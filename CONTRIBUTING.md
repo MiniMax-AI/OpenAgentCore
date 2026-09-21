@@ -250,7 +250,7 @@ Completed environments never reinstall initial files on reconnect or native reco
 Provider RunCommand carries bounded stdin, not confidential argv. Only fixed trusted
 initializers may run with Runtime authority. User setup and package install hooks
 run in the common packaged sandbox, without daemon credentials or native history.
-Files and resolved Skills precede system, npm/Python packages and ordered setup commands. Initialization has
+Files, resolved Skills and inline Plugins precede system, npm/Python packages and ordered setup commands. Initialization has
 provisioning network access; requested network restrictions apply to native tools
 after setup. Confidential env and setup snapshots are encrypted independently of
 ordinary metadata. Adapters apply tool env only after isolation, never to the
@@ -297,15 +297,29 @@ Inline and referenced Skill ZIPs use the same confidential initialization snapsh
 Core validates portable manifests and bounded regular-file archives, returns only
 safe Skill metadata, and freezes content before native preparation. The Runtime
 owns `/environment/initialization/capabilities/skills/<name>`; setup and native tools may read but
-not modify this tree. The common execution descriptor carries Skill metadata,
-never native plugin configuration or template identities. Adapters register native
-Skill roots without changing the execution loop or enabling unrestricted tools.
-Native activation extensions remain adapter-owned and must fail explicitly when
-unqualified. Generic Plugins and capability-directory
-imports remain separate work; an adapter-owned Claude plugin envelope does not
-implement public Plugins.
+not modify this tree. Skill-only public Plugin ZIPs preserve their complete package
+layout and reuse the shared archive and portable Skill parsers. Core keeps safe
+Plugin metadata separate from encrypted archives. Templates inherit or replace
+Plugin and capability-directory lists through the same hosted resolver.
 
-Name, enabled/disabled/exact-domain restricted network, initial files, inline/referenced Skills and env/setup/system/npm/Python are
+After ordered setup, the existing initializer snapshots declared workspace-contained
+capability directories into protected storage and writes one installed manifest.
+This is an initialization artifact, not a second lifecycle owner or database ledger.
+Directory bytes are observed after setup; they are not frozen at Session creation.
+The common daemon resolves the manifest only for executable preparation and passes
+validated Runtime-owned Skill/package roots to adapters. Files reads do not require
+that artifact. Reconnection and recovery read installed bytes, never mutable source
+directories. Missing or inconsistent installations fail preparation without replay.
+
+Adapters register only selected Skill roots without changing the execution loop.
+Codex uses explicit extra roots; MiniMax projects its native catalog; Claude creates
+one controlled envelope per package with real directories and immutable hardlinks
+under content. Its explicit paths remain inside that envelope; original native
+control files are not activated. Keep native MCP discovery disabled. Unsupported
+native activation fails explicitly. Public Plugin MCP remains separate qualification,
+not silent partial activation or a generic plugin framework.
+
+Name, enabled/disabled/exact-domain restricted network, initial files, inline/referenced Skills, skill-only Plugins, workspace capability directories and env/setup/system/npm/Python are
 implemented independently of remaining installation fields. Reject unsupported
 inputs rather than persisting them for silent
 omission; expand inline and template initialization together in separately qualified

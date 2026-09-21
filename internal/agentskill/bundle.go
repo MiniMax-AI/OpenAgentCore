@@ -2,23 +2,21 @@
 package agentskill
 
 import (
-	"archive/zip"
-	"bytes"
 	"errors"
 	"io"
-	"os"
-	"path"
 	"regexp"
 	"strings"
 	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentbundle"
 )
 
 const (
-	MaxArchiveBytes  = 5 << 20
-	MaxExpandedBytes = 20 << 20
-	MaxFiles         = 1000
+	MaxArchiveBytes  = agentbundle.MaxArchiveBytes
+	MaxExpandedBytes = agentbundle.MaxExpandedBytes
+	MaxFiles         = agentbundle.MaxFiles
 )
 
 var ErrInvalid = errors.New("invalid or unsupported Skill bundle")
@@ -30,94 +28,50 @@ type Metadata struct {
 	Description string `json:"description"`
 }
 
-type File struct {
-	Path       string `json:"path"`
-	Data       []byte `json:"data"`
-	Executable bool   `json:"executable,omitempty"`
-}
-
 // Read validates the full archive before exposing any files for installation.
-func Read(archive []byte, expected Metadata) ([]File, error) {
-	if expected.Type != "inline" || !namePattern.MatchString(expected.Name) || len(expected.Name) > 64 || expected.Description == "" || !utf8.ValidString(expected.Description) || len(archive) > MaxArchiveBytes {
+func Read(archive []byte, expected Metadata) ([]agentbundle.File, error) {
+	if expected.Type != "inline" || !namePattern.MatchString(expected.Name) || len(expected.Name) > 64 || expected.Description == "" || !utf8.ValidString(expected.Description) {
 		return nil, ErrInvalid
 	}
-	reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
-	if err != nil || len(reader.File) == 0 || len(reader.File) > MaxFiles {
+	files, err := agentbundle.Read(archive)
+	if err != nil {
 		return nil, ErrInvalid
 	}
-	root := ""
-	seen := map[string]bool{}
-	files := []File{}
-	total := 0
 	manifest := false
-	for _, entry := range reader.File {
-		name := strings.TrimSuffix(entry.Name, "/")
-		if !utf8.ValidString(name) || len(name) > 4096 || strings.ContainsAny(name, "\\\x00\r\n") || path.Clean(name) != name || path.IsAbs(name) {
+	for i := range files {
+		if strings.HasPrefix(files[i].Path, "SKILL.md/") {
 			return nil, ErrInvalid
 		}
-		parts := strings.SplitN(name, "/", 2)
-		if parts[0] == "." || parts[0] == ".." || parts[0] == "" {
-			return nil, ErrInvalid
-		}
-		if root == "" {
-			root = parts[0]
-		}
-		if root != parts[0] || seen[name] || entry.Flags&1 != 0 {
-			return nil, ErrInvalid
-		}
-		seen[name] = true
-		if entry.Mode().Type() == os.ModeDir {
-			continue
-		}
-		if !entry.Mode().IsRegular() || len(parts) != 2 || entry.UncompressedSize64 > MaxExpandedBytes || total+int(entry.UncompressedSize64) > MaxExpandedBytes {
-			return nil, ErrInvalid
-		}
-		stream, err := entry.Open()
-		if err != nil {
-			return nil, ErrInvalid
-		}
-		body, readErr := io.ReadAll(io.LimitReader(stream, int64(MaxExpandedBytes-total)+1))
-		closeErr := stream.Close()
-		if readErr != nil || closeErr != nil || len(body) > MaxExpandedBytes-total {
-			return nil, ErrInvalid
-		}
-		total += len(body)
-		if strings.EqualFold(parts[1], "SKILL.md") {
-			if manifest {
-				return nil, ErrInvalid
-			}
-			parts[1] = "SKILL.md"
-			if ValidateManifest(body, expected) != nil {
+		if strings.EqualFold(files[i].Path, "SKILL.md") {
+			if manifest || ValidateManifest(files[i].Data, expected) != nil {
 				return nil, ErrInvalid
 			}
 			manifest = true
+			files[i].Path = "SKILL.md"
 		}
-		files = append(files, File{Path: parts[1], Data: body, Executable: entry.Mode().Perm()&0111 != 0})
 	}
 	if !manifest {
 		return nil, ErrInvalid
-	}
-	regular := map[string]bool{}
-	for _, f := range files {
-		regular[f.Path] = true
-	}
-	for _, f := range files {
-		for parent := path.Dir(f.Path); parent != "."; parent = path.Dir(parent) {
-			if regular[parent] {
-				return nil, ErrInvalid
-			}
-		}
 	}
 	return files, nil
 }
 
 // ValidateManifest accepts portable descriptive metadata, not native activation controls.
 func ValidateManifest(body []byte, expected Metadata) error {
-	actual, err := manifestMetadata(body)
+	actual, err := InspectManifest(body)
 	if err != nil || actual != expected {
 		return ErrInvalid
 	}
 	return nil
+}
+
+// InspectManifest shares the portable parser with Runtime directory discovery.
+func InspectManifest(body []byte) (Metadata, error) {
+	metadata, err := manifestMetadata(body)
+	if err != nil || !namePattern.MatchString(metadata.Name) || len(metadata.Name) > 64 || metadata.Description == "" {
+		return Metadata{}, ErrInvalid
+	}
+	return metadata, nil
 }
 
 func manifestMetadata(body []byte) (Metadata, error) {

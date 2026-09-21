@@ -108,6 +108,16 @@ func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPa
 				return r, err
 			}
 		}
+		local := *r.LocalEnvironment
+		local.Skills = nil
+		if local.Capabilities {
+			var err error
+			local.Skills, err = LoadSkills()
+			if err != nil {
+				return r, err
+			}
+		}
+		r.LocalEnvironment = &local
 		r.WorkDir = b.workspace
 	}
 	return r, nil

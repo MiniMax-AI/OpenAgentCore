@@ -63,7 +63,15 @@ func (s *Store) createSessionResources(ctx context.Context, tenant string, param
 				if err != nil {
 					return err
 				}
-				row, err = q.SetSessionSetupMetadata(ctx, sqlc.SetSessionSetupMetadataParams{ID: row.ID, Packages: packages, Skills: skills})
+				plugins, err := json.Marshal(setup.PluginMetadata())
+				if err != nil {
+					return err
+				}
+				directories, err := json.Marshal(append([]string{}, setup.CapabilityDirectories...))
+				if err != nil {
+					return err
+				}
+				row, err = q.SetSessionSetupMetadata(ctx, sqlc.SetSessionSetupMetadataParams{ID: row.ID, Packages: packages, Skills: skills, Plugins: plugins, CapabilityDirectories: directories})
 				if err != nil {
 					return err
 				}

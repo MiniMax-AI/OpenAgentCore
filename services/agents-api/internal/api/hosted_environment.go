@@ -41,11 +41,10 @@ func decodeHostedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 			env.Files = initialFileResponse(files)
 		case "skills":
 			env.Skills = skillResponse(setup.SkillMetadata())
-		case "capability_directories", "plugins":
-			var list []json.RawMessage
-			if json.Unmarshal(value, &list) != nil || len(list) != 0 {
-				return nil, store.ErrInvalidInput
-			}
+		case "plugins":
+			env.Plugins = pluginResponse(setup.PluginMetadata())
+		case "capability_directories":
+			env.CapabilityDirectories = append([]string{}, setup.CapabilityDirectories...)
 		case "env", "setup_commands":
 			// Confidential values remain in the separate initialization snapshot.
 		case "packages":
@@ -64,15 +63,14 @@ func hostedSessionEnvironment(environment store.Environment) (v1.SessionEnvironm
 	if err != nil || cfg.Type != "openai_hosted" {
 		return v1.SessionEnvironment{}, store.ErrInvalidInput
 	}
-	empty := []json.RawMessage{}
 	files := cfg.Files
 	if files == nil {
 		files = []json.RawMessage{}
 	}
-	directories := []string{}
+	directories := append([]string{}, cfg.CapabilityDirectories...)
 	return v1.SessionEnvironment{ID: environment.ID, Type: cfg.Type, CapabilityDirectories: &directories,
 		Network:  &v1.EnvironmentNetwork{Access: cfg.Network.Access, AllowedDomains: append([]string{}, cfg.Network.AllowedDomains...)},
-		Packages: func() *v1.EnvironmentPackages { value := packageMetadata(cfg.Packages); return &value }(), Files: &files, Plugins: &empty, Skills: &cfg.Skills}, nil
+		Packages: func() *v1.EnvironmentPackages { value := packageMetadata(cfg.Packages); return &value }(), Files: &files, Plugins: &cfg.Plugins, Skills: &cfg.Skills}, nil
 }
 
 // WithHostedEnvironments enables admission only for an operator-composed,
@@ -125,6 +123,11 @@ func storedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 	if err != nil {
 		return nil, err
 	}
+	plugins, err := storedPlugins(fields["plugins"])
+	if err != nil {
+		return nil, err
+	}
+	delete(fields, "plugins")
 	delete(fields, "skills")
 	delete(fields, "files")
 	base, err := json.Marshal(fields)
@@ -137,5 +140,6 @@ func storedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 	}
 	cfg.Files = files
 	cfg.Skills = skills
+	cfg.Plugins = plugins
 	return cfg, nil
 }

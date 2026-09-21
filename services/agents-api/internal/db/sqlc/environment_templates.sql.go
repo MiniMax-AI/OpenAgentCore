@@ -12,8 +12,8 @@ import (
 )
 
 const createEnvironmentTemplate = `-- name: CreateEnvironmentTemplate :one
-INSERT INTO environment_templates (id, tenant_id, name, network_access, files, file_contents, packages, env_contents, setup_contents, skills, skill_contents, network_allowed_domains)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id, tenant_id, name, network_access, network_allowed_domains, created_at, updated_at, files, packages, skills
+INSERT INTO environment_templates (id, tenant_id, name, network_access, files, file_contents, packages, env_contents, setup_contents, skills, skill_contents, network_allowed_domains, plugins, plugin_contents, capability_directories)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id, tenant_id, name, network_access, network_allowed_domains, created_at, updated_at, files, packages, skills, plugins, capability_directories
 `
 
 type CreateEnvironmentTemplateParams struct {
@@ -29,6 +29,9 @@ type CreateEnvironmentTemplateParams struct {
 	Skills                []byte      `json:"skills"`
 	SkillContents         []byte      `json:"skill_contents"`
 	NetworkAllowedDomains []string    `json:"network_allowed_domains"`
+	Plugins               []byte      `json:"plugins"`
+	PluginContents        []byte      `json:"plugin_contents"`
+	CapabilityDirectories []string    `json:"capability_directories"`
 }
 
 type CreateEnvironmentTemplateRow struct {
@@ -42,6 +45,8 @@ type CreateEnvironmentTemplateRow struct {
 	Files                 []byte             `json:"files"`
 	Packages              []byte             `json:"packages"`
 	Skills                []byte             `json:"skills"`
+	Plugins               []byte             `json:"plugins"`
+	CapabilityDirectories []string           `json:"capability_directories"`
 }
 
 func (q *Queries) CreateEnvironmentTemplate(ctx context.Context, arg CreateEnvironmentTemplateParams) (CreateEnvironmentTemplateRow, error) {
@@ -58,6 +63,9 @@ func (q *Queries) CreateEnvironmentTemplate(ctx context.Context, arg CreateEnvir
 		arg.Skills,
 		arg.SkillContents,
 		arg.NetworkAllowedDomains,
+		arg.Plugins,
+		arg.PluginContents,
+		arg.CapabilityDirectories,
 	)
 	var i CreateEnvironmentTemplateRow
 	err := row.Scan(
@@ -71,6 +79,8 @@ func (q *Queries) CreateEnvironmentTemplate(ctx context.Context, arg CreateEnvir
 		&i.Files,
 		&i.Packages,
 		&i.Skills,
+		&i.Plugins,
+		&i.CapabilityDirectories,
 	)
 	return i, err
 }
@@ -92,7 +102,7 @@ func (q *Queries) DeleteEnvironmentTemplate(ctx context.Context, arg DeleteEnvir
 }
 
 const getEnvironmentTemplate = `-- name: GetEnvironmentTemplate :one
-SELECT id, tenant_id, name, network_access, network_allowed_domains, created_at, updated_at, files, packages, skills FROM environment_templates WHERE tenant_id = $1 AND id = $2
+SELECT id, tenant_id, name, network_access, network_allowed_domains, created_at, updated_at, files, packages, skills, plugins, capability_directories FROM environment_templates WHERE tenant_id = $1 AND id = $2
 `
 
 type GetEnvironmentTemplateParams struct {
@@ -111,6 +121,8 @@ type GetEnvironmentTemplateRow struct {
 	Files                 []byte             `json:"files"`
 	Packages              []byte             `json:"packages"`
 	Skills                []byte             `json:"skills"`
+	Plugins               []byte             `json:"plugins"`
+	CapabilityDirectories []string           `json:"capability_directories"`
 }
 
 func (q *Queries) GetEnvironmentTemplate(ctx context.Context, arg GetEnvironmentTemplateParams) (GetEnvironmentTemplateRow, error) {
@@ -127,12 +139,14 @@ func (q *Queries) GetEnvironmentTemplate(ctx context.Context, arg GetEnvironment
 		&i.Files,
 		&i.Packages,
 		&i.Skills,
+		&i.Plugins,
+		&i.CapabilityDirectories,
 	)
 	return i, err
 }
 
 const listEnvironmentTemplates = `-- name: ListEnvironmentTemplates :many
-SELECT id, tenant_id, name, network_access, network_allowed_domains, created_at, updated_at, files, packages, skills FROM environment_templates
+SELECT id, tenant_id, name, network_access, network_allowed_domains, created_at, updated_at, files, packages, skills, plugins, capability_directories FROM environment_templates
 WHERE tenant_id = $1
   AND ($2::timestamptz IS NULL
        OR (NOT $3::boolean AND (created_at, id) < ($2::timestamptz, $4::uuid))
@@ -164,6 +178,8 @@ type ListEnvironmentTemplatesRow struct {
 	Files                 []byte             `json:"files"`
 	Packages              []byte             `json:"packages"`
 	Skills                []byte             `json:"skills"`
+	Plugins               []byte             `json:"plugins"`
+	CapabilityDirectories []string           `json:"capability_directories"`
 }
 
 func (q *Queries) ListEnvironmentTemplates(ctx context.Context, arg ListEnvironmentTemplatesParams) ([]ListEnvironmentTemplatesRow, error) {
@@ -192,6 +208,8 @@ func (q *Queries) ListEnvironmentTemplates(ctx context.Context, arg ListEnvironm
 			&i.Files,
 			&i.Packages,
 			&i.Skills,
+			&i.Plugins,
+			&i.CapabilityDirectories,
 		); err != nil {
 			return nil, err
 		}
@@ -204,7 +222,7 @@ func (q *Queries) ListEnvironmentTemplates(ctx context.Context, arg ListEnvironm
 }
 
 const resolveEnvironmentTemplate = `-- name: ResolveEnvironmentTemplate :one
-SELECT id, tenant_id, name, network_access, created_at, updated_at, files, file_contents, packages, env_contents, setup_contents, skills, skill_contents, network_allowed_domains FROM environment_templates WHERE tenant_id = $1 AND id = $2
+SELECT id, tenant_id, name, network_access, created_at, updated_at, files, file_contents, packages, env_contents, setup_contents, skills, skill_contents, network_allowed_domains, plugins, plugin_contents, capability_directories FROM environment_templates WHERE tenant_id = $1 AND id = $2
 `
 
 type ResolveEnvironmentTemplateParams struct {
@@ -230,6 +248,9 @@ func (q *Queries) ResolveEnvironmentTemplate(ctx context.Context, arg ResolveEnv
 		&i.Skills,
 		&i.SkillContents,
 		&i.NetworkAllowedDomains,
+		&i.Plugins,
+		&i.PluginContents,
+		&i.CapabilityDirectories,
 	)
 	return i, err
 }
@@ -246,9 +267,12 @@ UPDATE environment_templates SET
     setup_contents = CASE WHEN $13::boolean THEN $14::bytea ELSE setup_contents END,
     skills = CASE WHEN $15::boolean THEN $16::jsonb ELSE skills END,
     skill_contents = CASE WHEN $15::boolean THEN $17::bytea ELSE skill_contents END,
+    plugins = CASE WHEN $18::boolean THEN $19::jsonb ELSE plugins END,
+    plugin_contents = CASE WHEN $18::boolean THEN $20::bytea ELSE plugin_contents END,
+    capability_directories = CASE WHEN $21::boolean THEN $22::text[] ELSE capability_directories END,
     updated_at = clock_timestamp()
-WHERE tenant_id = $18 AND id = $19
-RETURNING id, tenant_id, name, network_access, network_allowed_domains, created_at, updated_at, files, packages, skills
+WHERE tenant_id = $23 AND id = $24
+RETURNING id, tenant_id, name, network_access, network_allowed_domains, created_at, updated_at, files, packages, skills, plugins, capability_directories
 `
 
 type UpdateEnvironmentTemplateParams struct {
@@ -269,6 +293,11 @@ type UpdateEnvironmentTemplateParams struct {
 	SetSkills             bool        `json:"set_skills"`
 	Skills                []byte      `json:"skills"`
 	SkillContents         []byte      `json:"skill_contents"`
+	SetPlugins            bool        `json:"set_plugins"`
+	Plugins               []byte      `json:"plugins"`
+	PluginContents        []byte      `json:"plugin_contents"`
+	SetDirectories        bool        `json:"set_directories"`
+	CapabilityDirectories []string    `json:"capability_directories"`
 	TenantID              pgtype.UUID `json:"tenant_id"`
 	ID                    pgtype.UUID `json:"id"`
 }
@@ -284,6 +313,8 @@ type UpdateEnvironmentTemplateRow struct {
 	Files                 []byte             `json:"files"`
 	Packages              []byte             `json:"packages"`
 	Skills                []byte             `json:"skills"`
+	Plugins               []byte             `json:"plugins"`
+	CapabilityDirectories []string           `json:"capability_directories"`
 }
 
 func (q *Queries) UpdateEnvironmentTemplate(ctx context.Context, arg UpdateEnvironmentTemplateParams) (UpdateEnvironmentTemplateRow, error) {
@@ -305,6 +336,11 @@ func (q *Queries) UpdateEnvironmentTemplate(ctx context.Context, arg UpdateEnvir
 		arg.SetSkills,
 		arg.Skills,
 		arg.SkillContents,
+		arg.SetPlugins,
+		arg.Plugins,
+		arg.PluginContents,
+		arg.SetDirectories,
+		arg.CapabilityDirectories,
 		arg.TenantID,
 		arg.ID,
 	)
@@ -320,6 +356,8 @@ func (q *Queries) UpdateEnvironmentTemplate(ctx context.Context, arg UpdateEnvir
 		&i.Files,
 		&i.Packages,
 		&i.Skills,
+		&i.Plugins,
+		&i.CapabilityDirectories,
 	)
 	return i, err
 }

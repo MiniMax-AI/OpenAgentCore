@@ -17,7 +17,7 @@ func TestSkillReferenceIdentityStopsAtCoreBoundary(t *testing.T) {
 		Configuration: []byte(`{"type":"openai_hosted","initialization":true,"skills":[{"type":"skill_reference","skill_id":"skill-private","version":"1","name":"proof","description":"A proof."}]}`)}
 	var request proto.PromptRequestPayload
 	_, err := (&Dispatcher{}).configurePreparedEnvironment(t.Context(), session, environment, store.ExecutionDevice{EnvironmentID: environment.ID}, &request)
-	if err != nil || request.LocalEnvironment == nil || len(request.LocalEnvironment.Skills) != 1 || request.LocalEnvironment.Skills[0].Name != "proof" || request.LocalEnvironment.Skills[0].Type != "inline" {
+	if err != nil || request.LocalEnvironment == nil || !request.LocalEnvironment.Capabilities || len(request.LocalEnvironment.Skills) != 0 {
 		t.Fatal("resolved Skill did not use the common installation descriptor", err)
 	}
 	raw, err := json.Marshal(request.LocalEnvironment)

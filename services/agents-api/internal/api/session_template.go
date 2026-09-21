@@ -30,8 +30,10 @@ func decodeTemplateEnvironment(raw json.RawMessage) (*v1.Environment, string, js
 	if value, exists := fields["network"]; exists && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 		return nil, "", nil, store.ErrInvalidInput
 	}
-	if value, exists := fields["skills"]; exists && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
-		return nil, "", nil, store.ErrInvalidInput
+	for _, name := range []string{"skills", "plugins", "capability_directories"} {
+		if value, exists := fields[name]; exists && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return nil, "", nil, store.ErrInvalidInput
+		}
 	}
 	for _, name := range []string{"files", "env", "setup_commands", "packages"} {
 		if _, supplied := fields[name]; supplied {
@@ -70,8 +72,20 @@ func (h *Handler) resolveTemplateEnvironment(ctx context.Context, tenant string,
 	if _, supplied := fields["skills"]; !supplied {
 		skills = template.Initialization.Skills
 	}
+	plugins := input.initialization.Plugins
+	if _, supplied := fields["plugins"]; !supplied {
+		plugins = template.Initialization.Plugins
+	}
+	directories := input.initialization.CapabilityDirectories
+	if _, supplied := fields["capability_directories"]; !supplied {
+		directories = template.Initialization.CapabilityDirectories
+	}
 	input.initialization = template.Initialization
 	input.initialization.Skills = skills
+	input.initialization.Plugins = plugins
+	input.initialization.CapabilityDirectories = directories
+	input.Environment.Plugins = pluginResponse(input.initialization.PluginMetadata())
+	input.Environment.CapabilityDirectories = append([]string{}, directories...)
 	input.Environment.Skills = skillResponse(input.initialization.SkillMetadata())
 	packages := template.Initialization.PackageMetadata()
 	input.Environment.Packages = &packages

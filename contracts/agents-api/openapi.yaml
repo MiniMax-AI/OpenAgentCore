@@ -282,6 +282,11 @@ definitions:
         allOf:
         - $ref: '#/definitions/v1.EnvironmentPackages'
         x-nullable: true
+      plugins:
+        items:
+          type: object
+        type: array
+        x-nullable: true
       setup_commands:
         items:
           type: object
@@ -1998,9 +2003,9 @@ paths:
     get:
       description: Returns durable connection status and safe installed metadata for
         supported self_hosted and basic openai_hosted profiles. Initial files expose
-        frozen safe metadata without content; empty plugins/skills describe the absence
-        of API-managed installations, not the contents or discovered capabilities
-        of the caller's machine. Unsupported installation configurations remain implementation
+        frozen safe metadata without content; Plugin/Skill entries expose only safe
+        configured installation metadata. Capability-directory discoveries are not
+        added to those arrays. Unsupported installation configurations remain implementation
         gaps. This read does not prepare execution, start compute or require an enabled
         execution worker. Session deletion removes the associated Environment from
         public reads; project-shared read authorization is unchanged. Connection status
@@ -2256,11 +2261,12 @@ paths:
       description: Saves tenant-owned hosted configuration. Supports nullable name,
         enabled/disabled or exact-domain restricted network, initial inline/file_id
         files, confidential env, ordered setup_commands, system/npm/Python packages
-        and inline/referenced Skill ZIPs. Omitted/null network defaults to enabled.
-        Restricted network requires 1–100 exact ASCII hostnames; other host forms
-        and populated unsupported installations are rejected before persistence without
-        echoing input. No compute is allocated. Exact hosted error/retry semantics
-        remain unverified.
+        inline/referenced Skill ZIPs, skill-only Plugin ZIPs and workspace-contained
+        capability directories. Omitted/null network defaults to enabled. Restricted
+        network requires 1–100 exact ASCII hostnames; other host forms and populated
+        unsupported installations are rejected before persistence without echoing
+        input. No compute is allocated. Exact hosted error/retry semantics remain
+        unverified.
       parameters:
       - description: agents=v1
         in: header
@@ -2394,9 +2400,11 @@ paths:
         Session snapshots and creation retries remain unchanged. Initial files replace
         as a list; null/empty clears. File data is encrypted separately and excluded
         from response metadata. Skills replace as a list; null/empty clears. Skill
-        archives are encrypted separately and omitted from responses. Other populated
-        installations are unsupported. Exact hosted no-op timestamp behavior remains
-        unverified.
+        archives are encrypted separately and omitted from responses. Plugins and
+        capability directories replace as lists; null/empty clears. Plugin archives
+        are encrypted and omitted from responses. Capability directories are snapshotted
+        after setup; Plugin MCP activation remains unsupported. Exact hosted no-op
+        timestamp behavior remains unverified.
       parameters:
       - description: agents=v1
         in: header

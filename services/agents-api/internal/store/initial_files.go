@@ -104,7 +104,7 @@ func (s *Store) ResolveEnvironmentTemplate(ctx context.Context, tenant, id strin
 		return EnvironmentTemplate{}, nil, ErrNotFound
 	}
 	row, err := s.queries.ResolveEnvironmentTemplate(ctx, sqlc.ResolveEnvironmentTemplateParams{TenantID: lookup.TenantID, ID: lookup.ID})
-	value, err := templateFromRow(templateMetadataRow{ID: row.ID, TenantID: row.TenantID, Name: row.Name, NetworkAccess: row.NetworkAccess, NetworkAllowedDomains: row.NetworkAllowedDomains, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, Files: row.Files, Packages: row.Packages, Skills: row.Skills}, err)
+	value, err := templateFromRow(templateMetadataRow{ID: row.ID, TenantID: row.TenantID, Name: row.Name, NetworkAccess: row.NetworkAccess, NetworkAllowedDomains: row.NetworkAllowedDomains, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, Files: row.Files, Packages: row.Packages, Skills: row.Skills, Plugins: row.Plugins, CapabilityDirectories: row.CapabilityDirectories}, err)
 	if err != nil {
 		return value, nil, err
 	}
@@ -124,6 +124,18 @@ func (s *Store) ResolveEnvironmentTemplate(ctx context.Context, tenant, id strin
 	}
 	for i, metadata := range value.Skills {
 		if metadata != value.Initialization.Skills[i].Metadata {
+			return value, nil, ErrInvalidInput
+		}
+	}
+	value.Initialization.CapabilityDirectories = append([]string(nil), value.CapabilityDirectories...)
+	if err = s.openEnvironmentSetup(canonicalTenant, "environment_template", value.ID, "plugins", row.PluginContents, &value.Initialization.Plugins); err != nil {
+		return value, nil, err
+	}
+	if len(value.Plugins) != len(value.Initialization.Plugins) {
+		return value, nil, ErrInvalidInput
+	}
+	for i, metadata := range value.Plugins {
+		if metadata != value.Initialization.Plugins[i].Metadata {
 			return value, nil, ErrInvalidInput
 		}
 	}

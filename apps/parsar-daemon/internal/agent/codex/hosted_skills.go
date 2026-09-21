@@ -7,15 +7,12 @@ import (
 	"path/filepath"
 
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/localworkspace"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentskill"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentcapabilities"
 )
 
-func verifyHostedSkills(skills []agentskill.Metadata) error {
-	if err := localworkspace.VerifySkills(skills); err != nil {
-		return err
-	}
+func verifyHostedSkills(skills []agentcapabilities.InstalledSkill) error {
 	for _, skill := range skills {
-		if err := verifyHostedSkillLayout(filepath.Join(localworkspace.SkillDirectory, skill.Name)); err != nil {
+		if err := verifyHostedSkillLayout(localworkspace.SkillPath(skill)); err != nil {
 			return err
 		}
 	}

@@ -66,7 +66,7 @@ def verify_environment_templates(client, foreign, http):
                      {'files': [{'type': 'inline', 'path': '/workspace/a', 'data': canary}]},
                      {'packages': {'system': ['-' + canary]}}, {'skills': [{'type': 'inline', 'data': canary}]},
                      {'plugins': [{'type': 'inline', 'data': canary}]},
-                     {'capability_directories': ['/workspace']},
+                     {'capability_directories': ['/private']},
                      {'network': {'access': 'restricted', 'allowed_domains': ['*.example.com']}},
                      {'name': ''}, {'unknown': canary}]:
             for path in ['', '/' + owned[0]]:

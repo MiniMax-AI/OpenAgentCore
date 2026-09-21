@@ -34,7 +34,7 @@ func TestHostedEnvironmentDefaultsAndExplicitGaps(t *testing.T) {
 		`"network":{"access":"disabled","allowed_domains":["example.com"]}`, `"network":{"access":"enabled","unknown":true}`,
 		`"env":{"SECRET":null}`, `"files":[{}]`, `"packages":{"system":[null]}`,
 		`"packages":{"unknown":[]}`, `"plugins":[{}]`, `"skills":[{}]`, `"setup_commands":["echo test"]`,
-		`"capability_directories":["/workspace"]`, `"template_id":"template"`, `"workspace_directory":"/workspace"`,
+		`"capability_directories":["/private"]`, `"template_id":"template"`, `"workspace_directory":"/workspace"`,
 		`"files":{}`, `"env":[]`, `"packages":[]`, `"network":[]`, `"unknown":null`,
 	} {
 		if _, err := decodeSessionEnvironment(json.RawMessage(`{"type":"openai_hosted",` + field + `}`)); err == nil {

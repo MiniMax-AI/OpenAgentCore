@@ -95,6 +95,9 @@ type EnvironmentTemplate struct {
 	Skills                []byte             `json:"skills"`
 	SkillContents         []byte             `json:"skill_contents"`
 	NetworkAllowedDomains []string           `json:"network_allowed_domains"`
+	Plugins               []byte             `json:"plugins"`
+	PluginContents        []byte             `json:"plugin_contents"`
+	CapabilityDirectories []string           `json:"capability_directories"`
 }
 
 type ExecutionProjectScope struct {

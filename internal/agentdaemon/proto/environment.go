@@ -1,12 +1,14 @@
 package proto
 
-import "github.com/MiniMax-AI-Dev/parsar/internal/agentskill"
+import "github.com/MiniMax-AI-Dev/parsar/internal/agentcapabilities"
 
 // LocalEnvironment references a deployment-bound workspace; it never supplies a path.
 type LocalEnvironment struct {
 	ID string `json:"id"`
-	// Skills describes Core-installed inert content in the packaged Runtime.
-	Skills []agentskill.Metadata `json:"skills,omitempty"`
+	// Capabilities requests the completed, protected Runtime installation.
+	Capabilities bool `json:"capabilities,omitempty"`
+	// Skills is resolved by the bound daemon; wire input cannot supply paths.
+	Skills []agentcapabilities.InstalledSkill `json:"-"`
 	// ToolEnvironment consumes Core-completed confidential initialization.
 	ToolEnvironment bool `json:"tool_environment,omitempty"`
 	// SystemPackages requires the installed Runtime tool root during execution.

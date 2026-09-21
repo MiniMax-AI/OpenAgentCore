@@ -2,10 +2,8 @@ package api
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentskill"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
@@ -53,17 +51,9 @@ func decodeEnvironmentSkills(raw json.RawMessage) ([]store.EnvironmentSkill, err
 		if decodeInputObject(entry, &input, "type", "name", "description", "source") != nil || input.Type != "inline" {
 			return nil, store.ErrInvalidInput
 		}
-		var source struct {
-			Type      string `json:"type"`
-			MediaType string `json:"media_type"`
-			Data      string `json:"data"`
-		}
-		if decodeInputObject(input.Source, &source, "type", "media_type", "data") != nil || source.Type != "base64" || source.MediaType != "application/zip" || len(source.Data) > base64.StdEncoding.EncodedLen(agentskill.MaxArchiveBytes) {
-			return nil, store.ErrInvalidInput
-		}
-		body, err := base64.StdEncoding.Strict().DecodeString(source.Data)
+		body, err := decodeCapabilityArchive(input.Source)
 		if err != nil {
-			return nil, store.ErrInvalidInput
+			return nil, err
 		}
 		result = append(result, store.EnvironmentSkill{Metadata: store.EnvironmentSkillMetadata{Type: input.Type, Name: input.Name, Description: input.Description}, Archive: body})
 	}

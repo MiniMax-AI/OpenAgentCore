@@ -160,7 +160,7 @@ content after template update/deletion.
 The shared initializer installs Skills under
 `/environment/initialization/capabilities/skills/<name>` before setup and native execution.
 Setup and native tools can read that tree but cannot write it; completed recovery
-never reinstalls it. The execution contract carries installed metadata only.
+never reinstalls it. The public descriptor requests capability installation; the common daemon resolves protected metadata and paths for native preparation.
 Codex registers native extra roots, Claude creates its own explicit Skill plugin
 envelope, and MiniMax points its native user-global catalog at the shared root.
 MiniMax retains disabled unrestricted built-in tools and uses its existing
@@ -169,9 +169,69 @@ isolated workspace tool worker. No Provider or model/tool loop is added.
 Codex nested `SKILL.md` discovery, `agents/openai.yaml` native dependency
 configuration and Claude inline/fenced shell preprocessing are not qualified in this batch and explicitly fail adapter
 preparation. Other files are not interpreted as a public plugin installation.
-Generic Plugins and capability-directory imports remain separate gaps. Native built-in Skill visibility
+The skill-only Plugin and capability-directory batch below extends installation; Plugin MCP remains unqualified. Native built-in Skill visibility
 is not evidence of exact public tool-set parity. Qualification probes alone do not
 establish complete public support; record real service acceptance separately.
+
+## Skill-only Plugins and capability directories
+
+A hosted
+`plugins` entry uses the pinned inline ZIP source with type/name/description and
+`.codex-plugin/plugin.json` inside its single archive root. The manifest declares
+Skill directories with `skills`; complete package-relative resources are retained.
+The same parser, template resolution and encrypted Session snapshot serve inline
+and template requests. Only type/name/description appears in public Plugin metadata.
+Template Plugin lists inherit on omission and replace when supplied. Template
+updates accept null/empty clearing; explicit null Session overrides remain an
+unconfirmed semantic and reject.
+
+`capability_directories` currently accepts clean absolute paths within `/workspace`.
+Initial files and setup can populate them. The shared initializer snapshots these
+directories after setup, then publishes one protected installed manifest. Recovery
+uses those installed bytes even if the source directory changes or is removed.
+This timing and workspace restriction are local implementation choices, not claims
+about unspecified upstream behavior. A supplied Session directory list replaces
+the template list; omitted lists inherit. Missing, overlapping duplicate Skill
+names, unsupported manifests and nonregular files reject initialization without
+publishing completion. Directory-discovered Skills do not become fabricated
+inline entries in public `skills` or `plugins` metadata.
+
+The common daemon resolves the installed manifest before executable preparation;
+read-only Files operations retain their existing minimal requirements. Native
+adapters consume Runtime-owned Skill and package roots. Codex uses explicit roots,
+MiniMax uses its native registry and Claude uses controlled envelopes with explicit
+roots into a hardlinked content tree. Native component configuration is never
+passed wholesale to a harness. Provider APIs and the native execution loops are
+unchanged. No new installation/recovery lifecycle or framework is introduced.
+
+This batch supports skill-only packages. Populated MCP configuration and other
+unqualified activation reject explicitly. An empty MCP map is inert; accepting it
+does not qualify MCP. Archives retain the shared 5 MiB compressed/20 MiB expanded/
+1,000-entry limits. Plugin lists are limited to 50 entries and 10 MiB compressed;
+combined installed capabilities are limited to 50 Skills and 50 MiB. Limits are
+implementation bounds. Native shell preprocessing, dependency activation and
+nested discovery retain the existing adapter restrictions.
+
+Real standalone Docker acceptance on 2026-09-21 passed with the fixed official
+SDK and raw HTTP against current Core/daemon/adapters on qualified native images:
+Codex/Kimi (258.08s), Claude/Kimi (187.81s) and MiniMax Code/MiniMax (250.23s).
+Each exercised two Plugin Skills with package-relative resources and one directory
+Skill generated during setup, public Files/Artifacts and tenant rejection, retained
+native history after Core/Runtime restart and source/template deletion, no repeated
+initialization, cancellation with stopped effects and stable duplicate cancellation.
+Operators verified nonempty private canaries and actual daemon credentials before
+native scripts proved the contents unreadable; canary hashes survived cold recovery.
+All owned execution resources were cleaned. The complete Core-only `make check`
+passed, including dedicated real PostgreSQL checks and native packaging.
+
+Evidence is under `~/.parsar/remediation/20260921/template-plugins/`:
+`acceptance-summary.json`, `native-final-{codex,claude,mcode}.json`,
+`runtime-builds.json` and `full-check-attempt2-result.json`. The shared reproducible
+fixture is `services/agents-api/tests/official_environment_plugins.py`; operator
+runners reuse existing standalone acceptance and private model configuration.
+Review and merge remain required before delivery. Plugin MCP, portable root
+`plugin.json` applicability and the unconfirmed semantics above remain gaps;
+these results do not establish complete Environment Templates or protocol compatibility.
 
 ## Packaged Runtime initialization contract
 

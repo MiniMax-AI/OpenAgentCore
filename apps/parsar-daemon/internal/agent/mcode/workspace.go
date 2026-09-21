@@ -62,21 +62,26 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 	if err != nil {
 		return opts, err
 	}
-	if err := localworkspace.VerifySkills(req.LocalEnvironment.Skills); err != nil {
-		return opts, err
-	}
 	if len(req.LocalEnvironment.Skills) > 0 {
-		link := filepath.Join(opts.DataDir, "skills")
-		if target, err := os.Readlink(link); err == nil {
-			if target != localworkspace.SkillDirectory {
-				return opts, fmt.Errorf("mcode: unexpected native Skill root")
-			}
-		} else if !os.IsNotExist(err) {
-			return opts, err
-		} else if err := os.Symlink(localworkspace.SkillDirectory, link); err != nil {
+		root := filepath.Join(opts.DataDir, "skills")
+		if err := os.MkdirAll(root, 0700); err != nil {
 			return opts, err
 		}
+		for _, skill := range req.LocalEnvironment.Skills {
+			link, target := filepath.Join(root, skill.Metadata.Name), localworkspace.SkillPath(skill)
+			actual, err := os.Readlink(link)
+			if err == nil {
+				if actual != target {
+					return opts, fmt.Errorf("mcode: unexpected native Skill root")
+				}
+			} else if !os.IsNotExist(err) {
+				return opts, err
+			} else if err := os.Symlink(target, link); err != nil {
+				return opts, err
+			}
+		}
 	}
+
 	raw, err := os.ReadFile(filepath.Join(opts.DataDir, "config.yaml"))
 	if err != nil {
 		return opts, err

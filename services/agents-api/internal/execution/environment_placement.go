@@ -7,12 +7,15 @@ import (
 	"errors"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentcapabilities"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentplugin"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
 type environmentPlacement struct {
+	Plugins               []agentplugin.Metadata           `json:"plugins,omitempty"`
 	Skills                []store.EnvironmentSkillMetadata `json:"skills,omitempty"`
 	Type                  string                           `json:"type"`
 	ToolEnvironment       bool                             `json:"initialization,omitempty"`
@@ -43,6 +46,7 @@ func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacem
 	case "openai_hosted":
 		// Stored policy is shared by preparation and provider bootstrap.
 		var local struct {
+			Plugins               []agentplugin.Metadata           `json:"plugins,omitempty"`
 			Skills                []store.EnvironmentSkillMetadata `json:"skills,omitempty"`
 			Files                 []store.InitialFileMetadata      `json:"files"`
 			Packages              *v1.EnvironmentPackages          `json:"packages,omitempty"`
@@ -56,7 +60,7 @@ func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacem
 		}
 		decoder := json.NewDecoder(bytes.NewReader(configuration))
 		decoder.DisallowUnknownFields()
-		if decoder.Decode(&local) == nil && len(local.CapabilityDirectories) == 0 {
+		if decoder.Decode(&local) == nil && agentcapabilities.ValidateDirectories(local.CapabilityDirectories) == nil {
 			placement.SystemPackages = local.Packages != nil && len(local.Packages.System) > 0
 			placement.NetworkAccess = "enabled"
 			if local.Network != nil {
@@ -91,12 +95,12 @@ func (d *Dispatcher) configurePreparedEnvironment(ctx context.Context, session s
 		if placement.SystemPackages && !placement.ToolEnvironment {
 			return nil, store.ErrInvalidInput
 		}
-		req.LocalEnvironment = &proto.LocalEnvironment{ID: environment.ID, ToolEnvironment: placement.ToolEnvironment, SystemPackages: placement.SystemPackages}
+		req.LocalEnvironment = &proto.LocalEnvironment{ID: environment.ID, Capabilities: len(placement.Plugins)+len(placement.CapabilityDirectories) > 0, ToolEnvironment: placement.ToolEnvironment, SystemPackages: placement.SystemPackages}
 		for _, metadata := range placement.Skills {
 			if store.ValidateInstalledSkillMetadata(metadata) != nil {
 				return nil, store.ErrInvalidInput
 			}
-			req.LocalEnvironment.Skills = append(req.LocalEnvironment.Skills, (store.EnvironmentSkill{Metadata: metadata}).InstallationMetadata())
+			req.LocalEnvironment.Capabilities = true
 		}
 		req.LocalEnvironment.NetworkAccess = placement.NetworkAccess
 		req.LocalEnvironment.AllowedDomains = append([]string(nil), placement.AllowedDomains...)

@@ -66,7 +66,7 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	if !req.WorkspaceReadOnly {
 		req.AgentOptions = executionOptions(req)
 	}
-	plan, skillRoot, err := prepareSessionPlan(parent, req, cfg)
+	plan, skillRoots, err := prepareSessionPlan(parent, req, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -169,8 +169,8 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 			return nil, err
 		}
 	}
-	if skillRoot != "" {
-		if err := setSkillExtraRoots(cancelCtx, rpc, []string{skillRoot}); err != nil {
+	if len(skillRoots) > 0 {
+		if err := setSkillExtraRoots(cancelCtx, rpc, skillRoots); err != nil {
 			cancelFn()
 			_ = rpc.Close()
 			plan.Cleanup()

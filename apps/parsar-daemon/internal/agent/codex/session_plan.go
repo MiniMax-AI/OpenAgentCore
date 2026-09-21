@@ -8,22 +8,22 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 )
 
-func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (SessionPlan, string, error) {
+func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (SessionPlan, []string, error) {
 	profile, err := managedPermissionProfile(req, cfg)
 	if err != nil {
-		return SessionPlan{}, "", err
+		return SessionPlan{}, nil, err
 	}
 	if req.WorkspaceReadOnly {
 		plan, err := workspaceReadPlan(req)
-		return plan, "", err
+		return plan, nil, err
 	}
 	mcpServers, err := publicMCPHTTPServers(req)
 	if err != nil {
-		return SessionPlan{}, "", err
+		return SessionPlan{}, nil, err
 	}
 	plan, err := BuildSessionPlan(req.RunID, req.AgentStateKey, req.WorkDir, req.AgentOptions)
 	if err != nil {
-		return SessionPlan{}, "", fmt.Errorf("codex: build session plan: %w", err)
+		return SessionPlan{}, nil, fmt.Errorf("codex: build session plan: %w", err)
 	}
 	if profile != "" {
 		plan.Sandbox = ""
@@ -37,13 +37,13 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	if req.LocalEnvironment != nil && req.LocalEnvironment.ToolEnvironment {
 		if err := localworkspace.VerifyToolEnvironment(req.LocalEnvironment.SystemPackages); err != nil {
 			plan.Cleanup()
-			return SessionPlan{}, "", err
+			return SessionPlan{}, nil, err
 		}
 		plan.Env = append(plan.Env, "PARSAR_RUNTIME_TOOL_ENV=1")
 		if req.LocalEnvironment.SystemPackages {
 			if err := prepareSystemToolAnchor(); err != nil {
 				plan.Cleanup()
-				return SessionPlan{}, "", err
+				return SessionPlan{}, nil, err
 			}
 			plan.Env = append(plan.Env, "PARSAR_RUNTIME_SYSTEM_PACKAGES=1")
 		}
@@ -57,32 +57,38 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	if mcpServers != nil {
 		if err := configureMCPHTTP(&plan, mcpServers); err != nil {
 			plan.Cleanup()
-			return SessionPlan{}, "", err
+			return SessionPlan{}, nil, err
 		}
 	}
 
 	if stringOpt(req.AgentOptions, "model_verbosity") != "" {
 		if err := prepareModelVerbosity(ctx, cfg.codexBinary, &plan); err != nil {
 			plan.Cleanup()
-			return SessionPlan{}, "", err
+			return SessionPlan{}, nil, err
 		}
 	}
 
 	if req.DisableExecutionEnvironment {
 		plan.Env = append(plan.Env, "CODEX_EXEC_SERVER_URL=none")
 	}
-	skillRoot := ""
+	var skillRoots []string
 	if req.LocalEnvironment != nil && len(req.LocalEnvironment.Skills) > 0 {
 		err = verifyHostedSkills(req.LocalEnvironment.Skills)
 		if err == nil {
-			skillRoot = localworkspace.SkillDirectory
+			for _, skill := range req.LocalEnvironment.Skills {
+				skillRoots = append(skillRoots, localworkspace.SkillPath(skill))
+			}
 		}
 	} else if !req.DisableExecutionEnvironment && req.RemoteEnvironment == nil {
-		skillRoot, err = prepareManagedSkills(ctx, cfg.logger, req)
+		var root string
+		root, err = prepareManagedSkills(ctx, cfg.logger, req)
+		if root != "" {
+			skillRoots = []string{root}
+		}
 	}
 	if err != nil {
 		plan.Cleanup()
-		return SessionPlan{}, "", err
+		return SessionPlan{}, nil, err
 	}
 
 	if req.RemoteEnvironment != nil {
@@ -92,8 +98,8 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	if cfg.runtimeNetwork.Access == "restricted" {
 		if err := prepareManagedNetwork(&plan, cfg.runtimeNetwork); err != nil {
 			plan.Cleanup()
-			return SessionPlan{}, "", err
+			return SessionPlan{}, nil, err
 		}
 	}
-	return plan, skillRoot, nil
+	return plan, skillRoots, nil
 }

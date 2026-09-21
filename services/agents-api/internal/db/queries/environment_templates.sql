@@ -1,9 +1,9 @@
 -- name: CreateEnvironmentTemplate :one
-INSERT INTO environment_templates (id, tenant_id, name, network_access, files, file_contents, packages, env_contents, setup_contents, skills, skill_contents, network_allowed_domains)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id, tenant_id, name, network_access, network_allowed_domains, created_at, updated_at, files, packages, skills;
+INSERT INTO environment_templates (id, tenant_id, name, network_access, files, file_contents, packages, env_contents, setup_contents, skills, skill_contents, network_allowed_domains, plugins, plugin_contents, capability_directories)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id, tenant_id, name, network_access, network_allowed_domains, created_at, updated_at, files, packages, skills, plugins, capability_directories;
 
 -- name: GetEnvironmentTemplate :one
-SELECT id, tenant_id, name, network_access, network_allowed_domains, created_at, updated_at, files, packages, skills FROM environment_templates WHERE tenant_id = $1 AND id = $2;
+SELECT id, tenant_id, name, network_access, network_allowed_domains, created_at, updated_at, files, packages, skills, plugins, capability_directories FROM environment_templates WHERE tenant_id = $1 AND id = $2;
 
 -- name: UpdateEnvironmentTemplate :one
 UPDATE environment_templates SET
@@ -17,15 +17,18 @@ UPDATE environment_templates SET
     setup_contents = CASE WHEN sqlc.arg(set_setup)::boolean THEN sqlc.narg(setup_contents)::bytea ELSE setup_contents END,
     skills = CASE WHEN sqlc.arg(set_skills)::boolean THEN sqlc.arg(skills)::jsonb ELSE skills END,
     skill_contents = CASE WHEN sqlc.arg(set_skills)::boolean THEN sqlc.narg(skill_contents)::bytea ELSE skill_contents END,
+    plugins = CASE WHEN sqlc.arg(set_plugins)::boolean THEN sqlc.arg(plugins)::jsonb ELSE plugins END,
+    plugin_contents = CASE WHEN sqlc.arg(set_plugins)::boolean THEN sqlc.narg(plugin_contents)::bytea ELSE plugin_contents END,
+    capability_directories = CASE WHEN sqlc.arg(set_directories)::boolean THEN sqlc.arg(capability_directories)::text[] ELSE capability_directories END,
     updated_at = clock_timestamp()
 WHERE tenant_id = sqlc.arg(tenant_id) AND id = sqlc.arg(id)
-RETURNING id, tenant_id, name, network_access, network_allowed_domains, created_at, updated_at, files, packages, skills;
+RETURNING id, tenant_id, name, network_access, network_allowed_domains, created_at, updated_at, files, packages, skills, plugins, capability_directories;
 
 -- name: DeleteEnvironmentTemplate :one
 DELETE FROM environment_templates WHERE tenant_id = $1 AND id = $2 RETURNING id;
 
 -- name: ListEnvironmentTemplates :many
-SELECT id, tenant_id, name, network_access, network_allowed_domains, created_at, updated_at, files, packages, skills FROM environment_templates
+SELECT id, tenant_id, name, network_access, network_allowed_domains, created_at, updated_at, files, packages, skills, plugins, capability_directories FROM environment_templates
 WHERE tenant_id = sqlc.arg(tenant_id)
   AND (sqlc.narg(after_created)::timestamptz IS NULL
        OR (NOT sqlc.arg(ascending)::boolean AND (created_at, id) < (sqlc.narg(after_created)::timestamptz, sqlc.arg(after_id)::uuid))

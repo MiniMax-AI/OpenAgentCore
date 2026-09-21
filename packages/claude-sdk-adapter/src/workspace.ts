@@ -95,13 +95,13 @@ export class WorkspaceProfile {
       env.CLAUDE_CODE_SHELL_PREFIX = "/usr/local/bin/agents-api-tool-root";
       env.PARSAR_RUNTIME_TOOL_SCRATCH = config.scratch;
     }
-    const skills = workspaceSkills(config.state, config.skills ?? []);
+    const skills = workspaceSkills(config.skills ?? []);
     this.skillNames = skills?.names ?? [];
     const skillTools = skills ? ["Skill"] : [];
     const protectedRoots = [config.home, config.state, ...config.protected_dirs];
     this.options = {
       env, tools: [...nativeTools, ...skillTools],
-      ...(skills ? { plugins: [{ type: "local" as const, path: skills.path, skipMcpDiscovery: true }] } : {}), allowedTools: [...functions], mcpServers: {}, strictMcpConfig: true,
+      ...(skills ? { plugins: skills.paths.map(path => ({ type: "local" as const, path, skipMcpDiscovery: true })) } : {}), allowedTools: [...functions], mcpServers: {}, strictMcpConfig: true,
       settingSources: [], permissionMode: "default", persistSession: true,
       settings: {
         ...(skills ? { disableSkillShellExecution: true } : {}),

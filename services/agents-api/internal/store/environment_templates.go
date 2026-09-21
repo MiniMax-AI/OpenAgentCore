@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentplugin"
 	"time"
 	"unicode/utf8"
 
@@ -19,28 +20,30 @@ import (
 // EnvironmentTemplate is configuration ownership, independent of provider images.
 
 type EnvironmentTemplate struct {
-	Skills         []EnvironmentSkillMetadata
-	Packages       v1.EnvironmentPackages
-	Initialization EnvironmentSetup
-	Files          []InitialFileMetadata
-	ID             string
-	Name           *string
-	NetworkAccess  string
-	AllowedDomains []string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	Plugins               []agentplugin.Metadata
+	CapabilityDirectories []string
+	Skills                []EnvironmentSkillMetadata
+	Packages              v1.EnvironmentPackages
+	Initialization        EnvironmentSetup
+	Files                 []InitialFileMetadata
+	ID                    string
+	Name                  *string
+	NetworkAccess         string
+	AllowedDomains        []string
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
 }
 
 type EnvironmentTemplateInput struct {
-	Initialization                           EnvironmentSetup
-	SetEnv, SetSetup, SetPackages, SetSkills bool
-	Files                                    []InitialFile
-	SetFiles                                 bool
-	Name                                     *string
-	SetName                                  bool
-	NetworkAccess                            string
-	AllowedDomains                           []string
-	SetNetwork                               bool
+	Initialization                                                       EnvironmentSetup
+	SetEnv, SetSetup, SetPackages, SetSkills, SetPlugins, SetDirectories bool
+	Files                                                                []InitialFile
+	SetFiles                                                             bool
+	Name                                                                 *string
+	SetName                                                              bool
+	NetworkAccess                                                        string
+	AllowedDomains                                                       []string
+	SetNetwork                                                           bool
 }
 
 func (in EnvironmentTemplateInput) valid() bool {
@@ -57,11 +60,11 @@ func templateFromRow(row templateMetadataRow, err error) (EnvironmentTemplate, e
 	if err != nil {
 		return EnvironmentTemplate{}, err
 	}
-	result := EnvironmentTemplate{ID: uuid.UUID(row.ID.Bytes).String(), NetworkAccess: row.NetworkAccess, AllowedDomains: append([]string{}, row.NetworkAllowedDomains...), CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
+	result := EnvironmentTemplate{CapabilityDirectories: append([]string{}, row.CapabilityDirectories...), ID: uuid.UUID(row.ID.Bytes).String(), NetworkAccess: row.NetworkAccess, AllowedDomains: append([]string{}, row.NetworkAllowedDomains...), CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
 	if row.Name.Valid {
 		result.Name = &row.Name.String
 	}
-	if json.Unmarshal(row.Files, &result.Files) != nil || json.Unmarshal(row.Packages, &result.Packages) != nil || json.Unmarshal(row.Skills, &result.Skills) != nil {
+	if json.Unmarshal(row.Files, &result.Files) != nil || json.Unmarshal(row.Packages, &result.Packages) != nil || json.Unmarshal(row.Skills, &result.Skills) != nil || json.Unmarshal(row.Plugins, &result.Plugins) != nil {
 		return EnvironmentTemplate{}, ErrInvalidInput
 	}
 	return result, nil
@@ -97,7 +100,11 @@ func (s *Store) CreateEnvironmentTemplate(ctx context.Context, tenantID string, 
 	if err != nil {
 		return EnvironmentTemplate{}, err
 	}
-	row, err := s.queries.CreateEnvironmentTemplate(ctx, sqlc.CreateEnvironmentTemplateParams{ID: pgtype.UUID{Bytes: id, Valid: true}, TenantID: tenant, Name: name, NetworkAccess: in.NetworkAccess, NetworkAllowedDomains: append([]string{}, in.AllowedDomains...), Files: metadata, FileContents: encrypted, Packages: packages, EnvContents: envContents, SetupContents: setupContents, Skills: skills, SkillContents: skillContents})
+	plugins, pluginContents, err := s.sealTemplatePlugins(uuid.UUID(tenant.Bytes).String(), id.String(), in.Initialization)
+	if err != nil {
+		return EnvironmentTemplate{}, err
+	}
+	row, err := s.queries.CreateEnvironmentTemplate(ctx, sqlc.CreateEnvironmentTemplateParams{ID: pgtype.UUID{Bytes: id, Valid: true}, TenantID: tenant, Name: name, NetworkAccess: in.NetworkAccess, NetworkAllowedDomains: append([]string{}, in.AllowedDomains...), Files: metadata, FileContents: encrypted, Packages: packages, EnvContents: envContents, SetupContents: setupContents, Skills: skills, SkillContents: skillContents, Plugins: plugins, PluginContents: pluginContents, CapabilityDirectories: append([]string{}, in.Initialization.CapabilityDirectories...)})
 	return templateFromRow(templateMetadataRow(row), err)
 }
 
@@ -127,7 +134,7 @@ func (s *Store) UpdateEnvironmentTemplate(ctx context.Context, tenantID, templat
 	if err != nil {
 		return EnvironmentTemplate{}, ErrNotFound
 	}
-	if !in.SetName && !in.SetNetwork && !in.SetFiles && !in.SetEnv && !in.SetSetup && !in.SetPackages && !in.SetSkills {
+	if !in.SetName && !in.SetNetwork && !in.SetFiles && !in.SetEnv && !in.SetSetup && !in.SetPackages && !in.SetSkills && !in.SetPlugins && !in.SetDirectories {
 		return s.GetEnvironmentTemplate(ctx, tenantID, templateID)
 	}
 	var name pgtype.Text
@@ -146,7 +153,11 @@ func (s *Store) UpdateEnvironmentTemplate(ctx context.Context, tenantID, templat
 	if err != nil {
 		return EnvironmentTemplate{}, err
 	}
-	row, err := s.queries.UpdateEnvironmentTemplate(ctx, sqlc.UpdateEnvironmentTemplateParams{TenantID: tenant, ID: id, Name: name, SetName: in.SetName, NetworkAccess: in.NetworkAccess, NetworkAllowedDomains: append([]string{}, in.AllowedDomains...), SetNetwork: in.SetNetwork, SetFiles: in.SetFiles, Files: metadata, FileContents: encrypted, Packages: packages, EnvContents: envContents, SetupContents: setupContents, SetPackages: in.SetPackages, SetEnv: in.SetEnv, SetSetup: in.SetSetup, SetSkills: in.SetSkills, Skills: skills, SkillContents: skillContents})
+	plugins, pluginContents, err := s.sealTemplatePlugins(uuid.UUID(tenant.Bytes).String(), uuid.UUID(id.Bytes).String(), in.Initialization)
+	if err != nil {
+		return EnvironmentTemplate{}, err
+	}
+	row, err := s.queries.UpdateEnvironmentTemplate(ctx, sqlc.UpdateEnvironmentTemplateParams{TenantID: tenant, ID: id, Name: name, SetName: in.SetName, NetworkAccess: in.NetworkAccess, NetworkAllowedDomains: append([]string{}, in.AllowedDomains...), SetNetwork: in.SetNetwork, SetFiles: in.SetFiles, Files: metadata, FileContents: encrypted, Packages: packages, EnvContents: envContents, SetupContents: setupContents, SetPackages: in.SetPackages, SetEnv: in.SetEnv, SetSetup: in.SetSetup, SetSkills: in.SetSkills, SetPlugins: in.SetPlugins, SetDirectories: in.SetDirectories, Skills: skills, SkillContents: skillContents, Plugins: plugins, PluginContents: pluginContents, CapabilityDirectories: append([]string{}, in.Initialization.CapabilityDirectories...)})
 	return templateFromRow(templateMetadataRow(row), err)
 }
 

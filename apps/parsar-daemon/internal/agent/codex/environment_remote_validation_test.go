@@ -84,7 +84,7 @@ func TestRemoteEnvironmentKeepsPathsAndCredentialsSeparate(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer plan.Cleanup()
-	if plan.Cwd != r.WorkDir || skillRoot != "" || len(plan.Environments) != 1 || plan.Environments[0].Cwd != r.RemoteEnvironment.WorkspaceDirectory || plan.Environments[0].EnvironmentID != "remote" {
+	if plan.Cwd != r.WorkDir || len(skillRoot) != 0 || len(plan.Environments) != 1 || plan.Environments[0].Cwd != r.RemoteEnvironment.WorkspaceDirectory || plan.Environments[0].EnvironmentID != "remote" {
 		t.Fatal("remote execution changed harness cwd or installed local skills")
 	}
 	if _, err := os.Stat(r.RemoteEnvironment.WorkspaceDirectory); !os.IsNotExist(err) {

@@ -78,6 +78,22 @@ func decodeEnvironmentSetup(fields map[string]json.RawMessage) (store.Environmen
 	if err != nil {
 		return result, err
 	}
+	result.Plugins, err = decodeEnvironmentPlugins(fields["plugins"])
+	if err != nil {
+		return result, err
+	}
+	if raw, supplied := fields["capability_directories"]; supplied {
+		var entries []*string
+		if json.Unmarshal(raw, &entries) != nil {
+			return result, store.ErrInvalidInput
+		}
+		for _, entry := range entries {
+			if entry == nil {
+				return result, store.ErrInvalidInput
+			}
+			result.CapabilityDirectories = append(result.CapabilityDirectories, *entry)
+		}
+	}
 	return result, result.Validate()
 }
 

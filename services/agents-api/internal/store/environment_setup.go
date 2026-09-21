@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentcapabilities"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/credentialcrypto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/google/uuid"
@@ -19,10 +20,12 @@ import (
 // EnvironmentSetup is confidential input, never ordinary resource metadata.
 // Core freezes it once; the common Runtime initializer executes it in order.
 type EnvironmentSetup struct {
-	Env      map[string]string      `json:"env,omitempty"`
-	Commands []SetupCommand         `json:"setup_commands,omitempty"`
-	Packages v1.EnvironmentPackages `json:"packages"`
-	Skills   []EnvironmentSkill     `json:"skills,omitempty"`
+	Env                   map[string]string      `json:"env,omitempty"`
+	Commands              []SetupCommand         `json:"setup_commands,omitempty"`
+	Packages              v1.EnvironmentPackages `json:"packages"`
+	Skills                []EnvironmentSkill     `json:"skills,omitempty"`
+	Plugins               []EnvironmentPlugin    `json:"plugins,omitempty"`
+	CapabilityDirectories []string               `json:"capability_directories,omitempty"`
 }
 
 type SetupCommand struct {
@@ -33,7 +36,7 @@ type SetupCommand struct {
 var environmentName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 func (s EnvironmentSetup) Empty() bool {
-	return len(s.Env)+len(s.Commands)+len(s.Packages.NPM)+len(s.Packages.Python)+len(s.Packages.System)+len(s.Skills) == 0
+	return len(s.Env)+len(s.Commands)+len(s.Packages.NPM)+len(s.Packages.Python)+len(s.Packages.System)+len(s.Skills)+len(s.Plugins)+len(s.CapabilityDirectories) == 0
 }
 
 func (s EnvironmentSetup) Validate() error {
@@ -41,11 +44,12 @@ func (s EnvironmentSetup) Validate() error {
 }
 
 func (s EnvironmentSetup) validate(installed bool) error {
-	if validateEnvironmentSkills(s.Skills, installed) != nil {
+	if validateEnvironmentSkills(s.Skills, installed) != nil || ValidateEnvironmentPlugins(s.Plugins) != nil || agentcapabilities.ValidateDirectories(s.CapabilityDirectories) != nil {
 		return ErrInvalidInput
 	}
 	ordinary := s
 	ordinary.Skills = nil
+	ordinary.Plugins = nil
 	raw, err := json.Marshal(ordinary)
 	if err != nil || len(raw) > 512*1024 {
 		return ErrInvalidInput
