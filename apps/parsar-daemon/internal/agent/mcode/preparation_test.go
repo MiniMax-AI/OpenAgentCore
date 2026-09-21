@@ -121,3 +121,42 @@ func TestPreparedWorkspaceCloseBeforeStart(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPreparedSubagentsReleaseUnusedOwner(t *testing.T) {
+	for _, method := range []string{"close", "cancel"} {
+		t.Run(method, func(t *testing.T) {
+			c, r, record := workspaceFixture(t)
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			resource, err := NewPreparationFactory(c)(ctx, r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := resource.(*prepared)
+			// The fixture only implements preparation. Enable execution cancellation's
+			// child branch after initialization to verify unused owners never enter it.
+			p.session.req.DisableSubagents = false
+			ended := make(chan error, 1)
+			go func() {
+				if method == "close" {
+					ended <- p.Close()
+				} else {
+					ended <- p.Cancel(ctx)
+				}
+			}()
+			select {
+			case err := <-ended:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-ctx.Done():
+				p.session.process.Cancel()
+				t.Fatal("unused owner did not close")
+			}
+			raw, err := os.ReadFile(record)
+			if err != nil || strings.Contains(string(raw), "session/prompt") || strings.Contains(string(raw), "delegation/stop") {
+				t.Fatalf("unused preparation executed work: %q %v", raw, err)
+			}
+		})
+	}
+}

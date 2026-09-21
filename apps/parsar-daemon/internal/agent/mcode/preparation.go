@@ -88,14 +88,29 @@ func (p *prepared) Close() error {
 	}
 	p.closed = true
 	p.mu.Unlock()
-	return p.session.Cancel(context.Background())
+	return p.closeUnused(context.Background())
 }
 
 func (p *prepared) Cancel(ctx context.Context) error {
 	p.mu.Lock()
 	p.closed = true
+	started := p.binding != nil
 	p.mu.Unlock()
+	if !started {
+		return p.closeUnused(ctx)
+	}
 	return p.session.Cancel(ctx)
+}
+
+// An unconsumed preparation has no model input or child work to settle.
+func (p *prepared) closeUnused(ctx context.Context) error {
+	p.session.process.Cancel()
+	select {
+	case <-p.session.finished:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (p *prepared) CancellationOutcome() proto.DonePayload { return p.session.CancellationOutcome() }
