@@ -575,8 +575,10 @@ connection-timeout change was made.
 full gate took 484.22 seconds. The optional MiniMax packaged-native scratch/large-output
 probe was skipped because its profile/artifact variables were unset. Unchanged
 native-profile qualification and the real reference workflows are separate evidence.
-Fresh independent review remains a merge prerequisite. These checks do not establish
-complete upstream Skill, Template or Agents API compatibility.
+A user-authorized reused-context GPT-6 Astra high reviewer inspected the entire
+52-file diff and original acceptance records, with no material actionable findings.
+This was not a fresh-context blind review. These checks do not establish complete
+upstream Skill, Template or Agents API compatibility.
 
 Sanitized results and operator drivers are retained on `zju_a100_2` under
 `~/.parsar/remediation/20260921/template-skill-references/`, with a local evidence
