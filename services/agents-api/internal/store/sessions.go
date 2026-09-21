@@ -136,11 +136,6 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 			return SessionCreation{}, err
 		}
 	}
-	hashConfiguration := configuration
-	// Empty configuration retains the idempotency hashes from the first schema.
-	if string(configuration) == "{}" {
-		hashConfiguration = nil
-	}
 	var initialization *EnvironmentSetup
 	if !input.Initialization.Empty() {
 		initialization = &input.Initialization
@@ -154,7 +149,7 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 		InitialInputs  json.RawMessage   `json:",omitempty"`
 		InitialFiles   []InitialFile     `json:",omitempty"`
 		Initialization *EnvironmentSetup `json:",omitempty"`
-	}{input.ModelProvider, input.Engine, input.Metadata, hashConfiguration, encodedInput, input.InitialFiles, initialization})
+	}{input.ModelProvider, input.Engine, input.Metadata, configuration, encodedInput, input.InitialFiles, initialization})
 	if err != nil {
 		return SessionCreation{}, fmt.Errorf("%w: input: %v", ErrInvalidInput, err)
 	}

@@ -82,7 +82,11 @@ func Read(archive []byte, expected Metadata) ([]File, error) {
 			return nil, ErrInvalid
 		}
 		total += len(body)
-		if parts[1] == "SKILL.md" {
+		if strings.EqualFold(parts[1], "SKILL.md") {
+			if manifest {
+				return nil, ErrInvalid
+			}
+			parts[1] = "SKILL.md"
 			if ValidateManifest(body, expected) != nil {
 				return nil, ErrInvalid
 			}
@@ -109,58 +113,66 @@ func Read(archive []byte, expected Metadata) ([]File, error) {
 
 // ValidateManifest accepts portable descriptive metadata, not native activation controls.
 func ValidateManifest(body []byte, expected Metadata) error {
-	if len(body) > 256<<10 || !utf8.Valid(body) {
+	actual, err := manifestMetadata(body)
+	if err != nil || actual != expected {
 		return ErrInvalid
+	}
+	return nil
+}
+
+func manifestMetadata(body []byte) (Metadata, error) {
+	if len(body) > 256<<10 || !utf8.Valid(body) {
+		return Metadata{}, ErrInvalid
 	}
 	text := strings.ReplaceAll(string(body), "\r\n", "\n")
 	if !strings.HasPrefix(text, "---\n") {
-		return ErrInvalid
+		return Metadata{}, ErrInvalid
 	}
 	end := strings.Index(text[4:], "\n---")
 	if end < 0 {
-		return ErrInvalid
+		return Metadata{}, ErrInvalid
 	}
 	end += 4
 	tail := text[end+4:]
 	if tail != "" && !strings.HasPrefix(tail, "\n") {
-		return ErrInvalid
+		return Metadata{}, ErrInvalid
 	}
 	decoder := yaml.NewDecoder(strings.NewReader(text[4:end]))
 	var document yaml.Node
 	if decoder.Decode(&document) != nil || len(document.Content) != 1 {
-		return ErrInvalid
+		return Metadata{}, ErrInvalid
 	}
 	var extra yaml.Node
 	if decoder.Decode(&extra) != io.EOF {
-		return ErrInvalid
+		return Metadata{}, ErrInvalid
 	}
 	node := document.Content[0]
 	if node.Kind != yaml.MappingNode {
-		return ErrInvalid
+		return Metadata{}, ErrInvalid
 	}
 	fields := map[string]*yaml.Node{}
 	for i := 0; i < len(node.Content); i += 2 {
 		key, value := node.Content[i], node.Content[i+1]
 		if key.Kind != yaml.ScalarNode || key.Tag != "!!str" || fields[key.Value] != nil {
-			return ErrInvalid
+			return Metadata{}, ErrInvalid
 		}
 		fields[key.Value] = value
 		switch key.Value {
 		case "name", "description", "license", "compatibility":
 			if value.Kind != yaml.ScalarNode || value.Tag != "!!str" {
-				return ErrInvalid
+				return Metadata{}, ErrInvalid
 			}
 		case "metadata":
 			var metadata map[string]string
 			if value.Kind != yaml.MappingNode || value.Decode(&metadata) != nil {
-				return ErrInvalid
+				return Metadata{}, ErrInvalid
 			}
 		default:
-			return ErrInvalid
+			return Metadata{}, ErrInvalid
 		}
 	}
-	if fields["name"] == nil || fields["description"] == nil || fields["name"].Value != expected.Name || fields["description"].Value != expected.Description {
-		return ErrInvalid
+	if fields["name"] == nil || fields["description"] == nil {
+		return Metadata{}, ErrInvalid
 	}
-	return nil
+	return Metadata{Type: "inline", Name: fields["name"].Value, Description: fields["description"].Value}, nil
 }

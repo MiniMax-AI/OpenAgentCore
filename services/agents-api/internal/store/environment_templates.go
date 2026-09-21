@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentskill"
 	"time"
 	"unicode/utf8"
 
@@ -20,7 +19,7 @@ import (
 // EnvironmentTemplate is configuration ownership, independent of provider images.
 
 type EnvironmentTemplate struct {
-	Skills         []agentskill.Metadata
+	Skills         []EnvironmentSkillMetadata
 	Packages       v1.EnvironmentPackages
 	Initialization EnvironmentSetup
 	Files          []InitialFileMetadata

@@ -45,6 +45,8 @@ and Clippy, and Linux OpenSSL development libraries. `make sqlc-generate` owns o
 migrations. The public protocol schema is `contracts/agents-api/openapi.yaml`;
 there is no product swaggo contract in this repository. Preserve its pinned types,
 coverage ledgers and official SDK/raw HTTP tests when changing API behavior.
+Run `make openapi` after handler annotation changes. It reuses the original
+Core-only swaggo v1.16.4 generator and writes this schema, without product routes.
 
 Core changes must retain the independent build and official-client workflow.
 Changes to native Harness sources require `make check-agents-harness-native`,
@@ -248,7 +250,7 @@ Completed environments never reinstall initial files on reconnect or native reco
 Provider RunCommand carries bounded stdin, not confidential argv. Only fixed trusted
 initializers may run with Runtime authority. User setup and package install hooks
 run in the common packaged sandbox, without daemon credentials or native history.
-Files and inline Skills precede system, npm/Python packages and ordered setup commands. Initialization has
+Files and resolved Skills precede system, npm/Python packages and ordered setup commands. Initialization has
 provisioning network access; requested network restrictions apply to native tools
 after setup. Confidential env and setup snapshots are encrypted independently of
 ordinary metadata. Adapters apply tool env only after isolation, never to the
@@ -271,7 +273,27 @@ Core preserves the system-package requirement in the common execution binding;
 a missing installation receipt fails preparation instead of falling back to base
 tools. This requirement does not add execution prerequisites to Files reads.
 
-Inline Skill ZIPs use the same confidential initialization snapshot and installer.
+Skills and their immutable versions are Core-owned tenant resources, independent of
+Sessions and native Skill installations. Serialize version allocation and pointer
+mutations under the owning Skill row; preserve unique version identities across
+concurrent uploads and deletion. Metadata reads never load or decrypt bundle bytes.
+Encrypt bundle contents with a tenant, Skill and version binding using the existing
+service cipher. Deleting a Skill reclaims its versions without affecting already
+frozen Session initialization. Public reference metadata, unresolved template intent
+and the resolved Runtime bundle are distinct; do not report a reference as inline
+merely because it reuses the same installer. No compatibility reader, source
+cache, extra lifecycle owner or per-harness resource implementation is required.
+Resolve references inside the Session creation transaction, after the creation
+upsert establishes ownership. Lock referenced resources in a stable order; freeze
+the selected version, descriptive metadata and bytes together. Creation retries
+recover the recorded intent before reading mutable templates or Skill sources.
+Templates preserve omitted/default, latest and explicit version selectors. Session
+responses contain concrete versions; only validated installation metadata crosses
+the Runtime boundary. A supplied Session Skill list replaces the template list;
+omission inherits. Explicit null reference selectors and null list overrides remain
+unqualified and reject rather than silently changing selection.
+
+Inline and referenced Skill ZIPs use the same confidential initialization snapshot and installer.
 Core validates portable manifests and bounded regular-file archives, returns only
 safe Skill metadata, and freezes content before native preparation. The Runtime
 owns `/environment/initialization/capabilities/skills/<name>`; setup and native tools may read but
@@ -279,11 +301,11 @@ not modify this tree. The common execution descriptor carries Skill metadata,
 never native plugin configuration or template identities. Adapters register native
 Skill roots without changing the execution loop or enabling unrestricted tools.
 Native activation extensions remain adapter-owned and must fail explicitly when
-unqualified. Skills API references, generic Plugins and capability-directory
+unqualified. Generic Plugins and capability-directory
 imports remain separate work; an adapter-owned Claude plugin envelope does not
 implement public Plugins.
 
-Name, enabled/disabled/exact-domain restricted network, initial files, inline Skills and env/setup/system/npm/Python are
+Name, enabled/disabled/exact-domain restricted network, initial files, inline/referenced Skills and env/setup/system/npm/Python are
 implemented independently of remaining installation fields. Reject unsupported
 inputs rather than persisting them for silent
 omission; expand inline and template initialization together in separately qualified

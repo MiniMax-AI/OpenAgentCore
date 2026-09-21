@@ -193,6 +193,28 @@ type SessionModelExecution struct {
 	EncryptedConfig []byte      `json:"encrypted_config"`
 }
 
+type Skill struct {
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	Name           string             `json:"name"`
+	Description    string             `json:"description"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	DefaultVersion int64              `json:"default_version"`
+	LatestVersion  int64              `json:"latest_version"`
+	NextVersion    int64              `json:"next_version"`
+}
+
+type SkillVersion struct {
+	ID          pgtype.UUID        `json:"id"`
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	SkillID     pgtype.UUID        `json:"skill_id"`
+	Version     int64              `json:"version"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	Contents    []byte             `json:"contents"`
+}
+
 type SourceFile struct {
 	ID        pgtype.UUID        `json:"id"`
 	TenantID  pgtype.UUID        `json:"tenant_id"`

@@ -6,5 +6,5 @@ SELECT f.contents FROM sessions s LEFT JOIN environment_setups f ON s.id = f.ses
 WHERE s.tenant_id = $1 AND s.id = $2 AND s.deleted_at IS NULL;
 
 -- name: SetSessionSetupMetadata :one
-UPDATE sessions SET configuration = jsonb_set(jsonb_set(configuration, '{environment,packages}', $2::jsonb), '{environment,initialization}', 'true'::jsonb)
+UPDATE sessions SET configuration = jsonb_set(jsonb_set(jsonb_set(configuration, '{environment,packages}', sqlc.arg(packages)::jsonb), '{environment,skills}', sqlc.arg(skills)::jsonb), '{environment,initialization}', 'true'::jsonb)
 WHERE id = $1 RETURNING *;

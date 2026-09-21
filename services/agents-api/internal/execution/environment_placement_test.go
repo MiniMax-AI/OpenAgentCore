@@ -1,13 +1,37 @@
 package execution
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"slices"
 	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
+
+func TestSkillReferenceIdentityStopsAtCoreBoundary(t *testing.T) {
+	session := store.Session{ID: "session", TenantID: "tenant"}
+	environment := store.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID,
+		Configuration: []byte(`{"type":"openai_hosted","initialization":true,"skills":[{"type":"skill_reference","skill_id":"skill-private","version":"1","name":"proof","description":"A proof."}]}`)}
+	var request proto.PromptRequestPayload
+	_, err := (&Dispatcher{}).configurePreparedEnvironment(t.Context(), session, environment, store.ExecutionDevice{EnvironmentID: environment.ID}, &request)
+	if err != nil || request.LocalEnvironment == nil || len(request.LocalEnvironment.Skills) != 1 || request.LocalEnvironment.Skills[0].Name != "proof" || request.LocalEnvironment.Skills[0].Type != "inline" {
+		t.Fatal("resolved Skill did not use the common installation descriptor", err)
+	}
+	raw, err := json.Marshal(request.LocalEnvironment)
+	if err != nil || bytes.Contains(raw, []byte("skill-private")) || bytes.Contains(raw, []byte("skill_reference")) {
+		t.Fatal("public source identity reached Runtime", err)
+	}
+	environment.Configuration = []byte(`{"type":"openai_hosted","skills":[{"type":"skill_reference","skill_id":"skill-private","version":"latest"}]}`)
+	if !LocalWorkspaceConfiguration(environment.Configuration) {
+		t.Fatal("admission demanded installed metadata before the creation transaction")
+	}
+	if _, err := (&Dispatcher{}).configurePreparedEnvironment(t.Context(), session, environment, store.ExecutionDevice{EnvironmentID: environment.ID}, &proto.PromptRequestPayload{}); err == nil {
+		t.Fatal("execution received an unresolved Skill selector")
+	}
+}
 
 func TestLocalEnvironmentRequiresQualifiedProfileAndExactAuthority(t *testing.T) {
 	for _, configuration := range []string{

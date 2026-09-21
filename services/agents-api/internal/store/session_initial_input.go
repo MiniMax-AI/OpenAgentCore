@@ -34,6 +34,10 @@ func (s *Store) createSessionResources(ctx context.Context, tenant string, param
 			return err
 		}
 		if row.ID == params.ID {
+			setup, err = s.freezeEnvironmentSkills(ctx, q, tenant, setup)
+			if err != nil {
+				return err
+			}
 			if err := s.saveSessionModelExecution(ctx, q, tenant, row.ID, provider); err != nil {
 				return err
 			}
@@ -55,7 +59,11 @@ func (s *Store) createSessionResources(ctx context.Context, tenant string, param
 				if err != nil {
 					return err
 				}
-				row, err = q.SetSessionSetupMetadata(ctx, sqlc.SetSessionSetupMetadataParams{ID: row.ID, Column2: packages})
+				skills, err := json.Marshal(setup.SkillMetadata())
+				if err != nil {
+					return err
+				}
+				row, err = q.SetSessionSetupMetadata(ctx, sqlc.SetSessionSetupMetadataParams{ID: row.ID, Packages: packages, Skills: skills})
 				if err != nil {
 					return err
 				}

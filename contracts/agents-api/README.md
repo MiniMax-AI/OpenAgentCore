@@ -64,7 +64,8 @@ This inventory is based on the pinned Python source, not our generated OpenAPI.
 It contains 42 distinct HTTP operations in 15 resource classes, excluding async
 duplicates, overloads and client-side helpers. There are 36 handler entries; the six
 Subagent read operations remain missing. The separate
-general `/v1/files` source-file API is outside this 42-operation count.
+general `/v1/files` source-file API and `/v1/skills` resource/version operations
+are outside this 42-operation count.
 
 An implemented route is not complete semantic compatibility. **Accepted** below
 means a recorded workflow passed under a specific profile; **partial** means some
@@ -72,12 +73,14 @@ variants work; **missing** means no implementation; **unverified** means behavio
 has not been shown to match upstream. Do not convert the route count into a
 compatibility percentage or treat a Docker result as E2B qualification.
 
-Paths below are SDK resource paths beneath `client.beta.agents`. Method names use
-the Python SDK. Vault HTTP paths start at `/vaults`, not `/agents/vaults`.
+Paths below are SDK resource paths beneath `client.beta.agents`, except Skills
+and Versions under `client.skills`. Method names use the Python SDK. Vault HTTP
+paths start at `/vaults`, not `/agents/vaults`.
 
 | Resource | Upstream operations | Current coverage |
 | --- | --- | --- |
 | Root reusable Agents | create, retrieve, update, list, delete | Partial create/retrieve/update/list/delete and Session references; configuration/error gaps remain |
+| Skills and Versions | create, retrieve, update default, list, delete, content | [Tenant-owned encrypted bundles and hosted references](environment-templates.md); qualified upload limits and unresolved hosted semantics are recorded explicitly |
 | sessions | create, retrieve, update, list, delete | Create (ordinary/live), retrieve, list with root-Agent filter, metadata-only update, public deletion with owned Docker/E2B cleanup; general physical cleanup and exact hosted semantics remain open |
 | sessions.events | create, stream | Text/cancel/function-result admission and live events; function-action state snapshots supported |
 | sessions.turns | retrieve, list | Implemented reads; lifecycle conformance still partial |
@@ -89,7 +92,7 @@ the Python SDK. Vault HTTP paths start at `/vaults`, not `/agents/vaults`.
 | sessions.subagents.turns.items | list | Missing |
 | environments | retrieve | Supported Codex self-hosted and three-harness Docker/E2B hosted profiles: durable status and safe initial-file metadata; other installation inventory and full lifecycle parity remain gaps |
 | environments.files | create, list | [Bounded live listing and inline/source-file creation](environment-files.md) on qualified Docker/E2B workspaces; Codex self-hosted listing is a separate supported path. Full listing, overwrite and error semantics remain partial |
-| environments.templates | create, retrieve, update, list, delete | [Reusable network, files, env/setup/packages, inline Skills and Session snapshots](environment-templates.md); other initialization and full semantics remain gaps |
+| environments.templates | create, retrieve, update, list, delete | [Reusable network, files, env/setup/packages, inline/referenced Skills and Session snapshots](environment-templates.md); other initialization and full semantics remain gaps |
 | vaults | create, retrieve, list, delete | Create/retrieve/list/delete with independent tenant persistence, stored status filtering, atomic Credential cascade and frozen Session attachments; archive semantics and full hosted lifecycle parity remain missing |
 | vaults.credentials | create, retrieve, update, list, delete | Static-bearer create/retrieve/list/token replacement/deletion with scoped encrypted storage; Session attachment and exact-URL HTTPS MCP binding; OAuth, archive semantics and full hosted lifecycle parity remain missing |
 
@@ -155,7 +158,7 @@ user-managed enrollment remain outside this qualification.
 | Area | Missing or unverified scope |
 | --- | --- |
 | Subagents / multi_agent | Six public child read operations, enabled execution, child lifecycle/interactions and full recovery; deferred outside the MVP |
-| Environment Templates | Skills references, Plugins, capability directories, unsupported restricted hostname forms, installation overrides/null network and exact hosted errors; CRUD/list, files, env/setup/system/npm/Python, inline Skills and Session references are supported |
+| Environment Templates | Plugins, capability directories, unsupported restricted hostname forms, installation overrides/null network and exact hosted errors; CRUD/list, files, env/setup/system/npm/Python, inline/referenced Skills and Session references are supported |
 | Input and configuration | Non-text initial input, broader content/configuration unions, structured output and reasoning/verbosity combinations |
 | Tools and interactions | Deferred functions, other tool types, effective tool-set enforcement and result/cancel publication ordering; MiniMax public functions/MCP remain unsupported |
 | Vault and Credentials | OAuth/refresh, archive semantics, revocation/concurrent mutation and exact hosted selection/error behavior; static bearer CRUD/token replacement is already present |

@@ -43,17 +43,18 @@ func (q *Queries) GetEnvironmentSetup(ctx context.Context, arg GetEnvironmentSet
 }
 
 const setSessionSetupMetadata = `-- name: SetSessionSetupMetadata :one
-UPDATE sessions SET configuration = jsonb_set(jsonb_set(configuration, '{environment,packages}', $2::jsonb), '{environment,initialization}', 'true'::jsonb)
+UPDATE sessions SET configuration = jsonb_set(jsonb_set(jsonb_set(configuration, '{environment,packages}', $2::jsonb), '{environment,skills}', $3::jsonb), '{environment,initialization}', 'true'::jsonb)
 WHERE id = $1 RETURNING id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id
 `
 
 type SetSessionSetupMetadataParams struct {
-	ID      pgtype.UUID `json:"id"`
-	Column2 []byte      `json:"column_2"`
+	ID       pgtype.UUID `json:"id"`
+	Packages []byte      `json:"packages"`
+	Skills   []byte      `json:"skills"`
 }
 
 func (q *Queries) SetSessionSetupMetadata(ctx context.Context, arg SetSessionSetupMetadataParams) (Session, error) {
-	row := q.db.QueryRow(ctx, setSessionSetupMetadata, arg.ID, arg.Column2)
+	row := q.db.QueryRow(ctx, setSessionSetupMetadata, arg.ID, arg.Packages, arg.Skills)
 	var i Session
 	err := row.Scan(
 		&i.ID,

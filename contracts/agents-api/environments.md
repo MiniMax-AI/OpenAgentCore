@@ -61,8 +61,8 @@ an existing allocation's Create.
 Omitted/null network defaults to enabled. Enabled, disabled and exact-host restricted
 policies use the same qualified image with adapter-selected immutable native policy.
 Templates and inline configuration share initial files, env, packages, ordered setup
-and inline Skills through the hosted initializer. Unsupported hostname forms,
-Plugins, Skill references and capability-directory imports reject explicitly; see
+and inline or tenant-owned referenced Skills through the hosted initializer.
+Unsupported hostname forms, Plugins and capability-directory imports reject explicitly; see
 the [Template coverage and limits](environment-templates.md). Empty/null installation
 defaults produce safe empty metadata, not a live workspace inventory. Hosted MCP
 combinations remain unimplemented.

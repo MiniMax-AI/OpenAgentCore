@@ -38,11 +38,12 @@ type templateLookupStore struct {
 	network string
 	domains []string
 	tenant  string
+	skills  []store.EnvironmentSkill
 }
 
 func (s *templateLookupStore) ResolveEnvironmentTemplate(_ context.Context, tenant, id string) (store.EnvironmentTemplate, []store.InitialFile, error) {
 	s.tenant = tenant
-	return store.EnvironmentTemplate{ID: id, NetworkAccess: s.network, AllowedDomains: s.domains}, nil, nil
+	return store.EnvironmentTemplate{ID: id, NetworkAccess: s.network, AllowedDomains: s.domains, Initialization: store.EnvironmentSetup{Skills: s.skills}}, nil, nil
 }
 
 func TestTemplateResolutionAndCreationIntent(t *testing.T) {

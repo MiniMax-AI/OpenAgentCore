@@ -9,19 +9,18 @@ import (
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentskill"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
 type environmentPlacement struct {
-	Skills                []agentskill.Metadata `json:"skills,omitempty"`
-	Type                  string                `json:"type"`
-	ToolEnvironment       bool                  `json:"initialization,omitempty"`
-	SystemPackages        bool                  `json:"-"`
-	NetworkAccess         string                `json:"-"`
-	AllowedDomains        []string              `json:"-"`
-	WorkspaceDirectory    string                `json:"workspace_directory"`
-	CapabilityDirectories []string              `json:"capability_directories"`
+	Skills                []store.EnvironmentSkillMetadata `json:"skills,omitempty"`
+	Type                  string                           `json:"type"`
+	ToolEnvironment       bool                             `json:"initialization,omitempty"`
+	SystemPackages        bool                             `json:"-"`
+	NetworkAccess         string                           `json:"-"`
+	AllowedDomains        []string                         `json:"-"`
+	WorkspaceDirectory    string                           `json:"workspace_directory"`
+	CapabilityDirectories []string                         `json:"capability_directories"`
 }
 
 // LocalWorkspaceConfiguration recognizes the qualified stored V1 profile. It
@@ -44,12 +43,12 @@ func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacem
 	case "openai_hosted":
 		// Stored policy is shared by preparation and provider bootstrap.
 		var local struct {
-			Skills                []agentskill.Metadata       `json:"skills,omitempty"`
-			Files                 []store.InitialFileMetadata `json:"files"`
-			Packages              *v1.EnvironmentPackages     `json:"packages,omitempty"`
-			Initialization        bool                        `json:"initialization,omitempty"`
-			Type                  string                      `json:"type"`
-			CapabilityDirectories []string                    `json:"capability_directories"`
+			Skills                []store.EnvironmentSkillMetadata `json:"skills,omitempty"`
+			Files                 []store.InitialFileMetadata      `json:"files"`
+			Packages              *v1.EnvironmentPackages          `json:"packages,omitempty"`
+			Initialization        bool                             `json:"initialization,omitempty"`
+			Type                  string                           `json:"type"`
+			CapabilityDirectories []string                         `json:"capability_directories"`
 			Network               *struct {
 				Access         string   `json:"access"`
 				AllowedDomains []string `json:"allowed_domains"`
@@ -92,7 +91,13 @@ func (d *Dispatcher) configurePreparedEnvironment(ctx context.Context, session s
 		if placement.SystemPackages && !placement.ToolEnvironment {
 			return nil, store.ErrInvalidInput
 		}
-		req.LocalEnvironment = &proto.LocalEnvironment{ID: environment.ID, ToolEnvironment: placement.ToolEnvironment, SystemPackages: placement.SystemPackages, Skills: placement.Skills}
+		req.LocalEnvironment = &proto.LocalEnvironment{ID: environment.ID, ToolEnvironment: placement.ToolEnvironment, SystemPackages: placement.SystemPackages}
+		for _, metadata := range placement.Skills {
+			if store.ValidateInstalledSkillMetadata(metadata) != nil {
+				return nil, store.ErrInvalidInput
+			}
+			req.LocalEnvironment.Skills = append(req.LocalEnvironment.Skills, (store.EnvironmentSkill{Metadata: metadata}).InstallationMetadata())
+		}
 		req.LocalEnvironment.NetworkAccess = placement.NetworkAccess
 		req.LocalEnvironment.AllowedDomains = append([]string(nil), placement.AllowedDomains...)
 		return nil, nil

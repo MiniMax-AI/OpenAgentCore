@@ -22,7 +22,7 @@ type EnvironmentSetup struct {
 	Env      map[string]string      `json:"env,omitempty"`
 	Commands []SetupCommand         `json:"setup_commands,omitempty"`
 	Packages v1.EnvironmentPackages `json:"packages"`
-	Skills   []InlineSkill          `json:"skills,omitempty"`
+	Skills   []EnvironmentSkill     `json:"skills,omitempty"`
 }
 
 type SetupCommand struct {
@@ -37,7 +37,11 @@ func (s EnvironmentSetup) Empty() bool {
 }
 
 func (s EnvironmentSetup) Validate() error {
-	if ValidateInlineSkills(s.Skills) != nil {
+	return s.validate(false)
+}
+
+func (s EnvironmentSetup) validate(installed bool) error {
+	if validateEnvironmentSkills(s.Skills, installed) != nil {
 		return ErrInvalidInput
 	}
 	ordinary := s
@@ -94,7 +98,7 @@ func (s *Store) openEnvironmentSetup(tenant, resource, id, field string, ciphert
 }
 
 func (s *Store) saveEnvironmentSetup(ctx context.Context, q *sqlc.Queries, tenant string, session pgtype.UUID, setup EnvironmentSetup) error {
-	if err := setup.Validate(); err != nil {
+	if err := setup.validate(true); err != nil {
 		return err
 	}
 	if setup.Empty() {
@@ -127,7 +131,7 @@ func (s *Store) ReadEnvironmentSetup(ctx context.Context, tenant, session string
 	if err = s.openEnvironmentSetup(uuid.UUID(lookup.TenantID.Bytes).String(), "session", uuid.UUID(lookup.ID.Bytes).String(), "initialization", encrypted, &result); err != nil {
 		return result, err
 	}
-	return result, result.Validate()
+	return result, result.validate(true)
 }
 
 func (s EnvironmentSetup) PackageMetadata() v1.EnvironmentPackages {

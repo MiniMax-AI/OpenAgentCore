@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 
@@ -8,7 +9,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
-func decodeInlineSkills(raw json.RawMessage) ([]store.InlineSkill, error) {
+func decodeEnvironmentSkills(raw json.RawMessage) ([]store.EnvironmentSkill, error) {
 	if len(raw) == 0 {
 		return nil, nil
 	}
@@ -16,8 +17,33 @@ func decodeInlineSkills(raw json.RawMessage) ([]store.InlineSkill, error) {
 	if json.Unmarshal(raw, &entries) != nil || len(entries) > 50 {
 		return nil, store.ErrInvalidInput
 	}
-	result := make([]store.InlineSkill, 0, len(entries))
+	result := make([]store.EnvironmentSkill, 0, len(entries))
 	for _, entry := range entries {
+		var discriminator struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(entry, &discriminator) != nil {
+			return nil, store.ErrInvalidInput
+		}
+		if discriminator.Type == "skill_reference" {
+			var reference struct {
+				Type    string          `json:"type"`
+				SkillID string          `json:"skill_id"`
+				Version json.RawMessage `json:"version"`
+			}
+			if decodeInputObject(entry, &reference, "type", "skill_id", "version") != nil {
+				return nil, store.ErrInvalidInput
+			}
+			metadata := store.EnvironmentSkillMetadata{Type: reference.Type, SkillID: reference.SkillID}
+			if len(reference.Version) > 0 {
+				// Null selection semantics are unconfirmed; do not silently select default.
+				if bytes.Equal(bytes.TrimSpace(reference.Version), []byte("null")) || json.Unmarshal(reference.Version, &metadata.Version) != nil || metadata.Version == "" {
+					return nil, store.ErrInvalidInput
+				}
+			}
+			result = append(result, store.EnvironmentSkill{Metadata: metadata})
+			continue
+		}
 		var input struct {
 			Type        string          `json:"type"`
 			Name        string          `json:"name"`
@@ -39,12 +65,12 @@ func decodeInlineSkills(raw json.RawMessage) ([]store.InlineSkill, error) {
 		if err != nil {
 			return nil, store.ErrInvalidInput
 		}
-		result = append(result, store.InlineSkill{Metadata: agentskill.Metadata{Type: input.Type, Name: input.Name, Description: input.Description}, Archive: body})
+		result = append(result, store.EnvironmentSkill{Metadata: store.EnvironmentSkillMetadata{Type: input.Type, Name: input.Name, Description: input.Description}, Archive: body})
 	}
-	return result, store.ValidateInlineSkills(result)
+	return result, store.ValidateEnvironmentSkills(result)
 }
 
-func skillResponse(skills []agentskill.Metadata) []json.RawMessage {
+func skillResponse(skills []store.EnvironmentSkillMetadata) []json.RawMessage {
 	result := make([]json.RawMessage, 0, len(skills))
 	for _, skill := range skills {
 		raw, _ := json.Marshal(skill)
@@ -63,8 +89,8 @@ func storedSkills(raw json.RawMessage) ([]json.RawMessage, error) {
 	}
 	seen := map[string]bool{}
 	for _, entry := range entries {
-		var metadata agentskill.Metadata
-		if decodeInputObject(entry, &metadata, "type", "name", "description") != nil || metadata.Type != "inline" || metadata.Name == "" || metadata.Description == "" || seen[metadata.Name] {
+		var metadata store.EnvironmentSkillMetadata
+		if decodeInputObject(entry, &metadata, "type", "name", "description", "skill_id", "version") != nil || store.ValidateInstalledSkillMetadata(metadata) != nil || seen[metadata.Name] {
 			return nil, store.ErrInvalidInput
 		}
 		seen[metadata.Name] = true

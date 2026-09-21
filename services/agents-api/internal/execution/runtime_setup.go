@@ -13,16 +13,16 @@ import (
 // runtimeSetupOperation is the packaged initializer's confidential stdin contract.
 // Public templates and native harness configuration never cross this boundary.
 type runtimeSetupOperation struct {
-	Skill    *store.InlineSkill `json:"-"`
-	Name     string             `json:"name,omitempty"`
-	Files    []agentskill.File  `json:"files,omitempty"`
-	Version  int                `json:"version"`
-	Action   string             `json:"action"`
-	Network  string             `json:"network,omitempty"`
-	Env      map[string]string  `json:"env"`
-	Packages []string           `json:"packages,omitempty"`
-	Command  string             `json:"command,omitempty"`
-	CWD      string             `json:"cwd,omitempty"`
+	Skill    *store.EnvironmentSkill `json:"-"`
+	Name     string                  `json:"name,omitempty"`
+	Files    []agentskill.File       `json:"files,omitempty"`
+	Version  int                     `json:"version"`
+	Action   string                  `json:"action"`
+	Network  string                  `json:"network,omitempty"`
+	Env      map[string]string       `json:"env"`
+	Packages []string                `json:"packages,omitempty"`
+	Command  string                  `json:"command,omitempty"`
+	CWD      string                  `json:"cwd,omitempty"`
 }
 
 func setupOperations(setup store.EnvironmentSetup) []runtimeSetupOperation {
@@ -64,7 +64,7 @@ func runRuntimeSetup(ctx context.Context, provider sandbox.Provider, reference s
 		return sandbox.ErrInvalid
 	}
 	if operation.Skill != nil {
-		files, err := agentskill.Read(operation.Skill.Archive, operation.Skill.Metadata)
+		files, err := agentskill.Read(operation.Skill.Archive, operation.Skill.InstallationMetadata())
 		if err != nil {
 			return err
 		}

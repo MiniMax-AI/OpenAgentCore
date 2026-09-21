@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"testing"
+
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
 func skillInput(t *testing.T, body string) json.RawMessage {
@@ -27,6 +29,62 @@ func skillInput(t *testing.T, body string) json.RawMessage {
 		t.Fatal(err)
 	}
 	return raw
+}
+
+func TestSkillReferenceParsingInheritanceAndReplacement(t *testing.T) {
+	lookup := &templateLookupStore{network: "enabled", skills: []store.EnvironmentSkill{{Metadata: store.EnvironmentSkillMetadata{Type: "skill_reference", SkillID: "skill-template", Version: "latest"}}}}
+	h := Handler{store: lookup}
+	for _, fields := range []string{"", `,"skills":[]`, `,"skills":[{"type":"skill_reference","skill_id":"skill-override","version":"2"}]`} {
+		var decoded decodedSessionRequest
+		if err := json.Unmarshal([]byte(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","environment_template_id":"template"`+fields+`}}`), &decoded); err != nil {
+			t.Fatal(err)
+		}
+		input, err := decoded.validated()
+		if err != nil {
+			t.Fatal(err)
+		}
+		intent, err := sessionCreationRequest(input, nil)
+		if err != nil || len(intent) == 0 {
+			t.Fatal("missing unresolved retry intent", err)
+		}
+		if err = h.resolveTemplateEnvironment(t.Context(), "tenant", &input); err != nil {
+			t.Fatal(err)
+		}
+		switch fields {
+		case "":
+			if len(input.initialization.Skills) != 1 || input.initialization.Skills[0].Metadata != lookup.skills[0].Metadata {
+				t.Fatal("reference inheritance")
+			}
+		case `,"skills":[]`:
+			if len(input.initialization.Skills) != 0 {
+				t.Fatal("explicit empty list did not replace")
+			}
+		default:
+			if len(input.initialization.Skills) != 1 || input.initialization.Skills[0].Metadata.SkillID != "skill-override" || input.initialization.Skills[0].Metadata.Version != "2" {
+				t.Fatal("reference replacement")
+			}
+		}
+	}
+	for _, version := range []string{"", `,"version":"latest"`, `,"version":"1"`} {
+		raw := []byte(`{"type":"openai_hosted","skills":[{"type":"skill_reference","skill_id":"skill-owned"` + version + `}]}`)
+		var decoded decodedSessionRequest
+		if err := json.Unmarshal(append(append([]byte(`{"agent":{"model":"test"},"environment":`), raw...), '}'), &decoded); err != nil {
+			t.Fatal(err)
+		}
+		input, err := decoded.validated()
+		if err != nil {
+			t.Fatal(err)
+		}
+		intent, err := sessionCreationRequest(input, nil)
+		if err != nil || !bytes.Contains(intent, []byte("skill-owned")) {
+			t.Fatal("inline reference lost retry intent", err)
+		}
+	}
+	for _, version := range []string{`null`, `1`, `""`, `"0"`} {
+		if _, err := decodeEnvironmentSkills([]byte(`[{"type":"skill_reference","skill_id":"skill-owned","version":` + version + `}]`)); err == nil {
+			t.Fatal("invalid or unconfirmed selector accepted")
+		}
+	}
 }
 
 func TestInlineSkillsSharedParsingSnapshotAndIntent(t *testing.T) {
@@ -75,7 +133,7 @@ func TestInlineSkillsSharedParsingSnapshotAndIntent(t *testing.T) {
 			t.Fatal("clear", err)
 		}
 	}
-	for _, invalid := range []string{`{"skills":[null]}`, `{"skills":[{"type":"skill_reference","skill_id":"foreign"}]}`, `{"skills":[{"type":"inline","name":"proof","description":"A proof.","source":{"type":"base64","media_type":"application/zip","data":"invalid"}}]}`} {
+	for _, invalid := range []string{`{"skills":[null]}`, `{"skills":[{"type":"skill_reference","skill_id":""}]}`, `{"skills":[{"type":"inline","name":"proof","description":"A proof.","source":{"type":"base64","media_type":"application/zip","data":"invalid"}}]}`} {
 		if _, err := decodeTemplateInput([]byte(invalid)); err == nil {
 			t.Fatal("invalid or unsupported skill accepted")
 		}

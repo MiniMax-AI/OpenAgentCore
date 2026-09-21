@@ -18,7 +18,7 @@ and five-operation SandboxProvider path as inline configuration.
   or network replaces, with null clearing name or resetting network.
 - Empty/null installation fields retain empty defaults. Responses contain safe
   metadata and never `env`, `setup_commands` or inline file data. Initial files are
-  supported as described below, together with inline Skills, env, ordered setup and system/npm/Python packages; remaining populated installations reject explicitly.
+  supported as described below, together with inline/referenced Skills, env, ordered setup and system/npm/Python packages; remaining populated installations reject explicitly.
 - Listing uses `after`, `limit` (1–100, default 20), and `order` (default `desc`).
   Creation timestamp plus ID supplies stable local ordering. Missing/foreign IDs
   and cursors return the same not-found result. No compute is allocated by CRUD.
@@ -86,9 +86,48 @@ native-history recovery preserve user modifications instead of reinstalling file
 Docker/E2B and all three harnesses use this same lifecycle. The Provider API remains
 five operations; public Templates are never E2B image templates.
 
-## Inline Skills
+## Skills and versioned references
 
-Both templates and standalone hosted configuration accept inline Skill ZIPs:
+Both templates and standalone hosted configuration accept project-owned Skill
+references and inline Skill ZIPs. Upload a directory through the pinned SDK, then
+reference its default version from a template:
+
+```python
+skill = client.skills.create(files=[
+    ("report/SKILL.md", b"---\nname: report\ndescription: Create the report.\n---\nFollow the report procedure.", "text/markdown"),
+])
+template = client.beta.agents.environments.templates.create(
+    skills=[{"type": "skill_reference", "skill_id": skill.id}]
+)
+session = client.beta.agents.sessions.create(
+    agent={"model": "your-configured-model"},
+    environment={"type": "openai_hosted", "environment_template_id": template.id},
+    input="Use the report Skill.",
+)
+```
+
+Core exposes the pinned `/v1/skills` resource, version and content operations using
+ordinary project bearer authentication. No Agents beta header is required on those
+resource routes. Metadata reads do not decrypt or fetch bundles. Content is encrypted
+with its tenant, Skill and immutable version identity. ZIP uploads use `files` and
+directory uploads use repeated `files[]`; the fixed SDK directory form above works.
+SDK 3.13.0 drops a single FileTypes tuple during multipart extraction before sending
+it. Use raw HTTP for a single ZIP with this fixed client; Core does not synthesize
+missing bytes or alter the pinned SDK.
+
+Templates preserve reference selectors: omission selects default at Session
+creation, `"latest"` selects latest, and a positive version string selects that
+version. A Session freezes tenant-authorized bytes and concrete version metadata
+in its creation transaction. Later source deletion, default changes or template
+updates cannot change that Session or its committed creation retry. A supplied
+Session Skill list replaces the template list; omission inherits. Explicit null
+reference versions and null list overrides are not qualified and reject.
+References return type/skill_id/version/name/description in Session metadata,
+while template responses retain unresolved selectors. Confidential bundle content
+never appears in these metadata responses. The common Runtime installation path
+receives frozen files and descriptive metadata, without source or template IDs.
+
+Inline Skill ZIPs use the same initializer:
 
 ```python
 import base64
@@ -113,11 +152,10 @@ and invalid manifests reject. Content is inert during installation; executable
 files retain their executable bit. These operational limits are not claims about
 upstream limits.
 
-Responses contain only type/name/description. Archive content stays in encrypted,
+Inline metadata contains only type/name/description. Archive content stays in encrypted,
 resource-bound template and Session snapshots. Updates replace supplied `skills`;
 omission preserves and null/[] clears. Existing Sessions retain their frozen
-content after template update/deletion. A template reference with an explicit
-Skills override rejects pending confirmation of upstream merge semantics.
+content after template update/deletion.
 
 The shared initializer installs Skills under
 `/environment/initialization/capabilities/skills/<name>` before setup and native execution.
@@ -131,8 +169,7 @@ isolated workspace tool worker. No Provider or model/tool loop is added.
 Codex nested `SKILL.md` discovery, `agents/openai.yaml` native dependency
 configuration and Claude inline/fenced shell preprocessing are not qualified in this batch and explicitly fail adapter
 preparation. Other files are not interpreted as a public plugin installation.
-Public `skill_reference`, `/v1/skills` version resolution, generic Plugins and
-capability-directory imports remain separate gaps. Native built-in Skill visibility
+Generic Plugins and capability-directory imports remain separate gaps. Native built-in Skill visibility
 is not evidence of exact public tool-set parity. Qualification probes alone do not
 establish complete public support; record real service acceptance separately.
 
@@ -233,9 +270,9 @@ policy on recovery; resource tests alone do not establish execution compatibilit
 
 ## Explicit gaps and evidence boundaries
 
-Nonempty `capability_directories` and `plugins`, and Skills API references,
-remain unsupported
-for both templates and inline initialization. The separate live Files API remains
+Nonempty `capability_directories` and `plugins` remain unsupported
+for both templates and inline initialization. Skill references use the shared
+initialization flow described above. The separate live Files API remains
 available after initialization. Unsupported requests reject without echoing payloads.
 
 The [hosted guide](https://developers.openai.com/api/docs/guides/agents-api/environments/openai-hosted)
@@ -247,7 +284,7 @@ Template updates replace each supplied field; omission preserves it and null cle
 it. Referenced Sessions inherit the snapshot; explicit env/packages/setup overrides
 with a template ID reject while override semantics remain unconfirmed.
 
-Files and inline Skills are installed first, followed by system, npm/Python packages and ordered commands;
+Files and resolved Skills are installed first, followed by system, npm/Python packages and ordered commands;
 the default cwd is `/workspace`. One command or package operation has the existing
 two-minute local budget, within the thirty-minute initialization budget. No command
 is retried after unknown effects. Completed setup never runs on reconnect.
@@ -506,3 +543,50 @@ Early Docker result manifests contain inherited installer archive fields; those
 fields do not qualify a new installer archive. Current binary and image hashes
 identify the tested deployment. These checks do not establish complete upstream
 Template or Agents API compatibility.
+
+## Reference batch validation and limits
+
+Resource operations passed fixed SDK/raw HTTP and real PostgreSQL checks. The
+shared reference path passed real Docker execution on all three qualified profiles:
+
+| Harness | Real model | Complete driver result |
+| --- | --- | --- |
+| Codex | Kimi K3 | Passed, 308.80 seconds |
+| Claude Code | Kimi K3 | Passed, 211.68 seconds |
+| MiniMax Code | MiniMax M2.7 | Passed, 162.71 seconds |
+
+Each run covers SDK upload, unresolved template intent, concrete Session metadata,
+native Skill supporting files, public Files/Artifacts and tenant checks, source
+and template deletion, committed retry, and cold Core/Runtime continuation without
+reinstalling or replaying the original Turn. All report zero cleanup errors. The
+current Core uses the previously qualified Runtime images and native adapters;
+this batch does not change their execution architecture or qualify E2B references.
+
+MiniMax's initial attempts failed because the test host's SOCKS route exceeded the
+native TLS connection deadline. A temporary operator SSH byte relay restored normal
+TLS latency, retaining native certificate validation and the same model/credentials.
+One subsequent response recalled the exact random history value but omitted its
+fixed prefix. Clarifying the test prompt to request the complete literal token,
+without supplying its random value again, passed the unchanged exact assertion and
+remaining checks. Failed evidence is retained; no Core output repair or native
+connection-timeout change was made.
+
+`make sqlc-generate`, `make openapi` and the standalone `make check` passed; the
+full gate took 484.22 seconds. The optional MiniMax packaged-native scratch/large-output
+probe was skipped because its profile/artifact variables were unset. Unchanged
+native-profile qualification and the real reference workflows are separate evidence.
+Fresh independent review remains a merge prerequisite. These checks do not establish
+complete upstream Skill, Template or Agents API compatibility.
+
+Sanitized results and operator drivers are retained on `zju_a100_2` under
+`~/.parsar/remediation/20260921/template-skill-references/`, with a local evidence
+index under `~/.parsar/remediation/20260921/template-capabilities-design/`.
+
+The current upload profile accepts at most 500 regular files, 5 MiB compressed
+and 20 MiB expanded per bundle. These are qualified implementation limits, not
+published protocol maxima. Exact hosted error parity, null version selection,
+unversioned content selection, top-level metadata across version changes and
+last/default/latest deletion semantics remain recorded gaps. Current resource
+behavior selects default for unversioned content, preserves initial top-level
+metadata, rejects default-version deletion and never reuses version numbers.
+These choices are not verified upstream guarantees.

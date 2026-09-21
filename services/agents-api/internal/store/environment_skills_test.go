@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentskill"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/credentialcrypto"
 	"github.com/google/uuid"
 )
@@ -33,7 +32,7 @@ func TestSkillsEncryptedTemplateAndFrozenSession(t *testing.T) {
 	if err = writer.Close(); err != nil {
 		t.Fatal(err)
 	}
-	setup := EnvironmentSetup{Skills: []InlineSkill{{Metadata: agentskill.Metadata{Type: "inline", Name: "proof", Description: "A proof."}, Archive: archive.Bytes()}}}
+	setup := EnvironmentSetup{Skills: []EnvironmentSkill{{Metadata: EnvironmentSkillMetadata{Type: "inline", Name: "proof", Description: "A proof."}, Archive: archive.Bytes()}}}
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	template, err := s.CreateEnvironmentTemplate(t.Context(), tenant, EnvironmentTemplateInput{SetSkills: true, Initialization: setup})
 	if err != nil {

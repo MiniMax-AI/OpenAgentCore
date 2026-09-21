@@ -2,8 +2,6 @@ package store
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"strings"
 	"testing"
@@ -81,35 +79,23 @@ func TestConfigurationIsPartOfSessionIdentity(t *testing.T) {
 	}
 }
 
-func TestOriginalSessionHashRespectsRecordedCreator(t *testing.T) {
-	s, pool := testStore(t)
-	ctx := context.Background()
-	legacyHash := sha256.Sum256([]byte(`{"Engine":"codex","Metadata":{}}`))
-	for _, known := range []bool{false, true} {
-		tenant, id := uuid.NewString(), uuid.NewString()
-		var kind, creatorID any
-		if known {
-			kind, creatorID = FixtureCreator().Kind, FixtureCreator().ID
+func TestEmptyConfigurationCanonicalizationPreservesCreator(t *testing.T) {
+	s, _ := testStore(t)
+	tenant := uuid.NewString()
+	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "empty-configuration"}
+	first, err := s.CreateSession(t.Context(), tenant, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, configuration := range [][]byte{nil, []byte(`{}`), []byte(` { } `)} {
+		input.Configuration = configuration
+		got, err := s.CreateSession(t.Context(), tenant, input)
+		if err != nil || got.ID != first.ID || string(got.Configuration) != "{}" || got.Creator == nil || *got.Creator != FixtureCreator() {
+			t.Fatal("canonical retry changed identity or creator", err)
 		}
-		// Seed each ownership state explicitly; neither the migration nor a retry assigns it.
-		_, err := pool.Exec(ctx, `INSERT INTO sessions (id, tenant_id, engine, metadata, idempotency_key, request_hash, creator_kind, creator_id)
-   VALUES ($1, $2, 'codex', '{}', 'legacy', $3, $4, $5)`, id, tenant, hex.EncodeToString(legacyHash[:]), kind, creatorID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, configuration := range [][]byte{nil, []byte(`{}`), []byte(` { } `)} {
-			got, err := s.CreateSession(ctx, tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "legacy", Configuration: configuration})
-			if !known {
-				if !errors.Is(err, ErrIdempotencyConflict) {
-					t.Fatal("unknown historical creator was claimed", err)
-				}
-			} else if err != nil || got.ID != id || string(got.Configuration) != "{}" || got.Creator == nil || *got.Creator != FixtureCreator() {
-				t.Fatalf("original hash retry = %+v, %v", got, err)
-			}
-		}
-		read, err := s.GetSession(ctx, tenant, id)
-		if err != nil || (read.Creator != nil) != known {
-			t.Fatal("retry changed recorded creator", read, err)
-		}
+	}
+	input.Creator.ID += "-other"
+	if _, err := s.CreateSession(t.Context(), tenant, input); !errors.Is(err, ErrIdempotencyConflict) {
+		t.Fatal("another creator claimed the same request", err)
 	}
 }

@@ -30,7 +30,10 @@ func decodeTemplateEnvironment(raw json.RawMessage) (*v1.Environment, string, js
 	if value, exists := fields["network"]; exists && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 		return nil, "", nil, store.ErrInvalidInput
 	}
-	for _, name := range []string{"files", "env", "setup_commands", "packages", "skills"} {
+	if value, exists := fields["skills"]; exists && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+		return nil, "", nil, store.ErrInvalidInput
+	}
+	for _, name := range []string{"files", "env", "setup_commands", "packages"} {
 		if _, supplied := fields[name]; supplied {
 			return nil, "", nil, store.ErrInvalidInput
 		}
@@ -63,8 +66,13 @@ func (h *Handler) resolveTemplateEnvironment(ctx context.Context, tenant string,
 	if !effective.Narrows(agentnetwork.Policy{Access: template.NetworkAccess, AllowedDomains: template.AllowedDomains}) {
 		return store.ErrInvalidInput
 	}
+	skills := input.initialization.Skills
+	if _, supplied := fields["skills"]; !supplied {
+		skills = template.Initialization.Skills
+	}
 	input.initialization = template.Initialization
-	input.Environment.Skills = skillResponse(template.Skills)
+	input.initialization.Skills = skills
+	input.Environment.Skills = skillResponse(input.initialization.SkillMetadata())
 	packages := template.Initialization.PackageMetadata()
 	input.Environment.Packages = &packages
 	input.initialFiles = files

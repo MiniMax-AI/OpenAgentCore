@@ -11,7 +11,7 @@ import (
 )
 
 func sessionCreationRequest(input sessionRequest, initial []store.Input) (json.RawMessage, error) {
-	if input.XAgentsCore == nil && input.AgentID == nil && input.templateID == "" && len(input.initialFiles) == 0 && !inlineCredentialIntent(input) && input.agentFields["x_agents_core"] == nil {
+	if input.XAgentsCore == nil && input.AgentID == nil && input.templateID == "" && len(input.initialFiles) == 0 && input.initialization.Empty() && !inlineCredentialIntent(input) && input.agentFields["x_agents_core"] == nil {
 		return nil, nil
 	}
 	agentID := ""

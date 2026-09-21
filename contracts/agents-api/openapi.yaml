@@ -1207,6 +1207,146 @@ definitions:
     - data
     - has_more
     type: object
+  v1.Skill:
+    properties:
+      created_at:
+        type: integer
+      default_version:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      latest_version:
+        type: string
+      name:
+        type: string
+      object:
+        enum:
+        - skill
+        type: string
+    required:
+    - created_at
+    - default_version
+    - description
+    - id
+    - latest_version
+    - name
+    - object
+    type: object
+  v1.SkillDeleted:
+    properties:
+      deleted:
+        type: boolean
+      id:
+        type: string
+      object:
+        enum:
+        - skill.deleted
+        type: string
+    required:
+    - deleted
+    - id
+    - object
+    type: object
+  v1.SkillList:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/v1.Skill'
+        type: array
+      first_id:
+        type: string
+        x-nullable: true
+      has_more:
+        type: boolean
+      last_id:
+        type: string
+        x-nullable: true
+      object:
+        enum:
+        - list
+        type: string
+    required:
+    - data
+    - has_more
+    - object
+    type: object
+  v1.SkillUpdateRequest:
+    properties:
+      default_version:
+        type: string
+    required:
+    - default_version
+    type: object
+  v1.SkillVersion:
+    properties:
+      created_at:
+        type: integer
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      object:
+        enum:
+        - skill.version
+        type: string
+      skill_id:
+        type: string
+      version:
+        type: string
+    required:
+    - created_at
+    - description
+    - id
+    - name
+    - object
+    - skill_id
+    - version
+    type: object
+  v1.SkillVersionDeleted:
+    properties:
+      deleted:
+        type: boolean
+      id:
+        type: string
+      object:
+        enum:
+        - skill.version.deleted
+        type: string
+      version:
+        type: string
+    required:
+    - deleted
+    - id
+    - object
+    - version
+    type: object
+  v1.SkillVersionList:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/v1.SkillVersion'
+        type: array
+      first_id:
+        type: string
+        x-nullable: true
+      has_more:
+        type: boolean
+      last_id:
+        type: string
+        x-nullable: true
+      object:
+        enum:
+        - list
+        type: string
+    required:
+    - data
+    - has_more
+    - object
+    type: object
   v1.SourceFile:
     properties:
       bytes:
@@ -2113,13 +2253,14 @@ paths:
     post:
       consumes:
       - application/json
-      description: Saves tenant-owned hosted configuration. Supports nullable
-        name, enabled/disabled or exact-domain restricted network, initial inline/file_id files, confidential
-        env, ordered setup_commands, system/npm/Python packages and inline Skill ZIPs.
-        Omitted/null network defaults to enabled. Restricted network requires 1–100
-        exact ASCII hostnames; other host forms and populated unsupported installations
-        are rejected before persistence without echoing input.
-        No compute is allocated. Exact hosted error/retry semantics remain unverified.
+      description: Saves tenant-owned hosted configuration. Supports nullable name,
+        enabled/disabled or exact-domain restricted network, initial inline/file_id
+        files, confidential env, ordered setup_commands, system/npm/Python packages
+        and inline/referenced Skill ZIPs. Omitted/null network defaults to enabled.
+        Restricted network requires 1–100 exact ASCII hostnames; other host forms
+        and populated unsupported installations are rejected before persistence without
+        echoing input. No compute is allocated. Exact hosted error/retry semantics
+        remain unverified.
       parameters:
       - description: agents=v1
         in: header
@@ -2424,16 +2565,21 @@ paths:
         initial provisioning has no caller connection action. Network defaults to
         enabled; disabled and restricted exact ASCII hostnames are supported. Restricted
         policy requires 1–100 allowed domains. Unsupported hostname forms and startup
-        installations are rejected. Confidential env, system/npm/Python
-        packages and ordered setup commands use the shared initialization lifecycle;
-        requested network applies after setup. Initial inline and tenant-owned file_id
-        files freeze encrypted bytes before provisioning, then install through the
-        common Core lifecycle before native execution or live Files access. Referenced
-        files/env/packages/setup overrides are rejected pending semantic verification.
-        Tenant-owned environment_template_id references inherit omitted network and
-        allow only narrowing overrides. Referenced network:null is explicitly unsupported
-        pending semantic verification. Core freezes effective configuration; template
-        updates/deletion do not alter Session snapshots or same-intent creation retries.
+        installations are rejected. Confidential env, system/npm/Python packages and
+        ordered setup commands use the shared initialization lifecycle; requested
+        network applies after setup. Initial inline and tenant-owned file_id files
+        freeze encrypted bytes before provisioning, then install through the common
+        Core lifecycle before native execution or live Files access. Referenced files/env/packages/setup
+        overrides are rejected pending semantic verification. Tenant-owned environment_template_id
+        references inherit omitted network and allow only narrowing overrides. Referenced
+        network:null is explicitly unsupported pending semantic verification. Core
+        freezes effective configuration; template updates/deletion do not alter Session
+        snapshots or same-intent creation retries. Inline or tenant-owned skill_reference
+        Skills share initialization. Templates preserve default/latest/explicit selectors;
+        Session creation freezes concrete metadata and encrypted content atomically.
+        Skill-list omission inherits and a supplied list replaces; null overrides
+        and null version selectors remain unqualified and reject. Source deletion/default
+        updates cannot change committed Session Skill contents.
       parameters:
       - description: agents=v1
         in: header
@@ -3421,6 +3567,300 @@ paths:
       summary: Download source file bytes
       tags:
       - Files
+  /skills:
+    get:
+      description: Lists tenant-owned metadata in timestamp order. Default page size
+        20, maximum 100; exact hosted defaults and limit-zero semantics remain unverified.
+      parameters:
+      - description: Skill resource cursor
+        in: query
+        name: after
+        type: string
+      - description: Page size
+        in: query
+        name: limit
+        type: integer
+      - description: Creation order
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SkillList'
+      security:
+      - BearerAuth: []
+      summary: List Skills
+      tags:
+      - Skills
+    post:
+      consumes:
+      - multipart/form-data
+      description: Accepts one ZIP in files or a directory in files[]. Applies the
+        qualified portable Skill bundle profile. No Beta header is required; full
+        hosted upload limits and activation extensions are not qualified.
+      parameters:
+      - description: Skill ZIP or directory files
+        in: formData
+        name: files
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.Skill'
+      security:
+      - BearerAuth: []
+      summary: Upload a Skill
+      tags:
+      - Skills
+  /skills/{skill_id}:
+    delete:
+      description: Deletes tenant-owned source bundles. Existing Session installation
+        snapshots remain independent.
+      parameters:
+      - description: Skill ID
+        in: path
+        name: skill_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SkillDeleted'
+      security:
+      - BearerAuth: []
+      summary: Delete a Skill and its versions
+      tags:
+      - Skills
+    get:
+      description: Returns tenant-owned metadata without decrypting contents or starting
+        Runtime. No Beta header is required.
+      parameters:
+      - description: Skill ID
+        in: path
+        name: skill_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.Skill'
+      security:
+      - BearerAuth: []
+      summary: Retrieve Skill metadata
+      tags:
+      - Skills
+    post:
+      consumes:
+      - application/json
+      description: Changes only the tenant-owned default pointer; immutable versions
+        and existing Session snapshots remain unchanged.
+      parameters:
+      - description: Skill ID
+        in: path
+        name: skill_id
+        required: true
+        type: string
+      - description: Default version
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v1.SkillUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.Skill'
+      security:
+      - BearerAuth: []
+      summary: Update the default Skill version
+      tags:
+      - Skills
+  /skills/{skill_id}/content:
+    get:
+      description: Downloads an authorized ZIP using the default pointer when no concrete
+        version is supplied. Exact upstream unversioned selection, content headers
+        and range semantics remain unverified.
+      parameters:
+      - description: Skill ID
+        in: path
+        name: skill_id
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+      security:
+      - BearerAuth: []
+      summary: Download Skill content
+      tags:
+      - Skills
+  /skills/{skill_id}/versions:
+    get:
+      description: Orders by version number; after identifies a version resource,
+        not a version number. No contents are decrypted.
+      parameters:
+      - description: Skill ID
+        in: path
+        name: skill_id
+        required: true
+        type: string
+      - description: Version resource cursor
+        in: query
+        name: after
+        type: string
+      - description: Page size
+        in: query
+        name: limit
+        type: integer
+      - description: Version order
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SkillVersionList'
+      security:
+      - BearerAuth: []
+      summary: List Skill versions
+      tags:
+      - Skills
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Skill ID
+        in: path
+        name: skill_id
+        required: true
+        type: string
+      - description: Skill ZIP or directory files
+        in: formData
+        name: files
+        required: true
+        type: file
+      - description: Set as default
+        in: formData
+        name: default
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SkillVersion'
+      security:
+      - BearerAuth: []
+      summary: Upload an immutable Skill version
+      tags:
+      - Skills
+  /skills/{skill_id}/versions/{version}:
+    delete:
+      description: Rejects deletion of the current default version. Exact hosted last-version/default
+        deletion precedence is not verified.
+      parameters:
+      - description: Skill ID
+        in: path
+        name: skill_id
+        required: true
+        type: string
+      - description: Concrete version number
+        in: path
+        name: version
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SkillVersionDeleted'
+      security:
+      - BearerAuth: []
+      summary: Delete a Skill version
+      tags:
+      - Skills
+    get:
+      parameters:
+      - description: Skill ID
+        in: path
+        name: skill_id
+        required: true
+        type: string
+      - description: Concrete version number
+        in: path
+        name: version
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SkillVersion'
+      security:
+      - BearerAuth: []
+      summary: Retrieve Skill version metadata
+      tags:
+      - Skills
+  /skills/{skill_id}/versions/{version}/content:
+    get:
+      parameters:
+      - description: Skill ID
+        in: path
+        name: skill_id
+        required: true
+        type: string
+      - description: Concrete version number
+        in: path
+        name: version
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+      security:
+      - BearerAuth: []
+      summary: Download immutable Skill version content
+      tags:
+      - Skills
   /vaults:
     get:
       description: Lists project-owned Vaults independently of execution. Includes
