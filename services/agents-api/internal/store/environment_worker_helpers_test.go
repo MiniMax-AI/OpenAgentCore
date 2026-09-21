@@ -3,8 +3,6 @@ package store_test
 import (
 	"context"
 	"encoding/json"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,7 +12,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func enableWorkerEnvironment(t *testing.T, h *dispatchHarness) *atomic.Int32 {
+func enableWorkerEnvironment(t *testing.T, h *dispatchHarness) {
 	t.Helper()
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: workerEnvironmentCapabilities()}}})
 	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "worker preparation capability", func() bool {
@@ -25,30 +23,26 @@ func enableWorkerEnvironment(t *testing.T, h *dispatchHarness) *atomic.Int32 {
 		info, _, _ := peer.AgentKindStatus("codex")
 		return info.Capabilities.Preparation && info.Capabilities.EnvironmentNone
 	})
-	released := &atomic.Int32{}
-	h.d.EnvironmentConnection = func(context.Context, store.Session, store.Environment) (execution.EnvironmentConnection, error) {
-		var once sync.Once
-		return execution.EnvironmentConnection{URL: "http://private-registry.test", Token: "synthetic-worker-token", Release: func() { once.Do(func() { released.Add(1) }) }}, nil
-	}
-	return released
 }
 
 func workerEnvironmentCapabilities() proto.AgentKindCapabilities {
-	return proto.AgentKindCapabilities{Streaming: true, Steering: true, DurableTurns: true, DurableInputReceipts: true, EnvironmentNone: true, WebSearchControl: true, TextVerbosity: true, ExecutionControls: true, SubagentControl: true, ToolObservations: true, Preparation: true, RemoteEnvironment: true}
+	return proto.AgentKindCapabilities{Streaming: true, Steering: true, DurableTurns: true, DurableInputReceipts: true, EnvironmentNone: true, WebSearchControl: true, TextVerbosity: true, ExecutionControls: true, SubagentControl: true, ToolObservations: true, Preparation: true, LocalEnvironment: true, LocalEnvironmentNetworkPolicy: true, WorkspaceReadPreparation: true, WorkspaceOutputExport: true}
 }
 
 func workerEnvironmentReservation(t *testing.T, h *dispatchHarness) store.EnvironmentInputReservation {
 	t.Helper()
 	pending := unboundWorkerEnvironmentReservation(t, h)
-	if err := h.s.BindSessionDevice(t.Context(), h.tenant, pending.SessionID, h.device.ID); err != nil {
+	session, err := h.s.GetSession(t.Context(), h.tenant, pending.SessionID)
+	if err != nil {
 		t.Fatal(err)
 	}
+	h.environments[session.ID] = connectFixtureRuntime(t, h, session)
 	return pending
 }
 
 func unboundWorkerEnvironmentReservation(t *testing.T, h *dispatchHarness) store.EnvironmentInputReservation {
 	t.Helper()
-	session, err := h.s.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/remote"}}`)})
+	session, err := h.s.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,24 +53,40 @@ func unboundWorkerEnvironmentReservation(t *testing.T, h *dispatchHarness) store
 	return pending
 }
 
-func workerFrames(t *testing.T, h *dispatchHarness) <-chan proto.Envelope {
+func workerFrames(t *testing.T, runtimes ...*dispatchHarness) <-chan proto.Envelope {
 	t.Helper()
 	frames := make(chan proto.Envelope, 64)
-	go func() {
-		defer close(frames)
-		for {
-			var env proto.Envelope
-			if h.conn.ReadJSON(&env) != nil {
-				return
+	for _, h := range runtimes {
+		go func() {
+			for {
+				var env proto.Envelope
+				if h.conn.ReadJSON(&env) != nil {
+					return
+				}
+				select {
+				case frames <- env:
+				case <-t.Context().Done():
+					return
+				}
 			}
-			select {
-			case frames <- env:
-			case <-t.Context().Done():
-				return
-			}
-		}
-	}()
+		}()
+	}
 	return frames
+}
+
+func workerRuntimeForPreparation(t *testing.T, h *dispatchHarness, frame proto.Envelope) *dispatchHarness {
+	t.Helper()
+	var input proto.ExecutionPreparePayload
+	if frame.DecodePayload(&input) != nil {
+		t.Fatal("invalid worker preparation")
+	}
+	for _, candidate := range h.environments {
+		if input.Configuration.AgentStateKey == "agents-api-"+candidate.session.ID && input.Configuration.LocalEnvironment != nil && input.Configuration.LocalEnvironment.ID == candidate.device.EnvironmentID && input.Configuration.RemoteEnvironment == nil {
+			return candidate
+		}
+	}
+	t.Fatal("worker preparation escaped its enrolled Runtime")
+	return nil
 }
 
 func nextWorkerFrame(t *testing.T, frames <-chan proto.Envelope, kind string) proto.Envelope {

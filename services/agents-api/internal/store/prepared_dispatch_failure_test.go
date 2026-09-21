@@ -15,7 +15,7 @@ import (
 func TestPreparedDispatchSettlesOnlyReadyInput(t *testing.T) {
 	for _, action := range []string{"cancel", "expire", "delete", "prepare-failure", "disconnect"} {
 		t.Run(action, func(t *testing.T) {
-			h, pending, released := preparedDispatchHarness(t)
+			h, pending := preparedDispatchHarness(t)
 			_, pool := store.NewTestStore(t)
 			result := runPreparedDispatch(h, t.Context(), pending)
 			frame := h.read(proto.TypeExecutionPrepare)
@@ -39,8 +39,8 @@ func TestPreparedDispatchSettlesOnlyReadyInput(t *testing.T) {
 				_ = h.conn.Close()
 			}
 			got := awaitPreparedDispatch(t, result)
-			if got.run.Turn.ID != "" || released.Load() != 1 {
-				t.Fatal("unready preparation admitted work or retained credentials", got, released.Load())
+			if got.run.Turn.ID != "" {
+				t.Fatal("unready preparation admitted work", got)
 			}
 			if action == "cancel" || action == "expire" {
 				want := store.EnvironmentInputCancelled
@@ -56,6 +56,9 @@ func TestPreparedDispatchSettlesOnlyReadyInput(t *testing.T) {
 			if action == "delete" && !errors.Is(got.err, store.ErrNotFound) {
 				t.Fatal("deleted reservation remained accessible", got.err)
 			}
+			if action != "disconnect" {
+				assertPreparationReleased(t, h, frame.ID, handle)
+			}
 			assertEnvironmentExpiryHasNoHistory(t, pool, h.session.ID)
 			if action == "prepare-failure" || action == "disconnect" {
 				stored, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, pending.ID)
@@ -70,7 +73,7 @@ func TestPreparedDispatchSettlesOnlyReadyInput(t *testing.T) {
 func TestPreparedDispatchHandlesStartRejectionAndPendingStartCancellation(t *testing.T) {
 	for _, action := range []string{"reject", "cancel", "cancel-no-outcome"} {
 		t.Run(action, func(t *testing.T) {
-			h, pending, released := preparedDispatchHarness(t)
+			h, pending := preparedDispatchHarness(t)
 			result := runPreparedDispatch(h, t.Context(), pending)
 			frame := h.read(proto.TypeExecutionPrepare)
 			handle := acknowledgePreparation(h, frame.ID)
@@ -99,9 +102,10 @@ func TestPreparedDispatchHandlesStartRejectionAndPendingStartCancellation(t *tes
 			if action == "cancel" {
 				want = store.TurnCancelled
 			}
-			if got.err != nil || got.run.Turn.Status != want || got.run.Turn.ID != start.RunID || released.Load() != 1 {
-				t.Fatal("Start control did not settle through ordinary completion", got, released.Load())
+			if got.err != nil || got.run.Turn.Status != want || got.run.Turn.ID != start.RunID {
+				t.Fatal("Start control did not settle through ordinary completion", got)
 			}
+			assertPreparationReleased(t, h, frame.ID, handle)
 			if action == "cancel-no-outcome" {
 				var outcome struct {
 					ErrorCode string `json:"error_code"`
@@ -115,10 +119,10 @@ func TestPreparedDispatchHandlesStartRejectionAndPendingStartCancellation(t *tes
 }
 
 func TestPreparedDispatchRejectsPooledWriterBeforePreparation(t *testing.T) {
-	h, pending, released := preparedDispatchHarness(t)
+	h, pending := preparedDispatchHarness(t)
 	h.d.Store = h.s
 	got, err := h.d.RunEnvironmentInput(context.Background(), h.tenant, h.session.ID, pending.ID)
-	if err == nil || got.Turn.ID != "" || released.Load() != 0 {
+	if err == nil || got.Turn.ID != "" {
 		t.Fatal("pooled writer reached native preparation", got, err)
 	}
 }
@@ -130,7 +134,7 @@ func TestPreparedDispatchCancellationReceiptSurvivesStartFailure(t *testing.T) {
 			name = "with-outcome"
 		}
 		t.Run(name, func(t *testing.T) {
-			h, pending, released := preparedDispatchHarness(t)
+			h, pending := preparedDispatchHarness(t)
 			result := runPreparedDispatch(h, t.Context(), pending)
 			prepare := h.read(proto.TypeExecutionPrepare)
 			handle := acknowledgePreparation(h, prepare.ID)
@@ -162,9 +166,10 @@ func TestPreparedDispatchCancellationReceiptSurvivesStartFailure(t *testing.T) {
 			if withOutcome {
 				want, code = store.TurnCancelled, ""
 			}
-			if got.err != nil || got.run.Turn.Status != want || outcome.ErrorCode != code || released.Load() != 1 {
+			if got.err != nil || got.run.Turn.Status != want || outcome.ErrorCode != code {
 				t.Fatal("preparation failure replaced the cancellation receipt", got)
 			}
+			assertPreparationReleased(t, h, prepare.ID, handle)
 			events, err := h.s.ListTurnEvents(t.Context(), h.tenant, h.session.ID, start.RunID, 0, 100)
 			if err != nil {
 				t.Fatal(err)

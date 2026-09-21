@@ -1,17 +1,15 @@
 package store_test
 
 import (
-	"context"
 	"testing"
-	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
 func TestEnvironmentDirectoryActiveRunUsesExistingOwner(t *testing.T) {
-	h, w, environment, released := directoryWorker(t, true)
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: proto.AgentKindCapabilities{Streaming: true, Steering: true, DurableTurns: true, DurableInputReceipts: true, WebSearchControl: true, TextVerbosity: true, ExecutionControls: true, SubagentControl: true, ToolObservations: true, Preparation: true, RemoteEnvironment: true, WorkspaceReadPreparation: true}}}})
+	h, w, environment := directoryWorker(t, true)
+	awaitFixtureCapabilities(t, h, workerEnvironmentCapabilities())
 	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "execute", []store.Input{{Kind: "message", Payload: []byte(`{"text":"work"}`)}})
 	if err != nil {
 		t.Fatal(err)
@@ -36,13 +34,11 @@ func TestEnvironmentDirectoryActiveRunUsesExistingOwner(t *testing.T) {
 	if got := awaitDirectoryResult(t, result); got.err != nil || len(got.value.Entries) != 1 {
 		t.Fatal("active read", got.err)
 	}
-	if released.Load() != 0 {
-		t.Fatal("active read released model execution")
-	}
 	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "finished"})
+	completeEmptyArtifactExport(t, h)
 	run := awaitWorkerEnvironmentRun(t, t.Context(), h.s, h.tenant, pending)
 	if run.Turn.Status != store.TurnCompleted {
 		t.Fatal("active read changed Turn outcome")
 	}
-	awaitDaemonRemoteCondition(t, context.Background(), 3*time.Second, "execution credential release", func() bool { return released.Load() == 1 })
+	assertPreparationReleased(t, h, prepare.ID, handle)
 }

@@ -3,7 +3,6 @@ package store_test
 import (
 	"context"
 	"errors"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,19 +17,14 @@ type directoryResult struct {
 	err   error
 }
 
-func directoryWorker(t *testing.T, execute ...bool) (*dispatchHarness, *execution.Worker, store.Environment, *atomic.Int32) {
+func directoryWorker(t *testing.T, execute ...bool) (*dispatchHarness, *execution.Worker, store.Environment) {
 	t.Helper()
-	h := newDispatchHarness(t)
-	var err error
-	h.session, err = h.s.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "read-only", Configuration: []byte(`{"agent":{"model":"unavailable-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)})
-	if err != nil {
-		t.Fatal(err)
-	}
+	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"unavailable-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), true)
 	environment, err := h.s.GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: proto.AgentKindCapabilities{RemoteEnvironment: true, Preparation: true, WorkspaceReadPreparation: true}}}})
+	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: proto.AgentKindCapabilities{LocalEnvironment: true, Preparation: true, WorkspaceReadPreparation: true}}}})
 	peer, err := h.registry.LookupDevice(h.device.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -39,19 +33,12 @@ func directoryWorker(t *testing.T, execute ...bool) (*dispatchHarness, *executio
 		info, _, _ := peer.AgentKindStatus("codex")
 		return info.Capabilities.WorkspaceReadPreparation
 	})
-	released := &atomic.Int32{}
 	h.d.Options = func(context.Context, store.Session) (map[string]any, error) {
 		if len(execute) > 0 && execute[0] {
 			return nil, nil
 		}
 		t.Error("read resolved model credentials")
 		return nil, errors.New("no credentials")
-	}
-	h.d.EnvironmentConnection = func(ctx context.Context, s store.Session, e store.Environment) (execution.EnvironmentConnection, error) {
-		if ctx.Err() != nil || s.ID != h.session.ID || e.ID != environment.ID || e.TenantID != h.tenant {
-			t.Error("wrong reader binding")
-		}
-		return execution.EnvironmentConnection{URL: "http://read-transport.test", Token: "synthetic-read-token", Release: func() { released.Add(1) }}, nil
 	}
 	w, err := execution.StartWorker(t.Context(), h.d)
 	if err != nil {
@@ -68,7 +55,7 @@ func directoryWorker(t *testing.T, execute ...bool) (*dispatchHarness, *executio
 			t.Error("reader worker did not stop")
 		}
 	})
-	return h, w, environment, released
+	return h, w, environment
 }
 
 func startDirectoryRead(ctx context.Context, w *execution.Worker, environment store.Environment) <-chan directoryResult {
@@ -95,7 +82,7 @@ func prepareDirectoryRead(t *testing.T, h *dispatchHarness, environment store.En
 	t.Helper()
 	frame := h.read(proto.TypeExecutionPrepare)
 	var request proto.ExecutionPreparePayload
-	if frame.DecodePayload(&request) != nil || !proto.ValidWorkspaceReadPreparation(request.Configuration) || request.Configuration.RemoteEnvironment.ID != environment.ID || request.Configuration.AgentStateKey != "agents-api-"+h.session.ID {
+	if frame.DecodePayload(&request) != nil || !proto.ValidWorkspaceReadPreparation(request.Configuration) || request.Configuration.LocalEnvironment == nil || request.Configuration.LocalEnvironment.ID != environment.ID || request.Configuration.RemoteEnvironment != nil || request.Configuration.AgentStateKey != "agents-api-"+h.session.ID {
 		t.Fatal("read did not use the closed preparation profile")
 	}
 	handle := acknowledgePreparation(h, frame.ID)
@@ -125,7 +112,7 @@ func completeDirectoryRead(t *testing.T, h *dispatchHarness, request, read strin
 }
 
 func TestEnvironmentDirectoryWorkerReadsWithoutExecutionPrerequisites(t *testing.T) {
-	h, w, environment, released := directoryWorker(t)
+	h, w, environment := directoryWorker(t)
 	foreign := environment
 	foreign.TenantID = uuid.NewString()
 	if _, err := w.ReadEnvironmentDirectory(t.Context(), foreign, "reports"); !errors.Is(err, store.ErrNotFound) {
@@ -148,8 +135,8 @@ func TestEnvironmentDirectoryWorkerReadsWithoutExecutionPrerequisites(t *testing
 	}
 	completeDirectoryRead(t, h, request, read, false, false)
 	got := awaitDirectoryResult(t, result)
-	if got.err != nil || len(got.value.Entries) != 1 || released.Load() != 1 {
-		t.Fatal("directory result", got.err, released.Load())
+	if got.err != nil || len(got.value.Entries) != 1 {
+		t.Fatal("directory result", got.err)
 	}
 	session, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
 	if err != nil || session.LastTurn != nil || session.EnvironmentInputActivity != nil {
@@ -164,12 +151,12 @@ func TestEnvironmentDirectoryWorkerReadsWithoutExecutionPrerequisites(t *testing
 func TestEnvironmentDirectoryWorkerRejectsIncompleteOrUnreleasedResults(t *testing.T) {
 	for _, mode := range []string{"truncated", "cleanup_failed"} {
 		t.Run(mode, func(t *testing.T) {
-			h, w, environment, released := directoryWorker(t)
+			h, w, environment := directoryWorker(t)
 			result := startDirectoryRead(t.Context(), w, environment)
 			request, read := prepareDirectoryRead(t, h, environment)
 			completeDirectoryRead(t, h, request, read, mode == "truncated", mode == "cleanup_failed")
 			got := awaitDirectoryResult(t, result)
-			if !errors.Is(got.err, execution.ErrExecutionUnavailable) || len(got.value.Entries) != 0 || released.Load() != 1 {
+			if !errors.Is(got.err, execution.ErrExecutionUnavailable) || len(got.value.Entries) != 0 {
 				t.Fatal("incomplete reader exposed data or retained authority", got.err)
 			}
 		})
@@ -177,7 +164,7 @@ func TestEnvironmentDirectoryWorkerRejectsIncompleteOrUnreleasedResults(t *testi
 }
 
 func TestEnvironmentDirectorySequentialReadsReleaseSchedulingOwnership(t *testing.T) {
-	h, w, environment, released := directoryWorker(t)
+	h, w, environment := directoryWorker(t)
 	const pages = 32
 	done := make(chan error, 1)
 	go func() {
@@ -200,8 +187,8 @@ func TestEnvironmentDirectorySequentialReadsReleaseSchedulingOwnership(t *testin
 	}
 	select {
 	case err := <-done:
-		if err != nil || released.Load() != pages {
-			t.Fatal("sequential reads retained ownership", err, released.Load())
+		if err != nil {
+			t.Fatal("sequential reads retained ownership", err)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("sequential reads did not finish")
@@ -209,7 +196,7 @@ func TestEnvironmentDirectorySequentialReadsReleaseSchedulingOwnership(t *testin
 }
 
 func TestEnvironmentDirectoryObserverCancellationRetainsReadOwner(t *testing.T) {
-	h, w, environment, released := directoryWorker(t)
+	h, w, environment := directoryWorker(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	result := startDirectoryRead(ctx, w, environment)
 	request, read := prepareDirectoryRead(t, h, environment)
@@ -217,12 +204,8 @@ func TestEnvironmentDirectoryObserverCancellationRetainsReadOwner(t *testing.T) 
 	if got := awaitDirectoryResult(t, result); !errors.Is(got.err, execution.ErrExecutionUnavailable) {
 		t.Fatal("cancelled observer result", got.err)
 	}
-	if released.Load() != 0 {
-		t.Fatal("observer cancelled native ownership")
-	}
 	if _, err := w.ReadEnvironmentDirectory(t.Context(), environment, "reports"); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatal("cancelled observer freed Session owner")
 	}
 	completeDirectoryRead(t, h, request, read, false, false)
-	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "reader release", func() bool { return released.Load() == 1 })
 }

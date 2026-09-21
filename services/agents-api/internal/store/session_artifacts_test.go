@@ -48,8 +48,14 @@ func artifactTurn(t *testing.T, s *Store, kind string) (tenant, session, environ
 }
 
 func TestSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T) {
+	for _, kind := range []string{"openai_hosted", "self_hosted"} {
+		t.Run(kind, func(t *testing.T) { testSessionArtifactsPublishVersionScopeAndLifetime(t, kind) })
+	}
+}
+
+func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind string) {
 	s, pool := testStore(t)
-	tenant, session, environment, turn := artifactTurn(t, s, "openai_hosted")
+	tenant, session, environment, turn := artifactTurn(t, s, kind)
 	before := sourceObjectCount(t, pool)
 	data := bytes.Repeat([]byte("immutable\x00"), 100000)
 	archive := artifactArchive(t, map[string][]byte{"outputs/a.bin": data, "outputs/nested/empty": {}})
@@ -166,8 +172,14 @@ type artifactReadError struct{}
 func (artifactReadError) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
 
 func TestSessionArtifactsRejectIncompleteAndUnownedCapture(t *testing.T) {
+	for _, kind := range []string{"openai_hosted", "self_hosted"} {
+		t.Run(kind, func(t *testing.T) { testSessionArtifactsRejectIncompleteAndUnownedCapture(t, kind) })
+	}
+}
+
+func testSessionArtifactsRejectIncompleteAndUnownedCapture(t *testing.T, kind string) {
 	s, pool := testStore(t)
-	tenant, session, environment, turn := artifactTurn(t, s, "openai_hosted")
+	tenant, session, environment, turn := artifactTurn(t, s, kind)
 	before := sourceObjectCount(t, pool)
 	valid := artifactArchive(t, map[string][]byte{"outputs/a": []byte("data")})
 	for name, body := range map[string]io.Reader{
@@ -190,10 +202,6 @@ func TestSessionArtifactsRejectIncompleteAndUnownedCapture(t *testing.T) {
 		if err := s.StageTurnArtifacts(t.Context(), ids[0], ids[1], ids[2], ids[3], artifactReadError{}); !errors.Is(err, ErrNotFound) {
 			t.Fatalf("unauthorized capture reached reader: %v", err)
 		}
-	}
-	st, ss, se, sr := artifactTurn(t, s, "self_hosted")
-	if err := s.StageTurnArtifacts(t.Context(), st, ss, sr, se, artifactReadError{}); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("self_hosted publication allowed: %v", err)
 	}
 }
 

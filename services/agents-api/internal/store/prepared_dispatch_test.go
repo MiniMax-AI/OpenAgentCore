@@ -3,9 +3,6 @@ package store_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,45 +17,22 @@ type preparedDispatchResult struct {
 	err error
 }
 
-func preparedDispatchHarness(t *testing.T) (*dispatchHarness, store.EnvironmentInputReservation, *atomic.Int32) {
+func preparedDispatchHarness(t *testing.T) (*dispatchHarness, store.EnvironmentInputReservation) {
 	t.Helper()
-	h := newDispatchHarness(t)
-	var err error
-	h.session, err = h.s.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "prepared", Configuration: json.RawMessage(`{"agent":{"model":"test-model","instructions":"Keep this instruction."},"environment":{"type":"self_hosted","workspace_directory":"/executor-workspace"}}`)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := h.s.BindSessionDevice(t.Context(), h.tenant, h.session.ID, h.device.ID); err != nil {
-		t.Fatal(err)
-	}
+	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model","instructions":"Keep this instruction."},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), true)
+	assertNoRuntimeAllocation(t, h)
 	lease, err := h.s.AcquireExecutionLease(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = lease.Close(context.Background()) })
 	h.d.Store = lease.Store()
-	peer, err := h.registry.LookupDevice(h.device.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: proto.AgentKindCapabilities{Streaming: true, Steering: true, DurableTurns: true, DurableInputReceipts: true, WebSearchControl: true, TextVerbosity: true, ExecutionControls: true, SubagentControl: true, ToolObservations: true, Preparation: true, RemoteEnvironment: true}}}})
-	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "preparation capability", func() bool {
-		info, _, _ := peer.AgentKindStatus("codex")
-		return info.Capabilities.Preparation && info.Capabilities.RemoteEnvironment
-	})
-	released := &atomic.Int32{}
-	h.d.EnvironmentConnection = func(owner context.Context, session store.Session, environment store.Environment) (execution.EnvironmentConnection, error) {
-		if owner.Err() != nil || environment.TenantID != h.tenant || environment.SessionID != session.ID || session.ID != h.session.ID {
-			return execution.EnvironmentConnection{}, errors.New("incorrect connection owner")
-		}
-		var once sync.Once
-		return execution.EnvironmentConnection{URL: "http://private-registry.test", Token: "synthetic-connection-token", Release: func() { once.Do(func() { released.Add(1) }) }}, nil
-	}
+	enableWorkerEnvironment(t, h)
 	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return h, pending, released
+	return h, pending
 }
 
 func runPreparedDispatch(h *dispatchHarness, ctx context.Context, pending store.EnvironmentInputReservation) <-chan preparedDispatchResult {
@@ -103,11 +77,11 @@ func readyPreparedDispatch(t *testing.T, h *dispatchHarness, request, handle str
 }
 
 func TestPreparedDispatchPromotesOriginalBatchAndPersistsCompletion(t *testing.T) {
-	h, pending, released := preparedDispatchHarness(t)
+	h, pending := preparedDispatchHarness(t)
 	result := runPreparedDispatch(h, t.Context(), pending)
 	frame := h.read(proto.TypeExecutionPrepare)
 	var prepare proto.ExecutionPreparePayload
-	if frame.DecodePayload(&prepare) != nil || prepare.Configuration.Prompt != "" || prepare.Configuration.RunID != "" || prepare.Configuration.ConversationID != "" || prepare.Configuration.RemoteEnvironment == nil || prepare.Configuration.RemoteEnvironment.WorkspaceDirectory != "/executor-workspace" || prepare.Configuration.DisableExecutionEnvironment {
+	if frame.DecodePayload(&prepare) != nil || prepare.Configuration.Prompt != "" || prepare.Configuration.RunID != "" || prepare.Configuration.ConversationID != "" || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != h.device.EnvironmentID || prepare.Configuration.RemoteEnvironment != nil || prepare.Configuration.DisableExecutionEnvironment {
 		t.Fatal("invalid preparation configuration", prepare)
 	}
 	session, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
@@ -129,17 +103,15 @@ func TestPreparedDispatchPromotesOriginalBatchAndPersistsCompletion(t *testing.T
 	}
 	h.write(start.RunID, proto.TypePromptSteerAck, proto.PromptSteerAckPayload{InputID: steer.InputID, Accepted: true})
 	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "answer", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "retained-prepared-native"}})
+	completeEmptyArtifactExport(t, h)
 	got := awaitPreparedDispatch(t, result)
-	if got.err != nil || got.run.Turn.Status != store.TurnCompleted || len(got.run.Reservation.Receipts) != 2 || got.run.Reservation.Receipts[0].Replayed || got.run.Reservation.Receipts[1].Sequence >= late.Sequence || released.Load() != 1 {
-		t.Fatal("prepared completion", got, released.Load())
+	if got.err != nil || got.run.Turn.Status != store.TurnCompleted || len(got.run.Reservation.Receipts) != 2 || got.run.Reservation.Receipts[0].Replayed || got.run.Reservation.Receipts[1].Sequence >= late.Sequence {
+		t.Fatal("prepared completion", got)
 	}
+	assertPreparationReleased(t, h, frame.ID, handle)
 	bound, err := h.s.GetSessionExecutionBinding(t.Context(), h.tenant, h.session.ID)
 	if err != nil || bound.NativeSessionID != "retained-prepared-native" {
 		t.Fatal("native identity was not committed", bound, err)
-	}
-	h.d.EnvironmentConnection = func(context.Context, store.Session, store.Environment) (execution.EnvironmentConnection, error) {
-		t.Error("replay resolved another native connection")
-		return execution.EnvironmentConnection{}, errors.New("unexpected replay")
 	}
 	retry, err := h.d.RunEnvironmentInput(t.Context(), h.tenant, h.session.ID, pending.ID)
 	if err != nil || len(retry.Reservation.Receipts) != 2 || !retry.Reservation.Receipts[0].Replayed || retry.Reservation.Receipts[0].TurnID != start.RunID || retry.Turn.ID != "" {
@@ -148,35 +120,27 @@ func TestPreparedDispatchPromotesOriginalBatchAndPersistsCompletion(t *testing.T
 }
 
 func TestPreparedDispatchOwnerOutlivesReservationDeadline(t *testing.T) {
-	h, pending, released := preparedDispatchHarness(t)
+	h, pending := preparedDispatchHarness(t)
 	_, pool := store.NewTestStore(t)
-	connection := h.d.EnvironmentConnection
-	owners := make(chan context.Context, 1)
-	h.d.EnvironmentConnection = func(owner context.Context, session store.Session, environment store.Environment) (execution.EnvironmentConnection, error) {
-		owners <- owner
-		return connection(owner, session, environment)
-	}
 	parent, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	result := runPreparedDispatch(h, parent, pending)
 	frame := h.read(proto.TypeExecutionPrepare)
-	owner := <-owners
-	if _, ok := owner.Deadline(); ok {
-		t.Fatal("reservation deadline was imposed on the execution owner")
-	}
 	handle := acknowledgePreparation(h, frame.ID)
 	start := readyPreparedDispatch(t, h, frame.ID, handle)
 	if _, err := pool.Exec(t.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE id=$1", pending.ID); err != nil {
 		t.Fatal(err)
 	}
 	stored, err := h.d.Store.ExpireEnvironmentInput(t.Context(), h.tenant, h.session.ID, pending.ID)
-	if err != nil || stored.State != store.EnvironmentInputAdmitted || owner.Err() != nil || released.Load() != 0 {
+	if err != nil || stored.State != store.EnvironmentInputAdmitted {
 		t.Fatal("admitted execution lost its owner to the pending-input deadline", err)
 	}
 	h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "started", RunID: start.RunID})
 	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "completed after the reservation deadline"})
+	completeEmptyArtifactExport(t, h)
 	got := awaitPreparedDispatch(t, result)
-	if got.err != nil || got.run.Turn.Status != store.TurnCompleted || owner.Err() == nil || released.Load() != 1 {
-		t.Fatal("completion did not settle and release the execution owner", got, released.Load())
+	if got.err != nil || got.run.Turn.Status != store.TurnCompleted {
+		t.Fatal("completion did not settle the execution owner", got)
 	}
+	assertPreparationReleased(t, h, frame.ID, handle)
 }

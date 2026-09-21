@@ -34,11 +34,12 @@ func newEnvironmentAdmission(t *testing.T) (*dispatchHarness, *execution.Worker)
 	})
 	h.session, err = worker.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{
 		Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
-		Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/remote"}}`),
+		Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	h = connectFixtureRuntime(t, h, h.session)
 	return h, worker
 }
 
@@ -152,10 +153,12 @@ func TestEnvironmentAdmissionWaitsForPreparedClaimAndRetainsRetry(t *testing.T) 
 		h.write(start.RunID, proto.TypePromptSteerAck, proto.PromptSteerAckPayload{InputID: steer.InputID, Accepted: true})
 	}
 	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "done", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "admitted-native"}})
+	completeEmptyArtifactExport(t, h)
 	run := awaitWorkerEnvironmentRun(t, t.Context(), h.s, h.tenant, pending)
 	if run.Turn.Status != store.TurnCompleted {
 		t.Fatal("completion", run.Turn)
 	}
+	assertPreparationReleased(t, h, frame.ID, handle)
 	replay, err := worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "wait", inputs)
 	if err != nil || len(replay) != 2 || !replay[0].Replayed || replay[0].TurnID != start.RunID {
 		t.Fatal("terminal retry", replay, err)

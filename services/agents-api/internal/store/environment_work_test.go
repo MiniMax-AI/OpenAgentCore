@@ -3,7 +3,6 @@ package store_test
 import (
 	"testing"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
 )
@@ -35,21 +34,18 @@ func TestEnvironmentInputWorkFiltersAndPagesDevices(t *testing.T) {
 				t.Fatal(err)
 			}
 		default:
-			other, err := h.s.CreateDevice(t.Context(), h.tenant, state, device.HashCredential(uuid.NewString()))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := pool.Exec(t.Context(), "UPDATE session_devices SET device_id=$2 WHERE session_id=$1", pending.SessionID, other.ID); err != nil {
-				t.Fatal(err)
-			}
+			runtime := h.environments[pending.SessionID]
 			if state == "revoked" {
-				if err := h.s.RevokeDevice(t.Context(), h.tenant, other.ID); err != nil {
+				if err := h.s.RevokeDevice(t.Context(), h.tenant, runtime.device.ID); err != nil {
 					t.Fatal(err)
 				}
-				work, err := h.s.ListEnvironmentInputWork(t.Context(), "", []string{other.ID})
+				work, err := h.s.ListEnvironmentInputWork(t.Context(), "", []string{runtime.device.ID})
 				if err != nil || len(work) != 0 {
-					t.Fatal("revoked device selected", work, err)
+					t.Fatal("revoked Runtime selected", work, err)
 				}
+			} else {
+				_ = runtime.conn.Close()
+				delete(h.environments, pending.SessionID)
 			}
 		}
 	}
@@ -64,7 +60,11 @@ func TestEnvironmentInputWorkFiltersAndPagesDevices(t *testing.T) {
 	unboundWorkerEnvironmentReservation(t, &foreign)
 	seen, cursor := 0, ""
 	for _, count := range []int{100, 4, 0} {
-		work, err := h.s.ListEnvironmentInputWork(t.Context(), cursor, []string{h.device.ID})
+		devices := []string{h.device.ID}
+		for _, runtime := range h.environments {
+			devices = append(devices, runtime.device.ID)
+		}
+		work, err := h.s.ListEnvironmentInputWork(t.Context(), cursor, devices)
 		if err != nil || len(work) != count {
 			t.Fatal("environment work page", len(work), count, err)
 		}

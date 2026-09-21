@@ -13,13 +13,17 @@ import (
 func TestWorkerEnvironmentSharesCapacityThroughClaimAndCleanup(t *testing.T) {
 	h := newDispatchHarness(t)
 	_, pool := store.NewTestStore(t)
-	released := enableWorkerEnvironment(t, h)
-	frames := workerFrames(t, h)
+	enableWorkerEnvironment(t, h)
 	pending := map[string]store.EnvironmentInputReservation{}
 	for range 2 {
-		value := unboundWorkerEnvironmentReservation(t, h)
+		value := workerEnvironmentReservation(t, h)
 		pending[value.SessionID] = value
 	}
+	runtimes := []*dispatchHarness{h}
+	for _, runtime := range h.environments {
+		runtimes = append(runtimes, runtime)
+	}
+	frames := workerFrames(t, runtimes...)
 	ordinary := map[string]store.Session{}
 	for _, key := range []string{"one", "two", "three"} {
 		session := publicSession(t, h, key)
@@ -49,16 +53,18 @@ func TestWorkerEnvironmentSharesCapacityThroughClaimAndCleanup(t *testing.T) {
 		t.Fatal("mixed queues did not share capacity", len(normal), len(preparing))
 	}
 	first := preparing[0]
-	handle := acknowledgePreparation(h, first.ID)
-	h.write(first.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "ready"})
+	firstRuntime := workerRuntimeForPreparation(t, h, first)
+	handle := acknowledgePreparation(firstRuntime, first.ID)
+	firstRuntime.write(first.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "ready"})
 	frame := nextWorkerFrame(t, frames, proto.TypeExecutionStart)
 	var start proto.ExecutionStartPayload
 	if frame.ID != first.ID || frame.DecodePayload(&start) != nil || start.Handle != handle || start.Prompt != "first" {
 		t.Fatal("worker changed preparation at Start")
 	}
-	h.write(first.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "started", RunID: start.RunID})
+	firstRuntime.write(first.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "started", RunID: start.RunID})
 	second := preparing[1]
-	secondHandle := acknowledgePreparation(h, second.ID)
+	secondRuntime := workerRuntimeForPreparation(t, h, second)
+	secondHandle := acknowledgePreparation(secondRuntime, second.ID)
 	var prepare proto.ExecutionPreparePayload
 	if second.DecodePayload(&prepare) != nil {
 		t.Fatal("invalid Prepare")
@@ -78,40 +84,59 @@ func TestWorkerEnvironmentSharesCapacityThroughClaimAndCleanup(t *testing.T) {
 	if _, err := h.s.CancelEnvironmentInput(t.Context(), h.tenant, waiting.SessionID, waiting.ID); err != nil {
 		t.Fatal(err)
 	}
-	release := nextWorkerFrame(t, frames, proto.TypeExecutionRelease)
+	// Distinct Runtime sockets do not promise cross-socket delivery order.
+	var release proto.Envelope
+	var resumed proto.Envelope
+	for range 2 {
+		select {
+		case frame := <-frames:
+			switch frame.Type {
+			case proto.TypeExecutionRelease:
+				if release.ID != "" {
+					t.Fatal("duplicate preparation release")
+				}
+				release = frame
+			case proto.TypePromptRequest:
+				if resumed.ID != "" {
+					t.Fatal("cleanup freed more than one capacity slot")
+				}
+				resumed = frame
+			default:
+				t.Fatal("unexpected cleanup frame", frame.Type)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("cancel did not release preparation and resume queued work")
+		}
+	}
 	var payload proto.ExecutionReleasePayload
-	if release.ID != second.ID || release.DecodePayload(&payload) != nil || payload.Handle != secondHandle {
-		t.Fatal("cancel released the wrong preparation")
+	if release.ID != second.ID || release.DecodePayload(&payload) != nil || payload.Handle != secondHandle || resumed.ID == "" {
+		t.Fatal("cancel released the wrong preparation or lost queued work")
 	}
-	normal = append(normal, nextWorkerFrame(t, frames, proto.TypePromptRequest))
-	if released.Load() != 1 {
-		t.Fatal("next job preceded preparation cleanup")
-	}
+	normal = append(normal, resumed)
 	for _, request := range normal {
 		h.write(request.ID, proto.TypeDone, proto.DonePayload{Content: "ordinary complete"})
 		h.session = ordinary[request.ID]
 		waitTurn(t, h, request.ID, store.TurnCompleted)
 	}
-	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "remote complete"})
+	firstRuntime.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "local complete"})
+	completeEmptyArtifactExport(t, firstRuntime, frames)
 	nextWorkerFrame(t, frames, proto.TypeExecutionRelease)
 	stop()
-	if released.Load() != 2 {
-		t.Fatal("connection owners were not released")
-	}
 	assertEnvironmentExpiryHasNoHistory(t, pool, waiting.SessionID)
 	assertEnvironmentExpiryHasNoHistory(t, pool, due.SessionID)
 }
 
 func TestWorkerEnvironmentRetriesPendingWithoutExtendingDeadline(t *testing.T) {
 	h := newDispatchHarness(t)
-	released := enableWorkerEnvironment(t, h)
-	frames := workerFrames(t, h)
-	pending := unboundWorkerEnvironmentReservation(t, h)
+	enableWorkerEnvironment(t, h)
+	pending := workerEnvironmentReservation(t, h)
+	runtime := h.environments[pending.SessionID]
+	frames := workerFrames(t, h, runtime)
 	_, stop := startEnvironmentExpiryWorker(t, h.d)
 	first := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
 	started := time.Now()
-	handle := acknowledgePreparation(h, first.ID)
-	h.write(first.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "failed"})
+	handle := acknowledgePreparation(runtime, first.ID)
+	runtime.write(first.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "failed"})
 	nextWorkerFrame(t, frames, proto.TypeExecutionRelease)
 	h.session = publicSession(t, h, "unrelated")
 	receipt := h.message("ordinary", "make progress after preparation failure")
@@ -122,10 +147,10 @@ func TestWorkerEnvironmentRetriesPendingWithoutExtendingDeadline(t *testing.T) {
 	h.write(request.ID, proto.TypeDone, proto.DonePayload{Content: "complete"})
 	waitTurn(t, h, request.ID, store.TurnCompleted)
 	second := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
-	if time.Since(started) < 4*time.Second || first.ID == second.ID || released.Load() != 1 {
+	if time.Since(started) < 4*time.Second || first.ID == second.ID {
 		t.Fatal("pending preparation retried rapidly or reused a released owner")
 	}
-	acknowledgePreparation(h, second.ID)
+	acknowledgePreparation(runtime, second.ID)
 	select {
 	case frame := <-frames:
 		t.Fatal("active preparation was duplicated", frame.Type)
@@ -139,22 +164,20 @@ func TestWorkerEnvironmentRetriesPendingWithoutExtendingDeadline(t *testing.T) {
 	}
 	_, stop = startEnvironmentExpiryWorker(t, h.d)
 	third := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
-	handle = acknowledgePreparation(h, third.ID)
-	h.write(third.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "ready"})
+	handle = acknowledgePreparation(runtime, third.ID)
+	runtime.write(third.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "ready"})
 	request = nextWorkerFrame(t, frames, proto.TypeExecutionStart)
 	var start proto.ExecutionStartPayload
 	if request.ID != third.ID || json.Unmarshal(request.Payload, &start) != nil || start.Handle != handle {
 		t.Fatal("restart changed retained preparation")
 	}
-	h.write(third.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "started", RunID: start.RunID})
-	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "resumed"})
+	runtime.write(third.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "started", RunID: start.RunID})
+	runtime.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "resumed"})
+	completeEmptyArtifactExport(t, runtime, frames)
 	run := awaitWorkerEnvironmentRun(t, t.Context(), h.s, h.tenant, pending)
 	if run.Turn.Status != store.TurnCompleted || !run.Reservation.Deadline.Equal(pending.Deadline) {
 		t.Fatal("restarted worker did not complete original work", run)
 	}
 	nextWorkerFrame(t, frames, proto.TypeExecutionRelease)
 	stop()
-	if released.Load() != 3 {
-		t.Fatal("worker leaked a preparation owner")
-	}
 }
