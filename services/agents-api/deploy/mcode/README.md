@@ -27,12 +27,13 @@ retain their engine. Do not expose a new public harness selector.
 
 ## Docker workspace
 
-Build the shared workspace helpers, install the published CLI into a private
-operator directory, and build the companion from the pinned native source:
+Build the shared workspace helpers and the single CLI/companion artifact from
+the pinned native source. Supply the matching npm package only for its native
+runtime dependencies:
 
 ```sh
-MCODE_NATIVE_SOURCE=/absolute/minimax-code bash scripts/build-mcode-harness.sh
-MCODE_CLI_DIR=/absolute/published-package \
+MCODE_NATIVE_SOURCE=/absolute/minimax-code \
+MCODE_CLI_DIR=/absolute/pinned-package bash scripts/build-mcode-harness.sh
 MCODE_HARNESS_BUILD_DIR=/absolute/built-companion \
 bash scripts/build-mcode-runtime.sh
 docker build --platform linux/amd64 -t agents-runtime:mcode \

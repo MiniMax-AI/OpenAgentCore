@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 package="$repo_root/packages/mcode-harness"
 source="${MCODE_NATIVE_SOURCE:?Set MCODE_NATIVE_SOURCE to the pinned upstream checkout}"
+native="${MCODE_CLI_DIR:?Set MCODE_CLI_DIR to the pinned CLI package supplying native dependencies}"
 if [[ "$(uname -s)" != Linux || "$(uname -m)" != x86_64 ]]; then
   printf 'Build the MiniMax Code Runtime artifact on Linux x86_64\n' >&2
   exit 1
@@ -21,6 +22,14 @@ mkdir "$context/upstream"
 git -C "$source" archive "$revision" | tar -x -C "$context/upstream"
 printf '%s\n' "$revision" > "$context/upstream/.parsar-source-revision"
 cp "$package/"*.mjs "$package/"*.ts "$package/"*.json "$context/"
+test "$(node "$native/cli.js" --version)" = 0.4.12
+(
+  cd "$context"
+  MCODE_SOURCE="$context/upstream" node patch-native.mjs
+  cd upstream
+  corepack pnpm install --frozen-lockfile
+  node scripts/build.mjs
+)
 (
   cd "$context"
   npm ci --no-audit --no-fund
@@ -33,6 +42,11 @@ artifact="$context/artifact"
 mkdir "$artifact"
 cp -R "$context/dist" "$context/node_modules" "$artifact/"
 cp "$package/launch.mjs" "$package/bridge.mjs" "$package/check.mjs" "$package/tool-executor.mjs" "$package/source.json" "$artifact/"
+cp "$package/subagent-snapshot.mjs" "$artifact/"
+mkdir "$artifact/native"
+cp -R "$context/upstream/dist/." "$artifact/native/"
+cp -R "$native/node_modules" "$artifact/native/"
+cp "$context/upstream/.parsar-native-patch.json" "$artifact/native-patch.json"
 cp "$context/upstream/LICENSE" "$artifact/UPSTREAM_LICENSE"
 cp "$context/upstream/third_party/sandbox-runtime/LICENSE" "$artifact/SANDBOX_LICENSE"
 cp "$context/upstream/third_party/pi-mono/LICENSE" "$artifact/PI_LICENSE"

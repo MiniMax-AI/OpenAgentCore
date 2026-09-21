@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
@@ -84,6 +85,13 @@ func prepareOptionsWithSkills(ctx context.Context, req proto.PromptRequestPayloa
 	}
 	if req.StrictResume {
 		configureTextExecution(config)
+		if !req.DisableSubagents {
+			config["agents"] = map[string]any{"default": map[string]any{
+				"tools":        []string{"task", "task_append", "task_query", "task_output", "task_stop"},
+				"builtinTools": []string{"task", "task_append", "task_query", "task_output", "task_stop"}, "skills": []string{},
+				"features": map[string]bool{"mavis": false, "delegation": true, "webSearch": false},
+			}}
+		}
 	}
 	mode := optionString(opts, "mode")
 	if mode == "" {
@@ -102,7 +110,15 @@ func prepareOptionsWithSkills(ctx context.Context, req proto.PromptRequestPayloa
 	}
 	result.Env = append([]string{}, os.Environ()...)
 	if req.StrictResume {
-		result.Env = executionEnvironment()
+		result.Env = append(executionEnvironment(), "PARSAR_MCODE_TOOL_POLICY=protected-mcp-v1")
+		if err := os.WriteFile(filepath.Join(result.DataDir, "mcp.json"), []byte(`{"mcpServers":{}}`), 0o600); err != nil {
+			return result, err
+		}
+		if !req.DisableSubagents {
+			result.Env = append(result.Env, "PARSAR_MCODE_MAX_SUBAGENTS="+strconv.Itoa(*req.MaxConcurrentSubagents))
+		} else {
+			result.Env = append(result.Env, "PARSAR_MCODE_MAX_SUBAGENTS=0")
+		}
 	}
 	if raw := opts["env"]; raw != nil && !req.StrictResume {
 		env, ok := raw.(map[string]any)

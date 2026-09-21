@@ -125,5 +125,21 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 	}
 	opts.MCP = []map[string]any{{"name": "parsar_workspace", "command": c.Node, "args": []string{c.Bridge, path}, "env": []map[string]string{}}}
 	opts.MCP = append(opts.MCP, servers...)
+	if !req.DisableSubagents {
+		// This native data directory belongs to one public Session and its
+		// descendants. ACP's ephemeral server map otherwise covers only root.
+		configured := map[string]any{}
+		for _, server := range opts.MCP[:1] {
+			name, _ := server["name"].(string)
+			configured[name] = map[string]any{"type": "stdio", "command": server["command"], "args": server["args"], "env": map[string]string{}, "enabled": true}
+		}
+		raw, err := json.Marshal(map[string]any{"mcpServers": configured})
+		if err != nil {
+			return opts, err
+		}
+		if err := os.WriteFile(filepath.Join(opts.DataDir, "mcp.json"), raw, 0o600); err != nil {
+			return opts, err
+		}
+	}
 	return opts, nil
 }

@@ -20,29 +20,33 @@ import (
 )
 
 type Session struct {
-	ctx            context.Context
-	req            proto.PromptRequestPayload
-	opts           launchOptions
-	process        *clirunner.Process
-	out            chan<- proto.Envelope
-	frames         chan rpcFrame
-	exited         chan struct{}
-	finished       chan struct{}
-	writeMu        sync.Mutex
-	mu             sync.Mutex
-	sessionID      string
-	permissions    map[string]pendingPermission
-	questions      map[string]pendingQuestion
-	exitErr        error
-	nextID         int
-	responses      map[string]chan rpcFrame
-	steeringReady  bool
-	steeringTurn   string
-	sequence       uint64
-	active         bool
-	content        strings.Builder
-	tools          map[string]toolUpdate
-	completedTools map[string]bool
+	ctx                     context.Context
+	req                     proto.PromptRequestPayload
+	opts                    launchOptions
+	process                 *clirunner.Process
+	out                     chan<- proto.Envelope
+	frames                  chan rpcFrame
+	exited                  chan struct{}
+	finished                chan struct{}
+	writeMu                 sync.Mutex
+	mu                      sync.Mutex
+	sessionID               string
+	permissions             map[string]pendingPermission
+	questions               map[string]pendingQuestion
+	exitErr                 error
+	nextID                  int
+	responses               map[string]chan rpcFrame
+	steeringReady           bool
+	steeringTurn            string
+	sequence                uint64
+	active                  bool
+	content                 strings.Builder
+	tools                   map[string]toolUpdate
+	completedTools          map[string]bool
+	previousNativeTurns     map[string]bool
+	subagentSettlementError error
+	rootCompletedAtMS       *int64
+	subagentHistoryReady    bool
 }
 
 var _ agent.Session = (*Session)(nil)
@@ -136,7 +140,31 @@ func (s *Session) run(p *prepared) {
 		err = p.awaitStart(err)
 	}
 	if err == nil {
+		if s.req.StrictResume && !s.req.DisableSubagents {
+			var snapshot nativeSubagentSnapshot
+			snapshot, err = s.readSubagents(s.ctx)
+			s.subagentHistoryReady = err == nil
+			s.previousNativeTurns = map[string]bool{}
+			for _, session := range snapshot.Sessions {
+				if session.ID == s.sessionID {
+					for _, turn := range session.Turns {
+						s.previousNativeTurns[turn.ID] = true
+					}
+				}
+			}
+		}
+	}
+	if err == nil {
 		err = s.executePrompt()
+	}
+	if s.req.StrictResume && !s.req.DisableSubagents && s.subagentHistoryReady && s.out != nil {
+		observationErr := s.settleSubagents()
+		s.mu.Lock()
+		s.subagentSettlementError = observationErr
+		s.mu.Unlock()
+		if observationErr != nil {
+			err = observationErr
+		}
 	}
 	if p != nil || err != nil {
 		s.process.Cancel()
@@ -163,18 +191,27 @@ func (s *Session) run(p *prepared) {
 		metadata[proto.DoneMetaAgentSessionID] = sessionID
 	}
 	// ACP context usage is not per-turn token usage; do not record it as spend.
-	s.emit(proto.TypeDone, proto.DonePayload{Content: s.content.String(), Metadata: metadata})
+	s.emit(proto.TypeDone, proto.DonePayload{Content: s.content.String(), Metadata: metadata, SourceCompletedAtMS: s.rootCompletedAtMS})
 }
 
 func (s *Session) prepareNative() error {
 	var initialized struct {
 		ProtocolVersion int `json:"protocolVersion"`
+		Meta            struct {
+			Subagents struct {
+				Version, MaxConcurrent int
+				WorkspaceTools         string
+			} `json:"parsar/subagents"`
+		} `json:"_meta"`
 	}
 	if err := s.call("initialize", map[string]any{"protocolVersion": 1, "clientInfo": map[string]string{"name": "parsar", "version": "1"}, "clientCapabilities": map[string]any{"elicitation": map[string]any{"form": map[string]any{}}}}, &initialized, false); err != nil {
 		return err
 	}
 	if initialized.ProtocolVersion != 1 {
 		return fmt.Errorf("mcode: unsupported ACP protocol version %d", initialized.ProtocolVersion)
+	}
+	if s.req.StrictResume && !s.req.DisableSubagents && (initialized.Meta.Subagents.Version != 1 || initialized.Meta.Subagents.WorkspaceTools != "protected-mcp-v1" || s.req.MaxConcurrentSubagents == nil || initialized.Meta.Subagents.MaxConcurrent != *s.req.MaxConcurrentSubagents) {
+		return fmt.Errorf("mcode: native Subagent admission is unavailable")
 	}
 	params := map[string]any{"cwd": s.opts.Dir, "mcpServers": s.opts.MCP}
 	method := "session/new"
@@ -321,6 +358,12 @@ func (s *Session) emit(kind string, payload any) {
 }
 
 func (s *Session) Cancel(ctx context.Context) error {
+	if s.req.StrictResume && !s.req.DisableSubagents {
+		if err := s.cancelSubagents(ctx); err != nil {
+			s.process.Cancel()
+			return err
+		}
+	}
 	s.process.Cancel()
 	if !s.req.StrictResume {
 		return nil

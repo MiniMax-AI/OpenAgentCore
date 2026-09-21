@@ -1,4 +1,4 @@
-# Build context contains the daemon, shared helpers, published CLI and tool companion.
+# Build context contains the daemon, shared helpers and pinned native artifact.
 FROM node:22.23.1-bookworm-slim@sha256:8607a9064d4a571140998ae9e52a3b3fcf9cff361d04642d5971e6cd76d39e27
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -9,12 +9,11 @@ COPY build-system-seed.py /tmp/build-system-seed.py
 RUN python3 -I -S /tmp/build-system-seed.py && rm /tmp/build-system-seed.py
 COPY --chmod=0555 tool-root.py /usr/local/bin/agents-api-tool-root
 COPY --chmod=0555 parsar-daemon agents-api-codex-directory agents-api-codex-write agents-api-workspace-export /usr/local/bin/
-COPY mcode /opt/mcode
 COPY mcode-harness /opt/mcode-harness
 COPY --chmod=0444 runtime-initialize.py /usr/local/bin/agents-api-runtime-initialize
 ENV HOME=/home/runtime PARSAR_HOME=/home/runtime/.parsar \
     PARSAR_MCODE_NODE=/usr/local/bin/node \
-    PARSAR_MCODE_BIN=/opt/mcode/cli.js \
+    PARSAR_MCODE_BIN=/opt/mcode-harness/native/cli.js \
     PARSAR_MCODE_WORKSPACE_BRIDGE=/opt/mcode-harness/bridge.mjs \
     PARSAR_MCODE_AGENTS_API=1 \
     PARSAR_MCODE_WORKSPACE=managed \
@@ -24,7 +23,7 @@ ENV HOME=/home/runtime PARSAR_HOME=/home/runtime/.parsar \
     PARSAR_RUNTIME_EXPORT_HELPER=/usr/local/bin/agents-api-workspace-export \
     PARSAR_RUNTIME_STAGING=/environment/staging
 USER 1000:1000
-RUN node /opt/mcode-harness/check.mjs && /opt/mcode/cli.js --version
+RUN node /opt/mcode-harness/check.mjs && /opt/mcode-harness/native/cli.js --version
 WORKDIR /environment/workspace
 ENTRYPOINT ["/usr/local/bin/parsar-daemon"]
 CMD ["connect", "--profile", "default"]

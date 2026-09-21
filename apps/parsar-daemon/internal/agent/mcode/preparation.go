@@ -30,7 +30,7 @@ func NewPreparationFactory(config WorkspaceConfig) agent.PreparationFactory {
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		if req.RunID != "" || req.Prompt != "" || req.ConversationID != "" || req.ObserveSubagentIdentities {
+		if req.RunID != "" || req.Prompt != "" || req.ConversationID != "" {
 			return nil, fmt.Errorf("mcode: preparation cannot contain input or product context")
 		}
 		opts, err := prepareWorkspaceOptions(ctx, config, req)

@@ -13,11 +13,19 @@ func SupportsExecution(version string) bool {
 }
 
 func validateExecutionRequest(req proto.PromptRequestPayload) error {
-	if !req.ReleaseOnCompletion || !req.DisableExecutionEnvironment || !req.DisableSubagents || req.WorkDir != "" || req.AgentStateKey == "" || req.LocalEnvironment != nil || req.RequireExistingNativeSession || len(req.FunctionTools) != 0 || (req.MCPHTTPServers != nil && len(*req.MCPHTTPServers) != 0) {
+	if !req.ReleaseOnCompletion || !req.DisableExecutionEnvironment || req.WorkDir != "" || req.AgentStateKey == "" || req.LocalEnvironment != nil || req.RequireExistingNativeSession || len(req.FunctionTools) != 0 || (req.MCPHTTPServers != nil && len(*req.MCPHTTPServers) != 0) {
 		return fmt.Errorf("mcode: unsupported execution configuration")
 	}
 	if req.ExecutionControls == nil || req.ExecutionControls.WebSearch != "disabled" || (req.ExecutionControls.TextVerbosity != "" && req.ExecutionControls.TextVerbosity != "medium") {
 		return fmt.Errorf("mcode: unsupported execution controls")
+	}
+	if !req.DisableSubagents {
+		if req.MaxConcurrentSubagents == nil || *req.MaxConcurrentSubagents < 1 {
+			return fmt.Errorf("mcode: Subagent concurrency limit is required")
+		}
+		if _, _, err := subagentReader(); err != nil {
+			return err
+		}
 	}
 	if mode := optionString(req.AgentOptions, "mode"); mode != "" {
 		return fmt.Errorf("mcode: text execution uses default native permissions")
