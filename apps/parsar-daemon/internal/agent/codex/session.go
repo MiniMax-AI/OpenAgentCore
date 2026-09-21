@@ -81,6 +81,7 @@ type Session struct {
 
 	cancelErr    error
 	cancelOnce   sync.Once
+	cancelReady  chan struct{}
 	cancelled    atomic.Bool
 	terminal     atomic.Bool
 	closeOutOnce sync.Once

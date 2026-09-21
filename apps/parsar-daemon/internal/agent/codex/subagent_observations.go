@@ -67,6 +67,9 @@ func (s *Session) collectSubagentFacts() {
 	for {
 		select {
 		case <-o.ctx.Done():
+			o.mu.Lock()
+			o.cancelResult = o.ctx.Err()
+			o.mu.Unlock()
 			return
 		case terminal = <-o.terminal:
 			started = true
@@ -97,6 +100,9 @@ func (s *Session) collectSubagentFacts() {
 				select {
 				case terminal = <-o.terminal:
 				case <-o.ctx.Done():
+					o.mu.Lock()
+					o.cancelResult = o.ctx.Err()
+					o.mu.Unlock()
 					return
 				}
 			}

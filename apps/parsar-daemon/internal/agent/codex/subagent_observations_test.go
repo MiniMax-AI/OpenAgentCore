@@ -13,11 +13,12 @@ import (
 )
 
 type subagentFixture struct {
-	mu          sync.Mutex
-	home        string
-	childStatus string
-	interrupted int
-	childItems  []json.RawMessage
+	mu            sync.Mutex
+	home          string
+	childStatus   string
+	interrupted   int
+	interruptGate <-chan struct{}
+	childItems    []json.RawMessage
 }
 
 func (f *subagentFixture) history(id string) subagentHistory {
@@ -99,6 +100,12 @@ func observationSession(t *testing.T, status string) (*Session, *subagentFixture
 			case "thread/list":
 				result = map[string]any{"data": []any{map[string]any{"id": "child", "parentThreadId": "root", "createdAt": 100, "agentNickname": "Child", "source": map[string]any{"subAgent": map[string]any{"thread_spawn": map[string]any{"parent_thread_id": "root"}}}}}, "nextCursor": nil}
 			case "turn/interrupt":
+				gate := f.interruptGate
+				f.mu.Unlock()
+				if gate != nil {
+					<-gate
+				}
+				f.mu.Lock()
 				f.interrupted++
 				f.childStatus = "interrupted"
 				f.persist(t)

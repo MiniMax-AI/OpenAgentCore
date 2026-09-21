@@ -85,7 +85,18 @@ func TestJSONRPCClientCloseCanRetryUnreapedChild(t *testing.T) {
 		}
 	}
 	closeConcurrently(true)
+	ownerCtx, cancelOwner := context.WithCancel(t.Context())
+	s := &Session{rpc: client, cancelCtx: ownerCtx, cancelFn: cancelOwner,
+		cfg: defaultSessionConfig(), interactions: newPendingCodexInteractions(), bufs: NewItemBuffers()}
+	ctx, cancelWait := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancelWait()
+	if err := s.Cancel(ctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Session cancellation before reap: %v", err)
+	}
 	reap.Do(client.waitChild)
+	if err := s.Cancel(t.Context()); err != nil {
+		t.Fatalf("Session cancellation retry after reap: %v", err)
+	}
 	closeConcurrently(false)
 	if client.cmd != cmd || cmd.ProcessState == nil {
 		t.Fatal("Close did not retain and reap its original child")

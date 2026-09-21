@@ -2,6 +2,7 @@ package codex
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -169,6 +170,11 @@ func TestPreparedCancelTransferredWaitsForCleanup(t *testing.T) {
 		t.Fatal("Session finished before local cleanup")
 	default:
 	}
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+	if err := p.Cancel(ctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("blocked cleanup ignored caller deadline: %v", err)
+	}
 	allowCleanup()
 	select {
 	case err := <-finished:
@@ -179,6 +185,9 @@ func TestPreparedCancelTransferredWaitsForCleanup(t *testing.T) {
 		t.Fatal("cancellation did not finish after local cleanup")
 	}
 	waitPreparedRelease(t, p, root)
+	if err := p.Cancel(t.Context()); err != nil {
+		t.Fatalf("settled cleanup could not be retried: %v", err)
+	}
 }
 
 func TestPreparedCancelRacingTransfer(t *testing.T) {

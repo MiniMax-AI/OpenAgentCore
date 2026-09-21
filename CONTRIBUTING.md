@@ -923,8 +923,11 @@ publication permanently transfers resource tracking to the Run; subsequent relea
 does not restore preparation ownership or make its old handle cancel that Run.
 Forwarded permission and user-choice observations from that cancelled handoff do
 not register actionable interactions. Codex prepared cancellation also waits for
-the transferred Session's local cleanup, which can finish after output closes;
-ordinary Session cancellation retains its existing behavior.
+the transferred Session's local cleanup, which can finish after output closes.
+Codex cancellation has one continuing native owner: caller deadlines bound only
+their wait, leaving child observation and cleanup alive for an explicit retry.
+Only observed child terminal facts can settle the child; actual observation
+failures remain failures. Native process-exit confirmation remains retryable.
 One prepared-output consumer starts before `Prepared.Start`, so native output beyond
 the 64-frame channel capacity cannot deadlock Start. It retains the first terminal
 frame, drains later output, and forwards accepted frames before the observed cancellation

@@ -99,9 +99,15 @@ func (p *Prepared) Cancel(ctx context.Context) error {
 	started := p.started
 	p.mu.Unlock()
 	if started {
-		err := p.session.Cancel(ctx)
-		<-p.session.waitDone
-		return err
+		if err := p.session.Cancel(ctx); err != nil {
+			return err
+		}
+		select {
+		case <-p.session.waitDone:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	return p.Close()
 }

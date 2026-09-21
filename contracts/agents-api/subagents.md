@@ -61,6 +61,9 @@ owner/reader alive while finite child work completes, and delivers child Items
 before their terminal Turn snapshot and Run completion. Cancellation uses the
 same owner and must settle child writes before release. A failed observation or
 uncertain native effect cannot be converted to a successful empty history.
+Codex cancellation continues under the same owner after a caller deadline; a
+later call can confirm settlement without repeating the native interrupt. Actual
+observation failures remain fail-closed, independently of local process cleanup.
 
 ## Native evidence and remaining qualification
 
