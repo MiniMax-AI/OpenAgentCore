@@ -1,19 +1,21 @@
-# E2B colocated Runtime
+# User-managed E2B Runtime
 
-E2B implements the existing SandboxProvider's Create, GetInfo, Renew, Kill and
-initialization-only RunCommand. Each sandbox contains the same daemon, native
-harness, local tools and workspace as the qualified Docker Runtime. Core remains
-independent. Daily execution and public Files/Artifacts use daemon/Runtime; they
-never use E2B commands or its filesystem service.
+The application creates, renews and destroys its own E2B sandbox using the
+maintained E2B SDK. Core receives neither the E2B API key nor an allocation
+request. The sandbox runs the existing V1 daemon, selected native harness, tools
+and workspace together. Codex, Claude Code and MiniMax Code use the same startup
+contract and their respective qualified Runtime images.
 
-## Build and qualify
+This deployment uses Parsar daemon enrollment, not Codex `exec-server` or Noise.
+Public execution and Files/Artifacts continue through Core and the daemon;
+E2B commands/files are used only for application-controlled deployment and
+inspection. A public Session deletion does not destroy the user-owned VM.
 
-Use the qualified Linux amd64 Docker image for the selected harness. Build the
-E2B template on a machine with Docker and Python 3.12+ using `requirements.txt`. The
-builder extracts the existing runtime binaries and native profile; it does not
-rebuild the harness or add a tool loop. Archive extraction retains read-only native
-configuration; extraction errors must not silently omit the profile. Store private keys and build outputs under
-`~/.parsar/` and keep them out of the checkout.
+## Build the packaged Runtime
+
+Use Python 3.12+, Docker and a qualified Linux amd64 Runtime image containing the
+environment-aware daemon `connect` command. Keep keys and build outputs outside
+the checkout, in private directories. Install the pinned SDK from this directory:
 
 ```sh
 python -m venv "$HOME/.parsar/build/e2b-sdk"
@@ -25,120 +27,122 @@ python -m venv "$HOME/.parsar/build/e2b-sdk"
   --output "$HOME/.parsar/build/e2b-template.json"
 ```
 
-The output's `template` is the official immutable `templateID:build_UUID`
-reference. Qualify and deploy that exact reference, never a mutable alias or a
-fallback template. Python and the E2B SDK are build/acceptance tools only; the
-production Core uses Go and authenticated official REST/Connect transports.
+The builder preserves the existing image's binaries, native configuration and
+private workspace layout. Its `template` output is an immutable
+`templateID:build_UUID`; use that exact value. Each engine needs its qualified
+image/build. No E2B account key, executor key or model credential belongs in a
+build, template environment, metadata, command argument or log.
 
-## Operator configuration
+## Start an existing self-hosted Environment
 
-Set `AGENTS_API_MANAGED_RUNTIMES_FILE` to a private JSON file:
+Create a public `self_hosted` Environment through Core and retain its ID and exact
+returned `remote_url`. Obtain an authorized connect-only executor key scoped to
+that Environment (or its owning principal) through the operator credential flow.
+The key JSON is `{"key_id":"UUID","executor_token":"SECRET"}` with an optional
+`environment_id` restriction. Store both this JSON and the separate E2B API key
+in private files with mode `0600`.
 
-```json
-{
-  "core_url": "https://core.example.com/api/v1",
-  "default_provider": "7d7527e1-c198-4d6a-a807-c4b90e89acb4",
-  "e2b": {
-    "7d7527e1-c198-4d6a-a807-c4b90e89acb4": {
-      "api_key_file": "/private/e2b.key",
-      "template": "TEMPLATE_ID:BUILD_UUID",
-      "lease_seconds": 7200
-    }
-  }
-}
+The current packaged profile uses public `/workspace`, backed by
+`/environment/workspace`. The remote endpoint must be reachable from the VM;
+use the returned `wss://.../api/v1/agent-daemon/ws` unchanged. The native profile
+comes from the image, and model credentials arrive through authenticated Core
+execution. Do not supply the old Core allocation/Bootstrap JSON or `auth.json`.
+
+Generate and retain an application launch UUID once. `launch.py` is a thin SDK
+example, not a service or a replacement lifecycle owner:
+
+```sh
+"$HOME/.parsar/build/e2b-sdk/bin/python" services/agents-api/deploy/e2b/launch.py \
+  --template 'TEMPLATE_ID:BUILD_UUID' \
+  --remote-url 'RETURNED_REMOTE_URL' \
+  --environment-id 'RETURNED_ENVIRONMENT_UUID' \
+  --launch-id 'YOUR_APPLICATION_LAUNCH_UUID' \
+  --executor-key-file "$HOME/.parsar/secrets/executor-key.json" \
+  --api-key-file "$HOME/.parsar/secrets/e2b.key" \
+  --record "$HOME/.parsar/runtimes/YOUR_APPLICATION_LAUNCH_UUID.json" \
+  --timeout 7200
 ```
 
-Set `AGENTS_API_DAEMON_WS_URL` to
-`wss://core.example.com/api/v1/agent-daemon/ws`. Both endpoints must be reachable
-from E2B. Select the existing `AGENTS_API_ENGINE` and corresponding private model
-provider configuration for the qualified image. No public engine selector is
-introduced. Docker and E2B entries share the provider-key namespace; retained
-entries remain available for existing allocations and cleanup. Use a new provider
-key when changing backend/account ownership.
+Choose a lease supported by your E2B account and renew it before expiry. The
+example creates an exclusive private launch record before Create, stores the
+returned sandbox ID before startup, and sets `on_timeout=kill` with auto-resume
+disabled. Metadata contains only the application launch ID and Environment ID.
+It never repeats Create/start, replaces a sandbox or deletes failure evidence.
+Reusing the record path rejects before any cloud call. Do not bypass that guard
+by supplying a new path after an uncertain result.
 
-The account must allow the configured lease (two hours minimum). This leaves
-room for Core's existing one-hour disconnect grace. Core renews the original
-running sandbox; no auto-pause, auto-resume, recreation, pool or migration is
-implemented. Provider expiry destroys volatile workspace/history; Core reports
-failure and must not fabricate a recovered Session or replay execution.
+## Inspect, renew and destroy
 
-## Initialization and security boundary
+The application remains responsible for the lease and cleanup, including after
+Session deletion or daemon failure. These SDK calls use the retained exact ID
+and do not connect to, resume or recreate a sandbox:
 
-Core persists its allocation and dedicated credential hash before Create. E2B
-metadata carries only installation, tenant, Environment, allocation, Session and
-device identifiers. The account key stays in Core. A private root-owned input
-injects the existing daemon auth profile, binds the workspace at `/workspace`,
-then launches the non-root daemon with the image's explicit native profile.
-Model credentials arrive through the existing authenticated execution contract.
-Neither credential belongs in template environment, metadata, command arguments,
-images or logs.
+```python
+import json
+from pathlib import Path
+from e2b import Sandbox
 
-E2B clears `/run` at boot and envd commands do not inherit template environment.
-Initialization uses `/root/.parsar/e2b` and the root-owned image environment file.
-E2B template finalization makes `/usr/local` writable and creates a passwordless
-privileged `user` account. The protected `/opt/parsar-e2b/init.py` restores
-root-owned executable paths (including injected envd/boot files) and locks that
-unused account before starting daemon. These are required corrections to the
-[provider's finalization](https://github.com/e2b-dev/runtime/blob/fad70f393e800cee0278669a63976c3aaa00871b/packages/orchestrator/pkg/template/build/phases/finalize/configure.sh),
-not changes to the native harness.
-Verify actual write and account-transition denial on every qualified template.
-Its final atomic receipt distinguishes completed bootstrap from merely running
-compute. On uncertain creation/initialization, Core observes the retained exact
-allocation or reclaims it; it never retries startup or rotates its credential.
-Inspection and cleanup recheck exact metadata ownership, including after restart.
-A command timeout/transport failure is an unconfirmed effect, requiring cleanup
-before reuse. Cancellation of a Provider request alone does not prove process exit.
-
-Native sandboxing remains mandatory inside the VM. Qualify actual tool reads,
-credential/history isolation, process namespaces, privilege denial, unauthenticated
-envd denial, both network policies and exact Core binding with each real harness.
-A readable **inner** PID 1 environment is not itself access to the outer daemon;
-verify namespace identity and actual sensitive-value/file access. Template builds
-and SDK deserialization alone do not qualify deployment.
-
-## Acceptance scope
-
-Use a separate execution database, the fixed official OpenAI SDK plus raw HTTP,
-real E2B instances and real model APIs. Cover all five Provider operations, actual
-native execution, Files upload/list, immutable Artifacts, tenant/auth isolation,
-cancellation with stopped effects, daemon/Core reconnect and exact-history recovery
-without automatic replay. Keep failure and cleanup evidence. Mock tests do not
-substitute for these checks. This deployment does not claim full official protocol
-compatibility or add user-managed enrollment, new protocol resources or HA.
-
-`services/agents-api/tests/official_e2b_v1.py` runs this acceptance against the
-packaged `bin/agents-api`, `bin/agents-api-migrate` and `upstream.json`. Use the
-fixed OpenAI SDK from `contracts/agents-api/upstream.json`, plus `e2b` from this
-directory's requirements. Pass a private JSON file with these operator inputs:
-
-```json
-{
-  "engine": "codex",
-  "model": "YOUR_REAL_MODEL",
-  "proof_root": "/absolute/private/proofs",
-  "package": "/absolute/agents-api-package",
-  "e2b_key_file": "/absolute/private/e2b.key",
-  "model_key_file": "/absolute/private/model.key",
-  "database_file": "/absolute/private/dedicated-database.url",
-  "options_file": "/absolute/private/execution-options.json",
-  "port": 19341,
-  "core_public_url": "https://acceptance-core.example.com",
-  "template": "TEMPLATE_ID:BUILD_UUID",
-  "native_history_root": "/home/runtime/.parsar/parsar-daemon/agent-sessions",
-  "psql_command": ["psql", "--dbname=YOUR_PRIVATE_TEST_DATABASE"]
-}
+record = json.loads(Path('/private/launch.json').read_text())
+api_key = Path('/private/e2b.key').read_text().strip()
+sandbox_id = record['sandbox_id']
+info = Sandbox.get_info(sandbox_id, api_key=api_key)
+assert info.metadata['parsar_launch_id'] == record['launch_id']
+assert info.metadata['parsar_environment_id'] == record['environment_id']
+Sandbox.set_timeout(sandbox_id, 7200, api_key=api_key)  # When renewing the live VM.
+# When the application is finished, or explicitly abandons this allocation:
+Sandbox.kill(sandbox_id, api_key=api_key)
 ```
 
-Route the public HTTPS/WebSocket endpoint to the test port. The fixture starts
-and crashes its own Core and Runtime, creates billable sandboxes, and deletes
-its Sessions and cloud allocations in cleanup. Use a dedicated database and
-proof directory. `psql_command` must access that same database and accept `-At -c`;
-do not put passwords in its arguments. Set the engine, history root and model
-options for each qualified native profile. Failures retain redacted evidence;
-direct provider cleanup is reported as failed Core cleanup, not acceptance.
+If Create's response was lost before its ID was saved, discover candidates using
+`Sandbox.list(query=SandboxQuery(metadata={'parsar_launch_id': launch_id}),
+api_key=api_key)`, importing `SandboxQuery` from `e2b`. Consume pages while
+`paginator.has_next` via `paginator.next_items()`. Verify both metadata fields
+against the private record, retain every matching provider ID, and explicitly
+inspect or destroy those allocations. An empty lookup is not permission to retry
+an uncertain Create. Do not select an arbitrary candidate or rotate its identity.
 
-For initialized-environment regression, enable `verify_environment_templates`,
-`verify_initial_files` and `verify_environment_setup` in the private test config.
-Add `verify_system_packages` to exercise real apt packages, compilation/linking,
-package/setup composition, native tool visibility and the finalized seed's hash
-and ownership. This reuses the same public execution and recovery checks.
+An uncertain startup result requires inspection of the same VM or explicit
+cleanup. Root-only `/root/.parsar/e2b/launch.json` records the startup claim;
+`ready.json` records only successful process handoff (`daemon_started`), even if
+the daemon subsequently exits. Neither proves enrollment, native readiness or a
+successful Turn. Check public Core Environment status and the private daemon log
+at `/home/runtime/.parsar/parsar-daemon/default/daemon.log`. The daemon's separate
+`/home/runtime/.parsar/parsar-daemon/environment.json` records the verified
+Environment/Session binding. Keep these records and native history on failure.
+Do not rerun `init.py`; it refuses any claimed attempt, including interrupted ones.
+The SDK's `Sandbox.connect` can resume paused sandboxes, so it is not used as an
+automatic recovery/inspection step here. VM expiry destroys volatile history;
+never claim a replacement VM recovered the original Session.
+
+## Startup and security boundary
+
+The protected image initializer uses the image's explicit environment, restores
+E2B-finalized executable/service permissions, locks the unused privileged `user`
+account, and binds `/workspace`. It writes the executor key to a mode-`0600` file
+inside the protected daemon directory, then starts the existing daemon as UID
+1000 with that file path. The input is removed before startup. No bearer enters
+the daemon's argv or inherited environment. Enrollment and immutable local binding
+remain daemon responsibilities; startup does not invent device/Session IDs.
+
+E2B clears `/run` at boot, so startup records live under `/root/.parsar/e2b`.
+Native sandboxing remains mandatory. Each actual template must verify private
+credential/history isolation, protected binary/config ownership, privilege denial
+and stopped descendant effects, rather than infer safety from file modes alone.
+The one-shot receipt cannot be reused to replace the daemon or overwrite history.
+
+## Verification scope
+
+Run the focused local tests with the pinned SDK environment:
+
+```sh
+python -m unittest discover -s services/agents-api/deploy/e2b -p '*_test.py' -v
+```
+
+These are controlled startup-contract tests: input binding, protected key output,
+unchanged URL, no secret in argv/environment/record, one-shot claim, and retained
+provider ID on unknown outcomes. They do not create billable resources or qualify
+E2B security, enrollment or model execution. Full acceptance must separately use
+all three real native harnesses, public SDK/raw HTTP, Files/Artifacts, key
+rotation/revocation, reconnect/history recovery, cancellation and explicit
+application-owned cleanup. The older `official_e2b_v1.py` fixture exercises the
+former Core-managed route and is not acceptance for this user-managed entry point.
