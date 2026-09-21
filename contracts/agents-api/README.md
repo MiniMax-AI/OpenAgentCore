@@ -29,10 +29,10 @@ registration, qualification and shared acceptance.
 Verify configuration against actual execution: response defaults must not merely
 describe values the adapter never applied.
 
-The private native registry persists fenced connection observations and pinned
+The Worker persists fenced authenticated daemon connection observations and pinned
 Environment-event snapshots through the existing execution owner. Session reads
 and live SSE also expose safe `self_hosted` output and reservation-owned connection
-actions. Public self-hosted creation accepts initial text or empty Codex Sessions;
+actions. Public self-hosted creation accepts initial text or empty Sessions on the three enabled harness profiles;
 initial input reserves work while returning the connection target promptly.
 Later idle text submissions wait for preparation/admission. Cancellation-only events
 reuse durable admission without creating work or retargeting retries; pending
@@ -53,8 +53,9 @@ The three-harness Docker V1 MVP is accepted: Codex, Claude Code and MiniMax Code
 share the execution/workspace contract, with independent Core/database deployment,
 Files/Artifacts, cancellation and owned-history continuation. Optional features
 still differ. See the [accepted scope and evidence](#accepted-milestone-and-evidence).
-The same three harnesses also passed separate real E2B V1 qualification in PR #705;
-see the [E2B operator guide](../../services/agents-api/deploy/e2b/README.md).
+The same three harnesses passed historical Core-managed E2B V1 qualification in
+PR #705. That route is retired; it does not qualify the new user-managed daemon
+enrollment chain. New local/E2B real acceptance remains pending.
 Select further work only within current user authorization. Parsar cutover and
 business Team orchestration are separate from protocol coverage.
 
@@ -81,17 +82,17 @@ paths start at `/vaults`, not `/agents/vaults`.
 | --- | --- | --- |
 | Root reusable Agents | create, retrieve, update, list, delete | Partial create/retrieve/update/list/delete and Session references; configuration/error gaps remain |
 | Skills and Versions | create, retrieve, update default, list, delete, content | [Tenant-owned encrypted bundles and hosted references](environment-templates.md); qualified upload limits and unresolved hosted semantics are recorded explicitly |
-| sessions | create, retrieve, update, list, delete | Create (ordinary/live), retrieve, list with root-Agent filter, metadata-only update, public deletion with owned Docker/E2B cleanup; general physical cleanup and exact hosted semantics remain open |
+| sessions | create, retrieve, update, list, delete | Create (ordinary/live), retrieve, list with root-Agent filter, metadata-only update, public deletion with owned Docker cleanup; user-managed compute stays caller-owned; general physical cleanup and exact hosted semantics remain open |
 | sessions.events | create, stream | Text/cancel/function-result admission and live events; function-action state snapshots supported |
 | sessions.turns | retrieve, list | Implemented reads; lifecycle conformance still partial |
 | sessions.items | list | Partial Item variants |
-| sessions.artifacts | retrieve, list, delete, content | Shared output capture and immutable stored reads/deletion on the accepted three-harness Docker/E2B profiles, including retained downloads after Runtime loss; exact upstream defaults/errors, unchanged-file republishing and cancellation-edge parity remain unverified |
+| sessions.artifacts | retrieve, list, delete, content | Shared output capture and immutable stored reads/deletion on accepted Docker profiles (prior Core-managed E2B evidence remains historical), including retained downloads after Runtime loss; exact upstream defaults/errors, unchanged-file republishing and cancellation-edge parity remain unverified |
 | sessions.subagents | retrieve, list | Missing |
 | sessions.subagents.items | list | Missing |
 | sessions.subagents.turns | retrieve, list | Missing |
 | sessions.subagents.turns.items | list | Missing |
-| environments | retrieve | Supported Codex self-hosted and three-harness Docker/E2B hosted profiles: durable status and safe initial-file metadata; other installation inventory and full lifecycle parity remain gaps |
-| environments.files | create, list | [Bounded live listing and inline/source-file creation](environment-files.md) on qualified Docker/E2B workspaces; Codex self-hosted listing is a separate supported path. Full listing, overwrite and error semantics remain partial |
+| environments | retrieve | Three-harness colocated self-hosted implementation and qualified Docker hosted profiles: durable status and safe initial-file metadata; other installation inventory and full lifecycle parity remain gaps |
+| environments.files | create, list | [Bounded live listing and inline/source-file creation](environment-files.md) on qualified Docker workspaces; new self-hosted enrollment reuses the local implementation, with real public acceptance pending. Full listing, overwrite and error semantics remain partial |
 | environments.templates | create, retrieve, update, list, delete | [Reusable network, files, env/setup/packages, inline/referenced Skills and Session snapshots](environment-templates.md); other initialization and full semantics remain gaps |
 | vaults | create, retrieve, list, delete | Create/retrieve/list/delete with independent tenant persistence, stored status filtering, atomic Credential cascade and frozen Session attachments; archive semantics and full hosted lifecycle parity remain missing |
 | vaults.credentials | create, retrieve, update, list, delete | Static-bearer create/retrieve/list/token replacement/deletion with scoped encrypted storage; Session attachment and exact-URL HTTPS MCP binding; OAuth, archive semantics and full hosted lifecycle parity remain missing |
@@ -134,6 +135,9 @@ is made for future model choices: the recorded Kimi continuation limitation is a
 new model-issued command after a recovery prompt, not automatic API replay.
 
 ### E2B V1 qualification
+
+This is historical evidence for the retired Core-managed E2B route. It does not
+qualify current user-managed E2B enrollment or transfer compute ownership to Core.
 
 PR #705 (`9cd1c46c7fab6eeef8cb35ce71f1ea0ca2cf8bc1`) separately qualified
 Codex, Claude Code and MiniMax Code with actual E2B and real Kimi/MiniMax APIs.
@@ -259,7 +263,7 @@ including further deployment qualification; this inventory describes merged beha
   asynchronous cancellation request while internal finalization remains available.
   Existing streams close on observing removal without an invented deletion event.
   Creation keys remain reserved (local 409); missing/repeated deletion locally
-  returns 404. Qualified managed Docker/E2B deletion also reclaims its owned Runtime;
+  returns 404. Qualified managed Docker deletion also reclaims its owned Runtime;
   broader physical SQL/native history cleanup, immediate native quiescence and
   exact hosted error/retry/overlapping-stream semantics remain unverified or
   unimplemented. Shared devices, saved Agents and other Sessions are independent.
@@ -282,9 +286,9 @@ including further deployment qualification; this inventory describes merged beha
   the service's `auto` policy; complete upstream-default/error/retry conformance is
   unverified. HTTP MCP with explicit `service` origin and
   boolean `required` (default false) supports saved configuration and Codex `none` execution,
-  plus `self_hosted` execution behind explicit combination capabilities. Remote
-  static Bearer authentication additionally requires `mcp_http_remote_bearer_auth`;
-  it keeps the secret in the trusted service native process. Required initialization
+  with Claude SDK
+  also supporting its qualified `none` subset. V1 `self_hosted` explicitly rejects
+  service-origin MCP; the old remote combination is retired. Required initialization
   additionally needs `mcp_http_required` on the pinned native profile. Native root
   thread creation/cold resume must initialize required servers before a native
   Turn starts; failure cannot silently replace retained history. Public acceptance
@@ -350,8 +354,9 @@ including further deployment qualification; this inventory describes merged beha
 - List operations use the upstream `after`, `limit`, `order` and resource-specific
   filters. Stream events preserve the upstream discriminators and payload shapes.
 - The upstream self-hosted environment includes an exec-server `remote_url`.
-  A Parsar daemon socket is not automatically compatible with that transport.
-  Provider adaptation must be explicit and verified before advertising support.
+  V1 retains that public resource field while explicitly selecting our private
+  daemon transport. It does not claim stock `exec-server` wire interoperability;
+  public resource semantics require independent acceptance.
 - Environment retrieval returns `object: agent.environment`, its ID/type, durable
   resource status and required non-null `files`, `plugins` and `skills` arrays.
   Hosted initial files report safe frozen metadata; empty arrays do not
@@ -372,7 +377,7 @@ and cancellation. This does not close the remaining protocol/transport gaps.
 
 | Capability | Current state |
 | --- | --- |
-| Independent deployment | Source-free Core package and separate execution PostgreSQL ownership; managed Docker/E2B Runtime co-locates daemon, selected harness and workspace; no Parsar dependency |
+| Independent deployment | Source-free Core package and separate execution PostgreSQL ownership; Docker-hosted and user-managed Runtime colocate daemon, selected harness and workspace; Core owns Docker only; no Parsar dependency |
 | Saved Agents and Sessions | Saved Agent routes, immutable inline/referenced Session configuration, metadata updates, root-Agent filtering and scoped cursor pagination |
 | Public execution | Initial/later text, active input and cancellation through Codex, Claude Code or MiniMax Code; Codex/Claude additionally support qualified public functions; see profile limits below |
 | Pending function actions | Persisted calls/results/application receipts, `required_actions`, Session `requires_action`, Turn `waiting`, and live state snapshots; other interactions remain incomplete |
@@ -380,32 +385,37 @@ and cancellation. This does not close the remaining protocol/transport gaps.
 | Execution ownership | Immutable Session engine/device, durable input receipts and database writer fencing; uncertain claimed work fails on restart, without blind replay |
 | Files and Artifacts | Bounded Environment listing and inline/file_id copies into qualified V1 workspaces; source-file lifecycle and immutable output capture/download/deletion; [Files limits](environment-files.md), [source limits](source-files.md) |
 | Clients | Fixed Python SDK 3.13.0 and official Go SDK v3.61.0; raw HTTP and real provider acceptance supplement controlled tests |
-| Release and product | Registry publication and Parsar cutover remain open; basic Docker/E2B provisioning is operator opt-in; business Team orchestration is deferred |
+| Release and product | Registry publication and Parsar cutover remain open; Docker hosting and user-side E2B provisioning are explicit opt-ins; business Team orchestration is deferred |
 
 ### Public engine profiles
 
 `AGENTS_API_ENGINE` supplies the default for new Sessions. The optional
 [Core harness extension](harness-selection.md) explicitly selects an enabled engine;
-existing Sessions retain their immutable choice. Model identity is independent.
+existing Sessions retain their immutable choice. `AGENTS_API_HARNESSES` explicitly
+adds installed deployment profiles without requiring a managed Provider. Model
+identity is independent.
 All three profiles require disabled `multi_agent`, implicit reasoning, service tier
 `auto` and ordinary text output. Optional tools/configuration are qualified per
 operation and placement; native support is not public admission by itself.
 
 | Engine | Qualified placements and limits |
 | --- | --- |
-| `codex` (default) | `none`, the bounded official `self_hosted` path and Docker/E2B `openai_hosted`; public functions with ordered text/image results; service-origin HTTP MCP on `none`/`self_hosted`, not hosted; supported verbosity follows the native policy below |
-| `claude_sdk` | `none` and Docker/E2B `openai_hosted`; medium verbosity, object-root function schemas and text-only function results; anonymous/static-bearer service-origin HTTP MCP with either required value on `none`; hosted service-origin HTTP MCP remains unsupported |
-| `mcode` | `none` text and Docker/E2B `openai_hosted` workspace execution; medium verbosity; public functions/service-origin MCP, image input and complete public usage breakdown remain unsupported |
+| `codex` (default) | Qualified `none` and Docker `openai_hosted`; public functions with ordered text/image results; service-origin HTTP MCP on `none` only; verbosity follows native policy |
+| `claude_sdk` | Qualified `none` and Docker `openai_hosted`; medium verbosity, object-root function schemas and text-only results; qualified anonymous/static-bearer service-origin HTTP MCP on `none` |
+| `mcode` | Qualified `none` text and Docker `openai_hosted`; medium verbosity; public functions/service-origin MCP, image input and complete public usage breakdown remain unsupported |
 
-All three hosted profiles reuse the [Docker](environments.md#basic-public-docker-hosted-profile)
-or [E2B](environments.md#basic-public-e2b-hosted-profile) provider lifecycle,
-workspace Files/Artifacts, cancellation and recovery queries, with engine-specific
-native isolation. Configuration and immutable Runtime images/templates require explicit
-operator setup: [Codex](../../services/agents-api/deploy/codex/README.md),
-[Claude Code](../../services/agents-api/deploy/claude/README.md), and
-[MiniMax Code](../../services/agents-api/deploy/mcode/README.md). The
-[E2B guide](../../services/agents-api/deploy/e2b/README.md) packages those qualified
-images as pinned templates.
+All three profiles implement user-managed `self_hosted` enrollment at `/workspace`
+through our private daemon transport; real public acceptance of that new chain
+is pending. Service-origin HTTP MCP is rejected on `self_hosted` and hosted local
+placements. This does not remove separately qualified Environment Plugin MCP.
+The [Docker lifecycle](environments.md#basic-public-docker-hosted-profile) retains
+workspace Files/Artifacts, cancellation and recovery with native isolation.
+Configure immutable Runtime images explicitly: [Codex](../../services/agents-api/deploy/codex/README.md),
+[Claude](../../services/agents-api/deploy/claude/README.md),
+[MiniMax](../../services/agents-api/deploy/mcode/README.md).
+[E2B packaging](../../services/agents-api/deploy/e2b/README.md) reuses the Runtime
+with the official SDK; the user owns provisioning, renewal and destruction.
+
 The shared initialization path supports env/setup and system/npm/Python packages;
 see the [evidence and limits](environment-templates.md#verification). Remaining
 unsupported startup installations, unqualified restricted hostname forms and hosted
@@ -416,8 +426,8 @@ and Claude anonymous HTTP or HTTPS bearer without literal headers. This batch
 does not qualify those new Plugin paths on E2B. MiniMax's private workspace MCP
 bridge remains internal transport, distinct from installed Environment MCP servers.
 
-The [Codex self-hosted profile](environments.md) remains distinct from managed
-Docker/E2B and from future user-managed Runtime enrollment. Product `claude_code`
+The [self-hosted profile](environments.md#initial-public-self-hosted-profile) uses
+user-managed Runtime enrollment and remains distinct from Core-managed Docker. Product `claude_code`
 is likewise a separate integration from the API's `claude_sdk` engine key.
 Unsupported configurations fail before Session creation; unsupported results fail
 before a batch write. Native capability claims cannot replace service profile
@@ -522,16 +532,11 @@ its restrictive profile with no built-in tools and only declared function callba
 A missing capability or unsupported native method fails rather than silently
 allocating a local execution environment. Native state still lives on the host;
 function callbacks may access their own resources. This is not filesystem isolation.
-Private `daemon` snapshots and the self-hosted registry/Noise transport are
-distinct from this mode.
-
-The native reference is Codex `rust-v0.153.4`, commit
-`3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`, especially
-`codex-rs/exec-server/src/environment_provider.rs`. The self-hosted registry
-requires executor registration, harness authorization and encrypted relay;
-a daemon WebSocket URL is not that protocol.
-The [Environment assessment](environments.md) records all environment/template/file
-operations, ownership, native authentication gaps and the implementation sequence.
+User-managed `self_hosted` uses an exact enrolled local Runtime instead. The
+former native registry/Noise transport is retired. The pinned native source remains
+a dependency reference, not a requirement to expose its executor protocol.
+The [Environment assessment](environments.md) separates current boundaries from
+historical native transport evidence.
 
 ### Public execution admission
 
@@ -776,7 +781,7 @@ Creator fields remain internal and do not extend the public Session schema.
 Executor keys now require the target Session's verified project and typed creator,
 with optional exact-Environment restriction. Key issuance can precede Session
 creation; rotation/revocation and current authorization reuse the durable ledger
-and existing native registry. Historical keys remain revoked and unclaimed. This
+and exact Runtime enrollment/gateway binding. Historical keys remain revoked and unclaimed. This
 executor-specific prerequisite does not open public Environment admission or
 establish complete ownership, hosted key lifecycle or error compatibility. See the
 [standalone configuration](../../services/agents-api/README.md#standalone-http-service).

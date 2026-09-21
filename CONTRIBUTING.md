@@ -35,9 +35,8 @@ split oversized components before extending them. Use `internal/obs/log` for log
 Run `make check` before completion. The standalone gate includes all daemon/shared
 Go tests, Core contract/client/service tests, a real dedicated PostgreSQL test
 database, byte-for-byte sqlc regeneration checks, standalone API builds, Claude SDK
-tests and packaging, MiniMax companion checks, Rust executor tests/format/Clippy,
-and Codex Harness packaging checks. It intentionally has no product Web/server/
-installer gates. The full gate fails when the database variable is missing.
+tests and packaging, MiniMax companion checks, and Rust filesystem-helper
+tests/format/Clippy. It intentionally has no product Web/server/installer gates. The full gate fails when the database variable is missing.
 
 Use Go from `go.mod`, Node 22, pnpm 10.30.3, Python 3.9+, Rust 1.95.0 with rustfmt
 and Clippy, and Linux OpenSSL development libraries. `make sqlc-generate` owns only
@@ -49,20 +48,13 @@ Run `make openapi` after handler annotation changes. It reuses the original
 Core-only swaggo v1.16.4 generator and writes this schema, without product routes.
 
 Core changes must retain the independent build and official-client workflow.
-Changes to native Harness sources require `make check-agents-harness-native`,
-`make build-agents-harness` and applicable live provider acceptance. Real execution
-checks require real models; do not count omitted prerequisites or mocked responses
-as live acceptance. Never expand this extraction into unrelated behavioral fixes.
-
-Native Harness CI runs checks and the release build on separate disposable runners
-so debug and release artifacts do not compete for disk. It disables incremental
-compilation and caches downloaded Cargo dependencies, not target directories.
-The Rust-only jobs remove unused preinstalled Android/.NET SDKs and report disk
-usage. Both matrix targets must pass; release optimization settings and native
-test/Clippy coverage remain unchanged. These resource settings apply to CI, not
-operator build defaults. Checks retain a 60-minute limit; cold optimized release
-builds receive 120 minutes after the standard runner exceeded one hour with disk
-space remaining. A timeout is still a failed build, not a skipped gate.
+Native adapter changes require their applicable build/check targets and live provider
+acceptance. Real execution checks require real models; do not count omitted
+prerequisites or mocked responses as live acceptance. `packages/codex-executor`
+retains only the directory, write and workspace-export Rust helpers. Its build and
+check targets remain; the separate `packages/codex-harness`, its build/check scripts
+and its CI/`make check` gate are retired. Historical remote native probes are not
+current validation entrypoints.
 
 ## Architecture boundaries
 
@@ -200,19 +192,25 @@ identity and prior API Turn state belong to `SessionExecutionBinding`.
 Platform-managed and user-managed deployment reuse this same Runtime. For platform
 management, SandboxProvider creates and reclaims it. For user management, the user
 starts the Runtime and its daemon authenticates and initiates the Core connection;
-Core must verify tenant ownership and the exact Environment binding. These are
-management responsibilities, not separate execution architectures. User-managed
-Runtime does not automatically mean the official `self_hosted` discriminator;
-that mapping needs separate protocol definition and acceptance. User-managed
-installation and enrollment remain later board work, outside the current Docker
-co-location security qualification.
+Core verifies principal ownership and the exact Environment binding. These are
+management responsibilities, not separate execution architectures.
 
-Preserve the accepted official `self_hosted` interoperability path and its native
-executor connection flow. Codex registry/Noise is specific to that path, not the
-V1 hosted backbone or a universal protocol for all engines. A private daemon URL
-or an undocumented daemon installation requirement cannot replace `remote_url`.
-Keep harness cwd separate from the executor workspace where that accepted remote
-path still requires it.
+In V1, our daemon fills the user-side executor role. Users deploy daemon, the
+selected harness, local tools and workspace together. Do not require Codex
+`exec-server`, a service-side harness, registry/Noise transport or remote tool
+forwarding. The explicit daemon-executor decision supersedes the previous native
+executor interoperability requirement. The superseded execution route is removed;
+retain reusable filesystem helpers,
+necessary regressions and historical evidence without a compatibility layer.
+
+User-managed onboarding creates a `self_hosted` Session first, then passes its
+Environment ID and unchanged `remote_url` to our Runtime with connect-only
+authorization. This is our daemon connection contract, not stock OpenAI
+`exec-server` transport compatibility. Validate the pinned public HTTP/SDK
+resources, state transitions and lifecycle separately; do not infer complete
+compatibility from a working connection. User-side tooling owns local Runtime or
+E2B allocation, renewal and cleanup. Session deletion and credential revocation do
+not transfer ownership of user compute to Core or prove process quiescence.
 
 Public Environment Templates belong to Core and its execution database, independently
 of provider image/build templates. Resolve a tenant-owned reference once at Session
@@ -382,36 +380,21 @@ does not remove service-owned hosted expiry and cleanup requirements.
 The official `openai_hosted` discriminator means hosting by this independent Core
 service, using Docker V1. Keep the public value unchanged; `parsar_hosted` is not
 a new API type. Public Environment Templates apply only to this hosted path.
-E2B onboarding follows the official `self_hosted` workflow: an application or
-webhook controller owns sandbox provisioning and cleanup, and the executor connects
+E2B onboarding follows the application-managed `self_hosted` resource workflow:
+the application owns sandbox provisioning and cleanup, and our daemon connects
 with the returned Environment ID, unchanged `remote_url` and scoped environment
-authorization. Reuse existing Runtime and provider components without a separate
-public integration design. A private daemon connection alone is not evidence of
-official interoperability. Qualify tenant ownership, credentials and connection
-lifecycle using the pinned client and actual execution.
+authorization. Reuse the same Runtime and thin provider components. No OpenAI
+executor process or additional execution architecture is required. Qualify
+principal/tenant ownership, credentials and connection lifecycle using the pinned
+client and actual execution; document our transport boundary explicitly.
 
-The previously accepted Core-managed E2B route remains implementation evidence
-pending bounded realignment and obsolete-route cleanup after Environment Templates.
-Do not expand it as a second hosted offering. Current Template acceptance uses
-Docker; historical E2B tests retain only their demonstrated scope.
-
-The existing E2B Provider uses an explicit `templateID:build_UUID` and the same qualified
-colocated Runtime. Its root-private bootstrap input and final atomic receipt live
-on persistent disk, never template `/run`. Running compute alone does not establish
-completed initialization. Inspect exact installation/tenant/Environment/allocation
-metadata and the matching Session/device receipt; never replay uncertain Create or
-bootstrap. Credentials stay out of provider metadata, template environment and
-command arguments. Use the existing one-hour disconnect grace with an E2B lease of
-at least two hours. Expiry, pause or lost state cannot silently recreate/resume a
-VM. Before launching daemon, trusted root bootstrap must correct E2B's writable
-program/boot paths and disable its unused passwordless privileged account; qualify
-these protections after provider finalization, not just in the source image.
-The [E2B operator guide](services/agents-api/deploy/e2b/README.md) owns packaging,
-configuration and real-cloud acceptance. The pinned official envd process schema
-and generated Go messages live together under `internal/sandbox/e2b/envdprocess`;
-regenerate with the documented tools when that source changes. Do not hand-write
-Connect framing or add SDK subprocesses to the static Core. Provider envd file and
-command access is initialization-only; public Files and execution remain on Runtime.
+The Core-managed E2B Provider, including its custom HTTP/Connect and envd protocol
+implementation, is retired. User-side E2B tooling uses the official SDK and the
+shared Runtime, not an additional execution architecture. The
+[E2B guide](services/agents-api/deploy/e2b/README.md) owns packaging and user-managed
+allocation, renewal and cleanup. Historical Core-managed E2B acceptance retains
+only its original scope; it does not qualify the new enrollment path. Current
+public Template acceptance uses Docker.
 
 The independent Docker Provider consumes an immutable Runtime image and retains
 one caller-owned allocation reference through partial creation and cleanup. Persist
@@ -536,12 +519,12 @@ device credential. Revocation does not authorize silent placement replacement.
 The private local Environment reference contains its identity and, for policy-aware
 execution, its immutable network policy. Trusted Runtime deployment configuration
 freezes the Environment, Session and workspace root;
-requests cannot supply a replacement root. Local and remote references are mutually
-exclusive. Use the same preparation/start lifecycle for native execution and the
+requests cannot supply a replacement root. The V1 path uses only the exact local
+Environment reference. Use the same preparation/start lifecycle for native execution and the
 existing bounded workspace controls for directory access. Local idle directory
 reads use the existing filesystem helper directly, with no model credentials or
-temporary harness. These private capabilities do not admit public hosted requests,
-establish Provider lifecycle, or define the official `self_hosted` mapping.
+temporary harness. These private capabilities alone do not authorize public requests or establish
+Provider lifecycle. Self-hosted enrollment supplies the exact local binding.
 Core rechecks the persisted Environment/device binding for preparation and active
 reads; capability discovery cannot select or authorize a general device for this
 placement. Local work uses the existing pending-input reservation and Worker
@@ -555,9 +538,10 @@ harness's native implementation behind its adapter. Core acts on verified capabi
 conditions; a capability declaration alone never grants public feature admission.
 Extend existing interfaces during related functional work without introducing a
 second framework or a broad rewrite. Codex, Claude Code and MiniMax Code have
-qualified dedicated Docker and E2B V1 profiles. Each harness has equal standing;
+qualified dedicated Docker profiles and historical Core-managed E2B evidence.
+New user-managed enrollment requires separate real acceptance. Each harness has equal standing;
 qualify each image/template with the common full-loop acceptance before deploying.
-Additional engines and hosted remote-executor separation remain separate work.
+Additional engines remain separate work; V1 has no separate remote executor.
 Later engines must satisfy the same applicable acceptance contract while keeping
 their suitable native deployment layout.
 
@@ -696,17 +680,15 @@ backfilled. Creation and recorded-intent retry snapshots load the Environment wi
 the Session row/cursor in the same transaction, without borrowing subsequent
 activity or Turn state. Initial state is `pending`; authenticated connection observations follow
 the lifecycle rules below.
-Public creation supports a `self_hosted` Session on the Codex profile when
-execution and a validated executor origin are configured. Require an absolute
-POSIX workspace directory without NUL, CR, LF or backslash for the current adapter;
-omitted/null capability directories use the empty default.
-Supported non-deferred function tools use the existing validation and native
-callback bridge. Nonempty capability directories and other engine placements
-remain rejected implementation gaps. Session output uses the owned
-Environment association; file operations and populated installation metadata remain separate.
+Public creation supports `self_hosted` on the three enabled native profiles when
+the daemon gateway is configured. V1 requires `/workspace` and empty/default
+capability directories. Supported non-deferred functions keep their engine-specific
+validation and native callback bridge. Enrollment binds the dedicated Runtime;
+Session output uses the owned Environment association. Public Files reuse the exact
+local workspace; populated self-hosted installation metadata remains unsupported.
 
 Environment retrieval uses the existing tenant-scoped join to a live owning Session
-and its durable connection status, independently of execution or registry setup.
+and its durable connection status, independently of a live Runtime or gateway setup.
 It preserves project-shared read access and exposes only the pinned resource fields.
 The current closed self-hosted configuration has no API-managed file, plugin or skill
 installations, so those required arrays are empty. They are not a filesystem listing
@@ -805,8 +787,8 @@ earlier failed Turn. This local settlement policy does not establish hosted expi
 errors or initial-input asynchronous failure semantics; those remain unverified.
 
 Session GET/list/metadata responses and live SSE share the safe `self_hosted`
-output projection. Its `remote_url` comes only from the executor registry's
-validated configured origin, never request headers or a daemon address. Include
+output projection. Its `remote_url` comes only from the daemon gateway
+configuration, never request headers or a daemon address. Include
 the owned Environment ID, workspace and capability directories without exposing
 private configuration. The standalone Environment resource remains separate.
 Acceptance must pass that exact URL and ID to the
@@ -829,154 +811,32 @@ real remote commands/files and a second native-history Turn. Private provisionin
 or injected API handlers cannot substitute for that workflow.
 
 
-The opt-in native Codex executor registry lives in
-`services/agents-api/internal/executor/codex`, outside public API handlers and the
-daemon device gateway. It reuses the worker's execution lease and Store ownership
-reads. The operator issues connect-only executor keys for a complete typed principal
-within an already verified project-to-tenant mapping. A key has a stable explicit
-management UUID, immutable principal and optional exact-Environment restriction;
-a principal key needs no Session at issuance. Only its digest, creation/issuance
-times and revocation state are persisted. Ordinary issuance never replaces an ID;
-rotation and revocation require that ID and full principal. Exact-target issuance
-and rotation share the Session deletion lock and require its recorded creator.
+User-managed Runtime enrollment authenticates the existing principal executor key
+against the exact live Session/Environment and its recorded creator. Keys retain
+stable management IDs, immutable principals, optional exact-Environment restrictions,
+rotation/revocation and digest-only storage. They grant connection authority, never
+Session API access. No raw-token import or secret read-back is added.
 
-Every authorization checks the current digest, non-revocation, project partition,
-Session creator kind/ID, optional restriction and live Session in one database
-snapshot. Unknown historical creators cannot authorize an executor. Deleting one
-Session denies that target without revoking a principal key serving other Sessions.
-Keys have no connection-ticket expiry; their validity ends through explicit
-rotation/revocation, while each target remains subject to current ownership checks.
-Keep caller, device, harness and executor credentials independent; no raw-token
-import or read-back is provided. Never log registry bearer or URL capabilities.
+Enrollment atomically creates or recovers one dedicated device and immutable Session
+binding under the Session lock. The V1 workspace is `/workspace`; nonempty
+self-hosted capability directories remain unsupported. No `runtime_allocation` is
+created for user-owned compute. A retry cannot replace a device, change its bound
+key or adopt another native history. Gateway authentication and dispatch recheck
+current key authority; rotation/revocation and deletion deny further use.
 
-Migration 26 retains legacy key digests/restrictions under their Environment UUIDs
-but revokes them with unknown principals. Do not infer historical identities or
-project mappings. Stop older registry and operator writers before migration;
-deploy the issuer, registry and launcher together, explicitly reissue keys and
-restart executors. Reserved legacy IDs cannot be claimed or rotated into principal
-keys. Downgrade cannot discard new principal-key identities or undo revocation.
-
-Registration IDs, five-minute connection capabilities and socket generations are
-process-local. Re-registration replaces the current socket; late close callbacks
-cannot clear its successor. Restart invalidates old URLs and requires registration
-again. An executor retaining a valid credential may register again: permanently
-excluding it requires key revocation/rotation. The current executor digest is rechecked for registration, validation, socket
-attachment and live socket heartbeats; rotation/revocation applies without restart.
-Registration replacement orders credential observations so an older request cannot
-overwrite a newer credential's registration. Heartbeats run every five seconds
-with a four-second authorization budget; closing sockets is an observation bound,
-not immediate revocation of remote side effects. Ownership is also rechecked; failed execution ownership closes the registry. This
-is bounded connection observation, not a guarantee of native process quiescence.
-Durable connection state and immutable Environment event snapshots follow the
-leased observation path below; a socket never establishes harness readiness. The harness registry grants a distinct, exact-Environment credential access to
-native `/connect`; the executor alone calls `/validate`. Each connection URL and
-one-use key authorization are separate five-minute capabilities bound to the
-current registration, executor socket and complete harness public key. Grants are
-bounded; refresh may issue unused grants without disturbing an active pair.
-
-Internal execution owners obtain random harness credentials from the native
-registry after current lease and exact tenant/Environment authorization. The
-registry retains at most 32 credential digests in memory. The owner context spans
-preparation and its transferred Run; release, owner cancellation and registry
-shutdown invalidate that credential, its pending grants and its own connected pair.
-Recheck the same live credential under the registry lock after authorization
-queries in connect, attach and validation. Old cleanup cannot revoke a successor.
-The five-minute connection-ticket lifetime does not expire an active execution
-owner or impose a Turn deadline. Pair closure is not proof of OS quiescence.
-Static harness-key files are retired explicitly, without a fallback or public
-issuance endpoint. Executor authorization also requires the recorded Session
-creator; tenant ownership alone cannot authorize executor connections. No credential bearer belongs in snapshots, events, logs or the database.
-
-One independent harness connection pairs with each executor connection. Native
-binary messages pass unchanged, up to the pinned 256 KiB limit, with one data
-writer and one in-flight message per direction. Write deadlines bound stalled
-peers. Either peer disconnecting closes both physical sockets and invalidates the
-pair's grants; this lets native Session/process recovery run in the executor.
-Never forward queued ciphertext to a replacement or invent transport replay.
-Concurrent native commands and files share one connection; additional independent
-harnesses are rejected without eviction. Full public Environment conformance and other engine
-placements remain separate work. Native transport annotations are excluded from the
-pinned public SDK OpenAPI output; their routes are documented in the service guide.
-
-Remote file operations must share the native execution owner's filesystem and
-authorized connection. The pinned stock app-server `fs/*` methods select its local
-Environment and cannot access an executor-only workspace. The opt-in
-[shared-filesystem probe](services/agents-api/tests/native/README.md#shared-native-filesystem-owner)
-instead injects one upstream `EnvironmentManager` into the native in-process
-app-server and uses its typed filesystem directly. This is a prerequisite
-experiment, not a production daemon selection or public file implementation.
-The pinned in-process transport can silently drop notifications under saturation;
-absence of a `Lagged` event does not prove lossless delivery. Resolve that event
-contract and process/authorization ownership before adopting an embedded runtime.
-Public workspace paths, file references, live metadata and pagination require
-separate protocol acceptance; no model prompt or shell command implements file IO.
-
-The opt-in [raw manager qualification](services/agents-api/tests/native/raw_manager/README.md)
-tracks an explicit patch against the same native pin. It publishes the raw runner's
-stock-built manager through an additive entrypoint, retaining native configuration,
-processor and transport assembly. The ordinary runner remains unchanged. Handle
-publication is not readiness or revocation; its owner must supervise runner failure,
-gate operations on initialization/readiness and release retained handles on teardown.
-This is a private native dependency experiment, not a production runtime selection.
-Record the patch, build overlay and artifact identities separately from upstream.
-Production adoption requires real acceptance of the requested operations against
-the remote workspace/history, bounded ownership and caller authorization. Require
-stale-write fencing when admitting mutations or replacing their owner, rather than
-making it a prerequisite for every read. Connection observation generations alone
-cannot retract already-issued filesystem mutations.
-
-The opt-in [private harness artifact](packages/codex-harness/README.md) consumes
-that same hook in a separately named executable at the unchanged native pin.
-Its canonical patch lives in the package; qualification manifests reference the
-same bytes. Export the exact upstream commit, verify the lock normalization and
-named-binary overlay, and retain source/toolchain/artifact provenance. Do not build
-from a mutable upstream worktree or present this integration as a stock binary.
-Capture operator selectors before native bootstrap; retain native dotenv/helper
-initialization before threads and its alias guard until runtime teardown.
-The existing Go RPC owns its raw stdio child. A private same-user local socket
-offers metadata and bounded reads through that runner's manager, with a frozen registry
-Environment UUID, the adapter's native `remote` manager key, and no local fallback.
-Keep socket admission bounded and stop it when the runner ends. Caller disconnect
-only stops response delivery. Runner completion stops pending frames/new admission
-and drains the already admitted operation within its original deadline before local
-release; an unresolved drain remains an owner failure. This retains a native wait,
-not a remote retirement guarantee. External forced child exit can interrupt the
-drain; the existing daemon RPC's short grace/local-reap contract must be reconciled
-before a file consumer can infer settlement from release. An unresolved native
-file timeout must stop the owner before admitting another operation; client
-frame/response timeouts are connection-local. Never equate dropping the native
-response future with remote settlement. Bound Tokio runtime shutdown so an
-uncancellable native stdin read cannot hide local process exit from the RPC owner.
-The separately hashed bounded-read hook pins one existing native RPC connection
-for open, sequential block reads and acknowledged close. It retains the pinned
-native wire and stock stream behavior. Bound returned bytes and use one-byte
-lookahead for exact/truncated results; do not promise a file snapshot. Uncertain
-open/read results remain uncertain even if a later close replies. Unconfirmed
-close fails the owner, with no partial success or connection replacement retry.
-These are private adapter outcomes, not new official Files fields or error semantics.
-The socket directory
-must be new and private under `~/.parsar`; native/helper/socket selectors remain
-operator configuration. `PARSAR_CODEX_HARNESS_BIN` opts the native Codex adapter
-into this artifact for validated remote preparations only; stock helper discovery
-and all nonremote execution remain unchanged. The adapter derives each private
-Environment/workspace binding and owns a short IPC directory under canonical
-`~/.parsar`, independently of deeper `PARSAR_HOME` profiles. Reuse the existing
-Prepared-to-Session transfer and RPC child; remove IPC only after that same child
-has been reaped, including initialization failure and Close timeouts. No wrapper,
-new capability, public Files admission or default daemon selection is introduced. Private file path checks do not qualify filesystem isolation, idle
-ownership, remote retirement, or the existing RPC's full backpressure behavior.
-Public cancellation qualification for this artifact reuses the fixed SDK/raw HTTP
-fixture with a task-isolated native system configuration and independently observed
-owners. Preserve existing behavioral assertions and keep that test placement
-separate from production isolation or public Files admission; see the
-[native acceptance guide](services/agents-api/tests/native/README.md#public-cancellation-with-the-optional-harness).
+The daemon, selected harness, local tools and workspace run together. The Dispatcher
+passes the existing typed `LocalEnvironment` after exact tenant/Session/Environment/
+device checks. Native preparation, Files and Artifacts reuse the same protected
+local workspace and existing lifecycle owners. There is no registry/Noise relay,
+transient harness credential, service-side harness or remote tool forwarding path.
+Keep model credentials, daemon authorization and native histories private; connection
+success alone establishes neither native readiness nor filesystem isolation.
 
 The private daemon `workspace_read` control targets an existing preparation handle
 or its transferred active Run on the same authenticated device connection. Require
 the exact frozen Environment identity; callers cannot supply sockets, credentials
 or workspace roots. Shared routing uses the optional `agent.WorkspaceReader`
-interface, without selecting an engine by name. The optional Codex artifact uses
-its existing same-manager socket; stock Codex and other adapters remain unsupported.
+interface, without selecting an engine by name.
 The same control accepts `operation: directory` through the optional
 `agent.WorkspaceDirectoryLister`, with mutually exclusive byte/entry limits and
 typed directory metadata. Directory responses carry at most 1024 single-component
@@ -984,12 +844,7 @@ UTF-8 names of at most 255 bytes, so escaped metadata stays below the existing
 frame bound. These are private transport limits, not public Files parameters.
 Byte and directory operations share target checks, correlation, capacity and
 retained operation waits; neither creates a Run or selects an engine by name.
-Current bound preparation admission requires `RemoteEnvironment`; the qualified
-co-located Claude workspace profile does not accept that placement. Its private
-directory capability therefore does not establish end-to-end control admission.
-Integrate its verified workspace identity through the existing lifecycle before
-claiming Claude control/public Files acceptance; never fabricate remote bindings.
-This control is not a public Files endpoint or capability advertisement.
+This control does not itself authorize a public Files endpoint or placement.
 
 The separate optional `agent.WorkspaceDirectoryLister` observes one workspace-relative
 directory on the existing Prepared/Session owner; empty path selects its root.
@@ -997,27 +852,15 @@ Return single-component names, entry kind, regular-file byte size and explicit
 truncation only after directory/metadata access and handle cleanup settle. Reuse
 byte-read admission, uncertainty and caller-detach ownership where applicable.
 Do not promise a snapshot, recursive traversal or public pagination through this
-private interface. Codex uses the same manager's native process backend to invoke
-an operator-installed `agents-api-codex-directory` through explicit argv, without a
-shell. `PARSAR_CODEX_DIRECTORY_HELPER` selects the executor-side executable and is
-frozen in the private child binding; an absent or invalid selector rejects only
-this operation. Keep that qualified installation outside the writable workspace.
-Require the verified Linux sandbox, read-only workspace/helper runtime access and
-restricted network. The helper anchors all traversal to no-follow descriptors and
-bounds enumeration before collecting names. Accept only a complete versioned result
-after native exit/output close. Account for native output and terminal event
-sequence numbers: retained-output eviction or a capped response's `closed` flag
-cannot establish completeness. Reject missing/oversized/invalid output; terminate
-and confirm exit/output close when rejection precedes settlement. Keep the existing
-retained wait and owner failure on native uncertainty; never retry unknown work.
-Private directory support alone does not enable a
-daemon control operation, public Files route or capability advertisement.
+private interface. The Runtime invokes the retained directory helper against the
+frozen local workspace. Keep the qualified helper outside writable paths, anchor
+traversal to no-follow descriptors, bound enumeration and require a complete
+validated result. Helper availability alone does not enable public Files admission.
 
 Bound encoded request payloads to 8 KiB and correlation IDs to 128 bytes before
 admission. Do not echo oversized IDs; omit oversized trace metadata in replies.
 Bound raw control results to 1 MiB within the existing 4 MiB transport frame; the
-native hook's separate 8 MiB bound is unchanged. Neither is a pinned public protocol
-limit. Successful reads require complete bytes/truncation and acknowledged native
+limits are local policies, not pinned public protocol limits. Successful reads require complete bytes/truncation and acknowledged native
 close. Safe native rejections carry no bytes; interrupted or ambiguous reads remain
 unknown and stop further reads on that owner. Local RPC reap never establishes file
 settlement. Retain a dispatched read's original bounded waiter across observer
@@ -1025,91 +868,12 @@ cancellation and resource transfer/release; stop new admission on resource closu
 The gateway bounds subscriptions and never retries or replays on reconnect. Duplicate
 pending operation IDs cannot start another read; this control does not promise durable
 idempotency or result recovery. Preparation/Run ownership, public path authorization,
-remote retirement and future Claude placement retain their separate requirements.
+public file authorization and native cleanup retain their separate requirements.
 
-The private [raw Files composition](services/agents-api/tests/native/raw_files/README.md)
-reuses the pinned native socket client and the same typed Files/registry fixture.
-Record its fixture-only workspace dependency patch separately from the manager
-hook and third-party versions. Its finite real Files/history workflow does not
-qualify the client's internal unbounded event queue for production. Client closure
-is not runner shutdown; join the stock runner before reporting owner teardown.
-Bounded native stream checks retain the original whole-file assertions. A truncated
-read's asynchronous close and stream EOF are not operation-retirement receipts;
-keep production caller-detachment and path-admission qualification separate.
-Its dedicated cancellation scenario distinguishes native interruption from command
-retirement. Target native background termination only by observed current-Turn
-item/process identity, and verify Files plus retained interrupted history through
-the maintained native client before any production ownership or public admission.
-
-The optional Codex file installer runs through the existing native process interface
-with bounded stdin chunks, declared length and a SHA-256 commit trailer. It fills
-the demonstrated native hard-link overwrite and whole-message size gaps; it is
-not a second filesystem service or public admission. Reuse held-directory traversal
-and existing rustix directory-relative operations for replacement. Keep preparation, caller
-authorization and uncertain mutation recovery in their existing owning layers.
-Require an existing disjoint staging directory on the destination filesystem.
-The operator must protect that directory and its ancestors from native tool and
-background-process writes; same-user mode bits alone do not do so. Use separate
-native filesystem policies for the installer and workspace tools, with a dedicated
-staging directory per Environment. The qualified installer sees one writable parent
-containing only that Environment's workspace and staging; tools retain workspace-only
-write access. Keep history, credentials and other tenants outside that parent.
-Separate sandbox bind mounts may reject rename even on the same backing filesystem;
-never fall back to copying. The helper cannot attest that placement rule;
-public admission must establish it. Concurrent workspace writers need not be
-globally stopped to protect staged bytes. Temporary-file cleanup is best effort.
-A queued stdin receipt, missing helper result or process termination is not a file
-commit receipt. See the [installer contract](packages/codex-executor/README.md#scoped-file-installer)
-for private limits, cleanup, metadata and concurrency semantics.
-
-The private harness file socket admits writes only with a frozen operator helper
-and staging binding; read-only preparation removes that binding. Workspace and
-staging must be distinct siblings under one non-root Environment parent, and the
-helper must be outside that writable parent. Receive the complete bounded body
-before starting a native process. Transfer 64 KiB chunks plus the digest through
-one captured native process; require Linux sandboxing and an exact versioned
-commit result with successful exit and complete output closure. Native queued
-stdin is not a commit. Caller detach does not cancel admitted work; uncertain
-input, output or deadline stops the existing owner without replay or replacement
-claims. Public Files.create, trusted placement admission and durable mutation
-recovery remain separate work. See the [private transport contract](packages/codex-harness/README.md#private-file-writes).
-
-The private [retirement qualification](services/agents-api/tests/native/retirement/README.md)
-separates native connection/processor shutdown from already admitted filesystem
-work. Its hashed test-only scheduling overlay is not a production native patch.
-Do not admit a replacement writer based only on socket closure, task cancellation,
-command exit or a Core lease change. Require an actual executor mutation-drain or
-enforced placement-retirement boundary; retain uncertainty across recovery when
-that boundary cannot be established. Native source evidence, instrumented mechanism
-tests and uninstrumented real execution remain distinct acceptance claims.
-The opt-in whole-placement fixture uses an exact task-owned Docker instance and
-cgroup/process observations before successor writes. This is a local-filesystem
-qualification, not an authenticated remote retirement receipt or public admission.
-
-The explicit `parsar-daemon placement enroll/retire` operator commands own the
-first local Runtime retirement consumer in `internal/agentdaemon/placement`.
-They use a fixed local Docker socket, an exact labeled container/incarnation,
-private durable state under `~/.parsar/placements`, and a per-target process lock.
-Enrollment is limited to the documented unprivileged Linux/cgroup-v2 local-storage
-profile. Keep controller state and the canonical Docker socket outside generated-code mounts,
-including when a workspace source is a filesystem root. Every source must reside
-on a whole-filesystem host mount whose device appears exactly once in the controller
-mount namespace; bind aliases, subvolume roots, stacked mounts and missing mount
-evidence are unqualified. This bounded profile does not resolve arbitrary mount graphs.
-Stopping, independent membership/process observations and non-forced removal must
-precede a durable successful receipt. Recovered receipts must complete their directory-sync barrier before success.
-Missing evidence or a crash after removal
-but before receipt persistence remains unknown; never clear it based on absence.
-Optional `--environment` enrollment freezes one canonical Environment UUID in a
-version-2 local receipt. Every scoped retire/reconcile must match it before any
-supervisor access or completed-receipt recovery; omission cannot bypass the check.
-Version-1 unscoped records remain unscoped and cannot be adopted by a scoped retry.
-Older controllers reject version-2 records. Enrollment is trusted operator consent,
-not verification of Core resource existence or tenant ownership; the future Core
-consumer must validate those using its existing authenticated associations.
-Normal harness release is unchanged. This local operator command is not Core
-admission, authenticated remote receipt support, or public Files compatibility.
-See the retirement fixture README for the profile and explicit native acceptance.
+The retained Rust directory, write and workspace-export helpers provide bounded
+filesystem operations for the colocated Runtime. Their protected executable paths,
+descriptor-relative traversal and exact workspace binding remain required. They
+do not implement an executor transport or grant tenant authority.
 
 Connection observations use the existing execution lease and Session lock. A
 separate `environment_connections` row retains the current generation and revision;
@@ -1124,81 +888,16 @@ Turn association. `connected`/`disconnected` are distinct from native preparatio
 readiness; do not cast resource `expired` into the event vocabulary or emit `ready`
 for a self-hosted connection.
 
-Registry writes run synchronously outside the relay mutex, with a four-second
-operation budget independent of client disconnect. Shutdown closes sockets, shares
-one four-second budget across captured disconnects, and drains accepted writes
-before the Worker releases its lease. Missing/deleted/terminal targets retire only
-the matching connection; other write failures are logged, retained by
-`LifecycleError`, and close the registry until restart. No successful persistence
-or continuous connectivity is inferred after a failed write. Before starting
-connection producers, a new Worker clears old generations and records disconnected
-state for old connected observations in batches of 32. Deleted resources stay
-hidden. Stop old writers before migrating/deploying this lifecycle; downgrade
-refuses to discard retained generation fencing. Metadata reads and full lifecycle conformance remain separate requirements.
+The existing Worker observes authenticated daemon peers for enrolled Environments,
+using durable generation/revision fencing under its execution lease. On restart it
+reconciles old connection observations before admitting new ones. A connection or
+heartbeat does not prove native readiness or process quiescence. Failed or stale
+observations cannot establish a current connection.
 
-The optional [Codex executor launcher](packages/codex-executor/README.md) is a
-separate Cargo package. Pin its native git revisions, transport patches, toolchain
-and lock; use the upstream executor/auth/runtime APIs without changing stock CLI
-credential protection. It reads only an explicit principal-key credential file with an optional exact-Environment restriction
-and uses the matching installed native binary/resources for hidden filesystem and
-sandbox helper modes. Keep its state below `~/.parsar/`; do not load ambient
-OpenAI login credentials. HTTPS certificate/hostname verification remains enabled.
-The separately named command does not establish stock-command compatibility or
-enable public Environment admission. Linux x86_64 is its initial deployment target.
-
-The executor build also provides a small `agents-api-codex-directory` helper for
-bounded, descriptor-scoped directory observations where the pinned native walk
-cannot maintain path isolation during concurrent ancestor replacement. Use the
-existing native process API, explicit argv and a qualified read-only sandbox;
-keep the executable at a trusted operator path outside the writable workspace.
-The adapter supplies its frozen workspace root. Enumerate and stat using retained
-no-follow directory descriptors, bound scanning before collecting all names, and
-require complete output plus native exit/close settlement. This is a private
-adapter prerequisite, not a new public protocol, transport or filesystem framework.
-The helper alone grants no tenant authority, public Files admission, snapshot or
-workspace-replacement guarantee. Preserve the stock executor/model loop.
-
-Native app-server placement is a prerequisite to typed dispatch. The pinned Codex
-app-server accepts registry configuration at startup; use explicit native Environment
-selections for the first thread and every Turn. Resume does not restore selections
-from history. Keep its process cwd and persistent `CODEX_HOME` local, separately
-from the executor cwd. Readiness and observed tool/file results are required:
-a completed native Turn alone does not establish successful remote execution.
-Apply an intentional native shell environment policy; upstream defaults do not
-filter all credential variables. Filtering is not process or filesystem isolation.
-The opt-in [placement probe](services/agents-api/tests/native/README.md) documents
-its real-provider prerequisites and limits. It does not enable public admission.
-
-The private daemon `remote_environment` descriptor carries Environment identity,
-executor workspace and transient native connection URL/token. `WorkDir` and
-`CODEX_HOME` remain harness-local. The selected adapter owns the connection
-protocol; Codex Noise configuration and native Environment selectors never enter
-the API core. Do not persist the connection token in configuration, events or
-completion metadata. Existing private provider configuration and device profiles
-have separate credential ownership.
-
-The initial Codex adapter advertises this mode only for the verified 0.153.4
-protocol, propagating the capability through the real heartbeat/gateway. It checks
-native remote readiness and absence of local fallback before starting a thread.
-Supply a stable state key, strict resume and completion release: each prompt owns
-one harness, and a bound Environment permits one harness connection. Send the
-native selection on first thread creation and every Turn; cold resume does not
-restore it. Reject conflicting native transport settings, unsupported engines or
-versions, non-POSIX executor paths, and local managed Skills/MCP/plugins/authoring
-or attachments. Apply explicit core shell inheritance and credential exclusions.
-
-Codex preparation initializes the existing RPC child and verifies environment
-readiness without creating a native thread or starting model work. It carries no
-RunID or prompt; the existing Factory resolves its state key before using the same
-Prepare/Start implementation. The resolved plan, tools and resume identity are
-fixed during preparation. Start accepts the actual RunID, prompt and output sink,
-checks remote status on the retained RPC without reconnecting, and transfers that
-resource once to the normal Session. Failed start or abandoned preparation closes
-the child and cleans temporary plan resources; deferred preparation Close is inert
-after transfer. The owner context spans the whole harness lifetime, while startup
-operation deadlines remain separate. Owner cancellation/RPC exit release pending
-resources; executor loss is checked at Start, not continuously monitored. This
-adapter seam does not provide public admission or a new scheduler.
+Preparation resolves the immutable local binding and holds the existing native
+resource without creating model work. Start transfers that resource once; failed
+start and abandoned preparation retain the established cleanup rules. Strict resume
+uses the bound native history and never falls back to a new Session.
 
 Every executable preparation must implement `PreparedCancellation`; read-only
 preparations may implement only `Prepared`. The Router rejects and closes an
@@ -1252,8 +951,8 @@ Start is pending; ordinary post-transfer cancellation, complete native output an
 remote process exit retain their separate limitations.
 
 The private daemon preparation controls reuse execution configuration but reject
-input, RunID, Conversation, attachments and product authoring. The initial profile
-requires a remote environment, stable state key, strict resume and completion
+input, RunID, Conversation, attachments and product authoring. The local profile
+requires an exact Environment binding, stable state key, strict resume and completion
 release. Its separate capability is registered through an execution-only factory
 and preserved through the product registry wrapper and heartbeat mapping. Native
 details remain inside the adapter; this private profile does not narrow upstream.
@@ -1290,23 +989,12 @@ records remain connection-local, not a persistent remote retirement fence.
 The public idle-text path uses this
 admission/start wiring; complete Environment lifecycle remains required work.
 
-This daemon slice keeps existing best-effort cancellation and harness cleanup.
-Native detached-session cleanup may stop remote commands after a delay; an applied
-receipt is not immediate process quiescence or complete final output/Usage. The
-opt-in registered-daemon test independently observes PID exit and stopped heartbeats
-while the daemon, registry and executor stay alive. Targeted process termination,
-cross-Turn background preservation and complete public cancellation/lifecycle remain
-separate work. The public idle-text profile has its own built-service acceptance;
-an adapter probe alone does not establish public compatibility.
-
-The private Dispatcher can execute a pending Environment input on an already bound,
-capable daemon. It requires the current leased Store before resolving transient
-connection credentials. A typed callback supplies only the URL, token and release;
-native registry types remain outside execution code. Derive Environment identity
-and workspace from Store ownership. Retain the same physical peer and preparation
-handle through readiness, atomic promotion/claim and the first non-replay Start.
-Initial prompt/cursor come from the reserved batch and its receipts; later messages
-use ordinary steering. Never hold a database lock during native preparation.
+The Dispatcher prepares pending Environment input only on its exact enrolled or
+managed device. Preserve the same physical peer and preparation handle through
+readiness, atomic promotion/claim and the first non-replay Start. Derive workspace
+and Environment identity from Store ownership, never caller-selected private paths.
+Initial prompt/cursor come from the reserved batch; later messages use ordinary
+steering. Never hold a database lock during native preparation.
 
 Observe the original pending deadline, cancellation, deletion and peer loss while
 waiting for readiness. Preparation failure leaves pending input and its deadline
@@ -1322,34 +1010,20 @@ Do not fabricate an empty cancellation outcome or infer native quiescence.
 The connection owner spans preparation and the transferred Run without a reservation-derived Run
 deadline; every exit releases it.
 
-The existing Worker discovers pending input with a connected, non-revoked device
-in the same tenant when its Dispatcher has a connection resolver. An unbound
-Session selects a device using the same engine capability checks as ordinary
-work, including remote preparation support, then uses the existing immutable
-binding before preparation. Existing bindings never move, including when their
-device is offline, revoked or lacks a required capability. A missing device or
-binding conflict leaves pending input and its deadline intact without a Turn;
-other database/ownership errors stop the Worker. Preparation, claim, Run and cleanup occupy one of the same four slots as ordinary Turns, keyed
-by Session. Both queues advance bounded ID cursors and alternate candidates; the
-pending queue is scanned at most once every five seconds on the existing tick.
-A preparation failure may retry while still pending, without extending its stored
-deadline. This is private scheduling policy, not an upstream timing guarantee.
-Unknown promotion results and errors after admission stop scheduling; existing
-claimed-Turn reconciliation handles restart without another Start. Expiry retains
-its ordinary cadence even at capacity. Public idle-text admission and principal
-identity are implemented; initial inputs and complete public lifecycle remain separate.
+The existing Worker scans pending inputs using the same bounded scheduling slots,
+Session locks, durable deadlines and engine capability checks. A self-hosted Session
+waits for its dedicated enrolled device; it cannot select an arbitrary same-tenant
+device or migrate an existing binding. Preparation failure can retry while still
+pending without extending the deadline. Unknown promotion results or errors after
+admission retain the existing no-replay settlement rules.
 
-The standalone service wires this resolver when its daemon gateway and
-`AGENTS_API_EXECUTOR_URL` are configured. Construct the gateway and native registry,
-configure the Dispatcher, then acquire Worker ownership before starting scheduling
-or HTTP consumers. Registry construction does not call the ownership callback;
-its Worker reference is assigned once before either consumer starts. Invalid
-registry configuration therefore fails before acquiring the execution lease.
-Shutdown waits for Run cleanup, drains registry observations while the Worker
-still owns its lease, then releases execution ownership and the gateway.
-The Codex resolver issues a fresh exact-Environment credential for the supplied
-execution owner; it does not admit public Environment input or
-define a transport for other engines.
+`AGENTS_API_DAEMON_WS_URL` enables the private gateway and supplies the unchanged
+public `remote_url`. `AGENTS_API_HARNESSES` explicitly adds deployment-supported
+engines to the default engine and configured managed profiles; advertising a
+heartbeat alone does not enable an engine. The three native profiles share enrollment
+at `/workspace`. Their new user-managed public chain requires fixed-client/raw HTTP,
+real-model, recovery, cancellation and credential-lifecycle acceptance separately
+from prior Docker or retired remote-executor evidence.
 
 #### Independent build artifacts
 
@@ -1531,24 +1205,16 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   the selected harness. Omitted/null service tier currently uses `auto`; complete
   upstream default/error/retry conformance and remaining MCP/web-search variants
   remain gaps. Unknown/unsupported variants fail explicitly. No product lookup is permitted.
-- Service-origin public HTTP MCP uses the native harness client and tool loop. The supported
-  execution profiles are Codex with `environment:none` or `self_hosted`, and
-  Claude SDK with `environment:none`. Both require an explicit `service`
-  connection origin and a trusted service-side harness. The execution device is
-  part of the service deployment; an arbitrary caller executor cannot be relabeled
-  service-origin. Admission requires the advertised `mcp_http_tools` capability
-  during selection and again before claiming work. The `self_hosted` combination
-  additionally requires `mcp_http_remote_environment` plus existing remote preparation
-  capabilities, including at the daemon before the factory; individual MCP/remote
-  capabilities on old peers do not imply the combination. MCP stays in the trusted
-  service harness while workspace commands use the executor. Static Vault Bearer
-  authentication additionally requires `mcp_http_remote_bearer_auth`; an older peer
-  supporting anonymous remote MCP and environment:none authentication separately
-  cannot execute the authenticated combination. Native remote readiness and exact
-  MCP preflight both precede
-  thread creation/resume. Other engines and placements remain implementation gaps.
-  Claude SDK admission additionally applies the supported values described in
-  [its adapter profile](#claude-sdk-adapter-foundation), including before persistence.
+- Service-origin public HTTP MCP uses the native harness client and tool loop on
+  trusted service-owned `environment:none` compute, with Codex or Claude SDK.
+  The V1 colocated `self_hosted` profile rejects it: user-owned compute cannot be
+  relabeled service-origin or receive its attached Vault credentials. Hosted
+  service-origin MCP also remains unsupported. Environment-origin Plugin MCP uses
+  its separate qualified local Runtime transport and isolation contract; do not
+  disable that path or infer optional-feature equality across engines.
+  Admission, device selection and preclaim still require the exact supported MCP
+  capabilities. Native declarations do not widen public placement authorization.
+
 - Keep accepted public MCP credential profiles separate from private adapter
   capabilities. The execution service declares the verified public bearer profiles
   centrally; a daemon capability alone cannot open a public profile. Reuse frozen
@@ -1591,16 +1257,15 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
 - The private Codex adapter's HTTPS MCP bearer authentication requires
   `mcp_http_bearer_auth` and the existing MCP/environment capabilities, checked
   before the factory. It is restricted to trusted service-side Codex with
-  `environment:none` or the explicitly supported authenticated remote combination. A transient
+  `environment:none`. A transient
   per-server `bearer_token` becomes a fresh daemon-owned `bearer_token_env_var`
   reference for each native process. Put the exact secret only in that app-server
   child's environment, after auxiliary launch probes; never in global environment,
   arguments, configuration/history, public snapshots or logs. Preflight accepts
   only the expected server/reference pairing and retains the existing rejection
-  of ambient credential sources. Remote commands use the existing core-only native
-  environment policy; service-side bearer variables must not enter executor
-  environments, commands, files or native history/snapshots. Use the native HTTP
-  client with TLS verification.
+  of ambient credential sources. Service-side bearer variables must not enter
+  generated commands, files or public history/snapshots. Use the native HTTP client
+  with TLS verification.
   This execution profile rejects empty values and bytes outside RFC 6750 b64token
   syntax with generic errors; it never trims tokens or narrows opaque Credential
   storage. OAuth and hosted redirect/error equivalence
@@ -1749,9 +1414,8 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   creators; only controlled historical fixtures may seed unknown ownership.
   The operator-selected
   `AGENTS_API_ENGINE` is separate from the requested model.
-  Public execution supports Codex and Claude SDK with environment `none`, plus
-  the Codex self-hosted text/function profile and the qualified Codex/Claude dedicated
-  Docker hosted profiles; reject unsupported
+  Public execution supports the enabled `none` profiles, the three colocated
+  self-hosted profiles and qualified three-harness Docker hosted profiles; reject unsupported
   input/environment/agent options explicitly.
 - `packages/agents-client/v1` configures the pinned official `openai-go` Session
   service. Use SDK request/response types, pagination and errors directly rather
@@ -1768,7 +1432,8 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   `/api/v1/agent-daemon/*`, separately from the official `/v1/agents/*` surface;
   device credentials grant no Session API or product permissions. The optional
   `AGENTS_API_DAEMON_WS_URL` enables that gateway. It is a single-process registry,
-  not a claim of multi-pod execution or the public self-hosted executor protocol.
+  not a claim of multi-pod execution or stock `exec-server` interoperability.
+  Self-hosted enrollment uses this gateway with an exact Environment binding.
   Session/device bindings are tenant-scoped and immutable. Revocation denies new
   connections and binding reads; an existing connection closes on its next
   heartbeat. Connectivity comes from the live registry, not a persisted online
@@ -1805,8 +1470,8 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   Done is emitted. Preserve separately reported usage on failure; do not add the
   same counters again when Done also includes them.
 - The dispatcher is an internal entry point used by the standalone service worker.
-  Its private `daemon` configuration is neither `environment:none` nor the official
-  self-hosted executor protocol. Further pending interactions and provider allocation
+  Legacy internal `daemon` configuration is not a public Environment type.
+  Self-hosted enrollment uses exact local binding; further pending interactions
   remain separate slices. Unexpected interaction requests fail explicitly until supported.
 - `environment_none` advertises an adapter's explicit environment-disable
   path. Execution snapshots with public `environment.type=none` require that

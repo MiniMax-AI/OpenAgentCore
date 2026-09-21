@@ -1,15 +1,13 @@
 # Environment contract and implementation path
 
-This assessment covers the fixed [Python SDK contract](upstream.json). It is an
-implementation plan with partial current coverage. Public execution admits
-`environment.type=none` on Codex and Claude SDK, the Codex self-hosted text/function
-profile, and operator-configured Docker/E2B hosted profiles for Codex, Claude Code
-and MiniMax Code below.
-Environment retrieval supports safe metadata for these environment profiles;
-[reusable templates and initial files](environment-templates.md) share inline initialization.
-Other populated startup installations remain missing. Live file listing
-and local inline/source writes have [partial coverage and explicit local policies](environment-files.md).
-See [current coverage](README.md#public-semantics).
+This assessment covers the fixed [Python SDK contract](upstream.json), with partial
+coverage. Core-managed Docker runs the three qualified native harnesses. V1
+user-managed `self_hosted` enrollment uses the same colocated Runtime for Codex,
+Claude SDK and MiniMax at `/workspace`; its new public chain still needs real
+acceptance. Core does not allocate E2B. Users own E2B allocation, renewal and cleanup
+through the official SDK and [Runtime packaging](../../services/agents-api/deploy/e2b/README.md).
+[Templates](environment-templates.md) remain a hosted-only resource path;
+[Files](environment-files.md) reuse the exact authorized local workspace.
 
 The internal Store now owns a durable Environment association for newly created
 `self_hosted` and `openai_hosted` snapshots, atomically with Session creation.
@@ -20,30 +18,14 @@ and the preparation/admission path below; additional provider profiles remain op
 Missing/`none` configurations and historical internal snapshots gain no backfill.
 
 
-The native Codex registry uses principal executor digest bindings with optional exact-Environment
-restrictions, the existing execution owner and scoped Store reads. Registration and current
-socket identity are process-local; the returned WebSocket capability expires for
-new connections after five minutes. Restart invalidates registrations, causing the
-native executor to register again. Replaced socket callbacks cannot clear a newer
-connection. Current socket observations now commit `connected`/`disconnected` and
-immutable pinned Environment-event snapshots through the leased Store. Replacement
-and revision fencing prevent late observations from overwriting successors; startup
-reconciliation removes the previous process's connection evidence. Registration
-alone is not connection, and connection is not native readiness. The public text
-profile and resource reads use this bridge. The canonical
-[observation and shutdown rules](../../CONTRIBUTING.md#environment-ownership-and-placement)
-cover write failures and recovery. Deleting the owning Session rejects new requests and closes
-existing sockets on the next ownership heartbeat. A previous holder of a still-valid
-executor credential can register again; permanent exclusion requires revocation.
-Execution owners now obtain transient harness credentials through the internal
-registry after exact tenant/Environment and execution-lease authorization. Their
-owner context spans preparation and the transferred Run; release/cancellation
-invalidates the credential and its own grants/pair. Static harness keys are retired.
-These credentials obtain short-lived, key-bound connection grants.
-The relay pairs one harness with the current executor socket and forwards native
-binary frames unchanged. Either peer loss closes both physical connections and
-invalidates grants; no queued frames or commands move to a successor. Refresh does
-not disturb a healthy pair. See the [operator prerequisite](../../services/agents-api/README.md#native-executor-transport-prerequisite).
+The private daemon gateway authenticates the enrolled Environment executor key and
+exact dedicated device. Existing Worker connection observations retain generation
+and revision fencing; registration and connectivity do not establish native
+readiness. Rotation/revocation, Session deletion and ownership loss deny further
+access without promising immediate cessation of native effects. Native history
+remains local to the bound Runtime and cannot be replaced on retry. There is no
+registry/Noise relay or transient service-side harness credential.
+See the [enrollment guide](../../services/agents-api/README.md#user-managed-runtime-enrollment).
 
 ## Basic public Docker-hosted profile
 
@@ -62,10 +44,11 @@ Omitted/null network defaults to enabled. Enabled, disabled and exact-host restr
 policies use the same qualified image with adapter-selected immutable native policy.
 Templates and inline configuration share initial files, env, packages, ordered setup
 and inline or tenant-owned referenced Skills through the hosted initializer.
-Unsupported hostname forms, Plugins and capability-directory imports reject explicitly; see
+Unsupported hostname forms and installation combinations reject explicitly; see
 the [Template coverage and limits](environment-templates.md). Empty/null installation
-defaults produce safe empty metadata, not a live workspace inventory. Hosted MCP
-combinations remain unimplemented.
+defaults produce safe empty metadata, not a live workspace inventory. Service-origin
+hosted MCP remains unsupported; Environment Plugin MCP has its
+own qualified transport matrix.
 
 Initial provisioning leaves a Session idle until a Turn starts, with no caller
 connection action. The managed scan records authenticated, exactly bound daemon
@@ -77,26 +60,25 @@ outcomes; new inputs reject terminal Environments. Expiry has no invented SSE
 variant. Local failure codes and exact event ordering remain unverified upstream
 semantics; this profile does not establish complete Environment compatibility.
 
-## Basic public E2B-hosted profile
+## User-managed E2B profile
 
-The [E2B operator configuration](../../services/agents-api/deploy/e2b/README.md)
-selects a qualified immutable template/build for the same three harnesses and
-`type=openai_hosted` admission. It retains the shared Runtime execution, Files,
-Artifacts and recovery paths and the public configuration limits above. Actual
-[three-harness E2B acceptance](README.md#e2b-v1-qualification) is separate from
-Docker evidence. The Provider's five operations manage allocation, initialization,
-lease renewal and cleanup only. A minimum two-hour renewable lease is required;
-expiry destroys volatile VM workspace/history and cannot authorize replay or
-transparent recreation. Pausing, migration and user-managed enrollment are not
-part of this qualified profile.
+The application creates, renews and destroys its E2B sandbox through the official
+SDK. It deploys the shared Runtime, then enrolls that Runtime into a `self_hosted`
+Session. Core neither keeps an E2B allocation nor issues Provider renew/kill calls.
+The [E2B guide](../../services/agents-api/deploy/e2b/README.md) owns packaging and
+user-side lifecycle instructions. Expiry or lost workspace/history must not trigger
+transparent replacement or replay. New enrollment qualification is pending.
+The [prior E2B qualification](README.md#e2b-v1-qualification) concerns the retired
+Core-managed topology only.
 
 ## Initial public self-hosted profile
 
-Create a Session with `environment.type=self_hosted`, an absolute
-`workspace_directory` and omitted/null/empty `capability_directories`. Creation
+Create a Session with `environment.type=self_hosted`,
+`workspace_directory: "/workspace"` and omitted/null/empty `capability_directories`. Creation
 accepts initial text as a string or ordered user-message array. Omitted/null input
-creates no Turn or connection action. Configured execution, a validated registry origin,
-Codex and supported non-deferred function definitions are validated before persistence.
+creates no Turn or connection action. Configured execution, an enabled harness and
+the exact local profile are validated
+before persistence. Supported optional functions remain engine-specific.
 
 Initial text commits a reservation and connection action, then returns the Session
 and Environment connection target while offline. Streamed creation sends its
@@ -130,14 +112,18 @@ existing function parser and remain fixed through native preparation and continu
 output/error field presence and ordered content keep their existing semantics.
 Retries retain the original call, including during later work. New results cannot
 bypass pending input. Function callbacks do not populate Environment installations.
-Mixed events, non-text input, nonempty capability directories and other
-engine placements are rejected temporary gaps. The current adapter also rejects
-workspace paths containing NUL, CR, LF or backslash; broader path/platform support
-remains open. Native execution still uses the
-scoped upstream-library launcher; arbitrary-domain stock CLI support is not proven.
-The built-service acceptance must publicly create and submit, keep a request open
-past 30 seconds, and verify two real remote command/file/history Turns through
-fixed SDK, raw HTTP and live SSE. Private setup alone is insufficient.
+Mixed events, non-text input and nonempty capability directories remain unsupported.
+The public field types are unchanged; `/workspace` is the V1 deployment limit, not
+an upstream schema change. `remote_url` is the configured daemon WebSocket URL,
+returned unchanged. This is our private connection contract and does not claim
+stock `exec-server` compatibility. Service-origin HTTP MCP is explicitly rejected
+on `self_hosted`; `none` MCP and hosted Template Plugin MCP retain their own scope.
+
+Mechanism tests cover enrollment, credential checks and exact-device dispatch. They
+do not establish real public qualification. Before claiming that qualification,
+exercise fixed SDK/raw HTTP creation/input, actual native tools, Files/Artifacts,
+second-Turn history, Core/Runtime restart, cancellation and credential rotation/
+revocation/deletion on each declared deployment.
 
 ## Contract inventory
 
@@ -202,13 +188,12 @@ transport to adapters. Logical ownership does not require a machine per object.
 | Provider allocation | Compute and filesystem lifetime; caller-owned for `self_hosted`, service-owned for hosted provisioning. |
 | Device and daemon connection | Authenticated engine-host identity and replaceable internal dispatch transport. |
 | Harness process and native Session | Native model/tool loop, execution state and proven history/continuation path. |
-| Executor connection | Access to an Environment's filesystem/process capabilities, independently authorized. |
+| Runtime enrollment | Exact Environment/device/key binding for user-managed compute; no service-owned allocation. |
 
-A co-located daemon/harness/workspace is a proposed placement for engines with
-native local tools. A harness using a separate executor is another placement.
-Neither proposal establishes public compatibility by itself. Advertising the
-specified `self_hosted` flow requires an actual caller-started executor to work;
-quietly requiring an extra Parsar daemon installation changes that flow.
+Daemon, harness, tools and workspace are colocated in V1. Our daemon fills the
+executor role; a separate native executor and service-side harness are retired.
+The pinned public resources remain the target, while stock executor wire
+interoperability is explicitly outside this implementation.
 
 Co-location needs a real credential and isolation design: generated code must not
 gain the broader application credential or cross-tenant secrets through a shared
@@ -217,7 +202,16 @@ native history independently of disposable compute, or prove native restoration;
 never treat an Environment ID as a filesystem or history backup. Do not silently
 move an existing Session away from its bound device.
 
-## Evidence and interoperability gap
+## Historical remote-executor assessment
+
+The remainder of this document records the former Codex registry/Noise topology
+and its original bounded evidence. It is retained for provenance, not current
+installation instructions or acceptance of the V1 enrollment chain. Its remote
+probe suites, separate harness package and launcher have been retired. References
+to their source paths describe the historical revision; use Git history to inspect
+them. Current deployment and validation requirements are above.
+
+### Evidence and interoperability gap
 
 The current [self-hosted guide](https://developers.openai.com/api/docs/guides/agents-api/environments/self-hosted)
 uses a restricted executor key and both returned values:
@@ -302,9 +296,9 @@ arbitrary interrupted-work replay, native crash restoration, TLS deployment and
 the stock CLI's production-domain restriction remain open. Other harnesses retain
 their own native placement and execution protocols.
 
-## Native app-server placement prerequisite
+### Native app-server placement prerequisite
 
-The opt-in [real-provider fixture](../../services/agents-api/tests/native/README.md)
+The opt-in real-provider fixture (historical source: `../../services/agents-api/tests/native/README.md`)
 adds stock app-server execution to the accepted PostgreSQL registry/relay. It keeps
 local harness history separate from a container-only executor workspace, exercises
 real MiniMax shell/file use, and resumes the same native thread after a fresh
@@ -341,14 +335,14 @@ Scoped credentials, placement trust and long-Turn reconnect lifetime remain expl
 dispatch prerequisites. Public acceptance must verify those boundaries, readiness
 and real API/daemon execution together.
 
-## Private daemon adapter
+### Private daemon adapter
 
 The registered-daemon fixture extends placement through the authenticated gateway,
 capability heartbeat and typed remote descriptor. The adapter consumes transient
 connection credentials, verifies native readiness and selects the executor on first
 and cold-resumed Turns. Local harness history remains separate from remote files.
 See [the contributor boundary](../../CONTRIBUTING.md) and
-[the real-provider fixture](../../services/agents-api/tests/native/README.md) for
+the real-provider fixture (historical source: `../../services/agents-api/tests/native/README.md`) for
 supported native version, rejected combinations and acceptance commands.
 
 The Codex adapter now separates preparation from prompt start using the same native
@@ -368,9 +362,9 @@ native detached cleanup may delay that exit. Complete resource lifecycle and
 complete public cancellation settlement remain separate from the initial text profile.
 
 
-## Shared native filesystem prerequisite
+### Shared native filesystem prerequisite
 
-The opt-in [shared-owner fixture](../../services/agents-api/tests/native/README.md#shared-native-filesystem-owner)
+The opt-in shared-owner fixture (historical source: `../../services/agents-api/tests/native/README.md#shared-native-filesystem-owner`)
 characterizes direct remote file operations alongside the upstream native model/tool
 loop. It uses one injected `EnvironmentManager` and one authorized registry pair;
 it does not open another harness connection or use stock host-only `fs/*` calls.
@@ -385,7 +379,7 @@ lifetime and daemon integration remain prerequisites. Public file create/list,
 uploaded file references, workspace path semantics, pagination and installation
 inventory remain unimplemented by this experiment.
 
-## Pending input storage prerequisite
+### Pending input storage prerequisite
 
 A private Store reservation can retain one ordered message batch without a Turn,
 Items or Turn events. It shares request identity with direct input admission and
@@ -446,7 +440,7 @@ outcome; without an observed final Done, delivery records an unknown failure.
 Preparation failure cannot discard a cancellation receipt already being awaited.
 Complete cancellation output/Usage and native cleanup remain required work.
 
-### Pending input activity and Session reads
+#### Pending input activity and Session reads
 
 The latest relevant reservation now owns a narrow pre-Turn activity projection.
 Pending offline input emits `requires_action` with `environment_connection`;
@@ -477,7 +471,7 @@ execution/registry configuration or invoke native work. Populated metadata, file
 operations beyond the current Files profile, populated hosted output and complete
 Environment conformance remain separate work.
 
-## Dependency-ordered implementation
+### Dependency-ordered implementation
 
 1. **Executor interoperability.** Demonstrate the documented unmodified executor
    command with supported authentication, then native harness authorization,
@@ -514,7 +508,7 @@ validation gaps. Preserve those gaps in the board and reassess its complete
 priorities after each accepted slice. No placeholder resource, permissive SDK
 parse or synthetic execution test establishes this roadmap as implemented.
 
-### Durable executor credential prerequisite
+#### Durable executor credential prerequisite
 
 The native registry authenticates connect-only executor keys against the target
 Session's verified project partition and immutable typed creator. Keys may be

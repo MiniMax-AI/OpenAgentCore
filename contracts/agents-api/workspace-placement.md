@@ -1,10 +1,31 @@
-# Two-engine workspace placement
+# Workspace placement
 
-This decision serves the Codex/Claude single-Agent milestone. It does not enable
-a public profile or change the pinned [Environment contract](environments.md).
-Ownership rules remain in [CONTRIBUTING.md](../../CONTRIBUTING.md#environment-ownership-and-placement).
+V1 colocates daemon, selected harness, native tools and `/workspace` in one Runtime.
+Our daemon is the user-side executor for `self_hosted`. Enrollment freezes the exact
+Session/Environment/device/key binding; it creates no managed allocation and cannot
+move a Session to another device. Core manages Docker hosting only. Users manage
+local or E2B Runtime creation, renewal and destruction through the official SDK.
 
-## Current implementation and missing prerequisites
+All three harnesses reuse typed `LocalEnvironment`, existing preparation/start/
+cancel ownership and protected local Files/Artifacts. Native credentials and
+histories remain inaccessible to generated tools. Strict resume requires retained
+history; connectivity alone establishes neither readiness nor isolation. Current
+implementation and pending new public acceptance are recorded in the
+[Environment profile](environments.md#initial-public-self-hosted-profile).
+
+The pinned public Environment resources and `remote_url` remain unchanged, while
+that URL names our private daemon transport. Stock `exec-server` interoperability,
+registry/Noise relay and service-side harness/remote tool forwarding are retired.
+Service-origin HTTP MCP is rejected on `self_hosted`; qualified `none` MCP and
+hosted Template Plugin MCP retain their separate boundaries.
+
+## Historical two-engine assessment
+
+The assessment below records the earlier topology and native prerequisites at its
+original scope. It is not current installation guidance or proof of the V1 daemon
+enrollment chain. Referenced retired package/probe sources remain in Git history.
+
+### Current implementation and missing prerequisites
 
 | Boundary | Codex | Claude Agent SDK |
 | --- | --- | --- |
@@ -23,7 +44,7 @@ loop. A public `self_hosted` implementation must still support the documented
 caller-started executor flow; a private daemon URL or an extra installation step
 cannot silently replace it.
 
-## Claude isolation prerequisite
+### Claude isolation prerequisite
 
 There are two separate boundaries. The deployment excludes broader application,
 daemon and other-tenant credentials from the harness environment and mounted
@@ -60,7 +81,7 @@ Upstream [sandbox documentation](https://code.claude.com/docs/en/sandboxing) and
 [deployment guidance](https://code.claude.com/docs/en/agent-sdk/secure-deployment)
 provide context; current documentation does not replace the pinned source.
 
-## Execution and file ownership
+### Execution and file ownership
 
 `execution.RunEnvironmentInput` currently owns a connection through preparation
 and one Run, then releases it. That is not an idle file owner. Existing durable
@@ -91,10 +112,10 @@ socket client's consumer queue is unbounded. The optional private harness artifa
 therefore uses stock raw stdio with the existing Go RPC and a separate local
 metadata socket into the same manager. It does not create a second executor pair
 or call host-local `fs/*` for a remote path. Patch ownership, exact builds and
-acceptance are defined in the [artifact guide](../../packages/codex-harness/README.md).
+acceptance are defined in the artifact guide (historical source: `../../packages/codex-harness/README.md`).
 This does not enable public Files, a reusable idle owner or full transport bounds.
 
-## Acceptance and next slice
+### Acceptance and next slice
 
 Start with synthetic credential/file/socket canaries using the pinned native
 tools. Stop on disclosure, bypass or fallback; never widen access to obtain a

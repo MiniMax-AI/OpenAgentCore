@@ -3,12 +3,13 @@
 The complete protocol target remains the SDK pinned in [upstream.json](upstream.json).
 The public GET and POST `/agents/environments/{id}/files` have partial coverage.
 Inline and source-file (`file_id`) creation target a qualified V1 local Environment,
-including the managed Docker/E2B profiles for Codex, Claude Code and MiniMax Code.
+including the Core-managed Docker profiles for Codex, Claude Code and MiniMax Code.
 [Source Files](source-files.md) have their own project-owned lifecycle. Managed
 hosted provisioning and shared Artifacts are accepted within the
 [recorded Docker MVP scope](README.md#accepted-milestone-and-evidence) and separate
-[E2B qualification](README.md#e2b-v1-qualification); complete
-Files/Environment semantics and other providers are not implied.
+historical Core-managed [E2B qualification](README.md#e2b-v1-qualification). The
+new user-managed enrollment chain reuses local Files but still needs real public
+acceptance; complete Files/Environment semantics and other providers are not implied.
 
 ## Pinned contract
 
@@ -83,7 +84,8 @@ It never starts a model for upload or supplies a filesystem root from the reques
 The deployment must qualify the protected sibling workspace/staging layout and
 its selected native adapter. The [engine profile guides](README.md#public-engine-profiles)
 describe accepted Docker configurations; the [E2B operator guide](../../services/agents-api/deploy/e2b/README.md)
-adds the qualified E2B deployment. A capability or path declaration alone
+covers user-managed E2B Runtime packaging, whose new enrollment chain still needs
+real acceptance. A capability or path declaration alone
 does not establish isolation or public hosted admission.
 
 Before sending any bytes, persist the mutation identity and request digest under

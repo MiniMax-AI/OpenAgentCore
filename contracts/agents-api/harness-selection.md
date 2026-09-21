@@ -34,8 +34,13 @@ resources and native histories. Agent edits do not change accepted Sessions.
 
 ## Operator configuration
 
-Existing `AGENTS_API_ENGINE` and `default_provider` deployments keep their default
-behavior. A deployment enabling multiple hosted harnesses adds `engine_providers`
+`AGENTS_API_ENGINE` selects the default engine. `AGENTS_API_HARNESSES` explicitly
+adds comma-separated deployment-supported engines, for example
+`codex,claude_sdk,mcode`, without requiring a managed Provider. The default engine
+and configured managed engine profiles remain enabled; unknown names fail startup.
+This setting does not install a harness or qualify a native deployment.
+
+Existing `default_provider` deployments keep their default behavior. A deployment enabling multiple hosted harnesses adds `engine_providers`
 to `AGENTS_API_MANAGED_RUNTIMES_FILE`:
 
 ```json

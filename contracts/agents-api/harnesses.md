@@ -41,10 +41,11 @@ checks. Additional capability combinations require evidence, not an engine-name
 exception. The static registry requires a build to add an implementation; dynamic
 plugin loading and untrusted code execution are outside this design.
 
-New Session selection currently uses the operator's `AGENTS_API_ENGINE` setting;
-existing Sessions retain their engine. The default is a deployment convenience,
-not a different contract or authority level. There is no invented public `harness`
-field. Future selection changes must respect the pinned public protocol.
+New Session selection uses the default `AGENTS_API_ENGINE` or the documented
+[harness extension](harness-selection.md). `AGENTS_API_HARNESSES` explicitly adds
+deployment-supported profiles without requiring a managed Provider; existing
+Sessions retain their engine. The default is a deployment convenience,
+not a different contract or authority level. The documented extension remains separate from the pinned public protocol.
 
 ## Shared behavioral obligations
 
@@ -78,14 +79,17 @@ syntactically or everything either upstream harness can theoretically perform.
 | Function image results | Supported subset | Gap; currently rejected |
 | Non-default verbosity | Native/model-dependent support | No equivalent qualified; medium only |
 | Public detailed Usage | Supported native counters | Native raw usage retained; public breakdown gap |
-| Official `self_hosted` remote executor path | Existing native Codex path | Not qualified; requires separate design |
+| V1 `self_hosted` daemon enrollment at `/workspace` | Implemented; new real public acceptance pending | Implemented; new real public acceptance pending |
 | Explicit reasoning, structured output, enabled `multi_agent`, message images | Shared service gaps | Shared service gaps |
 
 This inventory records supported combinations, not a feature-equality checklist.
 Do not silently drop options, fabricate measurements, weaken isolation or remove
 working features. Unsupported operations stay explicit; implementing them is a
-separate board decision, not an onboarding prerequisite. User-managed colocated Runtime enrollment is a
-separate queued feature; it is not a substitute for official `self_hosted`.
+separate board decision, not an onboarding prerequisite. MiniMax also implements the same colocated Runtime enrollment. This V1 decision
+uses our daemon as executor and explicitly does not claim stock `exec-server`
+interoperability. The old service-side harness/remote executor route is retired.
+Service-origin HTTP MCP remains unsupported on `self_hosted`; `none` MCP and
+qualified hosted Template Plugin MCP retain their separate scopes.
 
 ## Common contract acceptance
 

@@ -6,10 +6,17 @@ Standalone Agent API Core and its execution runtimes, copied from
 The source repository retains both its product and its existing Core copy.
 
 This repository contains the API service, PostgreSQL migrations, pinned public
-protocol, execution daemon, Docker/E2B providers, native Harness adapters,
+protocol, execution daemon, the Docker provider, native Harness adapters,
 runtime image builders, client library, tests and operator documentation.
 It does not contain the Parsar web application, product backend, product database,
 business CLI or product deployment stack.
+
+V1 user-managed deployments colocate our daemon, selected harness, tools and
+`/workspace`. Core manages Docker only; users provision, renew and destroy E2B
+through the official SDK. The returned `remote_url` uses our private daemon
+transport, not stock `exec-server`. See the
+[Runtime enrollment guide](services/agents-api/README.md#user-managed-runtime-enrollment)
+for explicit harness enablement and pending real acceptance.
 
 ## Start here
 
@@ -50,5 +57,7 @@ make check
 
 The full gate requires the test database rather than silently skipping persistence
 tests. Native model/provider fixtures remain explicit, credential-dependent
-acceptance checks; see the [native tests](services/agents-api/tests/native/README.md).
+acceptance checks; see the [coverage ledger](contracts/agents-api/README.md).
+The Rust gate covers only the retained directory/write/export helpers; the former
+separate Codex harness gate and remote probe suite are retired.
 Importing existing implementations does not establish additional protocol coverage.

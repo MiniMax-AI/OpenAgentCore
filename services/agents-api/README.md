@@ -4,8 +4,10 @@ Independent execution service implementing part of the pinned OpenAI Agents API.
 It owns reusable Agents, durable Sessions/Turns/Items, live events, function actions
 and a daemon execution worker. Public execution supports qualified Codex, Claude Code
 (`claude_sdk`) and MiniMax Code (`mcode`) profiles through the shared Runtime contract.
-The three-harness Linux amd64 Docker V1 MVP and the separate
-[E2B V1 deployment](deploy/e2b/README.md) qualification are accepted.
+The three-harness Linux amd64 Docker V1 MVP has accepted evidence. V1 user-managed
+Runtime enrollment is implemented for all three harnesses; its new public chain
+still requires real acceptance. [E2B deployment](deploy/e2b/README.md) is user-managed;
+its earlier Core-managed qualification does not qualify enrollment.
 It builds and runs with its own PostgreSQL database and credentials;
 Parsar's product service, frontend and database are not required.
 
@@ -190,7 +192,11 @@ access. `AGENTS_API_ENGINE` defaults to `codex`; use `claude_sdk` for Claude Cod
 or `mcode` for MiniMax Code. Configure the corresponding qualified Runtime through
 its [deployment guide](../../contracts/agents-api/README.md#public-engine-profiles).
 It selects new Sessions independently of the requested
-model. Existing Sessions retain their stored engine.
+model. Existing Sessions retain their stored engine. Set
+`AGENTS_API_HARNESSES=codex,claude_sdk,mcode` to explicitly enable installed profiles
+for user-managed enrollment without a managed Provider. This list supplements the
+default engine and any managed engine profiles; unknown names fail startup.
+Enabling a profile does not install its harness or qualify its deployment.
 
 The SDK base URL is `http://127.0.0.1:8091/v1`. Requests require a bearer key.
 Agents and Vault routes also require `OpenAI-Beta: agents=v1` (set by their SDK
@@ -201,7 +207,7 @@ resources); general Files routes do not. Supported operations include:
   configuration or a saved `agent_id`, field replacements, optional initial text
   and ordinary or streaming responses.
 - Session event submission and live streaming, Turn retrieve/list and Items list.
-- Environment retrieve for supported Codex self-hosted and three-harness Docker/E2B
+- Environment retrieve for three-harness colocated self-hosted and Docker
   profiles, bounded live file listing, and inline/source copies into qualified
   local workspaces. Shared Artifacts support capture, list/retrieve/content and
   deletion independently of the live Runtime after publication.
@@ -215,7 +221,7 @@ resources); general Files routes do not. Supported operations include:
 
 Execution uses the selected
 [engine profile](../../contracts/agents-api/README.md#public-engine-profiles),
-including `none` and the Codex self-hosted idle-text profile described below.
+including `none` and the colocated self-hosted profile described below.
 Ordinary JSON requests have a 1 MiB body limit; file transfers use the separate
 bounds in the Files contracts. Session lists support `after`, `limit` (1..100),
 `order` (`asc`/`desc`) and optional immutable root `agent_id`. The local defaults
@@ -227,7 +233,7 @@ public removal: Session/history reads and new input become unavailable. Active
 work receives a cancellation request; existing streams close on observing removal.
 Already claimed work may still complete. Creation keys stay reserved; deletion
 never affects other Sessions, saved Agents or their shared device. Internal records
-are retained for execution settlement. Managed Docker/E2B deletion separately revokes
+are retained for execution settlement. Managed Docker deletion separately revokes
 authority and reclaims owned compute/workspace/history; caller-managed compute
 is not reclaimed by this service. Local repeated deletion returns 404 and creation-key reuse returns
 409; exact hosted errors and overlapping stream timing are unverified.
@@ -249,13 +255,14 @@ it executable. Unsupported requests fail explicitly. `/healthz` reports liveness
 The basic `openai_hosted` profiles for Codex, Claude Code and MiniMax Code require
 explicit operator configuration. Select the qualified native image using the
 [engine profile guides](../../contracts/agents-api/README.md#public-engine-profiles),
-then follow the [Docker setup](deploy/codex/README.md#standalone-operator-configuration)
-or [E2B template/provider setup](deploy/e2b/README.md).
+then follow the [Docker setup](deploy/codex/README.md#standalone-operator-configuration).
+Core manages Docker only. For user-managed E2B, see
+[E2B Runtime packaging](deploy/e2b/README.md).
 Core remains independently deployed with its own database. Public idle and initial
 text Sessions share the existing preparation, execution, Files and recovery paths.
-Networking defaults to enabled; disabled is also supported after setup completes.
-Restricted domains, system packages and remaining unsupported startup installations
-remain gaps. Initial inline/file_id files, confidential env, npm/Python packages,
+Networking defaults to enabled; disabled and exact-domain restricted policy are
+supported after setup. System/npm/Python packages use the shared initializer;
+remaining unsupported combinations are explicit gaps. Initial inline/file_id files, confidential env, npm/Python packages,
 ordered setup and [public Environment Templates](../../contracts/agents-api/environment-templates.md)
 resolve to the same immutable hosted configuration, independently of provider templates. Additional harnesses
 require separate integration and qualification.
@@ -267,8 +274,9 @@ Exact hosted failure/expiry semantics remain unverified.
 The standalone service can accept existing daemon connections without a Parsar
 workspace or product database. Enable its internal gateway by setting
 `AGENTS_API_DAEMON_WS_URL=wss://your-service/api/v1/agent-daemon/ws` (use `ws`
-for local development). This is separate from the official Agents API executor
-contract; do not return this URL as a public `self_hosted` environment's remote URL.
+for local development). This configured URL is returned unchanged as
+`self_hosted.remote_url`. It names
+our private daemon transport, not stock OpenAI `exec-server` interoperability.
 
 After migrations, an operator can provision a device for an execution tenant:
 
@@ -299,8 +307,9 @@ device, preserves that assignment across retries/restarts, and refuses a silent
 move to another device. Revoked bindings cannot be used for dispatch. Device
 connections alone do not start a Turn. Submit text, cancellation or function results
 through the official Session events endpoint; the worker assigns a same-tenant host and preserves that
-binding. Managed Docker/E2B lifecycle is qualified within the three-harness V1 profiles;
-additional provider qualification and full protocol semantics remain separate. See the [ownership rules](../../CONTRIBUTING.md#product-and-execution-service-separation).
+binding. Managed Docker has three-harness evidence. This generic device provisioning path
+is for `none`; self-hosted Sessions require the dedicated enrollment below.
+User-managed enrollment and complete protocol semantics need separate acceptance. See the [ownership rules](../../CONTRIBUTING.md#product-and-execution-service-separation).
 
 ### Enable Claude SDK execution
 
@@ -448,21 +457,23 @@ Fresh installations and already indexed history need no backfill. Recovery reads
 continue to use Session/Turn/Items; this procedure is an upgrade operation, not
 an official SSE replay mechanism.
 
-## Native executor transport prerequisite
+## User-managed Runtime enrollment
 
-The disabled-by-default Codex adapter supports executor registration, harness key
-authorization and an opaque native Noise relay. Configured execution and an
-executor origin enable public `self_hosted` Sessions on Codex. The current
-profile requires an absolute `workspace_directory`, empty/default
-`capability_directories`, with optional supported non-deferred functions and
-service-origin HTTP MCP with optional attached static Bearer credentials. Initial
-text is optional.
+V1 uses our daemon as the user-side executor. Deploy daemon, selected harness,
+local tools and protected `/workspace` together using the shared Runtime. Core
+manages Docker-hosted compute only. The user owns local or E2B allocation, renewal
+and destruction; use the official E2B SDK through the
+[E2B guide](deploy/e2b/README.md), not a Core E2B Provider.
 
-To enable it alongside the existing daemon worker, set
-`AGENTS_API_EXECUTOR_URL` to the externally reachable HTTPS origin. Apply the
-execution migrations first and start the service once with configured caller
-principals to establish its immutable project mappings. Operator database authority
-can then issue a connect-only principal key before any Session exists:
+Create a Session with `environment={"type":"self_hosted",
+"workspace_directory":"/workspace"}` and empty/default capability directories.
+Retain the returned Environment ID and unchanged `remote_url`. Initial text may
+wait for connection; an idle Session creates no Turn. Codex, Claude SDK and MiniMax
+reuse the same exact binding and `LocalEnvironment` preparation path. Service-origin
+HTTP MCP is rejected on this placement; `none` MCP and separately qualified hosted
+Environment Plugin MCP remain available within their own limits.
+
+An operator issues a connect-only principal executor key using the existing issuer:
 
 ```bash
 umask 077
@@ -472,167 +483,44 @@ agents-api-environment-key --tenant "$TENANT_ID" \
   > "$HOME/.parsar/executor-key.json"
 ```
 
-`KEY_ID` is a new canonical nonzero UUID chosen for management and retained by the
-operator. Use `--subject-kind user` for a user principal. All identities must be
-explicit and match an existing verified project mapping; issuance never creates
-or remaps that association. `AGENTS_API_DATABASE_URL` points to the execution DB.
-Optionally add `--environment "$ENVIRONMENT_ID"` at issuance to restrict this key
-to one existing live Environment with the same recorded Session creator.
+The immutable principal must match a verified project mapping and the Session's
+recorded creator. Add `--environment "$ENVIRONMENT_ID"` to restrict a key to one
+live Environment. Keep the one-time `executor_token` output private. Only its digest
+is stored; there is no secret read-back. `--rotate` and `--revoke` require the same
+management ID and full principal; neither changes the key's restriction. Unknown
+historical creators cannot enroll. API bearer keys and executor keys are separate.
 
-JSON output contains `key_id`, `executor_token`, and `environment_id` only for a
-restricted key. Stdout is its only delivery; the
-[separate native launcher](../../packages/codex-executor/README.md) consumes this
-private file directly. There is no chosen-token import or secret read-back.
-Ordinary issuance rejects any existing management ID, including revoked IDs.
-Lost output requires explicit `--rotate` with the same full principal and key ID;
-`--revoke` invalidates the key without output. Neither operation accepts an
-Environment override or changes the key's principal/restriction. Rotation of a
-restricted key requires its live owning Session; revocation remains possible after
-deletion. Replace the private file and restart executors after rotation.
+The private `POST /api/v1/agent-daemon/enroll` endpoint accepts that executor bearer
+and `{"environment_id":"..."}`. It returns `device_id`, `session_id`,
+`environment_id` and `workspace_directory`, never another credential. Enrollment
+atomically binds one dedicated device/key to the Session; retries retain it and
+conflicting bindings reject. No managed `runtime_allocation` is created. Runtime
+onboarding connects to the returned `remote_url` using that exact binding and key.
+The endpoint is outside the pinned public Agents API, which remains unchanged.
+It is not stock `exec-server`, `/cloud/environment/*` or Noise interoperability;
+there is no service-side harness or remote tool forwarding compatibility path.
 
-The database stores the current digest, immutable typed subject/project partition,
-optional restriction, creation/issuance times and revocation marker. Authorization
-requires the target Session's project and recorded creator to match. A principal
-key can serve multiple matching Sessions; deleting one denies that target without
-revoking access to the others. Unknown historical creators never authorize an
-executor. Caller, daemon, harness and executor keys have distinct purposes.
-Executor keys have no five-minute grant expiry. A restart preserves keys but
-invalidates registrations and URL grants, requiring re-registration. Current-key
-checks apply to requests and upgrades; authorization heartbeats close existing
-pairs every five seconds with a four-second check budget. Connection closure does
-not establish native process quiescence.
+The gateway and Worker recheck current credential authority. Rotation/revocation,
+Session deletion and lost ownership deny further use; a replacement connection
+cannot overwrite a successor's observations. Connection events report authenticated
+connectivity, not native preparation readiness. Retained native history and workspace
+must survive a Runtime restart for continuation; missing history fails closed.
+Neither disconnect nor deletion promises immediate native process quiescence or
+reclaims user-owned E2B/local compute. The user must stop and destroy it explicitly.
 
-**Principal-key cutover:** stop older registries and operator writers, apply
-migration 26, and deploy the updated service, issuer and launcher together. Legacy
-digests, Environment restrictions and issuance times remain, but keys are revoked
-and their principals remain unknown. Their Environment UUIDs remain reserved as
-management IDs; they cannot be claimed or rotated into principal keys. Explicitly
-issue new keys with new IDs, replace old files and restart executors. Never infer
-ownership from old keys or product data. Downgrade refuses to discard principal-key
-identities and never undoes legacy revocation. The retired static executor-key
-setting remains rejected; there is no old/new authentication fallback.
+Pending input retains its durable identity/deadline through HTTP disconnects. Later
+idle input returns 204 after preparation/admission, not after model completion;
+use client/proxy timeouts above five minutes and recover progress through events
+and reads. Exact upstream failure/error timing remains unverified.
 
-Harness credentials are issued internally for an execution owner after checking
-the current execution lease and exact tenant/Environment ownership. The registry
-holds only bounded process-local digests. The owner retains its credential through
-preparation and the transferred Run, then releases it; cancellation and service
-shutdown also revoke access and close that credential's pair. Connection tickets
-still expire after five minutes, independently of the active owner's lifetime.
-See the [canonical ownership rules](../../CONTRIBUTING.md#environment-ownership-and-placement).
+The former registry/Noise relay, temporary harness credentials, separate native
+executor launcher, private Codex harness package and old remote native probes are
+retired. The Rust package retains only directory, write and workspace-export
+helpers. Historical acceptance remains evidence for its original topology, not
+proof of this new enrollment chain. Complete fixed-SDK/raw HTTP, real-model,
+Files/Artifacts, cancellation, restart/history and credential lifecycle acceptance
+is still required before declaring the new deployment qualified.
 
-**Transition from static harness keys:** stop the old registry, remove
-`AGENTS_API_HARNESS_KEYS_FILE`, retire its secrets/files and restart. That setting
-now fails startup rather than retaining a static fallback. With the daemon gateway
-and executor URL configured, the service Worker issues and releases these credentials
-for pending Environment inputs, selecting a capable tenant device once for an
-unbound Session and retaining existing bindings. There is no public harness-key endpoint or user/service-account
-identity equivalence. Caller, device, executor and harness credentials stay separate.
-
-Native routes live outside `/v1/agents`: `POST /cloud/environment/{id}/register`
-uses the executor credential; `/connect` uses the harness credential and `/validate`
-uses the executor credential. The returned WebSocket URLs carry separate connection
-capabilities. Keep URLs and `harness_key_authorization` private; redact query
-strings in external access logs. This native adapter does not expand the pinned
-public SDK OpenAPI surface. HTTP is
-allowed only on loopback for development. Production TLS termination remains an
-operator responsibility and requires deployment validation.
-
-Authenticated socket observations now persist connection state and immutable
-Environment event snapshots. These observations also back resource status reads,
-without establishing native readiness. Registration replacement
-and numbered callbacks fence old observations; a new Worker reconciles previous
-process state before opening connections. Shutdown drains observations before
-releasing execution ownership. Persistence failures close the registry and require
-a service restart; review its lifecycle error logs rather than treating closure as
-a successful write. See the [lifecycle rules](../../CONTRIBUTING.md#environment-ownership-and-placement).
-
-When the executor origin is configured, Session GET/list/metadata and live SSE can
-expose `self_hosted` Sessions through a safe output projection. Waiting input requests `environment_connection` before any Turn;
-connection arrival clears the action, and the existing Worker still verifies
-native readiness before admission. No waiting input means no connection request.
-The returned `remote_url` is the configured executor origin. Use that exact URL and
-Environment ID with the [pinned caller-started launcher](../../packages/codex-executor/README.md).
-Later idle text-message batches wait for durable preparation/admission before the
-input endpoint returns 204, even if the executor is already connected. Set client
-and proxy timeouts above five minutes; the service gives this response six minutes.
-Explicit retry keys preserve the original input identity and deadline. A disconnected
-HTTP observer does not cancel the reservation. Local expiry/cancellation errors are
-409 `environment_input_expired` / `environment_input_cancelled`; ownership loss is
-503 `execution_unavailable`. Exact hosted status/body parity remains unverified.
-Initial text on ordinary or streamed creation commits its reservation and returns
-the connection target promptly while offline. Connect using that target; the same
-Worker prepares and starts the initial Turn. A disconnected creation stream does
-not cancel the reservation. Initial expiry leaves a queryable failed Session with
-a safe error and no Turn; exact hosted error/timing parity remains unverified.
-Cancellation-only events use the existing durable receipt path, including idle
-no-Turn requests and retries that never retarget later work. A new cancellation
-still conflicts with pending pre-Turn input. HTTP 204 acknowledges admission;
-observe completion through events/queries and process cessation separately.
-Function definitions use the existing callback bridge. Submit result-only batches
-with explicit Turn/call identities; they create no Turn or preparation and retain
-the same identities on retries after completion or during later work. Pending
-reservations still block new results. Observe native application through the
-existing actions, Items and events; admission alone does not acknowledge application.
-Message-only batches append to an existing active Turn or reserve idle work under
-the same Session lock. Active input returns after durable admission and uses the
-existing native steering receipts; retries keep their original Turn after completion
-or during later work. No unlocked activity check can bypass idle preparation.
-Mixed events, deferred functions,
-nonempty capability directories, other placements, populated installation metadata
-remain unavailable in this self-hosted profile. Public Environment Templates apply only
-to hosted Sessions; Files coverage is recorded in the shared contract assessment.
-
-Retrieve the returned Environment with
-`client.beta.agents.environments.retrieve(session.environment.id)`. This read uses
-durable status and the owning live Session's project authorization, even when
-execution/registry configuration is disabled. Its required `files`, `plugins` and
-`skills` arrays are empty for the supported configuration, which has no API-managed
-installations. They do not list caller-prepared or model-created workspace files,
-or report native capability discovery. Unsupported stored installation configurations
-are rejected rather than reported as empty. The response contains no credentials,
-private configuration or file contents. See the
-[resource boundary](../../CONTRIBUTING.md#environment-ownership-and-placement).
-
-The adapter checks its execution lease and visible Environment on requests and
-five-second heartbeats; deleted ownership, shutdown or lost ownership closes
-connections. Re-registering replaces an old socket without allowing its late close
-to clear the replacement. A live credential can register again after replacement.
-No command replay or native process termination is promised.
-
-Each Environment currently accepts one independent harness connection. Multiple
-native commands, processes and file operations share it. A second attachment
-receives 409 without evicting the incumbent; `/connect` refresh remains
-non-disruptive. Five-minute, one-use harness grants bind both keys and sockets to
-the current registration. At most 32 grants are retained per registration;
-expired unused grants are pruned, and exhaustion returns 429. Expiration prevents
-new attachment/validation without terminating an established pair.
-
-The relay forwards binary frames unchanged, bounded to the native 256 KiB limit.
-A stalled write closes the pair after five seconds, without an application queue.
-Either peer disconnecting closes both physical sockets and invalidates outstanding
-harness grants. Native recovery may resume a retained Session/process; the service
-does not restart commands. Multiplexing independent harnesses, durable native
-backup, deployment TLS and arbitrary interrupted-work recovery remain unverified.
-
-The [native probe](tests/native/relay_probe.rs) exercises commands, a 128 KiB file,
-refresh, one retained process across a controlled outage, and fresh file retention.
-Build it as the `parsar_relay_probe` example in the pinned Codex Rust workspace
-(`3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`), with its matching lock/dependencies.
-The release source's workspace version labels may need alignment to its manifests;
-do not change third-party dependencies. Keep build/runtime files under `~/.parsar/`.
-Run `TestNativeHarnessRelayPostgreSQLAndProcessRecovery` with the dedicated execution
-test DB, `PARSAR_CODEX_BINARY` (0.153.4), `PARSAR_NATIVE_RELAY_PROBE` (that example)
-and `PARSAR_EXECUTOR_PROOF_DIR` (private output directory). Without those native
-prerequisites that test skips; the regular authorization/relay/Store checks still
-run. This transport proof makes zero model calls; public model execution through
-Environment remains a separate required acceptance workflow.
-
-The pinned Codex 0.153.4 CLI accepts registry API-key authentication on loopback but
-protects OpenAI credentials from third-party production domains. The separately
-named [upstream-library launcher](../../packages/codex-executor/README.md) provides
-an explicit service-credential path. It keeps the stock guard intact and does not
-establish the documented stock command on an arbitrary production domain.
-See [Environment contracts and remaining work](../../contracts/agents-api/environments.md).
 
 ### HTTP MCP execution
 
@@ -640,8 +528,7 @@ This section covers `agent.tools` with `connection_origin: "service"`.
 Environment-origin Plugin declarations use the separate
 [initialization and transport contract](../../contracts/agents-api/environment-templates.md#environment-origin-mcp-plugins).
 
-Service-origin MCP runs on trusted service-side compute. Codex supports `environment:{"type":"none"}`
-or a `self_hosted` Environment; Claude SDK supports HTTP MCP with
+Service-origin MCP runs on trusted service-side compute. Codex supports `environment:{"type":"none"}`; Claude SDK supports HTTP MCP with
 `environment:{"type":"none"}`. Inline or saved Agent tools may declare:
 
 ```json
@@ -669,7 +556,8 @@ work can already be accepted or queued during this wait. Exact hosted creation
 timing/errors and continuing MCP health monitoring remain unverified.
 
 On `environment:none`, both Codex and Claude SDK support tenant-owned `vault_ids`
-for static-bearer HTTPS MCP; Codex also supports the `self_hosted` combination.
+for static-bearer HTTPS MCP. `self_hosted` is explicitly unsupported for
+service-origin MCP in V1, including anonymous requests.
 An explicit
 `credential_id` selects an attached credential for the exact HTTPS URL; omission/null
 selects a unique matching credential, or stays anonymous if none matches. Ambiguity
@@ -678,20 +566,13 @@ the caller's original credential field. See [credential setup and limits](creden
 Authenticated execution additionally requires `mcp_http_bearer_auth`; missing keys
 or failed authorization/decryption never fall back to anonymous execution.
 
-With `self_hosted`, commands use the registered executor while MCP connections
-remain on the trusted service harness. This combination additionally
-requires `mcp_http_remote_environment` and the existing remote preparation
-capabilities; separate MCP/remote support on an older daemon does not imply this
-combination. A selected Vault credential also requires `mcp_http_remote_bearer_auth`;
-older peers with only separate MCP/remote/bearer capabilities cannot receive it.
-Secrets enter only the service native process environment, not the executor or
-public/native history. Unmatched attached Vaults may retain an anonymous selection.
-Both native remote readiness and MCP configuration
-checks run before thread creation/resume.
+The colocated V1 `self_hosted` profile does not admit service-origin MCP. The old
+separate executor/service-side MCP combination and its remote capability gates are
+retired. Do not forward Vault credentials to user-owned Runtime compute.
 
 Claude SDK requires a packaged runtime that reports `mcp_http_tools`; the SDK
 version alone does not qualify an older bundle. Its current profile
-requires `required:false`, connected servers and static inventories. Server labels
+accepts either `required` value, requires connected servers and static inventories. Server labels
 accept ASCII letters, digits, underscore and hyphen, except reserved `functions`;
 selected tool names additionally accept dots. Declared HTTP MCP tools compose with
 host functions; undeclared servers, built-ins and subagents remain disabled.
