@@ -40,16 +40,42 @@ func configureSubagentObservations(plan *SessionPlan, req proto.PromptRequestPay
 }
 
 func verifySubagentObservationProfile(ctx context.Context, rpc *JSONRPCClient, cwd string) error {
-	raw, err := rpc.Request(ctx, "hooks/list", map[string]any{"cwds": []string{cwd}})
-	var result struct {
-		Data []struct {
-			Cwd    string            `json:"cwd"`
-			Hooks  []json.RawMessage `json:"hooks"`
-			Errors []json.RawMessage `json:"errors"`
-		} `json:"data"`
+	hooks, err := readNativeToolHooks(ctx, rpc, cwd)
+	if err != nil {
+		return err
 	}
-	if err != nil || json.Unmarshal(raw, &result) != nil || len(result.Data) != 1 || result.Data[0].Cwd != cwd || len(result.Data[0].Hooks) != 0 || len(result.Data[0].Errors) != 0 {
-		return errors.New("codex: subagent observation requires hooks disabled")
+	// Packaged managed requirements may force hooks on. Only the immutable
+	// Bash pre-hook is admissible; managed-only discovery must survive reloads.
+	for _, hook := range hooks {
+		if !hook.isRuntimeToolEnvironmentHook() {
+			return errors.New("codex: subagent observation requires all hooks except the packaged Bash pre-hook disabled")
+		}
+	}
+
+	raw, err := rpc.Request(ctx, "configRequirements/read", nil)
+	var response struct {
+		Requirements *struct {
+			AllowManagedHooksOnly bool            `json:"allowManagedHooksOnly"`
+			Features              map[string]bool `json:"featureRequirements"`
+		} `json:"requirements"`
+	}
+	if err != nil || json.Unmarshal(raw, &response) != nil {
+		return errors.New("codex: subagent hook requirements unavailable")
+	}
+	if response.Requirements == nil {
+		if len(hooks) != 0 {
+			return errors.New("codex: managed-only subagent hooks are not enforced")
+		}
+		return nil
+	}
+	requirements := response.Requirements
+	if (len(hooks) != 0 || requirements.Features["hooks"]) && !requirements.AllowManagedHooksOnly {
+		return errors.New("codex: managed-only subagent hooks are not enforced")
+	}
+	for _, feature := range []string{"plugins", "code_mode", "code_mode_only", "code_mode_prewarm", "multi_agent_v2"} {
+		if requirements.Features[feature] {
+			return errors.New("codex: required feature conflicts with subagent observation profile")
+		}
 	}
 	return nil
 }

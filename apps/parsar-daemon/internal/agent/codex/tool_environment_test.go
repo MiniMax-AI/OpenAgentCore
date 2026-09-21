@@ -10,7 +10,7 @@ import (
 )
 
 func TestInitializedToolHookReadiness(t *testing.T) {
-	for _, mode := range []string{"ready", "disabled", "unmanaged", "async", "wrong command", "errors"} {
+	for _, mode := range []string{"ready", "empty", "disabled", "unmanaged", "async", "wrong command", "post hook", "wrong matcher", "wrong source", "untrusted", "errors"} {
 		t.Run(mode, func(t *testing.T) {
 			client, server, cleanup := NewTestClient()
 			defer cleanup()
@@ -33,6 +33,16 @@ func TestInitializedToolHookReadiness(t *testing.T) {
 			hook := map[string]any{"eventName": "preToolUse", "command": toolEnvironmentHookCommand, "matcher": "^Bash$", "enabled": true, "isManaged": true, "async": false, "sourcePath": toolEnvironmentHookSource, "trustStatus": "managed"}
 			entry := map[string]any{"cwd": "/workspace", "hooks": []any{hook}, "errors": []any{}}
 			switch mode {
+			case "empty":
+				entry["hooks"] = []any{}
+			case "post hook":
+				hook["eventName"] = "postToolUse"
+			case "wrong matcher":
+				hook["matcher"] = ".*"
+			case "wrong source":
+				hook["sourcePath"] = "/workspace/hooks"
+			case "untrusted":
+				hook["trustStatus"] = "untrusted"
 			case "disabled":
 				hook["enabled"] = false
 			case "unmanaged":
@@ -50,6 +60,29 @@ func TestInitializedToolHookReadiness(t *testing.T) {
 			if err := <-done; (err == nil) != (mode == "ready") {
 				t.Fatal("hook admission", mode, err)
 			}
+			go func() { done <- verifySubagentObservationProfile(ctx, client.JSONRPCClient, "/workspace") }()
+			if err := json.NewDecoder(server.FromClient).Decode(&request); err != nil {
+				t.Fatal(err)
+			}
+			if err := json.NewEncoder(server.ToClient).Encode(map[string]any{"id": request.ID, "result": map[string]any{"data": []any{entry}}}); err != nil {
+				t.Fatal(err)
+			}
+			if mode == "ready" || mode == "empty" {
+				if err := json.NewDecoder(server.FromClient).Decode(&request); err != nil {
+					t.Fatal(err)
+				}
+				if request.Method != "configRequirements/read" {
+					t.Fatal(request.Method)
+				}
+				if err := json.NewEncoder(server.ToClient).Encode(map[string]any{"id": request.ID, "result": map[string]any{"requirements": map[string]any{"allowManagedHooksOnly": true, "featureRequirements": map[string]bool{"hooks": true}}}}); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			if err := <-done; (err == nil) != (mode == "ready" || mode == "empty") {
+				t.Fatal("subagent hook admission", mode, err)
+			}
+
 		})
 	}
 }
