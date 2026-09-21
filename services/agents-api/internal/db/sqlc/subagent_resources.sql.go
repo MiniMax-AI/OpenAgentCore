@@ -36,7 +36,9 @@ func (q *Queries) ApplySubagentLifecycle(ctx context.Context, arg ApplySubagentL
 }
 
 const getChildItem = `-- name: GetChildItem :one
-SELECT i.id, i.session_id, i.subagent_id, i.turn_id, i.position, i.output_index, i.payload, t.created_at AS turn_created_at FROM subagent_items i JOIN subagent_turns t ON t.id = i.turn_id
+SELECT i.id, i.session_id, i.subagent_id, i.turn_id, i.position, i.output_index, i.payload, t.created_at AS turn_created_at,
+ COALESCE(i.payload = $4::jsonb, false)::boolean AS payload_equal
+FROM subagent_items i JOIN subagent_turns t ON t.id = i.turn_id
 WHERE i.session_id = $1 AND i.subagent_id = $2 AND i.id = $3
 `
 
@@ -44,6 +46,7 @@ type GetChildItemParams struct {
 	SessionID  pgtype.UUID `json:"session_id"`
 	SubagentID pgtype.UUID `json:"subagent_id"`
 	ID         pgtype.UUID `json:"id"`
+	Candidate  []byte      `json:"candidate"`
 }
 
 type GetChildItemRow struct {
@@ -55,10 +58,16 @@ type GetChildItemRow struct {
 	OutputIndex   pgtype.Int4        `json:"output_index"`
 	Payload       []byte             `json:"payload"`
 	TurnCreatedAt pgtype.Timestamptz `json:"turn_created_at"`
+	PayloadEqual  bool               `json:"payload_equal"`
 }
 
 func (q *Queries) GetChildItem(ctx context.Context, arg GetChildItemParams) (GetChildItemRow, error) {
-	row := q.db.QueryRow(ctx, getChildItem, arg.SessionID, arg.SubagentID, arg.ID)
+	row := q.db.QueryRow(ctx, getChildItem,
+		arg.SessionID,
+		arg.SubagentID,
+		arg.ID,
+		arg.Candidate,
+	)
 	var i GetChildItemRow
 	err := row.Scan(
 		&i.ID,
@@ -69,6 +78,7 @@ func (q *Queries) GetChildItem(ctx context.Context, arg GetChildItemParams) (Get
 		&i.OutputIndex,
 		&i.Payload,
 		&i.TurnCreatedAt,
+		&i.PayloadEqual,
 	)
 	return i, err
 }

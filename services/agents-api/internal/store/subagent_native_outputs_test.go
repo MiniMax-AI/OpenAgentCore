@@ -24,7 +24,7 @@ func TestSubagentNativeFunctionResultDoesNotConsumeOutputIndex(t *testing.T) {
 	}
 	input := submitMessage(t, s, tenant, session.ID, "start")
 	transition(t, owner, tenant, session.ID, input.TurnID, TurnQueued, TurnInProgress)
-	call := json.RawMessage(`{"id":"native-file-change","stage":"after","observation":{"status":"completed","kind":"function","name":"apply_patch","arguments":{},"content":[{"type":"input_text","text":"file written"}]}}`)
+	call := json.RawMessage(`{"id":"native-file-change","stage":"after","observation":{"status":"completed","kind":"function","name":"apply_patch","arguments":{"count":9007199254740993,"scale":1e2},"content":[{"type":"input_text","text":"file written"}]}}`)
 	text := "child answer"
 	message, _ := json.Marshal(proto.OutputMessagePayload{ID: "answer", Status: "completed", Text: &text})
 	facts := []ExecutionEvent{
@@ -35,6 +35,11 @@ func TestSubagentNativeFunctionResultDoesNotConsumeOutputIndex(t *testing.T) {
 	}
 	if err = owner.AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 1, facts); err != nil {
 		t.Fatal(err)
+	}
+	finished := int64(101000)
+	terminal := subagentFact(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "turn", Status: TurnCompleted, CreatedAtMS: 100000, CompletedAtMS: &finished})
+	if err = owner.AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 5, []ExecutionEvent{terminal, facts[2], facts[3]}); err != nil {
+		t.Fatal("identical native tool history must survive replay after completion", err)
 	}
 	child, err := s.GetSubagentIdentity(t.Context(), tenant, session.ID, "child")
 	if err != nil {

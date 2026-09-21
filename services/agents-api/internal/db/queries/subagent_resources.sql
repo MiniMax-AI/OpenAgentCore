@@ -57,7 +57,9 @@ ORDER BY CASE WHEN sqlc.arg(ascending)::boolean THEN t.created_at END ASC,
 LIMIT sqlc.arg(page_limit);
 
 -- name: GetChildItem :one
-SELECT i.*, t.created_at AS turn_created_at FROM subagent_items i JOIN subagent_turns t ON t.id = i.turn_id
+SELECT i.*, t.created_at AS turn_created_at,
+ COALESCE(i.payload = sqlc.narg(candidate)::jsonb, false)::boolean AS payload_equal
+FROM subagent_items i JOIN subagent_turns t ON t.id = i.turn_id
 WHERE i.session_id = $1 AND i.subagent_id = $2 AND i.id = $3;
 
 -- name: PutChildItem :one

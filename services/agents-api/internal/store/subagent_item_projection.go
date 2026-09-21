@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"reflect"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
@@ -52,8 +51,12 @@ func projectSubagentItem(ctx context.Context, q *sqlc.Queries, session pgtype.UU
 }
 
 func putChildItem(ctx context.Context, q *sqlc.Queries, session, childID pgtype.UUID, turn sqlc.SubagentTurn, position int32, item v1.Item) error {
+	payload, err := json.Marshal(item)
+	if err != nil {
+		return err
+	}
 	id, _ := parseID(item.ID)
-	old, err := q.GetChildItem(ctx, sqlc.GetChildItemParams{SessionID: session, SubagentID: childID, ID: id})
+	old, err := q.GetChildItem(ctx, sqlc.GetChildItemParams{SessionID: session, SubagentID: childID, ID: id, Candidate: payload})
 	fresh := errors.Is(err, pgx.ErrNoRows)
 	if err != nil && !fresh {
 		return err
@@ -66,7 +69,7 @@ func putChildItem(ctx context.Context, q *sqlc.Queries, session, childID pgtype.
 		if err = json.Unmarshal(old.Payload, &previous); err != nil {
 			return err
 		}
-		if reflect.DeepEqual(previous, item) {
+		if old.PayloadEqual {
 			return nil
 		}
 		if previous.Status != "in_progress" {
@@ -75,10 +78,6 @@ func putChildItem(ctx context.Context, q *sqlc.Queries, session, childID pgtype.
 	}
 	if terminalStatus(turn.Status) {
 		return ErrTurnConflict
-	}
-	payload, err := json.Marshal(item)
-	if err != nil {
-		return err
 	}
 	index, err := q.PutChildItem(ctx, sqlc.PutChildItemParams{ID: id, SessionID: session, SubagentID: childID, TurnID: turn.ID, Position: position, Payload: payload, IsOutput: item.Role != "user" && item.Type != "function_call_output"})
 	if err != nil {
