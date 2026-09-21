@@ -28,6 +28,8 @@ func discoverMCode(rc *runContext, check func(context.Context, string) (string, 
 		result.Capabilities.ExecutionControls = true
 		result.Capabilities.ToolObservations = true
 		result.Capabilities.SubagentControl = true
+		// Native preparation verifies the applied admission/tool profile before input.
+		result.Capabilities.SubagentObservations = true
 		result.Capabilities.EnvironmentNone = true
 	}
 	fmt.Fprintf(rc.stdout, "mcode preflight ok (%s)\n", version)

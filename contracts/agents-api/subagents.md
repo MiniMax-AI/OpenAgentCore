@@ -79,11 +79,25 @@ result receipts, but existing hook-failure handling only covers the root Turn. O
 execution is unchanged. Public function and MCP tools with enabled multi-agent execution
 remain unqualified. These limitations do not redefine the official protocol.
 
-Claude's fixed SDK exposes child listing/messages but its original opened time
-and child Turn boundaries still need evidence. MiniMax's fixed ACP exposes a
-persisted delegation graph but not child Turn/Item history reads. Neither adapter
-may substitute parent output, task completion, observation time or an empty list
-for the missing facts.
+Claude's fixed SDK uses native Agent and idle-child SendMessage calls. Original
+private child records establish parentage, the first own input time and subsequent
+own Turns; inherited parent context is excluded. The existing query owner admits
+children before start and retains their history through settlement. Confirmed
+cancellation uses a protected immutable effect receipt because native abort can
+leave no terminal record. The receipt preserves the confirmed effect time across
+reads without rewriting native history. This profile has no qualified close
+operation, and completed or cancelled children remain active. See the
+[adapter contract](../../packages/claude-sdk-adapter/SUBAGENTS.md) for restrictions.
+
+MiniMax's fixed ACP supplies native delegation operations. Its Session-private
+SQLite records supply original child identity, accepted inputs, terminal times
+and own messages. The native task-create transaction enforces the requested
+concurrent limit before start; native preparation must acknowledge that applied
+limit and the protected tool profile before any model input. Discovery describes
+adapter support, not proof that an arbitrary installed CLI applied these controls.
+Its child workspace isolation and public integration remain under qualification.
+Neither adapter may substitute parent output, task completion, observation time
+or an empty list for missing facts.
 
 Still unconfirmed upstream semantics include root-completion child propagation,
 complete child-delta ordering and Session Usage aggregation. Unlimited background
