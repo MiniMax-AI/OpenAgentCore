@@ -16,7 +16,7 @@ func configureSubagentObservations(plan *SessionPlan, req proto.PromptRequestPay
 		return nil
 	}
 	if req.LocalEnvironment != nil && req.LocalEnvironment.ToolEnvironment {
-		return errors.New("codex: multi_agent with initialized tool environment hooks is not supported")
+		return errors.New("codex: multi_agent with initialized tool environment requires verified child hook failure handling")
 	}
 	for _, feature := range []string{"hooks", "plugins", "code_mode", "code_mode_only", "code_mode_prewarm", "multi_agent_v2"} {
 		plan.EnableFeatures = slices.DeleteFunc(plan.EnableFeatures, func(value string) bool { return value == feature })

@@ -67,13 +67,15 @@ Fixed Codex 0.153.4 real probes established original close/resume/no-op/failure
 facts by correlating direct-tool output with the same call's persisted canonical
 completion. Cold resume has no raw-result opt-in, so this requires native persisted
 receipts. The proven profile excludes result-rewriting hooks, code-mode and
-plugins. Native Turn times have second precision; converting to milliseconds does
+plugins. A packaged immutable Bash PreToolUse hook is allowed only with enforced
+managed-only hook discovery and its exact Runtime command and matcher. Native Turn times have second precision; converting to milliseconds does
 not create additional precision. A real root-first probe confirmed child file
 work can finish in the same owner after the root finishes.
 
 Multi-agent execution with required ToolEnvironment initialization remains an
-explicit combination gap until its necessary PreToolUse hook can coexist with a
-qualified no-result-rewrite profile. Ordinary single-agent environment/package
+explicit combination gap until child hook-process failures are handled by the
+same execution owner. The managed PreToolUse hook itself does not alter lifecycle
+result receipts, but existing hook-failure handling only covers the root Turn. Ordinary single-agent environment/package
 execution is unchanged. Public function tools with enabled multi-agent execution
 remain unqualified. These limitations do not redefine the official protocol.
 
