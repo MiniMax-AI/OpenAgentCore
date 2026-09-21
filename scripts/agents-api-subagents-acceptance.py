@@ -140,8 +140,8 @@ def main():
         def children():
             return sdk_list(sessions.subagents, sid())
 
-        def wait_for(predicate, code):
-            deadline = time.monotonic() + args.timeout
+        def wait_for(predicate, code, timeout=None):
+            deadline = time.monotonic() + (args.timeout if timeout is None else timeout)
             while time.monotonic() < deadline:
                 value = predicate()
                 if value:
@@ -306,7 +306,7 @@ def main():
                    f"Give the second direct child task marker {marker}-beta and ask it to compute 7 * 8. "
                    "Wait for both direct children and report their results. Keep every child open and available; "
                    "do not close or interrupt them. Use no network or file tools.")
-            wait_for(lambda: len(children()) >= 3, "fixture_not_observed_spawn_and_nested")
+            wait_for(lambda: len(children()) >= 3, "fixture_not_observed_spawn_and_nested", timeout=5)
             root = sessions.retrieve(sid()).agent.id
             direct = [sub for sub in children() if sub["parent_agent_id"] == root]
             require(len(direct) >= 2, "fixture_not_observed_two_direct_children")
@@ -323,7 +323,7 @@ def main():
                    "Wait for both native child tasks and report their results. "
                    "Do not create nested children, close or interrupt either child. "
                    "Use no network or file tools.")
-            wait_for(lambda: len(children()) >= 2, "fixture_not_observed_two_children")
+            wait_for(lambda: len(children()) >= 2, "fixture_not_observed_two_children", timeout=5)
             inspect()
             report["phases"]["spawn-direct"] = "passed"
             save()
@@ -340,7 +340,7 @@ def main():
             submit("close", f"Use the native close tool to close only your existing direct child whose original task marker is {marker}-alpha. "
                    "Do not create a replacement and do not merely interrupt it. Leave the beta child open. Confirm after the native close returns.")
             changed = wait_for(lambda: [sub for sub in children() if sub["id"] in before and sub["status"] == "closed"],
-                               "fixture_not_observed_closed_child")
+                               "fixture_not_observed_closed_child", timeout=5)
             require(len(changed) == 1, "fixture_not_observed_single_closed_child")
             closed = changed[0]
             child = identifier(closed["id"])
@@ -359,7 +359,7 @@ def main():
                    "Do not create a replacement. Send it a new task to compute 19 + 23, wait for its reply, "
                    "and leave it open and available. Report only after the native task finishes.")
             resumed = wait_for(lambda: next((sub for sub in children() if sub["id"] == report["target_id"] and sub["status"] == "active"), None),
-                               "fixture_not_observed_resumed_child")
+                               "fixture_not_observed_resumed_child", timeout=5)
             require(resumed["opened_at"] == report["target_opened_at"] and resumed["closed_at"] is None, "resume_lifecycle_mismatch")
             own_turns = sdk_list(sessions.subagents.turns, resumed["id"], session_id=sid())
             own_items = sdk_list(sessions.subagents.items, resumed["id"], session_id=sid())
