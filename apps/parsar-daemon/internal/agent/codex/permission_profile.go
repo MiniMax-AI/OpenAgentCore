@@ -35,7 +35,7 @@ func managedPermissionProfile(req proto.PromptRequestPayload, cfg sessionConfig)
 		return "", cfg.runtimeNetworkError
 	}
 	if cfg.runtimeNetwork.Access != "" {
-		if req.LocalEnvironment == nil || !cfg.runtimeNetwork.Equal(agentnetwork.Policy{Access: req.LocalEnvironment.NetworkAccess, AllowedDomains: req.LocalEnvironment.AllowedDomains}) || profile != "managed-workspace" || cfg.harnessBinary != "" {
+		if req.LocalEnvironment == nil || !cfg.runtimeNetwork.Equal(agentnetwork.Policy{Access: req.LocalEnvironment.NetworkAccess, AllowedDomains: req.LocalEnvironment.AllowedDomains}) || profile != "managed-workspace" {
 			return "", errors.New("codex: Runtime network policy mismatch")
 		}
 		switch cfg.runtimeNetwork.Access {

@@ -27,9 +27,8 @@ func (s *Session) run(plan SessionPlan, req proto.PromptRequestPayload) {
 		return
 	}
 	turnParams := TurnStartParams{
-		ThreadID:     s.currentThreadID(),
-		Input:        input,
-		Environments: plan.Environments,
+		ThreadID: s.currentThreadID(),
+		Input:    input,
 	}
 	if plan.CollaborationMode != "" {
 		model := strings.TrimSpace(s.resolvedModel)

@@ -27,7 +27,6 @@ const terminalSendTimeout = 2 * time.Second
 // through Factory which uses defaults.
 type sessionConfig struct {
 	codexBinary         string
-	harnessBinary       string
 	permissionProfile   string
 	runtimeNetwork      agentnetwork.Policy
 	runtimeNetworkError error
@@ -39,7 +38,6 @@ func defaultSessionConfig() sessionConfig {
 	policy, err := localworkspace.RuntimeNetworkPolicy()
 	return sessionConfig{
 		codexBinary:       defaultBinary(),
-		harnessBinary:     os.Getenv("PARSAR_CODEX_HARNESS_BIN"),
 		permissionProfile: os.Getenv("PARSAR_CODEX_PERMISSION_PROFILE"),
 		runtimeNetwork:    policy, runtimeNetworkError: err,
 		logger:      obslog.Bg(),
@@ -76,7 +74,6 @@ type Session struct {
 	cfg                       sessionConfig
 	out                       chan<- proto.Envelope
 	rpc                       *JSONRPCClient
-	harness                   *privateHarness
 
 	cancelCtx context.Context
 	cancelFn  context.CancelFunc

@@ -3,8 +3,6 @@ package codex
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -30,10 +28,11 @@ func TestPreparedSessionTransfersSameResourceOnce(t *testing.T) {
 				t.Fatal("preparation did not retain its model catalog")
 			}
 			pid := p.session.rpc.cmd.Process.Pid
+			cfgPreparedCwd := p.plan.Cwd
 			// Caller-owned data cannot revise the prepared native configuration.
 			req.AgentOptions["model"] = "different-model"
 			req.AgentSessionID = "different-thread"
-			req.RemoteEnvironment.WorkspaceDirectory = "/different-executor"
+			req.WorkDir = "/different-workspace"
 			copy(req.FunctionTools[0].Parameters, strings.ReplaceAll(string(req.FunctionTools[0].Parameters), "integer", "boolean"))
 			out := make(chan proto.Envelope, 8)
 			startCtx, stopStart := context.WithCancel(t.Context())
@@ -61,10 +60,11 @@ func TestPreparedSessionTransfersSameResourceOnce(t *testing.T) {
 					t.Fatal("preparation and start used different children")
 				}
 				var params struct {
-					Model        string                 `json:"model"`
-					ThreadID     string                 `json:"threadId"`
-					DynamicTools []dynamicFunctionTool  `json:"dynamicTools"`
-					Environments []EnvironmentSelection `json:"environments"`
+					Model        string                `json:"model"`
+					ThreadID     string                `json:"threadId"`
+					DynamicTools []dynamicFunctionTool `json:"dynamicTools"`
+					Cwd          string                `json:"cwd"`
+					Environments json.RawMessage       `json:"environments"`
 				}
 				if err := json.Unmarshal(frame.Params, &params); err != nil {
 					t.Fatal(err)
@@ -77,7 +77,7 @@ func TestPreparedSessionTransfersSameResourceOnce(t *testing.T) {
 				if frame.Method == "thread/resume" && params.ThreadID != "fixture-native-thread" {
 					t.Fatal("prepared resume changed")
 				}
-				if frame.Method == "turn/start" && (len(params.Environments) != 1 || params.Environments[0].Cwd != "/executor-only") {
+				if len(params.Environments) != 0 || (frame.Method == "thread/start" && params.Cwd != cfgPreparedCwd) || p.plan.Cwd != cfgPreparedCwd {
 					t.Fatal("prepared environment changed")
 				}
 			}
@@ -85,7 +85,7 @@ func TestPreparedSessionTransfersSameResourceOnce(t *testing.T) {
 			if resume {
 				expectedThread = "thread/resume"
 			}
-			if counts["initialize"] != 1 || counts["environment/info"] != 1 || counts[expectedThread] != 1 || counts["turn/start"] != 1 {
+			if counts["initialize"] != 1 || counts["environment/status"] != 2 || counts[expectedThread] != 1 || counts["turn/start"] != 1 {
 				t.Fatal("unexpected native setup/start count", counts)
 			}
 			if err := session.Cancel(context.Background()); err != nil {
@@ -102,7 +102,7 @@ func TestPreparedSessionTransfersSameResourceOnce(t *testing.T) {
 }
 
 func TestPreparedSessionAbandonmentAndFailedStart(t *testing.T) {
-	for _, reason := range []string{"close", "owner cancelled", "rpc exited", "executor disconnected", "start cancelled"} {
+	for _, reason := range []string{"close", "owner cancelled", "rpc exited", "start cancelled"} {
 		t.Run(reason, func(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
 			owner, cancelOwner := context.WithCancel(t.Context())
@@ -122,10 +122,6 @@ func TestPreparedSessionAbandonmentAndFailedStart(t *testing.T) {
 				cancelOwner()
 			case "rpc exited":
 				if err := p.session.rpc.Close(); err != nil {
-					t.Fatal(err)
-				}
-			case "executor disconnected":
-				if err := os.WriteFile(filepath.Join(root, "remote-status"), []byte("disconnected"), 0o600); err != nil {
 					t.Fatal(err)
 				}
 			case "start cancelled":
@@ -148,11 +144,11 @@ func TestPreparedSessionAbandonmentAndFailedStart(t *testing.T) {
 			}
 			count := 0
 			for _, frame := range preparationFrames(t, root) {
-				if frame.Method == "environment/info" {
+				if frame.Method == "environment/status" {
 					count++
 				}
 			}
-			if count != 1 {
+			if count != 2 {
 				t.Fatal("failed start reconnected the native environment", count)
 			}
 		})
@@ -223,7 +219,7 @@ func TestPreparedSessionCancellationDuringReadiness(t *testing.T) {
 		}
 		result <- err
 	}()
-	waitPreparationMethod(t, root, "environment/info")
+	waitPreparationMethod(t, root, "environment/status")
 	cancel()
 	select {
 	case err := <-result:

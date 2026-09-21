@@ -3,6 +3,10 @@ package codex
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/localworkspace"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
+	"github.com/google/uuid"
+	"os"
 	"testing"
 	"time"
 
@@ -26,8 +30,31 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 	for _, start := range []bool{false, true} {
 		t.Run(map[bool]string{false: "disconnect-before-start", true: "transfer-and-cancel"}[start], func(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
+			environment, session := uuid.NewString(), uuid.NewString()
+			if err := os.MkdirAll(req.WorkDir, 0700); err != nil {
+				t.Fatal(err)
+			}
+			for key, value := range map[string]string{
+				"PARSAR_RUNTIME_ENVIRONMENT_ID":   environment,
+				"PARSAR_RUNTIME_SESSION_ID":       session,
+				"PARSAR_RUNTIME_WORKSPACE":        req.WorkDir,
+				"PARSAR_RUNTIME_DIRECTORY_HELPER": cfg.codexBinary,
+				"PARSAR_RUNTIME_NETWORK_ACCESS":   "enabled",
+			} {
+				t.Setenv(key, value)
+			}
+			binding, err := localworkspace.Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.WorkDir = ""
+			req.AgentStateKey = "agents-api-" + session
+			req.DisableExecutionEnvironment = false
+			req.LocalEnvironment = &proto.LocalEnvironment{ID: environment, NetworkAccess: "enabled"}
+			cfg.permissionProfile = "managed-workspace"
+			cfg.runtimeNetwork = agentnetwork.Policy{Access: "enabled"}
 			registry := agent.NewRegistry()
-			registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: proto.AgentKindCapabilities{RemoteEnvironment: true, FunctionTools: true}}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+			registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: proto.AgentKindCapabilities{LocalEnvironment: true, FunctionTools: true}}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 				return nil, errors.New("ordinary Factory must not run")
 			})
 			prepared := make(chan *Prepared, 1)
@@ -40,7 +67,7 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 				return p, nil
 			})
 			sender := make(preparationWireSender, 64)
-			r, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender})
+			r, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender, LocalWorkspace: binding})
 			if err != nil {
 				t.Fatal(err)
 			}

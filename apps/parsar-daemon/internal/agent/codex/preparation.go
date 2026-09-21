@@ -36,8 +36,11 @@ func newSession(parent context.Context, req proto.PromptRequestPayload, out chan
 }
 
 func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (*Prepared, error) {
-	if req.WorkspaceReadOnly && (!proto.ValidWorkspaceReadPreparation(req) || cfg.harnessBinary == "") {
-		return nil, errors.New("codex: read-only preparation requires a private harness and a closed read configuration")
+	if req.RemoteEnvironment != nil {
+		return nil, errors.New("codex: remote executor environments are not supported")
+	}
+	if req.WorkspaceReadOnly {
+		return nil, errors.New("codex: workspace reads use the local Runtime interface")
 	}
 	if req.RequireExistingNativeSession && (!req.StrictResume || req.AgentStateKey == "" || req.WorkspaceReadOnly) {
 		return nil, errors.New("codex: native-session recovery requires strict private state")
@@ -58,14 +61,9 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	if err != nil {
 		return nil, err
 	}
-	if err := validateRemoteEnvironmentRequest(req); err != nil {
-		return nil, err
-	}
 	req.AgentStateKey = effectiveAgentStateKey(req)
 
-	if !req.WorkspaceReadOnly {
-		req.AgentOptions = executionOptions(req)
-	}
+	req.AgentOptions = executionOptions(req)
 	plan, skillRoots, err := prepareSessionPlan(parent, req, cfg)
 	if err != nil {
 		return nil, err
@@ -82,20 +80,9 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 		LogTag:          "codex-preparation",
 		Logger:          cfg.logger,
 	}
-	if req.WorkspaceReadOnly {
-		rpcCfg.Env = append(workspaceReadEnvironment(os.Environ()), plan.Env...)
-		rpcCfg.ExtraArgs = []string{"--workspace-read-only"}
-	}
 	for _, kv := range plan.ExtraConfig {
 		rpcCfg.ExtraArgs = append(rpcCfg.ExtraArgs, "-c", kv[0]+"="+kv[1])
 	}
-	harness, err := configurePrivateHarness(&rpcCfg, cfg.harnessBinary, req.RemoteEnvironment)
-	if err != nil {
-		cancelFn()
-		plan.Cleanup()
-		return nil, err
-	}
-
 	if err := configureManagedNetworkProcess(&rpcCfg, plan.managedRequirements); err != nil {
 		cancelFn()
 		plan.Cleanup()
@@ -103,7 +90,6 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	}
 
 	rpc := NewJSONRPCClient(rpcCfg)
-	defer harness.releaseWith(rpc)
 
 	s := &Session{
 		toolEnvironment:           req.LocalEnvironment != nil && req.LocalEnvironment.ToolEnvironment,
@@ -114,7 +100,6 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 		observeSubagentIdentities: req.ObserveSubagentIdentities && !req.DisableSubagents,
 		cfg:                       cfg,
 		rpc:                       rpc,
-		harness:                   harness,
 		cancelCtx:                 cancelCtx,
 		cancelFn:                  cancelFn,
 		waitDone:                  make(chan struct{}),
@@ -123,12 +108,9 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 		resolvedModel:             plan.Model,
 		interactions:              newPendingCodexInteractions(),
 	}
-	if req.WorkspaceReadOnly {
-		s.cleanup = readPreparationCleanup(rpc, s.cleanup)
-	}
 	plan.Cleanup = s.cleanup
 	p := &Prepared{
-		session: s, plan: plan, remote: req.RemoteEnvironment != nil, workspaceReadOnly: req.WorkspaceReadOnly,
+		session: s, plan: plan,
 		resumeID: req.AgentSessionID, strictResume: req.StrictResume, requireExistingNativeSession: req.RequireExistingNativeSession,
 		transferred: make(chan struct{}),
 	}
@@ -140,20 +122,12 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	if _, err := rpc.Start(cancelCtx, initParams); err != nil {
 		return p.preparationFailed(fmt.Errorf("codex: rpc start: %w", err))
 	}
-	if err := harness.verify(); err != nil {
-		return p.preparationFailed(err)
-	}
 	if req.DisableExecutionEnvironment {
 		if err := verifyNoExecutionEnvironment(cancelCtx, rpc); err != nil {
 			cancelFn()
 			_ = rpc.Close()
 			plan.Cleanup()
 			return nil, err
-		}
-	}
-	if req.RemoteEnvironment != nil {
-		if err := verifyRemoteEnvironment(cancelCtx, rpc); err != nil {
-			return p.preparationFailed(err)
 		}
 	}
 	if s.toolEnvironment {
@@ -180,4 +154,9 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 
 	go p.watchOwner()
 	return p, nil
+}
+
+func (p *Prepared) preparationFailed(cause error) (*Prepared, error) {
+	_ = p.Close()
+	return nil, cause
 }

@@ -18,8 +18,8 @@ func publicMCPHTTPServers(req proto.PromptRequestPayload) (map[string]mcpServerC
 	if req.MCPHTTPServers == nil {
 		return nil, nil
 	}
-	if req.DisableExecutionEnvironment == (req.RemoteEnvironment != nil) {
-		return nil, errors.New("codex: public HTTP MCP requires environment:none or a remote environment")
+	if !req.DisableExecutionEnvironment || req.RemoteEnvironment != nil {
+		return nil, errors.New("codex: public HTTP MCP requires environment:none")
 	}
 	servers := make(map[string]mcpServerConfig, len(*req.MCPHTTPServers))
 	for _, declaration := range *req.MCPHTTPServers {

@@ -25,7 +25,7 @@ func preparationFixture(t *testing.T) (proto.PromptRequestPayload, sessionConfig
 	t.Setenv("PARSAR_HOME", root)
 	t.Setenv("PARSAR_PREPARATION_FAKE", "1")
 	t.Setenv("PARSAR_PREPARATION_FRAMES", filepath.Join(root, "frames.jsonl"))
-	t.Setenv("PARSAR_PREPARATION_STATUS", filepath.Join(root, "remote-status"))
+	t.Setenv("PARSAR_PREPARATION_STATUS", filepath.Join(root, "environment-status"))
 	t.Setenv("PARSAR_PREPARATION_BLOCK", "")
 	t.Setenv("PARSAR_PREPARATION_OBSERVE", "")
 	for _, key := range []string{"CODEX_EXEC_SERVER_URL", "CODEX_EXEC_SERVER_NOISE_REGISTRY_URL", "CODEX_EXEC_SERVER_NOISE_ENVIRONMENT_ID", "CODEX_EXEC_SERVER_NOISE_AUTH_TOKEN"} {
@@ -42,9 +42,9 @@ func preparationFixture(t *testing.T) (proto.PromptRequestPayload, sessionConfig
 	req := proto.PromptRequestPayload{
 		AgentKind: "codex", AgentStateKey: "prepared-session", WorkDir: filepath.Join(root, "harness"),
 		ReleaseOnCompletion: true, StrictResume: true,
-		AgentOptions:      map[string]any{"model": "fixture-model", "model_verbosity": "medium"},
-		RemoteEnvironment: &proto.RemoteEnvironment{ID: "fixture-environment", WorkspaceDirectory: "/executor-only", ConnectionURL: "http://127.0.0.1:12345", ConnectionToken: "synthetic-harness-token"},
-		FunctionTools:     []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object","properties":{"value":{"type":"integer"}}}`)}},
+		AgentOptions:                map[string]any{"model": "fixture-model", "model_verbosity": "medium"},
+		DisableExecutionEnvironment: true,
+		FunctionTools:               []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object","properties":{"value":{"type":"integer"}}}`)}},
 	}
 	return req, cfg, root
 }
@@ -99,7 +99,7 @@ func assertPreparationOnly(t *testing.T, root string) {
 
 func preparedCatalogs(t *testing.T, root string) []string {
 	t.Helper()
-	files, err := filepath.Glob(filepath.Join(root, "parsar-daemon", "agent-sessions", "prepared-session", "model-catalog-*.json"))
+	files, err := filepath.Glob(filepath.Join(root, "parsar-daemon", "agent-sessions", "*", "model-catalog-*.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,6 @@ func TestPreparationFakeCodexProcess(t *testing.T) {
 			os.Exit(0)
 		}
 	}
-	fakePrivateHarnessEndpoint()
 	log, err := os.OpenFile(os.Getenv("PARSAR_PREPARATION_FRAMES"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		os.Exit(2)
@@ -153,27 +152,15 @@ func TestPreparationFakeCodexProcess(t *testing.T) {
 		switch frame.Method {
 		case "initialize":
 			result = map[string]string{"userAgent": "fixture-codex"}
-		case "environment/info":
+		case "environment/status":
 			if os.Getenv("PARSAR_PREPARATION_BLOCK") == "1" {
 				for {
 					time.Sleep(time.Second)
 				}
 			}
-			result = map[string]any{"shell": map[string]string{"path": "/bin/sh"}}
-		case "environment/status":
-			var params map[string]string
-			_ = json.Unmarshal(frame.Params, &params)
 			status := "unknown"
-			if params["environmentId"] == "remote" {
-				status = "ready"
-				if data, err := os.ReadFile(os.Getenv("PARSAR_PREPARATION_STATUS")); err == nil {
-					status = string(data)
-				}
-			}
-			if status == "blocked" {
-				for {
-					time.Sleep(time.Second)
-				}
+			if data, err := os.ReadFile(os.Getenv("PARSAR_PREPARATION_STATUS")); err == nil {
+				status = string(data)
 			}
 			result = map[string]string{"status": status}
 		case "config/read":
