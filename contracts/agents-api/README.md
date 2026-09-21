@@ -364,6 +364,9 @@ including further deployment qualification; this inventory describes merged beha
 [Environment Templates](environment-templates.md) provide tenant-owned CRUD/list
 and immutable Session resolution through the same hosted initialization. They do not
 select an E2B image or make unsupported initialization executable.
+The supported Docker configuration has [composed real acceptance](environment-templates.md#composed-initialization-acceptance)
+across the three harnesses, including frozen source deletion, cold continuation
+and cancellation. This does not close the remaining protocol/transport gaps.
 
 ## Delivery and verification
 

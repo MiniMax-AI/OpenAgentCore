@@ -51,6 +51,17 @@ def verify(marker):
         except OSError:
             continue
         raise AssertionError('installed package writable')
+    if config.get('installed_dependencies'):
+        import packaging
+        assert packaging.__version__ == '26.0', 'installed Python dependency missing'
+        assert subprocess.check_output(['semver', '1.2.3']).strip() == b'1.2.3', 'installed npm dependency missing'
+        assert subprocess.check_output(['jq', '-r', '.value'], input=b'{"value":42}').strip() == b'42', 'installed system dependency missing'
+        try:
+            Path('/usr/bin/jq').open('r+b').close()
+        except OSError:
+            pass
+        else:
+            raise AssertionError('installed system root writable')
     return {'marker': marker, 'server': config['server'], 'checks': config['checks']}
 
 def invoke(name, arguments):
@@ -121,13 +132,15 @@ def _skill(name, marker, output):
     return {'SKILL.md': manifest, 'check.py': script, 'proof.txt': marker + '\n'}
 
 
-def _package(server, marker, selected, skill=False):
+def _package(server, marker, selected, skill=False, *, installed_dependencies=False):
     manifest = {'name': server, 'description': 'Native MCP isolation proof.', 'mcpServers': './.mcp.json'}
     files = {'.mcp.json': json.dumps({'mcpServers': {server: {
         'command': 'python3', 'args': ['../server.py'], 'cwd': 'resources',
         'env_vars': ['PLUGIN_MCP_SELECTED']}}}), 'server.py': _SERVER,
         'resources/proof.json': json.dumps({'server': server, 'marker': marker,
-            'selected_sha256': hashlib.sha256(selected.encode()).hexdigest(), 'checks': _CHECKS})}
+            'selected_sha256': hashlib.sha256(selected.encode()).hexdigest(),
+            'installed_dependencies': installed_dependencies,
+            'checks': _CHECKS + (['installed_dependencies'] if installed_dependencies else [])})}
     if skill:
         manifest['skills'] = ['./skills']
         files.update({'skills/combined/' + path: body for path, body in _skill(
@@ -146,7 +159,7 @@ def _inline_plugin(name, files):
                        'data': base64.b64encode(archive.getvalue()).decode()}}
 
 
-def plugin_mcp_fixture():
+def plugin_mcp_fixture(*, installed_dependencies=False):
     """Return one hosted configuration and exact expected public proof bytes.
 
     Before a native Turn, the runner must create nonempty private canary files
@@ -157,11 +170,13 @@ def plugin_mcp_fixture():
     env = {'PLUGIN_MCP_SELECTED': 'selected-' + secrets.token_hex(24),
            'PLUGIN_MCP_UNSELECTED': 'unselected-' + secrets.token_hex(24)}
     servers = ['mcp_only_proof', 'combined_proof', 'generated_proof']
-    plugins = [_inline_plugin(name, _package(name, marker, env['PLUGIN_MCP_SELECTED'], skill=index == 1))
+    plugins = [_inline_plugin(name, _package(name, marker, env['PLUGIN_MCP_SELECTED'], skill=index == 1,
+                       installed_dependencies=installed_dependencies))
                for index, name in enumerate(servers[:2])]
     exact, parent = '/workspace/generated/mcp-exact', '/workspace/generated/skill-parent'
     generated = {exact + '/' + path: body for path, body in _package(
-        servers[2], marker, env['PLUGIN_MCP_SELECTED']).items()}
+        servers[2], marker, env['PLUGIN_MCP_SELECTED'],
+        installed_dependencies=installed_dependencies).items()}
     # Selecting the parent discovers a nested Skill, but never the child's MCP.
     child = _package('unselected_child_mcp', marker, env['PLUGIN_MCP_SELECTED'])
     child_manifest = json.loads(child['.codex-plugin/plugin.json'])
@@ -178,8 +193,9 @@ def plugin_mcp_fixture():
              " p = Path(name)\n p.parent.mkdir(parents=True, exist_ok=True)\n p.write_text(body)\n"
              "p = Path('/workspace/plugin-mcp-setup-count')\n"
              "p.write_text(str(int(p.read_text()) + 1) if p.exists() else '1')\n")
+    checks = _CHECKS + (['installed_dependencies'] if installed_dependencies else [])
     outputs = {'/workspace/outputs/' + server + '.json': (json.dumps(
-        {'marker': marker, 'server': server, 'checks': _CHECKS}, sort_keys=True) + '\n').encode()
+        {'marker': marker, 'server': server, 'checks': checks}, sort_keys=True) + '\n').encode()
         for server in servers}
     outputs.update({path: (marker + '\n').encode() for path in [
         '/workspace/outputs/combined-skill.txt', '/workspace/outputs/parent-skill.txt']})
@@ -190,7 +206,7 @@ def plugin_mcp_fixture():
               'Report only the server names and success or failure, never environment values.')
     return {'plugins': plugins, 'files': initial, 'setup_commands': [{'command': 'python3 -c ' + shlex.quote(setup)}],
             'capability_directories': [exact, parent], 'env': env, 'marker': marker,
-            'servers': servers, 'forbidden_servers': ['unselected_child_mcp'], 'outputs': outputs,
+            'servers': servers, 'checks': checks, 'forbidden_servers': ['unselected_child_mcp'], 'outputs': outputs,
             'prompt': prompt, 'source_paths': ['/workspace/generated', '/workspace/plugin-mcp-seed.json'],
             'hold_server': servers[0], 'hold_paths': {'invocation': '/workspace/plugin-mcp-hold/invocation.json',
                 'ticks': '/workspace/plugin-mcp-hold/ticks.jsonl'},
@@ -201,17 +217,17 @@ def plugin_mcp_fixture():
 def _assert_private_body(value, fixture):
     serialized = json.dumps(value)
     secrets_to_check = list(fixture['env'].values()) + [plugin['source']['data'] for plugin in fixture['plugins']]
-    secrets_to_check += [item['data'] for item in fixture['files']]
+    secrets_to_check += [item['data'] for item in fixture['files'] if item['type'] == 'inline']
     assert all(secret not in serialized for secret in secrets_to_check), 'Private initialization body exposed'
 
 
-def verify_plugin_mcp_metadata(client, session, fixture):
+def verify_plugin_mcp_metadata(client, session, fixture, *, expected_skills=()):
     expected = [{key: plugin[key] for key in ['type', 'name', 'description']} for plugin in fixture['plugins']]
     resource = client.beta.agents.environments.retrieve(session.environment.id).to_dict()
     assert session.to_dict()['environment']['capability_directories'] == fixture['capability_directories']
     for value in [session.to_dict()['environment'], resource]:
         assert value['plugins'] == expected
-        assert value['skills'] == [], 'Configured metadata must not expose discovered Skill inventory'
+        assert value['skills'] == list(expected_skills), 'Configured metadata must not expose discovered Skill inventory'
         assert 'env' not in value and 'setup_commands' not in value
         _assert_private_body(value, fixture)
     return {'plugins': expected, 'capability_directories': fixture['capability_directories']}
@@ -319,7 +335,7 @@ def verify_plugin_mcp_items(client, http, session_id, turn_id, fixture, *,
         if expected_status == 'completed':
             assert item.get('error') is None
             assert _tool_proof(item['output']) == {
-                'marker': fixture['marker'], 'server': item['server_label'], 'checks': _CHECKS}
+                'marker': fixture['marker'], 'server': item['server_label'], 'checks': fixture['checks']}
     if expected_status == 'completed':
         answers = [item for item in group if item['type'] == 'message' and item.get('role') == 'assistant']
         assert answers

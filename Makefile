@@ -58,6 +58,7 @@ node-deps:
 	pnpm install --frozen-lockfile
 
 check-claude-sdk: node-deps
+	python3 services/agents-api/deploy/claude/shell_prefix_test.py
 	pnpm --filter @parsar/claude-sdk-adapter test
 	$(MAKE) build-claude-sdk-runtime
 

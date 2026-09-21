@@ -228,11 +228,11 @@ test("initialized user env is applied inside native Bash, never SDK spawn env", 
   assert.equal(denied.hookSpecificOutput.permissionDecision, "deny");
 });
 
-test("installed system tools use the full native shell prefix and existing scratch", t => {
+test("installed system tools retain the native prefix boundary and existing scratch", t => {
   const { dirs, config } = fixture(t);
   assert.throws(() => new WorkspaceProfile(dirs.workspace, { ...config, system_packages: true }), /invalid_request/);
   const profile = new WorkspaceProfile(dirs.workspace, { ...config, tool_environment: true, system_packages: true });
-  assert.equal(profile.options.env.CLAUDE_CODE_SHELL_PREFIX, "/usr/local/bin/agents-api-tool-root");
+  assert.equal(profile.options.env.CLAUDE_CODE_SHELL_PREFIX, "/usr/local/bin/agents-api-claude-shell-prefix");
   assert.equal(profile.options.env.PARSAR_RUNTIME_TOOL_SCRATCH, dirs.scratch);
   assert.equal(profile.options.env.TMPDIR, dirs.scratch);
   assert.ok(profile.options.sandbox.filesystem.denyWrite.includes("/environment/packages/system"));

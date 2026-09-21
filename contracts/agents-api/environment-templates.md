@@ -321,6 +321,63 @@ and failed attempts remain separate evidence. This batch does not qualify new
 Plugin MCP paths on E2B, service-origin hosted MCP, OAuth, unlisted transports or
 complete upstream protocol compatibility.
 
+### Composed initialization acceptance
+
+`services/agents-api/tests/official_environment_composition.py` combines the
+existing public fixtures in one enabled-network configuration: inline/referenced
+files, caller env, system/npm/Python packages, ordered setup, an uploaded Skill
+reference, Skill/MCP Plugins and exact capability-directory roots. Pass the same
+configuration through a Template reference or inline hosted Session; Core resolves
+both through the shared initialization flow.
+
+Use a real standalone service, fixed official SDK/raw HTTP and native model API.
+The operator supplies package-network access and creates the nonempty private
+canaries required by `official_environment_plugin_mcp.py`. The uploaded Skill and
+each selected MCP server must actually use the installed dependencies; compare the
+complete expected Files/Artifacts, public metadata, Items and live event sequence.
+The fixture is not a synthetic model or a replacement execution loop.
+
+After the first successful Turn, change the Skill default and Template, delete
+source resources and mutable capability directories, then retry the original
+Session creation and restart Core/Runtime. Verify frozen bytes/configuration,
+owned native history, retained user edits and a setup count of one. Finally cancel
+an MCP call with observed ongoing effects and verify terminal Items, stopped
+effects, stable duplicate cancellation and owned resource cleanup. A successful
+initial Turn alone does not pass this composed workflow.
+
+The final Docker composition passed on 2026-09-21 with SDK 3.13.0/raw HTTP,
+independent Core/PostgreSQL, Kimi K3 (Codex/Claude) and MiniMax-M2.7. Core and the
+unchanged Codex/MiniMax images are from main `8eb3c089`; the Claude image includes
+the native-prefix correction described under System packages. All four public
+runs completed with zero cleanup errors:
+
+| Profile | Result under `~/.parsar/remediation/20260921/template-composed-acceptance/` |
+| --- | --- |
+| Codex template | `docker/codex/composition-template-f19l27kz/result.json` |
+| Codex inline | `docker/codex/composition-inline-dhioacmy/result.json` |
+| MiniMax template | `docker/mcode/composition-template-9txsyiut/result.json` |
+| Claude template | `docker/claude/composition-template-fmros4h_/result.json` |
+
+`acceptance-summary.json` records exact images, binary/result hashes and checks.
+Claude's final image is
+`sha256:287e7634d932c20edc0895d2095ae79c59cc4e82d2e74f6d4996b4d35f091458`.
+Its separate real native regression, `claude-prefix-regression/run-6bd24d52`,
+verified cross-call cwd, quoting/exit status, installed jq, private credential/history
+isolation and restricted-network HTTP/HTTPS allows, domain/subdomain/redirect denials
+and direct-IP/proxy-free denial. This supplements the public runs; it does not
+replace them. The final `make-check-candidate2.log` passed, including the prefix
+regression and 115 Claude SDK tests. An unchanged opt-in packaged scratch/large-output
+probe was skipped; live execution checks ran separately.
+
+Failed attempts remain evidence. A deterministic Claude MCP startup failure led
+to the prefix correction. A later workspace permission rejection on the final
+image remains unexplained because its original native input was not retained;
+the successful repeat used explicit foreground/sandbox instructions and did not
+change production authorization or acceptance assertions. It does not establish
+a fix for that separate rejection. Diagnostic images and the superseded Bash-input
+prototype are excluded from final qualification. These results close the supported
+Templates workflow, not all upstream semantics, transports or Provider combinations.
+
 ## Packaged Runtime initialization contract
 
 Template handlers and stores resolve public configuration without choosing a
@@ -388,6 +445,10 @@ package-controlled root. Codex uses its managed hook, Claude its full-shell pref
 and MiniMax Code its existing tool worker; native execution and cancellation retain
 their existing owners. Core carries only the required initialized-tool condition.
 Files operations retain their existing authorization and initialization boundary.
+The Claude image includes an adapter-specific prefix dispatcher: its exact Runtime
+MCP entry starts directly, while complete native Bash commands enter the tool root
+unchanged. This preserves native sandboxing and cwd receipts without wrapping MCP
+inside a second tool root or introducing Core engine branches.
 
 This is a single-UID tool environment, not a full operating-system service manager.
 Packages requiring additional Unix identities, privileged operations or background

@@ -348,6 +348,14 @@ Claude composes the existing MCP identity/observation profile with its workspace
 profile. Verify the complete native inventory before admitting tool identities;
 MCP allowlist patterns never grant local Bash or file authority. Only declared
 random bearer references enter native query env, with native Bash denial retained.
+With system packages, Claude uses its packaged shell-prefix dispatcher. Only the
+exact fixed Runtime stdio invocation bypasses the tool root; it immediately execs
+the existing isolated launcher. All other full command strings pass unchanged to
+the tool root. The native Bash sandbox and cwd receipt remain in their original
+order. Do not move wrapping into Bash input hooks or add a directory-state owner.
+Keep this native distinction in the adapter; Core and the common launcher do not
+select an engine. Per-server env cannot disable the native global prefix because
+Claude selects the executable before merging that env.
 Environment-origin literal HTTP headers remain rejected for the pinned Claude
 client because its interpolation and cross-origin forwarding change their meaning.
 MiniMax accepts environment stdio only. Its adapter reads the existing Session-private
