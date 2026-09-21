@@ -51,7 +51,7 @@ func Project(turn, kind string, sequence int64, raw json.RawMessage) ([]Update, 
 		if err := json.Unmarshal(raw, &p); err != nil {
 			return nil, err
 		}
-		if p.ID == "" || (p.Status != "in_progress" && p.Status != "completed") {
+		if p.ID == "" || (p.Status != "in_progress" && p.Status != "completed" && p.Status != "incomplete") {
 			return nil, errors.New("invalid message observation")
 		}
 		text := ""

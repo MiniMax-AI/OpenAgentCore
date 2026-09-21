@@ -80,6 +80,49 @@ func TestSubagentNativeFunctionResultDoesNotConsumeOutputIndex(t *testing.T) {
 	}
 }
 
+func TestSubagentCancelledPartialMessageSurvivesHistoryReplay(t *testing.T) {
+	s, _ := testStore(t)
+	owner := executionLease(t, s).Store()
+	tenant, session := newSubagentSession(t, s)
+	host, err := s.CreateDevice(t.Context(), tenant, "cancelled child", device.HashCredential(uuid.NewString()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = owner.BindSessionDevice(t.Context(), tenant, session.ID, host.ID); err != nil {
+		t.Fatal(err)
+	}
+	input := submitMessage(t, s, tenant, session.ID, "start")
+	transition(t, owner, tenant, session.ID, input.TurnID, TurnQueued, TurnInProgress)
+	message := subagentFact(proto.TypeSubagentItem, proto.SubagentItemPayload{
+		NativeID: "child", TurnID: "child-turn", ItemID: "partial", Kind: proto.TypeOutputMessage,
+		Payload: json.RawMessage(`{"id":"partial","status":"incomplete","text":"Partial native answer"}`),
+	})
+	finished := int64(101000)
+	terminal := subagentFact(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "child-turn", Status: TurnCancelled, CreatedAtMS: 100000, CompletedAtMS: &finished})
+	facts := []ExecutionEvent{
+		subagentIdentityEvent("child", "root", 100),
+		subagentFact(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "child-turn", Status: TurnInProgress, CreatedAtMS: 100000}),
+		message, terminal,
+		// A cold history read must preserve the partial answer without re-execution.
+		message, terminal,
+	}
+	if err := owner.AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 1, facts); err != nil {
+		t.Fatal(err)
+	}
+	child, err := s.GetSubagentIdentity(t.Context(), tenant, session.ID, "child")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.ListSubagentItems(t.Context(), tenant, session.ID, child.ID, "", 20, true)
+	if err != nil || len(items.Data) != 1 || items.Data[0].Status != "incomplete" || *items.Data[0].Content[0].Text != "Partial native answer" {
+		t.Fatal(items, err)
+	}
+	turns, err := s.ListSubagentTurns(t.Context(), tenant, session.ID, child.ID, "", 20, true)
+	if err != nil || len(turns.Data) != 1 || turns.Data[0].Status != TurnCancelled {
+		t.Fatal(turns, err)
+	}
+}
+
 func TestSubagentRootCompletionRetainsNativeSourceTime(t *testing.T) {
 	for _, status := range []string{TurnCompleted, TurnCancelled} {
 		t.Run(status, func(t *testing.T) {
