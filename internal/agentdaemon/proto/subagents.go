@@ -33,8 +33,9 @@ type SubagentLifecyclePayload struct {
 	OccurredAtMS int64  `json:"occurred_at_ms"`
 }
 
-// SubagentTurnPayload describes child-owned work. Timestamps are native facts;
-// adapters may convert seconds to milliseconds without inventing finer precision.
+// SubagentTurnPayload describes child-owned work. Timestamps are native facts or
+// an immutable receipt of confirmed cancellation when native history omits it.
+// Converting seconds to milliseconds does not establish finer precision.
 // Emit identity first, then an active Turn, its Items, and its terminal snapshot.
 // Unknown token measurements stay nil. Core owns all public resource IDs.
 type SubagentTurnPayload struct {

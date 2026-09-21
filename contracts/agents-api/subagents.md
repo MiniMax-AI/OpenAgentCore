@@ -39,7 +39,7 @@ Run and execution journal. No new transport, scheduler or model/tool loop exists
 | --- | --- |
 | Identity | Prove native ID, original parent and creation time; publish parents first |
 | Lifecycle effect | Prove a successful close/reopen and its original time; stable effect identity across history reads |
-| Child Turn | Supply native-owned ID, state and source timestamps, with known Usage only |
+| Child Turn | Supply native-owned ID, state and source timestamps, with known Usage only; a missing native cancellation timestamp requires a durable confirmed-effect receipt |
 | Child Item | Supply an ordered complete message/tool snapshot using the existing neutral vocabulary |
 | Coordination | Translate the native operation and actor/recipient identities without putting native tool names in Core |
 

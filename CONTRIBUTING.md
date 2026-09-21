@@ -1838,6 +1838,11 @@ Record the upstream revision, native admission patch hashes and worker-source
 provenance. The bounded patch checks the shared descendant-task limit inside the
 existing native SQLite admission transaction before start, without another
 scheduler. ACP initialization must acknowledge the applied limit before input.
+The native tool catalog applies the protected workspace policy to every child,
+not only the root's configured profile. Only the Session's authorized internal
+workspace MCP entry crosses the native child selector; this does not grant
+external MCP access or bypass the native profile's read/write restrictions.
+Initialization must acknowledge that protected tool policy before input as well.
 Subagent reads use the Session-private protected native database. Multi-agent
 workspace execution installs only the existing authorized workspace MCP entry in
 that private native configuration so children inherit the same tools; public MCP
