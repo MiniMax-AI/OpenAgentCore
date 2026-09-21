@@ -12,14 +12,14 @@ import (
 )
 
 func TestAcceptedEnginePlacements(t *testing.T) {
-	for _, engine := range []string{"codex", "claude_sdk", "unregistered"} {
+	for _, engine := range []string{"codex", "claude_sdk", "mcode", "unregistered"} {
 		for _, placement := range []string{"none", "openai_hosted", "self_hosted"} {
 			raw := json.RawMessage(`{"agent":{"model":"fixture"},"environment":{"type":"` + placement + `"`)
 			if placement == "self_hosted" {
-				raw = append(raw, []byte(`,"workspace_directory":"/work"`)...)
+				raw = append(raw, []byte(`,"workspace_directory":"/workspace"`)...)
 			}
 			raw = append(raw, []byte(`}}`)...)
-			want := engine != "unregistered" && !(engine == "claude_sdk" && placement == "self_hosted")
+			want := engine != "unregistered"
 			if err := (Policy{}).ValidateSessionConfiguration(engine, raw); (err == nil) != want {
 				t.Fatalf("%s/%s: %v", engine, placement, err)
 			}

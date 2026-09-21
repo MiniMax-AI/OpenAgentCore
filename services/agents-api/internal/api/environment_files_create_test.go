@@ -128,8 +128,8 @@ func TestEnvironmentFileCreateAuthorityAndUncertainResults(t *testing.T) {
 		t.Fatal("wrong byte count reported success", w.Code)
 	}
 	f.environment.Configuration = json.RawMessage(`{"type":"self_hosted","workspace_directory":"/workspace"}`)
-	f.writes = 0
-	if w := requestCreateEnvironmentFile(h, f.environment.ID, body, "files-key"); w.Code != 503 || f.writes != 0 {
-		t.Fatal("unsupported placement admitted", w.Code)
+	f.writes, f.wrongSize = 0, false
+	if w := requestCreateEnvironmentFile(h, f.environment.ID, body, "files-key"); w.Code != 200 || f.writes != 1 {
+		t.Fatal("enrolled local workspace write rejected", w.Code)
 	}
 }

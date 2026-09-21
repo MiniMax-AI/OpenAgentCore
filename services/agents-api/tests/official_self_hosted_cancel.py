@@ -72,7 +72,7 @@ def main():
         phase = settings["phase"]
         if phase == "create":
             request = {"agent": {"model": "test-model", "instructions": "Controlled cancellation admission."},
-                       "environment": {"type": "self_hosted", "workspace_directory": "/private-cancel-workspace"}}
+                       "environment": {"type": "self_hosted", "workspace_directory": "/workspace"}}
             main_session = sessions.create(**request)
             initial = sessions.create(**request, input="Keep this pending initial input.")
             later = sessions.create(**request)

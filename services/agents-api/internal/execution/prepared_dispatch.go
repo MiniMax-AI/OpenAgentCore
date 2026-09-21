@@ -9,11 +9,6 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
-type EnvironmentConnection struct {
-	URL, Token string
-	Release    func()
-}
-
 type EnvironmentRun struct {
 	Reservation store.EnvironmentInputReservation
 	Turn        store.Turn
@@ -44,7 +39,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, tenantID, sessionI
 	if err != nil {
 		return run, err
 	}
-	peer, err := d.Registry.LookupDevice(bound.Device.ID)
+	peer, err := d.authorizedPeer(ctx, bound.Device.ID)
 	if err != nil {
 		return run, err
 	}
@@ -69,11 +64,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, tenantID, sessionI
 		}
 		messages = append(messages, text)
 	}
-	release, err := d.configurePreparedEnvironment(owner, session, environment, bound.Device, &req)
-	if release != nil {
-		defer release()
-	}
-	if err != nil {
+	if err := d.configurePreparedEnvironment(session, environment, bound.Device, &req); err != nil {
 		return run, err
 	}
 	prepared, err := newPreparedStart(peer)

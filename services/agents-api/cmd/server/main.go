@@ -27,6 +27,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/api"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtime"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeenrollment"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -93,35 +94,18 @@ func run() error {
 	options := []api.Option{api.WithSkills(executionStore), api.WithSourceFiles(executionStore), api.WithSessionArtifacts(executionStore)}
 	var daemonHandler http.Handler
 	var registry *gateway.Registry
-	var checkOwnership func(context.Context) error
 	if wsURL := os.Getenv("AGENTS_API_DAEMON_WS_URL"); wsURL != "" {
 		daemonHandler, registry, err = runtime.NewGateway(executionStore, wsURL)
 		if err != nil {
 			return err
 		}
 		defer runtime.CloseConnections(registry)
-		// Constructors do not invoke ownership checks; publish only after setup.
-		checkOwnership = func(ctx context.Context) error {
-			if worker == nil {
-				return errors.New("execution worker is not initialized")
-			}
-			return worker.CheckOwnership(ctx)
-		}
-	}
-	executor, err := executorRegistry(executionStore, func() *execution.Worker { return worker }, checkOwnership)
-	if err != nil {
-		return err
-	}
-	if executor != nil {
-		defer executor.Close()
-		options = append(options, api.WithEnvironmentRemoteURL(executor.PublicURL()))
+		options = append(options, api.WithEnvironmentRemoteURL(wsURL))
 	}
 	if registry != nil {
 		dispatcher := &execution.Dispatcher{Store: executionStore, Registry: registry,
-			EnvironmentConnection: environmentConnection(executor), ManagedRuntimes: managed, Options: transientOptions}
-		if executor != nil {
-			dispatcher.CloseEnvironmentConnections = executor.Close
-		}
+			ManagedRuntimes: managed, Options: transientOptions}
+
 		worker, err = execution.StartWorker(ctx, dispatcher)
 		if err != nil {
 			return err
@@ -135,26 +119,24 @@ func run() error {
 			}
 		}()
 		options = append(options, api.WithExecution(worker), api.WithEnvironmentDirectoryReader(worker), api.WithEnvironmentFileWriter(worker))
+		kinds, err := enabledHarnesses(engine, managed)
+		if err != nil {
+			return err
+		}
+		options = append(options, api.WithHarnesses(kinds))
 		if managed != nil && (managed.DefaultProvider != "" || len(managed.EngineProviders) > 0) {
-			kinds := make([]string, 0, len(managed.EngineProviders))
-			for kind := range managed.EngineProviders {
-				kinds = append(kinds, kind)
-			}
-			options = append(options, api.WithHostedEnvironments(), api.WithHarnesses(kinds))
+			options = append(options, api.WithHostedEnvironments())
 		}
 	}
 	handler, err := api.NewHandler(executionStore, auth, engine, options...)
 	if err != nil {
 		return err
 	}
-	if daemonHandler != nil || executor != nil {
+	if daemonHandler != nil {
 		mux := http.NewServeMux()
-		if daemonHandler != nil {
-			mux.Handle("/api/v1/agent-daemon/", daemonHandler)
-		}
-		if executor != nil {
-			mux.Handle("/cloud/environment/", executor.Handler())
-		}
+		mux.Handle("/api/v1/agent-daemon/", daemonHandler)
+		mux.Handle("/api/v1/agent-daemon/enroll", runtimeenrollment.EnrollmentHandler(executionStore))
+
 		mux.Handle("/", handler)
 		handler = mux
 	}

@@ -32,10 +32,7 @@ func (w *Worker) bindDevice(ctx context.Context, tenantID, sessionID string) (bo
 	if err := json.Unmarshal(session.Configuration, &snapshot); err != nil {
 		return false, err
 	}
-	if snapshot.Environment != nil && snapshot.Environment.Type == "self_hosted" && w.dispatcher.EnvironmentConnection == nil {
-		return false, nil
-	}
-	return w.bindSessionDevice(ctx, session, func(id string) bool { return w.ready(id, session.Engine, snapshot) })
+	return w.bindSessionDevice(ctx, session, func(id string) bool { return w.ready(ctx, id, session.Engine, snapshot) })
 }
 
 func (w *Worker) bindSessionDevice(ctx context.Context, session store.Session, ready func(string) bool) (bool, error) {
@@ -43,20 +40,19 @@ func (w *Worker) bindSessionDevice(ctx context.Context, session store.Session, r
 	if json.Unmarshal(session.Configuration, &snapshot) != nil {
 		return false, store.ErrInvalidInput
 	}
-	if snapshot.Environment != nil && snapshot.Environment.Type == "openai_hosted" {
+	if snapshot.Environment != nil && (snapshot.Environment.Type == "openai_hosted" || snapshot.Environment.Type == "self_hosted") {
 		environment, err := w.dispatcher.Store.GetSessionEnvironment(ctx, session.TenantID, session.ID)
 		if err != nil {
 			return false, err
 		}
-		placement, err := parseEnvironmentPlacement(environment.Configuration)
-		if err != nil {
+		if _, err := parseEnvironmentPlacement(environment.Configuration); err != nil {
 			return false, nil
 		}
 		bound, err := w.dispatcher.Store.GetSessionDevice(ctx, session.TenantID, session.ID)
 		if errors.Is(err, store.ErrNotFound) {
 			return false, nil
 		}
-		return err == nil && environmentDeviceMatches(session, environment, bound, placement) && ready(bound.ID), err
+		return err == nil && environmentDeviceMatches(session, environment, bound) && ready(bound.ID), err
 	}
 	bound, err := w.dispatcher.Store.GetSessionDevice(ctx, session.TenantID, session.ID)
 	if err == nil {
@@ -79,8 +75,8 @@ func (w *Worker) bindSessionDevice(ctx context.Context, session store.Session, r
 	return false, nil
 }
 
-func (w *Worker) ready(deviceID, engine string, snapshot Snapshot) bool {
-	peer, err := w.dispatcher.Registry.LookupDevice(deviceID)
+func (w *Worker) ready(ctx context.Context, deviceID, engine string, snapshot Snapshot) bool {
+	peer, err := w.dispatcher.authorizedPeer(ctx, deviceID)
 	if err != nil {
 		return false
 	}

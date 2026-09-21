@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -86,7 +87,8 @@ type Session struct {
 	owner *ownerLease
 
 	// heartbeat persists daemon-advertised capability snapshots.
-	heartbeat HeartbeatTouch
+	heartbeat      HeartbeatTouch
+	credentialHash string
 
 	hbMu       sync.Mutex
 	lastSeenAt time.Time
@@ -496,6 +498,7 @@ func (s *Session) handleHeartbeat(env proto.Envelope) {
 	defer cancel()
 	status, err := s.heartbeat.TouchAgentDaemonHeartbeat(ctx, device.Heartbeat{
 		RuntimeID:           s.DeviceID,
+		CredentialHash:      s.credentialHash,
 		DaemonVersion:       p.DaemonVersion,
 		ActiveRequests:      p.ActiveRequests,
 		HeartbeatTimestamp:  p.Timestamp,
@@ -643,4 +646,10 @@ func (s *Session) dispatch(env proto.Envelope) {
 		return
 	}
 	s.dispatchToSubscriber(env)
+}
+
+// AuthenticatedWith compares the credential digest captured by the HTTP upgrade.
+// The digest is never accepted from a daemon frame.
+func (s *Session) AuthenticatedWith(digest string) bool {
+	return s.credentialHash != "" && subtle.ConstantTimeCompare([]byte(s.credentialHash), []byte(digest)) == 1
 }

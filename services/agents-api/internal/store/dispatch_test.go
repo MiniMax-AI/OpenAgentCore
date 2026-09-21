@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"sync"
@@ -85,8 +86,8 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 	h.url = server.URL
 	t.Cleanup(func() { server.Close(); runtime.CloseConnections(h.registry) })
 	u, _ := url.Parse(wsURL)
-	u.RawQuery = url.Values{"device_id": {h.device.ID}, "token": {secret}, "version": {proto.Version}}.Encode()
-	h.conn, _, err = websocket.DefaultDialer.Dial(u.String(), nil)
+	u.RawQuery = url.Values{"device_id": {h.device.ID}, "version": {proto.Version}}.Encode()
+	h.conn, _, err = websocket.DefaultDialer.Dial(u.String(), http.Header{"Authorization": {"Bearer " + secret}})
 	if err != nil {
 		t.Fatal("device connection failed")
 	}

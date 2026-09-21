@@ -1,20 +1,15 @@
-# Native Codex executor for Agents API
+# Runtime filesystem helpers
 
-`agents-api-codex-executor` is a separately named launcher for a third-party Agents
-API registry. It embeds the unmodified Codex 0.153.4 executor libraries from commit
-`3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`. Upstream owns registration, Noise,
-reconnection, files, process execution and graceful shutdown. This package owns
-explicit connection configuration and its service-issued credential.
-
-This is an optional Linux x86_64 component. The Agents API service and other daemon
-adapters build independently. It does not enable public `self_hosted` admission or
-establish full Environment compatibility. Stock `codex exec-server` retains its
-API-key domain restriction; this launcher does not change that command.
+This package provides three bounded local filesystem helpers reused by the V1
+Runtime: directory listing, atomic file installation and workspace output export.
+The daemon, native harness, tools and workspace are colocated. The former separate
+Codex executor launcher and registry/Noise route are retired; source is retained
+in Git history. The package and helper names remain to avoid unrelated renaming.
 
 ## Build and installation
 
-Install Rust 1.95.0 with rustfmt and Clippy, a C toolchain, pkg-config and OpenSSL
-development headers. Build with the committed Cargo lock:
+Install Rust 1.95.0 with rustfmt and Clippy and a C toolchain. Build with the
+committed Cargo lock:
 
 ```sh
 make check-agents-executor
@@ -22,28 +17,18 @@ make build-agents-executor
 ```
 
 Build state stays under `~/.parsar/`. `CARGO_HOME`, `CARGO_TARGET_DIR` and
-`AGENTS_EXECUTOR_BUILD_DIR` can select existing absolute cache/output locations.
-The build copies only this package into its build context; no product or API
-service code is needed. The resulting GNU binary requires compatible glibc and
-OpenSSL runtime libraries. This is not a portable musl artifact.
-
-Install the exact official native Codex 0.153.4 package separately. Keep its
-platform resource directory intact, including any bundled sandbox helper.
-`--codex-bin` must point to its actual native executable, not the npm JavaScript
-entry point. The launcher checks its version and creates a stable
-`codex-linux-sandbox` alias under its private state directory. Native filesystem,
-argv0 and sandbox helper modes execute that official binary; none are copied into
-the launcher. System/container sandbox permissions must support the requested
-native policy. Do not interpret an unsandboxed command test as sandbox validation.
+`AGENTS_EXECUTOR_BUILD_DIR` select absolute cache/output locations. The build
+copies only this package and produces Linux x86_64 GNU binaries. Install helpers
+at operator-controlled paths outside the writable workspace. Runtime packaging
+supplies the selected harness and its native isolation independently.
 
 ## Scoped directory helper
 
-The build also emits `agents-api-codex-directory` for the current directory-listing
+The build emits `agents-api-codex-directory` for the current directory-listing
 adapter gap. Install it at an operator-controlled absolute path on the executor,
 outside the writable workspace. Its three argv values are the authorized absolute
 workspace root, a relative directory (empty for the root), and a limit of 1–4096.
-Invoke it directly through the existing authenticated native process API with a
-read-only filesystem policy and restricted network. No shell or model is involved.
+Runtime invokes it locally with the authorized filesystem policy. No shell or model is involved.
 The helper itself is a local program, not an authorization service: the caller
 must bind the root to the exact authorized owner and validate the installation.
 
@@ -63,8 +48,8 @@ This one-level observation has no order, paging or snapshot guarantee. Renames m
 leave an operation reading the directory it already opened; workspace replacement
 and cross-tenant placement remain the caller's responsibility. The helper does
 not change stock native filesystem methods, create a daemon connection, or enable
-public Files. The [native fixture](../../services/agents-api/tests/native/directory/README.md)
-qualifies the standalone helper independently of later adapter/public wiring.
+public Files. The package tests qualify the bounded helper; public Runtime acceptance separately
+checks authorization and Files behavior.
 
 ## Scoped output exporter
 
@@ -94,8 +79,8 @@ the helper alone does not enable public Artifacts.
 The optional `agents-api-codex-write` helper addresses two pinned native write
 limitations: hard-link targets are modified in place, and base64 encoding a
 50 MiB file exceeds the native 64 MiB message bound. Install this helper outside
-the writable workspace and invoke it directly through the native process API,
-with restricted network and the required helper/runtime reads. The qualified
+the writable workspace and invoke it locally through the existing Runtime installer, with restricted network
+and the required helper/runtime reads. The qualified
 installer policy grants write access to one dedicated per-Environment parent
 containing only workspace and staging; ordinary native tools can write only the
 workspace. Keep credentials, native history and other Environments outside that
@@ -110,8 +95,7 @@ the destination filesystem. Symlink traversal and cross-filesystem replacement
 are rejected; there is no copy fallback. The former three-argument private CLI
 is no longer accepted. Stream those bytes in bounded native stdin
 chunks, followed by their 32-byte binary SHA-256 digest. This is one private frame;
-there is no second request on that process. The native process protocol has no
-stdin-close method, so the digest terminates the frame without waiting for EOF.
+there is no second request on that process. The digest terminates the private frame without waiting for EOF.
 Extra bytes after the frame are not consumed. A process/write accepted receipt
 means queued input, not committed file contents.
 
@@ -146,54 +130,10 @@ A missing receipt remains unknown and must not trigger automatic replay. This
 helper does not fence a replacement owner after remote transport or service loss;
 public admission still needs operation ownership and recovery handling.
 
-## Connect an executor
-
-An operator creates an executor principal key with
-[`agents-api-environment-key`](../../services/agents-api/README.md#native-executor-transport-prerequisite).
-The key may be issued before a Session exists, or optionally restricted to one
-existing Environment. Redirect its JSON output to a mode-0600 regular file under
-`~/.parsar/` and transfer that credential to its executor. Keep caller, database,
-daemon and model-provider credentials outside this compute.
-
-```sh
-~/.parsar/build/agents-executor/agents-api-codex-executor \
-  --remote https://agents.example.com \
-  --environment-id "$ENVIRONMENT_ID" \
-  --credentials "$HOME/.parsar/executor.json" \
-  --codex-bin /opt/codex/bin/codex
-```
-
-The URL is an explicitly trusted service endpoint. HTTPS uses native certificate
-and hostname validation; HTTP is accepted only for loopback development.
-Userinfo, query strings and fragments are rejected. Native custom CA support uses
-`CODEX_CA_CERTIFICATE` or `SSL_CERT_FILE`; no certificate verification bypass is
-provided. Native HTTP(S) proxy behavior is retained.
-
-The JSON requires a canonical nonzero UUID `key_id` and the issued 43-character
-base64url `executor_token`. The optional `environment_id` may be omitted or null
-for a principal key. If present, it must be a canonical UUID equal to the requested
-Environment. The server authorizes the key's stored principal and restrictions;
-file metadata supplies local validation only.
-
-The credential is read once at startup, without ambient OpenAI login/API-key
-fallback or raw secret command-line arguments. At the cutover, update the launcher
-and replace old credential files together; files without `key_id` are rejected.
-Rotate the key through the operator command, replace the private file, and restart
-this launcher. Revocation closes the authorized connection through registry
-checks; it is not immediate process quiescence.
-
-Executor state and helper aliases live under
-`~/.parsar/codex-executor/<environment-id>/` (or the absolute `PARSAR_HOME`).
-The native executor's `CODEX_HOME` is scoped there independently of a user's Codex
-login. Run the executable under an ordinary service supervisor. SIGINT and SIGTERM
-ask the native library to shut down its sessions/processes before returning.
-Generated code shares this executor's process user and filesystem visibility;
-a private credential file or separate directory is not filesystem isolation.
-
 ## Verification boundaries
 
-`make check-agents-executor` checks configuration, scoped credential handling,
-formatting and Clippy. Native transport, TLS, sandbox/helper behavior and actual
-model calls require the opt-in [Environment fixtures](../../services/agents-api/tests/native/README.md).
-Record their prerequisites and results separately; unit tests and successful
-linking alone do not establish a usable executor deployment.
+`make check-agents-executor` runs helper tests, formatting and Clippy. The shared
+[public acceptance](../../services/agents-api/tests/official_user_runtime.py)
+checks execution, Files/Artifacts, cancellation and recovery through an enrolled
+Runtime. It requires real model APIs and independently deployed Core/Runtime;
+helper unit tests alone do not establish deployment or complete protocol compatibility.

@@ -2,9 +2,7 @@ package execution
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentcapabilities"
@@ -30,7 +28,7 @@ type environmentPlacement struct {
 // does not provision a Runtime, validate live authority, or admit hosted creation.
 func LocalWorkspaceConfiguration(configuration json.RawMessage) bool {
 	placement, err := parseEnvironmentPlacement(configuration)
-	return err == nil && placement.Type == "openai_hosted"
+	return err == nil && (placement.Type == "openai_hosted" || placement.Type == "self_hosted")
 }
 
 func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacement, error) {
@@ -40,7 +38,8 @@ func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacem
 	}
 	switch placement.Type {
 	case "self_hosted":
-		if placement.WorkspaceDirectory != "" && len(placement.CapabilityDirectories) == 0 {
+		if placement.WorkspaceDirectory == "/workspace" && len(placement.CapabilityDirectories) == 0 {
+			placement.NetworkAccess = "enabled"
 			return placement, nil
 		}
 	case "openai_hosted":
@@ -76,46 +75,29 @@ func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacem
 	return placement, store.ErrInvalidInput
 }
 
-func environmentDeviceMatches(session store.Session, environment store.Environment, bound store.ExecutionDevice, placement environmentPlacement) bool {
+func environmentDeviceMatches(session store.Session, environment store.Environment, bound store.ExecutionDevice) bool {
 	if environment.SessionID != session.ID || environment.TenantID != session.TenantID {
 		return false
 	}
-	if placement.Type == "openai_hosted" {
-		return bound.EnvironmentID == environment.ID
-	}
-	return bound.EnvironmentID == ""
+	return bound.EnvironmentID == environment.ID
 }
 
-func (d *Dispatcher) configurePreparedEnvironment(ctx context.Context, session store.Session, environment store.Environment, bound store.ExecutionDevice, req *proto.PromptRequestPayload) (func(), error) {
+func (d *Dispatcher) configurePreparedEnvironment(session store.Session, environment store.Environment, bound store.ExecutionDevice, req *proto.PromptRequestPayload) error {
 	placement, err := parseEnvironmentPlacement(environment.Configuration)
-	if err != nil || !environmentDeviceMatches(session, environment, bound, placement) {
-		return nil, store.ErrInvalidInput
+	if err != nil || !environmentDeviceMatches(session, environment, bound) {
+		return store.ErrInvalidInput
 	}
-	if placement.Type == "openai_hosted" {
-		if placement.SystemPackages && !placement.ToolEnvironment {
-			return nil, store.ErrInvalidInput
+	if placement.SystemPackages && !placement.ToolEnvironment {
+		return store.ErrInvalidInput
+	}
+	req.LocalEnvironment = &proto.LocalEnvironment{ID: environment.ID, Capabilities: len(placement.Plugins)+len(placement.CapabilityDirectories) > 0, ToolEnvironment: placement.ToolEnvironment, SystemPackages: placement.SystemPackages}
+	for _, metadata := range placement.Skills {
+		if store.ValidateInstalledSkillMetadata(metadata) != nil {
+			return store.ErrInvalidInput
 		}
-		req.LocalEnvironment = &proto.LocalEnvironment{ID: environment.ID, Capabilities: len(placement.Plugins)+len(placement.CapabilityDirectories) > 0, ToolEnvironment: placement.ToolEnvironment, SystemPackages: placement.SystemPackages}
-		for _, metadata := range placement.Skills {
-			if store.ValidateInstalledSkillMetadata(metadata) != nil {
-				return nil, store.ErrInvalidInput
-			}
-			req.LocalEnvironment.Capabilities = true
-		}
-		req.LocalEnvironment.NetworkAccess = placement.NetworkAccess
-		req.LocalEnvironment.AllowedDomains = append([]string(nil), placement.AllowedDomains...)
-		return nil, nil
+		req.LocalEnvironment.Capabilities = true
 	}
-	if d.EnvironmentConnection == nil {
-		return nil, errors.New("environment connection resolver is not configured")
-	}
-	connection, err := d.EnvironmentConnection(ctx, session, environment)
-	if err != nil {
-		return connection.Release, err
-	}
-	if connection.URL == "" || connection.Token == "" || connection.Release == nil {
-		return connection.Release, errors.New("environment connection is incomplete")
-	}
-	req.RemoteEnvironment = &proto.RemoteEnvironment{ID: environment.ID, WorkspaceDirectory: placement.WorkspaceDirectory, ConnectionURL: connection.URL, ConnectionToken: connection.Token}
-	return connection.Release, nil
+	req.LocalEnvironment.NetworkAccess = placement.NetworkAccess
+	req.LocalEnvironment.AllowedDomains = append([]string(nil), placement.AllowedDomains...)
+	return nil
 }

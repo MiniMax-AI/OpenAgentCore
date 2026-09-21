@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
@@ -69,8 +70,8 @@ func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 	}
 	dial := func(token string) (*websocket.Conn, error) {
 		u, _ := url.Parse(wsURL)
-		u.RawQuery = url.Values{"device_id": {owner.DeviceID}, "token": {token}, "version": {proto.Version}}.Encode()
-		conn, response, err := websocket.DefaultDialer.Dial(u.String(), nil)
+		u.RawQuery = url.Values{"device_id": {owner.DeviceID}, "version": {proto.Version}}.Encode()
+		conn, response, err := websocket.DefaultDialer.Dial(u.String(), http.Header{"Authorization": {"Bearer " + token}})
 		if response != nil && response.Body != nil {
 			response.Body.Close()
 		}

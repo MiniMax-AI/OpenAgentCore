@@ -144,5 +144,6 @@ provider ID on unknown outcomes. They do not create billable resources or qualif
 E2B security, enrollment or model execution. Full acceptance must separately use
 all three real native harnesses, public SDK/raw HTTP, Files/Artifacts, key
 rotation/revocation, reconnect/history recovery, cancellation and explicit
-application-owned cleanup. The older `official_e2b_v1.py` fixture exercises the
-former Core-managed route and is not acceptance for this user-managed entry point.
+application-owned cleanup. `tests/official_user_runtime.py` supplies the shared
+public execution checks. The former Core-managed `official_e2b_v1.py` fixture is
+retired; its original source and evidence remain in Git history.

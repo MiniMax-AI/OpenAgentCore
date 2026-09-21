@@ -26,11 +26,7 @@ func (d *Dispatcher) readPreparedDirectory(ctx context.Context, peer *gateway.Se
 
 func (d *Dispatcher) withPreparedWorkspace(owner context.Context, peer *gateway.Session, session store.Session, environment store.Environment, bound store.ExecutionDevice, consume func(context.Context, string) error) error {
 	req := proto.PromptRequestPayload{AgentKind: session.Engine, AgentStateKey: "agents-api-" + session.ID, StrictResume: true, ReleaseOnCompletion: true, WorkspaceReadOnly: true}
-	release, err := d.configurePreparedEnvironment(owner, session, environment, bound, &req)
-	if release != nil {
-		defer release()
-	}
-	if err != nil {
+	if err := d.configurePreparedEnvironment(session, environment, bound, &req); err != nil {
 		return ErrExecutionUnavailable
 	}
 	prepared, err := newPreparedStart(peer)

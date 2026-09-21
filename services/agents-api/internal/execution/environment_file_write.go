@@ -66,7 +66,7 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 		return fileWriteResult{err: store.ErrNotFound}
 	}
 	placement, err := parseEnvironmentPlacement(environment.Configuration)
-	if err != nil || placement.Type != "openai_hosted" {
+	if err != nil || (placement.Type != "openai_hosted" && placement.Type != "self_hosted") {
 		return unavailable
 	}
 	session, err := w.dispatcher.Store.GetSession(ctx, environment.TenantID, environment.SessionID)
@@ -74,10 +74,10 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 		return fileWriteResult{err: err}
 	}
 	bound, err := w.dispatcher.Store.GetSessionDevice(ctx, session.TenantID, session.ID)
-	if err != nil || !environmentDeviceMatches(session, environment, bound, placement) || w.dispatcher.Registry == nil {
+	if err != nil || !environmentDeviceMatches(session, environment, bound) || w.dispatcher.Registry == nil {
 		return unavailable
 	}
-	peer, err := w.dispatcher.Registry.LookupDevice(bound.ID)
+	peer, err := w.dispatcher.authorizedPeer(ctx, bound.ID)
 	if err != nil {
 		return unavailable
 	}

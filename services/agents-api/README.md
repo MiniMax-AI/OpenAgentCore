@@ -490,6 +490,24 @@ is stored; there is no secret read-back. `--rotate` and `--revoke` require the s
 management ID and full principal; neither changes the key's restriction. Unknown
 historical creators cannot enroll. API bearer keys and executor keys are separate.
 
+Inside the qualified Linux Runtime, install that JSON as an owned mode-0600
+`$PARSAR_HOME/parsar-daemon/executor-key.json`, outside the tool workspace. The
+packaged Runtime supplies its native harness, filesystem helpers and isolation
+profile. Start its daemon with the values returned by Session creation:
+
+```bash
+parsar-daemon connect --remote "$REMOTE_URL" \
+  --environment-id "$ENVIRONMENT_ID" \
+  --credential-file "$PARSAR_HOME/parsar-daemon/executor-key.json"
+```
+
+Use TLS outside loopback. Enrollment supplies the trusted Session identity; do
+not inject an unrelated `PARSAR_RUNTIME_SESSION_ID`. The daemon persists its
+immutable Environment binding beside the key and refuses to adopt another
+Environment's existing native history. Rotation keeps the same key ID: update the
+protected file, then restart the daemon to authenticate with the new token.
+WebSocket authentication uses the `Authorization` header, never a URL token.
+
 The private `POST /api/v1/agent-daemon/enroll` endpoint accepts that executor bearer
 and `{"environment_id":"..."}`. It returns `device_id`, `session_id`,
 `environment_id` and `workspace_directory`, never another credential. Enrollment

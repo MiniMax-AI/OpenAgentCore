@@ -12,7 +12,6 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	sandboxdocker "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/docker"
-	sandboxe2b "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/e2b"
 	"github.com/moby/moby/client"
 )
 
@@ -21,13 +20,6 @@ type managedRuntimeConfig struct {
 	EngineProviders map[string]string              `json:"engine_providers"`
 	DefaultProvider string                         `json:"default_provider"`
 	Docker          map[string]managedDockerConfig `json:"docker"`
-	E2B             map[string]managedE2BConfig    `json:"e2b"`
-}
-
-type managedE2BConfig struct {
-	APIKeyFile   string `json:"api_key_file"`
-	Template     string `json:"template"`
-	LeaseSeconds int    `json:"lease_seconds"`
 }
 
 type managedDockerConfig struct {
@@ -57,13 +49,12 @@ func managedRuntimes() (*execution.RuntimeProviders, func(), error) {
 	var config managedRuntimeConfig
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&config) != nil || decoder.Decode(new(any)) != io.EOF || len(config.Docker)+len(config.E2B) == 0 {
+	if decoder.Decode(&config) != nil || decoder.Decode(new(any)) != io.EOF || len(config.Docker) == 0 {
 		return nil, closeAll, errors.New("invalid managed Runtime configuration")
 	}
 	if config.DefaultProvider != "" {
 		_, dockerOK := config.Docker[config.DefaultProvider]
-		_, e2bOK := config.E2B[config.DefaultProvider]
-		if !dockerOK && !e2bOK {
+		if !dockerOK {
 			return nil, closeAll, errors.New("managed default provider is not configured")
 		}
 	}
@@ -80,8 +71,7 @@ func managedRuntimes() (*execution.RuntimeProviders, func(), error) {
 	for kind, key := range config.EngineProviders {
 		_, qualified := (engine.Catalog{}).Lookup(kind)
 		_, dockerOK := config.Docker[key]
-		_, e2bOK := config.E2B[key]
-		if !qualified || key == "" || (!dockerOK && !e2bOK) {
+		if !qualified || key == "" || (!dockerOK) {
 			return nil, closeAll, errors.New("invalid managed engine provider mapping")
 		}
 	}
@@ -92,20 +82,6 @@ func managedRuntimes() (*execution.RuntimeProviders, func(), error) {
 		}
 	}
 	result := &execution.RuntimeProviders{EngineProviders: config.EngineProviders, CoreURL: config.CoreURL, DefaultProvider: config.DefaultProvider, Providers: map[string]sandbox.Provider{}}
-	for key, entry := range config.E2B {
-		if _, duplicate := config.Docker[key]; duplicate {
-			return nil, closeAll, errors.New("managed provider keys must be unique")
-		}
-		keyBytes, err := os.ReadFile(entry.APIKeyFile)
-		if err != nil {
-			return nil, closeAll, errors.New("cannot read managed E2B API key file")
-		}
-		provider, err := sandboxe2b.New(sandboxe2b.Config{InstallationID: key, APIKey: strings.TrimSpace(string(keyBytes)), Template: entry.Template, LeaseSeconds: entry.LeaseSeconds})
-		if err != nil {
-			return nil, closeAll, errors.New("invalid managed E2B provider configuration")
-		}
-		result.Providers[key] = provider
-	}
 	for key, entry := range config.Docker {
 		// V1 qualifies a local Docker daemon. Remote executor/provider transports are
 		// separate work; do not silently inherit a different backend from the shell.

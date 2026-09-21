@@ -104,7 +104,9 @@ type SupportedAgentKind struct {
 // Heartbeat is the WebSocket daemon heartbeat
 // payload after gateway normalization.
 type Heartbeat struct {
-	RuntimeID           string
+	RuntimeID string
+	// CredentialHash comes from gateway authentication, never a daemon frame.
+	CredentialHash      string
 	DaemonVersion       string
 	ActiveRequests      int
 	HeartbeatTimestamp  int64

@@ -21,11 +21,12 @@ type Device struct {
 	ID             pgtype.UUID        `json:"id"`
 	TenantID       pgtype.UUID        `json:"tenant_id"`
 	Name           string             `json:"name"`
-	CredentialHash string             `json:"credential_hash"`
+	CredentialHash pgtype.Text        `json:"credential_hash"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	LastSeenAt     pgtype.Timestamptz `json:"last_seen_at"`
 	RevokedAt      pgtype.Timestamptz `json:"revoked_at"`
 	EnvironmentID  pgtype.UUID        `json:"environment_id"`
+	ExecutorKeyID  pgtype.UUID        `json:"executor_key_id"`
 }
 
 type Environment struct {
@@ -138,6 +139,14 @@ type RuntimeAllocation struct {
 	KeptAt         pgtype.Timestamptz `json:"kept_at"`
 	ReleasedAt     pgtype.Timestamptz `json:"released_at"`
 	Initialization string             `json:"initialization"`
+}
+
+type RuntimeDeviceAuthority struct {
+	ID             pgtype.UUID `json:"id"`
+	TenantID       pgtype.UUID `json:"tenant_id"`
+	Name           string      `json:"name"`
+	EnvironmentID  pgtype.UUID `json:"environment_id"`
+	CredentialHash string      `json:"credential_hash"`
 }
 
 type Session struct {

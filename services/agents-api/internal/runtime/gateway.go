@@ -16,8 +16,8 @@ type DeviceStore interface {
 	gateway.HeartbeatTouch
 }
 
-// NewGateway exposes the existing internal daemon protocol. It does not implement
-// the public Agents API self_hosted executor contract or grant Session API access.
+// NewGateway serves the V1 daemon executor transport for both managed and
+// user-managed Runtime. Its credentials never grant public Session API access.
 func NewGateway(s DeviceStore, publicWSURL string) (http.Handler, *gateway.Registry, error) {
 	u, err := url.Parse(publicWSURL)
 	if err != nil || s == nil || (u.Scheme != "ws" && u.Scheme != "wss") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "/api/v1/agent-daemon/ws" {

@@ -43,9 +43,7 @@ jobs:
             ~/.parsar/cache/executor-cargo
             ~/.parsar/cache/executor-target
           key: agents-executor-${{ runner.os }}-1.95.0-${{ hashFiles('packages/codex-executor/Cargo.lock') }}
-      - name: Check native launcher and independent release build
+      - name: Check shared workspace helpers and independent release build
         run: |
           make check-agents-executor
           make build-agents-executor
-          ~/.parsar/build/agents-executor/agents-api-codex-executor --version
-          ~/.parsar/build/agents-executor/agents-api-codex-executor --help

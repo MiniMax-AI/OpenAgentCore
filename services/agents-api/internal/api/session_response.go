@@ -8,7 +8,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
-// WithEnvironmentRemoteURL uses the composition's validated executor origin for self-hosted requests and output.
+// WithEnvironmentRemoteURL uses the composition's validated daemon executor URL for self-hosted requests and output.
 func WithEnvironmentRemoteURL(origin string) Option {
 	return func(h *Handler) { h.executorURL = origin }
 }

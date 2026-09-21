@@ -561,6 +561,11 @@ E2B self-hosted onboarding or complete upstream network semantics.
 
 ### Resource and initialization checks
 
+The E2B fixture and opt-in flags described below are historical evidence for the
+retired Core-managed deployment, retained in Git history at `d03e1d25`. Current
+user-managed E2B uses the shared daemon enrollment path and does not resolve hosted
+Templates. These historical tests do not qualify the replacement deployment.
+
 `official_environment_templates.py` checks all five fixed-SDK operations plus raw
 HTTP, exact safe response shapes, field replacement/defaults, pagination, tenant
 isolation and rejected confidential canaries. `official_e2b_v1.py` opts in with

@@ -13,14 +13,15 @@ import (
 
 // Worker owns queued work; the database lease excludes a second execution service.
 type Worker struct {
-	dispatcher     *Dispatcher
-	admission      *store.Store
-	lease          *store.ExecutionLease
-	directoryReads chan directoryReadRequest
-	fileWrites     chan fileWriteRequest
-	stopped        chan struct{}
-	stopOnce       sync.Once
-	runtimes       *runtimeLifecycle
+	dispatcher          *Dispatcher
+	admission           *store.Store
+	lease               *store.ExecutionLease
+	directoryReads      chan directoryReadRequest
+	fileWrites          chan fileWriteRequest
+	stopped             chan struct{}
+	stopOnce            sync.Once
+	runtimes            *runtimeLifecycle
+	enrolledConnections map[string]*runtimeConnection
 }
 
 func StartWorker(ctx context.Context, dispatcher *Dispatcher) (*Worker, error) {
@@ -30,7 +31,7 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher) (*Worker, error) {
 	}
 	owned := *dispatcher
 	owned.Store = lease.Store()
-	worker := &Worker{dispatcher: &owned, admission: dispatcher.Store, lease: lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{})}
+	worker := &Worker{dispatcher: &owned, admission: dispatcher.Store, lease: lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), enrolledConnections: make(map[string]*runtimeConnection)}
 	worker.runtimes, err = newRuntimeLifecycle(owned.Store, owned.Registry, owned.ManagedRuntimes)
 	if err != nil {
 		_ = lease.Close(context.Background())
@@ -104,9 +105,6 @@ func (w *Worker) Run(ctx context.Context) error {
 			// Drain an external provisioning caller before releasing the writer lease.
 			w.runtimes.gate <- struct{}{}
 			<-w.runtimes.gate
-		}
-		if w.dispatcher.CloseEnvironmentConnections != nil {
-			w.dispatcher.CloseEnvironmentConnections()
 		}
 		closeCtx, stop := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stop()
@@ -200,6 +198,9 @@ func (w *Worker) Run(ctx context.Context) error {
 				return err
 			}
 			if _, err := w.dispatcher.Store.ExpireEnvironmentInputs(ctx); err != nil {
+				return err
+			}
+			if err := w.observeEnrolledRuntimes(ctx); err != nil {
 				return err
 			}
 			if len(active) == 4 {

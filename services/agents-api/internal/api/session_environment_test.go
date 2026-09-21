@@ -10,7 +10,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
-const environmentOrigin = "https://executor.example"
+const environmentOrigin = "wss://core.example/api/v1/agent-daemon/ws"
 
 func environmentSession() store.Session {
 	return store.Session{

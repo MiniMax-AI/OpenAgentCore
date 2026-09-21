@@ -45,7 +45,7 @@ type CreateDeviceParams struct {
 	ID             pgtype.UUID `json:"id"`
 	TenantID       pgtype.UUID `json:"tenant_id"`
 	Name           string      `json:"name"`
-	CredentialHash string      `json:"credential_hash"`
+	CredentialHash pgtype.Text `json:"credential_hash"`
 }
 
 func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (pgtype.UUID, error) {
@@ -82,11 +82,7 @@ func (q *Queries) GetDevice(ctx context.Context, arg GetDeviceParams) (GetDevice
 }
 
 const getDeviceCredential = `-- name: GetDeviceCredential :one
-SELECT d.id, d.name, d.credential_hash FROM devices d
-WHERE d.id = $1 AND d.revoked_at IS NULL AND (d.environment_id IS NULL OR EXISTS (
-    SELECT 1 FROM environments e JOIN sessions s ON s.id = e.session_id
-    WHERE e.id = d.environment_id AND s.tenant_id = d.tenant_id AND s.deleted_at IS NULL
-))
+SELECT id, name, credential_hash FROM runtime_device_authority WHERE id = $1
 `
 
 type GetDeviceCredentialRow struct {
@@ -107,6 +103,7 @@ SELECT d.id, d.name, d.environment_id FROM session_devices b
 JOIN sessions s ON s.id = b.session_id
 JOIN devices d ON d.id = b.device_id AND d.tenant_id = s.tenant_id
 WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL
+AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = d.id)
 AND (d.environment_id IS NULL OR EXISTS (
     SELECT 1 FROM environments e WHERE e.id = d.environment_id AND e.session_id = s.id
 ))
@@ -137,6 +134,7 @@ FROM session_devices b
 JOIN sessions s ON s.id = b.session_id
 JOIN devices d ON d.id = b.device_id AND d.tenant_id = s.tenant_id
 WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL
+AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = d.id)
 AND (d.environment_id IS NULL OR EXISTS (
     SELECT 1 FROM environments e WHERE e.id = d.environment_id AND e.session_id = s.id
 ))
@@ -205,10 +203,7 @@ func (q *Queries) RevokeDevice(ctx context.Context, arg RevokeDeviceParams) (int
 
 const touchDevice = `-- name: TouchDevice :execrows
 UPDATE devices SET last_seen_at = clock_timestamp()
-WHERE devices.id = $1 AND devices.revoked_at IS NULL AND (devices.environment_id IS NULL OR EXISTS (
-    SELECT 1 FROM environments e JOIN sessions s ON s.id = e.session_id
-    WHERE e.id = devices.environment_id AND s.tenant_id = devices.tenant_id AND s.deleted_at IS NULL
-))
+WHERE devices.id = $1 AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = devices.id)
 `
 
 func (q *Queries) TouchDevice(ctx context.Context, id pgtype.UUID) (int64, error) {

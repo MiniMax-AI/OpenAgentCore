@@ -56,7 +56,7 @@ func newDeviceParams(tenant pgtype.UUID, name, credentialHash string) (sqlc.Crea
 		return sqlc.CreateDeviceParams{}, fmt.Errorf("%w: device name and SHA-256 credential digest required", ErrInvalidInput)
 	}
 	return sqlc.CreateDeviceParams{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, TenantID: tenant,
-		Name: name, CredentialHash: hex.EncodeToString(digest)}, nil
+		Name: name, CredentialHash: pgtype.Text{String: hex.EncodeToString(digest), Valid: true}}, nil
 }
 
 // GetDeviceCredential is used only by the shared gateway's credential verifier.
@@ -178,7 +178,14 @@ func (s *Store) TouchRuntimeHeartbeat(ctx context.Context, deviceID string) (dev
 }
 
 func (s *Store) TouchAgentDaemonHeartbeat(ctx context.Context, heartbeat device.Heartbeat) (device.HeartbeatStatus, error) {
-	return s.TouchRuntimeHeartbeat(ctx, heartbeat.RuntimeID)
+	id, err := parseID(heartbeat.RuntimeID)
+	if err != nil {
+		return device.HeartbeatStatus{}, err
+	}
+	n, err := s.queries.TouchAuthenticatedDevice(ctx, sqlc.TouchAuthenticatedDeviceParams{
+		ID: id, CredentialHash: heartbeat.CredentialHash,
+	})
+	return device.HeartbeatStatus{Liveness: "online", Deleted: n == 0}, err
 }
 
 // Live connectivity belongs to the gateway Registry. Only last-seen time is

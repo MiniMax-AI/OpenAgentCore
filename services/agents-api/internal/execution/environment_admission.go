@@ -29,7 +29,7 @@ func (w *Worker) validateEnvironmentAdmission(engine string, configuration json.
 	}
 	switch snapshot.Environment.Type {
 	case "self_hosted":
-		if w.dispatcher.EnvironmentConnection == nil {
+		if w.dispatcher.Registry == nil {
 			return store.ErrInvalidInput
 		}
 	case "openai_hosted":

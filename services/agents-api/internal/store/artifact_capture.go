@@ -43,7 +43,7 @@ func (s *Store) StageTurnArtifacts(ctx context.Context, tenantID, sessionID, tur
 	if err := json.Unmarshal(owned.Configuration, &configuration); err != nil {
 		return err
 	}
-	if configuration.Type != "openai_hosted" {
+	if configuration.Type != "openai_hosted" && configuration.Type != "self_hosted" {
 		return ErrInvalidInput
 	}
 	tx, err := s.pool.Begin(ctx)

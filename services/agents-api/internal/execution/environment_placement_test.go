@@ -2,7 +2,6 @@ package execution
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"slices"
 	"testing"
@@ -16,7 +15,7 @@ func TestSkillReferenceIdentityStopsAtCoreBoundary(t *testing.T) {
 	environment := store.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID,
 		Configuration: []byte(`{"type":"openai_hosted","initialization":true,"skills":[{"type":"skill_reference","skill_id":"skill-private","version":"1","name":"proof","description":"A proof."}]}`)}
 	var request proto.PromptRequestPayload
-	_, err := (&Dispatcher{}).configurePreparedEnvironment(t.Context(), session, environment, store.ExecutionDevice{EnvironmentID: environment.ID}, &request)
+	err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, store.ExecutionDevice{EnvironmentID: environment.ID}, &request)
 	if err != nil || request.LocalEnvironment == nil || !request.LocalEnvironment.Capabilities || len(request.LocalEnvironment.Skills) != 0 {
 		t.Fatal("resolved Skill did not use the common installation descriptor", err)
 	}
@@ -28,7 +27,7 @@ func TestSkillReferenceIdentityStopsAtCoreBoundary(t *testing.T) {
 	if !LocalWorkspaceConfiguration(environment.Configuration) {
 		t.Fatal("admission demanded installed metadata before the creation transaction")
 	}
-	if _, err := (&Dispatcher{}).configurePreparedEnvironment(t.Context(), session, environment, store.ExecutionDevice{EnvironmentID: environment.ID}, &proto.PromptRequestPayload{}); err == nil {
+	if err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, store.ExecutionDevice{EnvironmentID: environment.ID}, &proto.PromptRequestPayload{}); err == nil {
 		t.Fatal("execution received an unresolved Skill selector")
 	}
 }
@@ -47,15 +46,12 @@ func TestLocalEnvironmentRequiresQualifiedProfileAndExactAuthority(t *testing.T)
 	}
 	session := store.Session{ID: "session", TenantID: "tenant"}
 	environment := store.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID, Configuration: []byte(`{"type":"openai_hosted","network":{"access":"disabled"}}`)}
-	d := &Dispatcher{EnvironmentConnection: func(context.Context, store.Session, store.Environment) (EnvironmentConnection, error) {
-		t.Fatal("local placement resolved a remote transport")
-		return EnvironmentConnection{}, nil
-	}}
+	d := &Dispatcher{}
 	for _, scope := range []string{"", "other", environment.ID} {
 		var req proto.PromptRequestPayload
-		release, err := d.configurePreparedEnvironment(t.Context(), session, environment, store.ExecutionDevice{EnvironmentID: scope}, &req)
+		err := d.configurePreparedEnvironment(session, environment, store.ExecutionDevice{EnvironmentID: scope}, &req)
 		if scope == environment.ID {
-			if err != nil || release != nil || req.LocalEnvironment == nil || req.LocalEnvironment.ID != environment.ID || req.RemoteEnvironment != nil || req.WorkDir != "" {
+			if err != nil || req.LocalEnvironment == nil || req.LocalEnvironment.ID != environment.ID || req.RemoteEnvironment != nil || req.WorkDir != "" {
 				t.Fatal("local identity was not preserved", err)
 			}
 		} else if err == nil || req.LocalEnvironment != nil {
@@ -74,7 +70,7 @@ func TestNetworkPolicySurvivesPreparedBinding(t *testing.T) {
 			t.Fatal(err)
 		}
 		var req proto.PromptRequestPayload
-		_, err = (&Dispatcher{}).configurePreparedEnvironment(t.Context(), session, environment, store.ExecutionDevice{EnvironmentID: environment.ID}, &req)
+		err = (&Dispatcher{}).configurePreparedEnvironment(session, environment, store.ExecutionDevice{EnvironmentID: environment.ID}, &req)
 		if err != nil || req.LocalEnvironment == nil || req.LocalEnvironment.NetworkAccess != placement.NetworkAccess || !slices.Equal(req.LocalEnvironment.AllowedDomains, placement.AllowedDomains) {
 			t.Fatal("prepared binding lost policy", req.LocalEnvironment, err)
 		}
@@ -86,7 +82,7 @@ func TestSystemPackagesRemainRequiredInExecutionBinding(t *testing.T) {
 	environment := store.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID,
 		Configuration: []byte(`{"type":"openai_hosted","initialization":true,"packages":{"system":["jq"]}}`)}
 	var req proto.PromptRequestPayload
-	_, err := (&Dispatcher{}).configurePreparedEnvironment(t.Context(), session, environment,
+	err := (&Dispatcher{}).configurePreparedEnvironment(session, environment,
 		store.ExecutionDevice{EnvironmentID: environment.ID}, &req)
 	if err != nil || req.LocalEnvironment == nil || !req.LocalEnvironment.ToolEnvironment || !req.LocalEnvironment.SystemPackages {
 		t.Fatal("system initialization requirement was lost", err)
@@ -96,7 +92,7 @@ func TestSystemPackagesRemainRequiredInExecutionBinding(t *testing.T) {
 		t.Fatal("public admission requires a private execution receipt")
 	}
 	req = proto.PromptRequestPayload{}
-	if _, err := (&Dispatcher{}).configurePreparedEnvironment(t.Context(), session, environment,
+	if err := (&Dispatcher{}).configurePreparedEnvironment(session, environment,
 		store.ExecutionDevice{EnvironmentID: environment.ID}, &req); err == nil || req.LocalEnvironment != nil {
 		t.Fatal("execution without the required initialization was admitted")
 	}
@@ -112,5 +108,24 @@ func TestLocalNetworkDefaultsAndSupportedPolicies(t *testing.T) {
 	got, err := parseEnvironmentPlacement([]byte(`{"type":"openai_hosted","network":{"access":"disabled","allowed_domains":null}}`))
 	if err != nil || got.NetworkAccess != "disabled" {
 		t.Fatal("disabled policy lost", got, err)
+	}
+}
+
+func TestSelfHostedUsesSameLocalBinding(t *testing.T) {
+	session := store.Session{ID: "session", TenantID: "tenant"}
+	for _, workspace := range []string{"/workspace", "/other"} {
+		environment := store.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID,
+			Configuration: []byte(`{"type":"self_hosted","workspace_directory":"` + workspace + `"}`)}
+		for _, binding := range []string{"", "foreign", environment.ID} {
+			var request proto.PromptRequestPayload
+			err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, store.ExecutionDevice{EnvironmentID: binding}, &request)
+			valid := binding == environment.ID && workspace == "/workspace"
+			if (err == nil) != valid {
+				t.Fatal(workspace, binding, err)
+			}
+			if valid && (request.LocalEnvironment == nil || request.LocalEnvironment.ID != environment.ID || request.LocalEnvironment.NetworkAccess != "enabled" || request.RemoteEnvironment != nil) {
+				t.Fatal("self-hosted placement did not retain common local contract", request.LocalEnvironment)
+			}
+		}
 	}
 }

@@ -26,7 +26,7 @@ func (p Policy) mcpExecutionCredentials(engine string, snapshot Snapshot, server
 	fail := func(message string) (map[string]store.MCPCredentialBinding, error) {
 		return nil, errors.New(message)
 	}
-	if len(servers) > 0 && (!caps.MCPHTTPTools || snapshot.Environment == nil || (snapshot.Environment.Type != "none" && snapshot.Environment.Type != "self_hosted") || snapshot.Daemon != nil) {
+	if len(servers) > 0 && (!caps.MCPHTTPTools || snapshot.Environment == nil || snapshot.Environment.Type != "none" || snapshot.Daemon != nil) {
 		return fail("device must support the service-side HTTP MCP profile")
 	}
 	selected, err := p.mcpCredentialBindings(engine, snapshot)
@@ -36,17 +36,6 @@ func (p Policy) mcpExecutionCredentials(engine string, snapshot Snapshot, server
 	for _, server := range servers {
 		if server.Required && !caps.MCPHTTPRequired {
 			return fail("device must advertise mcp_http_required")
-		}
-	}
-	if len(servers) > 0 && snapshot.Environment.Type == "self_hosted" {
-		if !caps.MCPHTTPRemoteEnvironment {
-			return fail("device must support service-side HTTP MCP with a remote environment")
-		}
-		if len(selected) > 0 && !caps.MCPHTTPRemoteBearerAuth {
-			return fail("device must advertise mcp_http_remote_bearer_auth")
-		}
-		if !caps.Preparation || !caps.RemoteEnvironment {
-			return fail("device must advertise preparation and remote_environment")
 		}
 	}
 	if len(selected) > 0 && !caps.MCPHTTPBearerAuth {

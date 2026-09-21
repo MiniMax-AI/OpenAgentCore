@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"net/http"
 	"net/url"
 	"testing"
 	"time"
@@ -44,8 +45,8 @@ func connectFixtureRuntime(t *testing.T, h *dispatchHarness, session store.Sessi
 		t.Fatal(err)
 	}
 	u.Scheme, u.Path = "ws", "/api/v1/agent-daemon/ws"
-	u.RawQuery = url.Values{"device_id": {other.device.ID}, "token": {other.credential}, "version": {proto.Version}}.Encode()
-	other.conn, _, err = websocket.DefaultDialer.Dial(u.String(), nil)
+	u.RawQuery = url.Values{"device_id": {other.device.ID}, "version": {proto.Version}}.Encode()
+	other.conn, _, err = websocket.DefaultDialer.Dial(u.String(), http.Header{"Authorization": {"Bearer " + other.credential}})
 	if err != nil {
 		t.Fatal("enrolled Runtime connection failed")
 	}

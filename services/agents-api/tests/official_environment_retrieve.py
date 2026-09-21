@@ -42,7 +42,7 @@ def main():
             result = {key: settings[key] for key in ("environment_id", "deleted_environment_id", "foreign_environment_id")}
         else:
             creation = {"agent": {"model": "test-model"}, "environment": {
-                "type": "self_hosted", "workspace_directory": "/private-workspace-" + str(uuid.uuid4())}}
+                "type": "self_hosted", "workspace_directory": "/workspace"}}
             session = api.beta.agents.sessions.create(**creation)
             removed = api.beta.agents.sessions.create(**creation)
             other = foreign.beta.agents.sessions.create(**creation)

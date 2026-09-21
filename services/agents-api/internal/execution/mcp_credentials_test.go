@@ -34,7 +34,7 @@ func TestMCPFrozenCredentialAdmission(t *testing.T) {
 				snapshot.Daemon = &DaemonConfig{WorkDir: "/tmp"}
 			}
 			if strings.HasPrefix(mode, "self-hosted") {
-				snapshot.Environment = &v1.Environment{Type: "self_hosted", WorkspaceDirectory: "/work"}
+				snapshot.Environment = &v1.Environment{Type: "self_hosted", WorkspaceDirectory: "/workspace"}
 			}
 			if mode == "changed selection" {
 				binding.CredentialID = uuid.NewString()
@@ -46,7 +46,7 @@ func TestMCPFrozenCredentialAdmission(t *testing.T) {
 			rawTool, _ := json.Marshal(tool)
 			snapshot.Agent.Tools = []json.RawMessage{rawTool}
 			raw, _ := json.Marshal(snapshot)
-			valid := mode == "implicit" || mode == "explicit" || mode == "anonymous" || mode == "self-hosted anonymous" || mode == "self-hosted implicit" || mode == "self-hosted explicit"
+			valid := mode == "implicit" || mode == "explicit" || mode == "anonymous"
 			for _, engine := range []string{"codex", "claude_sdk"} {
 				supported := valid && (engine == "codex" || !strings.HasPrefix(mode, "self-hosted"))
 				if err := (Policy{}).ValidateSessionConfiguration(engine, raw); (err == nil) != supported {

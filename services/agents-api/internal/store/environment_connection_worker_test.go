@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestEnvironmentConnectionWorkerReconcilesAndClosesBeforeLease(t *testing.T) {
+func TestEnvironmentConnectionWorkerReconcilesAndReleasesLease(t *testing.T) {
 	s, pool := store.NewTestStore(t)
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "connection-worker", Configuration: []byte(`{"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)})
@@ -39,19 +39,8 @@ func TestEnvironmentConnectionWorkerReconcilesAndClosesBeforeLease(t *testing.T)
 		t.Fatal(err)
 	}
 	awaitRelease()
-	var worker *execution.Worker
-	closed := false
-	next := uuid.NewString()
-	dispatcher := &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry(), CloseEnvironmentConnections: func() {
-		closed = true
-		if err := worker.CheckOwnership(context.Background()); err != nil {
-			t.Error("shutdown lost ownership before connections", err)
-		}
-		if err := worker.ObserveEnvironmentConnection(context.Background(), tenant, environment.ID, next, 2, false); err != nil {
-			t.Error(err)
-		}
-	}}
-	worker, err = execution.StartWorker(t.Context(), dispatcher)
+	dispatcher := &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry()}
+	worker, err := execution.StartWorker(t.Context(), dispatcher)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,12 +57,7 @@ func TestEnvironmentConnectionWorkerReconcilesAndClosesBeforeLease(t *testing.T)
 		}
 	})
 	awaitEnvironmentConnectionState(t, ctx, s, tenant, environment.ID, "disconnected")
-	if err := worker.ReplaceEnvironmentConnection(ctx, tenant, environment.ID, next); err != nil {
-		t.Fatal(err)
-	}
-	if err := worker.ObserveEnvironmentConnection(ctx, tenant, environment.ID, next, 1, true); err != nil {
-		t.Fatal(err)
-	}
+
 	cancel()
 	select {
 	case err := <-done:
@@ -83,14 +67,11 @@ func TestEnvironmentConnectionWorkerReconcilesAndClosesBeforeLease(t *testing.T)
 	case <-time.After(10 * time.Second):
 		t.Fatal("worker did not close")
 	}
-	if !closed {
-		t.Fatal("worker skipped connection shutdown")
-	}
 	awaitEnvironmentConnectionState(t, t.Context(), s, tenant, environment.ID, "disconnected")
 	if err := worker.CheckOwnership(t.Context()); err == nil {
 		t.Fatal("worker retained lease")
 	}
-	if len(retainedEnvironmentEvents(t, t.Context(), s, tenant, session.ID, environment.ID)) != 4 {
+	if len(retainedEnvironmentEvents(t, t.Context(), s, tenant, session.ID, environment.ID)) != 2 {
 		t.Fatal("worker lifecycle did not retain all snapshots")
 	}
 }

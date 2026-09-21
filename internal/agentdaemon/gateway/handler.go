@@ -90,7 +90,7 @@ func NewHandler(cfg HandlerConfig) *Handler {
 			ReadBufferSize:  4096,
 			WriteBufferSize: 4096,
 			// Daemon is a non-browser client and sends no Origin;
-			// the bearer in the query param is the actual auth boundary.
+			// the Authorization bearer is the actual auth boundary.
 			CheckOrigin: func(*http.Request) bool { return true },
 		},
 	}
@@ -101,11 +101,11 @@ func NewHandler(cfg HandlerConfig) *Handler {
 // which fans synthetic error/done to every active subscriber.
 //
 //	@Summary	Agent-daemon WebSocket upgrade
-//	@Description	Long-lived duplex channel for daemon runtimes. Authenticated by the runner bearer passed as a query param since websockets have no header stage before upgrade.
+//	@Description	Long-lived duplex channel for daemon runtimes. Authenticated by the runner bearer in the HTTP Authorization header before upgrade.
 //	@Tags		agent-daemon
 //	@ID			agentDaemonWebsocket
 //	@Param		device_id query string true "device id"
-//	@Param		token query string true "runner bearer credential"
+//	@Param		Authorization header string true "Bearer <runner credential>"
 //	@Param		version query string true "daemon protocol version"
 //	@Success	101 {string} string "protocol switched"
 //	@Failure	400 {object} map[string]interface{}
@@ -116,10 +116,10 @@ func NewHandler(cfg HandlerConfig) *Handler {
 func (h *Handler) WS(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	deviceID := q.Get("device_id")
-	token := q.Get("token")
+	token := bearerFromAuthHeader(r)
 	version := q.Get("version")
 	if deviceID == "" || token == "" || version == "" {
-		writeAuthError(w, http.StatusBadRequest, "missing_params", "device_id, token, version are required")
+		writeAuthError(w, http.StatusBadRequest, "missing_params", "device_id, version and Authorization bearer are required")
 		return
 	}
 	if !proto.VersionCompatible(version) {
@@ -178,6 +178,7 @@ func (h *Handler) WS(w http.ResponseWriter, r *http.Request) {
 	}
 	sess := NewSessionWithOwner(conn, auth.DeviceID, auth.WorkspaceID, version, h.cfg.Registry, h.cfg.Log, lease)
 	sess.heartbeat = h.cfg.Heartbeat
+	sess.credentialHash = device.HashCredential(token)
 	h.cfg.Log("agentdaemon gateway: ws upgrade ok, registering device_id=%s owner_pod=%s waiters=%d",
 		auth.DeviceID, h.cfg.OwnerPodID, len(h.cfg.Registry.PendingWaiters(auth.DeviceID)))
 	if prev := h.cfg.Registry.Register(sess); prev != nil {

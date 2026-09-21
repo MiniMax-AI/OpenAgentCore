@@ -3,12 +3,12 @@ SQLC_VERSION ?= v1.29.0
 SQLC ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 SWAG_VERSION ?= v1.16.4
 
-.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-mcode-harness build-daemon build-agents-api build-agents-api-release check-agents-api docker-build-agents-api check-agents-api-container build-agents-executor check-agents-executor build-agents-harness check-agents-harness check-agents-harness-native build-agents-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime
+.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-mcode-harness build-daemon build-agents-api build-agents-api-release check-agents-api docker-build-agents-api check-agents-api-container build-agents-executor check-agents-executor build-agents-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime
 
 help:
 	@printf '%s\n' 'make build-agents-api  Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
 
-check: check-database check-sqlc check-go check-agents-api check-claude-sdk check-mcode-harness check-agents-executor check-agents-harness
+check: check-database check-sqlc check-go check-agents-api check-claude-sdk check-mcode-harness check-agents-executor
 	@printf 'Parsar Core checks passed.\n'
 
 check-database:
@@ -23,7 +23,7 @@ openapi:
 	output=$$(mktemp -d "$$root/core-openapi.XXXXXX"); trap 'rm -rf "$$output"' EXIT; \
 	go run github.com/swaggo/swag/cmd/swag@$(SWAG_VERSION) init \
 	    -g cmd/server/main.go --dir ./services/agents-api,./contracts/agents-api/v1 \
-	    --exclude ./services/agents-api/internal/executor --output "$$output" \
+	    --output "$$output" \
 	    --outputTypes yaml --parseInternal; \
 	mv "$$output/swagger.yaml" contracts/agents-api/openapi.yaml
 
@@ -75,15 +75,6 @@ build-agents-executor:
 
 check-agents-executor:
 	./scripts/check-agents-executor.sh
-
-build-agents-harness:
-	./scripts/build-agents-harness.sh
-
-check-agents-harness:
-	./scripts/check-agents-harness.sh
-
-check-agents-harness-native:
-	./scripts/build-agents-harness.sh check
 
 build-agents-runtime:
 	./scripts/build-agents-runtime.sh

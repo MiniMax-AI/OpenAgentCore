@@ -24,7 +24,7 @@ RETURNING id
 type CreateEnvironmentDeviceParams struct {
 	ID             pgtype.UUID `json:"id"`
 	Name           string      `json:"name"`
-	CredentialHash string      `json:"credential_hash"`
+	CredentialHash pgtype.Text `json:"credential_hash"`
 	TenantID       pgtype.UUID `json:"tenant_id"`
 	EnvironmentID  pgtype.UUID `json:"environment_id"`
 }

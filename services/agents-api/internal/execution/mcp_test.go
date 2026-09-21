@@ -13,10 +13,10 @@ func TestMCPRequiresSupportedServicePlacement(t *testing.T) {
 	}{
 		{"codex", `{"type":"none"}`, true},
 		{"claude_sdk", `{"type":"none"}`, true},
-		{"claude_sdk", `{"type":"self_hosted","workspace_directory":"/work"}`, false},
+		{"claude_sdk", `{"type":"self_hosted","workspace_directory":"/workspace"}`, false},
 		{"unavailable", `{"type":"none"}`, false},
 		{"codex", `null`, false},
-		{"codex", `{"type":"self_hosted","workspace_directory":"/work"}`, true},
+		{"codex", `{"type":"self_hosted","workspace_directory":"/workspace"}`, false},
 	} {
 		raw, err := json.Marshal(map[string]any{"agent": map[string]any{"model": "model", "tools": []json.RawMessage{tool}}, "environment": json.RawMessage(profile.environment)})
 		if err != nil {

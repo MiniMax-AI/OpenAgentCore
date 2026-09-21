@@ -77,7 +77,7 @@ func TestSelfHostedEmptyCreationAndStream(t *testing.T) {
 					defer server.Close()
 					ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 					defer cancel()
-					body := fmt.Sprintf(`{"agent":{"model":"MiniMax-M3"},"environment":{"type":"self_hosted","workspace_directory":"/remote/workspace"%s},"stream":%t%s}`, capability, stream, input)
+					body := fmt.Sprintf(`{"agent":{"model":"MiniMax-M3"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"%s},"stream":%t%s}`, capability, stream, input)
 					request, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/v1/agents/sessions", strings.NewReader(body))
 					if err != nil {
 						t.Fatal(err)
@@ -123,7 +123,7 @@ func TestSelfHostedEmptyCreationAndStream(t *testing.T) {
 					if persisted.Engine != "codex" || persisted.Creator.Kind != "service_account" || persisted.Creator.ID != "test-runner" || persisted.IdempotencyKey != "empty-environment" {
 						t.Fatal("creation lost engine or authenticated identity", persisted)
 					}
-					if session.Environment.ID != created.Environment.ID || session.Environment.RemoteURL != environmentOrigin || session.Environment.WorkspaceDirectory != "/remote/workspace" || session.Environment.CapabilityDirectories == nil || *session.Environment.CapabilityDirectories == nil || len(*session.Environment.CapabilityDirectories) != 0 {
+					if session.Environment.ID != created.Environment.ID || session.Environment.RemoteURL != environmentOrigin || session.Environment.WorkspaceDirectory != "/workspace" || session.Environment.CapabilityDirectories == nil || *session.Environment.CapabilityDirectories == nil || len(*session.Environment.CapabilityDirectories) != 0 {
 						t.Fatal("creation did not use the owned Environment and configured origin", session.Environment)
 					}
 					value := string(created.Environment.Configuration)
@@ -140,15 +140,15 @@ func TestSelfHostedEmptyCreationAndStream(t *testing.T) {
 }
 
 func TestSelfHostedCreationRejectsBeforePersistence(t *testing.T) {
-	validEnvironment := `{"type":"self_hosted","workspace_directory":"/remote/workspace"}`
+	validEnvironment := `{"type":"self_hosted","workspace_directory":"/workspace"}`
 	for _, tc := range []struct {
 		name, environment, agentFields, input, engine string
 	}{
 		{name: "missing environment", environment: ""},
 		{name: "null environment", environment: "null"},
 		{name: "array environment", environment: "[]"},
-		{name: "missing type", environment: `{"workspace_directory":"/remote/workspace"}`},
-		{name: "null type", environment: `{"type":null,"workspace_directory":"/remote/workspace"}`},
+		{name: "missing type", environment: `{"workspace_directory":"/workspace"}`},
+		{name: "null type", environment: `{"type":null,"workspace_directory":"/workspace"}`},
 		{name: "missing workspace", environment: `{"type":"self_hosted"}`},
 		{name: "null workspace", environment: `{"type":"self_hosted","workspace_directory":null}`},
 		{name: "numeric workspace", environment: `{"type":"self_hosted","workspace_directory":1}`},
@@ -158,15 +158,15 @@ func TestSelfHostedCreationRejectsBeforePersistence(t *testing.T) {
 		{name: "newline workspace placement", environment: `{"type":"self_hosted","workspace_directory":"/remote/\n"}`},
 		{name: "carriage return workspace placement", environment: `{"type":"self_hosted","workspace_directory":"/remote/\r"}`},
 		{name: "backslash workspace placement", environment: `{"type":"self_hosted","workspace_directory":"/remote/\\"}`},
-		{name: "capabilities", environment: `{"type":"self_hosted","workspace_directory":"/remote/workspace","capability_directories":["/remote/skills"]}`},
-		{name: "null capability entry", environment: `{"type":"self_hosted","workspace_directory":"/remote/workspace","capability_directories":[null]}`},
-		{name: "scalar capabilities", environment: `{"type":"self_hosted","workspace_directory":"/remote/workspace","capability_directories":"/remote/skills"}`},
-		{name: "output field", environment: `{"type":"self_hosted","workspace_directory":"/remote/workspace","remote_url":"https://forged.example"}`},
+		{name: "capabilities", environment: `{"type":"self_hosted","workspace_directory":"/workspace","capability_directories":["/remote/skills"]}`},
+		{name: "null capability entry", environment: `{"type":"self_hosted","workspace_directory":"/workspace","capability_directories":[null]}`},
+		{name: "scalar capabilities", environment: `{"type":"self_hosted","workspace_directory":"/workspace","capability_directories":"/remote/skills"}`},
+		{name: "output field", environment: `{"type":"self_hosted","workspace_directory":"/workspace","remote_url":"https://forged.example"}`},
 		{name: "none extra field", environment: `{"type":"none","workspace_directory":null}`},
 		{name: "initial image", environment: validEnvironment, input: `,"input":[{"role":"user","content":[{"type":"input_image","image_url":"https://example.com/image.png"}]}]`},
 		{name: "initial assistant message", environment: validEnvironment, input: `,"input":[{"role":"assistant","content":[{"type":"input_text","text":"start"}]}]`},
 		{name: "deferred functions", environment: validEnvironment, agentFields: `,"tools":[{"type":"function","name":"lookup","description":"Find a value","parameters":{"type":"object"},"defer_loading":true}]`},
-		{name: "Claude SDK placement", environment: validEnvironment, engine: "claude_sdk"},
+		{name: "unregistered harness placement", environment: validEnvironment, engine: "unregistered"},
 		{name: "Claude Code placement", environment: validEnvironment, engine: "claude_code"},
 	} {
 		for _, stream := range []bool{false, true} {
@@ -198,7 +198,7 @@ func TestSelfHostedCreationRequiresOperatorExecution(t *testing.T) {
 	for _, options := range [][]Option{nil, {WithExecution(&inputRecorder{})}, {WithEnvironmentRemoteURL(environmentOrigin)}} {
 		for _, stream := range []bool{false, true} {
 			handler, fixture := environmentCreationHandler(t, "codex", options...)
-			body := fmt.Sprintf(`{"agent":{"model":"MiniMax-M3"},"environment":{"type":"self_hosted","workspace_directory":"/remote/workspace"},"stream":%t}`, stream)
+			body := fmt.Sprintf(`{"agent":{"model":"MiniMax-M3"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"stream":%t}`, stream)
 			request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 			request.Header.Set("Authorization", "Bearer key")
 			request.Header.Set("OpenAI-Beta", "agents=v1")

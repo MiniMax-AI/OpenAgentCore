@@ -135,11 +135,11 @@ func TestStandaloneGatewayUsesExecutionCredentials(t *testing.T) {
 		}
 	}
 	u, _ := url.Parse(wsURL)
-	q := url.Values{"device_id": {a.ID}, "token": {secret}, "version": {proto.Version}}
+	q := url.Values{"device_id": {a.ID}, "version": {proto.Version}}
 	u.RawQuery = q.Encode()
 	connect := func() *websocket.Conn {
 		t.Helper()
-		conn, response, err := websocket.DefaultDialer.Dial(u.String(), nil)
+		conn, response, err := websocket.DefaultDialer.Dial(u.String(), http.Header{"Authorization": {"Bearer " + secret}})
 		if response != nil {
 			response.Body.Close()
 		}

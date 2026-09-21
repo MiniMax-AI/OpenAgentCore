@@ -59,7 +59,7 @@ func environmentFilesHandler(t *testing.T, enabled bool) (http.Handler, *environ
 	t.Helper()
 	f := &environmentFilesFixture{
 		environment: store.Environment{ID: uuid.NewString(), TenantID: uuid.NewString(), SessionID: uuid.NewString(), Status: "connected",
-			Configuration: json.RawMessage(`{"type":"self_hosted","workspace_directory":"/private/workspace"}`)},
+			Configuration: json.RawMessage(`{"type":"self_hosted","workspace_directory":"/workspace"}`)},
 		result: proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{}},
 	}
 	keys := []APIKey{}
@@ -126,7 +126,7 @@ func TestEnvironmentFilesOrderingPaginationAndProjection(t *testing.T) {
 				environmentFileEntry("a.txt", 14), environmentFileEntry("z.txt", 5), environmentFileEntry("A.txt", 0), environmentFileEntry("a-b.txt", 6),
 				{Name: "directory", Kind: "directory"}, {Name: "symlink", Kind: "symlink"}, {Name: "socket", Kind: "other"},
 			}
-			q := url.Values{"path": {"/private/workspace/sub/.//"}, "limit": {"2"}}
+			q := url.Values{"path": {"/workspace/sub/.//"}, "limit": {"2"}}
 			if order != "" {
 				q.Set("order", order)
 			}
@@ -151,7 +151,7 @@ func TestEnvironmentFilesOrderingPaginationAndProjection(t *testing.T) {
 					t.Fatal("unexpected continuation")
 				}
 			}
-			want := []string{"/private/workspace/sub/z.txt", "/private/workspace/sub/a.txt", "/private/workspace/sub/a-b.txt", "/private/workspace/sub/A.txt"}
+			want := []string{"/workspace/sub/z.txt", "/workspace/sub/a.txt", "/workspace/sub/a-b.txt", "/workspace/sub/A.txt"}
 			if order == "asc" {
 				want = []string{want[3], want[2], want[1], want[0]}
 			}
@@ -172,7 +172,7 @@ func TestEnvironmentFilesEmptyRootDefaultsAndSharedAccess(t *testing.T) {
 		f.result.Entries = append(f.result.Entries, environmentFileEntry(string(rune('A'+index)), int64(index)))
 	}
 	page = decodeEnvironmentFiles(t, requestEnvironmentFiles(h, f.environment.ID, "", "files-key"))
-	if len(page.Data) != 20 || page.Next == nil || page.Data[0].Path != "/private/workspace/U" {
+	if len(page.Data) != 20 || page.Next == nil || page.Data[0].Path != "/workspace/U" {
 		t.Fatal("wrong local defaults", page)
 	}
 	q := url.Values{"page": {*page.Next}}
@@ -201,7 +201,7 @@ func TestEnvironmentFilesAuthorizationPrecedesInspection(t *testing.T) {
 
 func TestEnvironmentFilesRejectsInvalidRequestsBeforeRead(t *testing.T) {
 	for _, query := range []string{
-		"limit=0", "limit=101", "limit=no", "limit=", "limit=1&limit=2", "order=ASC", "order=", "after=x", "unknown=x", "path=", "path=relative", "path=/private/workspace-sibling", "path=/private/workspace/../workspace", "path=/private/workspace/a/../../workspace", "path=/private/workspace/%00", "path=/private/workspace/%5C", "path=/private/workspace/%0A", "path=/private/workspace/%FF", "path=x&path=y", "path=" + strings.Repeat("a", 4097), "page=", "page=not-json", "page=" + strings.Repeat("a", 1025), "bad=%GG",
+		"limit=0", "limit=101", "limit=no", "limit=", "limit=1&limit=2", "order=ASC", "order=", "after=x", "unknown=x", "path=", "path=relative", "path=/workspace-sibling", "path=/workspace/../workspace", "path=/workspace/a/../../workspace", "path=/workspace/%00", "path=/workspace/%5C", "path=/workspace/%0A", "path=/workspace/%FF", "path=x&path=y", "path=" + strings.Repeat("a", 4097), "page=", "page=not-json", "page=" + strings.Repeat("a", 1025), "bad=%GG",
 	} {
 		t.Run(query[:min(len(query), 70)], func(t *testing.T) {
 			h, f := environmentFilesHandler(t, true)

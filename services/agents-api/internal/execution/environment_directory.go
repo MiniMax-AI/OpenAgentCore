@@ -85,7 +85,7 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 		return
 	}
 	if reserved {
-		ready, err := w.bindSessionDevice(check, session, func(id string) bool { return w.directoryDeviceReady(id, session.Engine, placement, true) })
+		ready, err := w.bindSessionDevice(check, session, func(id string) bool { return w.directoryDeviceReady(check, id, session.Engine, placement, true) })
 		if err != nil || !ready {
 			return
 		}
@@ -93,10 +93,10 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 	// Capture retains the public Turn after its native Run has been released.
 	prepare := reserved || session.LastTurn != nil && session.LastTurn.ArtifactCaptureStarted
 	bound, err := w.dispatcher.Store.GetSessionDevice(check, session.TenantID, session.ID)
-	if err != nil || !environmentDeviceMatches(session, environment, bound, placement) || !w.directoryDeviceReady(bound.ID, session.Engine, placement, prepare) {
+	if err != nil || !environmentDeviceMatches(session, environment, bound) || !w.directoryDeviceReady(check, bound.ID, session.Engine, placement, prepare) {
 		return
 	}
-	peer, err := w.dispatcher.Registry.LookupDevice(bound.ID)
+	peer, err := w.dispatcher.authorizedPeer(check, bound.ID)
 	if err != nil {
 		return
 	}
@@ -110,19 +110,16 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 	return
 }
 
-func (w *Worker) directoryDeviceReady(id, engine string, placement environmentPlacement, prepare bool) bool {
+func (w *Worker) directoryDeviceReady(ctx context.Context, id, engine string, placement environmentPlacement, prepare bool) bool {
 	if w.dispatcher.Registry == nil {
 		return false
 	}
-	peer, err := w.dispatcher.Registry.LookupDevice(id)
+	peer, err := w.dispatcher.authorizedPeer(ctx, id)
 	if err != nil {
 		return false
 	}
 	info, found, known := peer.AgentKindStatus(engine)
-	placementReady := info.Capabilities.RemoteEnvironment
-	if placement.Type == "openai_hosted" {
-		placementReady = info.Capabilities.LocalEnvironment
-	}
+	placementReady := info.Capabilities.LocalEnvironment
 	return known && found && info.Available && placementReady && (!prepare || (info.Capabilities.Preparation && info.Capabilities.WorkspaceReadPreparation))
 }
 

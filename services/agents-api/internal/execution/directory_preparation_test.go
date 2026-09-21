@@ -1,26 +1,19 @@
 package execution
 
 import (
-	"context"
 	"errors"
 	"testing"
-	"testing/synctest"
-	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
-func TestDirectoryPreparationBoundsConnectionResolution(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		d := &Dispatcher{EnvironmentConnection: func(ctx context.Context, _ store.Session, _ store.Environment) (EnvironmentConnection, error) {
-			<-ctx.Done()
-			return EnvironmentConnection{}, ctx.Err()
-		}}
-		started := time.Now()
-		result := d.readPreparedDirectory(context.Background(), nil, store.Session{}, store.Environment{Configuration: []byte(`{"type":"self_hosted","workspace_directory":"/workspace"}`)}, store.ExecutionDevice{}, proto.WorkspaceReadPayload{})
-		if !errors.Is(result.err, ErrExecutionUnavailable) || time.Since(started) <= 0 || time.Since(started) > 45*time.Second {
-			t.Fatal("connection resolution did not have a bounded owner lifetime")
-		}
-	})
+func TestDirectoryPreparationRejectsForeignBindingBeforeTransport(t *testing.T) {
+	result := (&Dispatcher{}).readPreparedDirectory(t.Context(), nil,
+		store.Session{ID: "session", TenantID: "tenant"},
+		store.Environment{ID: "environment", SessionID: "session", TenantID: "tenant", Configuration: []byte(`{"type":"self_hosted","workspace_directory":"/workspace"}`)},
+		store.ExecutionDevice{EnvironmentID: "other"}, proto.WorkspaceReadPayload{})
+	if !errors.Is(result.err, ErrExecutionUnavailable) {
+		t.Fatal("foreign binding reached transport", result.err)
+	}
 }

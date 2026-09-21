@@ -33,10 +33,7 @@ type Dispatcher struct {
 	Store    *store.Store
 	Registry *gateway.Registry
 	// Options resolves transient engine credentials; they are never stored here.
-	Options               func(context.Context, store.Session) (map[string]any, error)
-	EnvironmentConnection func(context.Context, store.Session, store.Environment) (EnvironmentConnection, error)
-	// CloseEnvironmentConnections drains transport observations before releasing execution ownership.
-	CloseEnvironmentConnections func()
+	Options func(context.Context, store.Session) (map[string]any, error)
 	// ManagedRuntimes is optional internal provisioning; it does not admit hosted API requests.
 	ManagedRuntimes *RuntimeProviders
 }
@@ -58,7 +55,7 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 	if err != nil {
 		return store.Turn{}, err
 	}
-	peer, err := d.Registry.LookupDevice(bound.Device.ID)
+	peer, err := d.authorizedPeer(ctx, bound.Device.ID)
 	if err != nil {
 		return store.Turn{}, err
 	}

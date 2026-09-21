@@ -89,7 +89,7 @@ func TestMCPExecutionChecksRequireVerifiedCapabilityCombinations(t *testing.T) {
 				case "environment":
 					snapshot.Environment = nil
 				}
-				allowed := missing == "" || placement == "none" && (missing == "preparation" || missing == "remote-mcp" || missing == "remote-bearer")
+				allowed := placement == "none" && (missing == "" || missing == "preparation" || missing == "remote-mcp" || missing == "remote-bearer")
 				selected, err := (Policy{}).mcpExecutionCredentials("codex", snapshot, servers, caps)
 				if (err == nil) != allowed || allowed && len(selected) != 1 {
 					t.Fatal("incorrect combined MCP capability decision", err)
