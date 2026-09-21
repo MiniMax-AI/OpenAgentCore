@@ -32,10 +32,10 @@ func validateClaudeConfiguration(agent v1.Agent, environment *v1.Environment, ha
 	if agent.Text.Verbosity != "" && agent.Text.Verbosity != "medium" {
 		return errors.New("The configured engine currently supports medium text verbosity only.")
 	}
-	if agent.MultiAgent.Enabled || agent.MultiAgent.MaxConcurrentSubagents != nil || agent.Reasoning.Effort != nil || agent.Reasoning.Summary != nil || (agent.ServiceTier != "" && agent.ServiceTier != "auto") || (agent.Text.Format.Type != "" && agent.Text.Format.Type != "text") {
+	if agent.Reasoning.Effort != nil || agent.Reasoning.Summary != nil || (agent.ServiceTier != "" && agent.ServiceTier != "auto") || (agent.Text.Format.Type != "" && agent.Text.Format.Type != "text") {
 		return ErrInvalidInput
 	}
-	return nil
+	return rejectSubagentTools(agent, "function", "mcp")
 }
 
 func validateClaudeTools(environment *v1.Environment, _ bool, tools []proto.FunctionTool, mcp []proto.MCPHTTPServer) error {

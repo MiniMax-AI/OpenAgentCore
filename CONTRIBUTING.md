@@ -160,9 +160,9 @@ bounded task from the complete board; nonblocking local improvements stay queued
 Authentication, tenant/credential isolation, state consistency and data loss remain
 material acceptance requirements. Optional feature equality is not required. After
 the three profiles pass merged-main validation, publish the results, limitations
-and backlog, then stop development until new user direction. Additional harness
-implementations and protocol Subagent execution remain queued without changing the
-complete pinned protocol target.
+and backlog, then stop development until new user direction. Additional harness implementations remain queued. The separately authorized
+Subagent batch targets the six read operations across these three harnesses and
+does not change the complete pinned protocol target.
 
 The current hosted architecture is V1: Core runs independently; each Environment
 sandbox contains its daemon, selected native harness, local tools and workspace.
@@ -1816,7 +1816,8 @@ for implementation and registration steps.
 
 MiniMax Code's opt-in Agents API profile qualifies native ACP 0.4.12 for
 `environment:none` text execution. It reuses the shared lifecycle without public
-workspace, functions, MCP or native Subagents. Native configuration disables
+workspace, functions or MCP. Enabled Subagents use the separately qualified
+common observation path below. Native configuration disables
 file/shell authority and external
 capability discovery; the child receives a private Session home and a restricted
 environment. Active-input application requires a native ACP receipt, cancellation
@@ -1824,7 +1825,8 @@ settles the process and output, and continuation requires the exact owned native
 history. Do not infer history IDs or qualify hosted execution from this text
 profile. See [deployment and acceptance](services/agents-api/deploy/mcode/README.md).
 
-The MiniMax workspace profile retains the published CLI and isolates native
+The MiniMax workspace profile builds one CLI from the fixed upstream source and
+lockfile through the existing companion packaging path, and isolates native
 workspace tools behind its standard MCP client. The process and native Session
 share one private control directory; public workspace files cannot configure that
 process or become privileged project instructions. A trusted adapter-owned bridge
@@ -1832,7 +1834,14 @@ runs the original six tool implementations in the upstream Linux sandbox, with n
 unsandboxed fallback. Keep native history bound to the control directory and Files/
 Artifacts bound to the public workspace. Core and shared file helpers remain engine
 neutral. This internal MCP transport does not admit public MCP configuration.
-Record published CLI and worker-source provenance separately; complete
+Record the upstream revision, native admission patch hashes and worker-source
+provenance. The bounded patch checks the shared descendant-task limit inside the
+existing native SQLite admission transaction before start, without another
+scheduler. ACP initialization must acknowledge the applied limit before input.
+Subagent reads use the Session-private protected native database. Multi-agent
+workspace execution installs only the existing authorized workspace MCP entry in
+that private native configuration so children inherit the same tools; public MCP
+and Environment-origin MCP combinations remain separately qualified. Complete
 [workspace acceptance](contracts/agents-api/mcode-workspace-v1.md) before enabling
 hosted execution. The standalone companion uses its own npm lock; `make check`
 runs its lifecycle tests and script checks, while its exact-source Linux build and
@@ -2152,8 +2161,11 @@ declared functions with ordered text results, and the HTTP MCP subset
 described above. It rejects unsupported request
 options and disables built-in tools and undeclared MCP discovery.
 `DisableExecutionEnvironment` and `DisableSubagents` are accepted assertions about
-this fixed restrictive profile. Omission does not enable built-in tools. New and
-resumed queries use the SDK's empty built-in tool set, explicit function MCP
+the single-Agent restrictive profile. Omission does not enable built-in tools.
+Explicit Subagent observation enables only its qualified native delegation tools,
+with admission before start and verified child identity before workspace authority.
+Public function/MCP combinations remain unqualified with Subagents. Single-Agent
+new and resumed queries use the SDK's empty built-in tool set, explicit function MCP
 configuration and allowlist, strict MCP configuration and empty user/project/local
 setting sources. Without HTTP MCP declarations, native initialization and real
 provider request inventories must contain only the declared host functions. Managed operator policy may further

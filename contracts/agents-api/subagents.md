@@ -76,7 +76,7 @@ Multi-agent execution with required ToolEnvironment initialization remains an
 explicit combination gap until child hook-process failures are handled by the
 same execution owner. The managed PreToolUse hook itself does not alter lifecycle
 result receipts, but existing hook-failure handling only covers the root Turn. Ordinary single-agent environment/package
-execution is unchanged. Public function tools with enabled multi-agent execution
+execution is unchanged. Public function and MCP tools with enabled multi-agent execution
 remain unqualified. These limitations do not redefine the official protocol.
 
 Claude's fixed SDK exposes child listing/messages but its original opened time
