@@ -25,6 +25,10 @@ type RuntimeInfo struct {
 	Features []string `json:"features"`
 }
 
+func (info RuntimeInfo) SupportsSubagents() bool {
+	return slices.Contains(info.Features, "subagent_resources")
+}
+
 func (info RuntimeInfo) SupportsHTTPMCP() bool {
 	return slices.Contains(info.Features, "mcp_http_tools")
 }

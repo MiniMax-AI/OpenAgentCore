@@ -1,3 +1,4 @@
+import type { Subagents } from "./subagents.js";
 import { parseEnvironmentMCP, type EnvironmentMCPServer } from "./mcp_environment.js";
 import type { MCPProfile } from "./mcp.js";
 import { parseSkills, workspaceSkills, type WorkspaceSkill } from "./workspace_skills.js";
@@ -81,7 +82,7 @@ export class WorkspaceProfile {
   readonly options: Options;
   private readonly skillNames: readonly string[];
 
-  constructor(private readonly cwd: string, private readonly config: Workspace, private readonly functions: readonly string[] = [], private readonly mcp?: MCPProfile) {
+  constructor(private readonly cwd: string, private readonly config: Workspace, private readonly functions: readonly string[] = [], private readonly mcp?: MCPProfile, private readonly subagents?: Subagents) {
     config = parseWorkspace(config, cwd)!;
     // SDK history lookup reads the bridge environment, independently of query.env.
     if (process.env.HOME !== config.home || process.env.CLAUDE_CONFIG_DIR !== config.state ||
@@ -109,7 +110,7 @@ export class WorkspaceProfile {
     const skillTools = skills ? ["Skill"] : [];
     const protectedRoots = [config.home, config.state, ...config.protected_dirs];
     this.options = {
-      env, tools: [...nativeTools, ...skillTools],
+      env, tools: [...nativeTools, ...skillTools, ...(subagents ? ["Agent", "SendMessage"] : [])],
       ...(skills ? { plugins: skills.paths.map(path => ({ type: "local" as const, path, skipMcpDiscovery: true })) } : {}), allowedTools: mcp?.allowed ?? [...functions], mcpServers: {}, strictMcpConfig: true,
       settingSources: [], permissionMode: "default", persistSession: true,
       settings: {
@@ -140,10 +141,10 @@ export class WorkspaceProfile {
 
   verify(tools: string[], servers: { name: string; status: string; tools?: { name: string }[] }[], sessionID = ""): void {
     if (this.mcp) {
-      this.mcp.verify(tools, servers as Parameters<MCPProfile["verify"]>[1], sessionID, [...nativeTools, ...(this.skillNames.length ? ["Skill"] : [])]);
+      this.mcp.verify(tools, servers as Parameters<MCPProfile["verify"]>[1], sessionID, [...nativeTools, ...(this.skillNames.length ? ["Skill"] : []), ...(this.subagents ? ["Task", "SendMessage"] : [])]);
       return;
     }
-    const expected = [...nativeTools, ...this.functions, ...(this.skillNames.length ? ["Skill"] : [])];
+    const expected = [...nativeTools, ...this.functions, ...(this.skillNames.length ? ["Skill"] : []), ...(this.subagents ? ["Task", "SendMessage"] : [])];
     if (servers.length !== (this.functions.length ? 1 : 0) ||
         servers.some(server => server.name !== "functions" || server.status !== "connected") ||
         tools.length !== expected.length || new Set(tools).size !== tools.length ||
@@ -151,7 +152,7 @@ export class WorkspaceProfile {
   }
 
   readonly canUseTool: CanUseTool = async (name, input, { signal, agentID }) => {
-    if (!signal.aborted && agentID === undefined && this.permits(name, input)) {
+    if (!signal.aborted && (agentID === undefined || this.subagents?.permitsActor(agentID)) && this.permits(name, input)) {
       return { behavior: "allow", updatedInput: this.absoluteInput(name, input) };
     }
     return { behavior: "deny", message: denial };
@@ -164,7 +165,7 @@ export class WorkspaceProfile {
           admission.hookSpecificOutput.permissionDecision === "deny") return admission;
       if (input.hook_event_name === "PreToolUse" && this.mcp.permits(input.tool_name)) return admission;
     }
-    if (!signal.aborted && input.hook_event_name === "PreToolUse" && input.agent_id === undefined &&
+    if (!signal.aborted && input.hook_event_name === "PreToolUse" && (input.agent_id === undefined || this.subagents?.permitsActor(input.agent_id)) &&
         (id === undefined || id === input.tool_use_id) && this.permits(input.tool_name, input.tool_input)) {
       if (input.tool_name === "Bash" && this.config.tool_environment) {
         const toolInput = input.tool_input as Record<string, unknown>;

@@ -18,7 +18,12 @@ type Config struct {
 	Workspace  *WorkspaceConfig
 }
 
+type subagentOptions struct {
+	MaxConcurrent int `json:"max_concurrent"`
+}
+
 type startRequest struct {
+	Subagents        *subagentOptions     `json:"subagents,omitempty"`
 	Type             string               `json:"type"`
 	Prompt           string               `json:"prompt,omitempty"`
 	Model            string               `json:"model"`
@@ -61,8 +66,19 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	if controls := req.ExecutionControls; controls != nil && (controls.WebSearch != "disabled" || controls.TextVerbosity != "medium") {
 		return fail("execution controls require disabled web search and medium text verbosity")
 	}
-	// The fixed SDK profile already excludes all built-in tools and subagents.
-	// Both restriction flags are supported; omitting them does not widen the profile.
+	if req.ObserveSubagentIdentities {
+		if req.DisableSubagents || len(req.FunctionTools) != 0 || req.MCPHTTPServers != nil || (req.LocalEnvironment != nil && len(req.LocalEnvironment.MCP) != 0) {
+			return fail("subagent execution does not support this tool combination")
+		}
+		limit := 6
+		if req.MaxConcurrentSubagents != nil {
+			limit = *req.MaxConcurrentSubagents
+		}
+		if limit < 1 {
+			return fail("invalid concurrent subagent limit")
+		}
+		start.Subagents = &subagentOptions{MaxConcurrent: limit}
+	}
 	if err := validateFunctions(req.FunctionTools); err != nil {
 		return startRequest{}, nil, err
 	}

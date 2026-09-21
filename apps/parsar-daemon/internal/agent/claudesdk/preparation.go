@@ -36,8 +36,8 @@ func NewPreparationFactory(config Config) agent.PreparationFactory {
 		if owner == nil {
 			owner = context.Background()
 		}
-		if config.Workspace == nil || req.RunID != "" || req.Prompt != "" || req.ConversationID != "" || req.ObserveSubagentIdentities {
-			return nil, fmt.Errorf("claudesdk: preparation requires workspace configuration without input, conversation or subagents")
+		if config.Workspace == nil || req.RunID != "" || req.Prompt != "" || req.ConversationID != "" {
+			return nil, fmt.Errorf("claudesdk: preparation requires workspace configuration without input or conversation")
 		}
 		snapshot := config
 		snapshot.Env = slices.Clone(config.Env)
@@ -52,6 +52,9 @@ func NewPreparationFactory(config Config) agent.PreparationFactory {
 		info, err := CheckRuntime(owner, snapshot)
 		if err != nil || !info.supportsWorkspacePreparation() {
 			return nil, fmt.Errorf("claudesdk: packaged runtime does not support workspace preparation")
+		}
+		if start.Subagents != nil && !info.SupportsSubagents() {
+			return nil, fmt.Errorf("claudesdk: packaged runtime does not support subagent resources")
 		}
 		if start.observeFunctions && !info.supportsWorkspaceCommands() {
 			return nil, fmt.Errorf("claudesdk: packaged runtime does not support workspace command observations")

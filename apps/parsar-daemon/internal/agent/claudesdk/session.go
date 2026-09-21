@@ -49,17 +49,22 @@ func NewFactory(config Config) agent.Factory {
 		if err != nil {
 			return nil, err
 		}
-		if start.MCPHTTPServers != nil {
+		if start.MCPHTTPServers != nil || start.Subagents != nil {
 			info, err := CheckRuntime(ctx, config)
-			if err != nil || !info.SupportsHTTPMCP() {
+			if start.Subagents != nil && (err != nil || !info.SupportsSubagents()) {
+				return nil, fmt.Errorf("claudesdk: packaged runtime does not support subagent resources")
+			}
+			if start.MCPHTTPServers != nil && (err != nil || !info.SupportsHTTPMCP()) {
 				return nil, fmt.Errorf("claudesdk: packaged runtime does not support HTTP MCP")
 			}
-			for _, server := range *start.MCPHTTPServers {
-				if server.Required && !info.SupportsHTTPMCPRequired() {
-					return nil, fmt.Errorf("claudesdk: packaged runtime does not support required HTTP MCP")
-				}
-				if server.BearerTokenEnvVar != "" && !info.SupportsHTTPMCPBearer() {
-					return nil, fmt.Errorf("claudesdk: packaged runtime does not support authenticated HTTP MCP")
+			if start.MCPHTTPServers != nil {
+				for _, server := range *start.MCPHTTPServers {
+					if server.Required && !info.SupportsHTTPMCPRequired() {
+						return nil, fmt.Errorf("claudesdk: packaged runtime does not support required HTTP MCP")
+					}
+					if server.BearerTokenEnvVar != "" && !info.SupportsHTTPMCPBearer() {
+						return nil, fmt.Errorf("claudesdk: packaged runtime does not support authenticated HTTP MCP")
+					}
 				}
 			}
 		}
@@ -73,6 +78,7 @@ func NewFactory(config Config) agent.Factory {
 }
 
 type bridgeEvent struct {
+	Fact        json.RawMessage             `json:"fact"`
 	InputID     string                      `json:"input_id"`
 	ResultID    string                      `json:"result_id"`
 	Usage       json.RawMessage             `json:"usage,omitempty"`
@@ -207,6 +213,13 @@ func (s *session) run(ctx context.Context, runID string, start startRequest, out
 				failure = err
 				s.process.Cancel()
 			}
+		case proto.TypeSubagentIdentity, proto.TypeSubagentTurn, proto.TypeSubagentItem, proto.TypeSubagentCoordination:
+			if start.Subagents == nil || !json.Valid(event.Fact) {
+				failure = fmt.Errorf("claudesdk: unrequested native child observation")
+				s.process.Cancel()
+				break
+			}
+			emit(event.Type, event.Fact)
 		case "usage":
 			if event.ResultID == "" || !s.matchesInputSession(event.SessionID) || event.SessionID == "" || (start.Resume != "" && event.SessionID != start.Resume) ||
 				(usageSession != "" && usageSession != event.SessionID) || usageIDs[event.ResultID] {

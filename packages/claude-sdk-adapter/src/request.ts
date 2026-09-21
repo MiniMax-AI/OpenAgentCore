@@ -12,6 +12,7 @@ export type Start = {
   resume?: string;
   require_history?: boolean;
   observe_messages?: boolean;
+  subagents?: { max_concurrent: number };
   functions?: { name: string; description: string; parameters: Tool["inputSchema"] }[];
   mcp_http_servers?: HTTPServer[];
   workspace?: Workspace;
@@ -27,7 +28,7 @@ export function parseRequest(line: string): Start | Prepare {
   const value: unknown = JSON.parse(line);
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_request");
   const request = value as Record<string, unknown>;
-  const allowed = new Set(["type", "prompt", "model", "system_prompt", "cwd", "resume", "require_history", "observe_messages", "functions", "mcp_http_servers", "workspace"]);
+  const allowed = new Set(["type", "prompt", "model", "system_prompt", "cwd", "resume", "require_history", "observe_messages", "subagents", "functions", "mcp_http_servers", "workspace"]);
   if (Object.keys(request).some(key => !allowed.has(key)) ||
       (request.type !== "start" && request.type !== "prepare") ||
       (request.type === "start" ? typeof request.prompt !== "string" || !request.prompt.trim() : "prompt" in request) ||
@@ -40,8 +41,14 @@ export function parseRequest(line: string): Start | Prepare {
   if (request.functions !== undefined && (!Array.isArray(request.functions) || request.functions.some(tool =>
       !tool || typeof tool.name !== "string" || !tool.name || typeof tool.description !== "string" ||
       !tool.parameters || tool.parameters.type !== "object"))) throw new Error("invalid_request");
+  if (request.subagents !== undefined) {
+    const value = request.subagents as Record<string, unknown>;
+    if (!value || typeof value !== "object" || Object.keys(value).length !== 1 || !Number.isSafeInteger(value.max_concurrent) || (value.max_concurrent as number) < 1 ||
+        (request.functions as unknown[] | undefined)?.length || request.mcp_http_servers !== undefined) throw new Error("invalid_request");
+  }
   parseHTTPServers(request.mcp_http_servers);
   const workspace = parseWorkspace(request.workspace, request.cwd);
+  if (request.subagents && workspace?.mcp?.length) throw new Error("invalid_request");
   if (request.require_history && !workspace) throw new Error("invalid_request");
   if ((workspace && "mcp_http_servers" in request) ||
       (request.type === "prepare" && !workspace)) throw new Error("invalid_request");
