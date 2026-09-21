@@ -162,7 +162,7 @@ user-managed enrollment remain outside this qualification.
 
 | Area | Missing or unverified scope |
 | --- | --- |
-| Subagents / multi_agent | Six reads and common observations are in implementation/qualification; other harness native gaps, full lifecycle/interactions and recovery remain explicit gaps |
+| Subagents / multi_agent | Six reads and same-child recovery have three-harness Docker evidence; optional native operations, live child progress, full lifecycle/interactions and tool combinations remain explicit gaps |
 | Environment Templates | Unsupported restricted hostname forms, unqualified installation overrides/null network and exact hosted errors remain gaps. CRUD/list, files, env/setup/system/npm/Python, inline/referenced Skills, Plugins, workspace capability directories and Session references have recorded coverage. Environment Plugin MCP transport and placement limits are [listed separately](environment-templates.md#environment-origin-mcp-plugins) |
 | Input and configuration | Non-text initial input, broader content/configuration unions, structured output and reasoning/verbosity combinations |
 | Tools and interactions | Deferred functions, other tool types, effective tool-set enforcement and result/cancel publication ordering; MiniMax public functions and service-origin MCP remain unsupported |
@@ -315,8 +315,9 @@ including further deployment qualification; this inventory describes merged beha
   replace the entire field ([configuration guide](https://developers.openai.com/api/docs/guides/agents-api/configuration)).
   Tools null clears the list as specified by pinned `session_create_params.py`.
   Saved metadata never becomes Session metadata. A model name is not a daemon engine name.
-  Current admission requires disabled multi-agent, implicit reasoning, tier `auto`,
-  ordinary text and non-deferred functions. Unsupported saved settings fail before
+  Current admission uses the qualified harness profile for multi-agent execution,
+  implicit reasoning, tier `auto`, ordinary text and non-deferred functions.
+  Enabled multi-agent/function combinations remain unsupported. Unsupported saved settings fail before
   Session persistence, unless replaced by supported overrides. Other native options
   remain implementation gaps, not excluded protocol variants.
   Fixed SDK/raw HTTP checks cover inherited/overridden configuration, tenant ownership,
@@ -505,8 +506,9 @@ prepared by release `906069e` before upgrade; see the
 [upgrade procedure](../../services/agents-api/README.md#upgrading-archived-item-history).
 The retired archive format could not recover unrecorded message boundaries or
 outcomes; those limitations remain in already indexed historical Items.
-Unsupported native variants, reasoning, subagent Items and Items mutation
-are not covered. Public submission supports text messages, cancellation and function results.
+Other native variants, full reasoning coverage and Items mutation remain gaps.
+Qualified child Items are described in [Subagents](subagents.md). Public submission
+supports text messages, cancellation and function results.
 
 Legacy Done frames alone do not complete assistant Items. Aggregate answer text
 is confirmed by successful Turn termination; failed Turns retain observed deltas
