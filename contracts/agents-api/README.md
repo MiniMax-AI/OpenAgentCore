@@ -65,7 +65,7 @@ business Team orchestration are separate from protocol coverage.
 This inventory is based on the pinned Python source, not our generated OpenAPI.
 It contains 42 distinct HTTP operations in 15 resource classes, excluding async
 duplicates, overloads and client-side helpers. There are 42 handler entries; the six
-[Subagent reads](subagents.md) are implemented with native qualification in progress. The separate
+[Subagent reads](subagents.md) have three-harness Docker workflow qualification. The separate
 general `/v1/files` source-file API and `/v1/skills` resource/version operations
 are outside this 42-operation count.
 
@@ -88,8 +88,8 @@ paths start at `/vaults`, not `/agents/vaults`.
 | sessions.turns | retrieve, list | Implemented reads; lifecycle conformance still partial |
 | sessions.items | list | Partial Item variants |
 | sessions.artifacts | retrieve, list, delete, content | Shared output capture and immutable stored reads/deletion on accepted Docker profiles and [qualified user-managed workflows](user-managed-runtime-v1.md) (prior Core-managed E2B evidence remains historical), including retained downloads after Runtime loss; exact upstream defaults/errors, unchanged-file republishing and cancellation-edge parity remain unverified |
-| sessions.subagents | retrieve, list | Implemented; native qualification in progress |
-| sessions.subagents.items | list | Implemented; own-child history qualification in progress |
+| sessions.subagents | retrieve, list | [Three-harness Docker reads, native lifecycle limits and real evidence](subagents.md); full multi-agent semantics remain partial |
+| sessions.subagents.items | list | Qualified own-child history reads; full Item variants and live child streaming remain partial |
 | sessions.subagents.turns | retrieve, list | Implemented; shared Session/child IDs |
 | sessions.subagents.turns.items | list | Implemented; scoped persisted reads |
 | environments | retrieve | Three-harness colocated self-hosted implementation and qualified Docker hosted profiles: durable status and safe initial-file metadata; other installation inventory and full lifecycle parity remain gaps |

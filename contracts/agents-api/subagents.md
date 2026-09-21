@@ -2,8 +2,9 @@
 
 The target is the six read operations in the pinned SDK in `upstream.json`.
 Implementation and qualification are separate: the public types and handlers do
-not qualify a harness merely because it can deserialize them. Live acceptance for
-this batch is pending; record the final exact source and evidence before release.
+not qualify a harness merely because it can deserialize them. The Docker V1
+workflows below have real execution evidence; they do not establish complete
+multi-agent or protocol compatibility.
 
 ## Public reads
 
@@ -95,9 +96,49 @@ and own messages. The native task-create transaction enforces the requested
 concurrent limit before start; native preparation must acknowledge that applied
 limit and the protected tool profile before any model input. Discovery describes
 adapter support, not proof that an arbitrary installed CLI applied these controls.
-Its child workspace isolation and public integration remain under qualification.
 Neither adapter may substitute parent output, task completion, observation time
 or an empty list for missing facts.
+
+## Qualified Docker workflows
+
+The three harnesses passed the same six GET checks with Python SDK 3.13.0 and
+raw HTTP against the independent Core, dedicated PostgreSQL and colocated Runtime.
+Checks include two real children with their own model output, ascending/descending
+pagination, scoped cursors, root/child Item separation, Session/child Turn identity
+and cross-project denial. A new native process continued the same child without
+changing old IDs, timestamps or history. Public cancellation stopped actual child
+workspace writes, persisted cancelled Turns and left the Subagent active. Core
+restart preserved all previously captured resources byte-for-byte after JSON
+normalization.
+
+| Harness | Native execution | Verified optional behavior | Explicit limits |
+| --- | --- | --- | --- |
+| Codex 0.153.4 | Native app-server, Kimi K3 Responses | Nested children, successful close and reopen, same-child continuation | Required ToolEnvironment and public function/MCP combinations are not qualified |
+| Claude Agent SDK 0.3.269 | Native Agent/SendMessage, Kimi K3 Anthropic endpoint | Foreground `parsar_worker`, idle-child continuation, protected Bash | No qualified close; running-child messages, background work, alternate child profiles and per-call model overrides are rejected |
+| MiniMax Code 0.4.12 | Fixed source `33b259bbbeb1c16433390869938191d09bdb0680` and recorded bounded patch, MiniMax M2.7 | Native task/task_append/task_stop, protected workspace tools | No qualified close/reopen; native workers do not delegate nested work; public function/MCP combinations remain unsupported |
+
+Native probes separately verified concurrency admission, child credential/history
+protection and cancellation settlement under each supported profile. MiniMax's
+initial child-tool isolation failure and Claude's initial input-projection failure
+remain failed evidence; subsequent fixed executions supply the acceptance proof.
+The MiniMax M3/Codex empty-tool-argument failure remains a separate model-profile
+investigation; Core does not repair model output.
+
+Evidence root on `zju_a100_2`:
+`~/.parsar/remediation/20260922/subagent-contract/`. Public proofs are in
+`public-codex-kimi1`, `public-claude_sdk-2` and `public-mcode-1`; native mechanism
+proofs are in `native-proof`, `claude-native` and `mcode-native`. The shared script
+`scripts/agents-api-subagents-acceptance.py --phase spawn-direct` validates common
+reads; its `resources_passed` and `requested_phase_passed` fields qualify that
+phase. Its aggregate `passed` field additionally requires the optional Codex
+close/reopen scenario. Do not require unsupported native close operations merely
+to make that separate aggregate flag true.
+
+This batch does not rerun the E2B deployment matrix or establish live child-delta
+timing equivalence. Claude and MiniMax publish verified child history at settlement;
+the accepted read/recovery workflow must not be advertised as continuous native
+child progress streaming. Existing single-Agent deployment evidence retains its
+original scope.
 
 Still unconfirmed upstream semantics include root-completion child propagation,
 complete child-delta ordering and Session Usage aggregation. Unlimited background
