@@ -44,6 +44,11 @@ func (b BootstrapResponse) HeartbeatInterval() time.Duration {
 // Bootstrap calls POST <serverURL>/agent-daemon/bootstrap with the
 // device's runner_credential as a bearer token.
 func Bootstrap(ctx context.Context, serverURL, deviceID, credential, daemonVersion string) (*BootstrapResponse, error) {
+	return BootstrapWithClient(ctx, http.DefaultClient, serverURL, deviceID, credential, daemonVersion)
+}
+
+// BootstrapWithClient lets a connection entry point enforce its redirect policy.
+func BootstrapWithClient(ctx context.Context, client *http.Client, serverURL, deviceID, credential, daemonVersion string) (*BootstrapResponse, error) {
 	if strings.TrimSpace(serverURL) == "" {
 		return nil, fmt.Errorf("transport.Bootstrap: serverURL required")
 	}
@@ -70,7 +75,7 @@ func Bootstrap(ctx context.Context, serverURL, deviceID, credential, daemonVersi
 	if daemonVersion != "" {
 		req.Header.Set("User-Agent", "parsar-daemon/"+daemonVersion)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("transport.Bootstrap: post: %w", err)
 	}

@@ -56,11 +56,14 @@ const (
 func runConnect(ctx *runContext, args []string) error {
 	fs := newFlagSet("connect")
 	var (
-		profile    = fs.String("profile", paths.DefaultProfile, "profile name for reading legacy auth.json state or writing pid/log files")
-		background = fs.Bool("b", false, "fork into the background; writes connect.pid + connect.log")
-		serverURL  = fs.String("url", "", "Parsar server base URL; with --token, pair inline before connecting")
-		token      = fs.String("token", "", "pairing token; with --url, connect consumes it without writing auth.json")
-		deviceName = fs.String("device-name", "", "human label for inline pairing (defaults to hostname)")
+		profile        = fs.String("profile", paths.DefaultProfile, "profile name for reading legacy auth.json state or writing pid/log files")
+		background     = fs.Bool("b", false, "fork into the background; writes connect.pid + connect.log")
+		serverURL      = fs.String("url", "", "Parsar server base URL; with --token, pair inline before connecting")
+		token          = fs.String("token", "", "pairing token; with --url, connect consumes it without writing auth.json")
+		deviceName     = fs.String("device-name", "", "human label for inline pairing (defaults to hostname)")
+		remote         = fs.String("remote", "", "self-hosted Environment remote_url, unchanged")
+		environment    = fs.String("environment-id", "", "self-hosted Environment ID")
+		credentialFile = fs.String("credential-file", "", "absolute path to protected executor credential JSON")
 	)
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("connect: parse flags: %w", err)
@@ -75,6 +78,12 @@ func runConnect(ctx *runContext, args []string) error {
 	loadInlineConnectEnv(serverURL, token, deviceName)
 	if err := paths.ValidateProfile(*profile); err != nil {
 		return fmt.Errorf("connect: %w", err)
+	}
+	if *remote != "" || *environment != "" || *credentialFile != "" {
+		if *serverURL != "" || *token != "" || *deviceName != "" || fs.NArg() != 0 {
+			return errors.New("connect: Environment enrollment cannot use pairing options or positional arguments")
+		}
+		return runEnvironmentConnect(ctx, *profile, *background, *remote, *environment, *credentialFile)
 	}
 
 	inlinePair := strings.TrimSpace(*serverURL) != "" || strings.TrimSpace(*token) != ""
@@ -234,6 +243,10 @@ func spawnBackground(rc *runContext, profile string, argv []string, extraEnv []s
 // unblocks the read pump and any in-flight Send so the daemon exits
 // without orphaning agent subprocesses.
 func mainLoop(rc *runContext, profile string, prof auth.Profile, agentCLIs agentCLIDiscovery) error {
+	return mainLoopRemote(rc, profile, prof, agentCLIs, "")
+}
+
+func mainLoopRemote(rc *runContext, profile string, prof auth.Profile, agentCLIs agentCLIDiscovery, remote string) error {
 	// Route through obs/log so daemon log lines pick up the same
 	// trace_id / span_id auto-injection as the server side — when the
 	// daemon adopts an envelope's trace, every log call under that ctx
@@ -262,7 +275,13 @@ func mainLoop(rc *runContext, profile string, prof auth.Profile, agentCLIs agent
 	}()
 
 	bootCtx, bootCancel := context.WithTimeout(rootCtx, bootstrapTimeout)
-	boot, err := transport.Bootstrap(bootCtx, prof.ServerURL, prof.RuntimeID, prof.RunnerCredential, Version)
+	var boot *transport.BootstrapResponse
+	var err error
+	if remote == "" {
+		boot, err = transport.Bootstrap(bootCtx, prof.ServerURL, prof.RuntimeID, prof.RunnerCredential, Version)
+	} else {
+		boot, err = environmentBootstrap(bootCtx, prof, remote)
+	}
 	bootCancel()
 	if err != nil {
 		return fmt.Errorf("connect: bootstrap: %w", err)
@@ -277,7 +296,7 @@ func mainLoop(rc *runContext, profile string, prof auth.Profile, agentCLIs agent
 	registerAgentKinds(registry, agentCLIs, prof.ServerURL)
 
 	dial := func(ctx context.Context) (*transport.Conn, error) {
-		return transport.Dial(ctx, transport.DialOptions{
+		conn, err := transport.Dial(ctx, transport.DialOptions{
 			WSURL:      wsURL,
 			DeviceID:   boot.DeviceID,
 			Credential: prof.RunnerCredential,
@@ -287,6 +306,13 @@ func mainLoop(rc *runContext, profile string, prof auth.Profile, agentCLIs agent
 			// in heartbeat's DaemonVersion field.
 			DaemonVersion: proto.Version,
 		})
+		if remote != "" && err != nil {
+			if errors.Is(err, transport.ErrPermanent) {
+				return nil, fmt.Errorf("Environment connection rejected: %w", transport.ErrPermanent)
+			}
+			return nil, errors.New("Environment connection failed")
+		}
+		return conn, err
 	}
 
 	for {
