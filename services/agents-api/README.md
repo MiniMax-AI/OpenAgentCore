@@ -5,9 +5,9 @@ It owns reusable Agents, durable Sessions/Turns/Items, live events, function act
 and a daemon execution worker. Public execution supports qualified Codex, Claude Code
 (`claude_sdk`) and MiniMax Code (`mcode`) profiles through the shared Runtime contract.
 The three-harness Linux amd64 Docker V1 MVP has accepted evidence. V1 user-managed
-Runtime enrollment is implemented for all three harnesses; its new public chain
-still requires real acceptance. [E2B deployment](deploy/e2b/README.md) is user-managed;
-its earlier Core-managed qualification does not qualify enrollment.
+Runtime enrollment has [recorded real acceptance](../../contracts/agents-api/user-managed-runtime-v1.md)
+with explicit deployment coverage. [E2B deployment](deploy/e2b/README.md) is user-managed;
+its earlier Core-managed qualification remains historical evidence.
 It builds and runs with its own PostgreSQL database and credentials;
 Parsar's product service, frontend and database are not required.
 
@@ -309,7 +309,7 @@ connections alone do not start a Turn. Submit text, cancellation or function res
 through the official Session events endpoint; the worker assigns a same-tenant host and preserves that
 binding. Managed Docker has three-harness evidence. This generic device provisioning path
 is for `none`; self-hosted Sessions require the dedicated enrollment below.
-User-managed enrollment and complete protocol semantics need separate acceptance. See the [ownership rules](../../CONTRIBUTING.md#product-and-execution-service-separation).
+User-managed enrollment has a separate [qualification record](../../contracts/agents-api/user-managed-runtime-v1.md); complete protocol semantics remain partial. See the [ownership rules](../../CONTRIBUTING.md#product-and-execution-service-separation).
 
 ### Enable Claude SDK execution
 
@@ -535,9 +535,9 @@ The former registry/Noise relay, temporary harness credentials, separate native
 executor launcher, private Codex harness package and old remote native probes are
 retired. The Rust package retains only directory, write and workspace-export
 helpers. Historical acceptance remains evidence for its original topology, not
-proof of this new enrollment chain. Complete fixed-SDK/raw HTTP, real-model,
-Files/Artifacts, cancellation, restart/history and credential lifecycle acceptance
-is still required before declaring the new deployment qualified.
+proof of this new enrollment chain. The [current qualification record](../../contracts/agents-api/user-managed-runtime-v1.md)
+identifies the separate fixed-SDK/raw HTTP, real-model, Files/Artifacts,
+cancellation, restart/history and credential lifecycle evidence.
 
 
 ### HTTP MCP execution

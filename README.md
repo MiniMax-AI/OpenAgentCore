@@ -16,7 +16,8 @@ V1 user-managed deployments colocate our daemon, selected harness, tools and
 through the official SDK. The returned `remote_url` uses our private daemon
 transport, not stock `exec-server`. See the
 [Runtime enrollment guide](services/agents-api/README.md#user-managed-runtime-enrollment)
-for explicit harness enablement and pending real acceptance.
+for harness enablement and the [qualification record](contracts/agents-api/user-managed-runtime-v1.md)
+for tested deployments and remaining limits.
 
 ## Start here
 

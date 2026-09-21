@@ -3,8 +3,8 @@
 This assessment covers the fixed [Python SDK contract](upstream.json), with partial
 coverage. Core-managed Docker runs the three qualified native harnesses. V1
 user-managed `self_hosted` enrollment uses the same colocated Runtime for Codex,
-Claude SDK and MiniMax at `/workspace`; its new public chain still needs real
-acceptance. Core does not allocate E2B. Users own E2B allocation, renewal and cleanup
+Claude SDK and MiniMax at `/workspace`; see its [real deployment qualification](user-managed-runtime-v1.md).
+Core does not allocate E2B. Users own E2B allocation, renewal and cleanup
 through the official SDK and [Runtime packaging](../../services/agents-api/deploy/e2b/README.md).
 [Templates](environment-templates.md) remain a hosted-only resource path;
 [Files](environment-files.md) reuse the exact authorized local workspace.
@@ -67,7 +67,8 @@ SDK. It deploys the shared Runtime, then enrolls that Runtime into a `self_hoste
 Session. Core neither keeps an E2B allocation nor issues Provider renew/kill calls.
 The [E2B guide](../../services/agents-api/deploy/e2b/README.md) owns packaging and
 user-side lifecycle instructions. Expiry or lost workspace/history must not trigger
-transparent replacement or replay. New enrollment qualification is pending.
+transparent replacement or replay. The [new enrollment qualification](user-managed-runtime-v1.md)
+records its own real deployment evidence.
 The [prior E2B qualification](README.md#e2b-v1-qualification) concerns the retired
 Core-managed topology only.
 

@@ -55,7 +55,8 @@ Files/Artifacts, cancellation and owned-history continuation. Optional features
 still differ. See the [accepted scope and evidence](#accepted-milestone-and-evidence).
 The same three harnesses passed historical Core-managed E2B V1 qualification in
 PR #705. That route is retired; it does not qualify the new user-managed daemon
-enrollment chain. New local/E2B real acceptance remains pending.
+enrollment chain. The [user-managed V1 qualification](user-managed-runtime-v1.md)
+records separate real deployment acceptance and its exact scope.
 Select further work only within current user authorization. Parsar cutover and
 business Team orchestration are separate from protocol coverage.
 
@@ -86,13 +87,13 @@ paths start at `/vaults`, not `/agents/vaults`.
 | sessions.events | create, stream | Text/cancel/function-result admission and live events; function-action state snapshots supported |
 | sessions.turns | retrieve, list | Implemented reads; lifecycle conformance still partial |
 | sessions.items | list | Partial Item variants |
-| sessions.artifacts | retrieve, list, delete, content | Shared output capture and immutable stored reads/deletion on accepted Docker profiles (prior Core-managed E2B evidence remains historical), including retained downloads after Runtime loss; exact upstream defaults/errors, unchanged-file republishing and cancellation-edge parity remain unverified |
+| sessions.artifacts | retrieve, list, delete, content | Shared output capture and immutable stored reads/deletion on accepted Docker profiles and [qualified user-managed workflows](user-managed-runtime-v1.md) (prior Core-managed E2B evidence remains historical), including retained downloads after Runtime loss; exact upstream defaults/errors, unchanged-file republishing and cancellation-edge parity remain unverified |
 | sessions.subagents | retrieve, list | Missing |
 | sessions.subagents.items | list | Missing |
 | sessions.subagents.turns | retrieve, list | Missing |
 | sessions.subagents.turns.items | list | Missing |
 | environments | retrieve | Three-harness colocated self-hosted implementation and qualified Docker hosted profiles: durable status and safe initial-file metadata; other installation inventory and full lifecycle parity remain gaps |
-| environments.files | create, list | [Bounded live listing and inline/source-file creation](environment-files.md) on qualified Docker workspaces; new self-hosted enrollment reuses the local implementation, with real public acceptance pending. Full listing, overwrite and error semantics remain partial |
+| environments.files | create, list | [Bounded live listing and inline/source-file creation](environment-files.md) on qualified Docker workspaces; [user-managed enrollment](user-managed-runtime-v1.md) reuses the local implementation with separate real public acceptance. Full listing, overwrite and error semantics remain partial |
 | environments.templates | create, retrieve, update, list, delete | [Reusable network, files, env/setup/packages, inline/referenced Skills and Session snapshots](environment-templates.md); other initialization and full semantics remain gaps |
 | vaults | create, retrieve, list, delete | Create/retrieve/list/delete with independent tenant persistence, stored status filtering, atomic Credential cascade and frozen Session attachments; archive semantics and full hosted lifecycle parity remain missing |
 | vaults.credentials | create, retrieve, update, list, delete | Static-bearer create/retrieve/list/token replacement/deletion with scoped encrypted storage; Session attachment and exact-URL HTTPS MCP binding; OAuth, archive semantics and full hosted lifecycle parity remain missing |
@@ -405,8 +406,8 @@ operation and placement; native support is not public admission by itself.
 | `mcode` | Qualified `none` text and Docker `openai_hosted`; medium verbosity; public functions/service-origin MCP, image input and complete public usage breakdown remain unsupported |
 
 All three profiles implement user-managed `self_hosted` enrollment at `/workspace`
-through our private daemon transport; real public acceptance of that new chain
-is pending. Service-origin HTTP MCP is rejected on `self_hosted` and hosted local
+through our private daemon transport; [separate real acceptance](user-managed-runtime-v1.md)
+records qualified deployments and limits. Service-origin HTTP MCP is rejected on `self_hosted` and hosted local
 placements. This does not remove separately qualified Environment Plugin MCP.
 The [Docker lifecycle](environments.md#basic-public-docker-hosted-profile) retains
 workspace Files/Artifacts, cancellation and recovery with native isolation.

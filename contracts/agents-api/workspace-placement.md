@@ -10,8 +10,8 @@ All three harnesses reuse typed `LocalEnvironment`, existing preparation/start/
 cancel ownership and protected local Files/Artifacts. Native credentials and
 histories remain inaccessible to generated tools. Strict resume requires retained
 history; connectivity alone establishes neither readiness nor isolation. Current
-implementation and pending new public acceptance are recorded in the
-[Environment profile](environments.md#initial-public-self-hosted-profile).
+implementation is recorded in the [Environment profile](environments.md#initial-public-self-hosted-profile);
+[real qualification](user-managed-runtime-v1.md) identifies accepted deployments and limits.
 
 The pinned public Environment resources and `remote_url` remain unchanged, while
 that URL names our private daemon transport. Stock `exec-server` interoperability,
