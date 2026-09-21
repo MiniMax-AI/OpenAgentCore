@@ -62,6 +62,24 @@ func TestSubagentLifecycleRequiresCorrelatedNativeReceipt(t *testing.T) {
 	}
 }
 
+func TestSubagentRolloutRejectsUnresolvedLifecycleInTerminalTurn(t *testing.T) {
+	home, h := lifecycleRollout(t, func(rows []map[string]any) { rows[2]["type"] = "other" })
+	// Another completed Item proves Turn ownership while close has no completion.
+	file, err := os.OpenFile(h.Path, os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = file.WriteString(`{"type":"event_msg","payload":{"type":"item_completed","thread_id":"root","turn_id":"turn","item":{"type":"AgentMessage","id":"answer"}}}` + "\n")
+	_ = file.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Turns[0].Items = nil
+	if _, err := readSubagentEffects(home, &h); err == nil {
+		t.Fatal("lost unknown close effect")
+	}
+}
+
 func TestSubagentRolloutFiltersInheritedTurnOwnership(t *testing.T) {
 	home, h := lifecycleRollout(t, nil)
 	h.ID = "child"

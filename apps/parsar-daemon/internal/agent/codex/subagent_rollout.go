@@ -175,6 +175,13 @@ func readSubagentEffects(home string, h *subagentHistory) ([]subagentEffect, err
 		}
 	}
 	h.Turns = owned
+	active := false
+	covered := map[string]bool{}
+	for _, turn := range h.Turns {
+		if turn.Status == "inProgress" {
+			active = true
+		}
+	}
 	var effects []subagentEffect
 	for _, turn := range h.Turns {
 		for _, raw := range turn.Items {
@@ -185,7 +192,11 @@ func readSubagentEffects(home string, h *subagentHistory) ([]subagentEffect, err
 			if item.Type != "collabAgentToolCall" || (item.Tool != "closeAgent" && item.Tool != "resumeAgent") {
 				continue
 			}
+			covered[item.ID] = true
 			if item.Status == "inProgress" {
+				if turn.Status != "inProgress" {
+					return nil, errors.New("codex: lifecycle effect remains unconfirmed in a terminal Turn")
+				}
 				continue
 			}
 			completion, ok := done[item.ID]
@@ -218,6 +229,16 @@ func readSubagentEffects(home string, h *subagentHistory) ([]subagentEffect, err
 				return nil, errors.New("codex: lifecycle success receipt unavailable")
 			}
 			effects = append(effects, subagentEffect{proto.SubagentLifecyclePayload{NativeID: target, EffectID: h.ID + ":" + item.ID, Status: status, OccurredAtMS: completion.CompletedAt}, h.ID, turn.ID, item.ID})
+		}
+	}
+	for call := range calls {
+		if _, ok := done[call]; !ok && !active {
+			return nil, errors.New("codex: lifecycle call has no confirmed terminal outcome")
+		}
+	}
+	for id, event := range done {
+		if event.Thread == h.ID && !covered[id] {
+			return nil, errors.New("codex: lifecycle history snapshot is incomplete")
 		}
 	}
 	return effects, nil
