@@ -10,9 +10,9 @@ from pathlib import Path
 
 fixture = json.loads(Path('/workspace/isolation-fixture.json').read_text())
 paths = ['/environment/staging/canary',
-         '/home/runtime/.parsar/parsar-daemon/default/auth.json',
+         '/home/runtime/.parsar/parsar-daemon/executor-key.json',
          fixture['history_path'],
-         '/proc/1/root/home/runtime/.parsar/parsar-daemon/default/auth.json',
+         '/proc/1/root/home/runtime/.parsar/parsar-daemon/executor-key.json',
          '/root/.parsar/e2b/ready.json', '/var/run/docker.sock']
 
 
