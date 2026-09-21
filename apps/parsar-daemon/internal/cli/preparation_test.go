@@ -13,7 +13,7 @@ import (
 func TestPreparationRegistrationBypassesProductWrappers(t *testing.T) {
 	for _, supported := range []bool{false, true} {
 		reg := agent.NewRegistry()
-		registerAgentKinds(reg, agentCLIDiscovery{Codex: proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: proto.AgentKindCapabilities{RemoteEnvironment: supported}}, ClaudeCode: proto.SupportedAgentKind{Kind: "claude_code"}, OpenCode: proto.SupportedAgentKind{Kind: "opencode"}, Pi: proto.SupportedAgentKind{Kind: "pi"}, MCode: proto.SupportedAgentKind{Kind: "mcode"}}, "http://unreachable.invalid")
+		registerAgentKinds(reg, agentCLIDiscovery{Codex: proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: proto.AgentKindCapabilities{LocalEnvironment: supported}}, ClaudeCode: proto.SupportedAgentKind{Kind: "claude_code"}, OpenCode: proto.SupportedAgentKind{Kind: "opencode"}, Pi: proto.SupportedAgentKind{Kind: "pi"}, MCode: proto.SupportedAgentKind{Kind: "mcode"}}, "http://unreachable.invalid")
 		_, err := reg.ResolvePreparation("codex")
 		if (err == nil) != supported {
 			t.Fatal("unverified native version advertised preparation")
