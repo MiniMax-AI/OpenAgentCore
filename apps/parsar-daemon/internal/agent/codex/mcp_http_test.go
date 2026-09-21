@@ -84,7 +84,6 @@ func TestPublicMCPHTTPRejectsInvalidProfileAndStoredCredentials(t *testing.T) {
 	valid := []proto.MCPHTTPServer{{ServerLabel: "docs", ServerURL: "https://docs.example/mcp"}}
 	for _, req := range []proto.PromptRequestPayload{
 		{MCPHTTPServers: &valid},
-		{MCPHTTPServers: &valid, DisableExecutionEnvironment: true, RemoteEnvironment: &proto.RemoteEnvironment{ID: "remote"}},
 	} {
 		if _, err := publicMCPHTTPServers(req); err == nil {
 			t.Fatal("non-service profile accepted")

@@ -3,6 +3,7 @@ package dispatch
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -87,5 +88,49 @@ func TestReadPreparationRetryCannotPublishStaleRelease(t *testing.T) {
 	var failed proto.PreparationStatusPayload
 	if len(sender) != 1 || (<-sender).DecodePayload(&failed) != nil || failed.State != "failed" {
 		t.Fatal("confirmed cleanup failure was suppressed")
+	}
+}
+
+// Local read-only preparation uses no native factory. Keep the shared close
+// settlement regression at its owner boundary instead of a retired remote fixture.
+type blockingWorkspacePreparation struct {
+	agent.Prepared
+	entered, release chan struct{}
+}
+
+func (p *blockingWorkspacePreparation) Close() error {
+	close(p.entered)
+	<-p.release
+	return nil
+}
+
+func TestReadPreparationReleaseWaitsForClose(t *testing.T) {
+	sender := make(workspaceStatusSender, 4)
+	prepared := &blockingWorkspacePreparation{entered: make(chan struct{}), release: make(chan struct{})}
+	var release sync.Once
+	defer release.Do(func() { close(prepared.release) })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	timer := time.NewTimer(time.Hour)
+	defer timer.Stop()
+	r := &Router{sender: sender, shutdownCh: make(chan struct{}), log: obslog.Bg()}
+	p := &preparationState{workspaceReadOnly: true, owns: true, prepared: prepared,
+		ctx: ctx, cancel: cancel, timer: timer,
+		status: proto.PreparationStatusPayload{Handle: "reader", Revision: 1, State: "ready"}}
+	r.releasePreparation(p, "released", "", true, true)
+	select {
+	case <-prepared.entered:
+	case <-time.After(time.Second):
+		t.Fatal("close did not start")
+	}
+	r.publishPreparation(p, p.status)
+	if len(sender) != 0 || !p.owns {
+		t.Fatal("release acknowledged before close settled")
+	}
+	release.Do(func() { close(prepared.release) })
+	r.shutdownWG.Wait()
+	var status proto.PreparationStatusPayload
+	if p.owns || len(sender) != 1 || (<-sender).DecodePayload(&status) != nil || status.State != "released" {
+		t.Fatal("settled close did not release ownership and publish status")
 	}
 }

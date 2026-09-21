@@ -202,6 +202,9 @@ forwarding. The explicit daemon-executor decision supersedes the previous native
 executor interoperability requirement. The superseded execution route is removed;
 retain reusable filesystem helpers,
 necessary regressions and historical evidence without a compatibility layer.
+The private daemon wire protocol is 0.3.0 after removal of remote execution fields.
+Deploy Core and daemon together; the existing major/minor WebSocket check rejects
+0.2 peers before dispatch rather than ignoring their removed configuration.
 
 User-managed onboarding creates a `self_hosted` Session first, then passes its
 Environment ID and unchanged `remote_url` to our Runtime with connect-only

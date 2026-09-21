@@ -193,7 +193,7 @@ func TestPreparedHandoffDuplicateStartDoesNotReexecuteDuringPublication(t *testi
 	if ack := lastSteeringAck(t, sender.recSender, "run", "publication-steering"); ack.ErrorCode != "not_ready" {
 		t.Fatalf("pre-publication steering = %+v", ack)
 	}
-	read := proto.WorkspaceReadPayload{RunID: "run", EnvironmentID: "environment", Path: "file", MaxBytes: 1}
+	read := proto.WorkspaceReadPayload{RunID: "run", EnvironmentID: preparationEnvironmentID, Path: "file", MaxBytes: 1}
 	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceRead, "publication-read", read)); err != nil {
 		t.Fatal(err)
 	}

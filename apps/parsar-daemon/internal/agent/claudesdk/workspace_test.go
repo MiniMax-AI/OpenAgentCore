@@ -76,15 +76,13 @@ func TestWorkspaceTrustedBindingAndEnvironment(t *testing.T) {
 }
 
 func TestWorkspaceRejectsConflictsBeforeSideEffects(t *testing.T) {
-	for _, name := range []string{"none", "remote", "work-dir", "mcp", "caller-policy", "relative", "missing", "overlap", "symlink", "rule-pattern", "ambient-setting", "duplicate-env", "bad-env", "path-empty-component", "path-workspace", "code-in-workspace"} {
+	for _, name := range []string{"none", "work-dir", "mcp", "caller-policy", "relative", "missing", "overlap", "symlink", "rule-pattern", "ambient-setting", "duplicate-env", "bad-env", "path-empty-component", "path-workspace", "code-in-workspace"} {
 		t.Run(name, func(t *testing.T) {
 			config := workspaceFixture(t)
 			req := workspaceRequest()
 			switch name {
 			case "none":
 				req.DisableExecutionEnvironment = true
-			case "remote":
-				req.RemoteEnvironment = &proto.RemoteEnvironment{}
 			case "work-dir":
 				req.WorkDir = config.Workspace.ScratchDir
 			case "mcp":

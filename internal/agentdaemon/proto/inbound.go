@@ -260,7 +260,6 @@ type AgentKindCapabilities struct {
 	ToolItems                     bool `json:"tool_items,omitempty"`
 	ToolObservations              bool `json:"tool_observations,omitempty"`
 	EnvironmentNone               bool `json:"environment_none,omitempty"`
-	RemoteEnvironment             bool `json:"remote_environment,omitempty"`
 	LocalEnvironment              bool `json:"local_environment,omitempty"`
 	LocalEnvironmentNetworkPolicy bool `json:"local_environment_network_policy,omitempty"`
 	Preparation                   bool `json:"preparation,omitempty"`
@@ -273,13 +272,11 @@ type AgentKindCapabilities struct {
 	SubagentControl      bool `json:"subagent_control,omitempty"`
 	DurableInputReceipts bool `json:"durable_input_receipts,omitempty"`
 	// DurableTurns includes strict resume, completion release and cancellation snapshots.
-	DurableTurns             bool `json:"durable_turns,omitempty"`
-	FunctionTools            bool `json:"function_tools,omitempty"`
-	MCPHTTPTools             bool `json:"mcp_http_tools,omitempty"`
-	MCPHTTPRequired          bool `json:"mcp_http_required,omitempty"`
-	MCPHTTPRemoteEnvironment bool `json:"mcp_http_remote_environment,omitempty"`
-	MCPHTTPRemoteBearerAuth  bool `json:"mcp_http_remote_bearer_auth,omitempty"`
-	MCPHTTPBearerAuth        bool `json:"mcp_http_bearer_auth,omitempty"`
+	DurableTurns      bool `json:"durable_turns,omitempty"`
+	FunctionTools     bool `json:"function_tools,omitempty"`
+	MCPHTTPTools      bool `json:"mcp_http_tools,omitempty"`
+	MCPHTTPRequired   bool `json:"mcp_http_required,omitempty"`
+	MCPHTTPBearerAuth bool `json:"mcp_http_bearer_auth,omitempty"`
 }
 
 // SupportedAgentKind is one daemon-advertised agent engine. Daemons

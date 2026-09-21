@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/dispatch"
+	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/localworkspace"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 )
 
@@ -64,18 +67,61 @@ func (p *controlledPreparation) CancellationOutcome() proto.DonePayload {
 	return proto.DonePayload{}
 }
 
+const preparationEnvironmentID = "11111111-1111-4111-8111-111111111111"
+const preparationSessionID = "22222222-2222-4222-8222-222222222222"
+
+func preparationWorkspace(t *testing.T) *localworkspace.Binding {
+	t.Helper()
+	helper := filepath.Join(t.TempDir(), "directory")
+	if err := os.WriteFile(helper, []byte("#!/bin/sh\nprintf '%s' '{\"version\":1,\"directory\":{\"entries\":[{\"name\":\"file\",\"kind\":\"file\",\"size_bytes\":3}],\"truncated\":true}}'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, value := range map[string]string{
+		"PARSAR_RUNTIME_ENVIRONMENT_ID":   preparationEnvironmentID,
+		"PARSAR_RUNTIME_SESSION_ID":       preparationSessionID,
+		"PARSAR_RUNTIME_WORKSPACE":        t.TempDir(),
+		"PARSAR_RUNTIME_DIRECTORY_HELPER": helper,
+		"PARSAR_RUNTIME_NETWORK_ACCESS":   "enabled",
+		"PARSAR_RUNTIME_ALLOWED_DOMAINS":  "",
+		"PARSAR_RUNTIME_WRITE_HELPER":     "",
+		"PARSAR_RUNTIME_EXPORT_HELPER":    "",
+		"PARSAR_RUNTIME_STAGING":          "",
+	} {
+		t.Setenv(name, value)
+	}
+	binding, err := localworkspace.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return binding
+}
+
+func localPreparationHarness(t *testing.T) *harness {
+	t.Helper()
+	h := newHarness(t)
+	if err := h.router.Shutdown(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	var err error
+	h.router, err = dispatch.New(dispatch.Config{Registry: h.reg, Sender: h.sender, LocalWorkspace: preparationWorkspace(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return h
+}
+
 func preparationRequest() proto.ExecutionPreparePayload {
-	return proto.ExecutionPreparePayload{Configuration: proto.PromptRequestPayload{AgentKind: "prepared", AgentStateKey: "execution-session", StrictResume: true, ReleaseOnCompletion: true, RemoteEnvironment: &proto.RemoteEnvironment{ID: "environment"}}}
+	return proto.ExecutionPreparePayload{Configuration: proto.PromptRequestPayload{AgentKind: "prepared", AgentStateKey: "agents-api-" + preparationSessionID, StrictResume: true, ReleaseOnCompletion: true, LocalEnvironment: &proto.LocalEnvironment{ID: preparationEnvironmentID, NetworkAccess: "enabled"}}}
 }
 
 func preparationRouter(t *testing.T, sender dispatch.Sender, timeout time.Duration, factory agent.PreparationFactory) *dispatch.Router {
 	t.Helper()
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "prepared", Available: true, Capabilities: proto.AgentKindCapabilities{RemoteEnvironment: true}}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "prepared", Available: true, Capabilities: proto.AgentKindCapabilities{LocalEnvironment: true}}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 		return nil, errors.New("ordinary Factory must not be used for preparation")
 	})
 	reg.RegisterPreparation("prepared", true, factory)
-	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, PreparationTimeout: timeout})
+	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, PreparationTimeout: timeout, LocalWorkspace: preparationWorkspace(t)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -382,14 +428,14 @@ func TestPreparationCapacityIncludesClosingResources(t *testing.T) {
 
 func TestPreparationRejectsInputAndProductConfiguration(t *testing.T) {
 	for name, change := range map[string]func(*proto.PromptRequestPayload){
-		"run":            func(p *proto.PromptRequestPayload) { p.RunID = "run" },
-		"input":          func(p *proto.PromptRequestPayload) { p.Prompt = "input" },
-		"conversation":   func(p *proto.PromptRequestPayload) { p.ConversationID = "product" },
-		"authoring":      func(p *proto.PromptRequestPayload) { p.WorkspaceAuthoring = true },
-		"attachment":     func(p *proto.PromptRequestPayload) { p.Attachments = []proto.PromptAttachment{{Kind: "image"}} },
-		"local fallback": func(p *proto.PromptRequestPayload) { p.RemoteEnvironment = nil },
-		"resume":         func(p *proto.PromptRequestPayload) { p.StrictResume = false },
-		"release":        func(p *proto.PromptRequestPayload) { p.ReleaseOnCompletion = false },
+		"run":                 func(p *proto.PromptRequestPayload) { p.RunID = "run" },
+		"input":               func(p *proto.PromptRequestPayload) { p.Prompt = "input" },
+		"conversation":        func(p *proto.PromptRequestPayload) { p.ConversationID = "product" },
+		"authoring":           func(p *proto.PromptRequestPayload) { p.WorkspaceAuthoring = true },
+		"attachment":          func(p *proto.PromptRequestPayload) { p.Attachments = []proto.PromptAttachment{{Kind: "image"}} },
+		"missing environment": func(p *proto.PromptRequestPayload) { p.LocalEnvironment = nil },
+		"resume":              func(p *proto.PromptRequestPayload) { p.StrictResume = false },
+		"release":             func(p *proto.PromptRequestPayload) { p.ReleaseOnCompletion = false },
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := preparationRouter(t, &recSender{}, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) {

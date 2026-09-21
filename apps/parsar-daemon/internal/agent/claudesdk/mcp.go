@@ -21,7 +21,7 @@ func validateMCP(req proto.PromptRequestPayload) error {
 	if req.MCPHTTPServers == nil {
 		return nil
 	}
-	if !req.DisableExecutionEnvironment || req.RemoteEnvironment != nil {
+	if !req.DisableExecutionEnvironment {
 		return fmt.Errorf("claudesdk: HTTP MCP requires environment:none")
 	}
 	return validateMCPServers(*req.MCPHTTPServers)

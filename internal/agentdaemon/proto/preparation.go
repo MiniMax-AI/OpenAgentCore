@@ -10,7 +10,7 @@ const (
 )
 
 // ExecutionPreparePayload reuses execution configuration without accepting input
-// or product authoring. The initial private profile requires a remote environment,
+// or product authoring. The initial private profile requires a bound local environment,
 // stable state key, strict resume and completion release.
 type ExecutionPreparePayload struct {
 	Configuration PromptRequestPayload `json:"configuration"`

@@ -38,7 +38,6 @@ func TestBindingRejectsScopeAndPathOverrides(t *testing.T) {
 		},
 		"other Session":     func(r *proto.PromptRequestPayload) { r.AgentStateKey = "agents-api-" + uuid.NewString() },
 		"path override":     func(r *proto.PromptRequestPayload) { r.WorkDir = b.workspace },
-		"remote":            func(r *proto.PromptRequestPayload) { r.RemoteEnvironment = &proto.RemoteEnvironment{ID: "other"} },
 		"none":              func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = true },
 		"product authoring": func(r *proto.PromptRequestPayload) { r.WorkspaceAuthoring = true },
 		"non-strict resume": func(r *proto.PromptRequestPayload) { r.StrictResume = false },

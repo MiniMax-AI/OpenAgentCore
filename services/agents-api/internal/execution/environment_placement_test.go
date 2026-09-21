@@ -51,7 +51,7 @@ func TestLocalEnvironmentRequiresQualifiedProfileAndExactAuthority(t *testing.T)
 		var req proto.PromptRequestPayload
 		err := d.configurePreparedEnvironment(session, environment, store.ExecutionDevice{EnvironmentID: scope}, &req)
 		if scope == environment.ID {
-			if err != nil || req.LocalEnvironment == nil || req.LocalEnvironment.ID != environment.ID || req.RemoteEnvironment != nil || req.WorkDir != "" {
+			if err != nil || req.LocalEnvironment == nil || req.LocalEnvironment.ID != environment.ID || req.WorkDir != "" {
 				t.Fatal("local identity was not preserved", err)
 			}
 		} else if err == nil || req.LocalEnvironment != nil {
@@ -123,7 +123,7 @@ func TestSelfHostedUsesSameLocalBinding(t *testing.T) {
 			if (err == nil) != valid {
 				t.Fatal(workspace, binding, err)
 			}
-			if valid && (request.LocalEnvironment == nil || request.LocalEnvironment.ID != environment.ID || request.LocalEnvironment.NetworkAccess != "enabled" || request.RemoteEnvironment != nil) {
+			if valid && (request.LocalEnvironment == nil || request.LocalEnvironment.ID != environment.ID || request.LocalEnvironment.NetworkAccess != "enabled") {
 				t.Fatal("self-hosted placement did not retain common local contract", request.LocalEnvironment)
 			}
 		}

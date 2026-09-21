@@ -13,7 +13,7 @@ func SupportsExecution(version string) bool {
 }
 
 func validateExecutionRequest(req proto.PromptRequestPayload) error {
-	if !req.ReleaseOnCompletion || !req.DisableExecutionEnvironment || !req.DisableSubagents || req.WorkDir != "" || req.AgentStateKey == "" || req.RemoteEnvironment != nil || req.LocalEnvironment != nil || req.RequireExistingNativeSession || len(req.FunctionTools) != 0 || (req.MCPHTTPServers != nil && len(*req.MCPHTTPServers) != 0) {
+	if !req.ReleaseOnCompletion || !req.DisableExecutionEnvironment || !req.DisableSubagents || req.WorkDir != "" || req.AgentStateKey == "" || req.LocalEnvironment != nil || req.RequireExistingNativeSession || len(req.FunctionTools) != 0 || (req.MCPHTTPServers != nil && len(*req.MCPHTTPServers) != 0) {
 		return fmt.Errorf("mcode: unsupported execution configuration")
 	}
 	if req.ExecutionControls == nil || req.ExecutionControls.WebSearch != "disabled" || (req.ExecutionControls.TextVerbosity != "" && req.ExecutionControls.TextVerbosity != "medium") {

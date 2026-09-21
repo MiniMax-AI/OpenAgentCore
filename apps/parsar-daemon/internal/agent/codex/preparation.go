@@ -36,9 +36,6 @@ func newSession(parent context.Context, req proto.PromptRequestPayload, out chan
 }
 
 func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (*Prepared, error) {
-	if req.RemoteEnvironment != nil {
-		return nil, errors.New("codex: remote executor environments are not supported")
-	}
 	if req.WorkspaceReadOnly {
 		return nil, errors.New("codex: workspace reads use the local Runtime interface")
 	}

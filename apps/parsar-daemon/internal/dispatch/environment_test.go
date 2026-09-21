@@ -43,23 +43,25 @@ func TestNoEnvironmentUsesAvailableCapability(t *testing.T) {
 	}
 }
 
-func TestRemoteEnvironmentRequiresAvailableCapability(t *testing.T) {
+func TestLocalEnvironmentRequiresAvailableCapability(t *testing.T) {
 	for _, mode := range []string{"unsupported", "unavailable", "none conflict", "supported"} {
 		t.Run(mode, func(t *testing.T) {
-			h := newHarness(t)
+			h := localPreparationHarness(t)
 			defer h.router.Shutdown(context.Background())
 			called := false
 			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: mode != "unavailable",
-				Capabilities: proto.AgentKindCapabilities{RemoteEnvironment: mode != "unsupported"}},
+				Capabilities: proto.AgentKindCapabilities{LocalEnvironment: mode != "unsupported"}},
 				func(_ context.Context, req proto.PromptRequestPayload, _ chan<- proto.Envelope) (agent.Session, error) {
 					called = true
-					if req.RemoteEnvironment == nil || req.RemoteEnvironment.ID != "environment-test" {
-						t.Error("remote descriptor lost before factory")
+					if req.LocalEnvironment == nil || req.LocalEnvironment.ID != preparationEnvironmentID {
+						t.Error("local descriptor lost before factory")
 					}
 					return nil, errors.New("controlled factory stop")
 				})
-			req := proto.PromptRequestPayload{AgentKind: "codex", RemoteEnvironment: &proto.RemoteEnvironment{ID: "environment-test"}, DisableExecutionEnvironment: mode == "none conflict"}
-			_ = h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "remote", req))
+			req := preparationRequest().Configuration
+			req.AgentKind = "codex"
+			req.DisableExecutionEnvironment = mode == "none conflict"
+			_ = h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "local", req))
 			if called != (mode == "supported") {
 				t.Fatalf("unexpected factory call for %s", mode)
 			}

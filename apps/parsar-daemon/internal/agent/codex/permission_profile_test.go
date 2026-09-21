@@ -18,7 +18,6 @@ func TestPermissionProfileRejectsIncompatiblePreparationBeforeState(t *testing.T
 	}{
 		{"builtin", ":danger-full-access", proto.PromptRequestPayload{}},
 		{"whitespace", " ", proto.PromptRequestPayload{}},
-		{"remote", "managed-workspace", proto.PromptRequestPayload{RemoteEnvironment: &proto.RemoteEnvironment{}}},
 		{"none", "managed-workspace", proto.PromptRequestPayload{DisableExecutionEnvironment: true}},
 		{"read-owner", "managed-workspace", proto.PromptRequestPayload{WorkspaceReadOnly: true}},
 	} {

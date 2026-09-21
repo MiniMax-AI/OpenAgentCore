@@ -5,7 +5,7 @@ package proto
 // upgrade query (`version=<semver>`) and in the bootstrap HTTP
 // response; mismatches fail closed at WS upgrade.
 const (
-	Version = "0.2.0"
+	Version = "0.3.0"
 )
 
 // VersionCompatible returns true when clientVersion's "X.Y" prefix

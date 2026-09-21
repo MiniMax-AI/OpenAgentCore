@@ -19,6 +19,7 @@ func TestWebSocketRequiresAuthorizationBearer(t *testing.T) {
 		status                          int
 	}{
 		{"header", "Bearer " + credential, "", http.StatusSwitchingProtocols},
+		{"retired wire version", "Bearer " + credential, "", http.StatusUpgradeRequired},
 		{"missing header", "", "", http.StatusBadRequest},
 		{"query alone", "", credential, http.StatusBadRequest},
 		{"wrong scheme", "Basic " + credential, credential, http.StatusBadRequest},
@@ -37,6 +38,9 @@ func TestWebSocketRequiresAuthorizationBearer(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(handler.WS))
 			defer server.Close()
 			query := url.Values{"device_id": {"device"}, "version": {proto.Version}}
+			if tc.name == "retired wire version" {
+				query.Set("version", "0.2.0")
+			}
 			if tc.queryToken != "" {
 				query.Set("token", tc.queryToken)
 			}

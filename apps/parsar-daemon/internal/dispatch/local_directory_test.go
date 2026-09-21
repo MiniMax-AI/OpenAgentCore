@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/dispatch"
@@ -69,4 +70,23 @@ func TestLocalDirectoryPreparationNeedsNoHarnessAndRejectsOtherOwners(t *testing
 	if harnessCalls.Load() != 0 || r.ActiveRuns() != 0 {
 		t.Fatal("read-only operation reached native execution")
 	}
+}
+
+func waitWorkspaceRead(t *testing.T, sender *recSender, id string) proto.WorkspaceReadResultPayload {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, env := range sender.snapshot() {
+			if env.Type == proto.TypeWorkspaceReadResult && env.ID == id {
+				var result proto.WorkspaceReadResultPayload
+				if env.DecodePayload(&result) != nil {
+					t.Fatal("invalid read result")
+				}
+				return result
+			}
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("read result missing", id)
+	return proto.WorkspaceReadResultPayload{}
 }

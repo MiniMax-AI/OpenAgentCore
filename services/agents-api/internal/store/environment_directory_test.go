@@ -82,7 +82,7 @@ func prepareDirectoryRead(t *testing.T, h *dispatchHarness, environment store.En
 	t.Helper()
 	frame := h.read(proto.TypeExecutionPrepare)
 	var request proto.ExecutionPreparePayload
-	if frame.DecodePayload(&request) != nil || !proto.ValidWorkspaceReadPreparation(request.Configuration) || request.Configuration.LocalEnvironment == nil || request.Configuration.LocalEnvironment.ID != environment.ID || request.Configuration.RemoteEnvironment != nil || request.Configuration.AgentStateKey != "agents-api-"+h.session.ID {
+	if frame.DecodePayload(&request) != nil || !proto.ValidWorkspaceReadPreparation(request.Configuration) || request.Configuration.LocalEnvironment == nil || request.Configuration.LocalEnvironment.ID != environment.ID || request.Configuration.AgentStateKey != "agents-api-"+h.session.ID {
 		t.Fatal("read did not use the closed preparation profile")
 	}
 	handle := acknowledgePreparation(h, frame.ID)

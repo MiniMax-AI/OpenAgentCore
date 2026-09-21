@@ -9,30 +9,18 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 )
 
-func TestRetiredRemotePreparationRejectedBeforeNativeSetup(t *testing.T) {
-	for _, mode := range []string{"remote", "remote and none", "remote and local", "read only"} {
-		t.Run(mode, func(t *testing.T) {
-			req, cfg, root := preparationFixture(t)
-			if mode == "read only" {
-				req.WorkspaceReadOnly = true
-			} else {
-				req.RemoteEnvironment = &proto.RemoteEnvironment{ID: "old-environment", WorkspaceDirectory: "/executor-only", ConnectionURL: "https://old-registry.invalid", ConnectionToken: "private-retired-token"}
-				req.DisableExecutionEnvironment = mode == "remote and none"
-				if mode == "remote and local" {
-					req.LocalEnvironment = &proto.LocalEnvironment{ID: "local"}
-				}
-			}
-			prepared, err := newPreparation(t.Context(), req, cfg)
-			if err == nil || prepared != nil || strings.Contains(err.Error(), "private-retired-token") {
-				t.Fatal("retired request admitted or credential exposed", err)
-			}
-			if len(preparationFrames(t, root)) != 0 {
-				t.Fatal("retired request started native child")
-			}
-			if _, err := os.Stat(filepath.Join(root, "parsar-daemon", "agent-sessions")); !os.IsNotExist(err) {
-				t.Fatal("retired request created native state", err)
-			}
-		})
+func TestReadOnlyPreparationRejectedBeforeNativeSetup(t *testing.T) {
+	req, cfg, root := preparationFixture(t)
+	req.WorkspaceReadOnly = true
+	prepared, err := newPreparation(t.Context(), req, cfg)
+	if err == nil || prepared != nil {
+		t.Fatal("read-only request admitted", err)
+	}
+	if len(preparationFrames(t, root)) != 0 {
+		t.Fatal("read-only request started native child")
+	}
+	if _, err := os.Stat(filepath.Join(root, "parsar-daemon", "agent-sessions")); !os.IsNotExist(err) {
+		t.Fatal("read-only request created native state", err)
 	}
 }
 

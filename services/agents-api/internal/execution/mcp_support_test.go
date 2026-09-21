@@ -22,7 +22,7 @@ func mcpSupportFixture(t *testing.T) (Snapshot, []proto.MCPHTTPServer, device.Ki
 		t.Fatal(err)
 	}
 	caps := device.KindCapabilities{EnvironmentNone: true, MCPHTTPTools: true, MCPHTTPBearerAuth: true, MCPHTTPRequired: true,
-		Preparation: true, RemoteEnvironment: true, MCPHTTPRemoteEnvironment: true, MCPHTTPRemoteBearerAuth: true}
+		Preparation: true}
 	return snapshot, servers, caps
 }
 
@@ -57,7 +57,7 @@ func TestMCPPublicBearerPolicyIsIndependentOfRuntimeCapabilities(t *testing.T) {
 
 func TestMCPExecutionChecksRequireVerifiedCapabilityCombinations(t *testing.T) {
 	for _, placement := range []string{"none", "self_hosted"} {
-		for _, missing := range []string{"", "mcp", "bearer", "placement", "required", "preparation", "remote-mcp", "remote-bearer", "daemon", "environment"} {
+		for _, missing := range []string{"", "mcp", "bearer", "placement", "required", "preparation", "daemon", "environment"} {
 			t.Run(placement+"/"+missing, func(t *testing.T) {
 				snapshot, servers, caps := mcpSupportFixture(t)
 				snapshot.Environment.Type = placement
@@ -75,21 +75,17 @@ func TestMCPExecutionChecksRequireVerifiedCapabilityCombinations(t *testing.T) {
 				case "bearer":
 					caps.MCPHTTPBearerAuth = false
 				case "placement":
-					caps.EnvironmentNone, caps.RemoteEnvironment = false, false
+					caps.EnvironmentNone = false
 				case "required":
 					caps.MCPHTTPRequired = false
 				case "preparation":
 					caps.Preparation = false
-				case "remote-mcp":
-					caps.MCPHTTPRemoteEnvironment = false
-				case "remote-bearer":
-					caps.MCPHTTPRemoteBearerAuth = false
 				case "daemon":
 					snapshot.Daemon = &DaemonConfig{WorkDir: "/work"}
 				case "environment":
 					snapshot.Environment = nil
 				}
-				allowed := placement == "none" && (missing == "" || missing == "preparation" || missing == "remote-mcp" || missing == "remote-bearer")
+				allowed := placement == "none" && (missing == "" || missing == "preparation")
 				selected, err := (Policy{}).mcpExecutionCredentials("codex", snapshot, servers, caps)
 				if (err == nil) != allowed || allowed && len(selected) != 1 {
 					t.Fatal("incorrect combined MCP capability decision", err)

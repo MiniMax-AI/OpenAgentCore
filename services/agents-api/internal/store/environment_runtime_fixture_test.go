@@ -74,7 +74,7 @@ func completeEmptyArtifactExport(t *testing.T, h *dispatchHarness, frames ...<-c
 	frame := read(proto.TypeExecutionPrepare)
 	var prepare proto.ExecutionPreparePayload
 	environment, err := h.s.GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
-	if err != nil || frame.DecodePayload(&prepare) != nil || !proto.ValidWorkspaceReadPreparation(prepare.Configuration) || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != environment.ID || prepare.Configuration.RemoteEnvironment != nil {
+	if err != nil || frame.DecodePayload(&prepare) != nil || !proto.ValidWorkspaceReadPreparation(prepare.Configuration) || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != environment.ID {
 		t.Fatal("artifact preparation lost exact local authority", err)
 	}
 	handle := acknowledgePreparation(h, frame.ID)

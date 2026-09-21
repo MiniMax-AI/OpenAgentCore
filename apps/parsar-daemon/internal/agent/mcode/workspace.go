@@ -51,7 +51,7 @@ func ConfigureLocal(binary, node, bridge, root, workspace string, network agentn
 }
 
 func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.PromptRequestPayload) (launchOptions, error) {
-	if !req.StrictResume || req.LocalEnvironment == nil || req.WorkDir != c.Directory || req.DisableExecutionEnvironment || !(agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Equal(agentnetwork.Policy{Access: req.LocalEnvironment.NetworkAccess, AllowedDomains: req.LocalEnvironment.AllowedDomains}) || req.RemoteEnvironment != nil || req.WorkspaceReadOnly {
+	if !req.StrictResume || req.LocalEnvironment == nil || req.WorkDir != c.Directory || req.DisableExecutionEnvironment || !(agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Equal(agentnetwork.Policy{Access: req.LocalEnvironment.NetworkAccess, AllowedDomains: req.LocalEnvironment.AllowedDomains}) || req.WorkspaceReadOnly {
 		return launchOptions{}, fmt.Errorf("mcode: execution does not match the dedicated workspace")
 	}
 	servers, err := environmentMCP(req.LocalEnvironment)

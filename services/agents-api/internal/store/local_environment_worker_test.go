@@ -70,7 +70,7 @@ func TestLocalEnvironmentWorkerDirectoryUsesExactAuthorityWithoutModel(t *testin
 	result := startDirectoryRead(t.Context(), w, environment)
 	frame := h.read(proto.TypeExecutionPrepare)
 	var prepare proto.ExecutionPreparePayload
-	if frame.DecodePayload(&prepare) != nil || !proto.ValidWorkspaceReadPreparation(prepare.Configuration) || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != environment.ID || prepare.Configuration.RemoteEnvironment != nil {
+	if frame.DecodePayload(&prepare) != nil || !proto.ValidWorkspaceReadPreparation(prepare.Configuration) || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != environment.ID {
 		t.Fatal("local read did not preserve its exact identity")
 	}
 	handle := acknowledgePreparation(h, frame.ID)
@@ -126,7 +126,7 @@ func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *test
 		}
 	}
 	var prepare proto.ExecutionPreparePayload
-	if frame.DecodePayload(&prepare) != nil || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != environment.ID || prepare.Configuration.RemoteEnvironment != nil || prepare.Configuration.WorkDir != "" {
+	if frame.DecodePayload(&prepare) != nil || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != environment.ID || prepare.Configuration.WorkDir != "" {
 		t.Fatal("local preparation lost identity")
 	}
 	before, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)

@@ -21,7 +21,7 @@ func validatePermissionProfile(req proto.PromptRequestPayload, profile string) e
 	if strings.TrimSpace(profile) != profile || strings.HasPrefix(profile, ":") {
 		return errors.New("codex: deployment permissions require a named native profile")
 	}
-	if req.RemoteEnvironment != nil || req.DisableExecutionEnvironment || req.WorkspaceReadOnly {
+	if req.DisableExecutionEnvironment || req.WorkspaceReadOnly {
 		return errors.New("codex: deployment permission profile requires local execution")
 	}
 	return nil
