@@ -106,7 +106,7 @@ function projectChild(child: Child, children: Map<string, Child>): Fact[] {
     const item = (id: string, kind: string, payload: Record<string, unknown>) => facts.push({ type: "subagent_item", fact: {
       native_id: child.id, turn_id: turn, item_id: id, position: position++, kind, payload,
     } });
-    item(first.uuid!, "message", { type: "message", role: "user", content: [{ type: "input_text", text: text(first) }] });
+    item(first.uuid!, "message", { input: [{ role: "user", content: [{ type: "input_text", text: text(first) }] }] });
     const messages = new Map<string, { text: string; thinking: string }>();
     const order: { id: string; kind: "text" | "thinking" | "tool" }[] = [], seen = new Set<string>();
     const toolCalls = calls(rows);

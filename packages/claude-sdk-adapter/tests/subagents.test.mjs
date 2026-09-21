@@ -115,3 +115,11 @@ test("simultaneous continuations reserve the idle recipient before native task s
   assert.equal((await send("retry")).hookSpecificOutput.permissionDecision, "allow");
   assert.throws(() => profile.consume({ type: "system", subtype: "task_started", task_type: "local_agent", task_id: "foreign", session_id: "root", tool_use_id: "retry" }), /mismatched native continuation target/);
 });
+
+test("child input uses the shared neutral input envelope", () => {
+  const { root, children } = fixture();
+  const input = projectHistory("root", root, children).find(e => e.type === "subagent_item" && e.fact.kind === "message");
+  assert.deepEqual(input.fact.payload, { input: [{ role: "user", content: [{ type: "input_text", text: "child input" }] }] });
+  assert.equal(input.fact.item_id, "child-turn");
+  assert.equal(input.fact.position, 0);
+});
