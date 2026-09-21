@@ -279,7 +279,7 @@ def run_acceptance(client, foreign, http, session, runtime, evidence_path, secre
         first, items = run_turn("Remember this exact conversation-only token, including the remember- prefix: " + memory + ". "
                                "Use your native shell tool to run exactly `python3 " + prefix + "-publish.py` once in the foreground. "
                                "Do not edit the script, delegate, retry the command, or repeat its side effects. Report any error without retrying.", 1)
-        assert any(item.get("type") == "command_execution" and item.get("exit_code") == 0 and prefix + "-publish.py" in item.get("command", "") for item in items), "Missing real native command observation"
+        assert any(item.get("type") == "command_execution" and item.get("status") == "completed" and prefix + "-publish.py" in item.get("command", "") for item in items), "Missing real native command observation"
         isolation_proof("first")
         assert runtime.read(prefix + "-published") == b"published\n", "Publish command was repeated"
         for path, data in outputs.items():
@@ -308,7 +308,7 @@ def run_acceptance(client, foreign, http, session, runtime, evidence_path, secre
         second, items = run_turn("Run exactly `python3 " + prefix + "-recover.py` once with your native shell tool; do not edit or retry it. "
                                 "Then return the entire exact conversation-only remember- token from our previous turn, including its prefix. "
                                 "Do not look for the token in files or rerun any earlier command.", 2)
-        assert any(item.get("type") == "command_execution" and item.get("exit_code") == 0 and prefix + "-recover.py" in item.get("command", "") for item in items), "Missing recovered native isolation command"
+        assert any(item.get("type") == "command_execution" and item.get("status") == "completed" and prefix + "-recover.py" in item.get("command", "") for item in items), "Missing recovered native isolation command"
         isolation_proof("recovered")
         assert memory in answer(items), "Cold continuation lost native conversation history"
         assert runtime.read(prefix + "-published") == b"published\n", "Cold continuation repeated side effects"
@@ -328,7 +328,7 @@ def run_acceptance(client, foreign, http, session, runtime, evidence_path, secre
         fourth, items = run_turn("Continue after the cancelled command. Never restart it or rerun the publish script. "
                                  "Run exactly `python3 " + prefix + "-resume.py` once with your native shell tool, without retries. "
                                  "Then return the entire original conversation-only remember- token, including its prefix.", 4)
-        assert any(item.get("type") == "command_execution" and item.get("exit_code") == 0 and prefix + "-resume.py" in item.get("command", "") for item in items), "Missing resumed native command observation"
+        assert any(item.get("type") == "command_execution" and item.get("status") == "completed" and prefix + "-resume.py" in item.get("command", "") for item in items), "Missing resumed native command observation"
         assert memory in answer(items) and runtime.read(prefix + "-resumed") == b"resumed\n", "Post-cancel continuation failed"
         assert runtime.read(starts) == b"started\n" and runtime.read(ticks) == stopped, "Continuation repeated cancelled effects"
         assert runtime.read(prefix + "-published") == b"published\n", "Continuation repeated publication"
