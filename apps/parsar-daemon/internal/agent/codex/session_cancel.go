@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func (s *Session) Cancel(_ context.Context) error {
+func (s *Session) Cancel(ctx context.Context) error {
 	s.cancelled.Store(true)
 	s.cancelOnce.Do(func() {
 		turnID, active := s.stopSteering()
@@ -19,8 +19,11 @@ func (s *Session) Cancel(_ context.Context) error {
 				return s.rpc.writeFrameContext(ctx, frame)
 			})
 		}
+		if s.subagents != nil {
+			s.cancelErr = s.cancelSubagentWork(ctx)
+		}
 		s.cancelFn()
 		_ = s.rpc.Close()
 	})
-	return nil
+	return s.cancelErr
 }

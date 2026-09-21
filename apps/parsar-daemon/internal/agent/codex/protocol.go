@@ -158,6 +158,7 @@ type SandboxPolicy struct {
 // ---------------------------------------------------------------------------
 
 type ThreadStartParams struct {
+	HistoryMode    string         `json:"historyMode,omitempty"`
 	Cwd            string         `json:"cwd"`
 	Model          string         `json:"model,omitempty"`
 	ModelProvider  string         `json:"modelProvider,omitempty"`
@@ -269,9 +270,10 @@ type TurnUsage struct {
 }
 
 type Turn struct {
-	ID     string     `json:"id"`
-	Usage  *TurnUsage `json:"usage,omitempty"`
-	Status string     `json:"status,omitempty"`
+	CompletedAt *int64     `json:"completedAt,omitempty"`
+	ID          string     `json:"id"`
+	Usage       *TurnUsage `json:"usage,omitempty"`
+	Status      string     `json:"status,omitempty"`
 	// Failed Turns carry the native provider error here.
 	Error *TurnError `json:"error,omitempty"`
 }

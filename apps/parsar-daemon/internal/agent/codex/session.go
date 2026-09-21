@@ -64,6 +64,7 @@ func Factory(ctx context.Context, req proto.PromptRequestPayload, out chan<- pro
 //     this by killing the child early.
 type Session struct {
 	toolEnvironment           bool
+	nativeHome                string
 	subagents                 *subagentObservations
 	observeSubagentIdentities bool
 	functions                 *functionCalls
@@ -78,6 +79,7 @@ type Session struct {
 	cancelCtx context.Context
 	cancelFn  context.CancelFunc
 
+	cancelErr    error
 	cancelOnce   sync.Once
 	cancelled    atomic.Bool
 	terminal     atomic.Bool
@@ -243,7 +245,11 @@ func (s *Session) onTurnCompleted(raw json.RawMessage) {
 		s.finishAfterTerminal()
 		return
 	}
-	s.emitDone(finalText, usage)
+	var completedAt *int64
+	if status == "completed" {
+		completedAt = nativeMilliseconds(p.Turn.CompletedAt)
+	}
+	s.emitDoneAt(finalText, usage, completedAt)
 	s.finishAfterTerminal()
 }
 
@@ -348,6 +354,10 @@ func (s *Session) peekLastErrText() string {
 // ---------------------------------------------------------------------------
 
 func (s *Session) emitDone(content string, usage *TurnUsage) {
+	s.emitDoneAt(content, usage, nil)
+}
+
+func (s *Session) emitDoneAt(content string, usage *TurnUsage, completedAt *int64) {
 	if !s.terminal.CompareAndSwap(false, true) {
 		return
 	}
@@ -357,7 +367,7 @@ func (s *Session) emitDone(content string, usage *TurnUsage) {
 		doneMeta[proto.DoneMetaAgentSessionID] = tid
 		doneMeta[proto.DoneMetaAgentSessionType] = "codex_thread"
 	}
-	payload := proto.DonePayload{Content: content, Metadata: doneMeta}
+	payload := proto.DonePayload{Content: content, Metadata: doneMeta, SourceCompletedAtMS: completedAt}
 	if usage != nil {
 		payload.Usage = s.usagePayload(*usage)
 	}

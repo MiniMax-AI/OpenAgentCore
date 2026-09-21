@@ -89,6 +89,7 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	rpc := NewJSONRPCClient(rpcCfg)
 
 	s := &Session{
+		nativeHome:                nativeHomeFromPlan(plan),
 		toolEnvironment:           req.LocalEnvironment != nil && req.LocalEnvironment.ToolEnvironment,
 		functions:                 functions,
 		observeMessages:           req.ObserveMessages,
@@ -125,6 +126,11 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 			_ = rpc.Close()
 			plan.Cleanup()
 			return nil, err
+		}
+	}
+	if s.observeSubagentIdentities {
+		if err := verifySubagentObservationProfile(cancelCtx, rpc, plan.Cwd); err != nil {
+			return p.preparationFailed(err)
 		}
 	}
 	if s.toolEnvironment {

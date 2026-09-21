@@ -3,7 +3,9 @@ package codex
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
@@ -11,155 +13,134 @@ import (
 
 const subagentLookupTimeout = 3 * time.Second
 
-type subagentCandidate struct{ child, parent, turn, item string }
-
-// One worker owns bounded metadata reads; the native reader only admits facts.
 type subagentObservations struct {
-	mu        sync.Mutex
-	seen      map[string]bool
-	sealed    bool
-	queue     chan subagentCandidate
-	ctx       context.Context
-	cancel    context.CancelFunc
-	done      chan struct{}
-	published chan struct{}
+	cancelling   atomic.Bool
+	cancelResult error
+	interrupted  map[string]bool
+
+	mu       sync.Mutex
+	sealed   bool
+	ctx      context.Context
+	cancel   context.CancelFunc
+	wake     chan struct{}
+	terminal chan []proto.Envelope
+	done     chan struct{}
+	sent     map[string]string
 }
 
 func (s *Session) startSubagentObservations() {
 	ctx, cancel := context.WithCancel(s.cancelCtx)
-	s.subagents = &subagentObservations{seen: make(map[string]bool), queue: make(chan subagentCandidate, 64),
-		ctx: ctx, cancel: cancel, done: make(chan struct{}), published: make(chan struct{})}
-	go s.collectSubagentIdentities()
+	s.subagents = &subagentObservations{ctx: ctx, cancel: cancel, wake: make(chan struct{}, 1), terminal: make(chan []proto.Envelope, 1), done: make(chan struct{}), sent: map[string]string{}, interrupted: map[string]bool{}}
+	go s.collectSubagentFacts()
 }
 
+// Notifications only wake the history reader; they never establish ownership or
+// infer successful lifecycle effects from the native tool's completion status.
 func (s *Session) observeSubagentIdentity(raw json.RawMessage) {
-	o := s.subagents
-	if o == nil {
+	if s.subagents == nil {
 		return
 	}
 	var event struct {
-		ThreadID string `json:"threadId"`
-		TurnID   string `json:"turnId"`
-		Item     struct {
-			ID                string   `json:"id"`
-			Type              string   `json:"type"`
-			Tool              string   `json:"tool"`
-			Status            string   `json:"status"`
-			SenderThreadID    string   `json:"senderThreadId"`
-			ReceiverThreadIDs []string `json:"receiverThreadIds"`
-		} `json:"item"`
+		ThreadID string                `json:"threadId"`
+		Item     subagentCollaboration `json:"item"`
 	}
-	if json.Unmarshal(raw, &event) != nil || event.Item.Type != "collabAgentToolCall" ||
-		(event.Item.Tool != "spawnAgent" && event.Item.Tool != "resumeAgent") {
+	if json.Unmarshal(raw, &event) != nil {
 		return
 	}
-	if !s.isRootTurn(event.ThreadID, event.TurnID) || event.Item.SenderThreadID != event.ThreadID || event.Item.ID == "" || event.Item.Status != "completed" {
-		s.subagentGap("discovery_unverified_or_late")
+	if event.Item.Type != "collabAgentToolCall" && event.ThreadID == s.currentThreadID() {
 		return
 	}
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	for _, child := range event.Item.ReceiverThreadIDs {
-		if o.sealed || s.terminal.Load() || child == "" || child == event.ThreadID {
-			s.subagentGap("discovery_unverified_or_late")
-			continue
-		}
-		if o.seen[child] {
-			continue
-		}
-		if len(o.seen) == 64 {
-			s.subagentGap("discovery_capacity")
-			continue
-		}
-		o.seen[child] = true
-		o.queue <- subagentCandidate{child, event.ThreadID, event.TurnID, event.Item.ID}
+	select {
+	case s.subagents.wake <- struct{}{}:
+	default:
 	}
 }
 
-func (s *Session) collectSubagentIdentities() {
+func (s *Session) collectSubagentFacts() {
 	o := s.subagents
 	defer close(o.done)
-	budget := 64
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	var terminal []proto.Envelope
+	var firstFailure time.Time
+	var started bool
 	for {
 		select {
 		case <-o.ctx.Done():
-			s.subagentGap("discovery_owner_ended")
 			return
-		case candidate, open := <-o.queue:
-			if !open {
+		case terminal = <-o.terminal:
+			started = true
+		case <-o.wake:
+			started = true
+		case <-ticker.C:
+		}
+		if !started {
+			continue
+		}
+		if s.currentThreadID() == "" {
+			if terminal != nil {
+				s.publishSubagentTerminal(terminal, nil)
 				return
 			}
-			s.resolveSubagentIdentity(candidate, &budget)
+			continue
 		}
-	}
-}
-
-func (s *Session) resolveSubagentIdentity(candidate subagentCandidate, budget *int) {
-	ctx, cancel := context.WithTimeout(s.subagents.ctx, subagentLookupTimeout)
-	defer cancel()
-	for {
-		metadata, found, err := s.persistedSubagent(ctx, candidate.child, candidate.parent, budget)
+		busy, err := s.snapshotSubagents(o.ctx)
 		if err != nil {
-			s.subagentGap(err.Error())
-			return
-		}
-		if found {
-			env, err := proto.NewEnvelope(proto.TypeSubagentIdentity, s.runID, proto.SubagentIdentityPayload{
-				NativeID: metadata.ID, ParentNativeID: metadata.ParentThreadID, NativeCreatedAt: metadata.CreatedAt,
-				ParentTurnID: candidate.turn, SourceItemID: candidate.item,
-			})
-			if err != nil || !s.sendWithin(ctx, env) {
-				s.subagentGap("identity_delivery_unavailable")
+			if firstFailure.IsZero() {
+				firstFailure = time.Now()
 			}
+			if time.Since(firstFailure) < subagentLookupTimeout {
+				continue
+			}
+			if terminal == nil {
+				s.emitTerminal("codex: subagent facts could not be confirmed", true)
+				select {
+				case terminal = <-o.terminal:
+				case <-o.ctx.Done():
+					return
+				}
+			}
+			o.mu.Lock()
+			o.cancelResult = err
+			o.mu.Unlock()
+			s.publishSubagentTerminal(terminal, err)
 			return
 		}
-		select {
-		case <-ctx.Done():
-			s.subagentGap("metadata_not_persisted")
+		firstFailure = time.Time{}
+		if terminal != nil && !busy {
+			s.publishSubagentTerminal(terminal, nil)
 			return
-		case <-time.After(100 * time.Millisecond):
 		}
 	}
 }
 
-func (s *Session) subagentGap(reason string) {
-	s.cfg.logger.Warn("codex: subagent identity observation incomplete", "run_id", s.runID, "reason", reason)
+func (s *Session) publishSubagentTerminal(events []proto.Envelope, cause error) {
+	if cause != nil {
+		s.cfg.logger.Warn("codex: subagent observation failed", "run_id", s.runID, "reason", cause.Error())
+		failure, _ := proto.NewEnvelope(proto.TypeError, s.runID, proto.ErrorPayload{Error: cause.Error()})
+		s.trySend(failure)
+	}
+	for _, event := range events {
+		s.trySend(event)
+	}
+	s.closeOut()
 }
 
-// The reader has already frozen terminal content/usage and sealed root mutation.
-// It must remain free to read pending RPC replies while this worker settles.
+// Freeze the root outcome on the native reader, then leave that reader available
+// until the existing Run owner has delivered all finite child work. Cancellation
+// remains the owner's boundary; there is no timeout that silently drops children.
 func (s *Session) sendTerminal(events ...proto.Envelope) {
-	emit := func() {
+	if s.subagents == nil {
 		for _, event := range events {
 			s.trySend(event)
 		}
-	}
-	o := s.subagents
-	if o == nil {
-		emit()
 		return
 	}
+	o := s.subagents
 	o.mu.Lock()
 	o.sealed = true
-	close(o.queue)
-	empty := len(o.seen) == 0
 	o.mu.Unlock()
-	finish := func() {
-		timer := time.AfterFunc(subagentLookupTimeout, o.cancel)
-		<-o.done
-		timer.Stop()
-		o.cancel()
-		emit()
-		s.closeOut()
-		close(o.published)
-	}
-	if empty {
-		// No metadata read can depend on this reader. Startup failures still emit
-		// synchronously before run's deferred output cleanup.
-		finish()
-	} else {
-		go finish()
-	}
+	o.terminal <- events
 }
 
 func (s *Session) closeRunOutput() {
@@ -167,12 +148,28 @@ func (s *Session) closeRunOutput() {
 		o.mu.Lock()
 		sealed := o.sealed
 		o.mu.Unlock()
-		if sealed {
-			<-o.published
-		} else {
+		if !sealed {
 			o.cancel()
-			<-o.done
 		}
+		<-o.done
+		o.cancel()
 	}
 	s.closeOut()
+}
+
+func (s *Session) sendSubagentFact(ctx context.Context, kind, key string, payload any) error {
+	env, err := proto.NewEnvelope(kind, s.runID, payload)
+	if err != nil {
+		return err
+	}
+	value := string(env.Payload)
+	key = kind + ":" + key
+	if s.subagents.sent[key] == value {
+		return nil
+	}
+	if !s.sendWithin(ctx, env) {
+		return errors.New("codex: subagent observation delivery unavailable")
+	}
+	s.subagents.sent[key] = value
+	return nil
 }

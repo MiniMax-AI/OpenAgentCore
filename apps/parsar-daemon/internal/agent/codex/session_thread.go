@@ -15,6 +15,9 @@ func (s *Session) startThread(plan SessionPlan) error {
 		Permissions:           plan.Permissions,
 		DeveloperInstructions: plan.SystemPrompt,
 	}
+	if s.observeSubagentIdentities {
+		params.HistoryMode = "paginated"
+	}
 	if s.functions != nil {
 		params.DynamicTools = s.functions.definitions
 	}

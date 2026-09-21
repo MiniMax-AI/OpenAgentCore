@@ -8,6 +8,7 @@ import (
 
 type subagentMetadata struct {
 	ID             string          `json:"id"`
+	Nickname       *string         `json:"agentNickname"`
 	ParentThreadID string          `json:"parentThreadId"`
 	CreatedAt      int64           `json:"createdAt"`
 	Source         json.RawMessage `json:"source"`

@@ -3,39 +3,113 @@ package codex
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 )
 
-const persistedChild = `{"id":"child","parentThreadId":"root","createdAt":100,"source":{"subAgent":{"thread_spawn":{"parent_thread_id":"root"}}}}`
-const completedSpawn = `{"threadId":"root","turnId":"turn","item":{"id":"spawn","type":"collabAgentToolCall","tool":"spawnAgent","status":"completed","senderThreadId":"root","receiverThreadIds":["child"]}}`
+type subagentFixture struct {
+	mu          sync.Mutex
+	home        string
+	childStatus string
+	interrupted int
+	childItems  []json.RawMessage
+}
 
-func identitySession(t *testing.T) (*Session, ServerSide, <-chan JsonRpcRequest, <-chan proto.Envelope) {
+func (f *subagentFixture) history(id string) subagentHistory {
+	h := subagentHistory{Thread: Thread{ID: id, Cwd: "/workspace", CreatedAt: 100, Path: filepath.Join(f.home, "sessions", id+".jsonl"), Status: map[string]string{"type": "idle"}}, HistoryMode: "paginated"}
+	start, finish := int64(101), int64(103)
+	turn := subagentNativeTurn{ID: id + "-turn", Status: "completed", StartedAt: &start, CompletedAt: &finish, ItemsView: "full"}
+	if id == "root" {
+		turn.Items = []json.RawMessage{json.RawMessage(`{"type":"collabAgentToolCall","id":"spawn","tool":"spawnAgent","status":"completed","senderThreadId":"root","receiverThreadIds":["child"],"prompt":"real child prompt"}`)}
+	} else {
+		h.Parent = "root"
+		turn.Status = f.childStatus
+		turn.Items = f.childItems
+		if turn.Status == "inProgress" {
+			turn.CompletedAt = nil
+			h.Status = map[string]string{"type": "active"}
+		}
+	}
+	h.Turns = []subagentNativeTurn{turn}
+	return h
+}
+
+func (f *subagentFixture) persist(t *testing.T) {
+	t.Helper()
+	for _, id := range []string{"root", "child"} {
+		h := f.history(id)
+		rows := []any{map[string]any{"type": "session_meta", "payload": map[string]any{"id": id, "cwd": h.Cwd}}}
+		for _, item := range h.Turns[0].Items {
+			var v map[string]any
+			_ = json.Unmarshal(item, &v)
+			rows = append(rows, map[string]any{"type": "event_msg", "payload": map[string]any{"type": "item_completed", "thread_id": id, "turn_id": id + "-turn", "completed_at_ms": 102000, "item": map[string]any{"id": v["id"], "type": "AgentMessage"}}})
+		}
+		var body []byte
+		for _, row := range rows {
+			line, _ := json.Marshal(row)
+			body = append(append(body, line...), '\n')
+		}
+		if err := os.WriteFile(h.Path+".tmp", body, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(h.Path+".tmp", h.Path); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func observationSession(t *testing.T, status string) (*Session, *subagentFixture, <-chan proto.Envelope) {
 	t.Helper()
 	client, server, cleanup := NewTestClient()
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	out := make(chan proto.Envelope, 64)
-	s := &Session{runID: "run", rpc: client.JSONRPCClient, out: out,
-		cancelCtx: ctx, cancelFn: cancel, cfg: defaultSessionConfig(), bufs: NewItemBuffers()}
-	if err := s.bindThreadResult(json.RawMessage(`{"thread":{"id":"root"}}`), ""); err != nil {
+	ctx, cancel := context.WithCancel(t.Context())
+	out := make(chan proto.Envelope, 128)
+	f := &subagentFixture{home: t.TempDir(), childStatus: status, childItems: []json.RawMessage{json.RawMessage(`{"type":"agentMessage","id":"answer","text":"child result"}`)}}
+	if err := os.Mkdir(filepath.Join(f.home, "sessions"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	s.beginRootTurn("root", "turn")
+	f.persist(t)
+	s := &Session{runID: "run", nativeHome: f.home, rpc: client.JSONRPCClient, out: out, cancelCtx: ctx, cancelFn: cancel, cfg: defaultSessionConfig(), bufs: NewItemBuffers(), interactions: newPendingCodexInteractions()}
+	s.setThreadID("root")
+	s.beginRootTurn("root", "root-turn")
 	s.startSubagentObservations()
 	s.registerHandlers()
-	requests := make(chan JsonRpcRequest, 64)
 	go func() {
-		defer close(requests)
 		decoder := json.NewDecoder(server.FromClient)
 		for {
-			var req JsonRpcRequest
-			if decoder.Decode(&req) != nil {
+			var request JsonRpcRequest
+			if decoder.Decode(&request) != nil {
 				return
 			}
-			requests <- req
+			args, _ := json.Marshal(request.Params)
+			var p map[string]any
+			_ = json.Unmarshal(args, &p)
+			f.mu.Lock()
+			id, _ := p["threadId"].(string)
+			var result any
+			switch request.Method {
+			case "thread/read":
+				result = map[string]any{"thread": f.history(id)}
+			case "thread/turns/list":
+				result = map[string]any{"data": f.history(id).Turns, "nextCursor": nil}
+			case "thread/list":
+				result = map[string]any{"data": []any{map[string]any{"id": "child", "parentThreadId": "root", "createdAt": 100, "agentNickname": "Child", "source": map[string]any{"subAgent": map[string]any{"thread_spawn": map[string]any{"parent_thread_id": "root"}}}}}, "nextCursor": nil}
+			case "turn/interrupt":
+				f.interrupted++
+				f.childStatus = "interrupted"
+				f.persist(t)
+				result = map[string]any{}
+			default:
+				result = map[string]any{}
+			}
+			f.mu.Unlock()
+			if json.NewEncoder(server.ToClient).Encode(map[string]any{"id": request.ID, "result": result}) != nil {
+				return
+			}
 		}
 	}()
 	t.Cleanup(func() {
@@ -44,154 +118,112 @@ func identitySession(t *testing.T) (*Session, ServerSide, <-chan JsonRpcRequest,
 		select {
 		case <-s.subagents.done:
 		case <-time.After(time.Second):
-			t.Error("metadata worker outlived owner")
+			t.Error("observer outlived owner")
 		}
 	})
-	return s, server, requests, out
+	return s, f, out
 }
 
-func identityRequest(t *testing.T, requests <-chan JsonRpcRequest) JsonRpcRequest {
+func collectObserved(t *testing.T, out <-chan proto.Envelope) []proto.Envelope {
 	t.Helper()
-	select {
-	case request := <-requests:
-		return request
-	case <-time.After(time.Second):
-		t.Fatal("metadata request absent")
-	}
-	return JsonRpcRequest{}
-}
-
-func identityReply(t *testing.T, server ServerSide, request JsonRpcRequest, result string) {
-	t.Helper()
-	if err := json.NewEncoder(server.ToClient).Encode(map[string]any{"id": request.ID, "result": json.RawMessage(result)}); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestSubagentIdentitySettlesBeforeFrozenRootTerminal(t *testing.T) {
-	s, server, requests, out := identitySession(t)
-	s.observeSubagentIdentity(json.RawMessage(completedSpawn))
-	s.observeSubagentIdentity(json.RawMessage(completedSpawn))
-	request := identityRequest(t, requests)
-	if request.Method != "thread/list" {
-		t.Fatal(request.Method)
-	}
-	params, _ := json.Marshal(request.Params)
-	var query map[string]any
-	_ = json.Unmarshal(params, &query)
-	if query["parentThreadId"] != "root" || query["useStateDbOnly"] != true || query["limit"] != float64(100) || len(query["modelProviders"].([]any)) != 0 {
-		t.Fatal("lookup is not explicitly persisted and parent-scoped", string(params))
-	}
-	notify := func(method, raw string) {
-		t.Helper()
-		if err := SendNotification(server, method, json.RawMessage(raw)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	notify("item/completed", `{"threadId":"root","turnId":"turn","item":{"type":"agentMessage","id":"root-message","text":"root result"}}`)
-	notify("turn/completed", `{"threadId":"child","turn":{"id":"child-turn","status":"completed"}}`)
-	notify("turn/completed", `{"threadId":"root","turn":{"id":"turn","status":"completed"}}`)
-	barrier := make(chan struct{}, 1)
-	s.rpc.OnNotification("test/barrier", func(json.RawMessage) { barrier <- struct{}{} })
-	notify("test/barrier", `{}`)
-	select {
-	case <-barrier:
-	case <-time.After(time.Second):
-		t.Fatal("root terminal blocked the native reader")
-	}
-	notify("item/completed", `{"threadId":"root","turnId":"turn","item":{"type":"agentMessage","id":"late","text":"late mutation"}}`)
-	identityReply(t, server, request, `{"data":[`+persistedChild+`],"nextCursor":null}`)
-	var kinds []string
+	var all []proto.Envelope
 	for {
 		select {
-		case env, open := <-out:
+		case event, open := <-out:
 			if !open {
-				if len(kinds) != 2 || kinds[0] != proto.TypeSubagentIdentity || kinds[1] != proto.TypeDone {
-					t.Fatal("identity missing, duplicated or delivered after root terminal", kinds)
-				}
-				return
+				return all
 			}
-			kinds = append(kinds, env.Type)
-			if env.Type == proto.TypeSubagentIdentity {
-				var value proto.SubagentIdentityPayload
-				if env.DecodePayload(&value) != nil || value.NativeID != "child" || value.ParentNativeID != "root" || value.NativeCreatedAt != 100 || value.ParentTurnID != "turn" || value.SourceItemID != "spawn" {
-					t.Fatal(value)
-				}
-			}
-			if env.Type == proto.TypeDone {
-				var done proto.DonePayload
-				if env.DecodePayload(&done) != nil || done.Content != "root result" || done.Metadata[proto.DoneMetaAgentSessionID] != "root" {
-					t.Fatal("pending metadata changed frozen root outcome", done)
-				}
+			all = append(all, event)
+		case <-time.After(5 * time.Second):
+			t.Fatal("observation did not settle")
+			return nil
+		}
+	}
+}
+
+func TestSubagentFactsPrecedeFrozenRootTerminal(t *testing.T) {
+	s, _, out := observationSession(t, "completed")
+	s.onTurnCompleted(json.RawMessage(`{"threadId":"root","turn":{"id":"root-turn","status":"completed","completedAt":102}}`))
+	events := collectObserved(t, out)
+	kinds := []string{proto.TypeSubagentIdentity, proto.TypeSubagentCoordination, proto.TypeSubagentTurn, proto.TypeSubagentItem, proto.TypeSubagentTurn, proto.TypeDone}
+	if len(events) != len(kinds) {
+		t.Fatalf("unexpected observations: %#v", events)
+	}
+	for i, event := range events {
+		if event.Type != kinds[i] {
+			t.Fatalf("event %d: %s", i, event.Type)
+		}
+	}
+	var identity proto.SubagentIdentityPayload
+	_ = events[0].DecodePayload(&identity)
+	if identity.Instructions == nil || *identity.Instructions != "real child prompt" || identity.Name == nil || *identity.Name != "Child" {
+		t.Fatal(identity)
+	}
+	var turn proto.SubagentTurnPayload
+	_ = events[4].DecodePayload(&turn)
+	if turn.Status != "completed" || turn.CompletedAtMS == nil || *turn.CompletedAtMS != 103000 || turn.Usage != nil {
+		t.Fatal(turn)
+	}
+	var done proto.DonePayload
+	_ = events[5].DecodePayload(&done)
+	if done.SourceCompletedAtMS == nil || *done.SourceCompletedAtMS != 102000 {
+		t.Fatal(done)
+	}
+}
+
+func TestSubagentRootFirstRetainsChildUntilTerminal(t *testing.T) {
+	s, f, out := observationSession(t, "inProgress")
+	s.emitDone("frozen", nil)
+	for i := 0; i < 4; i++ {
+		select {
+		case e := <-out:
+			if e.Type == proto.TypeDone {
+				t.Fatal("root released active child")
 			}
 		case <-time.After(time.Second):
-			t.Fatal("settled metadata did not release root terminal")
+			t.Fatal("child facts missing")
 		}
 	}
-}
-
-func TestSubagentIdentityRejectsUnverifiedMetadata(t *testing.T) {
-	for _, row := range []string{
-		`{"id":"child","parentThreadId":"foreign","createdAt":100,"source":{"subAgent":{"thread_spawn":{"parent_thread_id":"root"}}}}`,
-		`{"id":"child","parentThreadId":"root","createdAt":100,"source":{"subAgent":{"thread_spawn":{"parent_thread_id":"foreign"}}}}`,
-		`{"id":"child","parentThreadId":"root","createdAt":100,"source":"cli"}`,
-		`{"id":"child","parentThreadId":"root","source":{"subAgent":{"thread_spawn":{"parent_thread_id":"root"}}}}`,
-	} {
-		t.Run(row, func(t *testing.T) {
-			s, server, requests, out := identitySession(t)
-			s.observeSubagentIdentity(json.RawMessage(completedSpawn))
-			request := identityRequest(t, requests)
-			s.emitDone("root result", nil)
-			identityReply(t, server, request, `{"data":[`+row+`],"nextCursor":null}`)
-			select {
-			case env := <-out:
-				if env.Type != proto.TypeDone {
-					t.Fatal("unverified identity escaped", env.Type)
-				}
-			case <-time.After(time.Second):
-				t.Fatal("failed verification blocked terminal")
-			}
-		})
-	}
-}
-
-func TestSubagentIdentityRetriesPersistenceAndUsesOpaqueCursor(t *testing.T) {
-	s, server, requests, out := identitySession(t)
-	s.observeSubagentIdentity(json.RawMessage(completedSpawn))
-	identityReply(t, server, identityRequest(t, requests), `{"data":[],"nextCursor":null}`)
-	identityReply(t, server, identityRequest(t, requests), `{"data":[],"nextCursor":"opaque-native-cursor"}`)
-	request := identityRequest(t, requests)
-	params, _ := json.Marshal(request.Params)
-	var query map[string]any
-	_ = json.Unmarshal(params, &query)
-	if query["cursor"] != "opaque-native-cursor" {
-		t.Fatal(string(params))
-	}
-	identityReply(t, server, request, `{"data":[`+persistedChild+`],"nextCursor":null}`)
 	select {
-	case env := <-out:
-		if env.Type != proto.TypeSubagentIdentity {
-			t.Fatal(env.Type)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("persisted child not observed")
+	case e := <-out:
+		t.Fatalf("unexpected terminal: %s", e.Type)
+	case <-time.After(20 * time.Millisecond):
+	}
+	f.mu.Lock()
+	f.childStatus = "completed"
+	f.persist(t)
+	f.mu.Unlock()
+	events := collectObserved(t, out)
+	if events[len(events)-1].Type != proto.TypeDone {
+		t.Fatal(events)
 	}
 }
 
-func TestSubagentIdentityTerminalDeadlineBoundsQueuedDiscovery(t *testing.T) {
-	s, _, requests, out := identitySession(t)
-	for i := range 64 {
-		s.observeSubagentIdentity(json.RawMessage(fmt.Sprintf(`{"threadId":"root","turnId":"turn","item":{"id":"spawn-%d","type":"collabAgentToolCall","tool":"spawnAgent","status":"completed","senderThreadId":"root","receiverThreadIds":["child-%d"]}}`, i, i)))
-	}
-	identityRequest(t, requests) // The native reader accepts the request but gives no reply.
-	started := time.Now()
-	s.emitDone("root result", nil)
-	select {
-	case env := <-out:
-		if env.Type != proto.TypeDone || time.Since(started) > 4*time.Second {
-			t.Fatal("queued lookups extended root lifetime", env.Type)
+func TestSubagentCancellationAfterRootFrozenCollectsNativeTerminal(t *testing.T) {
+	s, f, out := observationSession(t, "inProgress")
+	s.emitDone("frozen", nil)
+	for i := 0; i < 4; i++ {
+		select {
+		case <-out:
+		case <-time.After(time.Second):
+			t.Fatal("child not active")
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("metadata worker did not respect shared terminal deadline")
+	}
+	if err := s.Cancel(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	events := collectObserved(t, out)
+	var cancelled bool
+	for _, event := range events {
+		if event.Type == proto.TypeSubagentTurn {
+			var turn proto.SubagentTurnPayload
+			_ = event.DecodePayload(&turn)
+			cancelled = turn.Status == "cancelled"
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.interrupted != 1 || !cancelled {
+		t.Fatalf("interrupts=%d cancelled=%v", f.interrupted, cancelled)
 	}
 }

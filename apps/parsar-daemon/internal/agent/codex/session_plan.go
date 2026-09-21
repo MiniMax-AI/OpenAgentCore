@@ -24,6 +24,10 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	if err != nil {
 		return SessionPlan{}, nil, fmt.Errorf("codex: build session plan: %w", err)
 	}
+	if err := configureSubagentObservations(&plan, req); err != nil {
+		plan.Cleanup()
+		return SessionPlan{}, nil, err
+	}
 	if profile != "" {
 		plan.Sandbox = ""
 		plan.Permissions = profile
