@@ -11,8 +11,9 @@ conversation context from spawn; nullable names/instructions are not prerequisit
 
 Run --phase all, or spawn, inspect, close, resume in separate invocations using
 the same --evidence directory under ~/.parsar. Inspect never submits model input.
-For an independently prepared Session, inspect proves reads only, not the full
-lifecycle. All/full acceptance requires observed spawn, nested, close and resume
+For an independently prepared Session, inspect requires two real children and
+proves reads only, not the full lifecycle. Use --require-nested when the native
+profile supports nested delegation; absence is recorded, not fabricated. All/full acceptance requires observed spawn, nested, close and resume
 facts; model prose is never accepted as evidence of a native action.
 
 Evidence contains only IDs, timestamps, counts and named checks. No HTTP bodies,
@@ -51,6 +52,7 @@ def main():
     parser.add_argument("--phase", choices=("spawn", "inspect", "close", "resume", "all"), default="inspect")
     parser.add_argument("--evidence", required=True, type=Path)
     parser.add_argument("--timeout", type=int, default=240)
+    parser.add_argument("--require-nested", action="store_true", help="Require native nested delegation in an externally prepared fixture")
     args = parser.parse_args()
     require(1 <= args.timeout <= 1800, "invalid_timeout")
     evidence = args.evidence.expanduser().resolve()
@@ -232,7 +234,9 @@ def main():
                     lineage.add(child)
                     child = parents[child]
             nested = [sub["id"] for sub in subs if sub["parent_agent_id"] in known]
-            require(nested, "fixture_not_observed_no_nested_child")
+            if args.require_nested or args.phase in ("spawn", "all"):
+                require(nested, "fixture_not_observed_no_nested_child")
+            require(len(subs) >= 2, "fixture_not_observed_two_children_for_scope_checks")
             seen_items, summaries = set(root_ids), []
             for sub in subs:
                 child = identifier(sub["id"])
@@ -283,8 +287,11 @@ def main():
             raw("/subagents/" + first["id"] + "/items", {"after": second["item_ids"][0]}, expected=404)
             report.update(subagents=summaries, nested_ids=nested, root_item_count=len(root_items))
             for name in ("six_get_sdk_and_raw", "root_child_item_isolation", "session_child_turn_identity",
-                         "nested_parentage", "pagination_asc_desc_after_limit", "invalid_and_wrong_scope_cursors", "foreign_project_scope"):
+                         "pagination_asc_desc_after_limit", "invalid_and_wrong_scope_cursors", "foreign_project_scope"):
                 checked(name)
+            if nested:
+                checked("nested_parentage")
+            report["resources_passed"] = True
             report["phases"]["inspect"] = "passed"
             save()
 
