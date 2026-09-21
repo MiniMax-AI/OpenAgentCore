@@ -39,7 +39,7 @@ func TestMCPHTTPBearerPlanSeparatesServersAndProcesses(t *testing.T) {
 				}
 				args, _ := json.Marshal(plan.ExtraConfig)
 				for i, server := range servers[:2] {
-					ref := plan.mcpHTTPServers[server.ServerLabel].BearerTokenEnvVar
+					ref := plan.mcpServers[server.ServerLabel].BearerTokenEnvVar
 					if !strings.HasPrefix(ref, "PARSAR_MCP_BEARER_") || seen[ref] || !slices.Contains(plan.Env, ref+"="+tokens[i]) {
 						t.Fatal("missing exact per-server secret or reused native reference")
 					}
@@ -51,7 +51,7 @@ func TestMCPHTTPBearerPlanSeparatesServersAndProcesses(t *testing.T) {
 						t.Fatal("secret reached configuration/arguments or reference was omitted")
 					}
 				}
-				if plan.mcpHTTPServers["public"].BearerTokenEnvVar != "" || strings.Count(string(config), "bearer_token_env_var") != 2 {
+				if plan.mcpServers["public"].BearerTokenEnvVar != "" || strings.Count(string(config), "bearer_token_env_var") != 2 {
 					t.Fatal("credential-free server received authentication")
 				}
 				plan.Cleanup()
@@ -97,7 +97,7 @@ func TestMCPHTTPBearerDoesNotReachModelCatalogProbe(t *testing.T) {
 		t.Fatal("catalog probe inherited bearer or failed", err)
 	}
 	defer plan.Cleanup()
-	if !slices.Contains(plan.Env, plan.mcpHTTPServers["tools"].BearerTokenEnvVar+"="+token) {
+	if !slices.Contains(plan.Env, plan.mcpServers["tools"].BearerTokenEnvVar+"="+token) {
 		t.Fatal("app-server did not receive bearer after catalog probe")
 	}
 }
@@ -128,7 +128,7 @@ func TestMCPHTTPBearerPreflightMatchesOnlyItsServerReference(t *testing.T) {
 				first["http_headers_helper"] = "operator-helper"
 			}
 			raw, err := json.Marshal(response)
-			if err != nil || matchesMCPHTTPConfig(raw, servers) != (mutation == "none") {
+			if err != nil || matchesMCPConfig(raw, servers) != (mutation == "none") {
 				t.Fatal("incorrect authenticated configuration decision", err)
 			}
 		})

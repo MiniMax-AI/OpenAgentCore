@@ -4,12 +4,15 @@ Core owns sequencing and the completion ledger. This helper executes one bounded
 operation; it never retries, schedules, selects a harness or interprets templates.
 """
 import base64
+import ctypes
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import runpy
+import select
+import signal
 import shlex
 import subprocess
 import sys
@@ -215,7 +218,76 @@ def run(request):
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
 
+def stdio_lifetime(args):
+    """Bind sandbox lifetime to the native process, not its transient spawn thread."""
+    parent = os.getppid()
+    if parent <= 1:
+        raise ValueError('native parent unavailable')
+    parent_fd = os.pidfd_open(parent)
+    child_fd = None
+    child = None
+    try:
+        watched = select.poll()
+        watched.register(parent_fd, select.POLLIN)
+        if os.getppid() != parent or watched.poll(0):
+            raise ValueError('native parent exited')
+        # Keep exited children waitable until their pidfd has been acquired.
+        signal.signal(signal.SIGCHLD, signal.SIG_DFL)
+        # Bind before fork. This entry is single-threaded; the child only sets
+        # its death signal and checks the captured parent before exec. bwrap sets
+        # its own signal later, leaving a demonstrated startup gap without this.
+        owner = os.getpid()
+        prctl = ctypes.CDLL(None).prctl
+        prctl.argtypes = [ctypes.c_int] + [ctypes.c_ulong] * 4
+        prctl.restype = ctypes.c_int
+
+        def bind_parent():
+            if prctl(1, signal.SIGKILL, 0, 0, 0) != 0 or os.getppid() != owner:
+                os._exit(1)
+
+        # No protocol forwarding. bwrap's parent-death signal now targets this
+        # stable launcher; its PID namespace owns descendants.
+        child = subprocess.Popen(args, env=BASE_ENV, close_fds=True, preexec_fn=bind_parent)
+        child_fd = os.pidfd_open(child.pid)
+        watched.register(child_fd, select.POLLIN)
+        events = dict(watched.poll())
+        if parent_fd in events:
+            child.kill()
+            child.wait()
+            return 1
+        result = child.wait()
+        return result if result >= 0 else 128 - result
+    finally:
+        if child is not None:
+            if child.poll() is None:
+                child.kill()
+            child.wait()
+        if child_fd is not None:
+            os.close(child_fd)
+        os.close(parent_fd)
+
+
+def stdio(package, server):
+    """Preserve the native MCP descriptors while entering the existing sandbox."""
+    roots()
+    args = sandbox('enabled', '/workspace')
+    helper = '/tmp/agents-api-mcp-exec'
+    # System-package roots predate daemon installation. Mount only the fixed
+    # static helper, never native configuration, credentials or Runtime state.
+    args[-1:-1] = ['--ro-bind', '/usr/local/bin/parsar-daemon', helper]
+    args += [helper, 'runtime-mcp-exec', package, server]
+    return stdio_lifetime(args)
+
+
 def main():
+    if len(sys.argv) != 1:
+        try:
+            if len(sys.argv) != 4 or sys.argv[1] != 'stdio':
+                raise ValueError('invalid stdio invocation')
+            return stdio(sys.argv[2], sys.argv[3])
+        except Exception:
+            print('Environment MCP unavailable', file=sys.stderr)
+            return 1
     try:
         raw = sys.stdin.buffer.read(MAX_INPUT + 1)
         if len(raw) > MAX_INPUT:

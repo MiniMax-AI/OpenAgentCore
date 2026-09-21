@@ -91,6 +91,9 @@ func Finalize(workspace, installed *os.Root, input Input) error {
 }
 
 func addPlugin(manifest *Manifest, root string, bundle agentplugin.Bundle) error {
+	if len(bundle.MCP) != 0 && manifest.addMCPPackage(root) != nil {
+		return ErrInvalid
+	}
 	for _, skill := range bundle.Skills {
 		if err := manifest.add(skill.Metadata, path.Join(root, skill.RelativeRoot), root); err != nil {
 			return err
@@ -140,25 +143,45 @@ func Load(root *os.Root) (Manifest, error) {
 	if err != nil {
 		return Manifest{}, err
 	}
-	packages := map[string]bool{}
+	packages := map[string][]agentbundle.File{}
 	total := 0
+	loadPackage := func(name string) ([]agentbundle.File, error) {
+		if files, ok := packages[name]; ok {
+			return files, nil
+		}
+		files, err := ReadTree(root, name, true)
+		if err != nil {
+			return nil, err
+		}
+		for _, file := range files {
+			total += len(file.Data)
+		}
+		if total > MaxSnapshotBytes {
+			return nil, ErrInvalid
+		}
+		packages[name] = files
+		return files, nil
+	}
 	for _, skill := range manifest.Skills {
-		if !packages[skill.PackageRoot] {
-			files, err := ReadTree(root, skill.PackageRoot, true)
-			if err != nil {
-				return Manifest{}, err
-			}
-			for _, file := range files {
-				total += len(file.Data)
-			}
-			if total > MaxSnapshotBytes {
-				return Manifest{}, ErrInvalid
-			}
-			packages[skill.PackageRoot] = true
+		if _, err := loadPackage(skill.PackageRoot); err != nil {
+			return Manifest{}, err
 		}
 		body, err := root.ReadFile(skill.RelativeRoot + "/SKILL.md")
 		if err != nil || agentskill.ValidateManifest(body, skill.Metadata) != nil {
 			return Manifest{}, ErrInvalid
+		}
+	}
+	for _, name := range manifest.Plugins {
+		files, err := loadPackage(name)
+		if err != nil {
+			return Manifest{}, err
+		}
+		bundle, err := agentplugin.Inspect(files)
+		if err != nil || len(bundle.MCP) == 0 {
+			return Manifest{}, ErrInvalid
+		}
+		for _, server := range bundle.MCP {
+			manifest.MCP = append(manifest.MCP, InstalledMCP{PackageRoot: name, Server: server})
 		}
 	}
 	return manifest, nil

@@ -39,7 +39,7 @@ func (s *Session) resumeThread(threadID string, plan SessionPlan) error {
 		Permissions:           plan.Permissions,
 		DeveloperInstructions: plan.SystemPrompt,
 	}
-	if plan.mcpHTTPServers != nil {
+	if plan.mcpServers != nil {
 		// Resolve the same project configuration checked before native startup.
 		params.Cwd = plan.Cwd
 	}

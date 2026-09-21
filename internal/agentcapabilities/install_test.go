@@ -68,8 +68,16 @@ func TestDirectoryDiscoveryDoesNotActivateChildPluginMCP(t *testing.T) {
 	if err != nil || len(manifest.Skills) != 1 || manifest.Skills[0].RelativeRoot != "directories/0/child/skills/proof" {
 		t.Fatalf("parent Skill discovery failed: %+v %v", manifest, err)
 	}
-	if err := Finalize(workspace, openTestRoot(t), Input{Directories: []string{"/workspace/parent/child"}}); err == nil {
-		t.Fatal("explicit Plugin root silently dropped declared MCP")
+	if len(manifest.MCP) != 0 || len(manifest.Plugins) != 0 {
+		t.Fatal("parent directory activated child Plugin MCP")
+	}
+	exact := openTestRoot(t)
+	if err := Finalize(workspace, exact, Input{Directories: []string{"/workspace/parent/child"}}); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err = Load(exact)
+	if err != nil || len(manifest.MCP) != 1 || manifest.MCP[0].Server.Name != "remote" {
+		t.Fatalf("exact Plugin MCP declaration lost: %+v %v", manifest, err)
 	}
 }
 

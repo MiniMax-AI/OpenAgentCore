@@ -9,22 +9,18 @@ import (
 
 const CapabilityDirectory = agentcapabilities.Directory
 
-// LoadSkills consumes only the packaged installation after binding authorization.
-func LoadSkills() ([]agentcapabilities.InstalledSkill, error) {
+// LoadCapabilities consumes the packaged installation after binding authorization.
+func LoadCapabilities() (agentcapabilities.Manifest, error) {
 	actual, err := filepath.EvalSymlinks(CapabilityDirectory)
 	if err != nil || actual != CapabilityDirectory {
-		return nil, agentcapabilities.ErrInvalid
+		return agentcapabilities.Manifest{}, agentcapabilities.ErrInvalid
 	}
 	root, err := os.OpenRoot(CapabilityDirectory)
 	if err != nil {
-		return nil, agentcapabilities.ErrInvalid
+		return agentcapabilities.Manifest{}, agentcapabilities.ErrInvalid
 	}
 	defer root.Close()
-	manifest, err := agentcapabilities.Load(root)
-	if err != nil {
-		return nil, err
-	}
-	return append([]agentcapabilities.InstalledSkill{}, manifest.Skills...), nil
+	return agentcapabilities.Load(root)
 }
 
 func SkillPath(skill agentcapabilities.InstalledSkill) string {

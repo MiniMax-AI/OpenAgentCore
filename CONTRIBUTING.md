@@ -297,7 +297,7 @@ Inline and referenced Skill ZIPs use the same confidential initialization snapsh
 Core validates portable manifests and bounded regular-file archives, returns only
 safe Skill metadata, and freezes content before native preparation. The Runtime
 owns `/environment/initialization/capabilities/skills/<name>`; setup and native tools may read but
-not modify this tree. Skill-only public Plugin ZIPs preserve their complete package
+not modify this tree. Public Plugin ZIPs preserve their complete package
 layout and reuse the shared archive and portable Skill parsers. Core keeps safe
 Plugin metadata separate from encrypted archives. Templates inherit or replace
 Plugin and capability-directory lists through the same hosted resolver.
@@ -315,11 +315,49 @@ Adapters register only selected Skill roots without changing the execution loop.
 Codex uses explicit extra roots; MiniMax projects its native catalog; Claude creates
 one controlled envelope per package with real directories and immutable hardlinks
 under content. Its explicit paths remain inside that envelope; original native
-control files are not activated. Keep native MCP discovery disabled. Unsupported
-native activation fails explicitly. Public Plugin MCP remains separate qualification,
-not silent partial activation or a generic plugin framework.
+control files are not activated. Keep automatic native MCP discovery disabled.
+Explicit Environment MCP declarations
+follow the separately qualified transport path below; unsupported native activation
+fails explicitly, without silent partial activation or a generic plugin framework.
 
-Name, enabled/disabled/exact-domain restricted network, initial files, inline/referenced Skills, skill-only Plugins, workspace capability directories and env/setup/system/npm/Python are
+Environment-origin MCP declarations use the shared Plugin parser and frozen
+installed packages. The installation manifest retains selected MCP package roots;
+Runtime re-parses those protected packages without another configuration copy,
+credential cache or lifecycle ledger. Native adapters must explicitly qualify and
+project supported declarations before public admission. Parent-directory Skill
+discovery does not activate nested Plugin MCP configuration.
+
+The packaged stdio entry enters the existing initialization sandbox before parsing
+or executing a server. It mounts only the fixed static daemon helper, which resolves
+the selected installed declaration, reads explicitly selected initialized user
+variables, applies package-relative cwd and replaces itself with the server. Native
+MCP stdin/stdout pass directly to the sandbox; no protocol forwarding loop,
+Provider command or second Plugin parser is introduced. The existing Python stdio
+entry remains a single-threaded launcher and monitors the native parent process
+through Linux pidfds. Native Codex recycles spawning threads, so binding bwrap's
+parent-death signal directly to those threads kills live MCP connections. The
+launcher gives bwrap a stable parent, retains its parent-death/PID namespace cleanup,
+and kills and reaps only that child when the native process exits. A pre-exec
+parent-death signal and expected-parent PID check close the reproduced fork-to-exec
+orphan window; bind libc before fork and keep this entry single-threaded. Missing
+pidfd support fails closed. This fixes the OS process lifetime boundary without adding a
+Core execution owner, retry or reconnect loop.
+Model/daemon launch variables are never credential sources. Hosted stdio requires
+enabled network; native HTTP requires its own qualified network and redirect behavior.
+Claude composes the existing MCP identity/observation profile with its workspace
+profile. Verify the complete native inventory before admitting tool identities;
+MCP allowlist patterns never grant local Bash or file authority. Only declared
+random bearer references enter native query env, with native Bash denial retained.
+Environment-origin literal HTTP headers remain rejected for the pinned Claude
+client because its interpolation and cross-origin forwarding change their meaning.
+MiniMax accepts environment stdio only. Its adapter reads the existing Session-private
+native runtime-name registry for exact first-frame identities and cross-checks
+completed native results. Reuse existing observation and cancellation settlement;
+never fabricate a delayed start event, guess normalized identities or add a registry
+of our own. Its unqualified HTTP transport remains rejected.
+These mechanisms alone do not establish public MCP support or full compatibility.
+
+Name, enabled/disabled/exact-domain restricted network, initial files, inline/referenced Skills, Plugins, workspace capability directories and env/setup/system/npm/Python are
 implemented independently of remaining installation fields. Reject unsupported
 inputs rather than persisting them for silent
 omission; expand inline and template initialization together in separately qualified
@@ -1485,7 +1523,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   the selected harness. Omitted/null service tier currently uses `auto`; complete
   upstream default/error/retry conformance and remaining MCP/web-search variants
   remain gaps. Unknown/unsupported variants fail explicitly. No product lookup is permitted.
-- Public HTTP MCP uses the native harness client and tool loop. The supported
+- Service-origin public HTTP MCP uses the native harness client and tool loop. The supported
   execution profiles are Codex with `environment:none` or `self_hosted`, and
   Claude SDK with `environment:none`. Both require an explicit `service`
   connection origin and a trusted service-side harness. The execution device is
@@ -2133,7 +2171,8 @@ Claude hosted functions compose the existing SDK function bridge with the native
 workspace sandbox. Only declared function tools and the verified native tool
 inventory are available. The bundle advertises this combination separately from
 basic workspace execution; function preparations require that verified combination.
-External hosted MCP remains unqualified. Function callbacks do not change file,
+Service-origin hosted MCP remains unqualified; Environment Plugin declarations
+use the separately qualified initialization path above. Function callbacks do not change file,
 credential, history, subagent or network authority.
 
 ### Claude dedicated Docker Runtime
@@ -2166,8 +2205,9 @@ Registration combines that contract with the verified operator binding. Core use
 an explicit accepted engine profile independently of advertisements. This profile
 supports native Bash/Read/Edit, preparation, shared Files/Artifacts, cancellation
 and same-history continuation. The separately advertised `workspace_functions`
-combination supports declared public functions with text results. External HTTP
-MCP remains unqualified here; its existing `none` support is retained.
+combination supports declared public functions with text results. Service-origin
+HTTP MCP remains unqualified here; its existing `none` support is retained.
+Environment Plugin MCP follows the separately qualified transport path above.
 Native Bash network access uses the harness's HTTP proxy; no alternate networking
 or tool loop is implemented by Core.
 

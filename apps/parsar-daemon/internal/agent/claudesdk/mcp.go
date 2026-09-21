@@ -24,8 +24,12 @@ func validateMCP(req proto.PromptRequestPayload) error {
 	if !req.DisableExecutionEnvironment || req.RemoteEnvironment != nil {
 		return fmt.Errorf("claudesdk: HTTP MCP requires environment:none")
 	}
+	return validateMCPServers(*req.MCPHTTPServers)
+}
+
+func validateMCPServers(servers []proto.MCPHTTPServer) error {
 	labels := map[string]bool{}
-	for _, server := range *req.MCPHTTPServers {
+	for _, server := range servers {
 		endpoint, err := url.Parse(server.ServerURL)
 		if !mcpLabel.MatchString(server.ServerLabel) || server.ServerLabel == "functions" || labels[server.ServerLabel] ||
 			err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Hostname() == "" || endpoint.User != nil ||
@@ -51,7 +55,7 @@ func validateMCP(req proto.PromptRequestPayload) error {
 // process environment and are expanded by the native HTTP client.
 type mcpHTTPServer struct {
 	ServerLabel       string    `json:"server_label"`
-	ServerURL         string    `json:"server_url"`
+	ServerURL         string    `json:"server_url,omitempty"`
 	AllowedTools      *[]string `json:"allowed_tools"`
 	Required          bool      `json:"required,omitempty"`
 	BearerTokenEnvVar string    `json:"bearer_token_env_var,omitempty"`
@@ -84,12 +88,12 @@ type mcpState struct {
 
 func (m *mcpState) receive(event bridgeEvent, start startRequest, emit func(string, any)) error {
 	n := event.Observation
-	if start.MCPHTTPServers == nil || n == nil || n.Kind != "mcp" || event.ID == "" || !json.Valid(n.Arguments) ||
+	if n == nil || n.Kind != "mcp" || event.ID == "" || !json.Valid(n.Arguments) ||
 		!json.Valid(n.Output) || !json.Valid(n.Error) {
 		return fmt.Errorf("claudesdk: invalid MCP observation")
 	}
 	declared := false
-	for _, server := range *start.MCPHTTPServers {
+	for _, server := range start.declaredMCP() {
 		if server.ServerLabel == n.Server && n.Name != "" && (server.AllowedTools == nil || slices.Contains(*server.AllowedTools, n.Name)) {
 			declared = true
 			break

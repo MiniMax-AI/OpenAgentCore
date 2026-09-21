@@ -20,7 +20,7 @@ export type Prepare = Omit<Start, "type" | "prompt" | "workspace"> & { type: "pr
 
 // MCP startup confirms its hooks before the native input iterator yields.
 export function immediatePrompt(request: Start | Prepare): string | undefined {
-  return request.type === "start" && request.mcp_http_servers === undefined ? request.prompt : undefined;
+  return request.type === "start" && request.mcp_http_servers === undefined && !request.workspace?.mcp?.length ? request.prompt : undefined;
 }
 
 export function parseRequest(line: string): Start | Prepare {

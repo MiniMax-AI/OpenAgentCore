@@ -30,6 +30,7 @@ type WorkspaceConfig struct {
 }
 
 type workspaceProfile struct {
+	MCP             []environmentMCPServer             `json:"mcp,omitempty"`
 	Skills          []agentcapabilities.InstalledSkill `json:"skills,omitempty"`
 	ToolEnvironment bool                               `json:"tool_environment,omitempty"`
 	SystemPackages  bool                               `json:"system_packages,omitempty"`
@@ -67,7 +68,12 @@ func prepareWorkspace(config Config, req proto.PromptRequestPayload) (*workspace
 	if req.LocalEnvironment != nil {
 		profile.Skills = req.LocalEnvironment.Skills
 	}
-	return profile, env, nil
+	servers, credentials, err := prepareEnvironmentMCP(req.LocalEnvironment)
+	if err != nil {
+		return nil, nil, err
+	}
+	profile.MCP = servers
+	return profile, append(env, credentials...), nil
 }
 
 func workspaceCwd(w *WorkspaceConfig) string {

@@ -61,6 +61,7 @@ func TestSubcommandsAreRegistered(t *testing.T) {
 	// the public CLI surface is the shipped contract.
 	want := map[string]bool{
 		"runtime-capabilities": false,
+		"runtime-mcp-exec":     false,
 		"placement":            false,
 		"connect":              false,
 		"status":               false,

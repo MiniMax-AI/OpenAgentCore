@@ -158,9 +158,9 @@ user-managed enrollment remain outside this qualification.
 | Area | Missing or unverified scope |
 | --- | --- |
 | Subagents / multi_agent | Six public child read operations, enabled execution, child lifecycle/interactions and full recovery; deferred outside the MVP |
-| Environment Templates | Plugin MCP, unsupported restricted hostname forms, unqualified installation overrides/null network and exact hosted errors remain gaps. CRUD/list, files, env/setup/system/npm/Python, inline/referenced Skills, skill-only Plugins, workspace capability directories and Session references have accepted coverage |
+| Environment Templates | Unsupported restricted hostname forms, unqualified installation overrides/null network and exact hosted errors remain gaps. CRUD/list, files, env/setup/system/npm/Python, inline/referenced Skills, Plugins, workspace capability directories and Session references have recorded coverage. Environment Plugin MCP transport and placement limits are [listed separately](environment-templates.md#environment-origin-mcp-plugins) |
 | Input and configuration | Non-text initial input, broader content/configuration unions, structured output and reasoning/verbosity combinations |
-| Tools and interactions | Deferred functions, other tool types, effective tool-set enforcement and result/cancel publication ordering; MiniMax public functions/MCP remain unsupported |
+| Tools and interactions | Deferred functions, other tool types, effective tool-set enforcement and result/cancel publication ordering; MiniMax public functions and service-origin MCP remain unsupported |
 | Vault and Credentials | OAuth/refresh, archive semantics, revocation/concurrent mutation and exact hosted selection/error behavior; static bearer CRUD/token replacement is already present |
 | Existing resources | Full Item/SSE/Usage variants, omitted/null/default/error semantics, pagination and overlapping lifecycle behavior beyond recorded cases |
 
@@ -391,8 +391,8 @@ operation and placement; native support is not public admission by itself.
 | Engine | Qualified placements and limits |
 | --- | --- |
 | `codex` (default) | `none`, the bounded official `self_hosted` path and Docker/E2B `openai_hosted`; public functions with ordered text/image results; service-origin HTTP MCP on `none`/`self_hosted`, not hosted; supported verbosity follows the native policy below |
-| `claude_sdk` | `none` and Docker/E2B `openai_hosted`; medium verbosity, object-root function schemas and text-only function results; anonymous/static-bearer HTTP MCP with either required value on `none`; hosted HTTP MCP remains unsupported |
-| `mcode` | `none` text and Docker/E2B `openai_hosted` workspace execution; medium verbosity; public functions/MCP, image input and complete public usage breakdown remain unsupported |
+| `claude_sdk` | `none` and Docker/E2B `openai_hosted`; medium verbosity, object-root function schemas and text-only function results; anonymous/static-bearer service-origin HTTP MCP with either required value on `none`; hosted service-origin HTTP MCP remains unsupported |
+| `mcode` | `none` text and Docker/E2B `openai_hosted` workspace execution; medium verbosity; public functions/service-origin MCP, image input and complete public usage breakdown remain unsupported |
 
 All three hosted profiles reuse the [Docker](environments.md#basic-public-docker-hosted-profile)
 or [E2B](environments.md#basic-public-e2b-hosted-profile) provider lifecycle,
@@ -405,9 +405,13 @@ operator setup: [Codex](../../services/agents-api/deploy/codex/README.md),
 images as pinned templates.
 The shared initialization path supports env/setup and system/npm/Python packages;
 see the [evidence and limits](environment-templates.md#verification). Remaining
-unsupported startup installations, unqualified restricted hostname forms and hosted public HTTP MCP
-remain outside these accepted profiles. MiniMax's private MCP tool bridge
-is internal transport, not public MCP support.
+unsupported startup installations, unqualified restricted hostname forms and hosted
+service-origin HTTP MCP remain outside these accepted profiles. Environment-origin
+MCP Plugins have a separate [Docker qualification and transport matrix](environment-templates.md#environment-origin-mcp-plugins):
+stdio on all three harnesses, Codex HTTP with literal headers or HTTPS bearer,
+and Claude anonymous HTTP or HTTPS bearer without literal headers. This batch
+does not qualify those new Plugin paths on E2B. MiniMax's private workspace MCP
+bridge remains internal transport, distinct from installed Environment MCP servers.
 
 The [Codex self-hosted profile](environments.md) remains distinct from managed
 Docker/E2B and from future user-managed Runtime enrollment. Product `claude_code`

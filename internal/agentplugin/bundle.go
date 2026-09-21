@@ -32,6 +32,7 @@ type Bundle struct {
 	Metadata Metadata
 	Files    []agentbundle.File
 	Skills   []Skill
+	MCP      []MCPServer
 }
 
 // Read validates the archive and its declared identity without native loading.
@@ -74,10 +75,14 @@ func Inspect(files []agentbundle.File) (Bundle, error) {
 		return Bundle{}, ErrInvalid
 	}
 	roots, err := skillRoots(manifest.Skills)
-	if err != nil || rejectMCP(manifest.MCP, members) != nil {
+	if err != nil {
 		return Bundle{}, ErrInvalid
 	}
-	result := Bundle{Metadata: Metadata{Type: "inline", Name: manifest.Name, Description: manifest.Description}, Files: files}
+	servers, err := readMCP(manifest.MCP, members)
+	if err != nil {
+		return Bundle{}, ErrInvalid
+	}
+	result := Bundle{Metadata: Metadata{Type: "inline", Name: manifest.Name, Description: manifest.Description}, Files: files, MCP: servers}
 	seen := map[string]bool{}
 	for _, file := range files {
 		if path.Base(file.Path) != "SKILL.md" {
@@ -98,7 +103,7 @@ func Inspect(files []agentbundle.File) (Bundle, error) {
 		seen[metadata.Name] = true
 		result.Skills = append(result.Skills, Skill{Metadata: metadata, RelativeRoot: root})
 	}
-	if len(result.Skills) == 0 || len(result.Skills) > 50 {
+	if (len(result.Skills) == 0 && (len(roots) != 0 || len(result.MCP) == 0)) || len(result.Skills) > 50 {
 		return Bundle{}, ErrInvalid
 	}
 	sort.Slice(result.Skills, func(i, j int) bool { return result.Skills[i].RelativeRoot < result.Skills[j].RelativeRoot })
@@ -106,6 +111,9 @@ func Inspect(files []agentbundle.File) (Bundle, error) {
 }
 
 func skillRoots(raw json.RawMessage) ([]string, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
 	var roots []string
 	var single string
 	if json.Unmarshal(raw, &single) == nil {
@@ -135,32 +143,6 @@ func relativeDeclaration(value string) (string, error) {
 		return "", ErrInvalid
 	}
 	return value, nil
-}
-
-func rejectMCP(raw json.RawMessage, files map[string][]byte) error {
-	config := ".mcp.json"
-	declared := len(raw) != 0
-	if declared {
-		if json.Unmarshal(raw, &config) != nil {
-			return ErrInvalid
-		}
-		var err error
-		config, err = relativeDeclaration(config)
-		if err != nil {
-			return err
-		}
-	}
-	body, exists := files[config]
-	if !exists && !declared {
-		return nil
-	}
-	var input struct {
-		Servers map[string]json.RawMessage `json:"mcpServers"`
-	}
-	if decodeObject(body, &input) != nil || input.Servers == nil || len(input.Servers) != 0 {
-		return ErrInvalid
-	}
-	return nil
 }
 
 func decodeObject(body []byte, output any) error {

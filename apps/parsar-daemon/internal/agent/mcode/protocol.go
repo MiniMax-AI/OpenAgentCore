@@ -30,6 +30,7 @@ type configOption struct {
 }
 
 type toolUpdate struct {
+	mcp       *mcpToolIdentity
 	ID        string         `json:"toolCallId"`
 	Name      string         `json:"name"`
 	Title     string         `json:"title"`

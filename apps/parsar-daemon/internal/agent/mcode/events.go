@@ -1,6 +1,7 @@
 package mcode
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -25,7 +26,9 @@ func (s *Session) handle(frame rpcFrame) error {
 		return nil
 	}
 	var event sessionUpdate
-	if err := json.Unmarshal(frame.Params, &event); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(frame.Params))
+	decoder.UseNumber()
+	if err := decoder.Decode(&event); err != nil {
 		return fmt.Errorf("mcode: invalid session update")
 	}
 	if event.SessionID != s.sessionID {
@@ -47,14 +50,14 @@ func (s *Session) handle(frame rpcFrame) error {
 		s.sequence++
 		s.emit(proto.TypeThinking, proto.ThinkingPayload{Text: event.Update.Content.Text, Sequence: s.sequence})
 	case "tool_call", "tool_call_update":
-		s.emitTool(event.Update.toolUpdate)
+		return s.emitTool(event.Update.toolUpdate)
 	}
 	return nil
 }
 
-func (s *Session) emitTool(update toolUpdate) {
+func (s *Session) emitTool(update toolUpdate) error {
 	if update.ID == "" || s.completedTools[update.ID] {
-		return
+		return nil
 	}
 	previous, started := s.tools[update.ID]
 	if update.Name == "" {
@@ -67,18 +70,33 @@ func (s *Session) emitTool(update toolUpdate) {
 		update.RawInput = previous.RawInput
 	}
 	if s.req.ObserveToolObservations {
-		started = workspaceToolObservation(previous, "before") != nil
+		update.mcp = previous.mcp
+		if update.mcp != nil && update.Name != previous.Name {
+			return fmt.Errorf("mcode: native MCP call identity changed")
+		}
+		if update.mcp == nil {
+			var err error
+			update.mcp, err = s.environmentMCPIdentity(update.Name)
+			if err != nil {
+				return err
+			}
+		}
+		started = previous.mcp != nil || workspaceToolObservation(previous, "before") != nil
 	}
 	if !started {
-		s.emitToolStage(update, "before")
+		if err := s.emitToolStage(update, "before"); err != nil {
+			return err
+		}
 	}
+	s.tools[update.ID] = update
 	if update.Status == "completed" || update.Status == "failed" {
-		s.emitToolStage(update, "after")
+		if err := s.emitToolStage(update, "after"); err != nil {
+			return err
+		}
 		delete(s.tools, update.ID)
 		s.completedTools[update.ID] = true
-	} else {
-		s.tools[update.ID] = update
 	}
+	return nil
 }
 
 func (s *Session) askPermission(frame rpcFrame) error {

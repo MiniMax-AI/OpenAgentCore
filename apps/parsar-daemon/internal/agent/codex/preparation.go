@@ -161,8 +161,8 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 			return p.preparationFailed(err)
 		}
 	}
-	if plan.mcpHTTPServers != nil {
-		if err := verifyMCPHTTPConfig(cancelCtx, rpc, plan); err != nil {
+	if plan.mcpServers != nil {
+		if err := verifyMCPConfig(cancelCtx, rpc, plan); err != nil {
 			cancelFn()
 			_ = rpc.Close()
 			plan.Cleanup()

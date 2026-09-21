@@ -34,6 +34,7 @@ func defaultRunContext() *runContext {
 // likely flow connect → status → stop / logs → logout.
 var commands = []command{
 	{name: "runtime-capabilities", summary: "Install frozen capabilities in the packaged Runtime", run: runRuntimeCapabilities},
+	{name: "runtime-mcp-exec", summary: "Execute installed MCP inside the packaged Runtime sandbox", run: runRuntimeMCP},
 	{name: "placement", summary: "Enroll or retire an explicitly managed local execution placement", run: runPlacement},
 	{name: "connect", summary: "Pair, open the reverse WebSocket, and start serving prompts", run: runConnect},
 	{name: "status", summary: "Print the paired profile and daemon state", run: runStatus},

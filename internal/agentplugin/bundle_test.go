@@ -38,7 +38,7 @@ func TestPluginRejectsUnqualifiedActivationAndUnsafeLayout(t *testing.T) {
 		body string
 	}{
 		{"declared MCP", ".codex-plugin/plugin.json", `{"name":"proof","description":"Use shared resources.","skills":"./skills","mcpServers":"./missing.json"}`},
-		{"default MCP", ".mcp.json", `{"mcpServers":{"remote":{"type":"http","url":"https://example.com/mcp"}}}`},
+		{"unqualified MCP field", ".mcp.json", `{"mcpServers":{"remote":{"type":"http","url":"https://example.com/mcp","env_http_headers":{"Authorization":"SECRET"}}}}`},
 		{"hooks", ".codex-plugin/plugin.json", `{"name":"proof","description":"Use shared resources.","skills":"./skills","hooks":"./hooks.json"}`},
 		{"escaping declaration", ".codex-plugin/plugin.json", `{"name":"proof","description":"Use shared resources.","skills":"./../private"}`},
 		{"absolute declaration", ".codex-plugin/plugin.json", `{"name":"proof","description":"Use shared resources.","skills":"/private"}`},

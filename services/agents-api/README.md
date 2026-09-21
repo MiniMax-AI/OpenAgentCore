@@ -636,7 +636,11 @@ See [Environment contracts and remaining work](../../contracts/agents-api/enviro
 
 ### HTTP MCP execution
 
-MCP runs on trusted service-side compute. Codex supports `environment:{"type":"none"}`
+This section covers `agent.tools` with `connection_origin: "service"`.
+Environment-origin Plugin declarations use the separate
+[initialization and transport contract](../../contracts/agents-api/environment-templates.md#environment-origin-mcp-plugins).
+
+Service-origin MCP runs on trusted service-side compute. Codex supports `environment:{"type":"none"}`
 or a `self_hosted` Environment; Claude SDK supports HTTP MCP with
 `environment:{"type":"none"}`. Inline or saved Agent tools may declare:
 

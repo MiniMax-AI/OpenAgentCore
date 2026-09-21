@@ -7,6 +7,21 @@ import (
 	"path/filepath"
 )
 
+// ReadToolEnvironment selects the immutable user configuration. It never reads
+// process environment or introduces live-execution prerequisites for Files.
+func ReadToolEnvironment() (map[string]string, error) {
+	info, err := os.Lstat(ToolEnvironmentJSON)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0222 != 0 || info.Size() > 1<<20 {
+		return nil, errors.New("initialized user environment unavailable")
+	}
+	body, err := os.ReadFile(ToolEnvironmentJSON)
+	var values map[string]string
+	if err != nil || json.Unmarshal(body, &values) != nil || values == nil {
+		return nil, errors.New("initialized user environment unavailable")
+	}
+	return values, nil
+}
+
 // These paths belong to the packaged Runtime, not a harness or public template.
 const (
 	InitializationDirectory = "/environment/initialization"

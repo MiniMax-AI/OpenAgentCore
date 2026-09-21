@@ -11,7 +11,7 @@ import (
 // config/read loads the same cwd and CLI layers without MCP discovery. Native
 // mcpServerStatus/list instead opens eager discovery connections; do not use it
 // to decide whether undeclared servers are safe to contact.
-func verifyMCPHTTPConfig(ctx context.Context, rpc *JSONRPCClient, plan SessionPlan) error {
+func verifyMCPConfig(ctx context.Context, rpc *JSONRPCClient, plan SessionPlan) error {
 	check, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	raw, err := rpc.Request(check, "config/read", map[string]any{"cwd": plan.Cwd, "includeLayers": false})
@@ -19,13 +19,13 @@ func verifyMCPHTTPConfig(ctx context.Context, rpc *JSONRPCClient, plan SessionPl
 		// Native configuration errors and responses can contain operator secrets.
 		return errors.New("codex: cannot verify public MCP configuration")
 	}
-	if !matchesMCPHTTPConfig(raw, plan.mcpHTTPServers) {
+	if !matchesMCPConfig(raw, plan.mcpServers) {
 		return errors.New("codex: effective native MCP configuration differs from the public declaration")
 	}
 	return nil
 }
 
-func matchesMCPHTTPConfig(raw json.RawMessage, declared map[string]mcpServerConfig) bool {
+func matchesMCPConfig(raw json.RawMessage, declared map[string]mcpServerConfig) bool {
 	var response struct {
 		Config struct {
 			Servers         map[string]map[string]any `json:"mcp_servers"`
@@ -42,12 +42,32 @@ func matchesMCPHTTPConfig(raw json.RawMessage, declared map[string]mcpServerConf
 	}
 	for name, expected := range declared {
 		server, exists := config.Servers[name]
-		if !exists || server["url"] != expected.URL || server["environment_id"] != "local" || server["enabled"] != true {
+		if !exists || server["environment_id"] != "local" || server["enabled"] != true {
 			return false
 		}
-		delete(server, "url")
+		if expected.URL != "" {
+			if server["url"] != expected.URL || !matchesMCPHeaderMap(server, "http_headers", expected.Headers) ||
+				!matchesMCPHeaderMap(server, "env_http_headers", expected.EnvHTTPHeaders) {
+				return false
+			}
+			delete(server, "url")
+		} else {
+			args, err := json.Marshal(expected.Args)
+			var want any
+			if err != nil || json.Unmarshal(args, &want) != nil || server["command"] != expected.Command || !reflect.DeepEqual(server["args"], want) {
+				return false
+			}
+			delete(server, "command")
+			delete(server, "args")
+		}
 		delete(server, "environment_id")
 		delete(server, "enabled")
+		if expected.ApproveTools {
+			if server["default_tools_approval_mode"] != "approve" {
+				return false
+			}
+			delete(server, "default_tools_approval_mode")
+		}
 		if expected.Required {
 			if server["required"] != true {
 				return false
@@ -100,5 +120,21 @@ func matchesMCPHTTPConfig(raw json.RawMessage, declared map[string]mcpServerConf
 			}
 		}
 	}
+	return true
+}
+
+func matchesMCPHeaderMap(server map[string]any, field string, expected map[string]string) bool {
+	actual, present := server[field]
+	if len(expected) == 0 {
+		return !present
+	}
+	want := make(map[string]any, len(expected))
+	for key, value := range expected {
+		want[key] = value
+	}
+	if !reflect.DeepEqual(actual, want) {
+		return false
+	}
+	delete(server, field)
 	return true
 }

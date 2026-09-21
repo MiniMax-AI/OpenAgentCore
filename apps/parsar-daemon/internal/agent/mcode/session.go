@@ -142,6 +142,7 @@ func (s *Session) run(p *prepared) {
 		s.process.Cancel()
 		<-s.exited
 	}
+	s.finishEnvironmentMCP()
 	if s.out == nil {
 		return
 	}

@@ -1,3 +1,5 @@
+import { parseEnvironmentMCP, type EnvironmentMCPServer } from "./mcp_environment.js";
+import type { MCPProfile } from "./mcp.js";
 import { parseSkills, workspaceSkills, type WorkspaceSkill } from "./workspace_skills.js";
 import type { CanUseTool, HookCallback, Options } from "@anthropic-ai/claude-agent-sdk";
 import { lstatSync, realpathSync, statSync } from "node:fs";
@@ -12,6 +14,7 @@ export type Workspace = {
   dependency_path: string;
   env_names: string[];
   skills?: WorkspaceSkill[];
+  mcp?: EnvironmentMCPServer[];
   tool_environment?: boolean;
   system_packages?: boolean;
   network_access?: "enabled" | "disabled" | "restricted";
@@ -45,7 +48,7 @@ export function parseWorkspace(value: unknown, cwd: string): Workspace | undefin
   if (value === undefined) return undefined;
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_request");
   const config = value as Record<string, unknown>;
-  if (Object.keys(config).some(key => !["home", "state", "scratch", "protected_dirs", "dependency_path", "env_names", "network_access", "allowed_domains", "tool_environment", "system_packages", "skills"].includes(key)) ||
+  if (Object.keys(config).some(key => !["home", "state", "scratch", "protected_dirs", "dependency_path", "env_names", "network_access", "allowed_domains", "tool_environment", "system_packages", "skills", "mcp"].includes(key)) ||
       (config.tool_environment !== undefined && typeof config.tool_environment !== "boolean") ||
       (config.system_packages !== undefined && typeof config.system_packages !== "boolean") ||
       (config.system_packages === true && config.tool_environment !== true) ||
@@ -54,6 +57,8 @@ export function parseWorkspace(value: unknown, cwd: string): Workspace | undefin
       typeof config.dependency_path !== "string" || !config.dependency_path ||
       config.env_names.some(name => typeof name !== "string" || !environmentNames.has(name)) ||
       new Set(config.env_names).size !== config.env_names.length) throw new Error("invalid_request");
+  const mcp = parseEnvironmentMCP(config.mcp);
+  if (mcp?.length && config.network_access !== "enabled") throw new Error("invalid_request");
   const domains = config.allowed_domains ?? [];
   const hostname = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/i;
   if (!Array.isArray(domains) || (config.network_access === "restricted"
@@ -76,7 +81,7 @@ export class WorkspaceProfile {
   readonly options: Options;
   private readonly skillNames: readonly string[];
 
-  constructor(private readonly cwd: string, private readonly config: Workspace, private readonly functions: readonly string[] = []) {
+  constructor(private readonly cwd: string, private readonly config: Workspace, private readonly functions: readonly string[] = [], private readonly mcp?: MCPProfile) {
     config = parseWorkspace(config, cwd)!;
     // SDK history lookup reads the bridge environment, independently of query.env.
     if (process.env.HOME !== config.home || process.env.CLAUDE_CONFIG_DIR !== config.state ||
@@ -91,6 +96,10 @@ export class WorkspaceProfile {
       if (value === undefined) throw new Error("invalid_request");
       env[name] = value;
     }
+    for (const reference of mcp?.credentialReferences() ?? []) {
+      if (!process.env[reference]) throw new Error("invalid_request");
+      env[reference] = process.env[reference]!;
+    }
     if (config.system_packages) {
       env.CLAUDE_CODE_SHELL_PREFIX = "/usr/local/bin/agents-api-tool-root";
       env.PARSAR_RUNTIME_TOOL_SCRATCH = config.scratch;
@@ -101,7 +110,7 @@ export class WorkspaceProfile {
     const protectedRoots = [config.home, config.state, ...config.protected_dirs];
     this.options = {
       env, tools: [...nativeTools, ...skillTools],
-      ...(skills ? { plugins: skills.paths.map(path => ({ type: "local" as const, path, skipMcpDiscovery: true })) } : {}), allowedTools: [...functions], mcpServers: {}, strictMcpConfig: true,
+      ...(skills ? { plugins: skills.paths.map(path => ({ type: "local" as const, path, skipMcpDiscovery: true })) } : {}), allowedTools: mcp?.allowed ?? [...functions], mcpServers: {}, strictMcpConfig: true,
       settingSources: [], permissionMode: "default", persistSession: true,
       settings: {
         ...(skills ? { disableSkillShellExecution: true } : {}),
@@ -116,10 +125,10 @@ export class WorkspaceProfile {
         enabled: true, failIfUnavailable: true, autoAllowBashIfSandboxed: false, allowUnsandboxedCommands: false,
         excludedCommands: [], enableWeakerNestedSandbox: false, enableWeakerNetworkIsolation: false,
         filesystem: { disabled: false, allowWrite: [cwd, config.scratch, ...(config.tool_environment ? ["/environment/packages"] : [])], denyRead: protectedRoots,
-          denyWrite: [...protectedRoots, ...(skills ? ["/environment/initialization/capabilities"] : []),
+          denyWrite: [...protectedRoots, ...(skills || config.mcp?.length ? ["/environment/initialization/capabilities"] : []),
             ...(config.system_packages ? ["/environment/packages/system"] : [])], allowRead: [] },
         credentials: {
-          envVars: [...new Set([...credentialNames, ...config.env_names])].map(name => ({ name, mode: "deny" })),
+          envVars: [...new Set([...credentialNames, ...config.env_names, ...(mcp?.credentialReferences() ?? [])])].map(name => ({ name, mode: "deny" })),
           files: protectedRoots.map(path => ({ path, mode: "deny" })),
         },
         network: { allowedDomains: config.network_access === "enabled" ? ["*"] : config.network_access === "restricted" ? [...config.allowed_domains!] : [], strictAllowlist: true, allowAllUnixSockets: false, allowLocalBinding: false },
@@ -129,7 +138,11 @@ export class WorkspaceProfile {
     };
   }
 
-  verify(tools: string[], servers: { name: string; status: string }[]): void {
+  verify(tools: string[], servers: { name: string; status: string; tools?: { name: string }[] }[], sessionID = ""): void {
+    if (this.mcp) {
+      this.mcp.verify(tools, servers as Parameters<MCPProfile["verify"]>[1], sessionID, [...nativeTools, ...(this.skillNames.length ? ["Skill"] : [])]);
+      return;
+    }
     const expected = [...nativeTools, ...this.functions, ...(this.skillNames.length ? ["Skill"] : [])];
     if (servers.length !== (this.functions.length ? 1 : 0) ||
         servers.some(server => server.name !== "functions" || server.status !== "connected") ||
@@ -145,6 +158,12 @@ export class WorkspaceProfile {
   };
 
   readonly beforeTool: HookCallback = async (input, id, { signal }) => {
+    if (this.mcp) {
+      const admission = await this.mcp.beforeTool(input, id, { signal });
+      if ("hookSpecificOutput" in admission && admission.hookSpecificOutput?.hookEventName === "PreToolUse" &&
+          admission.hookSpecificOutput.permissionDecision === "deny") return admission;
+      if (input.hook_event_name === "PreToolUse" && this.mcp.permits(input.tool_name)) return admission;
+    }
     if (!signal.aborted && input.hook_event_name === "PreToolUse" && input.agent_id === undefined &&
         (id === undefined || id === input.tool_use_id) && this.permits(input.tool_name, input.tool_input)) {
       if (input.tool_name === "Bash" && this.config.tool_environment) {
@@ -166,7 +185,7 @@ export class WorkspaceProfile {
   private permits(name: string, value: unknown): boolean {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
     const input = value as Record<string, unknown>;
-    if (this.functions.includes(name)) return true;
+    if (this.functions.includes(name) || this.mcp?.permits(name)) return true;
     if (name === "Skill") return typeof input.skill === "string" && this.skillNames.includes(input.skill);
     if (name === "Bash") return typeof input.command === "string" && !!input.command.trim() &&
       (input.run_in_background === undefined || input.run_in_background === false) &&

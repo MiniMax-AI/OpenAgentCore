@@ -52,7 +52,7 @@ func publicMCPHTTPServers(req proto.PromptRequestPayload) (map[string]mcpServerC
 	return servers, nil
 }
 
-func configureMCPHTTP(plan *SessionPlan, servers map[string]mcpServerConfig) error {
+func configureMCP(plan *SessionPlan, servers map[string]mcpServerConfig) error {
 	var codexHome string
 	for _, entry := range plan.Env {
 		if value, ok := strings.CutPrefix(entry, "CODEX_HOME="); ok {
@@ -80,6 +80,6 @@ func configureMCPHTTP(plan *SessionPlan, servers map[string]mcpServerConfig) err
 		}
 	}
 	plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"mcp_oauth_credentials_store", `"file"`})
-	plan.mcpHTTPServers = servers
+	plan.mcpServers = servers
 	return nil
 }

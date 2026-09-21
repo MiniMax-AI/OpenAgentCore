@@ -169,7 +169,8 @@ isolated workspace tool worker. No Provider or model/tool loop is added.
 Codex nested `SKILL.md` discovery, `agents/openai.yaml` native dependency
 configuration and Claude inline/fenced shell preprocessing are not qualified in this batch and explicitly fail adapter
 preparation. Other files are not interpreted as a public plugin installation.
-The skill-only Plugin and capability-directory batch below extends installation; Plugin MCP remains unqualified. Native built-in Skill visibility
+The initial skill-only Plugin and capability-directory batch below extends installation;
+environment-origin MCP has a separate qualification boundary described below. Native built-in Skill visibility
 is not evidence of exact public tool-set parity. Qualification probes alone do not
 establish complete public support; record real service acceptance separately.
 
@@ -204,9 +205,8 @@ roots into a hardlinked content tree. Native component configuration is never
 passed wholesale to a harness. Provider APIs and the native execution loops are
 unchanged. No new installation/recovery lifecycle or framework is introduced.
 
-This batch supports skill-only packages. Populated MCP configuration and other
-unqualified activation reject explicitly. An empty MCP map is inert; accepting it
-does not qualify MCP. Archives retain the shared 5 MiB compressed/20 MiB expanded/
+The original accepted batch supported skill-only packages and inert empty MCP maps.
+Environment-origin MCP uses the separate transport path below. Archives retain the shared 5 MiB compressed/20 MiB expanded/
 1,000-entry limits. Plugin lists are limited to 50 entries and 10 MiB compressed;
 combined installed capabilities are limited to 50 Skills and 50 MiB. Limits are
 implementation bounds. Native shell preprocessing, dependency activation and
@@ -230,9 +230,96 @@ Evidence is under `~/.parsar/remediation/20260921/template-plugins/`:
 fixture is `services/agents-api/tests/official_environment_plugins.py`; operator
 runners reuse existing standalone acceptance and private model configuration.
 A user-authorized reused-context GPT-6 Astra high independent review of all 60
-changed files found no material actionable findings. Plugin MCP, portable root
-`plugin.json` applicability and the unconfirmed semantics above remain gaps;
+changed files found no material actionable findings. Those historical results do
+not qualify Plugin MCP. Portable root `plugin.json` applicability and the unconfirmed
+semantics above remain gaps;
 these results do not establish complete Environment Templates or protocol compatibility.
+
+## Environment-origin MCP Plugins
+
+MCP-only and combined Skill/MCP packages use the same encrypted template/Session
+snapshot and installation as Skill-only Plugins. The fixed format remains
+`.codex-plugin/plugin.json` with `mcpServers: "./.mcp.json"`, or an omitted path
+using the root `.mcp.json`. The file contains `mcpServers` keyed by server name.
+An exact capability-directory Plugin root activates its MCP declarations; selecting
+a parent directory discovers Skills without activating every nested MCP server.
+
+The common parser accepts HTTP `url`, `bearer_token_env_var`, literal `http_headers`,
+and stdio `command`, `args`, selected `env_vars`, package-relative `cwd`. It does not
+resolve credentials. Runtime reloads frozen installed packages and resolves selected
+values only from initialized caller env. A missing value fails instead of using a
+model or daemon variable. Public `env_http_headers` remains unsupported; an adapter
+may privately use native reference fields without changing public literal values.
+Caller-owned env remains available to caller code under the normal env contract.
+
+Stdio executes through the existing Runtime sandbox and a fixed static helper,
+which applies selected env/cwd and directly execs the package command. A small
+single-threaded launcher monitors the native parent process with Linux pidfds;
+bwrap retains its parent-death protection against that stable launcher. This avoids
+killing MCP servers when Codex recycles a spawning thread. Native MCP owns the
+transport; the launcher does not parse or forward protocol messages. Dependencies must be installed in the ordinary
+Environment initialization flow. The current implemented transport boundaries are:
+
+| Adapter | Environment MCP implementation |
+| --- | --- |
+| Codex | Stdio; HTTP with literal headers and HTTPS bearer references |
+| Claude Code | Stdio; anonymous HTTP or HTTPS bearer, without literal custom headers |
+| MiniMax Code | Stdio; HTTP explicitly rejected pending safe native qualification |
+
+All current Environment MCP execution requires enabled network. Restricted/disabled
+HTTP and hosted stdio under a restricted/disabled policy are not qualified. Claude
+literal headers are rejected because the pinned client expands them again and
+forwards custom headers across origins. MiniMax ACP does not enable the native
+custom-header redirect protection. Duplicate global server identities are rejected;
+official duplicate namespace and required/optional connection-failure semantics
+remain unconfirmed. These are implementation limits, not changes to the upstream
+protocol or claims of equal optional feature sets.
+
+### Docker qualification (2026-09-21)
+
+The fixed OpenAI SDK 3.13.0 and raw HTTP passed against independent Core,
+PostgreSQL and Docker Runtimes using real Kimi K3 (Codex/Claude) and MiniMax-M2.7
+(MiniMax Code). Each stdio run exercised MCP-only, combined Skill/MCP and exact
+capability-directory packages, selected env/cwd, Files/Artifacts, tenant checks
+and positive private credential/history canaries. Removing mutable sources and
+the template, then restarting Core and Runtime, retained installed tools and native
+history without replaying setup. Public cancellation stopped owned tool effects;
+duplicate cancellation remained stable. SDK/raw Items and live event ordering
+were compared without replacing native failed/incomplete tool observations.
+
+Separate real Kimi HTTPS runs covered inline/template configuration and cold
+continuation: Codex literal headers plus bearer, and Claude anonymous plus bearer.
+Codex preserved same-origin credentials and rejected cross-origin redirects.
+Private CA trust and hostname validation remained enabled. These runs used the
+same Core/daemon/adapters before the final stdio-only launcher correction and
+Codex shell hook fix; affected paths were then qualified separately on final images.
+
+Evidence is under `~/.parsar/remediation/20260921/template-plugin-mcp/`:
+
+| Profile | Passed public run |
+| --- | --- |
+| Codex stdio | `docker/codex/plugin-d1anzd48/result.json` |
+| Claude stdio | `docker/claude/plugin-l05txyye/result.json` |
+| MiniMax stdio | `docker/mcode/plugin-ttnduvtn/result.json` |
+| Codex HTTPS | `final-codex-http/run-8tldu8v2/result.json` |
+| Claude HTTPS | `final-claude-http/run-67b8vj1o/result.json` |
+
+Core binary SHA-256: `4b0b3360bdc776e715d9239c3b9564cd7760dd4cef6a42d1a5b82db565f84912`.
+Daemon: `d6ac4eeb7657884ab3704bcdc74456044e8e702f2f89b2d30486f29ea5fe083c`.
+Per-run records retain exact Runtime image IDs and cleanup results. The final
+`make-check-final.log` passed; OpenAPI regeneration and focused Go/Claude tests
+also passed. Real Linux process checks cover idle creator-thread exit, native and
+wrapper exit, active-call cleanup and the reproduced pre-exec orphan window.
+`services/agents-api/deploy/runtime/initialize_stdio_test.py` retains that OS
+regression; it requires a disposable Linux packaged Runtime, not a model fixture.
+The Codex environment hook additionally passed 30 actual sh/Bash cases after its
+Bash-specific `eval --` failed under native `/bin/sh`.
+
+The reusable public fixture is
+`services/agents-api/tests/official_environment_plugin_mcp.py`. Mechanism probes
+and failed attempts remain separate evidence. This batch does not qualify new
+Plugin MCP paths on E2B, service-origin hosted MCP, OAuth, unlisted transports or
+complete upstream protocol compatibility.
 
 ## Packaged Runtime initialization contract
 
@@ -331,9 +418,9 @@ policy on recovery; resource tests alone do not establish execution compatibilit
 
 ## Explicit gaps and evidence boundaries
 
-Nonempty `capability_directories` and `plugins` remain unsupported
-for both templates and inline initialization. Skill references use the shared
-initialization flow described above. The separate live Files API remains
+Templates and inline initialization share Plugin, capability-directory and Skill
+reference installation. Unsupported native activation and unqualified protocol
+semantics remain explicit gaps as described above. The separate live Files API remains
 available after initialization. Unsupported requests reject without echoing payloads.
 
 The [hosted guide](https://developers.openai.com/api/docs/guides/agents-api/environments/openai-hosted)

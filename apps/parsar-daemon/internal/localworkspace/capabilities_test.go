@@ -6,17 +6,20 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentcapabilities"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 )
 
 func TestCapabilityPathsStayRuntimeOwnedAndDoNotGateReads(t *testing.T) {
 	binding, request := testBinding(t)
 	request.LocalEnvironment.Skills = []agentcapabilities.InstalledSkill{{RelativeRoot: "caller/private", PackageRoot: "caller"}}
+	secret := "private-mcp-marker"
+	request.LocalEnvironment.MCP = []proto.EnvironmentMCP{{PackageRoot: "caller/private", BearerToken: &secret}}
 	raw, err := json.Marshal(request.LocalEnvironment)
-	if err != nil || bytes.Contains(raw, []byte("caller")) || bytes.Contains(raw, []byte("skills")) {
+	if err != nil || bytes.Contains(raw, []byte("caller")) || bytes.Contains(raw, []byte("skills")) || bytes.Contains(raw, []byte(secret)) {
 		t.Fatal("Runtime paths crossed the public daemon descriptor", err)
 	}
 	configured, err := binding.Configure(request)
-	if err != nil || len(configured.LocalEnvironment.Skills) != 0 {
+	if err != nil || len(configured.LocalEnvironment.Skills) != 0 || len(configured.LocalEnvironment.MCP) != 0 {
 		t.Fatal("execution accepted caller-supplied Skill paths", err)
 	}
 	request.LocalEnvironment.Capabilities = true

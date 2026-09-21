@@ -54,6 +54,10 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 	if !req.StrictResume || req.LocalEnvironment == nil || req.WorkDir != c.Directory || req.DisableExecutionEnvironment || !(agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Equal(agentnetwork.Policy{Access: req.LocalEnvironment.NetworkAccess, AllowedDomains: req.LocalEnvironment.AllowedDomains}) || req.RemoteEnvironment != nil || req.WorkspaceReadOnly {
 		return launchOptions{}, fmt.Errorf("mcode: execution does not match the dedicated workspace")
 	}
+	servers, err := environmentMCP(req.LocalEnvironment)
+	if err != nil {
+		return launchOptions{}, err
+	}
 	// Reuse public option validation and private Session state provisioning. Native
 	// cwd remains private; only the internal MCP worker receives the public workspace.
 	private := req
@@ -120,5 +124,6 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 		return opts, err
 	}
 	opts.MCP = []map[string]any{{"name": "parsar_workspace", "command": c.Node, "args": []string{c.Bridge, path}, "env": []map[string]string{}}}
+	opts.MCP = append(opts.MCP, servers...)
 	return opts, nil
 }

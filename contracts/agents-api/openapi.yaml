@@ -2261,12 +2261,11 @@ paths:
       description: Saves tenant-owned hosted configuration. Supports nullable name,
         enabled/disabled or exact-domain restricted network, initial inline/file_id
         files, confidential env, ordered setup_commands, system/npm/Python packages
-        inline/referenced Skill ZIPs, skill-only Plugin ZIPs and workspace-contained
-        capability directories. Omitted/null network defaults to enabled. Restricted
-        network requires 1–100 exact ASCII hostnames; other host forms and populated
-        unsupported installations are rejected before persistence without echoing
-        input. No compute is allocated. Exact hosted error/retry semantics remain
-        unverified.
+        inline/referenced Skill ZIPs, Plugin ZIPs and workspace-contained capability
+        directories. Omitted/null network defaults to enabled. Restricted network
+        requires 1–100 exact ASCII hostnames; other host forms and populated unsupported
+        installations are rejected before persistence without echoing input. No compute
+        is allocated. Exact hosted error/retry semantics remain unverified.
       parameters:
       - description: agents=v1
         in: header
@@ -2403,8 +2402,9 @@ paths:
         archives are encrypted separately and omitted from responses. Plugins and
         capability directories replace as lists; null/empty clears. Plugin archives
         are encrypted and omitted from responses. Capability directories are snapshotted
-        after setup; Plugin MCP activation remains unsupported. Exact hosted no-op
-        timestamp behavior remains unverified.
+        after setup. Environment MCP execution requires a qualified native transport
+        and runtime network policy. Exact hosted no-op timestamp behavior remains
+        unverified.
       parameters:
       - description: agents=v1
         in: header

@@ -6,19 +6,27 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 )
 
-func (s *Session) emitToolStage(update toolUpdate, stage string) {
+func (s *Session) emitToolStage(update toolUpdate, stage string) error {
 	payload := proto.ToolCallPayload{ID: update.ID, Name: update.Name, Stage: stage, Args: update.RawInput}
 	if stage == "after" {
 		payload.Result = map[string]any{"output": update.RawOutput, "status": update.Status}
 	}
 	if s.req.ObserveToolObservations {
 		payload.Observation = workspaceToolObservation(update, stage)
+		if payload.Observation == nil {
+			var err error
+			payload.Observation, err = environmentMCPObservation(update, stage)
+			if err != nil {
+				return err
+			}
+		}
 		// Native task/skill bookkeeping has no qualified public item mapping.
 		if payload.Observation == nil {
-			return
+			return nil
 		}
 	}
 	s.emit(proto.TypeToolCall, payload)
+	return nil
 }
 
 func workspaceToolObservation(update toolUpdate, stage string) *proto.ToolObservation {

@@ -29,6 +29,15 @@ type InstalledSkill struct {
 type Manifest struct {
 	Version int              `json:"version"`
 	Skills  []InstalledSkill `json:"skills"`
+	Plugins []string         `json:"plugins,omitempty"`
+	MCP     []InstalledMCP   `json:"-"`
+}
+
+// InstalledMCP is resolved from a frozen package at load time. The manifest
+// stores the package root, not a second copy of configuration or credentials.
+type InstalledMCP struct {
+	PackageRoot string
+	Server      agentplugin.MCPServer
 }
 
 // Input describes frozen sources; directory contents are observed after setup.
@@ -81,5 +90,23 @@ func decodeManifest(body []byte) (Manifest, error) {
 			return Manifest{}, ErrInvalid
 		}
 	}
+	for _, root := range result.Plugins {
+		if checked.addMCPPackage(root) != nil {
+			return Manifest{}, ErrInvalid
+		}
+	}
 	return result, nil
+}
+
+func (m *Manifest) addMCPPackage(root string) error {
+	if !validRelative(root) || len(m.Plugins) >= 100 {
+		return ErrInvalid
+	}
+	for _, old := range m.Plugins {
+		if old == root {
+			return ErrInvalid
+		}
+	}
+	m.Plugins = append(m.Plugins, root)
+	return nil
 }

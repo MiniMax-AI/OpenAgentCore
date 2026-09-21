@@ -39,8 +39,8 @@ type SessionPlan struct {
 	EnableFeatures  []string
 	DisableFeatures []string
 
-	// Non-nil for typed service-side HTTP MCP, including private bearer references.
-	mcpHTTPServers map[string]mcpServerConfig
+	// Non-nil for declared service or Environment MCP, including private references.
+	mcpServers map[string]mcpServerConfig
 
 	// Model is the slug to request on thread/start. Empty inherits the
 	// codex.config.toml default.

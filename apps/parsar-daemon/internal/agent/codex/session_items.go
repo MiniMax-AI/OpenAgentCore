@@ -16,8 +16,8 @@ import (
 // (TypeDelta / TypeThinking), and completed-item bodies anchor the
 // final text for the done event.
 type ItemBuffers struct {
-	Reasoning   map[string]string
-	AgentText   map[string]string
+	Reasoning map[string]string
+	AgentText map[string]string
 }
 
 // NewItemBuffers returns an empty buffer set.

@@ -1,3 +1,4 @@
+import type { StdioServer } from "./mcp_environment.js";
 import type { HookCallback, McpServerConfig, McpServerStatus } from "@anthropic-ai/claude-agent-sdk";
 
 export type HTTPServer = {
@@ -51,6 +52,7 @@ export class MCPProfile {
   readonly denied: string[] = [];
   readonly identities = new Map<string, ToolIdentity>();
   private sessionID = "";
+  private localTools = new Set<string>();
   private admitted = false;
   private release!: (ready: boolean) => void;
   private readonly ready = new Promise<boolean>(resolve => { this.release = resolve; });
@@ -65,7 +67,7 @@ export class MCPProfile {
       if (!signal.aborted && await Promise.race([this.ready, interrupted]) && !signal.aborted && this.admitted &&
           input.hook_event_name === "PreToolUse" && input.agent_id === undefined && input.session_id === this.sessionID &&
           (id === undefined || id === input.tool_use_id) &&
-          (this.identities.has(input.tool_name) || this.functions.includes(input.tool_name))) return {};
+          (this.identities.has(input.tool_name) || this.functions.includes(input.tool_name) || this.localTools.has(input.tool_name))) return {};
       return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny",
         permissionDecisionReason: "Tool is outside the verified execution profile." } };
     } finally {
@@ -73,30 +75,35 @@ export class MCPProfile {
     }
   };
 
-  constructor(private readonly declarations: HTTPServer[], private readonly functions: string[]) {
+  constructor(private readonly declarations: (HTTPServer | StdioServer)[], private readonly functions: string[]) {
     this.allowed = [...functions];
     for (const server of declarations) {
       const prefix = `mcp__${server.server_label}__`;
-      const reference = server.bearer_token_env_var;
-      if (reference && !process.env[reference]) throw new Error("missing MCP credential environment");
-      // An explicit empty Authorization suppresses native OAuth and automatic auth.
-      // Keep bearer references literal: SDK server configuration enters native argv.
-      this.servers[server.server_label] = { type: "http", url: server.server_url, alwaysLoad: true,
-        headers: { Authorization: reference ? `Bearer \${${reference}}` : "" } };
+      if ("command" in server) {
+        this.servers[server.server_label] = { type: "stdio", command: server.command, args: [...server.args], env: {} };
+      } else {
+        const reference = server.bearer_token_env_var;
+        if (reference && !process.env[reference]) throw new Error("missing MCP credential environment");
+        // An explicit empty Authorization suppresses native OAuth and automatic auth.
+        // Keep bearer references literal: SDK server configuration enters native argv.
+        this.servers[server.server_label] = { type: "http", url: server.server_url, alwaysLoad: true,
+          headers: { Authorization: reference ? `Bearer \${${reference}}` : "" } };
+      }
       if (server.allowed_tools === null) this.allowed.push(prefix + "*");
       else if (!server.allowed_tools.length) this.denied.push(prefix + "*");
       else this.allowed.push(...server.allowed_tools.map(name => nativeToolName(server.server_label, name)));
     }
   }
 
-  verify(inventory: string[], statuses: McpServerStatus[], sessionID: string): void {
+  verify(inventory: string[], statuses: McpServerStatus[], sessionID: string, localTools: readonly string[] = []): void {
     // Native status.config can contain expanded headers. Retain only identities;
     // never publish or persist the private SDK control response.
     this.admitted = false;
     const expected = new Map<string, ToolIdentity>();
     const declared = new Map(this.declarations.map(server => [server.server_label, server]));
     const seen = new Set<string>();
-    const nativeNames = new Set(this.functions);
+    const baseline = [...this.functions, ...localTools];
+    const nativeNames = new Set(baseline);
     for (const status of statuses) {
       if (seen.has(status.name)) throw new Error("duplicate native MCP server");
       seen.add(status.name);
@@ -115,24 +122,31 @@ export class MCPProfile {
       }
     }
     if (seen.size !== declared.size + (this.functions.length ? 1 : 0) ||
-        inventory.length !== expected.size + this.functions.length || new Set(inventory).size !== inventory.length ||
-        inventory.some(name => !expected.has(name) && !this.functions.includes(name))) {
+        inventory.length !== expected.size + baseline.length || new Set(inventory).size !== inventory.length ||
+        inventory.some(name => !expected.has(name) && !baseline.includes(name))) {
       throw new Error("unexpected native MCP inventory");
     }
     this.identities.clear();
     for (const [name, identity] of expected) this.identities.set(name, identity);
+    this.localTools = new Set(localTools);
     this.sessionID = sessionID;
     this.admitted = true;
     this.release(true);
   }
 
   verifyRequired(statuses: McpServerStatus[]): void {
-    for (const server of this.declarations.filter(server => server.required)) {
+    for (const server of this.declarations.filter(server => "required" in server && server.required)) {
       const matches = statuses.filter(status => status.name === server.server_label);
       if (matches.length !== 1 || matches[0].status !== "connected") {
         throw new Error("required native MCP server unavailable");
       }
     }
+  }
+
+  permits(name: string): boolean { return this.admitted && this.identities.has(name); }
+
+  credentialReferences(): string[] {
+    return this.declarations.flatMap(server => "bearer_token_env_var" in server && server.bearer_token_env_var ? [server.bearer_token_env_var] : []);
   }
 
   close(): void { this.admitted = false; this.release(false); }

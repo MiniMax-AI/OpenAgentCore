@@ -15,7 +15,9 @@ try:
         raise ValueError('invalid hook input')
     if not Path('/environment/initialization/tool-env.sh').is_file():
         raise ValueError('missing tool environment')
-    rewritten = '. /environment/initialization/tool-env.sh && eval -- ' + shlex.quote(command)
+    # POSIX sh does not accept eval --. A leading space prevents option parsing
+    # while preserving the native shell, cwd and command text.
+    rewritten = '. /environment/initialization/tool-env.sh && eval ' + shlex.quote(' ' + command)
     if os.environ.get('PARSAR_RUNTIME_SYSTEM_PACKAGES') == '1':
         rewritten = '/usr/bin/python3 -I -S /usr/local/bin/agents-api-tool-root ' + shlex.quote(command)
     print(json.dumps({'hookSpecificOutput': {'hookEventName': 'PreToolUse',

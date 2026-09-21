@@ -54,8 +54,13 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 		disableSubagents(&plan)
 	}
 	mcpBearerEnv := prepareMCPHTTPBearer(mcpServers, req.MCPHTTPServers)
+	mcpServers, environmentMCPEnv, err := mergeEnvironmentMCP(mcpServers, req.LocalEnvironment)
+	if err != nil {
+		plan.Cleanup()
+		return SessionPlan{}, nil, err
+	}
 	if mcpServers != nil {
-		if err := configureMCPHTTP(&plan, mcpServers); err != nil {
+		if err := configureMCP(&plan, mcpServers); err != nil {
 			plan.Cleanup()
 			return SessionPlan{}, nil, err
 		}
@@ -95,6 +100,7 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 		configureRemoteEnvironment(&plan, *req.RemoteEnvironment)
 	}
 	plan.Env = append(plan.Env, mcpBearerEnv...)
+	plan.Env = append(plan.Env, environmentMCPEnv...)
 	if cfg.runtimeNetwork.Access == "restricted" {
 		if err := prepareManagedNetwork(&plan, cfg.runtimeNetwork); err != nil {
 			plan.Cleanup()

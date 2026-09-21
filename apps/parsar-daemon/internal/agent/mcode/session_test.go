@@ -220,12 +220,22 @@ func TestMCodeProcess(t *testing.T) {
 			}
 			_, _ = f.WriteString(frame.Method + "\n")
 			_ = f.Close()
+			if frame.Method == "session/new" || frame.Method == "session/load" {
+				if os.WriteFile(record+".session", frame.Params, 0600) != nil {
+					os.Exit(11)
+				}
+			}
 		}
 		result := any(map[string]any{})
 		switch frame.Method {
 		case "initialize":
 			result = map[string]int{"protocolVersion": 1}
 		case "session/new", "session/load":
+			if scenario == "prepared-mcp-cancel" {
+				if writeMCPRegistry(os.Getenv("MINIMAX_DATA_DIR"), mcpRegistryEntry("proof.server", "proof_server", "read.status", "read_status")) != nil {
+					os.Exit(12)
+				}
+			}
 			if frame.Method == "session/load" {
 				update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": "OLD HISTORY"}})
 			}
@@ -248,8 +258,12 @@ func TestMCodeProcess(t *testing.T) {
 				Prompt []map[string]string `json:"prompt"`
 			}
 			_ = json.Unmarshal(frame.Params, &input)
-			if strict := scenario == "strict-cancel" || scenario == "prepared"; (strict && len(input.Prompt) != 2) || (!strict && len(input.Prompt) != 1) {
+			if strict := scenario == "strict-cancel" || strings.HasPrefix(scenario, "prepared"); (strict && len(input.Prompt) != 2) || (!strict && len(input.Prompt) != 1) {
 				os.Exit(9)
+			}
+			if scenario == "prepared-mcp-cancel" {
+				update("tool_call", map[string]any{"toolCallId": "native-call", "name": "mcp__proof_server__read_status", "status": "in_progress", "rawInput": map[string]any{}})
+				continue
 			}
 			if scenario == "steering" || scenario == "steer-rejected" || scenario == "steer-lost" || scenario == "strict-cancel" {
 				promptID = frame.ID

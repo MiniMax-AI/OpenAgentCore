@@ -57,7 +57,7 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 		t.Fatal("operator MCP was rendered")
 	}
 	tools[0] = "mutated"
-	if (*plan.mcpHTTPServers["docs.server"].EnabledTools)[0] != "lookup.docs" {
+	if (*plan.mcpServers["docs.server"].EnabledTools)[0] != "lookup.docs" {
 		t.Fatal("prepared allowlist retained caller-owned memory")
 	}
 	history := filepath.Join(home, "retained-history.jsonl")

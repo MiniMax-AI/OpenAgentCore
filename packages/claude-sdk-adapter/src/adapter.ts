@@ -32,7 +32,9 @@ export type Event =
 export async function execute(request: Start | Prepare, emit: (event: Event) => Promise<void>, abort: AbortController, functions = new FunctionBridge(emit), inputs = new Inputs(immediatePrompt(request)), reads = new WorkspaceReads(emit, abort), directories = new WorkspaceDirectories(emit, abort)): Promise<void> {
   const definitions = (request.functions ?? []).map(tool => ({ name: tool.name, description: tool.description, inputSchema: tool.parameters }));
   const names = definitions.map(tool => `mcp__functions__${tool.name}`);
-  const workspace = request.workspace === undefined ? undefined : new WorkspaceProfile(request.cwd, request.workspace, names);
+  const declarations = request.workspace?.mcp ?? request.mcp_http_servers;
+  const profile = declarations === undefined ? undefined : new MCPProfile(declarations, names);
+  const workspace = request.workspace === undefined ? undefined : new WorkspaceProfile(request.cwd, request.workspace, names, profile);
   const commands = workspace ? new CommandObserver() : undefined;
   if (request.type === "prepare" && !workspace) throw new Error("invalid_request");
   if (workspace && "mcp_http_servers" in request) throw new Error("invalid_request");
@@ -50,7 +52,6 @@ export async function execute(request: Start | Prepare, emit: (event: Event) => 
   }
   const mcpServers: Record<string, McpServerConfig> = Object.create(null);
   if (definitions.length) mcpServers.functions = createFunctionServer(definitions, functions.invoke);
-  const profile = request.mcp_http_servers === undefined ? undefined : new MCPProfile(request.mcp_http_servers, names);
   const mcp = profile ? new MCPObserver(profile.identities) : undefined;
   if (profile) Object.assign(mcpServers, profile.servers);
   const children: Promise<number | null>[] = [];
@@ -73,7 +74,7 @@ export async function execute(request: Start | Prepare, emit: (event: Event) => 
         systemPrompt: request.system_prompt,
         ...(request.resume ? { resume: request.resume } : {}),
         tools: [], allowedTools: profile?.allowed ?? names, strictMcpConfig: true, settingSources: [],
-        ...(profile ? {
+        ...(profile && !workspace ? {
           agent: "parsar_root", disallowedTools: profile.denied,
           hooks: { PreToolUse: [{ hooks: [profile.beforeTool] }] },
           agents: { parsar_root: { description: "Execution root.", prompt: request.system_prompt,
@@ -119,7 +120,7 @@ export async function execute(request: Start | Prepare, emit: (event: Event) => 
       if (message.type === "system" && message.subtype === "init") {
         nativeID = message.session_id;
         if (!nativeID || (request.resume && nativeID !== request.resume)) throw new Error("unexpected native session");
-        if (workspace) workspace.verify(message.tools, message.mcp_servers);
+        if (workspace) workspace.verify(message.tools, profile ? await stream.mcpServerStatus() : message.mcp_servers, nativeID);
         else if (profile) profile.verify(message.tools, await stream.mcpServerStatus(), nativeID);
         else if (message.tools.length !== names.length || message.tools.some(name => !names.includes(name)) ||
             message.mcp_servers.length !== (definitions.length ? 1 : 0) ||
