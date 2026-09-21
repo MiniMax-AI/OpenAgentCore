@@ -9,7 +9,8 @@ also requires AGENTS_API_MODEL. AGENTS_API_ENVIRONMENT_JSON defaults to
 AGENTS_API_SESSION_ID selects an existing Session. Close/resume use the native
 conversation context from spawn; nullable names/instructions are not prerequisites.
 
-Run --phase all, or spawn, inspect, close, resume in separate invocations using
+Run --phase all for the nested/close/resume native profile, --phase spawn-direct
+for common reads with two real children, or spawn, inspect, close, resume using
 the same --evidence directory under ~/.parsar. Inspect never submits model input.
 For an independently prepared Session, inspect requires two real children and
 proves reads only, not the full lifecycle. Use --require-nested when the native
@@ -49,7 +50,7 @@ def identifier(value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--phase", choices=("spawn", "inspect", "close", "resume", "all"), default="inspect")
+    parser.add_argument("--phase", choices=("spawn", "spawn-direct", "inspect", "close", "resume", "all"), default="inspect")
     parser.add_argument("--evidence", required=True, type=Path)
     parser.add_argument("--timeout", type=int, default=240)
     parser.add_argument("--require-nested", action="store_true", help="Require native nested delegation in an externally prepared fixture")
@@ -314,6 +315,19 @@ def main():
             report["phases"]["spawn"] = "passed"
             save()
 
+        def spawn_direct():
+            submit("spawn-direct", "Use your native subagent task tools; do not simulate delegation. "
+                   f"Create two direct child sessions. Give the first marker {marker}-alpha "
+                   "and ask it to compute 13 + 29. Give the second marker "
+                   f"{marker}-beta and ask it to compute 7 * 8. "
+                   "Wait for both native child tasks and report their results. "
+                   "Do not create nested children, close or interrupt either child. "
+                   "Use no network or file tools.")
+            wait_for(lambda: len(children()) >= 2, "fixture_not_observed_two_children")
+            inspect()
+            report["phases"]["spawn-direct"] = "passed"
+            save()
+
         def close_child():
             require(report["phases"].get("spawn") == "passed", "spawn_evidence_required")
             root = sessions.retrieve(sid()).agent.id
@@ -358,10 +372,10 @@ def main():
             checked("resume_same_id_opened_at_null_closed_at_and_retained_history")
             save()
 
-        phases = {"spawn": spawn, "inspect": inspect, "close": close_child, "resume": resume_child}
+        phases = {"spawn": spawn, "spawn-direct": spawn_direct, "inspect": inspect, "close": close_child, "resume": resume_child}
         for phase in ("spawn", "close", "resume") if args.phase == "all" else (args.phase,):
             phases[phase]()
-        report["passed"] = all(report["phases"].get(phase) == "passed" for phase in phases)
+        report["passed"] = all(report["phases"].get(phase) == "passed" for phase in ("spawn", "inspect", "close", "resume"))
         report["requested_phase_passed"] = True
         report.pop("failure", None)
         report.pop("http_status", None)
@@ -376,7 +390,7 @@ def main():
             if connection is not None:
                 connection.close()
         save()
-        print(json.dumps({key: report.get(key) for key in ("passed", "requested_phase_passed", "session_id", "target_id", "phases", "failure")}))
+        print(json.dumps({key: report.get(key) for key in ("passed", "resources_passed", "requested_phase_passed", "session_id", "target_id", "phases", "failure")}))
 
 
 if __name__ == "__main__":
