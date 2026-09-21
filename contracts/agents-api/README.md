@@ -158,7 +158,7 @@ user-managed enrollment remain outside this qualification.
 | Area | Missing or unverified scope |
 | --- | --- |
 | Subagents / multi_agent | Six public child read operations, enabled execution, child lifecycle/interactions and full recovery; deferred outside the MVP |
-| Environment Templates | Skill-only Plugins and workspace capability directories are in current-batch acceptance; Plugin MCP, unsupported restricted hostname forms, unqualified installation overrides/null network and exact hosted errors remain gaps. CRUD/list, files, env/setup/system/npm/Python, inline/referenced Skills and Session references have accepted coverage |
+| Environment Templates | Plugin MCP, unsupported restricted hostname forms, unqualified installation overrides/null network and exact hosted errors remain gaps. CRUD/list, files, env/setup/system/npm/Python, inline/referenced Skills, skill-only Plugins, workspace capability directories and Session references have accepted coverage |
 | Input and configuration | Non-text initial input, broader content/configuration unions, structured output and reasoning/verbosity combinations |
 | Tools and interactions | Deferred functions, other tool types, effective tool-set enforcement and result/cancel publication ordering; MiniMax public functions/MCP remain unsupported |
 | Vault and Credentials | OAuth/refresh, archive semantics, revocation/concurrent mutation and exact hosted selection/error behavior; static bearer CRUD/token replacement is already present |
