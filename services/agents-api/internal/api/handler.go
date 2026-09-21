@@ -48,6 +48,7 @@ type Handler struct {
 	skills             SkillStore
 	sourceFiles        SourceFileStore
 	artifacts          SessionArtifactStore
+	subagents          SubagentStore
 }
 
 func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...Option) (http.Handler, error) {
@@ -106,6 +107,7 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 		r.Get("/agents/sessions/{session_id}/items", h.listItems)
 		r.Get("/agents/sessions/{session_id}/turns", h.listTurns)
 		r.Get("/agents/sessions/{session_id}/turns/{turn_id}", h.getTurn)
+		h.registerSubagentRoutes(r)
 		r.Get("/agents/sessions/{session_id}/artifacts", h.listSessionArtifacts)
 		r.Get("/agents/sessions/{session_id}/artifacts/{artifact_id}", h.getSessionArtifact)
 		r.Get("/agents/sessions/{session_id}/artifacts/{artifact_id}/content", h.sessionArtifactContent)
