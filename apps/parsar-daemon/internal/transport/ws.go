@@ -29,8 +29,7 @@ type DialOptions struct {
 	DeviceID string
 
 	// Credential is the bearer compared against runner_credential_hash.
-	// Sent as the token query param (not as a header) because some
-	// HTTP middleware strips Authorization on upgrade requests.
+	// Sent only as an Authorization bearer header.
 	Credential string
 
 	// DaemonVersion is the X.Y.Z string used for
@@ -85,7 +84,6 @@ func Dial(ctx context.Context, opts DialOptions) (*Conn, error) {
 	}
 	dialURL, err := withQueryParams(opts.WSURL, map[string]string{
 		"device_id": opts.DeviceID,
-		"token":     opts.Credential,
 		"version":   opts.DaemonVersion,
 	})
 	if err != nil {
@@ -96,7 +94,12 @@ func Dial(ctx context.Context, opts DialOptions) (*Conn, error) {
 
 	dialCtx, cancel := context.WithTimeout(ctx, opts.HandshakeTimeout)
 	defer cancel()
-	wsConn, resp, err := dialer.DialContext(dialCtx, dialURL, opts.HTTPHeader)
+	headers := opts.HTTPHeader.Clone()
+	if headers == nil {
+		headers = make(http.Header)
+	}
+	headers.Set("Authorization", "Bearer "+opts.Credential)
+	wsConn, resp, err := dialer.DialContext(dialCtx, dialURL, headers)
 	if err != nil {
 		// 401/403/426 are operator-fixable and MUST NOT be retried —
 		// the gateway will keep rejecting until credential / device /
@@ -105,11 +108,15 @@ func Dial(ctx context.Context, opts DialOptions) (*Conn, error) {
 		if resp != nil {
 			switch resp.StatusCode {
 			case http.StatusUnauthorized, http.StatusForbidden, http.StatusUpgradeRequired:
-				return nil, fmt.Errorf("transport.Dial: ws upgrade rejected with %s: %w: %w", resp.Status, err, ErrPermanent)
+				return nil, fmt.Errorf("transport.Dial: ws upgrade rejected with HTTP %d: %w", resp.StatusCode, ErrPermanent)
 			}
-			return nil, fmt.Errorf("transport.Dial: ws upgrade rejected with %s: %w", resp.Status, err)
+			return nil, fmt.Errorf("transport.Dial: ws upgrade rejected with HTTP %d", resp.StatusCode)
 		}
-		return nil, fmt.Errorf("transport.Dial: ws upgrade: %w", err)
+		if dialCtx.Err() != nil {
+			return nil, fmt.Errorf("transport.Dial: ws upgrade: %w", dialCtx.Err())
+		}
+		// Upgrade errors can include peer-controlled text; never log credentials.
+		return nil, fmt.Errorf("transport.Dial: ws upgrade failed")
 	}
 	// Bound a single inbound frame so a misbehaving server can't OOM
 	// us. Matches the gateway's 4 MiB outbound ceiling.
@@ -354,13 +361,14 @@ func isPermanentClose(err error) bool {
 	return websocket.IsCloseError(err, CloseRuntimeDeleted)
 }
 
-// withQueryParams appends params, preserving any existing query string.
+// withQueryParams appends non-secret parameters and removes legacy credentials.
 func withQueryParams(raw string, params map[string]string) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return "", fmt.Errorf("transport: parse ws url %q: %w", raw, err)
+		return "", fmt.Errorf("transport: invalid ws url")
 	}
 	q := u.Query()
+	q.Del("token")
 	for k, v := range params {
 		q.Set(k, v)
 	}

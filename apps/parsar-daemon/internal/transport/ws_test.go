@@ -26,6 +26,7 @@ type fakeGateway struct {
 
 	mu       sync.Mutex
 	dialURL  string
+	dialAuth string
 	frames   []proto.Envelope
 	wantAuth bool
 
@@ -42,6 +43,7 @@ func newFakeGateway() *fakeGateway {
 func (g *fakeGateway) handler(w http.ResponseWriter, r *http.Request) {
 	g.mu.Lock()
 	g.dialURL = r.URL.String()
+	g.dialAuth = r.Header.Get("Authorization")
 	g.mu.Unlock()
 
 	conn, err := g.upgrader.Upgrade(w, r, nil)
@@ -84,13 +86,15 @@ func (g *fakeGateway) recordedDialURL() string {
 // httpToWS rewrites httptest server URL into the ws:// equivalent.
 func httpToWS(s string) string { return "ws" + strings.TrimPrefix(s, "http") }
 
-func TestDialPassesAuthInQueryParams(t *testing.T) {
+func TestDialPassesAuthOnlyInHeader(t *testing.T) {
 	gw := newFakeGateway()
 	srv := httptest.NewServer(http.HandlerFunc(gw.handler))
 	defer srv.Close()
 
+	headers := http.Header{"Authorization": {"Bearer obsolete"}, "X-Test": {"preserved"}}
 	conn, err := transport.Dial(context.Background(), transport.DialOptions{
-		WSURL:         httpToWS(srv.URL) + "/agent-daemon/ws",
+		WSURL:         httpToWS(srv.URL) + "/agent-daemon/ws?token=legacy",
+		HTTPHeader:    headers,
 		DeviceID:      "rt_abc",
 		Credential:    "shh-secret",
 		DaemonVersion: "0.1.0",
@@ -104,8 +108,17 @@ func TestDialPassesAuthInQueryParams(t *testing.T) {
 	if !strings.Contains(dialURL, "device_id=rt_abc") {
 		t.Errorf("dial URL %q missing device_id", dialURL)
 	}
-	if !strings.Contains(dialURL, "token=shh-secret") {
-		t.Errorf("dial URL %q missing token", dialURL)
+	if strings.Contains(dialURL, "token") || strings.Contains(dialURL, "shh-secret") {
+		t.Errorf("dial URL contains credentials")
+	}
+	gw.mu.Lock()
+	auth := gw.dialAuth
+	gw.mu.Unlock()
+	if auth != "Bearer shh-secret" {
+		t.Error("missing credential authorization header")
+	}
+	if headers.Get("Authorization") != "Bearer obsolete" {
+		t.Error("Dial mutated caller headers")
 	}
 	if !strings.Contains(dialURL, "version=0.1.0") {
 		t.Errorf("dial URL %q missing version", dialURL)
@@ -422,5 +435,27 @@ func TestSendRespectsContextCancel(t *testing.T) {
 	cancel()
 	if err := conn.Send(ctx, env); !errors.Is(err, context.Canceled) {
 		t.Fatalf("Send with cancelled ctx = %v, want context.Canceled", err)
+	}
+}
+
+func TestDialDoesNotExposePeerReflectedCredential(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer conn.Close()
+		_, _ = conn.Write([]byte("HTTP/1.1 401 " + r.Header.Get("Authorization") + "\r\nContent-Length: 0\r\n\r\n"))
+	}))
+	defer srv.Close()
+	_, err := transport.Dial(context.Background(), transport.DialOptions{
+		WSURL: httpToWS(srv.URL), DeviceID: "d", Credential: "private-credential", DaemonVersion: "0.1.0",
+	})
+	if err == nil || !errors.Is(err, transport.ErrPermanent) {
+		t.Fatalf("want permanent rejection, got %v", err)
+	}
+	if strings.Contains(err.Error(), "private-credential") || strings.Contains(err.Error(), "Bearer") {
+		t.Fatal("upgrade error exposed authorization")
 	}
 }
