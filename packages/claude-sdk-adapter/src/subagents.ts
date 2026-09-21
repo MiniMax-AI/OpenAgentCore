@@ -5,7 +5,7 @@ const deny = (reason: string) => ({ hookSpecificOutput: { hookEventName: "PreToo
 export class Subagents {
   readonly known = new Set<string>();
   private readonly observedCalls = new Set<string>();
-  private readonly pending = new Set<string>();
+  private readonly pending = new Map<string, string>();
   private readonly running = new Map<string, string>();
   private readonly admitted = new Map<string, string>();
   private session = "";
@@ -35,10 +35,10 @@ export class Subagents {
       : typeof value.to !== "string" || !this.known.has(value.to) || (value.type !== undefined && value.type !== "message") ||
         typeof value.message !== "string" || !value.message.trim()) return deny("Unsupported subagent operation.");
     if (this.pending.has(input.tool_use_id)) return {};
-    if (!spawn && this.running.has(value.to as string)) return deny("The subagent is still running.");
+    if (!spawn && (this.running.has(value.to as string) || [...this.pending.values()].includes(value.to as string))) return deny("The subagent is still running.");
     {
       if (this.pending.size + this.running.size >= this.limit) return deny("The concurrent subagent limit has been reached.");
-      this.pending.add(input.tool_use_id);
+      this.pending.set(input.tool_use_id, spawn ? "" : value.to as string);
     }
     return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow" } };
   };
@@ -71,6 +71,8 @@ export class Subagents {
     }
     if (message.type === "system" && message.subtype === "task_started" && message.task_type === "local_agent") {
       if (message.session_id !== this.session || !message.tool_use_id || !/^[A-Za-z0-9_-]{1,160}$/.test(message.task_id)) throw new Error("unbound native child task");
+      const recipient = this.pending.get(message.tool_use_id);
+      if (recipient && recipient !== message.task_id) throw new Error("mismatched native continuation target");
       if (!this.pending.delete(message.tool_use_id) && !this.running.has(message.task_id)) throw new Error("unadmitted native child task");
       this.known.add(message.task_id);
       this.running.set(message.task_id, message.tool_use_id);

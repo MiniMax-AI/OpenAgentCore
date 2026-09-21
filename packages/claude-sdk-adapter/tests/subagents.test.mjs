@@ -102,3 +102,16 @@ test("cancellation publication is atomic and cannot replace an earlier effect", 
     assert.deepEqual(JSON.parse(await readFile(path, "utf8")), receipt);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test("simultaneous continuations reserve the idle recipient before native task start", async () => {
+  const profile = new Subagents("/workspace", 6, undefined), context = { signal: new AbortController().signal };
+  profile.consume({ type: "system", subtype: "init", session_id: "root" });
+  profile.known.add("child");
+  const send = id => profile.beforeTool({ hook_event_name: "PreToolUse", session_id: "root", tool_name: "SendMessage", tool_use_id: id,
+    tool_input: { to: "child", message: "continue" } }, id, context);
+  const result = await Promise.all([send("first"), send("second")]);
+  assert.deepEqual(result.map(r => r.hookSpecificOutput.permissionDecision), ["allow", "deny"]);
+  await profile.failedTool({ hook_event_name: "PostToolUseFailure", tool_use_id: "first" });
+  assert.equal((await send("retry")).hookSpecificOutput.permissionDecision, "allow");
+  assert.throws(() => profile.consume({ type: "system", subtype: "task_started", task_type: "local_agent", task_id: "foreign", session_id: "root", tool_use_id: "retry" }), /mismatched native continuation target/);
+});
