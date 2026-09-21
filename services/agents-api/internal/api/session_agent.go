@@ -64,9 +64,6 @@ func admitSessionAgent(cfg v1.SavedAgentConfiguration) (v1.Agent, error) {
 	if strings.TrimSpace(cfg.Model) == "" {
 		return v1.Agent{}, errors.New("Execution currently requires a nonempty model.")
 	}
-	if cfg.MultiAgent.Enabled || cfg.MultiAgent.MaxConcurrentSubagents != nil {
-		return v1.Agent{}, errors.New("Enabled multi_agent execution is not supported by this service yet.")
-	}
 	if cfg.Reasoning.Effort != nil || cfg.Reasoning.Summary != nil {
 		return v1.Agent{}, errors.New("Explicit reasoning execution options are not supported by this service yet.")
 	}

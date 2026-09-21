@@ -48,6 +48,7 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session store.Session
 		RequireExistingNativeSession: recoverNativeSession,
 		ObserveMessages:              caps.MessageItems, ObserveToolObservations: true,
 		ObserveSubagentIdentities: snapshot.Agent.MultiAgent.Enabled,
+		MaxConcurrentSubagents:    snapshot.Agent.MultiAgent.MaxConcurrentSubagents,
 		DisableSubagents:          !snapshot.Agent.MultiAgent.Enabled}
 	if len(mcp) != 0 {
 		selected, err := d.mcpExecutionCredentials(session.Engine, snapshot, mcp, caps)

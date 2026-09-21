@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/jackc/pgx/v5"
@@ -45,7 +46,25 @@ func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turn
 				return ErrUnappliedInputs
 			}
 		}
-		row, err = q.TransitionTurn(ctx, sqlc.TransitionTurnParams{ID: p.ID, SessionID: session, ExpectedStatus: current.Status, NewStatus: status, Outcome: outcome})
+		sourceCompleted := pgtype.Timestamptz{}
+		if status == TurnCompleted {
+			var snapshot struct {
+				Done *struct {
+					SourceCompletedAtMS *int64 `json:"source_completed_at_ms"`
+				} `json:"done"`
+			}
+			if json.Unmarshal(outcome, &snapshot) != nil {
+				return ErrInvalidInput
+			}
+			if snapshot.Done != nil && snapshot.Done.SourceCompletedAtMS != nil {
+				ms := *snapshot.Done.SourceCompletedAtMS
+				if ms <= 0 || ms/1000 < current.CreatedAt.Time.Unix() {
+					return ErrInvalidInput
+				}
+				sourceCompleted = pgtype.Timestamptz{Time: time.UnixMilli(ms), Valid: true}
+			}
+		}
+		row, err = q.TransitionTurn(ctx, sqlc.TransitionTurnParams{ID: p.ID, SessionID: session, ExpectedStatus: current.Status, NewStatus: status, Outcome: outcome, SourceCompletedAt: sourceCompleted})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrTurnConflict
 		}

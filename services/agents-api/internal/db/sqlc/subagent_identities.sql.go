@@ -12,7 +12,7 @@ import (
 )
 
 const getSubagentIdentity = `-- name: GetSubagentIdentity :one
-SELECT i.id, i.session_id, i.device_id, i.engine, i.native_id, i.parent_native_id, i.native_created_at, i.first_turn_id, i.first_event_ordinal, e.created_at AS first_observed_at FROM subagent_identities i
+SELECT i.id, i.session_id, i.device_id, i.engine, i.native_id, i.parent_native_id, i.native_created_at, i.first_turn_id, i.first_event_ordinal, i.name, i.instructions, i.public_visible, i.status, i.closed_at_ms, i.lifecycle_at_ms, e.created_at AS first_observed_at FROM subagent_identities i
 JOIN sessions s ON s.id = i.session_id
 JOIN turn_events e ON e.turn_id = i.first_turn_id AND e.ordinal = i.first_event_ordinal
 WHERE s.tenant_id = $1 AND s.id = $2
@@ -35,6 +35,12 @@ type GetSubagentIdentityRow struct {
 	NativeCreatedAt   int64              `json:"native_created_at"`
 	FirstTurnID       pgtype.UUID        `json:"first_turn_id"`
 	FirstEventOrdinal int32              `json:"first_event_ordinal"`
+	Name              pgtype.Text        `json:"name"`
+	Instructions      pgtype.Text        `json:"instructions"`
+	PublicVisible     bool               `json:"public_visible"`
+	Status            string             `json:"status"`
+	ClosedAtMs        pgtype.Int8        `json:"closed_at_ms"`
+	LifecycleAtMs     int64              `json:"lifecycle_at_ms"`
 	FirstObservedAt   pgtype.Timestamptz `json:"first_observed_at"`
 }
 
@@ -51,6 +57,12 @@ func (q *Queries) GetSubagentIdentity(ctx context.Context, arg GetSubagentIdenti
 		&i.NativeCreatedAt,
 		&i.FirstTurnID,
 		&i.FirstEventOrdinal,
+		&i.Name,
+		&i.Instructions,
+		&i.PublicVisible,
+		&i.Status,
+		&i.ClosedAtMs,
+		&i.LifecycleAtMs,
 		&i.FirstObservedAt,
 	)
 	return i, err
@@ -65,11 +77,14 @@ SELECT $1, s.id, b.device_id, s.engine, $2,
     $3, $4, $5, $6
 FROM sessions s JOIN session_devices b ON b.session_id = s.id
 WHERE s.id = $7
-  AND (b.native_session_id = '' OR b.native_session_id = $3)
-  AND NOT EXISTS (
-      SELECT 1 FROM subagent_identities old
-      WHERE old.session_id = s.id AND old.parent_native_id <> $3
-  )
+  AND (b.native_session_id = $3
+       OR EXISTS (SELECT 1 FROM subagent_identities p
+                  WHERE p.session_id = s.id AND p.native_id = $3)
+       OR (b.native_session_id = '' AND NOT EXISTS
+           (SELECT 1 FROM subagent_identities old WHERE old.session_id = s.id
+            AND old.parent_native_id <> $3
+            AND NOT EXISTS (SELECT 1 FROM subagent_identities ancestor
+                            WHERE ancestor.session_id = s.id AND ancestor.native_id = old.parent_native_id))))
 ON CONFLICT (device_id, engine, native_id) DO UPDATE SET id = subagent_identities.id
 WHERE subagent_identities.session_id = EXCLUDED.session_id
   AND subagent_identities.parent_native_id = EXCLUDED.parent_native_id

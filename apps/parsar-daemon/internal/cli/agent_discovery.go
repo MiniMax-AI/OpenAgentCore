@@ -99,6 +99,7 @@ func discoverAgentCLIs(rc *runContext, profile string, checks agentCLIChecks) (a
 				TextVerbosity:        codex.SupportsTextVerbosity,
 				ExecutionControls:    codex.SupportsTextVerbosity,
 				SubagentControl:      true,
+				SubagentObservations: true,
 			},
 		},
 		Pi: proto.SupportedAgentKind{

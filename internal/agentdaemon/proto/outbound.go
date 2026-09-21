@@ -35,6 +35,7 @@ const (
 // PromptInput so future agent implementations can evolve the wire shape
 // without touching the connector surface.
 type PromptRequestPayload struct {
+	MaxConcurrentSubagents *int `json:"max_concurrent_subagents,omitempty"`
 	// AgentKind selects which agent implementation the daemon
 	// dispatches to.
 	AgentKind string `json:"agent_kind"`

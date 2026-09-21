@@ -23,7 +23,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	lease := executionLease(t, s)
 	w := lease.Store()
 	ctx := t.Context()
-	tenant, session := newTurnSession(t, s)
+	tenant, session := newSubagentSession(t, s)
 	host, err := s.CreateDevice(ctx, tenant, "identity test", device.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
@@ -141,7 +141,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 func TestSubagentIdentityRejectsLostLease(t *testing.T) {
 	s, pool := testStore(t)
 	old := executionLease(t, s)
-	tenant, session := newTurnSession(t, s)
+	tenant, session := newSubagentSession(t, s)
 	input := submitMessage(t, s, tenant, session.ID, "first")
 	transition(t, old.Store(), tenant, session.ID, input.TurnID, TurnQueued, TurnInProgress)
 	var killed bool

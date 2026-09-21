@@ -277,26 +277,28 @@ UPDATE turns SET status = $1, outcome = $2,
     started_at = CASE WHEN $1::text = 'in_progress'
         THEN COALESCE(started_at, clock_timestamp()) ELSE started_at END,
     completed_at = CASE WHEN $1::text IN ('completed', 'failed', 'cancelled')
-        THEN clock_timestamp() ELSE NULL END
-WHERE id = $3 AND session_id = $4
-    AND status = $5
+        THEN COALESCE($3::timestamptz, clock_timestamp()) ELSE NULL END
+WHERE id = $4 AND session_id = $5
+    AND status = $6
     AND status IN ('queued', 'in_progress', 'waiting')
     AND ($1::text <> 'in_progress' OR cancel_requested_at IS NULL)
 RETURNING id, session_id, status, created_at, started_at, completed_at, cancel_requested_at, outcome, event_count, event_bytes, token_usage, artifact_capture_started
 `
 
 type TransitionTurnParams struct {
-	NewStatus      string      `json:"new_status"`
-	Outcome        []byte      `json:"outcome"`
-	ID             pgtype.UUID `json:"id"`
-	SessionID      pgtype.UUID `json:"session_id"`
-	ExpectedStatus string      `json:"expected_status"`
+	NewStatus         string             `json:"new_status"`
+	Outcome           []byte             `json:"outcome"`
+	SourceCompletedAt pgtype.Timestamptz `json:"source_completed_at"`
+	ID                pgtype.UUID        `json:"id"`
+	SessionID         pgtype.UUID        `json:"session_id"`
+	ExpectedStatus    string             `json:"expected_status"`
 }
 
 func (q *Queries) TransitionTurn(ctx context.Context, arg TransitionTurnParams) (Turn, error) {
 	row := q.db.QueryRow(ctx, transitionTurn,
 		arg.NewStatus,
 		arg.Outcome,
+		arg.SourceCompletedAt,
 		arg.ID,
 		arg.SessionID,
 		arg.ExpectedStatus,

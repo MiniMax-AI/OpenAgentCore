@@ -91,7 +91,7 @@ func run() error {
 	}
 	var workerDone chan error
 	var worker *execution.Worker
-	options := []api.Option{api.WithSkills(executionStore), api.WithSourceFiles(executionStore), api.WithSessionArtifacts(executionStore)}
+	options := []api.Option{api.WithSubagents(executionStore), api.WithSkills(executionStore), api.WithSourceFiles(executionStore), api.WithSessionArtifacts(executionStore)}
 	var daemonHandler http.Handler
 	var registry *gateway.Registry
 	if wsURL := os.Getenv("AGENTS_API_DAEMON_WS_URL"); wsURL != "" {

@@ -15,6 +15,16 @@ func projectSource(ctx context.Context, q *sqlc.Queries, session, turn pgtype.UU
 	if kind == proto.TypeSubagentIdentity {
 		return projectSubagentIdentity(ctx, q, session, turn, int32(sequence), raw)
 	}
+	switch kind {
+	case proto.TypeSubagentLifecycle:
+		return projectSubagentLifecycle(ctx, q, session, raw)
+	case proto.TypeSubagentTurn:
+		return projectSubagentTurn(ctx, q, session, raw)
+	case proto.TypeSubagentItem:
+		return projectSubagentItem(ctx, q, session, raw)
+	case proto.TypeSubagentCoordination:
+		return projectRootCoordination(ctx, q, session, turn, raw, created)
+	}
 	if usage := measuredUsage(kind, raw); usage != nil {
 		payload, err := json.Marshal(usage)
 		if err != nil {

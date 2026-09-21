@@ -562,6 +562,7 @@ func deviceKindsFromHeartbeat(p proto.HeartbeatPayload) []device.SupportedAgentK
 				TextVerbosity:                 info.Capabilities.TextVerbosity,
 				ExecutionControls:             info.Capabilities.ExecutionControls,
 				SubagentControl:               info.Capabilities.SubagentControl,
+				SubagentObservations:          info.Capabilities.SubagentObservations,
 				FunctionTools:                 info.Capabilities.FunctionTools,
 				MCPHTTPTools:                  info.Capabilities.MCPHTTPTools,
 				MCPHTTPRequired:               info.Capabilities.MCPHTTPRequired,

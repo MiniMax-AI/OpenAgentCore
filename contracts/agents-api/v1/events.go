@@ -2,6 +2,7 @@ package v1
 
 // SessionEvent contains the supported live event variants of the pinned protocol.
 type SessionEvent struct {
+	Subagent     *Subagent                `json:"subagent,omitempty"`
 	Type         string                   `json:"type" binding:"required"`
 	EventID      string                   `json:"event_id" binding:"required"`
 	SessionID    string                   `json:"session_id,omitempty"`

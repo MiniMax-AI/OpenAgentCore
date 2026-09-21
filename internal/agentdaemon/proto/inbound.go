@@ -233,10 +233,12 @@ type ErrorPayload struct {
 // embedded) so a refactor of PromptOutput doesn't silently flip the
 // wire shape.
 type DonePayload struct {
-	Content    string         `json:"content"`
-	Transcript string         `json:"transcript,omitempty"`
-	Usage      Usage          `json:"usage,omitzero"`
-	Metadata   map[string]any `json:"metadata,omitempty"`
+	// SourceCompletedAtMS freezes the native root completion before child settlement.
+	SourceCompletedAtMS *int64         `json:"source_completed_at_ms,omitempty"`
+	Content             string         `json:"content"`
+	Transcript          string         `json:"transcript,omitempty"`
+	Usage               Usage          `json:"usage,omitzero"`
+	Metadata            map[string]any `json:"metadata,omitempty"`
 }
 
 const (
@@ -249,6 +251,7 @@ const (
 // cancellation belong to the daemon connector itself; these bits are
 // the engine-specific surface the UI uses for filtering and copy.
 type AgentKindCapabilities struct {
+	SubagentObservations          bool `json:"subagent_observations,omitempty"`
 	Streaming                     bool `json:"streaming,omitempty"`
 	Permissions                   bool `json:"permissions,omitempty"`
 	Usage                         bool `json:"usage,omitempty"`

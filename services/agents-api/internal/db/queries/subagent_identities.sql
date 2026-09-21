@@ -7,11 +7,14 @@ SELECT sqlc.arg(id), s.id, b.device_id, s.engine, sqlc.arg(native_id),
     sqlc.arg(parent_native_id), sqlc.arg(native_created_at), sqlc.arg(first_turn_id), sqlc.arg(first_event_ordinal)
 FROM sessions s JOIN session_devices b ON b.session_id = s.id
 WHERE s.id = sqlc.arg(session_id)
-  AND (b.native_session_id = '' OR b.native_session_id = sqlc.arg(parent_native_id))
-  AND NOT EXISTS (
-      SELECT 1 FROM subagent_identities old
-      WHERE old.session_id = s.id AND old.parent_native_id <> sqlc.arg(parent_native_id)
-  )
+  AND (b.native_session_id = sqlc.arg(parent_native_id)
+       OR EXISTS (SELECT 1 FROM subagent_identities p
+                  WHERE p.session_id = s.id AND p.native_id = sqlc.arg(parent_native_id))
+       OR (b.native_session_id = '' AND NOT EXISTS
+           (SELECT 1 FROM subagent_identities old WHERE old.session_id = s.id
+            AND old.parent_native_id <> sqlc.arg(parent_native_id)
+            AND NOT EXISTS (SELECT 1 FROM subagent_identities ancestor
+                            WHERE ancestor.session_id = s.id AND ancestor.native_id = old.parent_native_id))))
 ON CONFLICT (device_id, engine, native_id) DO UPDATE SET id = subagent_identities.id
 WHERE subagent_identities.session_id = EXCLUDED.session_id
   AND subagent_identities.parent_native_id = EXCLUDED.parent_native_id

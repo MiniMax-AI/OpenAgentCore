@@ -16,7 +16,7 @@ func TestSubagentIdentityUsesLeasedDispatchJournal(t *testing.T) {
 			h := newDispatchHarness(t)
 			ctx := t.Context()
 			configuration, _ := json.Marshal(map[string]any{
-				"agent":  map[string]any{"model": "test-model", "multi_agent": map[string]bool{"enabled": enabled}},
+				"agent":  map[string]any{"id": "agent_root", "model": "test-model", "multi_agent": map[string]bool{"enabled": enabled}},
 				"daemon": map[string]string{"work_dir": "/tmp"},
 			})
 			var err error

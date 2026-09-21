@@ -33,7 +33,7 @@ func projectSubagentIdentity(ctx context.Context, q *sqlc.Queries, session, turn
 			return ErrInvalidInput
 		}
 	}
-	_, err := q.PutSubagentIdentity(ctx, sqlc.PutSubagentIdentityParams{
+	id, err := q.PutSubagentIdentity(ctx, sqlc.PutSubagentIdentityParams{
 		ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, SessionID: session,
 		NativeID: identity.NativeID, ParentNativeID: identity.ParentNativeID,
 		NativeCreatedAt: identity.NativeCreatedAt, FirstTurnID: turn, FirstEventOrdinal: ordinal,
@@ -41,7 +41,10 @@ func projectSubagentIdentity(ctx context.Context, q *sqlc.Queries, session, turn
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrIdempotencyConflict
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return publishSubagent(ctx, q, session, id, identity)
 }
 
 // GetSubagentIdentity recovers a binding in its authorized, visible Session.

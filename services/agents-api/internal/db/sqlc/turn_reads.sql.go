@@ -12,7 +12,7 @@ import (
 )
 
 const listTurns = `-- name: ListTurns :many
-SELECT t.id, t.session_id, t.status, t.created_at, t.started_at, t.completed_at, t.cancel_requested_at, t.outcome, t.event_count, t.event_bytes, t.token_usage, t.artifact_capture_started FROM turns t JOIN sessions s ON s.id = t.session_id
+SELECT t.id, t.session_id, t.status, t.created_at, t.started_at, t.completed_at, t.cancel_requested_at, t.outcome, t.token_usage, t.artifact_capture_started, t.subagent_id FROM public_execution_turns t JOIN sessions s ON s.id = t.session_id
 WHERE s.tenant_id = $1 AND t.session_id = $2
   AND ($3::timestamptz IS NULL
        OR (NOT $4::boolean AND (t.created_at, t.id) < ($3::timestamptz, $5::uuid))
@@ -34,7 +34,7 @@ type ListTurnsParams struct {
 	PageLimit    int32              `json:"page_limit"`
 }
 
-func (q *Queries) ListTurns(ctx context.Context, arg ListTurnsParams) ([]Turn, error) {
+func (q *Queries) ListTurns(ctx context.Context, arg ListTurnsParams) ([]PublicExecutionTurn, error) {
 	rows, err := q.db.Query(ctx, listTurns,
 		arg.TenantID,
 		arg.SessionID,
@@ -47,9 +47,9 @@ func (q *Queries) ListTurns(ctx context.Context, arg ListTurnsParams) ([]Turn, e
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Turn{}
+	items := []PublicExecutionTurn{}
 	for rows.Next() {
-		var i Turn
+		var i PublicExecutionTurn
 		if err := rows.Scan(
 			&i.ID,
 			&i.SessionID,
@@ -59,10 +59,9 @@ func (q *Queries) ListTurns(ctx context.Context, arg ListTurnsParams) ([]Turn, e
 			&i.CompletedAt,
 			&i.CancelRequestedAt,
 			&i.Outcome,
-			&i.EventCount,
-			&i.EventBytes,
 			&i.TokenUsage,
 			&i.ArtifactCaptureStarted,
+			&i.SubagentID,
 		); err != nil {
 			return nil, err
 		}

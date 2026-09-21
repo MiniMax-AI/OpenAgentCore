@@ -60,6 +60,7 @@ type HeartbeatStatus struct {
 // KindCapabilities mirrors the daemon heartbeat capability
 // shape after gateway-level normalization. Persistence stays separate from wire protocol structs.
 type KindCapabilities struct {
+	SubagentObservations          bool `json:"subagent_observations,omitempty"`
 	Streaming                     bool `json:"streaming,omitempty"`
 	Permissions                   bool `json:"permissions,omitempty"`
 	Usage                         bool `json:"usage,omitempty"`

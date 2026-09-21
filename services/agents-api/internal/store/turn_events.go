@@ -6,7 +6,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -38,7 +37,7 @@ func (s *Store) AppendTurnEvents(ctx context.Context, tenantID, sessionID, turnI
 	normalized := make([]ExecutionEvent, len(events))
 	payloadBytes := 0
 	for i, event := range events {
-		if event.Kind == proto.TypeSubagentIdentity && s.executionLease == nil {
+		if isSubagentObservation(event.Kind) && s.executionLease == nil {
 			return errors.New("subagent discovery requires a leased Store")
 		}
 		if len(event.Payload) > 512*1024 || !enginePattern.MatchString(event.Kind) {

@@ -30,6 +30,7 @@ const (
 // not an upstream response; the API must project supported wire types explicitly.
 type Turn struct {
 	ID, SessionID, Status string
+	SubagentID            string
 	CreatedAt             time.Time
 	StartedAt             time.Time
 	CompletedAt           time.Time
@@ -53,7 +54,18 @@ func (s *Store) GetTurn(ctx context.Context, tenantID, sessionID, turnID string)
 	}
 	row, err := s.queries.GetTurn(ctx, params)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Turn{}, ErrNotFound
+		// Native child work has a separate writer and never enters the Core queue.
+		if _, err := s.GetSession(ctx, tenantID, sessionID); err != nil {
+			return Turn{}, err
+		}
+		child, err := s.queries.GetChildTurn(ctx, sqlc.GetChildTurnParams{SessionID: params.SessionID, ID: params.ID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Turn{}, ErrNotFound
+		}
+		if err != nil {
+			return Turn{}, err
+		}
+		return childStoreTurn(child), nil
 	}
 	if err != nil {
 		return Turn{}, fmt.Errorf("get turn: %w", err)

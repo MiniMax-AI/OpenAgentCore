@@ -42,7 +42,13 @@ func (s *Store) ListTurns(ctx context.Context, tenantID, sessionID, cursor strin
 		rows = rows[:limit]
 	}
 	for _, row := range rows {
-		page.Turns = append(page.Turns, turnFromRow(row))
+		value := Turn{ID: uuid.UUID(row.ID.Bytes).String(), SessionID: sessionID, Status: row.Status,
+			CreatedAt: row.CreatedAt.Time, StartedAt: row.StartedAt.Time, CompletedAt: row.CompletedAt.Time,
+			CancelRequestedAt: row.CancelRequestedAt.Time, Outcome: row.Outcome, Usage: row.TokenUsage, ArtifactCaptureStarted: row.ArtifactCaptureStarted}
+		if row.SubagentID.Valid {
+			value.SubagentID = uuid.UUID(row.SubagentID.Bytes).String()
+		}
+		page.Turns = append(page.Turns, value)
 	}
 	return page, nil
 }

@@ -92,7 +92,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 		t.Fatal("device connection failed")
 	}
 	t.Cleanup(func() { h.conn.Close() })
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: proto.AgentKindCapabilities{Streaming: true, Steering: true, Resume: true, DurableTurns: true, DurableInputReceipts: true, WebSearchControl: true, TextVerbosity: true, ExecutionControls: true, SubagentControl: true, ToolObservations: true, NativeSessionRecovery: true}}}})
+	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: proto.AgentKindCapabilities{Streaming: true, Steering: true, Resume: true, DurableTurns: true, DurableInputReceipts: true, WebSearchControl: true, TextVerbosity: true, ExecutionControls: true, SubagentControl: true, SubagentObservations: true, ToolObservations: true, NativeSessionRecovery: true}}}})
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		peer, e := h.registry.LookupDevice(h.device.ID)

@@ -37,7 +37,7 @@ UPDATE turns SET status = sqlc.arg(new_status), outcome = sqlc.arg(outcome),
     started_at = CASE WHEN sqlc.arg(new_status)::text = 'in_progress'
         THEN COALESCE(started_at, clock_timestamp()) ELSE started_at END,
     completed_at = CASE WHEN sqlc.arg(new_status)::text IN ('completed', 'failed', 'cancelled')
-        THEN clock_timestamp() ELSE NULL END
+        THEN COALESCE(sqlc.narg(source_completed_at)::timestamptz, clock_timestamp()) ELSE NULL END
 WHERE id = sqlc.arg(id) AND session_id = sqlc.arg(session_id)
     AND status = sqlc.arg(expected_status)
     AND status IN ('queued', 'in_progress', 'waiting')

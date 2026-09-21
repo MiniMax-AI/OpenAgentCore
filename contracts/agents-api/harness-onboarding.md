@@ -145,3 +145,13 @@ The requested MiniMax Code workspace Runtime is qualified separately in
 workspace execution and shared Files/Artifacts, cancellation/recovery and independent
 Docker deployment. Text-only qualification is an intermediate milestone for that
 scope, not completion of the requested Runtime integration.
+
+## Optional Subagent observations
+
+A harness that supports the Subagent resource reads implements the existing
+[neutral observation contract](subagents.md#common-adapter-contract). It reports
+verified child identity, lifecycle effects and owned Turn/Item history through
+the authenticated Run, then qualifies those facts with real execution. It does
+not add routes, storage branches or a harness-specific Core scheduler. Report
+unsupported native facts explicitly; completing a child task is not closing its
+Subagent. Native background work must remain owned through settlement and cancel.

@@ -91,6 +91,9 @@ func (p Policy) engineCapabilities(peer *gateway.Session, engine string, snapsho
 	if !caps.ToolObservations {
 		return fail("device must advertise tool_observations")
 	}
+	if snapshot.Agent.MultiAgent.Enabled && !caps.SubagentObservations {
+		return fail("device must support durable subagent observations")
+	}
 	if !snapshot.Agent.MultiAgent.Enabled && !caps.SubagentControl {
 		return fail("device must advertise subagent_control")
 	}

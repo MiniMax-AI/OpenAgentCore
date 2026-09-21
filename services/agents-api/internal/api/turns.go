@@ -92,6 +92,10 @@ func turnResponse(session store.Session, turn store.Turn) (v1.Turn, error) {
 		return v1.Turn{}, errors.New("missing stored agent identity")
 	}
 	response := v1.Turn{Usage: tokenUsage(turn.Usage), ID: turn.ID, SessionID: turn.SessionID, AgentID: cfg.Agent.ID, Object: "agent.session.turn", Status: turn.Status, CreatedAt: turn.CreatedAt.Unix(), StartedAt: unixTime(turn.StartedAt), CompletedAt: unixTime(turn.CompletedAt)}
+	if turn.SubagentID != "" {
+		response.AgentID = turn.SubagentID
+		response.SubagentID = &turn.SubagentID
+	}
 	if turn.Status == store.TurnFailed {
 		// Native errors can contain secrets; publish a stable category without raw diagnostics.
 		response.Error = &v1.TurnError{Code: "internal_error", Message: "The execution could not complete."}

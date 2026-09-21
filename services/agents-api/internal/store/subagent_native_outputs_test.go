@@ -1,0 +1,103 @@
+package store
+
+import (
+	"encoding/json"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/google/uuid"
+)
+
+func TestSubagentNativeFunctionResultDoesNotConsumeOutputIndex(t *testing.T) {
+	s, _ := testStore(t)
+	owner := executionLease(t, s).Store()
+	tenant, session := newSubagentSession(t, s)
+	host, err := s.CreateDevice(t.Context(), tenant, "child outputs", device.HashCredential(uuid.NewString()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = owner.BindSessionDevice(t.Context(), tenant, session.ID, host.ID); err != nil {
+		t.Fatal(err)
+	}
+	input := submitMessage(t, s, tenant, session.ID, "start")
+	transition(t, owner, tenant, session.ID, input.TurnID, TurnQueued, TurnInProgress)
+	call := json.RawMessage(`{"id":"native-file-change","stage":"after","observation":{"status":"completed","kind":"function","name":"apply_patch","arguments":{},"content":[{"type":"input_text","text":"file written"}]}}`)
+	text := "child answer"
+	message, _ := json.Marshal(proto.OutputMessagePayload{ID: "answer", Status: "completed", Text: &text})
+	facts := []ExecutionEvent{
+		subagentIdentityEvent("child", "root", 100),
+		subagentFact(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "turn", Status: TurnInProgress, CreatedAtMS: 100000}),
+		subagentFact(proto.TypeSubagentItem, proto.SubagentItemPayload{NativeID: "child", TurnID: "turn", ItemID: "native-file-change", Position: 0, Kind: proto.TypeToolCall, Payload: call}),
+		subagentFact(proto.TypeSubagentItem, proto.SubagentItemPayload{NativeID: "child", TurnID: "turn", ItemID: "answer", Position: 1, Kind: proto.TypeOutputMessage, Payload: message}),
+	}
+	if err = owner.AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 1, facts); err != nil {
+		t.Fatal(err)
+	}
+	child, err := s.GetSubagentIdentity(t.Context(), tenant, session.ID, "child")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.ListSubagentItems(t.Context(), tenant, session.ID, child.ID, "", 20, true)
+	if err != nil || len(items.Data) != 3 {
+		t.Fatal(items, err)
+	}
+	events, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]bool{}
+	for _, change := range events {
+		e := change.Event
+		if e.Item == nil || e.Item.TurnID == input.TurnID {
+			continue
+		}
+		found[e.Item.Type] = true
+		switch e.Item.Type {
+		case "function_call_output":
+			if e.OutputIndex != nil {
+				t.Fatal("native tool result consumed output index", e)
+			}
+		case "function_call":
+			if e.OutputIndex == nil || *e.OutputIndex != 0 {
+				t.Fatal(e)
+			}
+		case "message":
+			if e.OutputIndex == nil || *e.OutputIndex != 1 {
+				t.Fatal(e)
+			}
+		}
+	}
+	if len(found) != 3 {
+		t.Fatal(found)
+	}
+}
+
+func TestSubagentRootCompletionRetainsNativeSourceTime(t *testing.T) {
+	for _, status := range []string{TurnCompleted, TurnCancelled} {
+		t.Run(status, func(t *testing.T) {
+			s, _ := testStore(t)
+			tenant, session := newTurnSession(t, s)
+			input := submitMessage(t, s, tenant, session.ID, "start")
+			transition(t, s, tenant, session.ID, input.TurnID, TurnQueued, TurnInProgress)
+			current, err := s.GetTurn(t.Context(), tenant, session.ID, input.TurnID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			source := current.CreatedAt.Unix() * 1000
+			outcome := json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, source))
+			completed, err := s.CompleteExecution(t.Context(), tenant, session.ID, input.TurnID, status, outcome, "", input.Sequence)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if status == TurnCompleted && !completed.CompletedAt.Equal(time.UnixMilli(source)) {
+				t.Fatal("child drain changed root source completion", completed.CompletedAt)
+			}
+			if status == TurnCancelled && !completed.CompletedAt.After(time.UnixMilli(source)) {
+				t.Fatal("cancellation reused native success timestamp", completed.CompletedAt)
+			}
+		})
+	}
+}

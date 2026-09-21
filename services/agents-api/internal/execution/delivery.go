@@ -321,6 +321,9 @@ func (r *Result) mergeDone(raw json.RawMessage) error {
 	if done.Metadata == nil {
 		done.Metadata = r.Done.Metadata
 	}
+	if done.SourceCompletedAtMS == nil {
+		done.SourceCompletedAtMS = r.Done.SourceCompletedAtMS
+	}
 	r.Done = done
 	return nil
 }

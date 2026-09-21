@@ -1521,29 +1521,25 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   `disable_subagents` policy on both new and resumed Turns. Native translation
   stays in the adapter: Codex disables both multi-agent feature generations,
   overriding operator feature preferences. Product prompts that omit the policy
-  retain their defaults. Enabled multi-agent execution and public Subagent
-  resources remain separate implementation gaps; the Agent tools list is not
+  retain their defaults. Enabled multi-agent observations require separate operation qualification; the Agent tools list is not
   proven to enumerate every harness-internal utility.
-- Private `observe_subagent_identities` requests discover direct root children
-  from completed native spawn/resume Items. The Codex adapter verifies exact child
-  identity, persisted parent and original spawn-source parent against its RPC-bound
-  root. Use parent-filtered persisted `thread/list`; `thread/read` can synthesize
-  creation time before persistence. Native fields stay in the adapter. One worker
-  allows 64 candidates and 64 metadata RPCs per dispatch, four 100-row pages per
-  lookup pass, and three seconds per lookup. Root terminal content and Usage freeze
-  before a separate, three-second settlement wait; keep the reader free for RPC
-  replies and deliver successful observations before Done. Owner cancellation,
-  missing persistence, overflow, failed spawn and late discovery remain explicit
-  gaps, never invented identities or public closure. Child lifetime is unchanged.
-  The leased execution journal projects neutral identity facts in its existing
-  Session transaction; unrequested observations are rejected. Device and engine
-  come from the authorized Session binding, not daemon-supplied project ownership.
-  The service assigns a stable ID unique within device/engine/native identity and
-  freezes Session, parent, native creation and first-event provenance. Conflicts
-  roll back the whole event batch; identical or later continuation observations
-  preserve the original binding. Internal reads enforce project and visible Session
-  scope. This is a private consumer prerequisite, not public Subagent admission,
-  lifecycle, child output reconstruction or complete discovery/recovery.
+- Subagent resources use the common observations in
+  `internal/agentdaemon/proto/subagents.go`: verified identity, successful lifecycle
+  effects, native-owned Turns/Items and neutral coordination operations. Core
+  assigns public IDs and projects them under the existing Session lock and leased
+  execution journal. Native names, history parsing and outcome proof stay in
+  adapters. Public GETs read persisted resources without starting native work.
+  Child Turns have a native writer and a separate table from the Core queue;
+  `public_execution_turns` provides the shared Session read/pagination view.
+  Session Items stay root-owned; copied parent transcripts never become child work.
+  Repeated effects are idempotent. Active includes idle; task completion, process
+  release and cancellation cannot fabricate public closure. Native timestamps
+  retain their actual precision and unknown Usage stays null.
+  Reuse the existing native owner for child settlement and cancellation, freeze
+  root output first, and deliver child Items before their terminal Turn snapshot.
+  Do not add another scheduler or a broad recovery framework. Capability
+  advertisements do not qualify unsupported native facts. The exact read contract,
+  admission limits and remaining evidence are in [Subagents](contracts/agents-api/subagents.md).
 - `function_tools` advertises the optional native function-call bridge. Explicit
   prompt definitions become Codex dynamic tools; unchanged prompts carry none.
   Requests and ordered text/image results are scoped by Run and native call ID.

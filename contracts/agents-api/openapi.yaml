@@ -55,6 +55,20 @@ definitions:
     - text
     - tools
     type: object
+  v1.AgentContent:
+    properties:
+      encrypted_content:
+        type: string
+      text:
+        type: string
+      type:
+        enum:
+        - output_text
+        - encrypted_content
+        type: string
+    required:
+    - type
+    type: object
   v1.AgentDeleted:
     properties:
       deleted:
@@ -681,6 +695,8 @@ definitions:
     properties:
       action:
         $ref: '#/definitions/v1.WebSearchAction'
+      agent_id:
+        type: string
       arguments: {}
       call_id:
         type: string
@@ -699,6 +715,8 @@ definitions:
         type: integer
       id:
         type: string
+      model:
+        type: string
       name:
         type: string
       output: {}
@@ -707,10 +725,20 @@ definitions:
         - commentary
         - final_answer
         type: string
+      reasoning_effort:
+        type: string
+      recipient_agent_id:
+        type: string
+      recipient_agent_ids:
+        items:
+          type: string
+        type: array
       role:
         enum:
         - user
         - assistant
+        type: string
+      sender_agent_id:
         type: string
       server_label:
         type: string
@@ -721,6 +749,10 @@ definitions:
         - failed
         - incomplete
         type: string
+      summary:
+        items:
+          $ref: '#/definitions/v1.SummaryText'
+        type: array
       turn_id:
         type: string
       type:
@@ -731,15 +763,24 @@ definitions:
         - function_call
         - function_call_output
         - web_search_call
+        - reasoning
+        - agent_message
+        - create_subagent_call
+        - send_subagent_input_call
+        - resume_subagent_call
+        - wait_for_subagents_call
+        - interrupt_subagent_call
+        - close_subagent_call
         type: string
     required:
     - id
-    - status
     - turn_id
     - type
     type: object
   v1.ItemContent:
     properties:
+      encrypted_content:
+        type: string
       image_url:
         type: string
       text:
@@ -749,6 +790,7 @@ definitions:
         - input_text
         - output_text
         - input_image
+        - encrypted_content
         type: string
     required:
     - type
@@ -1157,6 +1199,8 @@ definitions:
         $ref: '#/definitions/v1.Session'
       session_id:
         type: string
+      subagent:
+        $ref: '#/definitions/v1.Subagent'
       text:
         type: string
       turn:
@@ -1476,6 +1520,68 @@ definitions:
       type:
         type: string
     type: object
+  v1.Subagent:
+    properties:
+      closed_at:
+        type: integer
+        x-nullable: true
+      id:
+        type: string
+      instructions:
+        items:
+          $ref: '#/definitions/v1.AgentContent'
+        type: array
+        x-nullable: true
+      name:
+        type: string
+        x-nullable: true
+      object:
+        enum:
+        - agent.session.subagent
+        type: string
+      opened_at:
+        type: integer
+      parent_agent_id:
+        type: string
+      session_id:
+        type: string
+      status:
+        enum:
+        - active
+        - closed
+        type: string
+    required:
+    - id
+    - object
+    - opened_at
+    - parent_agent_id
+    - session_id
+    - status
+    type: object
+  v1.SubagentList:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/v1.Subagent'
+        type: array
+      has_more:
+        type: boolean
+    required:
+    - data
+    - has_more
+    type: object
+  v1.SummaryText:
+    properties:
+      text:
+        type: string
+      type:
+        enum:
+        - summary_text
+        type: string
+    required:
+    - text
+    - type
+    type: object
   v1.TextConfig:
     properties:
       format:
@@ -1551,6 +1657,9 @@ definitions:
         - failed
         - cancelled
         type: string
+      subagent_id:
+        type: string
+        x-nullable: true
       usage:
         allOf:
         - $ref: '#/definitions/v1.TokenUsage'
@@ -1567,6 +1676,21 @@ definitions:
     properties:
       code:
         enum:
+        - context_length_exceeded
+        - session_budget_exceeded
+        - usage_limit_exceeded
+        - rate_limit_exceeded
+        - server_overloaded
+        - cyber_policy
+        - connection_failed
+        - server_error
+        - authentication_error
+        - invalid_request
+        - resource_not_found
+        - sandbox_error
+        - executor_version_incompatible
+        - active_turn_not_steerable
+        - request_timeout
         - internal_error
         type: string
       message:
@@ -2523,31 +2647,31 @@ paths:
       - application/json
       description: Supports inline configuration or a tenant-owned saved agent_id
         with per-Session field replacements. Execution supports model/instructions,
-        text verbosity, non-deferred function tools, disabled multi_agent, implicit
-        reasoning, service tier auto and environment type none, subject to the configured
-        engine. Codex additionally supports HTTP MCP with explicit service origin,
-        native allowed_tools and boolean required defaulting to false. Session vault_ids
-        attach only project-owned Vaults; credential_id selects an attached static
-        bearer credential for the exact HTTPS URL, while null/omission selects a unique
-        match or remains anonymous. Ambiguous selection rejects creation. Frozen private
-        selections never populate an omitted public credential_id; missing decryption
-        configuration fails dispatch without anonymous fallback. Required initialization
-        uses native startup before the first native Turn, including cold resume, and
-        requires a separately advertised capability; exact hosted creation timing
-        and error parity remain unverified. Other MCP origins and OAuth remain unsupported.
-        The self_hosted profile requires Codex, an absolute workspace_directory and
-        empty capability_directories, with optional non-deferred function tools and
-        HTTP MCP using explicit service origin, optionally authenticated by the attached
-        Vault rules. Remote MCP and remote Bearer authentication each require separately
-        advertised combination support; old peers cannot receive unsupported work.
-        Omitted/null capability_directories use the empty-list default; self_hosted
-        requires configured execution plus executor registry. Claude SDK currently
-        requires medium verbosity and object-root function schemas. It supports anonymous
-        or attached static-bearer service-origin HTTP MCP on none with boolean required
-        and separately advertised MCP/bearer/required runtime support. Required servers
-        must be connected before the first native input is released; pending or failed
-        startup rejects execution. The shared Vault selection and immutable binding
-        rules apply; unsupported native labels/tool names reject before persistence.
+        text verbosity, non-deferred function tools, adapter-qualified multi_agent
+        with persisted Subagent reads, implicit reasoning, service tier auto and environment
+        type none, subject to the configured engine. Codex additionally supports HTTP
+        MCP with explicit service origin, native allowed_tools and boolean required
+        defaulting to false. Session vault_ids attach only project-owned Vaults; credential_id
+        selects an attached static bearer credential for the exact HTTPS URL, while
+        null/omission selects a unique match or remains anonymous. Ambiguous selection
+        rejects creation. Frozen private selections never populate an omitted public
+        credential_id; missing decryption configuration fails dispatch without anonymous
+        fallback. Required initialization uses native startup before the first native
+        Turn, including cold resume, and requires a separately advertised capability;
+        exact hosted creation timing and error parity remain unverified. Other MCP
+        origins and OAuth remain unsupported. The self_hosted profile requires Codex,
+        an absolute workspace_directory and empty capability_directories, with optional
+        non-deferred function tools and HTTP MCP using explicit service origin, optionally
+        authenticated by the attached Vault rules. Remote MCP and remote Bearer authentication
+        each require separately advertised combination support; old peers cannot receive
+        unsupported work. Omitted/null capability_directories use the empty-list default;
+        self_hosted requires configured execution plus executor registry. Claude SDK
+        currently requires medium verbosity and object-root function schemas. It supports
+        anonymous or attached static-bearer service-origin HTTP MCP on none with boolean
+        required and separately advertised MCP/bearer/required runtime support. Required
+        servers must be connected before the first native input is released; pending
+        or failed startup rejects execution. The shared Vault selection and immutable
+        binding rules apply; unsupported native labels/tool names reject before persistence.
         An attached Vault with no matching credential may remain anonymous; missing
         keys or failed credential lookup/decryption never fall back to anonymous execution.
         Omitted stream defaults to false; stream and agent_id cannot be null. Metadata
@@ -3219,6 +3343,401 @@ paths:
       summary: List persisted execution Items
       tags:
       - Items
+  /agents/sessions/{session_id}/subagents:
+    get:
+      description: Includes nested and closed Subagents. Cursors belong to the same
+        tenant and Session.
+      parameters:
+      - description: agents=v1
+        in: header
+        name: OpenAI-Beta
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: session_id
+        required: true
+        type: string
+      - description: Last Subagent ID from the previous page
+        in: query
+        name: after
+        type: string
+      - default: 20
+        description: Page size
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      - default: desc
+        description: Resource order
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SubagentList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List Session Subagents
+      tags:
+      - Subagents
+  /agents/sessions/{session_id}/subagents/{subagent_id}:
+    get:
+      description: Returns this Session's persisted Subagent. Active includes idle
+        between Turns. Resuming preserves opened_at and clears closed_at. Unknown
+        or inaccessible parent scopes return not found.
+      parameters:
+      - description: agents=v1
+        in: header
+        name: OpenAI-Beta
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: session_id
+        required: true
+        type: string
+      - description: Subagent ID
+        in: path
+        name: subagent_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.Subagent'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Retrieve a Session Subagent
+      tags:
+      - Subagents
+  /agents/sessions/{session_id}/subagents/{subagent_id}/items:
+    get:
+      description: Returns only this Subagent's own Items across all its Turns, not
+        its descendants' Items. Cursors belong to the same tenant, Session and Subagent.
+      parameters:
+      - description: agents=v1
+        in: header
+        name: OpenAI-Beta
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: session_id
+        required: true
+        type: string
+      - description: Subagent ID
+        in: path
+        name: subagent_id
+        required: true
+        type: string
+      - description: Last Item ID from the previous page
+        in: query
+        name: after
+        type: string
+      - default: 20
+        description: Page size
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      - default: desc
+        description: Resource order
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.ItemList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List a Subagent's Items
+      tags:
+      - Subagents
+  /agents/sessions/{session_id}/subagents/{subagent_id}/turns:
+    get:
+      description: Includes this Subagent's Turns after resume. Cursors belong to
+        the same tenant, Session and Subagent. Missing recorded usage remains null.
+      parameters:
+      - description: agents=v1
+        in: header
+        name: OpenAI-Beta
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: session_id
+        required: true
+        type: string
+      - description: Subagent ID
+        in: path
+        name: subagent_id
+        required: true
+        type: string
+      - description: Last Turn ID from the previous page
+        in: query
+        name: after
+        type: string
+      - default: 20
+        description: Page size
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      - default: desc
+        description: Creation order
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.TurnList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List a Subagent's Turns
+      tags:
+      - Subagents
+  /agents/sessions/{session_id}/subagents/{subagent_id}/turns/{turn_id}:
+    get:
+      description: Returns the same canonical Turn exposed by the Session Turn endpoint,
+        scoped to the owning Subagent. Unknown or inaccessible parent scopes return
+        not found.
+      parameters:
+      - description: agents=v1
+        in: header
+        name: OpenAI-Beta
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: session_id
+        required: true
+        type: string
+      - description: Subagent ID
+        in: path
+        name: subagent_id
+        required: true
+        type: string
+      - description: Turn ID
+        in: path
+        name: turn_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.Turn'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Retrieve a Subagent Turn
+      tags:
+      - Subagents
+  /agents/sessions/{session_id}/subagents/{subagent_id}/turns/{turn_id}/items:
+    get:
+      description: Returns Items owned by this exact Subagent Turn. Cursors belong
+        to the same tenant, Session, Subagent and Turn.
+      parameters:
+      - description: agents=v1
+        in: header
+        name: OpenAI-Beta
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: session_id
+        required: true
+        type: string
+      - description: Subagent ID
+        in: path
+        name: subagent_id
+        required: true
+        type: string
+      - description: Turn ID
+        in: path
+        name: turn_id
+        required: true
+        type: string
+      - description: Last Item ID from the previous page
+        in: query
+        name: after
+        type: string
+      - default: 20
+        description: Page size
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      - default: desc
+        description: Resource order
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.ItemList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List a Subagent Turn's Items
+      tags:
+      - Subagents
   /agents/sessions/{session_id}/turns:
     get:
       description: Returns persisted state in creation order. The cursor belongs to

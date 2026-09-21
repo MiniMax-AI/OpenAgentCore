@@ -54,12 +54,12 @@ func (j *journal) observe(ctx context.Context, env proto.Envelope) error {
 }
 
 func (j *journal) enqueue(env proto.Envelope) error {
-	if env.Type == proto.TypeSubagentIdentity && !j.observeSubagents {
+	if (env.Type == proto.TypeSubagentIdentity || env.Type == proto.TypeSubagentLifecycle || env.Type == proto.TypeSubagentTurn || env.Type == proto.TypeSubagentItem || env.Type == proto.TypeSubagentCoordination) && !j.observeSubagents {
 		return store.ErrInvalidInput
 	}
 	switch env.Type {
 	case proto.TypeDelta, proto.TypeOutputMessage, proto.TypeThinking, proto.TypeToolCall, proto.TypeCommandOutput, proto.TypeUsage,
-		proto.TypeError, proto.TypeDone, proto.TypePromptSteerAck, proto.TypeSubagentIdentity, "cancel_receipt":
+		proto.TypeError, proto.TypeDone, proto.TypePromptSteerAck, proto.TypeSubagentIdentity, proto.TypeSubagentLifecycle, proto.TypeSubagentTurn, proto.TypeSubagentItem, proto.TypeSubagentCoordination, "cancel_receipt":
 	default:
 		return nil
 	}
