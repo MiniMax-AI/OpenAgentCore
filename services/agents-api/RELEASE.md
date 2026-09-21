@@ -33,8 +33,8 @@ detect changed bytes; obtain the archive and checksum from a trusted distributor
 
 Provision a dedicated PostgreSQL database and account. Use neither the product
 database nor its migrations. The following local example assumes an unused port
-8091. For remote clients, place the API behind TLS and set both advertised URLs to
-the corresponding reachable service addresses.
+8091. For remote clients, place the API behind TLS and set the advertised daemon URL to
+the reachable WSS service address.
 
 ```sh
 umask 077
@@ -64,11 +64,10 @@ project and subject IDs must remain stable across key rotation.
 
 For the Docker variant, continue in `HOSTED.md` now to configure the Runtime's
 outward connection and provider before starting Core. For the basic archive,
-set the separately installed software's reachable endpoints:
+set the reachable daemon endpoint:
 
 ```sh
 export AGENTS_API_DAEMON_WS_URL=ws://127.0.0.1:8091/api/v1/agent-daemon/ws
-export AGENTS_API_EXECUTOR_URL=http://127.0.0.1:8091
 ```
 
 Keep the configuration and key files mode 0600. Run migrations explicitly, then
@@ -83,36 +82,6 @@ start the API in the foreground or through your existing service supervisor:
 project mappings required by the operator commands. One API execution worker owns
 each database; starting replicas does not provide execution HA. Native history
 belongs to the harness host and must survive API replacement.
-
-## Connect execution software
-
-Keep the API running. In a separate operator shell with the same private database
-configuration, provision a new daemon profile and an executor principal key using
-the IDs from `keys.json`. `KEY_ID` is a new canonical nonzero UUID retained for
-future rotation/revocation. The executor key can be issued before any Session.
-
-```sh
-umask 077
-mkdir -p "$PARSAR_HOME/parsar-daemon/agents-api"
-"$AGENTS_API_BIN_DIR/agents-api-device" \
-  --tenant "$TENANT_ID" --name 'Agents API harness' \
-  --url http://127.0.0.1:8091 \
-  > "$PARSAR_HOME/parsar-daemon/agents-api/auth.json"
-"$AGENTS_API_BIN_DIR/agents-api-environment-key" \
-  --tenant "$TENANT_ID" --organization "$ORGANIZATION_ID" \
-  --project "$PROJECT_ID" --subject-kind service_account \
-  --subject-id "$SUBJECT_ID" --key-id "$KEY_ID" \
-  > "$PARSAR_HOME/executor-key.json"
-```
-
-Use new private files; do not overwrite an existing device profile or key output.
-Install the daemon, matching native Codex 0.153.4 resources and
-[native executor launcher](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/packages/codex-executor/README.md)
-separately. In the daemon's own service environment, configure native model access
-and run `parsar-daemon connect --profile agents-api` with the provisioned profile.
-Transfer the profile securely if the harness runs on another host. The harness
-must not inherit the operator database or caller credentials. Provider credentials
-belong in its private native configuration, outside caller executor compute.
 
 ## Use the public client
 
@@ -131,19 +100,41 @@ session = client.beta.agents.sessions.create(
 print(session.id, session.environment.id, session.environment.remote_url)
 ```
 
-On caller-controlled executor compute, prepare `/workspace` and connect the
-separately installed launcher using the returned target. Transfer only its scoped
-`executor-key.json`; do not transfer caller, database, daemon or model credentials.
+Keep the API running. In a separate operator shell with the private database
+configuration, issue an executor key restricted to this Environment using the
+principal IDs from `keys.json`. `KEY_ID` is a new canonical nonzero UUID retained
+for rotation/revocation. Save the output to a new private file:
 
 ```sh
-agents-api-codex-executor --remote "$REMOTE_URL" \
-  --environment-id "$ENVIRONMENT_ID" --credentials "$HOME/.parsar/executor-key.json" \
-  --codex-bin /opt/codex/bin/codex
+umask 077
+"$AGENTS_API_BIN_DIR/agents-api-environment-key" \
+  --tenant "$TENANT_ID" --organization "$ORGANIZATION_ID" \
+  --project "$PROJECT_ID" --subject-kind service_account \
+  --subject-id "$SUBJECT_ID" --key-id "$KEY_ID" --environment "$ENVIRONMENT_ID" \
+  > "$PARSAR_HOME/executor-key.json"
 ```
 
-A directory or key binding does not isolate files or same-user processes. Use an
-appropriate separate runtime when isolation is required. HTTP is accepted only
-for loopback development; a remote executor needs the reachable HTTPS target.
+Deploy the qualified V1 Runtime containing our daemon, selected native harness,
+local tools and workspace. Transfer only its scoped key into the protected daemon
+state directory as an owned mode-0600 file. Keep API caller and database credentials
+outside Runtime. Configure the model through the existing private adapter options;
+native tools must not inherit model credentials or read native history.
+
+Inside that Runtime, use the exact values returned by Session creation:
+
+```sh
+parsar-daemon connect --remote "$REMOTE_URL" \
+  --environment-id "$ENVIRONMENT_ID" \
+  --credential-file "$PARSAR_HOME/parsar-daemon/executor-key.json"
+```
+
+The daemon fills the executor role. No separate Codex executor or service-side
+harness is required. This is our private daemon transport, not stock exec-server
+wire interoperability. Use WSS outside loopback. Runtime packaging must provide
+`/environment/workspace`, its `/workspace` alias, helpers and native isolation;
+a directory or key binding alone does not isolate same-user processes. User-owned
+E2B deployment uses the [official-SDK startup example](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/services/agents-api/deploy/e2b/README.md).
+Core does not allocate or reclaim that compute.
 
 In the same Python client, stream a Turn after connecting the executor:
 
@@ -161,7 +152,7 @@ Reuse the database, caller identities, daemon profile and native history. Do not
 resubmit uncertain execution as new work. Graceful shutdown or connection closure
 does not by itself prove all native descendants have exited.
 
-For key rotation, device revocation, existing-database upgrades and other supported
+For key rotation, executor-key revocation, existing-database upgrades and other supported
 profiles, use the [versioned service guide](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/services/agents-api/README.md).
 This package does not install PostgreSQL, daemons, harnesses, TLS or a supervisor,
 and it does not switch Parsar's product execution path.
