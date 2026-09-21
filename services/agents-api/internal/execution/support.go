@@ -112,7 +112,7 @@ func (p Policy) engineCapabilities(peer *gateway.Session, engine string, snapsho
 		if !caps.Preparation || !caps.LocalEnvironment || !caps.WorkspaceReadPreparation || !caps.WorkspaceOutputExport {
 			return fail("device must advertise local preparation, workspace reads and output export")
 		}
-		if (snapshot.Environment.Network == nil || snapshot.Environment.Network.Access != "disabled") && !caps.LocalEnvironmentNetworkPolicy {
+		if !caps.LocalEnvironmentNetworkPolicy {
 			return fail("device must advertise local_environment_network_policy")
 		}
 	}

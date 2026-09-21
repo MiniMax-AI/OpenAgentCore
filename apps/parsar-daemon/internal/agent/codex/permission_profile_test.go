@@ -2,6 +2,7 @@ package codex
 
 import (
 	"context"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
 	"os"
 	"path/filepath"
 	"testing"
@@ -63,7 +64,7 @@ func TestManagedNetworkPolicySelectsNativeProfileAndRejectsMismatchBeforeState(t
 			root := filepath.Join(t.TempDir(), "uncreated")
 			t.Setenv("PARSAR_HOME", root)
 			req := proto.PromptRequestPayload{AgentStateKey: "session", LocalEnvironment: &proto.LocalEnvironment{ID: "environment", NetworkAccess: mode}}
-			cfg := sessionConfig{permissionProfile: "managed-workspace", runtimeNetworkAccess: mode}
+			cfg := sessionConfig{permissionProfile: "managed-workspace", runtimeNetwork: agentnetwork.Policy{Access: mode}}
 			wrong := req
 			wrong.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "restricted"}
 			if _, _, err := prepareSessionPlan(t.Context(), wrong, cfg); err == nil {

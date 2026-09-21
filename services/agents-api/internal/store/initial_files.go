@@ -104,7 +104,7 @@ func (s *Store) ResolveEnvironmentTemplate(ctx context.Context, tenant, id strin
 		return EnvironmentTemplate{}, nil, ErrNotFound
 	}
 	row, err := s.queries.ResolveEnvironmentTemplate(ctx, sqlc.ResolveEnvironmentTemplateParams{TenantID: lookup.TenantID, ID: lookup.ID})
-	value, err := templateFromRow(templateMetadataRow{ID: row.ID, TenantID: row.TenantID, Name: row.Name, NetworkAccess: row.NetworkAccess, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, Files: row.Files, Packages: row.Packages, Skills: row.Skills}, err)
+	value, err := templateFromRow(templateMetadataRow{ID: row.ID, TenantID: row.TenantID, Name: row.Name, NetworkAccess: row.NetworkAccess, NetworkAllowedDomains: row.NetworkAllowedDomains, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, Files: row.Files, Packages: row.Packages, Skills: row.Skills}, err)
 	if err != nil {
 		return value, nil, err
 	}

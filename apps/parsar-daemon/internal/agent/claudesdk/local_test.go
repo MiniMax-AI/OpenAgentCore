@@ -41,6 +41,24 @@ func TestLocalWorkspaceBindingNetworkAndRequiredHistory(t *testing.T) {
 	}
 }
 
+func TestRestrictedWorkspacePolicyUsesExactBoundAuthority(t *testing.T) {
+	config := workspaceFixture(t)
+	config.Workspace.NetworkAccess = "restricted"
+	config.Workspace.AllowedDomains = []string{"Example.com", "api.example.com", "example.com"}
+	req := workspaceRequest()
+	req.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "restricted", AllowedDomains: []string{"api.example.com", "EXAMPLE.COM"}}
+	start, _, err := prepare(config, req)
+	if err != nil || !slices.Equal(start.Workspace.AllowedDomains, []string{"api.example.com", "example.com"}) {
+		t.Fatal("native policy lost exact bound domains", start, err)
+	}
+	for _, domains := range [][]string{{"example.com"}, {"example.org"}, nil} {
+		req.LocalEnvironment.AllowedDomains = domains
+		if _, _, err := prepare(config, req); err == nil {
+			t.Fatal("different policy entered bound Runtime", domains)
+		}
+	}
+}
+
 func TestWorkspaceProviderCredentialsReplaceAmbientSelection(t *testing.T) {
 	config := workspaceFixture(t)
 	original := slices.Clone(config.Env)

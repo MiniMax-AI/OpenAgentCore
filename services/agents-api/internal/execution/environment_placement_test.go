@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
@@ -35,6 +36,23 @@ func TestLocalEnvironmentRequiresQualifiedProfileAndExactAuthority(t *testing.T)
 			}
 		} else if err == nil || req.LocalEnvironment != nil {
 			t.Fatal("unscoped or foreign authority accepted")
+		}
+	}
+}
+
+func TestNetworkPolicySurvivesPreparedBinding(t *testing.T) {
+	session := store.Session{ID: "session", TenantID: "tenant"}
+	for _, network := range []string{`{"access":"disabled"}`, `{"access":"restricted","allowed_domains":["Example.com","api.example.com"]}`} {
+		environment := store.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID,
+			Configuration: []byte(`{"type":"openai_hosted","network":` + network + `}`)}
+		placement, err := parseEnvironmentPlacement(environment.Configuration)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var req proto.PromptRequestPayload
+		_, err = (&Dispatcher{}).configurePreparedEnvironment(t.Context(), session, environment, store.ExecutionDevice{EnvironmentID: environment.ID}, &req)
+		if err != nil || req.LocalEnvironment == nil || req.LocalEnvironment.NetworkAccess != placement.NetworkAccess || !slices.Equal(req.LocalEnvironment.AllowedDomains, placement.AllowedDomains) {
+			t.Fatal("prepared binding lost policy", req.LocalEnvironment, err)
 		}
 	}
 }

@@ -60,7 +60,7 @@ func discoverMCodeWorkspace(rc *runContext, discovery *agentCLIDiscovery) {
 		fail(err)
 		return
 	}
-	c, err := mcode.ConfigureLocal(binary, node, os.Getenv("PARSAR_MCODE_WORKSPACE_BRIDGE"), root, os.Getenv("PARSAR_RUNTIME_WORKSPACE"), binding.NetworkAccess(), os.Getenv("PARSAR_RUNTIME_STAGING"))
+	c, err := mcode.ConfigureLocal(binary, node, os.Getenv("PARSAR_MCODE_WORKSPACE_BRIDGE"), root, os.Getenv("PARSAR_RUNTIME_WORKSPACE"), binding.NetworkPolicy(), os.Getenv("PARSAR_RUNTIME_STAGING"))
 	if err == nil {
 		err = mcode.CheckWorkspace(context.Background(), c)
 	}

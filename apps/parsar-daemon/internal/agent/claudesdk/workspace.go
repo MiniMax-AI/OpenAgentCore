@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/localworkspace"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/paths"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentskill"
 )
 
@@ -21,6 +22,7 @@ type WorkspaceConfig struct {
 	Directory       string
 	PublicDirectory string
 	NetworkAccess   string
+	AllowedDomains  []string
 	HomeDir         string
 	ScratchDir      string
 	ProtectedDirs   []string
@@ -38,6 +40,7 @@ type workspaceProfile struct {
 	DependencyPath  string                `json:"dependency_path"`
 	EnvNames        []string              `json:"env_names"`
 	NetworkAccess   string                `json:"network_access,omitempty"`
+	AllowedDomains  []string              `json:"allowed_domains,omitempty"`
 }
 
 func prepareWorkspace(config Config, req proto.PromptRequestPayload) (*workspaceProfile, []string, error) {
@@ -47,7 +50,7 @@ func prepareWorkspace(config Config, req proto.PromptRequestPayload) (*workspace
 	if req.WorkDir != "" && req.WorkDir != config.Workspace.Directory {
 		return nil, nil, fmt.Errorf("claudesdk: work_dir conflicts with the trusted workspace binding")
 	}
-	if req.LocalEnvironment != nil && (config.Workspace.NetworkAccess == "" || req.LocalEnvironment.NetworkAccess != config.Workspace.NetworkAccess) {
+	if req.LocalEnvironment != nil && !(agentnetwork.Policy{Access: config.Workspace.NetworkAccess, AllowedDomains: config.Workspace.AllowedDomains}).Equal(agentnetwork.Policy{Access: req.LocalEnvironment.NetworkAccess, AllowedDomains: req.LocalEnvironment.AllowedDomains}) {
 		return nil, nil, fmt.Errorf("claudesdk: local Runtime network policy mismatch")
 	}
 	profile, env, err := workspaceEnvironment(config)
@@ -87,7 +90,7 @@ func workspaceEnvironment(config Config) (*workspaceProfile, []string, error) {
 	if w == nil || !filepath.IsAbs(config.Node) || !filepath.IsAbs(config.Entrypoint) {
 		return fail()
 	}
-	if w.NetworkAccess != "" && w.NetworkAccess != "disabled" && w.NetworkAccess != "enabled" {
+	if (w.NetworkAccess != "" || len(w.AllowedDomains) > 0) && (agentnetwork.Policy{Access: w.NetworkAccess, AllowedDomains: w.AllowedDomains}).Validate() != nil {
 		return fail()
 	}
 	if w.PublicDirectory != "" {
@@ -157,7 +160,7 @@ func workspaceEnvironment(config Config) (*workspaceProfile, []string, error) {
 	}
 	dependencyPath := strings.Join(dependencies, string(os.PathListSeparator))
 	profile := &workspaceProfile{Home: w.HomeDir, State: config.StateDir, Scratch: w.ScratchDir,
-		ProtectedDirs: append([]string{}, w.ProtectedDirs...), DependencyPath: dependencyPath, EnvNames: []string{}, NetworkAccess: w.NetworkAccess}
+		ProtectedDirs: append([]string{}, w.ProtectedDirs...), DependencyPath: dependencyPath, EnvNames: []string{}, NetworkAccess: w.NetworkAccess, AllowedDomains: (agentnetwork.Policy{Access: w.NetworkAccess, AllowedDomains: w.AllowedDomains}).Hosts()}
 	env := []string{"PATH=" + dependencyPath, "HOME=" + w.HomeDir, "TMPDIR=" + w.ScratchDir,
 		"CLAUDE_CONFIG_DIR=" + config.StateDir, "DISABLE_TELEMETRY=1", "DISABLE_ERROR_REPORTING=1",
 		"DISABLE_AUTOUPDATER=1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1"}

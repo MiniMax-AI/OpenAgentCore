@@ -13,7 +13,7 @@ and five-operation SandboxProvider path as inline configuration.
   Every operation requires project authentication and `OpenAI-Beta: agents=v1`.
   CRUD/list works without an execution deployment.
 - Optional nullable name, preserved verbatim, with a local 1–256 Unicode character
-  bound. Network supports `enabled` and `disabled`; omitted/null create network
+  bound. Network supports `enabled`, `disabled` and exact-host `restricted`; omitted/null create network
   defaults to the pinned enabled policy. Update omission preserves; supplied name
   or network replaces, with null clearing name or resetting network.
 - Empty/null installation fields retain empty defaults. Responses contain safe
@@ -23,7 +23,8 @@ and five-operation SandboxProvider path as inline configuration.
   Creation timestamp plus ID supplies stable local ordering. Missing/foreign IDs
   and cursors return the same not-found result. No compute is allocated by CRUD.
 - Session `environment_template_id` resolves under the caller's tenant. Omitted
-  network inherits; enabled can narrow to disabled, never the reverse. Effective
+  network inherits; enabled can narrow to restricted or disabled. Restricted can
+  narrow to an exact-host subset or disabled; disabled cannot widen. Effective
   configuration is frozen without passing the template ID to execution.
 - Updating/deleting a template does not change existing Sessions. Creation retries
   recover recorded caller intent before template lookup, including after deletion;
@@ -210,10 +211,30 @@ root installation or package retry mechanism. Existing operation and initializat
 time budgets apply. New harnesses implement the same Runtime contract rather than
 adding template-specific business logic.
 
+## Restricted network policy
+
+Template and inline configuration share Core validation, persistence and resolution.
+`restricted` requires 1–100 exact ASCII hostnames; subdomains and redirect destinations
+need their own entries. Unsupported host forms (wildcards, URL/port syntax, IP literals,
+Unicode and trailing dots) reject explicitly. This is a qualified subset, not a
+claim of complete upstream hostname normalization or TLS routing semantics.
+Public reads preserve supplied spelling, order and duplicates. Effective native
+comparison uses a separate lowercase, deduplicated copy; updates cannot change
+existing Session snapshots or retry intent.
+
+Provider bootstrap and preparation carry the same frozen policy. Runtime rejects
+mismatches and missing hosted execution policy. Read-only workspace access retains
+its existing minimal prerequisites. Core owns no native proxy configuration:
+Codex uses its managed network ceiling, while Claude and MiniMax use native sandbox
+allowlists. Provisioning remains a separate phase before runtime restrictions.
+Current qualification evidence must cover real Docker native execution, permitted
+and denied hosts, credential isolation, Files/Artifacts, cancellation and retained
+policy on recovery; resource tests alone do not establish execution compatibility.
+
 ## Explicit gaps and evidence boundaries
 
 Nonempty `capability_directories` and `plugins`, and Skills API references,
-plus restricted-domain network policy, remain unsupported
+remain unsupported
 for both templates and inline initialization. The separate live Files API remains
 available after initialization. Unsupported requests reject without echoing payloads.
 
@@ -236,7 +257,7 @@ System packages use the isolated tool root described above.
 The [update Reference](https://developers.openai.com/api/reference/python/resources/beta/subresources/agents/subresources/environments/subresources/templates/methods/update)
 defines runtime network as post-setup and packages as preceding that policy.
 Initialization therefore uses its isolated provisioning network; native tools
-apply the requested enabled/disabled policy afterward. Allowing setup internet is
+apply the requested enabled/disabled/restricted policy afterward. Allowing setup internet is
 an implementation inference from that phase boundary, not an explicit upstream
 guarantee. Env values are intentionally readable by Agent code; they must not
 appear automatically in public metadata or initialization diagnostics.
@@ -249,6 +270,47 @@ override semantics remain unverified. The last case explicitly rejects in this
 batch rather than guessing inheritance. This batch is not full protocol compatibility.
 
 ## Verification
+
+### Restricted-network Docker acceptance (2026-09-21)
+
+The fixed SDK 3.13.0 and raw HTTP passed restricted-policy CRUD, tenant isolation,
+template narrowing and immutable creation-retry checks against the standalone Core.
+Current Core/daemon builds with Codex 0.153.4, Claude Code and MiniMax Code passed
+real Kimi/MiniMax execution, initialized system tools and Skills, Files/Artifacts,
+credential isolation, cancellation with observed descendant cleanup, and retained
+workspace/native history after separate Core and Runtime restarts. Codex exercised
+both template and inline configuration; Claude and MiniMax exercised templates.
+
+Separate real-model network runs on all three Docker profiles verified HTTP and
+certificate-checked HTTPS to allowed sites, rejection of an unlisted host and
+subdomain, rejection after an allowed site's redirect, and failure of direct-IP or
+proxy-free access. Allowed HTTPS, host rejection and direct-bypass checks repeated
+after Core/Runtime restart with the frozen policy and retained conversation history.
+The checks use actual tool effects, native command Items where available and exact
+transport connection counts, not the model's assessment. All accepted runs cleaned
+their owned containers, volumes and test transport.
+
+The test host lacked direct DNS/TCP egress. A task-only network-namespace route and
+transparent sidecar carried unchanged HTTP/TLS bytes to real sites through the
+existing outlet; host routes, Runtime capabilities, native policy and certificate
+validation stayed unchanged. This qualifies native enforcement through that test
+outlet, not production direct egress or DNS. An earlier Codex probe incorrectly
+required a complete result file after native denial; the corrected probe requires
+the corresponding native rejection when the tool is interrupted. One initial
+MiniMax run failed before its first tool call; an independent rerun passed, without
+a Core change or an established root cause for that failure.
+
+Focused policy/API/adapter/PostgreSQL tests, the real Codex managed-process lifecycle
+test and the complete Core `make check` passed. Optional Docker fault fixtures were
+not enabled; real public Docker runs cover the accepted paths. The first full-check
+invocation lacked the server's OpenSSL development paths; the corrected invocation
+passed with a fresh database. Evidence and failed attempts remain under
+`~/.parsar/remediation/20260921/template-network-native/` and the Feishu task record.
+Core SHA-256: `0dc40384192fc75c4be9896072dfe0089c30a02e44804faca7a14c7d8525efa3`.
+E2B probes remain mechanism evidence only; this batch does not qualify official
+E2B self-hosted onboarding or complete upstream network semantics.
+
+### Resource and initialization checks
 
 `official_environment_templates.py` checks all five fixed-SDK operations plus raw
 HTTP, exact safe response shapes, field replacement/defaults, pagination, tenant

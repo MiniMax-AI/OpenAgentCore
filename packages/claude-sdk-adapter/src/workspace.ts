@@ -1,6 +1,7 @@
 import { parseSkills, workspaceSkills, type WorkspaceSkill } from "./workspace_skills.js";
 import type { CanUseTool, HookCallback, Options } from "@anthropic-ai/claude-agent-sdk";
 import { lstatSync, realpathSync, statSync } from "node:fs";
+import { isIP } from "node:net";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
 export type Workspace = {
@@ -13,7 +14,8 @@ export type Workspace = {
   skills?: WorkspaceSkill[];
   tool_environment?: boolean;
   system_packages?: boolean;
-  network_access?: "enabled" | "disabled";
+  network_access?: "enabled" | "disabled" | "restricted";
+  allowed_domains?: string[];
 };
 
 const environmentNames = new Set([
@@ -43,15 +45,20 @@ export function parseWorkspace(value: unknown, cwd: string): Workspace | undefin
   if (value === undefined) return undefined;
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_request");
   const config = value as Record<string, unknown>;
-  if (Object.keys(config).some(key => !["home", "state", "scratch", "protected_dirs", "dependency_path", "env_names", "network_access", "tool_environment", "system_packages", "skills"].includes(key)) ||
+  if (Object.keys(config).some(key => !["home", "state", "scratch", "protected_dirs", "dependency_path", "env_names", "network_access", "allowed_domains", "tool_environment", "system_packages", "skills"].includes(key)) ||
       (config.tool_environment !== undefined && typeof config.tool_environment !== "boolean") ||
       (config.system_packages !== undefined && typeof config.system_packages !== "boolean") ||
       (config.system_packages === true && config.tool_environment !== true) ||
-      (config.network_access !== undefined && config.network_access !== "enabled" && config.network_access !== "disabled") ||
+      (config.network_access !== undefined && config.network_access !== "enabled" && config.network_access !== "disabled" && config.network_access !== "restricted") ||
       !Array.isArray(config.protected_dirs) || !Array.isArray(config.env_names) ||
       typeof config.dependency_path !== "string" || !config.dependency_path ||
       config.env_names.some(name => typeof name !== "string" || !environmentNames.has(name)) ||
       new Set(config.env_names).size !== config.env_names.length) throw new Error("invalid_request");
+  const domains = config.allowed_domains ?? [];
+  const hostname = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/i;
+  if (!Array.isArray(domains) || (config.network_access === "restricted"
+      ? domains.length < 1 || domains.length > 100 || domains.some(host => typeof host !== "string" || !hostname.test(host) || host.trim() !== host || isIP(host) !== 0)
+      : domains.length !== 0)) throw new Error("invalid_request");
   const roots = [cwd, config.home, config.state, config.scratch, ...config.protected_dirs].map(path => directory(path, true));
   if (roots.some((root, index) => roots.some((other, otherIndex) => index !== otherIndex && contains(root, other)))) {
     throw new Error("invalid_request");
@@ -115,7 +122,7 @@ export class WorkspaceProfile {
           envVars: [...new Set([...credentialNames, ...config.env_names])].map(name => ({ name, mode: "deny" })),
           files: protectedRoots.map(path => ({ path, mode: "deny" })),
         },
-        network: { allowedDomains: config.network_access === "enabled" ? ["*"] : [], strictAllowlist: true, allowAllUnixSockets: false, allowLocalBinding: false },
+        network: { allowedDomains: config.network_access === "enabled" ? ["*"] : config.network_access === "restricted" ? [...config.allowed_domains!] : [], strictAllowlist: true, allowAllUnixSockets: false, allowLocalBinding: false },
       },
       canUseTool: this.canUseTool,
       hooks: { PreToolUse: [{ hooks: [this.beforeTool] }] },

@@ -22,6 +22,7 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 	}
 	caps := proto.AgentKindCapabilities{LocalEnvironment: true, Preparation: true, WorkspaceReadPreparation: true}
 	if execute {
+		caps.LocalEnvironmentNetworkPolicy = true
 		caps.WorkspaceOutputExport = true
 		caps.Streaming, caps.Steering, caps.DurableTurns, caps.DurableInputReceipts = true, true, true, true
 		caps.WebSearchControl, caps.TextVerbosity, caps.ExecutionControls = true, true, true

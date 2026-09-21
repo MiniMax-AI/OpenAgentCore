@@ -34,6 +34,22 @@ func TestProviderRejectsUnsafeOperatorConfiguration(t *testing.T) {
 	}
 }
 
+func TestBootstrapRequiresCompleteNetworkPolicyBeforeDockerEffects(t *testing.T) {
+	p := &Provider{}
+	for _, policy := range []sandbox.Bootstrap{
+		{}, {NetworkAccess: "restricted"},
+		{NetworkAccess: "restricted", AllowedDomains: []string{"*.example.com"}},
+		{NetworkAccess: "enabled", AllowedDomains: []string{"example.com"}},
+	} {
+		policy.Reference = sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}
+		policy.SessionID, policy.DeviceID = uuid.NewString(), uuid.NewString()
+		policy.CoreURL, policy.Credential = "http://core.invalid/api/v1", "synthetic"
+		if _, err := p.Create(t.Context(), policy); !errors.Is(err, sandbox.ErrInvalid) {
+			t.Fatal("invalid bootstrap reached Docker", err)
+		}
+	}
+}
+
 // This optional Docker mechanism test uses a pinned fixture image whose entrypoint
 // is sleep. It is not native/model acceptance; the real Runtime has separate checks.
 func TestDockerProviderLifecycle(t *testing.T) {
@@ -57,9 +73,10 @@ func TestDockerProviderLifecycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	bootstrap := func() sandbox.Bootstrap {
-		return sandbox.Bootstrap{Reference: sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "http://core.invalid/api/v1", Credential: "synthetic-test-credential"}
+		return sandbox.Bootstrap{Reference: sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "http://core.invalid/api/v1", Credential: "synthetic-test-credential", NetworkAccess: "enabled"}
 	}
 	b := bootstrap()
+	b.NetworkAccess, b.AllowedDomains = "restricted", []string{"Example.com", "api.example.com"}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
@@ -100,6 +117,15 @@ func TestDockerProviderLifecycle(t *testing.T) {
 	}
 	if strings.Contains(string(inspected.Raw), b.Credential) || inspected.Container.Config.User != "1000:1000" || !inspected.Container.HostConfig.ReadonlyRootfs || inspected.Container.HostConfig.Privileged {
 		t.Fatal("unsafe Docker configuration")
+	}
+	for _, value := range []string{"PARSAR_RUNTIME_NETWORK_ACCESS=restricted", `PARSAR_RUNTIME_ALLOWED_DOMAINS=["api.example.com","example.com"]`} {
+		found := false
+		for _, entry := range inspected.Container.Config.Env {
+			found = found || entry == value
+		}
+		if !found {
+			t.Fatalf("bootstrap lost network policy: %s", value)
+		}
 	}
 	changed := b
 	changed.Credential = "must-not-replace-existing"

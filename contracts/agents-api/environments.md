@@ -58,11 +58,14 @@ and retry identity before the existing leased Worker provisions its allocation.
 A committed creation interrupted before bootstrap is recovered without replaying
 an existing allocation's Create.
 
-Omitted/null network defaults to enabled; explicit enabled and disabled use the
-same image with adapter-selected immutable native policy. Unsupported restricted
-domains and populated env/packages/setup/plugins/skills/capability
-paths fail explicitly. Initial inline/file_id files use the shared hosted initializer. Empty/null installation defaults produce safe empty metadata,
-not a live workspace inventory. Hosted MCP combinations remain unimplemented.
+Omitted/null network defaults to enabled. Enabled, disabled and exact-host restricted
+policies use the same qualified image with adapter-selected immutable native policy.
+Templates and inline configuration share initial files, env, packages, ordered setup
+and inline Skills through the hosted initializer. Unsupported hostname forms,
+Plugins, Skill references and capability-directory imports reject explicitly; see
+the [Template coverage and limits](environment-templates.md). Empty/null installation
+defaults produce safe empty metadata, not a live workspace inventory. Hosted MCP
+combinations remain unimplemented.
 
 Initial provisioning leaves a Session idle until a Turn starts, with no caller
 connection action. The managed scan records authenticated, exactly bound daemon

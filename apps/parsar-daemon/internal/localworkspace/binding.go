@@ -7,18 +7,20 @@ import (
 	"strings"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
 	"github.com/google/uuid"
 )
 
 // Binding freezes operator-owned identity and paths for one Runtime lifetime.
 type Binding struct {
-	environment   string
-	networkAccess string
-	stateKey      string
-	workspace     string
-	helper        string
-	exportHelper  string
-	writer        *fileWriter
+	environment    string
+	networkAccess  string
+	allowedDomains []string
+	stateKey       string
+	workspace      string
+	helper         string
+	exportHelper   string
+	writer         *fileWriter
 }
 
 func New(environment, session, workspace, helper string) (*Binding, error) {
@@ -46,10 +48,11 @@ func New(environment, session, workspace, helper string) (*Binding, error) {
 
 func Load() (*Binding, error) {
 	values := []string{os.Getenv("PARSAR_RUNTIME_ENVIRONMENT_ID"), os.Getenv("PARSAR_RUNTIME_SESSION_ID"), os.Getenv("PARSAR_RUNTIME_WORKSPACE"), os.Getenv("PARSAR_RUNTIME_DIRECTORY_HELPER")}
-	network := os.Getenv("PARSAR_RUNTIME_NETWORK_ACCESS")
-	if network != "" && network != "enabled" && network != "disabled" {
-		return nil, errors.New("unsupported local Runtime network policy")
+	policy, err := RuntimeNetworkPolicy()
+	if err != nil {
+		return nil, err
 	}
+	network := policy.Access
 	writeHelper, staging := os.Getenv("PARSAR_RUNTIME_WRITE_HELPER"), os.Getenv("PARSAR_RUNTIME_STAGING")
 	exportHelper := os.Getenv("PARSAR_RUNTIME_EXPORT_HELPER")
 	if strings.Join(values, "") == "" && writeHelper == "" && staging == "" && network == "" && exportHelper == "" {
@@ -60,6 +63,7 @@ func Load() (*Binding, error) {
 		return nil, err
 	}
 	b.networkAccess = network
+	b.allowedDomains = policy.Hosts()
 	if exportHelper != "" {
 		// Reuse the startup executable/root checks; this grants no caller authority.
 		if _, err := New(values[0], values[1], values[2], exportHelper); err != nil {
@@ -89,8 +93,11 @@ func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPa
 		r.ConversationID != "" || r.WorkspaceAuthoring || len(r.Attachments) != 0 || !r.StrictResume || !r.ReleaseOnCompletion {
 		return r, errors.New("request does not match the dedicated local Environment")
 	}
-	if (!r.WorkspaceReadOnly || r.LocalEnvironment.NetworkAccess != "") && r.LocalEnvironment.NetworkAccess != b.networkAccess {
-		return r, errors.New("request does not match the local Runtime network policy")
+	if !r.WorkspaceReadOnly || r.LocalEnvironment.NetworkAccess != "" || len(r.LocalEnvironment.AllowedDomains) > 0 {
+		requested := agentnetwork.Policy{Access: r.LocalEnvironment.NetworkAccess, AllowedDomains: r.LocalEnvironment.AllowedDomains}
+		if !b.NetworkPolicy().Equal(requested) {
+			return r, errors.New("request does not match the local Runtime network policy")
+		}
 	}
 	if !r.WorkspaceReadOnly {
 		if r.LocalEnvironment.SystemPackages && !r.LocalEnvironment.ToolEnvironment {
@@ -105,6 +112,3 @@ func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPa
 	}
 	return r, nil
 }
-
-// NetworkAccess is deployment-owned; read-only workspace controls need no network.
-func (b *Binding) NetworkAccess() string { return b.networkAccess }

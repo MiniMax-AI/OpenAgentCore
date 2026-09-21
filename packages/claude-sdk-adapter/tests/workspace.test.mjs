@@ -172,6 +172,15 @@ test("dedicated Runtime carries an explicit native network policy", t => {
     assert.equal(options.sandbox.allowUnsandboxedCommands, false);
   }
   assert.throws(() => parseStart(JSON.stringify({ ...request, workspace: { ...config, network_access: "restricted" } })), /invalid_request/);
+  const restricted = { ...config, network_access: "restricted", allowed_domains: ["example.com", "api.example.com"] };
+  const parsed = parseStart(JSON.stringify({ ...request, workspace: restricted }));
+  assert.deepEqual(parsed.workspace.allowed_domains, restricted.allowed_domains);
+  const network = new WorkspaceProfile(dirs.workspace, restricted).options.sandbox.network;
+  assert.deepEqual(network, { allowedDomains: restricted.allowed_domains, strictAllowlist: true, allowAllUnixSockets: false, allowLocalBinding: false });
+  for (const allowed_domains of [["*"], ["*.example.com"], ["example.com:443"], ["127.0.0.1"], ["example.com\n"], []]) {
+    assert.throws(() => parseStart(JSON.stringify({ ...request, workspace: { ...restricted, allowed_domains } })), /invalid_request/);
+  }
+  assert.throws(() => parseStart(JSON.stringify({ ...request, workspace: { ...restricted, network_access: "enabled" } })), /invalid_request/);
   const { workspace, ...none } = request;
   assert.throws(() => parseStart(JSON.stringify({ ...none, require_history: true })), /invalid_request/);
 });

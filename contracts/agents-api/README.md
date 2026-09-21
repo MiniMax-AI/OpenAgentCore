@@ -155,7 +155,7 @@ user-managed enrollment remain outside this qualification.
 | Area | Missing or unverified scope |
 | --- | --- |
 | Subagents / multi_agent | Six public child read operations, enabled execution, child lifecycle/interactions and full recovery; deferred outside the MVP |
-| Environment Templates | Skills references, Plugins, capability directories, restricted network, installation overrides/null network and exact hosted errors; CRUD/list, files, env/setup/system/npm/Python, inline Skills and Session references are supported |
+| Environment Templates | Skills references, Plugins, capability directories, unsupported restricted hostname forms, installation overrides/null network and exact hosted errors; CRUD/list, files, env/setup/system/npm/Python, inline Skills and Session references are supported |
 | Input and configuration | Non-text initial input, broader content/configuration unions, structured output and reasoning/verbosity combinations |
 | Tools and interactions | Deferred functions, other tool types, effective tool-set enforcement and result/cancel publication ordering; MiniMax public functions/MCP remain unsupported |
 | Vault and Credentials | OAuth/refresh, archive semantics, revocation/concurrent mutation and exact hosted selection/error behavior; static bearer CRUD/token replacement is already present |
@@ -402,7 +402,7 @@ operator setup: [Codex](../../services/agents-api/deploy/codex/README.md),
 images as pinned templates.
 The shared initialization path supports env/setup and system/npm/Python packages;
 see the [evidence and limits](environment-templates.md#verification). Remaining
-unsupported startup installations, restricted domains and hosted public HTTP MCP
+unsupported startup installations, unqualified restricted hostname forms and hosted public HTTP MCP
 remain outside these accepted profiles. MiniMax's private MCP tool bridge
 is internal transport, not public MCP support.
 

@@ -12,7 +12,8 @@ type LocalEnvironment struct {
 	// SystemPackages requires the installed Runtime tool root during execution.
 	SystemPackages bool `json:"system_packages,omitempty"`
 	// NetworkAccess must match the immutable Runtime policy for execution.
-	NetworkAccess string `json:"network_access,omitempty"`
+	NetworkAccess  string   `json:"network_access,omitempty"`
+	AllowedDomains []string `json:"allowed_domains,omitempty"`
 }
 
 func (r PromptRequestPayload) EnvironmentID() string {

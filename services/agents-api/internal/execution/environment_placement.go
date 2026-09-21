@@ -8,6 +8,7 @@ import (
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentskill"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
@@ -18,6 +19,7 @@ type environmentPlacement struct {
 	ToolEnvironment       bool                  `json:"initialization,omitempty"`
 	SystemPackages        bool                  `json:"-"`
 	NetworkAccess         string                `json:"-"`
+	AllowedDomains        []string              `json:"-"`
 	WorkspaceDirectory    string                `json:"workspace_directory"`
 	CapabilityDirectories []string              `json:"capability_directories"`
 }
@@ -40,7 +42,7 @@ func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacem
 			return placement, nil
 		}
 	case "openai_hosted":
-		// Qualified local execution currently supports enabled/disabled network only.
+		// Stored policy is shared by preparation and provider bootstrap.
 		var local struct {
 			Skills                []agentskill.Metadata       `json:"skills,omitempty"`
 			Files                 []store.InitialFileMetadata `json:"files"`
@@ -59,10 +61,11 @@ func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacem
 			placement.SystemPackages = local.Packages != nil && len(local.Packages.System) > 0
 			placement.NetworkAccess = "enabled"
 			if local.Network != nil {
-				if len(local.Network.AllowedDomains) != 0 || (local.Network.Access != "enabled" && local.Network.Access != "disabled") {
+				if (agentnetwork.Policy{Access: local.Network.Access, AllowedDomains: local.Network.AllowedDomains}).Validate() != nil {
 					return placement, store.ErrInvalidInput
 				}
 				placement.NetworkAccess = local.Network.Access
+				placement.AllowedDomains = append([]string(nil), local.Network.AllowedDomains...)
 			}
 			return placement, nil
 		}
@@ -90,18 +93,8 @@ func (d *Dispatcher) configurePreparedEnvironment(ctx context.Context, session s
 			return nil, store.ErrInvalidInput
 		}
 		req.LocalEnvironment = &proto.LocalEnvironment{ID: environment.ID, ToolEnvironment: placement.ToolEnvironment, SystemPackages: placement.SystemPackages, Skills: placement.Skills}
-		// Keep the previously qualified explicit-disabled internal peer path intact.
-		// New bound-policy peers validate the exact policy during preparation.
-		boundPolicy := placement.NetworkAccess != "disabled"
-		if d.Registry != nil {
-			if peer, e := d.Registry.LookupDevice(bound.ID); e == nil {
-				info, found, known := peer.AgentKindStatus(session.Engine)
-				boundPolicy = boundPolicy || (known && found && info.Capabilities.LocalEnvironmentNetworkPolicy)
-			}
-		}
-		if boundPolicy {
-			req.LocalEnvironment.NetworkAccess = placement.NetworkAccess
-		}
+		req.LocalEnvironment.NetworkAccess = placement.NetworkAccess
+		req.LocalEnvironment.AllowedDomains = append([]string(nil), placement.AllowedDomains...)
 		return nil, nil
 	}
 	if d.EnvironmentConnection == nil {

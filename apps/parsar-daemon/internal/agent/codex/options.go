@@ -15,6 +15,8 @@ import (
 // SessionPlan holds the resolved per-prompt launch plan derived from
 // the daemon's PromptRequestPayload.
 type SessionPlan struct {
+	managedRequirements string
+
 	// Cwd is the validated working directory passed to codex (and to
 	// the spawned app-server). Empty when the caller provided no work_dir.
 	Cwd string

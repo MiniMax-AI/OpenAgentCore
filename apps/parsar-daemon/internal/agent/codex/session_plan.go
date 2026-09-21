@@ -89,5 +89,11 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 		configureRemoteEnvironment(&plan, *req.RemoteEnvironment)
 	}
 	plan.Env = append(plan.Env, mcpBearerEnv...)
+	if cfg.runtimeNetwork.Access == "restricted" {
+		if err := prepareManagedNetwork(&plan, cfg.runtimeNetwork); err != nil {
+			plan.Cleanup()
+			return SessionPlan{}, "", err
+		}
+	}
 	return plan, skillRoot, nil
 }

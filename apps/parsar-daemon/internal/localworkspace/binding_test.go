@@ -21,7 +21,8 @@ func testBinding(t *testing.T) (*Binding, proto.PromptRequestPayload) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return b, proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{ID: environment}, AgentStateKey: "agents-api-" + session, StrictResume: true, ReleaseOnCompletion: true}
+	b.networkAccess = "disabled"
+	return b, proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{ID: environment, NetworkAccess: "disabled"}, AgentStateKey: "agents-api-" + session, StrictResume: true, ReleaseOnCompletion: true}
 }
 
 func TestBindingRejectsScopeAndPathOverrides(t *testing.T) {

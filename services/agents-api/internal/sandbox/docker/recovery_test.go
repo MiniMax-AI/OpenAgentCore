@@ -87,7 +87,7 @@ func TestDockerProviderRecoveryObservations(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			b := sandbox.Bootstrap{Reference: sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "http://core.invalid/api/v1", Credential: "synthetic-recovery-token"}
+			b := sandbox.Bootstrap{Reference: sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "http://core.invalid/api/v1", Credential: "synthetic-recovery-token", NetworkAccess: "enabled"}
 			direct, e := client.New(client.WithHost("unix:///var/run/docker.sock"))
 			if e != nil {
 				t.Fatal(e)

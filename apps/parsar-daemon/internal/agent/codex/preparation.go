@@ -96,6 +96,12 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 		return nil, err
 	}
 
+	if err := configureManagedNetworkProcess(&rpcCfg, plan.managedRequirements); err != nil {
+		cancelFn()
+		plan.Cleanup()
+		return nil, err
+	}
+
 	rpc := NewJSONRPCClient(rpcCfg)
 	defer harness.releaseWith(rpc)
 

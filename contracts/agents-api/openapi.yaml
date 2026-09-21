@@ -2113,11 +2113,12 @@ paths:
     post:
       consumes:
       - application/json
-      description: Saves tenant-owned basic hosted configuration. Supports nullable
-        name, enabled/disabled network, initial inline/file_id files, confidential
+      description: Saves tenant-owned hosted configuration. Supports nullable
+        name, enabled/disabled or exact-domain restricted network, initial inline/file_id files, confidential
         env, ordered setup_commands, system/npm/Python packages and inline Skill ZIPs.
-        Omitted/null network defaults to enabled. Other populated installations and
-        restricted network are rejected before persistence without echoing input.
+        Omitted/null network defaults to enabled. Restricted network requires 1–100
+        exact ASCII hostnames; other host forms and populated unsupported installations
+        are rejected before persistence without echoing input.
         No compute is allocated. Exact hosted error/retry semantics remain unverified.
       parameters:
       - description: agents=v1
@@ -2421,8 +2422,9 @@ paths:
         supports non-deferred function tools with text results alongside native workspace
         tools; HTTP MCP remains unsupported. Idle Sessions provision automatically;
         initial provisioning has no caller connection action. Network defaults to
-        enabled; disabled is also supported, while restricted domains and remaining
-        unsupported startup installations are rejected. Confidential env, system/npm/Python
+        enabled; disabled and restricted exact ASCII hostnames are supported. Restricted
+        policy requires 1–100 allowed domains. Unsupported hostname forms and startup
+        installations are rejected. Confidential env, system/npm/Python
         packages and ordered setup commands use the shared initialization lifecycle;
         requested network applies after setup. Initial inline and tenant-owned file_id
         files freeze encrypted bytes before provisioning, then install through the

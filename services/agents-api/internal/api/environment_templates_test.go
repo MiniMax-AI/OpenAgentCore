@@ -12,12 +12,12 @@ import (
 )
 
 func TestTemplateConfigurationRejectsUnqualifiedInputs(t *testing.T) {
-	for _, raw := range []string{`{}`, `{"packages":{}}`, `{"packages":{"npm":null}}`, `{"packages":{"system":["jq","libpq-dev"]}}`, `{"packages":{"system":null}}`, `{"name":null,"network":null}`, `{"name":"保存","network":{"access":"disabled"},"env":{},"files":[],"setup_commands":[],"packages":{"npm":null}}`} {
+	for _, raw := range []string{`{"network":{"access":"restricted","allowed_domains":["Example.com","example.com"]}}`, `{}`, `{"packages":{}}`, `{"packages":{"npm":null}}`, `{"packages":{"system":["jq","libpq-dev"]}}`, `{"packages":{"system":null}}`, `{"name":null,"network":null}`, `{"name":"保存","network":{"access":"disabled"},"env":{},"files":[],"setup_commands":[],"packages":{"npm":null}}`} {
 		if _, err := decodeTemplateInput([]byte(raw)); err != nil {
 			t.Fatalf("supported input: %s: %v", raw, err)
 		}
 	}
-	for _, raw := range []string{`null`, `[]`, `{"name":""}`, `{"name":42}`, `{"type":"openai_hosted"}`, `{"network":{"access":"restricted","allowed_domains":["example.com"]}}`, `{"env":{"PATH":"confidential-canary"}}`, `{"setup_commands":[{"command":"confidential-canary","cwd":"relative"}]}`, `{"packages":{"system":["-o"]}}`, `{"packages":{"system":[""]}}`, `{"packages":{"system":[null]}}`, `{"plugins":[{}]}`, `{"skills":[{}]}`, `{"capability_directories":["/workspace"]}`} {
+	for _, raw := range []string{`null`, `[]`, `{"name":""}`, `{"name":42}`, `{"type":"openai_hosted"}`, `{"env":{"PATH":"confidential-canary"}}`, `{"setup_commands":[{"command":"confidential-canary","cwd":"relative"}]}`, `{"packages":{"system":["-o"]}}`, `{"packages":{"system":[""]}}`, `{"packages":{"system":[null]}}`, `{"plugins":[{}]}`, `{"skills":[{}]}`, `{"capability_directories":["/workspace"]}`} {
 		if _, err := decodeTemplateInput([]byte(raw)); err == nil {
 			t.Fatalf("unsupported input accepted: %s", raw)
 		}
@@ -36,12 +36,13 @@ func TestTemplateConfigurationRejectsUnqualifiedInputs(t *testing.T) {
 type templateLookupStore struct {
 	ResourceStore
 	network string
+	domains []string
 	tenant  string
 }
 
 func (s *templateLookupStore) ResolveEnvironmentTemplate(_ context.Context, tenant, id string) (store.EnvironmentTemplate, []store.InitialFile, error) {
 	s.tenant = tenant
-	return store.EnvironmentTemplate{ID: id, NetworkAccess: s.network}, nil, nil
+	return store.EnvironmentTemplate{ID: id, NetworkAccess: s.network, AllowedDomains: s.domains}, nil, nil
 }
 
 func TestTemplateResolutionAndCreationIntent(t *testing.T) {

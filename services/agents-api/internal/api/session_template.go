@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
@@ -56,8 +57,10 @@ func (h *Handler) resolveTemplateEnvironment(ctx context.Context, tenant string,
 		return store.ErrInvalidInput
 	}
 	if _, supplied := fields["network"]; !supplied {
-		input.Environment.Network = &v1.EnvironmentNetworkInput{Access: template.NetworkAccess}
-	} else if template.NetworkAccess == "disabled" && input.Environment.Network.Access != "disabled" {
+		input.Environment.Network = &v1.EnvironmentNetworkInput{Access: template.NetworkAccess, AllowedDomains: append([]string{}, template.AllowedDomains...)}
+	}
+	effective := agentnetwork.Policy{Access: input.Environment.Network.Access, AllowedDomains: input.Environment.Network.AllowedDomains}
+	if !effective.Narrows(agentnetwork.Policy{Access: template.NetworkAccess, AllowedDomains: template.AllowedDomains}) {
 		return store.ErrInvalidInput
 	}
 	input.initialization = template.Initialization

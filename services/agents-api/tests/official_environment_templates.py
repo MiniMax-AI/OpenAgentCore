@@ -19,6 +19,7 @@ def verify_environment_templates(client, foreign, http):
         assert http.get(base, headers={'Authorization': 'Bearer ' + client.api_key}).status_code == 400
         assert api.list().data == []
         for values in ({}, {'packages': {}}, {'packages': {'npm': None}}, {'name': None, 'network': None, 'env': None, 'setup_commands': None},
+                       {'network': {'access': 'restricted', 'allowed_domains': ['Example.com', 'api.example.com', 'example.com']}},
                        {'name': ' preserved ', 'network': {'access': 'disabled'}, 'files': [],
                         'plugins': [], 'skills': [], 'packages': {'python': [], 'npm': None}}):
             response = api.with_raw_response.create(**values)
@@ -29,7 +30,7 @@ def verify_environment_templates(client, foreign, http):
             assert body['object'] == 'agent.environment.template'
             assert body['name'] == values.get('name')
             assert body['network'] == {'access': (values.get('network') or {}).get('access', 'enabled'),
-                                       'allowed_domains': []}
+                                       'allowed_domains': (values.get('network') or {}).get('allowed_domains') or []}
             assert body['packages'] == {'python': [], 'npm': [], 'system': []}
             for field in ['capability_directories', 'files', 'plugins', 'skills']:
                 assert body[field] == []
@@ -66,7 +67,7 @@ def verify_environment_templates(client, foreign, http):
                      {'packages': {'system': ['-' + canary]}}, {'skills': [{'type': 'inline', 'data': canary}]},
                      {'plugins': [{'type': 'inline', 'data': canary}]},
                      {'capability_directories': ['/workspace']},
-                     {'network': {'access': 'restricted', 'allowed_domains': ['example.com']}},
+                     {'network': {'access': 'restricted', 'allowed_domains': ['*.example.com']}},
                      {'name': ''}, {'unknown': canary}]:
             for path in ['', '/' + owned[0]]:
                 response = http.post(base + path, headers=headers, json=body)

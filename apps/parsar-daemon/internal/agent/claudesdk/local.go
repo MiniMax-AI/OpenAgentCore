@@ -5,20 +5,22 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
 )
 
 // ConfigureLocal selects the qualified, dedicated Runtime layout. The shared
 // localworkspace binding still authorizes every request against its Session.
-func ConfigureLocal(config Config, root, workspace, network, staging string) (Config, error) {
+func ConfigureLocal(config Config, root, workspace string, network agentnetwork.Policy, staging string) (Config, error) {
 	config.StateDir = filepath.Join(root, "runtime", "claude-sdk", "history")
 	config.Workspace = &WorkspaceConfig{
-		Directory: workspace, PublicDirectory: "/workspace", NetworkAccess: network,
+		Directory: workspace, PublicDirectory: "/workspace", NetworkAccess: network.Access, AllowedDomains: network.Hosts(),
 		HomeDir:        filepath.Join(root, "runtime", "claude-sdk", "home"),
 		ScratchDir:     filepath.Join(root, "runtime", "claude-sdk", "scratch"),
 		ProtectedDirs:  []string{filepath.Join(root, "parsar-daemon"), staging},
 		DependencyPath: "/usr/local/bin:/usr/bin:/bin",
 	}
-	if network != "enabled" && network != "disabled" {
+	if network.Validate() != nil {
 		return Config{}, fmt.Errorf("claudesdk: dedicated Runtime requires an explicit network policy")
 	}
 	for _, dir := range []string{config.StateDir, config.Workspace.HomeDir, config.Workspace.ScratchDir} {

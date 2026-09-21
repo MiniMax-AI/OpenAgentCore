@@ -3,7 +3,9 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
@@ -27,7 +29,7 @@ func decodeHostedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 				continue
 			}
 			var network v1.EnvironmentNetworkInput
-			if decodeInputObject(value, &network, "access", "allowed_domains") != nil || (network.Access != "enabled" && network.Access != "disabled") || len(network.AllowedDomains) != 0 {
+			if decodeInputObject(value, &network, "access", "allowed_domains") != nil || (agentnetwork.Policy{Access: network.Access, AllowedDomains: network.AllowedDomains}).Validate() != nil {
 				return nil, store.ErrInvalidInput
 			}
 			env.Network = &network
@@ -69,7 +71,7 @@ func hostedSessionEnvironment(environment store.Environment) (v1.SessionEnvironm
 	}
 	directories := []string{}
 	return v1.SessionEnvironment{ID: environment.ID, Type: cfg.Type, CapabilityDirectories: &directories,
-		Network:  &v1.EnvironmentNetwork{Access: cfg.Network.Access, AllowedDomains: []string{}},
+		Network:  &v1.EnvironmentNetwork{Access: cfg.Network.Access, AllowedDomains: append([]string{}, cfg.Network.AllowedDomains...)},
 		Packages: func() *v1.EnvironmentPackages { value := packageMetadata(cfg.Packages); return &value }(), Files: &files, Plugins: &empty, Skills: &cfg.Skills}, nil
 }
 

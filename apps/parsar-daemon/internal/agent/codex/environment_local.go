@@ -23,5 +23,5 @@ func SupportsLocalNetworkPolicy(version string) bool {
 		return false
 	}
 	binding, err := localworkspace.Load()
-	return err == nil && binding != nil && binding.NetworkAccess() != ""
+	return err == nil && binding != nil && binding.NetworkPolicy().Validate() == nil
 }

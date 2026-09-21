@@ -1,13 +1,19 @@
 import { SandboxManager } from './dist/sandbox.mjs';
 import { spawn } from 'node:child_process';
 import { readFileSync, mkdirSync } from 'node:fs';
+import { isIP } from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const profile = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 if (profile.workspace !== process.argv[3] || profile.workspace !== '/workspace')
   throw new Error('Workspace profile does not match execution binding');
-if (!['disabled','enabled'].includes(profile.network)) throw new Error('Invalid network policy');
+if (!['disabled','enabled','restricted'].includes(profile.network)) throw new Error('Invalid network policy');
+const domains=profile.allowedDomains??[];
+const hostname=/^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/i;
+if (!Array.isArray(domains) || (profile.network==='restricted'
+ ? domains.length<1 || domains.length>100 || domains.some(host=>typeof host!=='string'||!hostname.test(host)||host.trim()!==host||isIP(host)!==0)
+ : domains.length!==0)) throw new Error('Invalid network domains');
 const baseEnv = {PATH:'/usr/local/bin:/usr/bin:/bin',HOME:profile.scratch,TMPDIR:profile.scratch,LANG:'C.UTF-8'};
 if (profile.systemPackages) {
  if (!profile.toolEnvironment) throw new Error('System packages require initialized tool configuration');
@@ -20,7 +26,7 @@ process.on('SIGTERM',cancel);process.on('SIGINT',cancel);
 try {
  mkdirSync(profile.scratch,{recursive:true});
  await SandboxManager.initialize({
-  network:{allowedDomains:[],deniedDomains:profile.network==='disabled'?['*']:[],allowAll:profile.network==='enabled'},
+  network:{allowedDomains:domains,deniedDomains:profile.network==='disabled'?['*']:[],allowAll:profile.network==='enabled',strictAllowlist:true,allowAllUnixSockets:false,allowLocalBinding:false},
   filesystem:{denyRead:profile.protectedDirs,allowWrite:[profile.workspace,profile.scratch,...(profile.toolEnvironment ? ['/environment/packages'] : [])],denyWrite:[...(profile.skills ? ["/environment/initialization/capabilities"] : []),...(profile.systemPackages ? ['/environment/packages/system'] : [])]},
   seccomp:{applyPath:join(here,'dist/vendor/seccomp/x64/apply-seccomp')},
  },undefined,false);

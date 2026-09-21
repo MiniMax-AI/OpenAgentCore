@@ -5,11 +5,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/containerd/errdefs"
 	"github.com/google/uuid"
@@ -103,13 +105,18 @@ func (p *Provider) Renew(ctx context.Context, r sandbox.Reference) (sandbox.Info
 func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
 	info := sandbox.Info{Reference: b.Reference}
 	u, e := url.Parse(b.CoreURL)
-	if (b.NetworkAccess != "" && b.NetworkAccess != "enabled" && b.NetworkAccess != "disabled") || !validReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || e != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.TrimSpace(b.Credential) == "" {
+	policy := agentnetwork.Policy{Access: b.NetworkAccess, AllowedDomains: b.AllowedDomains}
+	if policy.Validate() != nil || !validReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || e != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.TrimSpace(b.Credential) == "" {
 		return info, sandbox.ErrInvalid
 	}
 	if existing, e := p.GetInfo(ctx, b.Reference); e == nil {
 		return existing, sandbox.ErrExists
 	} else if !errors.Is(e, sandbox.ErrNotFound) {
 		return info, e
+	}
+	domains, err := json.Marshal(policy.Hosts())
+	if err != nil {
+		return info, sandbox.ErrInvalid
 	}
 	name := p.name(b.Reference)
 	// Retained volumes without a container are partial or lost state, not an
@@ -147,7 +154,7 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 		init = &enabled
 	}
 	v, e := p.client.ContainerCreate(ctx, client.ContainerCreateOptions{Name: name, Image: p.config.Image,
-		Config: &container.Config{User: "1000:1000", WorkingDir: "/environment/workspace", Labels: p.labels(b.Reference), Env: []string{"PARSAR_RUNTIME_ENVIRONMENT_ID=" + b.EnvironmentID, "PARSAR_RUNTIME_SESSION_ID=" + b.SessionID, "PARSAR_RUNTIME_NETWORK_ACCESS=" + b.NetworkAccess}},
+		Config: &container.Config{User: "1000:1000", WorkingDir: "/environment/workspace", Labels: p.labels(b.Reference), Env: []string{"PARSAR_RUNTIME_ENVIRONMENT_ID=" + b.EnvironmentID, "PARSAR_RUNTIME_SESSION_ID=" + b.SessionID, "PARSAR_RUNTIME_NETWORK_ACCESS=" + policy.Access, "PARSAR_RUNTIME_ALLOWED_DOMAINS=" + string(domains)}},
 		HostConfig: &container.HostConfig{ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges", "seccomp=" + p.config.Seccomp, "apparmor=unconfined"}, NetworkMode: container.NetworkMode(p.config.Network), ExtraHosts: p.config.ExtraHosts,
 			MaskedPaths: masked, ReadonlyPaths: readonly, Init: init,
 			Resources: container.Resources{PidsLimit: &limit, Memory: 2 * 1024 * 1024 * 1024, NanoCPUs: 2 * 1000000000}, Tmpfs: map[string]string{"/tmp": "rw,nosuid,nodev,size=128m"},

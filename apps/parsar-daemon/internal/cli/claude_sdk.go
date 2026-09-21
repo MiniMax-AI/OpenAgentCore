@@ -75,7 +75,7 @@ func discoverClaudeSDK(rc *runContext, profile string, check func(context.Contex
 		if err != nil {
 			return fail(err)
 		}
-		out.Config, err = claudesdk.ConfigureLocal(out.Config, root, os.Getenv("PARSAR_RUNTIME_WORKSPACE"), binding.NetworkAccess(), os.Getenv("PARSAR_RUNTIME_STAGING"))
+		out.Config, err = claudesdk.ConfigureLocal(out.Config, root, os.Getenv("PARSAR_RUNTIME_WORKSPACE"), binding.NetworkPolicy(), os.Getenv("PARSAR_RUNTIME_STAGING"))
 		if err != nil {
 			return fail(err)
 		}

@@ -133,7 +133,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	}
 	info, err := provider.Create(ctx, sandbox.Bootstrap{
 		Reference: runtimeReference(owner), SessionID: owner.SessionID, DeviceID: owner.DeviceID,
-		CoreURL: r.config.CoreURL, Credential: token, NetworkAccess: placement.NetworkAccess,
+		CoreURL: r.config.CoreURL, Credential: token, NetworkAccess: placement.NetworkAccess, AllowedDomains: placement.AllowedDomains,
 	})
 	if err != nil {
 		// Explicit invalid/foreign bootstrap cannot become an authorized Runtime.

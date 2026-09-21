@@ -181,8 +181,11 @@ initial-text Session using `environment: {"type": "openai_hosted"}`. Core commit
 its identity before automatically provisioning it. Queries expose durable
 connection status; execution separately prepares the native harness. Session
 deletion revokes authority before owned container/volume cleanup. Supported network
-policies are enabled and disabled. Templates, populated startup installations,
-restricted domains and hosted MCP combinations remain explicit gaps.
+policies are enabled, disabled and restricted to exact ASCII hostnames. Templates
+and inline configuration share initial files, env, packages, ordered setup and inline
+Skills; see the [supported fields and limits](../../../../contracts/agents-api/environment-templates.md).
+Other hostname forms, Plugins, Skill references, capability-directory imports and
+hosted MCP combinations remain explicit gaps.
 
 ### Environment initialization
 

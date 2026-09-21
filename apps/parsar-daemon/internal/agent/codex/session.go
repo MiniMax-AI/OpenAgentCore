@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
+	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/localworkspace"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
 	obslog "github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
 )
 
@@ -24,22 +26,24 @@ const terminalSendTimeout = 2 * time.Second
 // sessionConfig is the cross-cutting knob bag — production callers go
 // through Factory which uses defaults.
 type sessionConfig struct {
-	codexBinary          string
-	harnessBinary        string
-	permissionProfile    string
-	runtimeNetworkAccess string
-	logger               *slog.Logger
-	killTimeout          time.Duration
+	codexBinary         string
+	harnessBinary       string
+	permissionProfile   string
+	runtimeNetwork      agentnetwork.Policy
+	runtimeNetworkError error
+	logger              *slog.Logger
+	killTimeout         time.Duration
 }
 
 func defaultSessionConfig() sessionConfig {
+	policy, err := localworkspace.RuntimeNetworkPolicy()
 	return sessionConfig{
-		codexBinary:          defaultBinary(),
-		harnessBinary:        os.Getenv("PARSAR_CODEX_HARNESS_BIN"),
-		permissionProfile:    os.Getenv("PARSAR_CODEX_PERMISSION_PROFILE"),
-		runtimeNetworkAccess: os.Getenv("PARSAR_RUNTIME_NETWORK_ACCESS"),
-		logger:               obslog.Bg(),
-		killTimeout:          rpcKillTimeout,
+		codexBinary:       defaultBinary(),
+		harnessBinary:     os.Getenv("PARSAR_CODEX_HARNESS_BIN"),
+		permissionProfile: os.Getenv("PARSAR_CODEX_PERMISSION_PROFILE"),
+		runtimeNetwork:    policy, runtimeNetworkError: err,
+		logger:      obslog.Bg(),
+		killTimeout: rpcKillTimeout,
 	}
 }
 

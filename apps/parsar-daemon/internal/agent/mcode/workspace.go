@@ -11,19 +11,21 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/localworkspace"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
 )
 
 // WorkspaceConfig is frozen deployment input, separate from public Agent options.
 type WorkspaceConfig struct {
 	Binary, Node, Bridge, Directory, Network, Scratch string
 	ProtectedDirs                                     []string
+	AllowedDomains                                    []string
 }
 
-func ConfigureLocal(binary, node, bridge, root, workspace, network, staging string) (WorkspaceConfig, error) {
-	c := WorkspaceConfig{Binary: binary, Node: node, Bridge: bridge, Directory: workspace, Network: network,
+func ConfigureLocal(binary, node, bridge, root, workspace string, network agentnetwork.Policy, staging string) (WorkspaceConfig, error) {
+	c := WorkspaceConfig{Binary: binary, Node: node, Bridge: bridge, Directory: workspace, Network: network.Access, AllowedDomains: network.Hosts(),
 		Scratch:       filepath.Join(root, "runtime", "mcode-tools", "scratch"),
 		ProtectedDirs: []string{filepath.Join(root, "parsar-daemon"), filepath.Join(root, "runtime", "mcode"), filepath.Dir(workspace), staging}}
-	if network != "enabled" && network != "disabled" {
+	if network.Validate() != nil {
 		return c, fmt.Errorf("mcode: explicit workspace network policy is required")
 	}
 	for _, path := range []string{binary, node, bridge, root, workspace, staging} {
@@ -49,7 +51,7 @@ func ConfigureLocal(binary, node, bridge, root, workspace, network, staging stri
 }
 
 func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.PromptRequestPayload) (launchOptions, error) {
-	if !req.StrictResume || req.LocalEnvironment == nil || req.WorkDir != c.Directory || req.DisableExecutionEnvironment || req.LocalEnvironment.NetworkAccess != c.Network || req.RemoteEnvironment != nil || req.WorkspaceReadOnly {
+	if !req.StrictResume || req.LocalEnvironment == nil || req.WorkDir != c.Directory || req.DisableExecutionEnvironment || !(agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Equal(agentnetwork.Policy{Access: req.LocalEnvironment.NetworkAccess, AllowedDomains: req.LocalEnvironment.AllowedDomains}) || req.RemoteEnvironment != nil || req.WorkspaceReadOnly {
 		return launchOptions{}, fmt.Errorf("mcode: execution does not match the dedicated workspace")
 	}
 	// Reuse public option validation and private Session state provisioning. Native
@@ -92,7 +94,7 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 	if err = os.WriteFile(filepath.Join(opts.DataDir, "config.yaml"), raw, 0600); err != nil {
 		return opts, err
 	}
-	profile := map[string]any{"workspace": "/workspace", "scratch": c.Scratch, "network": c.Network, "protectedDirs": slices.Clone(c.ProtectedDirs), "skills": len(req.LocalEnvironment.Skills) > 0}
+	profile := map[string]any{"workspace": "/workspace", "scratch": c.Scratch, "network": c.Network, "allowedDomains": (agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Hosts(), "protectedDirs": slices.Clone(c.ProtectedDirs), "skills": len(req.LocalEnvironment.Skills) > 0}
 	if req.LocalEnvironment.ToolEnvironment {
 		if err := localworkspace.VerifyToolEnvironment(req.LocalEnvironment.SystemPackages); err != nil {
 			return opts, err

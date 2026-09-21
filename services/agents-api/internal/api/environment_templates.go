@@ -59,11 +59,12 @@ func decodeTemplateInput(raw []byte) (store.EnvironmentTemplateInput, error) {
 		return in, err
 	}
 	in.NetworkAccess = environment.Network.Access
+	in.AllowedDomains = append([]string{}, environment.Network.AllowedDomains...)
 	return in, nil
 }
 
 func templateResponse(t store.EnvironmentTemplate) v1.EnvironmentTemplate {
-	return v1.EnvironmentTemplate{ID: t.ID, Object: "agent.environment.template", Name: t.Name, CreatedAt: t.CreatedAt.Unix(), UpdatedAt: t.UpdatedAt.Unix(), CapabilityDirectories: []string{}, Network: v1.EnvironmentNetwork{Access: t.NetworkAccess, AllowedDomains: []string{}}, Packages: packageMetadata(&t.Packages), Files: templateFileResponse(t.Files), Plugins: []json.RawMessage{}, Skills: skillResponse(t.Skills)}
+	return v1.EnvironmentTemplate{ID: t.ID, Object: "agent.environment.template", Name: t.Name, CreatedAt: t.CreatedAt.Unix(), UpdatedAt: t.UpdatedAt.Unix(), CapabilityDirectories: []string{}, Network: v1.EnvironmentNetwork{Access: t.NetworkAccess, AllowedDomains: append([]string{}, t.AllowedDomains...)}, Packages: packageMetadata(&t.Packages), Files: templateFileResponse(t.Files), Plugins: []json.RawMessage{}, Skills: skillResponse(t.Skills)}
 }
 
 func templateNoQuery(w http.ResponseWriter, r *http.Request) bool {
@@ -84,14 +85,14 @@ func readTemplateInput(w http.ResponseWriter, r *http.Request) (store.Environmen
 	}
 	in, err := decodeTemplateInput(raw)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", "Template fields are invalid or require unsupported initialization. Name, enabled/disabled network, initial files, env, system/npm/Python packages, setup commands and inline Skill ZIPs are supported.")
+		writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", "Template fields are invalid or require unsupported initialization. Name, enabled/disabled or exact-domain restricted network, initial files, env, system/npm/Python packages, setup commands and inline Skill ZIPs are supported.")
 		return in, false
 	}
 	return in, true
 }
 
 // @Summary Create an Environment Template
-// @Description Saves tenant-owned basic hosted configuration. Supports nullable name, enabled/disabled network, initial inline/file_id files, confidential env, ordered setup_commands, system/npm/Python packages and inline Skill ZIPs. Omitted/null network defaults to enabled. Other populated installations and restricted network are rejected before persistence without echoing input. No compute is allocated. Exact hosted error/retry semantics remain unverified.
+// @Description Saves tenant-owned hosted configuration. Supports nullable name, enabled/disabled or exact-domain restricted network, initial inline/file_id files, confidential env, ordered setup_commands, system/npm/Python packages and inline Skill ZIPs. Omitted/null network defaults to enabled. Restricted network requires 1–100 exact ASCII hostnames; other host forms and populated unsupported installations are rejected before persistence without echoing input. No compute is allocated. Exact hosted error/retry semantics remain unverified.
 // @Tags Environment Templates
 // @Accept json
 // @Produce json

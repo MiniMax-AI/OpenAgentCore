@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentskill"
 	"time"
 	"unicode/utf8"
@@ -26,6 +27,7 @@ type EnvironmentTemplate struct {
 	ID             string
 	Name           *string
 	NetworkAccess  string
+	AllowedDomains []string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }
@@ -38,12 +40,13 @@ type EnvironmentTemplateInput struct {
 	Name                                     *string
 	SetName                                  bool
 	NetworkAccess                            string
+	AllowedDomains                           []string
 	SetNetwork                               bool
 }
 
 func (in EnvironmentTemplateInput) valid() bool {
 	return in.Initialization.Validate() == nil && (in.Name == nil || (utf8.ValidString(*in.Name) && utf8.RuneCountInString(*in.Name) >= 1 && utf8.RuneCountInString(*in.Name) <= 256)) &&
-		(!in.SetNetwork || in.NetworkAccess == "enabled" || in.NetworkAccess == "disabled")
+		(!in.SetNetwork || (agentnetwork.Policy{Access: in.NetworkAccess, AllowedDomains: in.AllowedDomains}).Validate() == nil)
 }
 
 type templateMetadataRow sqlc.GetEnvironmentTemplateRow
@@ -55,7 +58,7 @@ func templateFromRow(row templateMetadataRow, err error) (EnvironmentTemplate, e
 	if err != nil {
 		return EnvironmentTemplate{}, err
 	}
-	result := EnvironmentTemplate{ID: uuid.UUID(row.ID.Bytes).String(), NetworkAccess: row.NetworkAccess, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
+	result := EnvironmentTemplate{ID: uuid.UUID(row.ID.Bytes).String(), NetworkAccess: row.NetworkAccess, AllowedDomains: append([]string{}, row.NetworkAllowedDomains...), CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
 	if row.Name.Valid {
 		result.Name = &row.Name.String
 	}
@@ -68,6 +71,7 @@ func templateFromRow(row templateMetadataRow, err error) (EnvironmentTemplate, e
 func (s *Store) CreateEnvironmentTemplate(ctx context.Context, tenantID string, in EnvironmentTemplateInput) (EnvironmentTemplate, error) {
 	if !in.SetNetwork {
 		in.NetworkAccess = "enabled"
+		in.AllowedDomains = nil
 		in.SetNetwork = true
 	}
 	if !in.valid() {
@@ -94,7 +98,7 @@ func (s *Store) CreateEnvironmentTemplate(ctx context.Context, tenantID string, 
 	if err != nil {
 		return EnvironmentTemplate{}, err
 	}
-	row, err := s.queries.CreateEnvironmentTemplate(ctx, sqlc.CreateEnvironmentTemplateParams{ID: pgtype.UUID{Bytes: id, Valid: true}, TenantID: tenant, Name: name, NetworkAccess: in.NetworkAccess, Files: metadata, FileContents: encrypted, Packages: packages, EnvContents: envContents, SetupContents: setupContents, Skills: skills, SkillContents: skillContents})
+	row, err := s.queries.CreateEnvironmentTemplate(ctx, sqlc.CreateEnvironmentTemplateParams{ID: pgtype.UUID{Bytes: id, Valid: true}, TenantID: tenant, Name: name, NetworkAccess: in.NetworkAccess, NetworkAllowedDomains: append([]string{}, in.AllowedDomains...), Files: metadata, FileContents: encrypted, Packages: packages, EnvContents: envContents, SetupContents: setupContents, Skills: skills, SkillContents: skillContents})
 	return templateFromRow(templateMetadataRow(row), err)
 }
 
@@ -143,7 +147,7 @@ func (s *Store) UpdateEnvironmentTemplate(ctx context.Context, tenantID, templat
 	if err != nil {
 		return EnvironmentTemplate{}, err
 	}
-	row, err := s.queries.UpdateEnvironmentTemplate(ctx, sqlc.UpdateEnvironmentTemplateParams{TenantID: tenant, ID: id, Name: name, SetName: in.SetName, NetworkAccess: in.NetworkAccess, SetNetwork: in.SetNetwork, SetFiles: in.SetFiles, Files: metadata, FileContents: encrypted, Packages: packages, EnvContents: envContents, SetupContents: setupContents, SetPackages: in.SetPackages, SetEnv: in.SetEnv, SetSetup: in.SetSetup, SetSkills: in.SetSkills, Skills: skills, SkillContents: skillContents})
+	row, err := s.queries.UpdateEnvironmentTemplate(ctx, sqlc.UpdateEnvironmentTemplateParams{TenantID: tenant, ID: id, Name: name, SetName: in.SetName, NetworkAccess: in.NetworkAccess, NetworkAllowedDomains: append([]string{}, in.AllowedDomains...), SetNetwork: in.SetNetwork, SetFiles: in.SetFiles, Files: metadata, FileContents: encrypted, Packages: packages, EnvContents: envContents, SetupContents: setupContents, SetPackages: in.SetPackages, SetEnv: in.SetEnv, SetSetup: in.SetSetup, SetSkills: in.SetSkills, Skills: skills, SkillContents: skillContents})
 	return templateFromRow(templateMetadataRow(row), err)
 }
 

@@ -81,19 +81,20 @@ type EnvironmentSetup struct {
 }
 
 type EnvironmentTemplate struct {
-	ID            pgtype.UUID        `json:"id"`
-	TenantID      pgtype.UUID        `json:"tenant_id"`
-	Name          pgtype.Text        `json:"name"`
-	NetworkAccess string             `json:"network_access"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
-	Files         []byte             `json:"files"`
-	FileContents  []byte             `json:"file_contents"`
-	Packages      []byte             `json:"packages"`
-	EnvContents   []byte             `json:"env_contents"`
-	SetupContents []byte             `json:"setup_contents"`
-	Skills        []byte             `json:"skills"`
-	SkillContents []byte             `json:"skill_contents"`
+	ID                    pgtype.UUID        `json:"id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	Name                  pgtype.Text        `json:"name"`
+	NetworkAccess         string             `json:"network_access"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	Files                 []byte             `json:"files"`
+	FileContents          []byte             `json:"file_contents"`
+	Packages              []byte             `json:"packages"`
+	EnvContents           []byte             `json:"env_contents"`
+	SetupContents         []byte             `json:"setup_contents"`
+	Skills                []byte             `json:"skills"`
+	SkillContents         []byte             `json:"skill_contents"`
+	NetworkAllowedDomains []string           `json:"network_allowed_domains"`
 }
 
 type ExecutionProjectScope struct {

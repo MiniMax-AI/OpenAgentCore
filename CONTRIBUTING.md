@@ -283,7 +283,7 @@ unqualified. Skills API references, generic Plugins and capability-directory
 imports remain separate work; an adapter-owned Claude plugin envelope does not
 implement public Plugins.
 
-Name, enabled/disabled network, initial files, inline Skills and env/setup/system/npm/Python are
+Name, enabled/disabled/exact-domain restricted network, initial files, inline Skills and env/setup/system/npm/Python are
 implemented independently of remaining installation fields. Reject unsupported
 inputs rather than persisting them for silent
 omission; expand inline and template initialization together in separately qualified
@@ -291,13 +291,29 @@ batches. Resource reads need only tenant authorization, not a live Runtime.
 See the [Template coverage and unresolved semantics](contracts/agents-api/environment-templates.md).
 
 SandboxProvider has five operations: Create, GetInfo, Renew, Kill and RunCommand.
-Use maintained provider SDKs and thin adapters, Docker first and E2B after the MVP.
+Use maintained provider SDKs and thin adapters. The current hosted offering uses Docker.
 Provider initialization creates the sandbox and starts its daemon/harness;
 RunCommand is for initialization only. Daily execution and Files use Runtime and
 native or bounded local capabilities. Docker's lack of a native renewable lease
 does not remove service-owned hosted expiry and cleanup requirements.
 
-The E2B Provider uses an explicit `templateID:build_UUID` and the same qualified
+The official `openai_hosted` discriminator means hosting by this independent Core
+service, using Docker V1. Keep the public value unchanged; `parsar_hosted` is not
+a new API type. Public Environment Templates apply only to this hosted path.
+E2B onboarding follows the official `self_hosted` workflow: an application or
+webhook controller owns sandbox provisioning and cleanup, and the executor connects
+with the returned Environment ID, unchanged `remote_url` and scoped environment
+authorization. Reuse existing Runtime and provider components without a separate
+public integration design. A private daemon connection alone is not evidence of
+official interoperability. Qualify tenant ownership, credentials and connection
+lifecycle using the pinned client and actual execution.
+
+The previously accepted Core-managed E2B route remains implementation evidence
+pending bounded realignment and obsolete-route cleanup after Environment Templates.
+Do not expand it as a second hosted offering. Current Template acceptance uses
+Docker; historical E2B tests retain only their demonstrated scope.
+
+The existing E2B Provider uses an explicit `templateID:build_UUID` and the same qualified
 colocated Runtime. Its root-private bootstrap input and final atomic receipt live
 on persistent disk, never template `/run`. Running compute alone does not establish
 completed initialization. Inspect exact installation/tenant/Environment/allocation
@@ -407,14 +423,26 @@ The [co-location qualification inputs](services/agents-api/deploy/codex/README.m
 record the pinned native/Docker prerequisites and limits; this switch alone does
 not admit hosted Environments or authorize a workspace.
 
-A managed Runtime's enabled/disabled network policy is immutable deployment input,
-transferred through the provider-neutral bootstrap and checked against execution
-preparation. The native adapter selects the corresponding managed profile; Core
-and Docker do not select native profile names. New policy-aware peers advertise
-`local_environment_network_policy`; enabled execution requires that capability.
-The older explicit-disabled internal peer path remains supported without widening
-its policy. Read-only workspace access does not require execution network policy.
-A declaration alone does not qualify an image or admit public hosted creation.
+A managed Runtime's network policy is immutable deployment input, transferred
+through the provider-neutral bootstrap and checked against execution preparation.
+The shared policy includes enabled, disabled and an exact-host restricted allowlist.
+Core preserves public spelling/order/duplicates and only permits Template overrides
+that narrow authority. Adapters translate a normalized copy into native settings;
+Core and Docker never select native profile names. Every hosted execution peer
+must support `local_environment_network_policy` and receive the complete bound
+policy; missing policy never falls back to enabled or an older peer path. Read-only
+workspace access does not require execution network policy. A declaration alone
+does not qualify an image or admit public hosted creation.
+
+Codex restricted networking uses its native managed network requirements and proxy.
+Its adapter preserves the image's filesystem, approval and hook requirements and
+adds the frozen exact-host ceiling in Session-private state. The existing RPC
+client owns a bubblewrap child that mounts those requirements read-only and runs
+the stock native app-server in a PID namespace; teardown retains the same owner.
+Preparation regenerates the non-secret requirements from the frozen policy. Keep
+the file with Session state so cleanup cannot race a running child's mount.
+Claude and MiniMax translate the same policy into their native sandbox allowlists.
+These translations do not add a Core network service or model/tool loop.
 
 A dedicated local Runtime uses one Environment-scoped device credential and an
 immutable binding to that Environment's Session. It is excluded from general
@@ -435,8 +463,8 @@ establish Provider lifecycle, or define the official `self_hosted` mapping.
 Core rechecks the persisted Environment/device binding for preparation and active
 reads; capability discovery cannot select or authorize a general device for this
 placement. Local work uses the existing pending-input reservation and Worker
-ownership without a remote connection resolver. The basic hosted profile supports `network.access: enabled` or `disabled`; the
-actual image must qualify both native profiles before public deployment. Omitted
+ownership without a remote connection resolver. The hosted profile supports `network.access: enabled`, `disabled` and exact-host
+`restricted`; each image must qualify the supported policies before public deployment. Omitted
 network settings mean enabled upstream and must not be silently treated as disabled.
 
 Core and Runtime use common preparation, start, input-receipt, cancellation,
