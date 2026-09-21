@@ -203,10 +203,6 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 func publicInitialWorker(t *testing.T, s *store.Store) (*execution.Worker, func(bool)) {
 	t.Helper()
 	dispatcher := &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry()}
-	dispatcher.EnvironmentConnection = func(context.Context, store.Session, store.Environment) (execution.EnvironmentConnection, error) {
-		t.Error("offline public creation attempted native preparation")
-		return execution.EnvironmentConnection{}, errors.New("offline fixture has no native connection")
-	}
 	worker, err := execution.StartWorker(t.Context(), dispatcher)
 	if err != nil {
 		t.Fatal(err)

@@ -34,6 +34,7 @@ def main():
         assert environment["id"] == (environment_id or environment["id"])
         assert environment["type"] == "self_hosted" and environment["capability_directories"] == []
         assert environment["remote_url"] == settings["remote_url"]
+        assert environment["workspace_directory"] == "/workspace"
         action = {"type": "environment_connection", "environment_id": environment["id"]}
         assert value["required_actions"] == ([action] if status == "requires_action" else [])
         assert value["error"] == ("The initial input timed out waiting for the environment connection." if status == "failed" else None)
@@ -62,7 +63,7 @@ def main():
 
         phase = settings.get("phase", "create")
         if phase == "create":
-            environment = {"type": "self_hosted", "workspace_directory": "/private-initial-workspace"}
+            environment = {"type": "self_hosted", "workspace_directory": "/workspace"}
             inline = {"agent": {"model": "test-model", "instructions": "Retain the creation snapshot."}, "environment": environment}
             ordered = [{"role": "user", "content": [{"type": "input_text", "text": "first private input"}]},
                        {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "second private input"}]}]
