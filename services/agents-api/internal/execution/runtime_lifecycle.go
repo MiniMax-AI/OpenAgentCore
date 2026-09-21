@@ -212,10 +212,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAlloc
 		if err != nil {
 			return err
 		}
-		delete(r.connections, owner.ID)
-		if r.initializing != nil && r.initializing.owner.ID == owner.ID {
-			r.initializing = nil
-		}
+		r.clearRuntimeState(owner)
 	} else if err := r.observeConnection(ctx, owner); err != nil {
 		return err
 	}
@@ -282,6 +279,14 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAlloc
 	}
 	_, err = r.store.KeepRuntimeAllocation(ctx, owner)
 	return err
+}
+
+// Allocation identity owns initialization; Environment identity owns connectivity.
+func (r *runtimeLifecycle) clearRuntimeState(owner store.RuntimeAllocation) {
+	delete(r.connections, owner.EnvironmentID)
+	if r.initializing != nil && r.initializing.owner.ID == owner.ID {
+		r.initializing = nil
+	}
 }
 
 func runtimeReference(owner store.RuntimeAllocation) sandbox.Reference {
