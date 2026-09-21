@@ -338,7 +338,9 @@ def main():
                 "items": [item["id"] for item in sdk_list(sessions.subagents.items, child, session_id=sid())],
             } for child in before}
             submit("close", f"Use the native close tool to close only your existing direct child whose original task marker is {marker}-alpha. "
-                   "Do not create a replacement and do not merely interrupt it. Leave the beta child open. Confirm after the native close returns.")
+                   "Native processes may have been released between these root Turns. First use native resume on that SAME child ID "
+                   "to load it if necessary, then invoke native close. Do not send a new task, create a replacement or merely interrupt it. "
+                   "Leave the beta child open. Check the actual native close result and report failure if it failed.")
             changed = wait_for(lambda: [sub for sub in children() if sub["id"] in before and sub["status"] == "closed"],
                                "fixture_not_observed_closed_child", timeout=5)
             require(len(changed) == 1, "fixture_not_observed_single_closed_child")
