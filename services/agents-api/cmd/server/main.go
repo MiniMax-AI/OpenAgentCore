@@ -96,12 +96,9 @@ func run() error {
 	}
 	observationSources := map[string]runtimeobs.Source{}
 	if managed != nil {
-		for key, provider := range managed.Providers {
-			source, ok := provider.(runtimeobs.Source)
-			if !ok {
-				continue
-			}
-			observationSources[key] = source
+		source, ok := managed.Provider.(runtimeobs.Source)
+		if ok {
+			observationSources[managed.InstallationID] = source
 		}
 	}
 	resolver, err := runtimeobs.NewResolver(executionStore)
