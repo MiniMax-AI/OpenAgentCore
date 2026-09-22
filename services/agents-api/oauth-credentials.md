@@ -135,3 +135,31 @@ and arbitrary provider/harness combinations remain separate work.
 
 Keycloak is used only by private real-acceptance infrastructure. No production
 code depends on its realm, endpoints, token format or administrative APIs.
+
+## Acceptance scope
+
+The 2026-09-22 credential lifecycle batch uses a standalone Core database, genuine
+Keycloak 26.7.4 authorization-code grants with S256 PKCE, a TLS MCP server checking
+issuer/audience/expiry through provider introspection, and real Kimi model calls.
+Keycloak's public, Basic and POST client authentication flows exercise consent,
+refresh-token rotation, rejected reuse, revocation and code/PKCE rejection. All
+three grant variants also exercise fixed-SDK/raw-HTTP resource operations.
+
+Codex with Basic client authentication exercises initial MCP access, dispatch
+refresh, another refresh after Core restart, manual replacement, refusal after
+refresh-grant revocation, reauthorization and refusal after Credential deletion.
+Claude with POST client authentication exercises initial access and refresh
+through the same Core path. Revocation/deletion failures are checked before new
+native or MCP work. These are the existing trusted `environment:none` public
+MCP profiles; no new hosted/user-managed/MiniMax profile is qualified.
+
+Refresh acceptance explicitly moves the stored declared expiry into the past;
+it does not claim waiting for the provider JWT to expire. Reads, public histories
+and owned logs are checked for known grant/model secrets. Controlled PostgreSQL
+concurrency and failed-commit tests supplement these live checks. The browser
+console reads mixed static/OAuth metadata and permits deletion; application-owned
+OAuth authorization/replacement is performed through the public API, while its
+existing static-token replacement UI remains static-only.
+
+This evidence does not qualify Google, GitHub or arbitrary OAuth services,
+provider-independent error equivalence, or the complete Agents API protocol.
