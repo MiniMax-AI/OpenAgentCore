@@ -57,33 +57,41 @@ func (s *Session) SubmitFunctionResult(ctx context.Context, result proto.Functio
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if err := s.rpc.writeFrameContext(ctx, JsonRpcResponse{JsonRpc: JsonRpcVersion, ID: pending.rpcID, Result: reply}); err != nil {
-		s.settleFunctionResult(result.CallID, fmt.Errorf("write function result: %w", err))
-		s.cancelFn()
+		if s.settleFunctionResult(result.CallID, fmt.Errorf("write function result: %w", err)) {
+			s.cancelFn()
+		}
 	}
+	return s.waitFunctionResult(ctx, result.CallID, pending)
+}
+
+func (s *Session) waitFunctionResult(ctx context.Context, callID string, pending *pendingFunction) error {
 	select {
 	case err := <-pending.receipt:
 		return err
 	case <-s.rpc.Done():
-		s.settleFunctionResult(result.CallID, agent.ErrUnknownFunctionCall)
+		s.settleFunctionResult(callID, agent.ErrUnknownFunctionCall)
 	case <-s.cancelCtx.Done():
-		s.settleFunctionResult(result.CallID, agent.ErrUnknownFunctionCall)
+		s.settleFunctionResult(callID, agent.ErrUnknownFunctionCall)
 	case <-ctx.Done():
-		s.settleFunctionResult(result.CallID, ctx.Err())
-		// Uncertain delivery cannot be retried into the same native execution.
-		s.cancelFn()
+		// Only the owner of an unconfirmed outcome may cancel execution.
+		if s.settleFunctionResult(callID, ctx.Err()) {
+			s.cancelFn()
+		}
 	}
 	return <-pending.receipt
 }
 
 // The map owns settlement. Removing a call and writing its buffered receipt are
 // atomic with shutdown; no waiter, native IO or output send holds this lock.
-func (s *Session) settleFunctionResult(callID string, err error) {
+func (s *Session) settleFunctionResult(callID string, err error) bool {
 	s.functions.mu.Lock()
 	defer s.functions.mu.Unlock()
 	if pending := s.functions.pending[callID]; pending != nil {
 		delete(s.functions.pending, callID)
 		pending.receipt <- err
+		return true
 	}
+	return false
 }
 
 func (s *Session) confirmFunctionResult(raw json.RawMessage) {

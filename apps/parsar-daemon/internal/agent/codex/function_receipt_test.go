@@ -193,3 +193,26 @@ func TestFunctionReceiptDeadlineEndsUncertainExecution(t *testing.T) {
 	}
 	s.stopFunctionCalls()
 }
+
+// The receipt and deadline are both ready when the waiter resumes. Either select
+// branch must preserve the native confirmation and its continuing execution.
+func TestFunctionReceiptWinsSimultaneousDeadline(t *testing.T) {
+	for range 100 {
+		client, _, cleanup := NewTestClient()
+		s, _ := newInteractionTestSession(client.JSONRPCClient)
+		s.setThreadID("thread")
+		s.startSteering("thread", "turn")
+		s.functions, _ = prepareFunctionTools(nil)
+		pending := &pendingFunction{turnID: "turn", name: "lookup", reply: &functionReply{Success: true, ContentItems: []functionContent{}}, receipt: make(chan error, 1)}
+		s.functions.pending["call"] = pending
+		s.confirmFunctionResult(nativeFunctionReceipt("thread", "turn", "call", "lookup", "true", "completed", "[]"))
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		err := s.waitFunctionResult(ctx, "call", pending)
+		cancelled := s.cancelCtx.Err()
+		cleanup()
+		if err != nil || cancelled != nil {
+			t.Fatalf("confirmed result lost to deadline: result=%v execution=%v", err, cancelled)
+		}
+	}
+}
