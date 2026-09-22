@@ -73,3 +73,29 @@ change requires no new native-model capability qualification; existing real-mode
 evidence retains its original scope. Record completed checks and independent review
 before merging; neither a deserializable response nor a route inventory proves
 complete compatibility.
+
+## Completed acceptance
+
+The nine-family fixed-SDK/raw-HTTP regression passed against actual Core HTTP,
+PostgreSQL and Worker admission with dispatch paused. It checked 35 primary
+rejections, nine SDK empty-query omission cases, successful ascending/descending
+and default pagination, authentication and foreign-tenant masking. Resource
+snapshots and the original three cancelled Turns/three Items remained unchanged.
+The baseline failed at raw empty-order admission; the implementation passed.
+This is resource/query acceptance, not native or model execution. Logs, exact
+SDK serializer source and hashes are retained in the survey directory's
+`ACCEPTANCE.md`; its owned database was removed.
+
+Server `make -o check-web check` passed at `e4cb8a5`, including the dedicated
+PostgreSQL regression, sqlc regeneration, service/adapter Go tests and builds,
+Claude/MiniMax checks and Rust tests/format/Clippy. Web/client source and dependencies
+are unchanged from PR #35: its 287 client tests, 583 Web tests and 76 browser cases
+remain the applicable exact-source evidence; no new Web run is claimed. The
+optional packaged MiniMax native-tools probe was skipped. This batch changes no
+Runtime/provider/model behavior and does not requalify their combinations.
+
+A fresh independent GPT-6 Astra high reviewer found no grounded in-scope findings
+after inspecting the full diff and evidence; API tests and `git diff --check`
+passed independently. Server logs are retained under
+`~/.parsar/remediation/20260923/list-query-alignment/`. The remaining limits, cursor,
+lookup and Files verbose error differences above are not declared compatible.
