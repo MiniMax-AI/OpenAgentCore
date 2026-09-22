@@ -128,6 +128,34 @@ test("workspace native options keep the strict sandbox and exact native inventor
   assert.throws(() => profile.verify(options.tools, [{ name: "untrusted", status: "connected" }]), /unexpected native workspace inventory/);
 });
 
+test("structured workspace admits only its configured native terminal tool", async t => {
+  const { dirs, config, request } = fixture(t);
+  const output_format = { type: "json_schema", schema: { type: "object" } };
+  const configured = { ...request, observe_messages: true, output_format };
+  assert.deepEqual(parseStart(JSON.stringify(configured)), configured);
+  const ordinary = new WorkspaceProfile(dirs.workspace, config);
+  const structured = new WorkspaceProfile(dirs.workspace, config, [], undefined, undefined, true);
+  const { canUseTool: ordinaryPermission, hooks: ordinaryHooks, ...ordinaryOptions } = ordinary.options;
+  const { canUseTool: structuredPermission, hooks: structuredHooks, ...structuredOptions } = structured.options;
+  assert.deepEqual(structuredOptions, ordinaryOptions);
+  const inventory = ["Bash", "Read", "Edit", "StructuredOutput"];
+  structured.verify(inventory, []);
+  assert.throws(() => ordinary.verify(inventory, []));
+  assert.throws(() => structured.verify(["Bash", "Read", "Edit"], []));
+  assert.throws(() => structured.verify([...inventory, "Write"], []));
+  const context = { signal: new AbortController().signal, toolUseID: "terminal", requestId: "request" };
+  assert.equal((await ordinary.canUseTool("StructuredOutput", {}, context)).behavior, "deny");
+  assert.equal((await structured.canUseTool("StructuredOutput", {}, context)).behavior, "allow");
+  for (const extra of [{ agentID: "child" }, { signal: AbortSignal.abort() }]) {
+    assert.equal((await structured.canUseTool("StructuredOutput", {}, { ...context, ...extra })).behavior, "deny");
+  }
+  const hook = { hook_event_name: "PreToolUse", tool_name: "StructuredOutput", tool_input: {}, tool_use_id: "terminal" };
+  assert.deepEqual(await structured.beforeTool(hook, "terminal", context), {});
+  for (const [input, id, ctx] of [[{ ...hook, agent_id: "child" }, "terminal", context], [hook, "wrong", context], [hook, "terminal", { ...context, signal: AbortSignal.abort() }]]) {
+    assert.equal((await structured.beforeTool(input, id, ctx)).hookSpecificOutput.permissionDecision, "deny");
+  }
+});
+
 test("workspace permissions and pre-tool hook reject outside paths and unsafe Bash flags", async t => {
   const { dirs, config } = fixture(t);
   writeFileSync(join(dirs.workspace, "file.txt"), "fixture");

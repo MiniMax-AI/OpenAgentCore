@@ -41,7 +41,7 @@ export async function execute(request: Start | Prepare, emit: (event: Event) => 
   const declarations = request.workspace?.mcp ?? request.mcp_http_servers;
   const profile = declarations === undefined ? undefined : new MCPProfile(declarations, names);
   const subagents = request.subagents ? new Subagents(request.cwd, request.subagents.max_concurrent, request.resume) : undefined;
-  const workspace = request.workspace === undefined ? undefined : new WorkspaceProfile(request.cwd, request.workspace, names, profile, subagents);
+  const workspace = request.workspace === undefined ? undefined : new WorkspaceProfile(request.cwd, request.workspace, names, profile, subagents, !!request.output_format);
   const commands = workspace ? new CommandObserver() : undefined;
   if (request.type === "prepare" && !workspace) throw new Error("invalid_request");
   if (workspace && "mcp_http_servers" in request) throw new Error("invalid_request");

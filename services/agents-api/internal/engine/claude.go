@@ -46,8 +46,11 @@ func validateClaudeConfiguration(agent v1.Agent, environment *v1.Environment, ha
 		if err := proto.ValidateBinary64Schema(agent.Text.Format.Schema); err != nil {
 			return err
 		}
-		if environment.Type != "none" || agent.MultiAgent.Enabled {
-			return errors.New("Structured output currently requires a single-agent environment:none profile.")
+		if (environment.Type != "none" && environment.Type != "openai_hosted") || agent.MultiAgent.Enabled {
+			return errors.New("Structured output requires a qualified single-agent placement.")
+		}
+		if len(environment.Skills) != 0 || len(environment.Plugins) != 0 || len(environment.CapabilityDirectories) != 0 {
+			return errors.New("Structured output with environment Skills or Plugins is not qualified.")
 		}
 		for _, raw := range agent.Tools {
 			var tool struct {

@@ -1999,12 +1999,20 @@ admission requires the selected profile's structured-output qualification, and
 only requests using this option require the Runtime's `structured_output` and
 message-observation capabilities. A capability advertisement does not qualify a
 new public combination. Claude advertises this operation only when the installed
-SDK bridge reports its `structured_output` feature and the selected Runtime is
-not a workspace profile.
+SDK bridge reports its `structured_output` feature. A workspace Runtime also
+requires the complete local Runtime contract and `workspace_structured_output`;
+preparation checks that bundle before native launch. These remain adapter readiness
+features, not new Core lifecycle or public protocol variants.
 
-The current qualified path is Claude SDK, `environment:none`, medium verbosity,
-single Agent, with optional ordinary function tools and text results. Workspace,
-HTTP MCP, Subagent combinations and non-object root schemas remain unqualified.
+The current qualified path is Claude SDK, `environment:none` or Core-managed
+Docker `openai_hosted`, medium verbosity, single Agent, with optional ordinary
+function tools and text results. The workspace uses its existing preparation and
+native sandbox with only the SDK's configured `StructuredOutput` tool added to
+inventory and permission checks. Frozen schemas reach preparation before the
+input handoff; Start cannot replace them. Skills, Plugins, capability directories,
+HTTP MCP, Subagent/tool-discovery combinations and non-object root schemas remain
+unqualified. Check resolved template contents as well as inline configuration;
+ordinary text requests retain their existing qualifications.
 The SDK uses binary64 JSON numbers: reject execution schemas whose numeric values
 would change during that conversion, without narrowing saved Agent storage.
 Codex and MiniMax structured output remain explicit execution gaps.

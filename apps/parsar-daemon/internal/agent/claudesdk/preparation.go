@@ -53,6 +53,9 @@ func NewPreparationFactory(config Config) agent.PreparationFactory {
 		if err != nil || !info.supportsWorkspacePreparation() {
 			return nil, fmt.Errorf("claudesdk: packaged runtime does not support workspace preparation")
 		}
+		if start.OutputFormat != nil && !info.SupportsWorkspaceStructuredOutput() {
+			return nil, fmt.Errorf("claudesdk: packaged runtime does not support workspace structured output")
+		}
 		if start.Subagents != nil && !info.SupportsSubagents() {
 			return nil, fmt.Errorf("claudesdk: packaged runtime does not support subagent resources")
 		}

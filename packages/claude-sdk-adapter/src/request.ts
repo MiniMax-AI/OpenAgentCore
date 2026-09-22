@@ -58,12 +58,13 @@ export function parseRequest(line: string): Start | Prepare {
     const format = request.output_format as Start["output_format"];
     if (!format || format.type !== "json_schema" || Object.keys(format).some(key => !["type", "schema"].includes(key)) ||
         !format.schema || format.schema.type !== "object" || !request.observe_messages || request.subagents ||
-        request.workspace || request.mcp_http_servers !== undefined) throw new Error("invalid_request");
+        request.mcp_http_servers !== undefined) throw new Error("invalid_request");
   }
   if (request.type === "start") requestInput(request.input);
   parseHTTPServers(request.mcp_http_servers);
   const workspace = parseWorkspace(request.workspace, request.cwd);
   if (request.subagents && workspace?.mcp?.length) throw new Error("invalid_request");
+  if (request.output_format && (workspace?.mcp?.length || workspace?.skills?.length)) throw new Error("invalid_request");
   if (request.require_history && !workspace) throw new Error("invalid_request");
   if ((workspace && "mcp_http_servers" in request) ||
       (request.type === "prepare" && !workspace)) throw new Error("invalid_request");

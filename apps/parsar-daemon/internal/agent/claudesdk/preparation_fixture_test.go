@@ -44,6 +44,12 @@ func runPreparationHelper() {
 		} else if mode == "old-command-runtime" {
 			features = []string{"workspace_tools", "workspace_prepare"}
 		}
+		if strings.HasPrefix(mode, "structured-") {
+			features = append(features, "local_runtime_v1", "structured_output")
+			if mode == "structured-ready" {
+				features = append(features, "workspace_structured_output")
+			}
+		}
 		_ = json.NewEncoder(os.Stdout).Encode(RuntimeInfo{Type: "runtime_ready", Protocol: 2, Node: "fixture", SDK: "fixture", MCP: "fixture", Native: "fixture", Features: features})
 		return
 	}
@@ -105,7 +111,12 @@ func runPreparationHelper() {
 		return
 	}
 	emit(bridgeEvent{Type: "input_ready", SessionID: request.Resume})
-	emit(bridgeEvent{Type: "delta", Delta: "partial"})
+	if request.ObserveMessages {
+		text := "completed"
+		emit(bridgeEvent{Type: "output_message", Message: &proto.OutputMessagePayload{ID: "native-message", Status: "completed", Text: &text}})
+	} else {
+		emit(bridgeEvent{Type: "delta", Delta: "partial"})
+	}
 	emit(bridgeEvent{Type: "usage", ResultID: "native-result", SessionID: request.Resume, Usage: json.RawMessage(usageFixture)})
 	emit(bridgeEvent{Type: "input_closed", SessionID: request.Resume})
 	emit(bridgeEvent{Type: "result", SessionID: request.Resume, Text: "completed"})

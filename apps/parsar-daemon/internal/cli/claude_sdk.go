@@ -101,7 +101,10 @@ func discoverClaudeSDK(rc *runContext, profile string, check func(context.Contex
 	out.Info.Capabilities.MessageImages = info.SupportsMessageImages()
 	out.Info.Capabilities.FunctionResultImages = info.SupportsFunctionResultImages()
 	out.Info.Capabilities.ToolSearch = out.Config.Workspace == nil && info.SupportsToolSearch()
-	out.Info.Capabilities.StructuredOutput = out.Config.Workspace == nil && info.SupportsStructuredOutput()
+	out.Info.Capabilities.StructuredOutput = info.SupportsStructuredOutput()
+	if out.Config.Workspace != nil {
+		out.Info.Capabilities.StructuredOutput = info.SupportsWorkspaceStructuredOutput()
+	}
 	out.Info.Capabilities.SubagentObservations = info.SupportsSubagents()
 	out.Info.Capabilities.MCPHTTPTools = info.SupportsHTTPMCP()
 	out.Info.Capabilities.MCPHTTPBearerAuth = info.SupportsHTTPMCPBearer()

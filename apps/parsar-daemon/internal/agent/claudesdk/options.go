@@ -79,7 +79,7 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	}
 	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
 		format := req.ExecutionControls.OutputFormat
-		if format.Type != "json_schema" || !req.ObserveMessages || !req.DisableSubagents || config.Workspace != nil || req.MCPHTTPServers != nil {
+		if format.Type != "json_schema" || !req.ObserveMessages || !req.DisableSubagents || req.MCPHTTPServers != nil || (req.LocalEnvironment != nil && (len(req.LocalEnvironment.MCP) != 0 || len(req.LocalEnvironment.Skills) != 0)) {
 			return fail("structured output requires the qualified message-observing single-agent function profile")
 		}
 		if err := proto.ValidateBinary64Schema(format.Schema); err != nil {
