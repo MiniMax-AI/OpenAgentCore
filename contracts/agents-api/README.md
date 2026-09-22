@@ -653,8 +653,9 @@ the immutable Session configuration and creation retry identity. Saved-Agent
 inheritance uses the same resolved tools. The bounded [deferred discovery path](tool-search.md)
 adds type-only `tool_search` for its qualified profile. Other discovery combinations, other tool kinds,
 the native 64-definition cap and unique nonblank names of at most 512 bytes remain
-compatibility gaps. Claude SDK additionally requires object-root schemas and
-text-only results. Codex internal Goal/Skills/user-input/discovery semantics need
+compatibility gaps. Claude SDK additionally requires object-root schemas. It accepts text and
+successful inline PNG/JPEG function results on `none`; failed/workspace images and remote references
+remain gaps. See [function image coverage](function-result-images.md). Codex internal Goal/Skills/user-input/discovery semantics need
 upstream evidence; their presence alone does not prove a tool-set mismatch.
 
 The worker selects a same-tenant host advertising `function_tools` for configured

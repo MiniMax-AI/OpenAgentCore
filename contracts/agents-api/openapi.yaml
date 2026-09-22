@@ -3239,10 +3239,13 @@ paths:
         executor URL settings. Disconnecting the waiting HTTP request does not cancel
         retained work or restart its deadline. Retry keys identify the whole ordered
         batch. Function output accepts text or ordered text/image parts subject to
-        engine support; Claude SDK currently accepts text results only. Codex and
-        Claude SDK on none accept ordered inline PNG/JPEG image messages. Workspace
-        profiles and other engines remain text-only; remote image URLs are unsupported.
-        Image references are retained unchanged without service-side downloads.
+        engine support; Claude SDK accepts text results and, on none, successful inline
+        PNG/JPEG results, preserving ordered content; error images and remote references
+        reject before admission. Native image resizing may change bytes. Runtime image-result
+        support is checked only for image-bearing delivery. Codex and Claude SDK on
+        none accept ordered inline PNG/JPEG image messages. Workspace profiles and
+        other engines remain text-only; remote image URLs are unsupported. Image references
+        are retained unchanged without service-side downloads.
       parameters:
       - description: agents=v1
         in: header

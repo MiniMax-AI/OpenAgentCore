@@ -20,7 +20,7 @@ type Profile struct {
 	MessageImagePlacements                     []string
 	ValidateConfiguration                      func(agent v1.Agent, environment *v1.Environment, hasDaemon bool) error
 	ValidateTools                              func(environment *v1.Environment, hasDaemon bool, functions []proto.FunctionTool, mcp []proto.MCPHTTPServer) error
-	ValidateFunctionResult                     func([]proto.InputContent) error
+	ValidateFunctionResult                     func(placement string, result proto.FunctionResultPayload) error
 }
 
 func (p Profile) Accepts(placement string) bool {

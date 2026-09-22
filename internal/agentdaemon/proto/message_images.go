@@ -10,8 +10,8 @@ import (
 	"strings"
 )
 
-// ValidateInlineImages checks the bounded user-message image profile. It does
-// not download references, rewrite bytes or change function-result support.
+// ValidateInlineImages checks inline PNG/JPEG content without downloading or
+// rewriting it. Callers separately qualify message/function-result support.
 func (m MessageInput) ValidateInlineImages() error {
 	for _, message := range m {
 		for _, part := range message.Content {
@@ -23,15 +23,15 @@ func (m MessageInput) ValidateInlineImages() error {
 			}
 			header, encoded, ok := strings.Cut(*part.ImageURL, ",")
 			if !ok || (header != "data:image/png;base64" && header != "data:image/jpeg;base64") {
-				return errors.New("user image requires inline PNG or JPEG")
+				return errors.New("image requires inline PNG or JPEG")
 			}
 			data, err := base64.StdEncoding.Strict().DecodeString(encoded)
 			if err != nil || base64.StdEncoding.EncodeToString(data) != encoded {
-				return errors.New("user image requires valid base64")
+				return errors.New("image requires valid base64")
 			}
 			_, format, err := image.DecodeConfig(bytes.NewReader(data))
 			if err != nil || header != "data:image/"+format+";base64" {
-				return errors.New("user image format does not match its media type")
+				return errors.New("image format does not match its media type")
 			}
 		}
 	}

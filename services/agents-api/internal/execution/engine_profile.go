@@ -71,7 +71,7 @@ func validateProfileInputs(profile engine.Profile, placement string, inputs []st
 		if err != nil {
 			return store.ErrInvalidInput
 		}
-		if err := profile.ValidateFunctionResult(result.Content); err != nil {
+		if err := profile.ValidateFunctionResult(placement, result); err != nil {
 			return profileError(err)
 		}
 	}

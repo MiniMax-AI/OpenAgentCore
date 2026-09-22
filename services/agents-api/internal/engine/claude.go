@@ -18,11 +18,14 @@ func claudeProfile() Profile {
 		Placements:                     []string{"none", "openai_hosted", "self_hosted"}, MCPBearer: true,
 		ValidateConfiguration: validateClaudeConfiguration,
 		ValidateTools:         validateClaudeTools,
-		ValidateFunctionResult: func(content []proto.InputContent) error {
-			for _, part := range content {
-				if part.Type != "input_text" {
+		ValidateFunctionResult: func(placement string, result proto.FunctionResultPayload) error {
+			for _, part := range result.Content {
+				if part.Type == "input_image" && (!result.Success || placement != "none") {
 					return ErrInvalidInput
 				}
+			}
+			if (proto.MessageInput{{Content: result.Content}}).ValidateInlineImages() != nil {
+				return ErrInvalidInput
 			}
 			return nil
 		},

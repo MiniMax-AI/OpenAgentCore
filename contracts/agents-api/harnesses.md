@@ -71,12 +71,12 @@ syntactically or everything either upstream harness can theoretically perform.
 | --- | --- | --- |
 | Docker hosted text execution, native local tools | Qualified | Qualified |
 | Files, immutable Artifacts, cancellation, restart/history recovery | Qualified | Qualified |
-| Public functions in `none` | Qualified | Qualified; object-root schemas and text results |
+| Public functions in `none` | Qualified | Qualified; object-root schemas; text or successful inline PNG/JPEG results |
 | Public functions alongside hosted workspace tools | Qualified | Qualified; object-root schemas and text results |
 | HTTP MCP and static-bearer Vault credentials in `none` | Qualified | Qualified subset |
 | Required MCP initialization | Qualified | Qualified on `none`; native readiness before initial input |
 | Hosted HTTP MCP | Gap | Gap |
-| Function image results | Supported subset | Gap; currently rejected |
+| Function image results | Supported subset; early acknowledgement is transport-only | Successful inline PNG/JPEG on `none`; native resizing allowed, error/workspace images rejected |
 | Non-default verbosity | Native/model-dependent support | No equivalent qualified; medium only |
 | Public detailed Usage | Supported native counters | Native raw usage retained; public breakdown gap |
 | V1 `self_hosted` daemon enrollment at `/workspace` | [Qualified deployment scope](user-managed-runtime-v1.md) | [Qualified deployment scope](user-managed-runtime-v1.md) |

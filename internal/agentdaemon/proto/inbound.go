@@ -276,6 +276,7 @@ type AgentKindCapabilities struct {
 	StructuredOutput     bool `json:"structured_output,omitempty"`
 	ToolSearch           bool `json:"tool_search,omitempty"`
 	MessageImages        bool `json:"message_images,omitempty"`
+	FunctionResultImages bool `json:"function_result_images,omitempty"`
 	SubagentControl      bool `json:"subagent_control,omitempty"`
 	DurableInputReceipts bool `json:"durable_input_receipts,omitempty"`
 	// DurableTurns includes strict resume, completion release and cancellation snapshots.

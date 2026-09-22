@@ -107,9 +107,12 @@ func (s *session) SubmitFunctionResult(ctx context.Context, result proto.Functio
 		return err
 	}
 	for _, part := range result.Content {
-		if part.Type != "input_text" {
-			return fmt.Errorf("claudesdk: image function results are not supported")
+		if part.Type == "input_image" && !result.Success {
+			return fmt.Errorf("claudesdk: native error results cannot retain images")
 		}
+	}
+	if err := (proto.MessageInput{{Content: result.Content}}).ValidateInlineImages(); err != nil {
+		return err
 	}
 	data, err := json.Marshal(struct {
 		Type string `json:"type"`

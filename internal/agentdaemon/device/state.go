@@ -84,6 +84,7 @@ type KindCapabilities struct {
 	StructuredOutput     bool `json:"structured_output,omitempty"`
 	ToolSearch           bool `json:"tool_search,omitempty"`
 	MessageImages        bool `json:"message_images,omitempty"`
+	FunctionResultImages bool `json:"function_result_images,omitempty"`
 	SubagentControl      bool `json:"subagent_control,omitempty"`
 	FunctionTools        bool `json:"function_tools,omitempty"`
 	MCPHTTPTools         bool `json:"mcp_http_tools,omitempty"`

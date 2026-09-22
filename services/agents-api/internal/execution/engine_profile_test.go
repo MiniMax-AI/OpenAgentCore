@@ -45,9 +45,10 @@ func TestAdditionalProfileUsesCommonAdmission(t *testing.T) {
 			}
 			return nil
 		},
-		ValidateFunctionResult: func(content []proto.InputContent) error {
+		ValidateFunctionResult: func(placement string, result proto.FunctionResultPayload) error {
+			content := result.Content
 			resultChecked = true
-			if len(content) != 1 || content[0].Text == nil || *content[0].Text != "response" {
+			if placement != "none" || !result.Success || len(content) != 1 || content[0].Text == nil || *content[0].Text != "response" {
 				t.Fatal("common result decoding did not reach profile")
 			}
 			return engine.ErrInvalidInput

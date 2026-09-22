@@ -51,6 +51,7 @@ type functionReply struct {
 type functionExchange struct {
 	store                 *store.Store
 	tenant, session, turn string
+	kind                  string
 	tools                 []proto.FunctionTool
 	callID                string
 	reply                 <-chan functionReply
@@ -88,6 +89,9 @@ func (f *functionExchange) start(ctx context.Context, peer *gateway.Session) err
 		}
 		result, err := functionResult(call)
 		if err != nil {
+			return err
+		}
+		if err := requireFunctionResultImages(peer, f.kind, result); err != nil {
 			return err
 		}
 		env, err := proto.NewEnvelope(proto.TypeFunctionResult, f.turn, result)
@@ -177,4 +181,16 @@ func functionResult(call store.FunctionCall) (proto.FunctionResultPayload, error
 		result.Content = append(result.Content, proto.InputContent{Type: "input_text", Text: value.Error})
 	}
 	return result, result.ValidateContent()
+}
+
+// Check only this result, not ordinary function declarations or text delivery.
+func requireFunctionResultImages(peer *gateway.Session, kind string, result proto.FunctionResultPayload) error {
+	if !(proto.MessageInput{{Content: result.Content}}).HasImages() {
+		return nil
+	}
+	info, found, known := peer.AgentKindStatus(kind)
+	if !found || !known || !info.Available || !info.Capabilities.FunctionResultImages {
+		return errors.New("Runtime does not support function result images")
+	}
+	return nil
 }

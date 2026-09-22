@@ -2263,9 +2263,14 @@ Claude uses its restrictive profile without claiming those general capabilities.
 Idle and initial-input Session creation qualify the resolved configuration before
 persistence; saved Agent resources remain independent of engine restrictions.
 Claude additionally requires medium verbosity and explicit object-root function
-schemas. Function-result batches normalize through the existing shared parser and
-reject non-text content before any batch write, preserving pending calls and retry
-identity. These are implementation limits, not changes to the upstream contract.
+schemas. Function-result batches normalize through the existing shared parser. Claude accepts
+text results and, on `none`, successful ordered inline PNG/JPEG results;
+workspace images, failed image results and
+invalid/remote references reject before any batch write, preserving pending calls
+and retry identity. Public qualification receives the full neutral result so
+success-dependent limitations remain in the profile. Image-bearing delivery alone
+requires Runtime function-result image support; text results and function
+declarations do not acquire that requirement. These are implementation limits, not changes to the upstream contract.
 Do not bypass them by dropping fields, changing model identity or fabricating usage.
 Operators may configure the daemon provider environment or the existing transient
 `AGENTS_API_EXECUTION_OPTIONS_FILE` with adapter-owned `claude_provider`
@@ -2274,7 +2279,7 @@ persisting them in Session configuration. The adapter exclusively selects the
 provider environment and removes credentials from native tool environments. Product `claude_code` and product execution are unchanged.
 The `none` public profile accepts only
 text, explicit model/system instructions, managed state, exact native resume and
-declared functions with ordered text results, and the HTTP MCP subset
+declared functions with ordered text or successful inline PNG/JPEG results, and the HTTP MCP subset
 described above. It rejects unsupported request
 options and disables built-in tools and undeclared MCP discovery.
 `DisableExecutionEnvironment` and `DisableSubagents` are accepted assertions about
@@ -2318,7 +2323,12 @@ permission checks. It grants no runtime-token business authority.
 
 Function results remain pending after stdin/MCP delivery. A matching live, root
 native user tool_result confirms application only when its Session/call identity,
-error flag and returned text match the submission. Ignore replayed, synthetic and
+error flag and ordered content match the submission. Text matches exactly; each
+submitted image position must remain a valid native base64 image. Native resizing
+or re-encoding may change image bytes. This acknowledges incorporation into native
+history, not byte/pixel fidelity or completed provider consumption. Public Items
+retain the original caller content; real image-dependent model responses separately
+qualify usability. Ignore replayed, synthetic and
 subagent messages. Native error text joins the submitted text parts with newlines;
 neutral observations retain their original order and separate failure status.
 Missing/mismatched receipts fail the execution; do not replay unknown delivery.
@@ -2327,7 +2337,7 @@ execution on timeout. Invalid or unsupported image results fail before consuming
 a pending call. Function state belongs to one live Run and ends with it; the
 existing router owns receipt retry/conflict handling. This does not establish
 crash recovery or exactly-once effects. Public schemas outside MCP's object-root
-contract and image result mapping remain admission/execution gaps.
+contract, failed image results and remote image references remain admission/execution gaps.
 
 Each SDK result supplies one native usage snapshot, including reported failures.
 `Usage.Raw.claude_sdk_result` holds the latest; queries with multiple native results
@@ -2375,7 +2385,7 @@ recovery remain separate work. Daemon registration alone does not establish publ
 
 Public text/function execution, active input, pending-call cancellation and cold
 continuation are accepted for the registered restrictive profile. Environment
-provisioning, broader tools/verbosity, complete public Usage, image results and
+provisioning, broader tools/verbosity, complete public Usage, failed image results and
 process-loss recovery remain gaps. Managed installation and release publication
 remain separate tasks. `make check-cli` also builds
 and tests the SDK package, including native output draining; CI selects that check

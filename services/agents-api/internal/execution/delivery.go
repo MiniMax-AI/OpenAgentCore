@@ -97,7 +97,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 	var pending *pendingInput
 	var cancelSent time.Time
 	var cancelReply <-chan cancellationResult
-	functions := &functionExchange{store: d.Store, tenant: tenantID, session: sessionID, turn: request.RunID, tools: request.FunctionTools}
+	functions := &functionExchange{kind: request.AgentKind, store: d.Store, tenant: tenantID, session: sessionID, turn: request.RunID, tools: request.FunctionTools}
 	done := false
 	cancelCtx, stopCancellation := context.WithCancel(ctx)
 	defer stopCancellation()

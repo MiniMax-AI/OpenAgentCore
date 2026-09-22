@@ -99,6 +99,7 @@ func discoverClaudeSDK(rc *runContext, profile string, check func(context.Contex
 	}
 	out.Info.Available, out.Info.Version = true, info.SDK
 	out.Info.Capabilities.MessageImages = info.SupportsMessageImages()
+	out.Info.Capabilities.FunctionResultImages = info.SupportsFunctionResultImages()
 	out.Info.Capabilities.ToolSearch = out.Config.Workspace == nil && info.SupportsToolSearch()
 	out.Info.Capabilities.StructuredOutput = out.Config.Workspace == nil && info.SupportsStructuredOutput()
 	out.Info.Capabilities.SubagentObservations = info.SupportsSubagents()
