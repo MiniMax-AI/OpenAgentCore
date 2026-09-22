@@ -538,7 +538,7 @@ describe("OpenAIAgentsClient", () => {
         param: null,
       } }, 404), []),
     });
-    await expect(client.retrieveSourceFile("missing")).rejects.toMatchObject({
+    await expect(client.retrieveSourceFile("file-123e4567-e89b-42d3-a456-426614174000")).rejects.toMatchObject({
       status: 404, code: null, param: null, errorType: "invalid_request_error",
     });
   });
