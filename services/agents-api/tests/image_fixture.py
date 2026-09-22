@@ -13,4 +13,3 @@ def picture(names):
 
     image = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 400, 140, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
     return "data:image/png;base64," + base64.b64encode(image).decode()
-
