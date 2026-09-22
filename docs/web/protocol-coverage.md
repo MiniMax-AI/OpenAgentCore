@@ -83,6 +83,8 @@ the Core key binding. Agents Core Web's local proxy owns the bearer server-side.
 | Environment Templates retrieve/update/delete | Yes | No | Reusable client methods only; no Web management surface, so a Template is never edited or deleted from the browser |
 | Environment keys | No public browser API | Hidden | Operator-issued executor credentials stay on executor compute and never enter browser state, request previews, navigation, or Create actions |
 | Vaults and static-bearer Credentials | Yes | Yes, when discovered | Web traverses the Vault and per-Vault Credential page chains to their Core end markers before publishing one loaded metadata result, provides safe lifecycle controls and write-only token create/replace, and deterministically attaches each selected Credential's owning Vault to Session creation. The reads are non-atomic and not a current Core total. Tokens are never returned; catalog success is not runtime proof |
+| Runtime observations | Core extension | Yes, read-only | Dashboard traverses the complete tenant-scoped current-observation page chain, requires an exact Session identity join, and publishes only complete snapshots. Docker and microsandbox values remain provider evidence; unsupported, unavailable, stale, and unknown are distinct. Browser-local trends are explicitly Live and ephemeral |
+| Runtime history | Optional Core extension | Client implemented; Dashboard pending | Capability discovery and bounded Session history are strictly projected through `packages/agents-client`. Durable UI must remain disabled until capability discovery reports qualified periodic collection and a production Reader; token throughput is not synthesized into history |
 | Protocol Subagents / enabled multi-agent | Later | No | Distinct from storing multiple Agent configurations |
 | Usage/observability | Response types | Yes, scoped | Session aggregate and per-Turn token Usage are labelled separately; unavailable measurements remain unknown, not zero |
 
@@ -397,13 +399,16 @@ upstream.
 
 ## Dashboard and System boundary
 
-- Dashboard is a Web-derived view over the last successfully traversed Agent and
-  Session page-chain results for the configured Core access scope. Web follows every
+- Dashboard is a Web-derived view over the last successfully traversed Agent,
+  Session, and Runtime-observation page-chain results for the configured Core
+  access scope. Web follows every
   continuation with `limit=100&order=desc`, rejects duplicate identities and
   invalid or cyclic cursors, and allows at most 100 pages per collection. If Core
   reports that page 101 is required, the refresh fails closed and does not publish
-  the partial result. Dashboard performs no additional Turn, Item, Environment,
-  or execution-readiness requests and makes no writes.
+  the partial result. The Runtime collection must complete and have exactly the
+  same Session ID set before it replaces the prior snapshot. Dashboard performs
+  no Turn, Item, Environment, lifecycle, or execution-readiness requests and makes
+  no writes.
 - When both top-level collection reads fail through a gateway/network condition,
   Dashboard labels the local Agent Core backend as not ready and links the whole
   notice to connection recovery. An explicitly configured local Docker guide may
@@ -428,6 +433,13 @@ upstream.
   at most eight rows ordered by valid Core-reported `last_active_at`. A
   `self_hosted` label identifies only the Session profile, not an executor
   connection. Row actions navigate to the exact loaded Session.
+- Runtime charts use bounded browser-local samples from complete joined snapshots.
+  CPU rate is derived only from ordered cumulative counters for the same allocation
+  and compute incarnation; memory remains point-in-time; gaps are not interpolated.
+  The 15-minute and one-hour ranges are labelled Live and reset across browser
+  lifecycle. Durable history capability and Session-query client methods exist,
+  but Web must not advertise Durable until the operator Reader and qualified
+  periodic sampling pass end-to-end acceptance. Token throughput remains Live-only.
 - Agent and Session collection states remain independent. A failed refresh may
   leave an explicitly labelled prior loaded result visible, including a previously
   confirmed empty result. An initial failed empty collection is unavailable

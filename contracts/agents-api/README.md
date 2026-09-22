@@ -110,7 +110,8 @@ compatibility.
 
 | Extension | Operations | Current coverage |
 | --- | --- | --- |
-| Runtime observations | `GET /v1/agents/runtime-observations`; `GET /v1/agents/sessions/{session_id}/runtime-observation` | Current, read-only, tenant-scoped Session contexts with stable Session-keyset pagination, bounded concurrent sampling, Docker metrics, explicit unsupported/unavailable states, strict `packages/agents-client` projection, and no lifecycle mutation. Kubernetes, E2B, self-hosted telemetry, history, CPU-rate derivation, and automatic idle policy remain unimplemented. See [Runtime observation API](runtime-observability-api.md). |
+| Runtime observations | `GET /v1/agents/runtime-observations`; `GET /v1/agents/sessions/{session_id}/runtime-observation` | Current, read-only, tenant-scoped Session contexts with stable Session-keyset pagination, bounded concurrent sampling, Docker and microsandbox metrics, explicit unsupported/unavailable states, strict `packages/agents-client` projection, and no lifecycle mutation. Kubernetes, E2B, self-hosted telemetry, and automatic idle policy remain unimplemented. See [Runtime observation API](runtime-observability-api.md). |
+| Runtime history | `GET /v1/agents/runtime-history/capabilities`; `GET /v1/agents/sessions/{session_id}/runtime-history` | Optional backend-neutral capability and bounded tenant/Session-scoped history contract with allocation/incarnation fencing, explicit coverage and strict client projection. Disabled by default until a production Reader and qualified periodic collection are configured; Durable Web rendering remains pending. See [Runtime history API](runtime-history-api.md). |
 
 For each resource, verify the referenced request/response unions and observable
 behavior, not just the route. Non-text initial input, configuration

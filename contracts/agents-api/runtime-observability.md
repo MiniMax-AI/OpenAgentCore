@@ -104,8 +104,9 @@ capabilities in the [full design](runtime-observability-design.md).
 
 The internal `runtimehistory` boundary is backend-neutral and validates Core
 scope, incarnation fences, bucket coverage, nullability, time bounds and total
-point limits. It does not make history available by itself: no production
-Reader or public history route is configured in this phase.
+point limits. The public capability and Session history routes plus strict client
+projection are implemented, but they do not make history available by themselves:
+no production Reader is configured in this phase.
 
 ## First-phase boundary
 
@@ -116,5 +117,7 @@ attribution or the existing sandbox lifecycle interface.
 
 The current API and browser-local Web live window are documented in the
 [full design](runtime-observability-design.md) and the
-[public extension](runtime-observability-api.md). History queries, additional
-providers, self-hosted telemetry, and idle-policy authority remain later phases.
+[current-snapshot extension](runtime-observability-api.md), and the optional
+[history extension](runtime-history-api.md). The production history Reader,
+additional providers, self-hosted telemetry, and idle-policy authority remain
+later phases.

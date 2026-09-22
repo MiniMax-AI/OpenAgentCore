@@ -26,24 +26,49 @@ const (
 
 var providerTypePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 
+const maxSafeInteger = uint64(1<<53 - 1)
+
+func canonicalUUID(value string) bool {
+	parsed, err := uuid.Parse(value)
+	return err == nil && parsed != uuid.Nil && parsed.String() == value
+}
+
+func validPublicTime(value time.Time) bool {
+	if value.IsZero() {
+		return false
+	}
+	seconds := value.Unix()
+	return seconds >= 0 && uint64(seconds) <= maxSafeInteger
+}
+
+func validPublicBoundary(value time.Time) bool {
+	return validPublicTime(value) && value.Nanosecond() == 0
+}
+
+func validCount(value int) bool {
+	return value >= 0 && uint64(value) <= maxSafeInteger
+}
+
 // Capabilities contains only backend-neutral facts safe to expose through a
 // future public capability response. Backend names, endpoints, credentials and
 // tenant identity are deliberately absent.
 type Capabilities struct {
-	CollectionMode CollectionMode
-	SampleInterval time.Duration
-	Retention      time.Duration
-	MinimumStep    time.Duration
-	MaximumRange   time.Duration
-	MaximumPoints  int
-	Metrics        []Metric
+	CollectionMode     CollectionMode
+	SampleInterval     time.Duration
+	Retention          time.Duration
+	MinimumStep        time.Duration
+	MaximumRange       time.Duration
+	MaximumPoints      int
+	MaximumSeries      int
+	MaximumTotalPoints int
+	Metrics            []Metric
 }
 
 func (c Capabilities) Durable() bool {
 	return c.CollectionMode == CollectionPeriodic && c.SampleInterval > 0
 }
 
-func (c Capabilities) validate() error {
+func (c Capabilities) Validate() error {
 	switch c.CollectionMode {
 	case CollectionOnRead:
 		if c.SampleInterval != 0 {
@@ -59,8 +84,16 @@ func (c Capabilities) validate() error {
 	if c.Retention <= 0 || c.MinimumStep <= 0 || c.MaximumRange <= 0 || c.MaximumRange > c.Retention {
 		return errors.New("invalid Runtime history time bounds")
 	}
+	for _, value := range []time.Duration{c.SampleInterval, c.Retention, c.MinimumStep, c.MaximumRange} {
+		if value%time.Second != 0 {
+			return errors.New("Runtime history public time bounds must use whole seconds")
+		}
+	}
 	if c.MaximumPoints < 2 || c.MaximumPoints > 10_000 {
 		return errors.New("invalid Runtime history point limit")
+	}
+	if c.MaximumSeries < 1 || c.MaximumSeries > 1_000 || c.MaximumTotalPoints < c.MaximumPoints || c.MaximumTotalPoints > 100_000 {
+		return errors.New("invalid Runtime history result limits")
 	}
 	if len(c.Metrics) == 0 || len(c.Metrics) > 2 {
 		return errors.New("invalid Runtime history metrics")
@@ -81,7 +114,7 @@ type Scope struct {
 
 func (s Scope) validate() error {
 	for _, value := range []string{s.TenantID, s.SessionID, s.EnvironmentID} {
-		if uuid.Validate(value) != nil {
+		if !canonicalUUID(value) {
 			return errors.New("invalid Runtime history scope")
 		}
 	}
@@ -95,9 +128,11 @@ type Range struct {
 
 type Query struct {
 	Scope
-	Start, End time.Time
-	Step       time.Duration
-	MaxPoints  int
+	Start, End                        time.Time
+	Step                              time.Duration
+	Retention                         time.Duration
+	MaxPoints                         int
+	MaximumSeries, MaximumTotalPoints int
 }
 
 // Result is returned by a backend Reader before the service validates identity,
@@ -106,7 +141,15 @@ type Query struct {
 type Result struct {
 	GeneratedAt  time.Time
 	RetainedFrom *time.Time
+	Coverage     []CoveragePoint
 	Series       []Series
+}
+
+type CoveragePoint struct {
+	Start, End                      time.Time
+	FirstObservedAt, LastObservedAt time.Time
+	ObservationCount                int
+	ObservedCount, UnavailableCount int
 }
 
 type Series struct {
@@ -138,24 +181,78 @@ type Response struct {
 	Resolution   time.Duration
 	GeneratedAt  time.Time
 	RetainedFrom *time.Time
+	Coverage     []CoveragePoint
 	Series       []Series
 }
 
+func (r Response) Validate(now time.Time) error {
+	if err := r.Capabilities.Validate(); err != nil || r.Scope.validate() != nil {
+		return ErrInvalidResult
+	}
+	if !validPublicBoundary(r.Requested.Start) || !validPublicBoundary(r.Requested.End) || !r.Requested.End.After(r.Requested.Start) || r.Requested.End.Sub(r.Requested.Start) > r.MaximumRange || r.Requested.MaxPoints < 2 || r.Requested.MaxPoints > r.MaximumPoints {
+		return ErrInvalidResult
+	}
+	wantResolution := resolution(r.Requested.End.Sub(r.Requested.Start), r.Requested.MaxPoints, r.MinimumStep)
+	if r.Resolution != wantResolution {
+		return ErrInvalidResult
+	}
+	query := Query{
+		Scope: r.Scope, Start: r.Requested.Start, End: r.Requested.End, Step: r.Resolution, Retention: r.Retention, MaxPoints: r.Requested.MaxPoints,
+		MaximumSeries: r.MaximumSeries, MaximumTotalPoints: r.MaximumTotalPoints,
+	}
+	if err := validateResult(query, Result{GeneratedAt: r.GeneratedAt, RetainedFrom: r.RetainedFrom, Coverage: r.Coverage, Series: r.Series}, now); err != nil {
+		return ErrInvalidResult
+	}
+	return nil
+}
+
 func validateResult(query Query, result Result, now time.Time) error {
-	if result.GeneratedAt.IsZero() || result.GeneratedAt.After(now.Add(time.Second)) {
+	if query.Retention <= 0 {
+		return errors.New("invalid Runtime history query retention")
+	}
+	if !validPublicTime(result.GeneratedAt) || result.GeneratedAt.Before(query.Start) || result.GeneratedAt.After(now.Add(time.Second)) {
 		return errors.New("invalid Runtime history generation time")
 	}
-	if result.RetainedFrom != nil && (result.RetainedFrom.IsZero() || result.RetainedFrom.After(query.End)) {
+	if result.RetainedFrom != nil && (!validPublicBoundary(*result.RetainedFrom) || result.RetainedFrom.After(query.End) || result.RetainedFrom.After(result.GeneratedAt)) {
 		return errors.New("invalid Runtime history retention boundary")
 	}
+	retainedStart := query.Start
+	if configuredStart := result.GeneratedAt.Add(-query.Retention); configuredStart.After(retainedStart) {
+		retainedStart = configuredStart
+	}
+	if result.RetainedFrom != nil && result.RetainedFrom.After(retainedStart) {
+		retainedStart = *result.RetainedFrom
+	}
+	if len(result.Coverage) > query.MaxPoints {
+		return errors.New("Runtime history result exceeds coverage point limit")
+	}
+	var coverageObservationCount uint64
+	for index, point := range result.Coverage {
+		if err := validateCoveragePoint(query, point); err != nil {
+			return err
+		}
+		if uint64(point.ObservationCount) > maxSafeInteger-coverageObservationCount {
+			return errors.New("Runtime history coverage sample count exceeds safe integer limit")
+		}
+		coverageObservationCount += uint64(point.ObservationCount)
+		if point.LastObservedAt.After(result.GeneratedAt) {
+			return errors.New("Runtime history coverage observation is newer than result")
+		}
+		if point.ObservationCount > 0 && point.FirstObservedAt.Before(retainedStart) {
+			return errors.New("Runtime history coverage predates retention")
+		}
+		if index > 0 && result.Coverage[index-1].End.After(point.Start) {
+			return errors.New("Runtime history coverage points overlap or are out of order")
+		}
+	}
 	seriesKeys := map[string]bool{}
-	totalPoints := 0
-	if len(result.Series) > query.MaxPoints {
+	totalPoints := len(result.Coverage)
+	if len(result.Series) > query.MaximumSeries {
 		return errors.New("Runtime history result exceeds series limit")
 	}
 	for index := range result.Series {
 		series := &result.Series[index]
-		if series.Scope != query.Scope || uuid.Validate(series.AllocationID) != nil || series.StartedAt.IsZero() || !series.StartedAt.Before(query.End) || !providerTypePattern.MatchString(series.ProviderType) {
+		if series.Scope != query.Scope || !canonicalUUID(series.AllocationID) || !validPublicTime(series.StartedAt) || series.StartedAt.After(result.GeneratedAt) || !series.StartedAt.Before(query.End) || !providerTypePattern.MatchString(series.ProviderType) {
 			return errors.New("invalid Runtime history series identity")
 		}
 		key := series.AllocationID + "\x00" + series.StartedAt.UTC().Format(time.RFC3339Nano)
@@ -164,13 +261,19 @@ func validateResult(query Query, result Result, now time.Time) error {
 		}
 		seriesKeys[key] = true
 		totalPoints += len(series.Points)
-		if totalPoints > query.MaxPoints {
+		if len(series.Points) > query.MaxPoints || totalPoints > query.MaximumTotalPoints {
 			return errors.New("Runtime history result exceeds point limit")
 		}
 		for pointIndex := range series.Points {
 			point := series.Points[pointIndex]
 			if err := validatePoint(query, series.StartedAt, point); err != nil {
 				return err
+			}
+			if point.LastObservedAt.After(result.GeneratedAt) {
+				return errors.New("Runtime history observation is newer than result")
+			}
+			if point.ObservationCount > 0 && point.FirstObservedAt.Before(retainedStart) {
+				return errors.New("Runtime history observation predates retention")
 			}
 			if pointIndex > 0 && series.Points[pointIndex-1].End.After(point.Start) {
 				return errors.New("Runtime history points overlap or are out of order")
@@ -180,12 +283,31 @@ func validateResult(query Query, result Result, now time.Time) error {
 	return nil
 }
 
+func validateCoveragePoint(query Query, point CoveragePoint) error {
+	if !validPublicBoundary(point.Start) || !validPublicBoundary(point.End) || point.Start.Before(query.Start) || !point.End.After(point.Start) || point.End.After(query.End) || point.End.Sub(point.Start) > query.Step {
+		return errors.New("invalid Runtime history coverage bounds")
+	}
+	if !validCount(point.ObservationCount) || !validCount(point.ObservedCount) || !validCount(point.UnavailableCount) || uint64(point.ObservedCount)+uint64(point.UnavailableCount) != uint64(point.ObservationCount) {
+		return errors.New("invalid Runtime history coverage count")
+	}
+	if point.ObservationCount == 0 {
+		if !point.FirstObservedAt.IsZero() || !point.LastObservedAt.IsZero() {
+			return errors.New("empty Runtime history coverage contains observations")
+		}
+		return nil
+	}
+	if !validPublicTime(point.FirstObservedAt) || !validPublicTime(point.LastObservedAt) || point.FirstObservedAt.Before(point.Start) || point.LastObservedAt.Before(point.FirstObservedAt) || !point.LastObservedAt.Before(point.End) {
+		return errors.New("invalid Runtime history coverage observation bounds")
+	}
+	return nil
+}
+
 func validatePoint(query Query, startedAt time.Time, point Point) error {
-	if point.Start.Before(query.Start) || !point.End.After(point.Start) || point.End.After(query.End) || point.End.Sub(point.Start) > query.Step || point.End.Before(startedAt) {
+	if !validPublicBoundary(point.Start) || !validPublicBoundary(point.End) || point.Start.Before(query.Start) || !point.End.After(point.Start) || point.End.After(query.End) || point.End.Sub(point.Start) > query.Step || !point.End.After(startedAt) {
 		return errors.New("invalid Runtime history point bounds")
 	}
-	if point.ObservationCount < 0 || point.ObservedCount < 0 || point.UnavailableCount < 0 || point.ObservedCount+point.UnavailableCount != point.ObservationCount ||
-		point.CPUContributorCount < 0 || point.CPUContributorCount > point.ObservedCount || point.MemoryContributorCount < 0 || point.MemoryContributorCount > point.ObservedCount {
+	if !validCount(point.ObservationCount) || !validCount(point.ObservedCount) || !validCount(point.UnavailableCount) || uint64(point.ObservedCount)+uint64(point.UnavailableCount) != uint64(point.ObservationCount) ||
+		!validCount(point.CPUContributorCount) || point.CPUContributorCount > point.ObservedCount || !validCount(point.MemoryContributorCount) || point.MemoryContributorCount > point.ObservedCount {
 		return errors.New("invalid Runtime history point coverage")
 	}
 	if point.ObservationCount == 0 {
@@ -194,7 +316,7 @@ func validatePoint(query Query, startedAt time.Time, point Point) error {
 		}
 		return nil
 	}
-	if point.FirstObservedAt.Before(point.Start) || point.FirstObservedAt.Before(startedAt) || point.LastObservedAt.Before(point.FirstObservedAt) || !point.LastObservedAt.Before(point.End) {
+	if !validPublicTime(point.FirstObservedAt) || !validPublicTime(point.LastObservedAt) || point.FirstObservedAt.Before(point.Start) || point.FirstObservedAt.Before(startedAt) || point.LastObservedAt.Before(point.FirstObservedAt) || !point.LastObservedAt.Before(point.End) {
 		return errors.New("invalid Runtime history observation bounds")
 	}
 	if value := point.CPUUtilizationRatio; value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0) || *value < 0) {
@@ -209,7 +331,6 @@ func validatePoint(query Query, startedAt time.Time, point Point) error {
 	if point.CPUContributorCount > 0 && point.CPUUtilizationRatio == nil && point.CPUCapacityCores == nil {
 		return errors.New("Runtime history CPU coverage lacks a value")
 	}
-	const maxSafeInteger = uint64(1<<53 - 1)
 	if point.MemoryUsageBytes != nil && *point.MemoryUsageBytes > maxSafeInteger || point.MemoryLimitBytes != nil && (*point.MemoryLimitBytes == 0 || *point.MemoryLimitBytes > maxSafeInteger) {
 		return errors.New("invalid Runtime history memory value")
 	}

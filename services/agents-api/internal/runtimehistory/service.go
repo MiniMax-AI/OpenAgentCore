@@ -6,7 +6,12 @@ import (
 	"time"
 )
 
-var ErrUnsupported = errors.New("Runtime history is unsupported for this Session")
+var (
+	ErrInvalidRange  = errors.New("invalid Runtime history range")
+	ErrInvalidResult = errors.New("invalid Runtime history result")
+	ErrUnavailable   = errors.New("Runtime history is unavailable")
+	ErrUnsupported   = errors.New("Runtime history is unsupported for this Session")
+)
 
 type ScopeResolver interface {
 	ResolveRuntimeHistoryScope(context.Context, string, string) (Scope, error)
@@ -29,7 +34,7 @@ func NewService(resolver ScopeResolver, reader Reader) (*Service, error) {
 		return nil, errors.New("Runtime history resolver and reader are required")
 	}
 	capabilities := reader.Capabilities()
-	if err := capabilities.validate(); err != nil {
+	if err := capabilities.Validate(); err != nil {
 		return nil, err
 	}
 	return &Service{resolver: resolver, reader: reader, capabilities: cloneCapabilities(capabilities), now: time.Now}, nil
@@ -43,28 +48,31 @@ func (s *Service) Capabilities() Capabilities {
 // request. The history Reader receives only Core identity and bounded range data;
 // provider-native identity is never an authority-bearing input.
 func (s *Service) QuerySession(ctx context.Context, tenantID, sessionID string, requested Range) (Response, error) {
-	now := s.now().UTC()
-	if requested.Start.IsZero() || requested.End.IsZero() || !requested.End.After(requested.Start) || requested.End.After(now.Add(time.Second)) || requested.End.Sub(requested.Start) > s.capabilities.MaximumRange || requested.MaxPoints < 2 || requested.MaxPoints > s.capabilities.MaximumPoints {
-		return Response{}, errors.New("invalid Runtime history range")
+	requestNow := s.now().UTC()
+	if !validPublicBoundary(requested.Start) || !validPublicBoundary(requested.End) || !requested.End.After(requested.Start) || requested.End.After(requestNow.Add(time.Second)) || requested.End.Sub(requested.Start) > s.capabilities.MaximumRange || requested.MaxPoints < 2 || requested.MaxPoints > s.capabilities.MaximumPoints {
+		return Response{}, ErrInvalidRange
 	}
 	scope, err := s.resolver.ResolveRuntimeHistoryScope(ctx, tenantID, sessionID)
 	if err != nil {
 		return Response{}, err
 	}
 	if scope.TenantID != tenantID || scope.SessionID != sessionID {
-		return Response{}, errors.New("Runtime history resolver returned mismatched identity")
+		return Response{}, ErrInvalidResult
 	}
 	if err := scope.validate(); err != nil {
-		return Response{}, err
+		return Response{}, ErrInvalidResult
 	}
 	step := resolution(requested.End.Sub(requested.Start), requested.MaxPoints, s.capabilities.MinimumStep)
-	query := Query{Scope: scope, Start: requested.Start.UTC(), End: requested.End.UTC(), Step: step, MaxPoints: requested.MaxPoints}
+	query := Query{
+		Scope: scope, Start: requested.Start.UTC(), End: requested.End.UTC(), Step: step, Retention: s.capabilities.Retention, MaxPoints: requested.MaxPoints,
+		MaximumSeries: s.capabilities.MaximumSeries, MaximumTotalPoints: s.capabilities.MaximumTotalPoints,
+	}
 	result, err := s.reader.Query(ctx, query)
 	if err != nil {
-		return Response{}, err
+		return Response{}, ErrUnavailable
 	}
-	if err := validateResult(query, result, now); err != nil {
-		return Response{}, err
+	if err := validateResult(query, result, s.now().UTC()); err != nil {
+		return Response{}, ErrInvalidResult
 	}
 	return Response{
 		Capabilities: cloneCapabilities(s.capabilities),
@@ -73,16 +81,25 @@ func (s *Service) QuerySession(ctx context.Context, tenantID, sessionID string, 
 		Resolution:   query.Step,
 		GeneratedAt:  result.GeneratedAt.UTC(),
 		RetainedFrom: cloneTime(result.RetainedFrom),
+		Coverage:     append([]CoveragePoint(nil), result.Coverage...),
 		Series:       cloneSeries(result.Series),
 	}, nil
 }
 
 func resolution(duration time.Duration, maxPoints int, minimum time.Duration) time.Duration {
-	step := (duration + time.Duration(maxPoints) - 1) / time.Duration(maxPoints)
+	divisor := time.Duration(maxPoints)
+	step := duration / divisor
+	if duration%divisor != 0 {
+		step++
+	}
 	if step < minimum {
 		return minimum
 	}
-	return ((step + time.Second - 1) / time.Second) * time.Second
+	seconds := step / time.Second
+	if step%time.Second != 0 {
+		seconds++
+	}
+	return seconds * time.Second
 }
 
 func cloneTime(value *time.Time) *time.Time {

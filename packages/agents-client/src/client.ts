@@ -1,6 +1,7 @@
 import { exactFields, onlyFields, isRecord, hasOwn, canonicalUuid, isNonnegativeInteger, sameResourceId } from "./response-projection";
 import { projectTokenUsage } from "./usage-projection";
 import { projectAgentTurn, projectSessionItem, projectItemContent, projectHistoryPage, validateHistoryPageOptions } from "./history-projection";
+import { projectRuntimeHistory, projectRuntimeHistoryCapabilities } from "./runtime-history-projection";
 import { createSSEDecoder } from "./sse";
 import { projectVaultCredentialAuth, validCredentialURL } from "./vault-credential-auth";
 import type {
@@ -48,6 +49,9 @@ import type {
   ReplaceVaultCredentialTokenInput,
   RuntimeObservation,
   RuntimeObservationList,
+  RuntimeHistory,
+  RuntimeHistoryCapabilities,
+  RuntimeHistoryQuery,
   Vault,
   VaultCredential,
   VaultCredentialDeleted,
@@ -921,6 +925,14 @@ function projectAgentSession(
 
 function invalidRuntimeObservation(message = "Agent Core returned an invalid Runtime observation."): never {
   throw new AgentCoreError(message, 502, "invalid_runtime_observation");
+}
+
+function invalidRuntimeHistoryCapabilities(message = "Agent Core returned invalid Runtime history capabilities."): never {
+  throw new AgentCoreError(message, 502, "invalid_runtime_history_capabilities");
+}
+
+function invalidRuntimeHistory(message = "Agent Core returned invalid Runtime history."): never {
+  throw new AgentCoreError(message, 502, "invalid_runtime_history");
 }
 
 function nullableRuntimeNumber(value: unknown): number | null {
@@ -1973,6 +1985,33 @@ export class OpenAIAgentsClient implements AgentCore {
       { signal: options?.signal },
     );
     return projectRuntimeObservation(value, sessionId);
+  }
+
+  async getRuntimeHistoryCapabilities(options?: ReadOptions): Promise<RuntimeHistoryCapabilities> {
+    const value = await this.request<unknown>(
+      "/agents/runtime-history/capabilities",
+      { signal: options?.signal },
+    );
+    return projectRuntimeHistoryCapabilities(value, invalidRuntimeHistoryCapabilities);
+  }
+
+  async retrieveRuntimeHistory(sessionId: string, query: RuntimeHistoryQuery): Promise<RuntimeHistory> {
+    const canonicalSessionId = canonicalUuid(sessionId);
+    if (
+      query == null || canonicalSessionId === null || !isNonnegativeInteger(query.start) || !isNonnegativeInteger(query.end) ||
+      query.end <= query.start || (query.maxPoints !== undefined && (
+        !Number.isSafeInteger(query.maxPoints) || query.maxPoints < 2 || query.maxPoints > 10_000
+      ))
+    ) throw new TypeError("Runtime history query is invalid.");
+    const params = new URLSearchParams();
+    params.set("start", String(query.start));
+    params.set("end", String(query.end));
+    if (query.maxPoints !== undefined) params.set("max_points", String(query.maxPoints));
+    const value = await this.request<unknown>(
+      withQuery(`/agents/sessions/${encodeURIComponent(canonicalSessionId)}/runtime-history`, params),
+      { signal: query.signal },
+    );
+    return projectRuntimeHistory(value, canonicalSessionId, query, invalidRuntimeHistory);
   }
 
   async createSession(input: CreateSessionInput, idempotencyKey = createIdempotencyKey()): Promise<AgentSession> {

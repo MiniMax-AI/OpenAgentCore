@@ -3,7 +3,9 @@
 Status: Phase 2 and initial Core Web consumption implemented. The current-snapshot routes, strict
 `packages/agents-client` projection, and generated `openapi.yaml` contract are
 implemented and consumed by the Dashboard through complete Session/observation
-identity joins. Historical queries and lifecycle controls remain outside this phase.
+identity joins. Durable history uses the separate optional
+[Runtime history API](runtime-history-api.md); lifecycle controls remain outside
+this phase.
 
 This is an Agents Core extension, not an upstream OpenAI Agents resource. The
 implementation must record that status in the coverage ledger and generated
@@ -264,7 +266,8 @@ deletion makes the candidate incomplete and prevents publication.
 
 - Token usage: use existing Session/Turn Usage.
 - Billing and cost: product/backend concern.
-- Historical series: optional later capability with a separate contract.
+- Historical series in these routes: the optional capability uses the separate
+  [Runtime history API](runtime-history-api.md).
 - Container logs and command output.
 - Provider credentials or native configuration.
 - Start, stop, pause, resume, restart, renew, or delete operations.

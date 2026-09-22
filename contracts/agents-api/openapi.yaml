@@ -1051,6 +1051,333 @@ definitions:
     - usage_seconds_total
     - utilization_ratio
     type: object
+  v1.RuntimeHistory:
+    properties:
+      coverage:
+        $ref: '#/definitions/v1.RuntimeHistoryCoverage'
+      generated_at:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      object:
+        enum:
+        - agent.runtime_history
+        type: string
+      requested_range:
+        $ref: '#/definitions/v1.RuntimeHistoryRange'
+      resolution_seconds:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+      series:
+        items:
+          $ref: '#/definitions/v1.RuntimeHistorySeries'
+        maxItems: 1000
+        type: array
+      session_id:
+        format: uuid
+        type: string
+      source:
+        enum:
+        - durable
+        type: string
+    required:
+    - coverage
+    - generated_at
+    - object
+    - requested_range
+    - resolution_seconds
+    - series
+    - session_id
+    - source
+    type: object
+  v1.RuntimeHistoryCPU:
+    properties:
+      capacity_cores:
+        minimum: 5e-324
+        type: number
+        x-nullable: true
+      contributor_count:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+      utilization_ratio:
+        minimum: 0
+        type: number
+        x-nullable: true
+    required:
+    - capacity_cores
+    - contributor_count
+    - utilization_ratio
+    type: object
+  v1.RuntimeHistoryCapabilities:
+    properties:
+      available:
+        type: boolean
+      collection_mode:
+        enum:
+        - on_read
+        - periodic
+        type: string
+        x-nullable: true
+      maximum_points:
+        maximum: 10000
+        minimum: 2
+        type: integer
+        x-nullable: true
+      maximum_range_seconds:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+        x-nullable: true
+      metrics:
+        items:
+          enum:
+          - cpu
+          - memory
+          type: string
+        maxItems: 2
+        type: array
+      minimum_step_seconds:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+        x-nullable: true
+      object:
+        enum:
+        - agent.runtime_history_capabilities
+        type: string
+      reason:
+        enum:
+        - not_configured
+        - periodic_collection_required
+        type: string
+        x-nullable: true
+      retention_seconds:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+        x-nullable: true
+      sample_interval_seconds:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+        x-nullable: true
+    required:
+    - available
+    - collection_mode
+    - maximum_points
+    - maximum_range_seconds
+    - metrics
+    - minimum_step_seconds
+    - object
+    - reason
+    - retention_seconds
+    - sample_interval_seconds
+    type: object
+  v1.RuntimeHistoryCoverage:
+    properties:
+      buckets:
+        items:
+          $ref: '#/definitions/v1.RuntimeHistoryCoveragePoint'
+        maxItems: 10000
+        type: array
+      expected_sample_count:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      first_sample_at:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+        x-nullable: true
+      last_sample_at:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+        x-nullable: true
+      retained_start:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      sample_count:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+    required:
+    - buckets
+    - expected_sample_count
+    - first_sample_at
+    - last_sample_at
+    - retained_start
+    - sample_count
+    type: object
+  v1.RuntimeHistoryCoveragePoint:
+    properties:
+      end:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+      first_observed_at:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+        x-nullable: true
+      last_observed_at:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+        x-nullable: true
+      observation_count:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      observed_count:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      start:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      unavailable_count:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+    required:
+    - end
+    - first_observed_at
+    - last_observed_at
+    - observation_count
+    - observed_count
+    - start
+    - unavailable_count
+    type: object
+  v1.RuntimeHistoryMemory:
+    properties:
+      contributor_count:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+      limit_bytes:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+        x-nullable: true
+      usage_bytes:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+        x-nullable: true
+    required:
+    - contributor_count
+    - limit_bytes
+    - usage_bytes
+    type: object
+  v1.RuntimeHistoryPoint:
+    properties:
+      cpu:
+        allOf:
+        - $ref: '#/definitions/v1.RuntimeHistoryCPU'
+        x-nullable: true
+      end:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+      first_observed_at:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+        x-nullable: true
+      last_observed_at:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+        x-nullable: true
+      memory:
+        allOf:
+        - $ref: '#/definitions/v1.RuntimeHistoryMemory'
+        x-nullable: true
+      observation_count:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      observed_count:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      start:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      unavailable_count:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+    required:
+    - cpu
+    - end
+    - first_observed_at
+    - last_observed_at
+    - memory
+    - observation_count
+    - observed_count
+    - start
+    - unavailable_count
+    type: object
+  v1.RuntimeHistoryRange:
+    properties:
+      end:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+      start:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+    required:
+    - end
+    - start
+    type: object
+  v1.RuntimeHistorySeries:
+    properties:
+      allocation_id:
+        format: uuid
+        type: string
+      environment_id:
+        format: uuid
+        type: string
+      points:
+        items:
+          $ref: '#/definitions/v1.RuntimeHistoryPoint'
+        maxItems: 10000
+        type: array
+      provider_type:
+        pattern: '^[a-z][a-z0-9_]{0,31}$'
+        type: string
+      started_at:
+        $ref: '#/definitions/v1.RuntimeHistoryTime'
+    required:
+    - allocation_id
+    - environment_id
+    - points
+    - provider_type
+    - started_at
+    type: object
+  v1.RuntimeHistoryTime:
+    properties:
+      nanoseconds:
+        maximum: 999999999
+        minimum: 0
+        type: integer
+      seconds:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+    required:
+    - nanoseconds
+    - seconds
+    type: object
   v1.RuntimeInstance:
     properties:
       allocation_id:
@@ -2877,6 +3204,37 @@ paths:
       summary: Update an Environment Template
       tags:
       - Environment Templates
+  /agents/runtime-history/capabilities:
+    get:
+      description: Core extension advertising only safe backend-neutral Durable history
+        availability and bounds. Available is true only when a query Reader and qualified
+        periodic collection are both configured.
+      parameters:
+      - description: agents=v1
+        in: header
+        name: OpenAI-Beta
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.RuntimeHistoryCapabilities'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Retrieve Runtime history capabilities
+      tags:
+      - Runtime history
   /agents/runtime-observations:
     get:
       description: Core extension listing one current Runtime context per tenant-owned
@@ -3725,6 +4083,77 @@ paths:
       summary: List persisted execution Items
       tags:
       - Items
+  /agents/sessions/{session_id}/runtime-history:
+    get:
+      description: Core extension returning tenant-scoped stored Runtime observations
+        for one Session. End is exclusive; the server selects a bounded resolution.
+        Responses contain at most 1,000 series, 10,000 points per coverage/series
+        array, and 100,000 total coverage plus series points. It never reads or changes
+        live compute.
+      parameters:
+      - description: agents=v1
+        in: header
+        name: OpenAI-Beta
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: session_id
+        required: true
+        type: string
+      - description: Inclusive Unix-second start
+        in: query
+        maximum: 9007199254740991
+        minimum: 0
+        name: start
+        required: true
+        type: integer
+      - description: Exclusive Unix-second end
+        in: query
+        maximum: 9007199254740991
+        minimum: 1
+        name: end
+        required: true
+        type: integer
+      - description: Maximum points per series; defaults to the lower of 120 and the
+          advertised service maximum
+        in: query
+        maximum: 10000
+        minimum: 2
+        name: max_points
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.RuntimeHistory'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Retrieve Session Runtime history
+      tags:
+      - Runtime history
   /agents/sessions/{session_id}/runtime-observation:
     get:
       description: Core extension returning one tenant-scoped, read-only current Runtime

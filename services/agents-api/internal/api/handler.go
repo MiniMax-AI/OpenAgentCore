@@ -50,6 +50,7 @@ type Handler struct {
 	artifacts           SessionArtifactStore
 	subagents           SubagentStore
 	runtimeObservations RuntimeObservationService
+	runtimeHistory      RuntimeHistoryService
 }
 
 func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...Option) (http.Handler, error) {
@@ -103,6 +104,8 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 		r.Get("/agents/sessions/{session_id}", h.getSession)
 		r.Get("/agents/sessions/{session_id}/runtime-observation", h.getRuntimeObservation)
 		r.Get("/agents/runtime-observations", h.listRuntimeObservations)
+		r.Get("/agents/runtime-history/capabilities", h.getRuntimeHistoryCapabilities)
+		r.Get("/agents/sessions/{session_id}/runtime-history", h.getRuntimeHistory)
 		r.Post("/agents/sessions/{session_id}", h.updateSession)
 		r.Delete("/agents/sessions/{session_id}", h.deleteSession)
 		r.Post("/agents/sessions/{session_id}/events", h.createEvents)

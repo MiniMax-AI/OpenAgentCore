@@ -828,6 +828,98 @@ export interface RuntimeObservationList extends ListPage<RuntimeObservation> {
   last_id: string | null;
 }
 
+export type RuntimeHistoryCollectionMode = "on_read" | "periodic";
+export type RuntimeHistoryCapabilityReason = "not_configured" | "periodic_collection_required";
+export type RuntimeHistoryMetric = "cpu" | "memory";
+
+export interface RuntimeHistoryCapabilities {
+  object: "agent.runtime_history_capabilities";
+  available: boolean;
+  reason: RuntimeHistoryCapabilityReason | null;
+  collection_mode: RuntimeHistoryCollectionMode | null;
+  sample_interval_seconds: number | null;
+  retention_seconds: number | null;
+  minimum_step_seconds: number | null;
+  maximum_range_seconds: number | null;
+  maximum_points: number | null;
+  metrics: RuntimeHistoryMetric[];
+}
+
+export interface RuntimeHistoryQuery extends ReadOptions {
+  /** Inclusive Unix-second boundary. */
+  start: number;
+  /** Exclusive Unix-second boundary. */
+  end: number;
+  /** Requested maximum buckets per series. Core selects the effective resolution. */
+  maxPoints?: number;
+}
+
+export interface RuntimeHistoryRange {
+  start: number;
+  end: number;
+}
+
+export interface RuntimeHistoryCoveragePoint {
+  start: number;
+  end: number;
+  first_observed_at: number | null;
+  last_observed_at: number | null;
+  observation_count: number;
+  observed_count: number;
+  unavailable_count: number;
+}
+
+export interface RuntimeHistoryCPU {
+  contributor_count: number;
+  utilization_ratio: number | null;
+  capacity_cores: number | null;
+}
+
+export interface RuntimeHistoryMemory {
+  contributor_count: number;
+  usage_bytes: number | null;
+  limit_bytes: number | null;
+}
+
+export interface RuntimeHistoryPoint extends RuntimeHistoryCoveragePoint {
+  cpu: RuntimeHistoryCPU | null;
+  memory: RuntimeHistoryMemory | null;
+}
+
+export interface RuntimeHistorySeries {
+  environment_id: string;
+  allocation_id: string;
+  /** Lossless compute-incarnation identity fence. */
+  started_at: RuntimeHistoryTime;
+  provider_type: string;
+  points: RuntimeHistoryPoint[];
+}
+
+export interface RuntimeHistoryTime {
+  seconds: number;
+  nanoseconds: number;
+}
+
+export interface RuntimeHistoryCoverage {
+  retained_start: number;
+  first_sample_at: number | null;
+  last_sample_at: number | null;
+  sample_count: number;
+  expected_sample_count: number;
+  buckets: RuntimeHistoryCoveragePoint[];
+}
+
+export interface RuntimeHistory {
+  object: "agent.runtime_history";
+  source: "durable";
+  session_id: string;
+  requested_range: RuntimeHistoryRange;
+  resolution_seconds: number;
+  generated_at: number;
+  coverage: RuntimeHistoryCoverage;
+  series: RuntimeHistorySeries[];
+}
+
 export interface AgentCore {
   listAgents(options?: PageOptions): Promise<ListPage<SavedAgent>>;
   createAgent(input: CreateAgentInput): Promise<SavedAgent>;
@@ -846,6 +938,8 @@ export interface AgentCore {
   listSessions(options?: PageOptions & { agentId?: string }): Promise<ListPage<AgentSession>>;
   listRuntimeObservations(options?: PageOptions): Promise<RuntimeObservationList>;
   retrieveRuntimeObservation(sessionId: string, options?: ReadOptions): Promise<RuntimeObservation>;
+  getRuntimeHistoryCapabilities(options?: ReadOptions): Promise<RuntimeHistoryCapabilities>;
+  retrieveRuntimeHistory(sessionId: string, query: RuntimeHistoryQuery): Promise<RuntimeHistory>;
   createSession(input: CreateSessionInput, idempotencyKey?: string): Promise<AgentSession>;
   createSessionStream(
     input: Omit<CreateSessionInput, "stream">,

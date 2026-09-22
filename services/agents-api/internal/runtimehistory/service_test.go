@@ -39,13 +39,15 @@ func (r *fakeReader) Query(_ context.Context, query Query) (Result, error) {
 
 func capabilities() Capabilities {
 	return Capabilities{
-		CollectionMode: CollectionPeriodic,
-		SampleInterval: 30 * time.Second,
-		Retention:      7 * 24 * time.Hour,
-		MinimumStep:    30 * time.Second,
-		MaximumRange:   24 * time.Hour,
-		MaximumPoints:  1_000,
-		Metrics:        []Metric{MetricCPU, MetricMemory},
+		CollectionMode:     CollectionPeriodic,
+		SampleInterval:     30 * time.Second,
+		Retention:          7 * 24 * time.Hour,
+		MinimumStep:        30 * time.Second,
+		MaximumRange:       24 * time.Hour,
+		MaximumPoints:      1_000,
+		MaximumSeries:      64,
+		MaximumTotalPoints: 10_000,
+		Metrics:            []Metric{MetricCPU, MetricMemory},
 	}
 }
 
@@ -90,10 +92,39 @@ func TestServiceNeverQueriesBeforeOwnershipResolution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Second)
 	_, err = service.QuerySession(t.Context(), tenantID, sessionID, Range{Start: now.Add(-time.Hour), End: now, MaxPoints: 60})
 	if !errors.Is(err, denied) || len(reader.queries) != 0 {
 		t.Fatalf("unauthorized history reached reader: err=%v queries=%+v", err, reader.queries)
+	}
+}
+
+func TestServiceValidatesResultAgainstTimeAfterReaderReturns(t *testing.T) {
+	requestNow := time.Date(2026, 9, 23, 8, 0, 0, 0, time.UTC)
+	resultNow := requestNow.Add(2 * time.Second)
+	scope := Scope{TenantID: tenantID, SessionID: sessionID, EnvironmentID: environmentID}
+	reader := &fakeReader{capabilities: capabilities(), result: Result{GeneratedAt: resultNow}}
+	service, err := NewService(fixedScopeResolver{scope: scope}, reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clockCalls := 0
+	service.now = func() time.Time {
+		clockCalls++
+		if clockCalls == 1 {
+			return requestNow
+		}
+		return resultNow
+	}
+
+	_, err = service.QuerySession(t.Context(), tenantID, sessionID, Range{
+		Start: requestNow.Add(-time.Hour), End: requestNow, MaxPoints: 60,
+	})
+	if err != nil {
+		t.Fatalf("valid result from slow Reader rejected: %v", err)
+	}
+	if clockCalls != 2 {
+		t.Fatalf("clock calls = %d, want request and result validation times", clockCalls)
 	}
 }
 
@@ -104,7 +135,7 @@ func TestServiceRejectsInvalidRangeAndResolverIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Second)
 	for _, requested := range []Range{
 		{Start: now, End: now, MaxPoints: 60},
 		{Start: now.Add(-25 * time.Hour), End: now, MaxPoints: 60},
@@ -130,9 +161,24 @@ func TestServiceRejectsMalformedBackendResults(t *testing.T) {
 	scope := Scope{TenantID: tenantID, SessionID: sessionID, EnvironmentID: environmentID}
 	base := Series{Scope: scope, AllocationID: allocationID, StartedAt: start.Add(-time.Minute), ProviderType: "docker"}
 	for name, mutate := range map[string]func(*Result){
-		"cross tenant":        func(result *Result) { result.Series[0].TenantID = "55555555-5555-4555-8555-555555555555" },
+		"cross tenant":            func(result *Result) { result.Series[0].TenantID = "55555555-5555-4555-8555-555555555555" },
+		"noncanonical allocation": func(result *Result) { result.Series[0].AllocationID = "urn:uuid:" + allocationID },
+		"nil allocation":          func(result *Result) { result.Series[0].AllocationID = "00000000-0000-0000-0000-000000000000" },
+		"generation before range": func(result *Result) { result.GeneratedAt = start.Add(-time.Second) },
+		"pre-epoch generation":    func(result *Result) { result.GeneratedAt = time.Unix(-1, 0) },
+		"pre-epoch incarnation":   func(result *Result) { result.Series[0].StartedAt = time.Unix(-1, 0) },
+		"incarnation newer than generation": func(result *Result) {
+			result.GeneratedAt = start.Add(10 * time.Minute)
+			result.Series[0].StartedAt = start.Add(10*time.Minute + time.Nanosecond)
+			result.Series[0].Points = nil
+		},
+		"subsecond retention": func(result *Result) { value := start.Add(time.Nanosecond); result.RetainedFrom = &value },
 		"duplicate series":    func(result *Result) { result.Series = append(result.Series, result.Series[0]) },
 		"out of range":        func(result *Result) { result.Series[0].Points[0].End = now.Add(time.Minute) },
+		"subsecond bucket":    func(result *Result) { result.Series[0].Points[0].Start = start.Add(time.Nanosecond) },
+		"bucket ends at incarnation": func(result *Result) {
+			result.Series[0].StartedAt = result.Series[0].Points[0].End
+		},
 		"zero coverage value": func(result *Result) { value := 1.0; result.Series[0].Points[0].CPUUtilizationRatio = &value },
 		"exclusive end": func(result *Result) {
 			point := &result.Series[0].Points[0]
@@ -160,6 +206,43 @@ func TestServiceRejectsMalformedBackendResults(t *testing.T) {
 			point := &result.Series[0].Points[0]
 			point.ObservationCount, point.ObservedCount, point.CPUContributorCount = 1, 1, 1
 			point.FirstObservedAt, point.LastObservedAt = point.Start, point.Start
+		},
+		"unsafe observation count": func(result *Result) {
+			point := &result.Series[0].Points[0]
+			point.ObservationCount = int(maxSafeInteger) + 1
+			point.UnavailableCount = point.ObservationCount
+		},
+		"unsafe coverage count": func(result *Result) {
+			count := int(maxSafeInteger) + 1
+			result.Coverage = []CoveragePoint{{Start: start, End: start.Add(time.Minute), ObservationCount: count, UnavailableCount: count}}
+		},
+		"unsafe coverage sum": func(result *Result) {
+			count := int(maxSafeInteger/2 + 1)
+			result.Coverage = []CoveragePoint{
+				{Start: start, End: start.Add(time.Minute), FirstObservedAt: start, LastObservedAt: start, ObservationCount: count, UnavailableCount: count},
+				{Start: start.Add(time.Minute), End: start.Add(2 * time.Minute), FirstObservedAt: start.Add(time.Minute), LastObservedAt: start.Add(time.Minute), ObservationCount: count, UnavailableCount: count},
+			}
+		},
+		"coverage predates retention": func(result *Result) {
+			retained := start.Add(30 * time.Second)
+			result.RetainedFrom = &retained
+			result.Coverage = []CoveragePoint{{
+				Start: start, End: start.Add(time.Minute), FirstObservedAt: start.Add(10 * time.Second), LastObservedAt: start.Add(10 * time.Second),
+				ObservationCount: 1, UnavailableCount: 1,
+			}}
+		},
+		"series predates retention": func(result *Result) {
+			retained := start.Add(30 * time.Second)
+			result.RetainedFrom = &retained
+			point := &result.Series[0].Points[0]
+			point.FirstObservedAt, point.LastObservedAt = start.Add(10*time.Second), start.Add(10*time.Second)
+			point.ObservationCount, point.UnavailableCount = 1, 1
+		},
+		"observation newer than generation": func(result *Result) {
+			point := &result.Series[0].Points[0]
+			point.ObservationCount, point.ObservedCount = 1, 1
+			point.FirstObservedAt, point.LastObservedAt = point.Start, point.Start.Add(time.Second)
+			result.GeneratedAt = point.Start
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -192,5 +275,13 @@ func TestServiceRejectsUnsafeCapabilities(t *testing.T) {
 		if _, err := NewService(fixedScopeResolver{}, &fakeReader{capabilities: value}); err == nil {
 			t.Fatalf("unsafe capabilities accepted: %+v", value)
 		}
+	}
+}
+
+func TestResolutionUsesOverflowSafeCeiling(t *testing.T) {
+	duration := (time.Duration(1<<63-1) / time.Second) * time.Second
+	value := resolution(duration, 2, time.Second)
+	if value <= 0 || value < duration/2 || value%time.Second != 0 {
+		t.Fatalf("unsafe resolution for large duration: %v", value)
 	}
 }

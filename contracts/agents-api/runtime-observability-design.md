@@ -351,7 +351,7 @@ lease before every periodic export handoff. `on_read` remains distinct from
 `periodic`, so ad hoc API
 traffic cannot be counted as qualified cadence coverage.
 
-A future history API must expose actual sample coverage. Core Web must not
+A history API must expose actual sample coverage. Core Web must not
 advertise a durable range until the operator backend, query adapter, and a
 qualified periodic collection cadence are all configured.
 
@@ -364,7 +364,8 @@ before calling a Reader. Reader queries always carry tenant, Session, and
 Environment scope plus a bounded start, exclusive end, server-selected step,
 and total point budget. Provider-native identity is never a query input.
 
-Reader results remain divided by allocation and compute `started_at` fence.
+Reader results remain divided by allocation and the lossless compute `started_at`
+seconds-plus-nanoseconds fence.
 Every bucket reports explicit observation coverage and nullable CPU/memory
 values. CPU utilization may be derived only from ordered cumulative counters
 inside one fence; memory uses the final observed value in the bucket. Empty
@@ -378,9 +379,10 @@ and supported metrics. A configured Reader without qualified periodic sampling
 is not sufficient to advertise a Durable Dashboard source. Backend identity,
 URLs, credentials, and tenant data are never capability fields.
 
-This internal boundary is implemented, but no production Reader or public
-history route is configured yet. The next qualification adds the ClickHouse
-reference Reader, then a Session-scoped public extension and strict client.
+This internal boundary, the Session-scoped public extension, capability discovery,
+and strict client are implemented. No production Reader is configured yet. The
+next qualification adds the ClickHouse reference Reader and end-to-end retention,
+isolation, restart, and incarnation evidence before Web advertises Durable ranges.
 
 ## 11. Dashboard information architecture
 
@@ -542,11 +544,14 @@ Implemented for the browser-local current-snapshot live window.
 - Implemented: backend-neutral `runtimehistory` types and service validation.
   Tenant/Session/Environment scope precedes every Reader query; incarnation,
   coverage, nullability, ordering, range and total-point invariants are enforced.
+- Implemented: safe public capability discovery, bounded Session-scoped history
+  query routes, generated OpenAPI schemas, and strict `packages/agents-client`
+  projection. Unconfigured or on-read-only deployments cannot advertise Durable.
 - Qualified: optional OTLP Collector fan-out with a separate high-cardinality
   history store and server-side tenant-scoped query adapter. ClickHouse is the
   first reference backend; no backend is a Core execution dependency.
-- Not implemented: a production `runtimehistory` Reader, public history
-  extension, durable Web ranges, retention configuration, and exporter
+- Not implemented: a production `runtimehistory` Reader, durable Web ranges,
+  retention deployment configuration, and exporter
   queue/drop/error coverage telemetry.
 - Add telemetry exporter and qualified operator backend.
 - Define a separate history query adapter and retention/security policy.
