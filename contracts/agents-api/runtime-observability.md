@@ -87,7 +87,9 @@ ownership, or lifecycle authority. The file may contain endpoint authorization
 headers and is never returned to Web. Provider receipts, native identifiers, raw
 errors, paths, and credentials are excluded from metric attributes. CPU,
 capacity, and memory points require the provider-qualified compute `started_at`
-fence; unfenced observations export coverage and read duration only.
+fence; unfenced observations export coverage and read duration only. Core
+resolved/observed nanosecond attributes provide a backend join key even when
+generic OTLP storage lowers the event timestamp precision.
 
 The server-only file may also enable a bounded periodic cadence. Only the Core
 service holding the execution database lease runs that deployment-wide sampler;
@@ -99,6 +101,11 @@ Exports distinguish `periodic` samples from `on_read` samples.
 The Collector, high-cardinality history backend, server-side history query
 adapter, retention policy, and durable Web ranges remain separate optional
 capabilities in the [full design](runtime-observability-design.md).
+
+The internal `runtimehistory` boundary is backend-neutral and validates Core
+scope, incarnation fences, bucket coverage, nullability, time bounds and total
+point limits. It does not make history available by itself: no production
+Reader or public history route is configured in this phase.
 
 ## First-phase boundary
 

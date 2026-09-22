@@ -212,6 +212,7 @@ func recordAttributes(record runtimeobs.ExportRecord) attribute.Set {
 		attribute.String("agents.runtime.mode", string(record.Mode)),
 		attribute.String("agents.runtime.status", string(record.Status)),
 		attribute.String("agents.runtime.collection.source", string(record.CollectionSource)),
+		attribute.Int64("agents.runtime.resolved_at_unix_nano", record.ResolvedAt.UnixNano()),
 	}
 	if record.EnvironmentID != "" {
 		values = append(values, attribute.String("agents.environment.id", record.EnvironmentID))
@@ -227,6 +228,9 @@ func recordAttributes(record runtimeobs.ExportRecord) attribute.Set {
 	}
 	if record.Sample != nil && record.Sample.StartedAt != nil {
 		values = append(values, attribute.Int64("agents.runtime.compute.started_at_unix_nano", record.Sample.StartedAt.UnixNano()))
+	}
+	if record.Sample != nil {
+		values = append(values, attribute.Int64("agents.runtime.observed_at_unix_nano", record.Sample.ObservedAt.UnixNano()))
 	}
 	return attribute.NewSet(values...)
 }

@@ -327,8 +327,10 @@ The OTLP request uses standard protobuf metrics and these instruments:
 | `agents.runtime.sample.duration` | delta histogram, seconds | bounded provider read duration |
 
 Core-owned tenant, Session, Environment, allocation, mode, provider type,
-status, safe reason, and collection source (`on_read` or `periodic`) are metric
-attributes. CPU, capacity, and memory points
+status, safe reason, collection source (`on_read` or `periodic`), and Core
+resolved/observed timestamps are metric attributes. The explicit nanosecond
+timestamps preserve the record join key when a backend's generic OTLP tables
+store metric event time at lower precision. CPU, capacity, and memory points
 are exported only when the sample also carries the compute `started_at` fence;
 that fence is included as an attribute on every such point. Provider keys,
 provider receipts, native container/pod/instance
@@ -352,6 +354,33 @@ traffic cannot be counted as qualified cadence coverage.
 A future history API must expose actual sample coverage. Core Web must not
 advertise a durable range until the operator backend, query adapter, and a
 qualified periodic collection cadence are all configured.
+
+### 10.3 Backend-neutral history query boundary
+
+`services/agents-api/internal/runtimehistory` defines the server-side query
+contract independently from ClickHouse, OTLP, and the public HTTP shape. Its
+service resolves the authenticated tenant and Session to durable Core identity
+before calling a Reader. Reader queries always carry tenant, Session, and
+Environment scope plus a bounded start, exclusive end, server-selected step,
+and total point budget. Provider-native identity is never a query input.
+
+Reader results remain divided by allocation and compute `started_at` fence.
+Every bucket reports explicit observation coverage and nullable CPU/memory
+values. CPU utilization may be derived only from ordered cumulative counters
+inside one fence; memory uses the final observed value in the bucket. Empty
+buckets remain gaps. The service rejects cross-scope rows, duplicate series,
+overlapping or out-of-range buckets, unsafe provider labels, invalid numeric
+values, and results exceeding the total point budget.
+
+Capabilities contain only safe backend-neutral limits: collection mode,
+qualified sample interval, retention, minimum step, maximum range, point budget,
+and supported metrics. A configured Reader without qualified periodic sampling
+is not sufficient to advertise a Durable Dashboard source. Backend identity,
+URLs, credentials, and tenant data are never capability fields.
+
+This internal boundary is implemented, but no production Reader or public
+history route is configured yet. The next qualification adds the ClickHouse
+reference Reader, then a Session-scoped public extension and strict client.
 
 ## 11. Dashboard information architecture
 
@@ -510,12 +539,15 @@ Implemented for the browser-local current-snapshot live window.
 - Implemented: optional execution-owner singleton sampling across all nondeleted
   managed Sessions. Keyset scans, provider concurrency, source deadlines, and
   non-overlapping sweeps are bounded; collection source is exported explicitly.
+- Implemented: backend-neutral `runtimehistory` types and service validation.
+  Tenant/Session/Environment scope precedes every Reader query; incarnation,
+  coverage, nullability, ordering, range and total-point invariants are enforced.
 - Qualified: optional OTLP Collector fan-out with a separate high-cardinality
   history store and server-side tenant-scoped query adapter. ClickHouse is the
   first reference backend; no backend is a Core execution dependency.
-- Not implemented: `runtimehistory` query adapter, public history extension,
-  durable Web ranges, retention configuration, and exporter queue/drop/error
-  coverage telemetry.
+- Not implemented: a production `runtimehistory` Reader, public history
+  extension, durable Web ranges, retention configuration, and exporter
+  queue/drop/error coverage telemetry.
 - Add telemetry exporter and qualified operator backend.
 - Define a separate history query adapter and retention/security policy.
 - Replace or extend the ephemeral live window with explicitly advertised durable

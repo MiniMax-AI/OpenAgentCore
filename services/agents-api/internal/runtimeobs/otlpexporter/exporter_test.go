@@ -84,7 +84,9 @@ func TestExporterBuildsFencedProviderNeutralMetrics(t *testing.T) {
 		"agents.tenant.id": "tenant", "agents.session.id": "session", "agents.environment.id": "environment",
 		"agents.runtime.allocation.id": "allocation", "agents.runtime.mode": "openai_hosted",
 		"agents.runtime.provider.type": "docker", "agents.runtime.status": "observed",
-		"agents.runtime.collection.source": "on_read",
+		"agents.runtime.collection.source":     "on_read",
+		"agents.runtime.resolved_at_unix_nano": "1790132400000000000",
+		"agents.runtime.observed_at_unix_nano": "1790132400000000000",
 	} {
 		if attrs[key] != want {
 			t.Fatalf("attribute %q = %q, want %q", key, attrs[key], want)
