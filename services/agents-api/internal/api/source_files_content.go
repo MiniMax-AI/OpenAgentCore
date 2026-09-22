@@ -8,28 +8,29 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
 // @Summary Download source file bytes
-// @Description Streams an authorized immutable source snapshot. Already-admitted reads may finish after deletion; later reads reject. No Beta header is required. Range requests and exact hosted headers/error behavior are not implemented or verified.
+// @Description Resolves project-owned File metadata before enforcing download policy. Public download of user_data Files returns 400; missing and foreign Files return the same 404. Internal initial-file and workspace copies remain available. No Beta header is required.
 // @Tags Files
-// @Produce octet-stream
+// @Produce json
 // @Security BearerAuth
 // @Param file_id path string true "Source file ID"
-// @Success 200 {file} binary
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /files/{file_id}/content [get]
 func (h *Handler) sourceFileContent(w http.ResponseWriter, r *http.Request) {
 	if !h.sourceFilesReady(w, r) {
 		return
 	}
-	serveStoredContent(w, r, func(ctx context.Context, consume func(string, int64, io.Reader) error) error {
-		return h.sourceFiles.ReadSourceFile(ctx, tenantID(r), chi.URLParam(r, "file_id"), func(file store.SourceFile, body io.Reader) error {
-			return consume(file.Filename, file.SizeBytes, body)
-		})
-	}, "id")
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	_, err := h.sourceFiles.GetSourceFile(ctx, tenantID(r), chi.URLParam(r, "file_id"))
+	if err != nil {
+		writeStoreError(w, r, err, "id")
+		return
+	}
+	writeError(w, http.StatusBadRequest, "", "Not allowed to download files of purpose: user_data")
 }
 
 func serveStoredContent(w http.ResponseWriter, r *http.Request, read func(context.Context, func(string, int64, io.Reader) error) error, notFoundParam ...string) {

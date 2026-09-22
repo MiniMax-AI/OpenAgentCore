@@ -67,6 +67,31 @@ func TestSourceFileListMapsStorageErrors(t *testing.T) {
 	}
 }
 
+func TestSourceFileListPurposeValidationBeforeCursorLookup(t *testing.T) {
+	for _, purpose := range []string{"", "user_data", "assistants", "batch", "fine-tune", "vision", "evals", "assistants_output", "batch_output", "fine-tune-results", "unknown", "USER_DATA"} {
+		t.Run("purpose="+purpose, func(t *testing.T) {
+			f := &sourceFilesFixture{listErr: store.ErrNotFound}
+			h, _ := environmentFileCreateHandler(t, WithSourceFiles(f))
+			server := newSourceFileServer(t, h)
+			status, raw := sourceRequest(t, server, http.MethodGet, "/v1/files?after=file-missing&purpose="+purpose, "files-key", "", nil)
+			wantStatus, wantParam, wantCalls := http.StatusNotFound, "after", 1
+			if purpose == "unknown" || purpose == "USER_DATA" {
+				wantStatus, wantParam, wantCalls = http.StatusBadRequest, "purpose", 0
+			}
+			var body map[string]map[string]any
+			if status != wantStatus || json.Unmarshal(raw, &body) != nil || f.listCalls != wantCalls {
+				t.Fatalf("purpose validation: %d %s calls=%d", status, raw, f.listCalls)
+			}
+			if e := body["error"]; e["type"] != "invalid_request_error" || e["code"] != nil || e["param"] != wantParam {
+				t.Fatalf("purpose error projection: %s", raw)
+			}
+			if wantCalls == 1 && (f.listPurpose == nil || *f.listPurpose != purpose) {
+				t.Fatalf("purpose filter changed: %v", f.listPurpose)
+			}
+		})
+	}
+}
+
 func newSourceFileServer(t *testing.T, handler http.Handler) *httptest.Server {
 	t.Helper()
 	server := httptest.NewServer(handler)

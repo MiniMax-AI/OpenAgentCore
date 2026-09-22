@@ -62,6 +62,17 @@ def verify_source_file_list(client, other, invalid, peer, expect_error):
             response = raw.get(endpoint + "?" + query, headers=headers)
             assert response.status_code == 400
             assert response.json()["error"]["type"] == "invalid_request_error"
+        for purpose in ("unknown", "USER_DATA"):
+            response = raw.get(endpoint, headers=headers, params={"purpose": purpose, "after": "file-missing"})
+            assert response.status_code == 400
+            error = response.json()["error"]
+            assert (error["type"], error["code"], error["param"]) == ("invalid_request_error", None, "purpose")
+            try:
+                files.list(purpose=purpose, after="file-missing")
+            except BadRequestError as denied:
+                assert denied.status_code == 400 and denied.body == error
+            else:
+                raise AssertionError("SDK accepted invalid list purpose")
         response = raw.get(endpoint, headers=headers, params={"after": "not-a-file"})
         assert response.status_code == 404
         assert response.json()["error"]["code"] is None

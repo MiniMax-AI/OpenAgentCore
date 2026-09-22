@@ -7,7 +7,7 @@ import (
 )
 
 // @Summary List source files
-// @Description Lists project-owned Files without reading their bodies. Supports the pinned after, limit, order and purpose query surface. The limit defaults to 10000 and must be 1–10000. Equal creation times use ID ordering. Current storage contains only user_data; exact hosted default order, invalid-cursor errors and concurrent-page behavior remain unverified. No Beta header is required.
+// @Description Lists project-owned Files without reading their bodies. The limit defaults to 10000 and must be 1–10000. Equal creation times use ID ordering. Purpose validation precedes cursor lookup; current storage contains only user_data. An explicit empty purpose retains the local exact-filter behavior. Hosted positive filtering, default order and concurrent-page behavior remain unverified. No Beta header is required.
 // @Tags Files
 // @Produce json
 // @Security BearerAuth
@@ -51,6 +51,12 @@ func readSourceFilePage(w http.ResponseWriter, r *http.Request) (pageOptions, *s
 	values, present := q["purpose"]
 	if !present {
 		return options, nil, true
+	}
+	switch values[0] {
+	case "", "user_data", "assistants", "batch", "fine-tune", "vision", "evals", "assistants_output", "batch_output", "fine-tune-results":
+	default:
+		writeError(w, http.StatusBadRequest, "", "Invalid purpose.", "purpose")
+		return pageOptions{}, nil, false
 	}
 	return options, &values[0], true
 }

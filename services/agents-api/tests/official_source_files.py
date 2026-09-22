@@ -4,6 +4,22 @@ import hashlib
 from pathlib import Path
 import tempfile
 
+from openai import BadRequestError
+
+
+def verify_source_download_denied(client, http, source_id):
+    endpoint = str(client.base_url).rstrip("/") + "/files/" + source_id + "/content"
+    response = http.get(endpoint, headers={"Authorization": "Bearer " + client.api_key})
+    assert response.status_code == 400
+    error = response.json()["error"]
+    assert (error["type"], error["code"], error["param"]) == ("invalid_request_error", None, None)
+    try:
+        client.files.content(source_id)
+    except BadRequestError as denied:
+        assert denied.status_code == 400 and denied.body == error
+    else:
+        raise AssertionError("SDK allowed public user_data content download")
+
 
 def verify_source_files(client, foreign, http, environment, directory, cases):
     base = str(client.base_url).rstrip("/")
@@ -25,7 +41,7 @@ def verify_source_files(client, foreign, http, environment, directory, cases):
         assert source["purpose"] == "user_data" and source["status"] == "processed"
         assert source["expires_at"] is None and source["status_details"] is None
         assert client.files.retrieve(source_id).to_dict() == source
-        assert client.files.content(source_id).read() == content
+        verify_source_download_denied(client, http, source_id)
         for method, suffix in (("GET", ""), ("GET", "/content"), ("DELETE", "")):
             response = http.request(method, endpoint + suffix, headers=other)
             assert response.status_code == 404 and "error" in response.json(), "Foreign source access succeeded"
@@ -64,17 +80,14 @@ def verify_source_files(client, foreign, http, environment, directory, cases):
         large = client.files.create(file=("512MiB.bin", body), purpose="user_data")
     try:
         assert large.bytes == 512 << 20
-        actual, size = hashlib.sha256(), 0
-        with client.files.with_streaming_response.content(large.id) as response:
-            for chunk in response.iter_bytes(chunk_size=256 << 10):
-                size += len(chunk)
-                actual.update(chunk)
-        assert size == large.bytes and actual.digest() == digest.digest(), "Large source stream differs"
+        verify_source_download_denied(client, http, large.id)
         response = http.post(base + "/agents/environments/" + environment + "/files",
                              headers={**headers, "OpenAI-Beta": "agents=v1"},
                              json={"type": "file_id", "file_id": large.id, "path": directory + "/too-large.bin"})
         assert response.status_code == 413, "Destination size bound bypassed"
     finally:
         client.files.delete(large.id)
-    return copies, receipts, {"source_limit_bytes": 512 << 20, "large_source_sha256": digest.hexdigest(),
+    # This digest identifies the upload fixture; public download is denied and proves no byte round-trip.
+    return copies, receipts, {"source_limit_bytes": 512 << 20, "large_source_fixture_sha256": digest.hexdigest(),
+                              "public_source_download_denied": True,
                               "deleted_sources_unavailable": True, "foreign_source_rejected": True}

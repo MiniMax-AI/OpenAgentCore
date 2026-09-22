@@ -10,6 +10,8 @@ from pathlib import Path
 import httpx2
 from openai import DefaultHttpxClient, NotFoundError, OpenAI
 
+from official_source_files import verify_source_download_denied
+
 
 def main():
     base, token, foreign = sys.argv[1:]
@@ -65,7 +67,7 @@ def main():
             assert unauthorized.status_code == 401
             assert all(value not in unauthorized.text for value in (file.id, file.filename, secret))
             assert owner.files.retrieve(file.id).to_dict() == before
-            assert owner.files.content(file.id).read() == secret.encode()
+            verify_source_download_denied(owner, raw, file.id)
         assert list(outsider.files.list()) == []
         tail = owner.files.list(after=file.id)
         assert tail.data == [] and tail.has_more is False
