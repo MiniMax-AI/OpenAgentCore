@@ -180,11 +180,16 @@ including further deployment qualification; this inventory describes merged beha
 
 ## Public semantics
 
+The [September 22 wire comparison](official-semantics-alignment.md) records the
+bounded official-service observations, aligned responses and remaining differences.
+It supplements the fixed SDK baseline; current documentation does not silently
+upgrade the protocol.
+
 - Credentials use `POST /vaults/{vault_id}/credentials` and
   `GET /vaults/{vault_id}/credentials/{credential_id}`. The static profile accepts
   `static_bearer` with required string token and HTTPS destination, plus a
-  required name trimmed to 1–256 UTF-8 bytes. Tokens remain opaque, including empty
-  strings; exact hosted token validation is unverified. The local URL profile
+  required name trimmed to 1–256 UTF-8 bytes. Tokens remain opaque and nonempty; explicitly empty tokens are rejected before
+  mutation, following the sampled official create/update behavior. The local URL profile
   excludes userinfo/fragments and preserves queries without normalization or network
   contact. Public metadata contains identity, owning Vault, name, timestamps and
   auth type/destination; it never returns tokens or ciphertext and can be read
@@ -563,7 +568,9 @@ historical native transport evidence.
 `POST /v1/agents/sessions/{session_id}/events` accepts `agent.session.input.message`
 with ordered user `input_text` content and [qualified image content](message-input.md), `agent.session.input.cancel` and
 `agent.session.input.tool_result`. Successful atomic
-admission returns 204, as consumed by the official `events.create` method. A retry
+admission returns 202 with no body, as observed from the official service.
+An empty event array is an authenticated no-op: it creates no Turn or Item and
+does not reserve an execution retry key. A retry
 key identifies the entire ordered request; conflict does not partially admit it.
 Messages start queued work or steer the active Turn. Individual input messages
 remain distinct Items even when their text shares one native prompt.

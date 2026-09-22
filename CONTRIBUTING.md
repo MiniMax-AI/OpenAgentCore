@@ -113,7 +113,11 @@ databases, credentials and migrations. The product uses Core exclusively; it has
   with a synthetic model does not constitute live model validation. Keep provider
   credentials in private test configuration, outside source, logs and task records.
   Record unspecified or unverified behavior explicitly; never invent official
-  semantics. Track partial
+  semantics. When current documentation adds operations or fields absent from the
+  fixed baseline, queue a protocol upgrade instead of silently implementing a new
+  version. Owned-resource live probes can qualify status codes and wire details
+  left unspecified by the SDK; retain request evidence and distinguish observations
+  from guaranteed or fully covered behavior. Track partial
   coverage in `contracts/agents-api/README.md` until the complete target is verified.
   Reconcile current coverage summaries with merged routes and recorded acceptance;
   distinguish accepted profiles, partial implementation, missing operations and

@@ -73,10 +73,12 @@ and exact hosted query/concurrent-page semantics remain separate gaps.
 
 Required name is trimmed to 1–256 UTF-8 bytes. Required `auth` accepts
 `static_bearer` or the [OAuth variant](oauth-credentials.md). Static auth requires an HTTPS `mcp_server_url` and a string `token`. The token is
-preserved as opaque data, including whitespace or an empty string. This does not
+preserved as opaque, nonempty data; whitespace is not trimmed. An explicitly
+empty token is rejected before storage or replacement. This does not
 verify that it will authenticate to a destination. The local URL profile excludes
 userinfo and fragments, preserves queries and performs no DNS or HTTP request.
-Exact hosted empty-token and URL normalization rules remain unverified.
+Official empty-token create/update rejection was observed directly. Other hosted
+URL normalization rules remain unverified.
 
 The response contains `id`, `vault_id`, `name`, `object: vault.credential`,
 `created_at`, `updated_at` and `auth`. Static auth contains only `type` and
