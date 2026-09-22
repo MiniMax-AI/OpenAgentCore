@@ -1,6 +1,6 @@
 # Vault credential storage
 
-The standalone service supports static-bearer Credential creation, token replacement,
+The standalone service supports static-bearer and OAuth Credential creation, token replacement,
 deletion and safe metadata retrieval through the pinned official SDK. It stores tokens as authenticated
 ciphertext in its own PostgreSQL database. There is no product-service dependency,
 public secret-read endpoint. Resource creation, replacement and retrieval do not contact the
@@ -72,7 +72,7 @@ archived fixtures verify filtering, not a public archive operation. Archive beha
 and exact hosted query/concurrent-page semantics remain separate gaps.
 
 Required name is trimmed to 1–256 UTF-8 bytes. Required `auth` accepts
-`static_bearer`, an HTTPS `mcp_server_url` and a string `token`. The token is
+`static_bearer` or the [OAuth variant](oauth-credentials.md). Static auth requires an HTTPS `mcp_server_url` and a string `token`. The token is
 preserved as opaque data, including whitespace or an empty string. This does not
 verify that it will authenticate to a destination. The local URL profile excludes
 userinfo and fragments, preserves queries and performs no DNS or HTTP request.
@@ -95,8 +95,9 @@ authentication. Names are public mutable metadata and are not part of this bindi
 Resource SQL reads select no secret ciphertext. The key and request token exist in
 trusted service memory; this protects stored secrets, not a compromised service host.
 
-Credential archive behavior, OAuth refresh, restricted-key scopes and revocation
-semantics remain separate gaps. The foreign key preserves Vault ownership and
+See [OAuth credentials](oauth-credentials.md) for grant storage, dispatch-time refresh,
+replacement and provider-revocation boundaries. Credential archive behavior,
+restricted-key scopes and storage-key rotation remain separate gaps. The foreign key preserves Vault ownership and
 atomically removes all dependent Credentials when their Vault is deleted. The full
 protocol target is unchanged.
 
@@ -125,7 +126,7 @@ Trusted service-side Codex and Claude SDK support `environment:none`; Codex also
 supports the documented `self_hosted` combination. The daemon must advertise both
 `mcp_http_tools` and `mcp_http_bearer_auth`. The usual
 [MCP profile limits](README.md#http-mcp-execution) still apply. Without an explicit
-`credential_id`, one exact-URL static credential among attached Vaults is selected;
+`credential_id`, one exact-URL static or OAuth credential among attached Vaults is selected;
 zero matches remains anonymous and multiple matches fail. A foreign, missing,
 unattached or wrong-destination reference returns the same local 404 before Session
 creation. Saving a reference on an Agent does not authorize it for a Session.
@@ -168,8 +169,9 @@ an already-resolved or running request may still hold the previous token. Updati
 this resource performs no MCP call, changes no server-side token independently,
 and provides no in-flight revocation, hot reload or cancellation. Coordinate the
 destination's token change operationally. Replacing this token does not rotate the
-storage encryption key or reset its encryption budget. OAuth replacement and exact
-hosted overlapping-update, replay and timestamp semantics remain unverified.
+storage encryption key or reset its encryption budget. OAuth partial replacement
+is described in [OAuth credentials](oauth-credentials.md). Exact hosted
+overlapping-update, replay and timestamp semantics remain unverified.
 
 ## Delete a stored credential
 

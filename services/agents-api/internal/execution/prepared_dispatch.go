@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
@@ -53,16 +54,19 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, tenantID, sessionI
 	if err != nil {
 		return run, err
 	}
-	var messages []string
+	var messages proto.MessageInput
 	for _, input := range run.Reservation.Inputs {
 		if input.Kind != "message" {
 			return run, store.ErrInvalidInput
 		}
-		text, err := messageText(input.Payload)
+		text, err := messageInput(input.Payload)
 		if err != nil {
 			return run, err
 		}
-		messages = append(messages, text)
+		messages = append(messages, text...)
+	}
+	if err := d.messageInputSupport(peer, session.Engine, snapshot, messages); err != nil {
+		return run, err
 	}
 	if err := d.configurePreparedEnvironment(session, environment, bound.Device, &req); err != nil {
 		return run, err
@@ -79,7 +83,15 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, tenantID, sessionI
 	if err != nil || run.Reservation.State != store.EnvironmentInputPending {
 		return run, err
 	}
-	run.Reservation, err = d.Store.PromoteEnvironmentInput(owner, tenantID, sessionID, reservationID)
+	if err := d.messageInputSupport(peer, session.Engine, snapshot, messages); err != nil {
+		return run, err
+	}
+	promoted, err := d.Store.PromoteEnvironmentInput(owner, tenantID, sessionID, reservationID)
+	if errors.Is(err, store.ErrTurnConflict) {
+		// A rejected claim leaves the reservation pending for a later attempt.
+		return run, err
+	}
+	run.Reservation = promoted
 	if err != nil || run.Reservation.State != store.EnvironmentInputAdmitted {
 		return run, err
 	}
@@ -87,7 +99,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, tenantID, sessionI
 		return run, nil
 	}
 	req.RunID = run.Reservation.Receipts[0].TurnID
-	req.Prompt = strings.Join(messages, "\n\n")
+	req.Input = messages
 	through := run.Reservation.Receipts[len(run.Reservation.Receipts)-1].Sequence
 	result, status := d.deliver(owner, tenantID, sessionID, peer, req, through, prepared)
 	result, status = d.captureCompletedArtifacts(owner, peer, session, environment, bound.Device, req.RunID, result, status)

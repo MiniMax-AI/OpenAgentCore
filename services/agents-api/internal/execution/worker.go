@@ -37,6 +37,18 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher) (*Worker, error) {
 		_ = lease.Close(context.Background())
 		return nil, err
 	}
+	var deployment *store.RuntimeDeployment
+	if worker.runtimes != nil {
+		config := worker.runtimes.config
+		deployment = &store.RuntimeDeployment{InstallationID: config.InstallationID, BackendFingerprint: config.BackendFingerprint, Maintenance: config.Maintenance}
+	}
+	if err := owned.Store.ConfigureRuntimeDeployment(ctx, deployment); err != nil {
+		if worker.runtimes != nil {
+			worker.runtimes.stop()
+		}
+		_ = lease.Close(context.Background())
+		return nil, err
+	}
 	if err := owned.Store.ReconcileEnvironmentConnections(ctx); err != nil {
 		if worker.runtimes != nil {
 			worker.runtimes.stop()
@@ -62,14 +74,14 @@ func (w *Worker) SubmitInputs(ctx context.Context, tenant, session, key string, 
 	if err != nil {
 		return nil, err
 	}
+	if err := w.dispatcher.validateEngineInputs(value.Engine, value.Configuration, inputs); err != nil {
+		return nil, err
+	}
 	if preparedEnvironmentConfiguration(value.Configuration) {
 		return w.submitEnvironmentInputs(ctx, value, key, inputs)
 	}
 	if !w.dispatcher.canAdmitInputs(value.Engine, value.Configuration) {
 		return nil, store.ErrInvalidInput
-	}
-	if err := w.dispatcher.validateEngineInputs(value.Engine, inputs); err != nil {
-		return nil, err
 	}
 	return w.admission.SubmitInputs(ctx, tenant, session, key, inputs)
 }

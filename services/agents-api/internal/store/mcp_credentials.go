@@ -72,7 +72,7 @@ func (s *Store) ResolveMCPCredentials(ctx context.Context, tenantID string, vaul
 				return nil, ErrNotFound
 			}
 		}
-		rows, err := s.queries.FindMCPStaticCredentials(ctx, sqlc.FindMCPStaticCredentialsParams{
+		rows, err := s.queries.FindMCPCredentials(ctx, sqlc.FindMCPCredentialsParams{
 			TenantID: tenant, VaultIds: vaults, McpServerUrl: request.ServerURL, CredentialID: id,
 		})
 		if err != nil {
@@ -111,8 +111,20 @@ func (s *Store) MCPBearerToken(ctx context.Context, tenantID string, vaultIDs []
 		return "", ErrNotFound
 	}
 	id, err := parseID(binding.CredentialID)
-	if err != nil || binding.AuthType != "static_bearer" || binding.ServerURL == "" {
+	if err != nil || (binding.AuthType != "static_bearer" && binding.AuthType != "mcp_oauth") || binding.ServerURL == "" {
 		return "", ErrNotFound
+	}
+	if binding.AuthType == "mcp_oauth" {
+		attached := false
+		for _, candidate := range vaults {
+			if candidate == vault {
+				attached = true
+			}
+		}
+		if !attached {
+			return "", ErrNotFound
+		}
+		return s.oauthBearerToken(ctx, tenantID, binding)
 	}
 	ciphertext, err := s.queries.GetMCPStaticCredentialCiphertext(ctx, sqlc.GetMCPStaticCredentialCiphertextParams{
 		TenantID: tenant, VaultIds: vaults, VaultID: vault, CredentialID: id, McpServerUrl: binding.ServerURL,

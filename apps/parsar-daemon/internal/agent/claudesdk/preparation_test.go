@@ -63,7 +63,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 	if err := json.Unmarshal(raw, &frozen); err != nil {
 		t.Fatal(err)
 	}
-	if frozen.Model != "fixture" || frozen.Resume != "native-session" || frozen.Workspace == nil || frozen.Prompt != "" {
+	if frozen.Model != "fixture" || frozen.Resume != "native-session" || frozen.Workspace == nil || len(frozen.Input) != 0 {
 		t.Fatal("configuration-only request was not retained")
 	}
 	config.Env[0] = "ANTHROPIC_AUTH_TOKEN=changed"
@@ -73,7 +73,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 	req.AgentSessionID = "changed"
 	out := make(chan proto.Envelope, 16)
 	operation, stopOperation := context.WithCancel(ctx)
-	s, err := p.Start(operation, "actual-run", "hello", out)
+	s, err := p.Start(operation, "actual-run", proto.TextInput("hello"), out)
 	stopOperation()
 	if err != nil {
 		t.Fatal(err)
@@ -84,7 +84,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 	if err := p.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.Start(ctx, "duplicate", "hello", make(chan proto.Envelope, 8)); err == nil {
+	if _, err := p.Start(ctx, "duplicate", proto.TextInput("hello"), make(chan proto.Envelope, 8)); err == nil {
 		t.Fatal("duplicate Start was accepted")
 	}
 	var done proto.DonePayload
@@ -115,11 +115,11 @@ func TestPreparationRejectsInputAndUnavailableProfilesBeforeLaunch(t *testing.T)
 			case "run":
 				req.RunID = "unexpected"
 			case "prompt":
-				req.Prompt = "unexpected"
+				req.Input = proto.TextInput("unexpected")
 			case "conversation":
 				req.ConversationID = "product"
 			case "attachments":
-				req.Attachments = []proto.PromptAttachment{{Kind: "image"}}
+				req.Input = proto.MessageInput{{Content: []proto.InputContent{{Type: "input_image"}}}}
 			case "authoring":
 				req.WorkspaceAuthoring = true
 			case "subagents":
@@ -179,7 +179,7 @@ func TestPreparationFailureAndUnusedRelease(t *testing.T) {
 					prompt = "hello"
 					cancel()
 				}
-				_, startErr := p.Start(operation, "run", prompt, make(chan proto.Envelope, 8))
+				_, startErr := p.Start(operation, "run", proto.TextInput(prompt), make(chan proto.Envelope, 8))
 				cancel()
 				if startErr == nil {
 					t.Fatal("invalid or cancelled Start succeeded")
@@ -193,7 +193,7 @@ func TestPreparationFailureAndUnusedRelease(t *testing.T) {
 			case <-time.After(5 * time.Second):
 				t.Fatal("unused process was not settled")
 			}
-			if _, err := p.Start(t.Context(), "late", "hello", make(chan proto.Envelope, 8)); err == nil {
+			if _, err := p.Start(t.Context(), "late", proto.TextInput("hello"), make(chan proto.Envelope, 8)); err == nil {
 				t.Fatal("released preparation was reusable")
 			}
 			if got := p.CancellationOutcome(); !reflect.DeepEqual(got, proto.DonePayload{}) {
@@ -215,7 +215,7 @@ func TestPreparedCancellationKeepsOwnershipUntilOutputDrain(t *testing.T) {
 	defer p.Cancel(context.Background())
 	out := make(chan proto.Envelope)
 	operation, stopOperation := context.WithCancel(owner)
-	if _, err := p.Start(operation, "run", "hello", out); err != nil {
+	if _, err := p.Start(operation, "run", proto.TextInput("hello"), out); err != nil {
 		t.Fatal(err)
 	}
 	stopOperation()
@@ -259,7 +259,10 @@ func TestPreparedStartRacesCloseAndCancellation(t *testing.T) {
 			var startErr error
 			var wg sync.WaitGroup
 			wg.Add(2)
-			go func() { defer wg.Done(); running, startErr = p.Start(t.Context(), "run", "hello", out) }()
+			go func() {
+				defer wg.Done()
+				running, startErr = p.Start(t.Context(), "run", proto.TextInput("hello"), out)
+			}()
 			go func() {
 				defer wg.Done()
 				if cancelResource {
@@ -303,7 +306,7 @@ func TestPreparedConcurrentStartTransfersOnlyOnce(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			out := make(chan proto.Envelope, 16)
-			_, err := p.Start(t.Context(), "run", "hello", out)
+			_, err := p.Start(t.Context(), "run", proto.TextInput("hello"), out)
 			results <- err == nil
 			if err == nil {
 				for event := range out {

@@ -23,7 +23,7 @@ type controlledPreparation struct {
 	mu        sync.Mutex
 	session   agent.Session
 	starts    atomic.Int32
-	start     func(context.Context, string, string, chan<- proto.Envelope) (agent.Session, error)
+	start     func(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (agent.Session, error)
 	closeHook func()
 }
 
@@ -36,7 +36,7 @@ func (p *controlledPreparation) Close() error {
 	})
 	return nil
 }
-func (p *controlledPreparation) Start(ctx context.Context, id, prompt string, out chan<- proto.Envelope) (agent.Session, error) {
+func (p *controlledPreparation) Start(ctx context.Context, id string, prompt proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 	p.starts.Add(1)
 	session, err := p.start(ctx, id, prompt, out)
 	if session != nil {
@@ -165,7 +165,7 @@ func TestPreparationReleaseDuringBlockedFactory(t *testing.T) {
 	p := &controlledPreparation{closed: make(chan struct{})}
 	entered, allowReturn := make(chan context.Context, 1), make(chan struct{})
 	r := preparationRouter(t, sender, time.Minute, func(ctx context.Context, req proto.PromptRequestPayload) (agent.Prepared, error) {
-		if req.RunID != "" || req.Prompt != "" {
+		if req.RunID != "" || len(req.Input) != 0 {
 			t.Error("run input reached preparation")
 		}
 		entered <- ctx
@@ -208,8 +208,8 @@ func TestPreparationSingleTransferAndReleaseDoesNotCancelRun(t *testing.T) {
 	sender := &recSender{}
 	gotSession := make(chan *fakeSession, 1)
 	p := &controlledPreparation{closed: make(chan struct{})}
-	p.start = func(ctx context.Context, id, prompt string, out chan<- proto.Envelope) (agent.Session, error) {
-		if id != "real-run" || prompt != "actual input" {
+	p.start = func(ctx context.Context, id string, prompt proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+		if id != "real-run" || *prompt[0].Content[0].Text != "actual input" {
 			t.Error("start identity or prompt changed")
 		}
 		s := &fakeSession{ctx: ctx, out: out, closeOutOnCancel: true}
@@ -225,7 +225,7 @@ func TestPreparationSingleTransferAndReleaseDoesNotCancelRun(t *testing.T) {
 	if err := r.Handle(t.Context(), prepare); err != nil {
 		t.Fatal(err)
 	}
-	start := mustEnv(t, proto.TypeExecutionStart, "request", proto.ExecutionStartPayload{Handle: ready.Handle, RunID: "real-run", Prompt: "actual input"})
+	start := mustEnv(t, proto.TypeExecutionStart, "request", proto.ExecutionStartPayload{Handle: ready.Handle, RunID: "real-run", Input: proto.TextInput("actual input")})
 	if err := r.Handle(t.Context(), start); err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +262,7 @@ func TestPreparationCancelDuringStartClosesLateSession(t *testing.T) {
 	entered, cancelEntered, allowReturn := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	lateSession := make(chan *fakeSession, 1)
 	p := &cancellationPreparation{controlledPreparation: &controlledPreparation{closed: make(chan struct{})}}
-	p.start = func(_ context.Context, _, _ string, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 		close(entered)
 		<-allowReturn
 		s := &fakeSession{out: out, closeOutOnCancel: true}
@@ -276,7 +276,7 @@ func TestPreparationCancelDuringStartClosesLateSession(t *testing.T) {
 	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
 	_ = r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "request", preparationRequest()))
 	ready := waitPreparationStatus(t, sender, "request", "ready", "")
-	_ = r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionStart, "request", proto.ExecutionStartPayload{Handle: ready.Handle, RunID: "real-run", Prompt: "input"}))
+	_ = r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionStart, "request", proto.ExecutionStartPayload{Handle: ready.Handle, RunID: "real-run", Input: proto.TextInput("input")}))
 	<-entered
 	if err := r.Handle(t.Context(), mustEnv(t, proto.TypePromptCancel, "real-run", proto.PromptCancelPayload{DeliveryID: "cancel"})); err != nil {
 		t.Fatal(err)
@@ -333,7 +333,7 @@ func TestPreparationCapacityAndConnectionOwnership(t *testing.T) {
 		t.Error("unexpected new native resource")
 		return nil, errors.New("unexpected")
 	})
-	if err := other.Handle(t.Context(), mustEnv(t, proto.TypeExecutionStart, "0", proto.ExecutionStartPayload{Handle: handles[0], RunID: "run", Prompt: "input"})); err == nil {
+	if err := other.Handle(t.Context(), mustEnv(t, proto.TypeExecutionStart, "0", proto.ExecutionStartPayload{Handle: handles[0], RunID: "run", Input: proto.TextInput("input")})); err == nil {
 		t.Fatal("another connection consumed handle")
 	}
 }
@@ -356,7 +356,7 @@ func TestPreparationExpiryAndOldHandleCannotStartReplacement(t *testing.T) {
 	if next.Handle == old.Handle || next.ExpiresAt <= old.ExpiresAt {
 		t.Fatal("replacement reused expired identity")
 	}
-	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionStart, "request", proto.ExecutionStartPayload{Handle: old.Handle, RunID: "late", Prompt: "late"})); err == nil {
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionStart, "request", proto.ExecutionStartPayload{Handle: old.Handle, RunID: "late", Input: proto.TextInput("late")})); err == nil {
 		t.Fatal("old handle started replacement")
 	}
 }
@@ -428,11 +428,13 @@ func TestPreparationCapacityIncludesClosingResources(t *testing.T) {
 
 func TestPreparationRejectsInputAndProductConfiguration(t *testing.T) {
 	for name, change := range map[string]func(*proto.PromptRequestPayload){
-		"run":                 func(p *proto.PromptRequestPayload) { p.RunID = "run" },
-		"input":               func(p *proto.PromptRequestPayload) { p.Prompt = "input" },
-		"conversation":        func(p *proto.PromptRequestPayload) { p.ConversationID = "product" },
-		"authoring":           func(p *proto.PromptRequestPayload) { p.WorkspaceAuthoring = true },
-		"attachment":          func(p *proto.PromptRequestPayload) { p.Attachments = []proto.PromptAttachment{{Kind: "image"}} },
+		"run":          func(p *proto.PromptRequestPayload) { p.RunID = "run" },
+		"input":        func(p *proto.PromptRequestPayload) { p.Input = proto.TextInput("input") },
+		"conversation": func(p *proto.PromptRequestPayload) { p.ConversationID = "product" },
+		"authoring":    func(p *proto.PromptRequestPayload) { p.WorkspaceAuthoring = true },
+		"attachment": func(p *proto.PromptRequestPayload) {
+			p.Input = proto.MessageInput{{Content: []proto.InputContent{{Type: "input_image"}}}}
+		},
 		"missing environment": func(p *proto.PromptRequestPayload) { p.LocalEnvironment = nil },
 		"resume":              func(p *proto.PromptRequestPayload) { p.StrictResume = false },
 		"release":             func(p *proto.PromptRequestPayload) { p.ReleaseOnCompletion = false },

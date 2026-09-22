@@ -13,7 +13,7 @@ import (
 func TestWorkspaceDirectoryRetainsEnvironmentAndTransferredOwner(t *testing.T) {
 	sender := &recSender{}
 	p := &controlledPreparation{closed: make(chan struct{})}
-	p.start = func(ctx context.Context, _ string, _ string, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(ctx context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 		return &fakeSession{out: out, ctx: ctx, closeOutOnCancel: true}, nil
 	}
 	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
@@ -33,7 +33,7 @@ func TestWorkspaceDirectoryRetainsEnvironmentAndTransferredOwner(t *testing.T) {
 			t.Fatal(got)
 		}
 		if phase == "idle" {
-			_ = r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionStart, "prepare", proto.ExecutionStartPayload{Handle: ready.Handle, RunID: "run", Prompt: "start"}))
+			_ = r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionStart, "prepare", proto.ExecutionStartPayload{Handle: ready.Handle, RunID: "run", Input: proto.TextInput("start")}))
 			waitPreparationStatus(t, sender, "prepare", "started", "")
 			_ = r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceRead, "stale", request))
 			if got := waitWorkspaceRead(t, sender, "stale"); got.Outcome != "rejected" {

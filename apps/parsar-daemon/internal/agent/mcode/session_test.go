@@ -18,7 +18,7 @@ import (
 func testRequest(t *testing.T) proto.PromptRequestPayload {
 	t.Helper()
 	t.Setenv("PARSAR_HOME", t.TempDir())
-	return proto.PromptRequestPayload{RunID: "run-1", ConversationID: "conversation-1", AgentStateKey: "conversation-1/agent-1/mcode", Prompt: "Hello", AgentOptions: map[string]any{
+	return proto.PromptRequestPayload{RunID: "run-1", ConversationID: "conversation-1", AgentStateKey: "conversation-1/agent-1/mcode", Input: proto.TextInput("Hello"), AgentOptions: map[string]any{
 		"model": "fixture", "mcode_provider": map[string]any{"kind": "custom", "enabled": true}, "system_prompt": "Current instructions",
 	}}
 }

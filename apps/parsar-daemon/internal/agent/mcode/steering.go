@@ -18,7 +18,8 @@ func (s *Session) Steer(ctx context.Context, input proto.PromptSteerPayload) err
 
 // Native acceptance belongs to the active ACP Turn; it does not promise model consumption.
 func (s *Session) SteerWithReceipt(ctx context.Context, input proto.PromptSteerPayload, written func()) error {
-	if strings.TrimSpace(input.InputID) == "" || strings.TrimSpace(input.Text) == "" {
+	text, err := input.Input.TextOnly()
+	if strings.TrimSpace(input.InputID) == "" || err != nil {
 		return agent.ErrSteeringRejected
 	}
 	s.mu.Lock()
@@ -32,7 +33,7 @@ func (s *Session) SteerWithReceipt(ctx context.Context, input proto.PromptSteerP
 	}
 	id, response := s.reserveResponse()
 	defer s.removeResponse(id)
-	raw, err := json.Marshal(map[string]string{"sessionId": native, "text": input.Text, "clientRequestId": input.InputID})
+	raw, err := json.Marshal(map[string]string{"sessionId": native, "text": text, "clientRequestId": input.InputID})
 	if err != nil {
 		return err
 	}

@@ -75,6 +75,10 @@ variants work; **missing** means no implementation; **unverified** means behavio
 has not been shown to match upstream. Do not convert the route count into a
 compatibility percentage or treat a Docker result as E2B qualification.
 
+The [execution and tools matrix](execution-tools.md) records message input,
+structured output, tool configuration/results, discovery and required-action
+recovery by operation, with exact qualified profiles and remaining gaps.
+
 Paths below are SDK resource paths beneath `client.beta.agents`, except Skills
 and Versions under `client.skills`. Method names use the Python SDK. Vault HTTP
 paths start at `/vaults`, not `/agents/vaults`.
@@ -96,7 +100,7 @@ paths start at `/vaults`, not `/agents/vaults`.
 | environments.files | create, list | [Bounded live listing and inline/source-file creation](environment-files.md) on qualified Docker workspaces; [user-managed enrollment](user-managed-runtime-v1.md) reuses the local implementation with separate real public acceptance. Full listing, overwrite and error semantics remain partial |
 | environments.templates | create, retrieve, update, list, delete | [Reusable network, files, env/setup/packages, inline/referenced Skills and Session snapshots](environment-templates.md); other initialization and full semantics remain gaps |
 | vaults | create, retrieve, list, delete | Create/retrieve/list/delete with independent tenant persistence, stored status filtering, atomic Credential cascade and frozen Session attachments; archive semantics and full hosted lifecycle parity remain missing |
-| vaults.credentials | create, retrieve, update, list, delete | Static-bearer create/retrieve/list/token replacement/deletion with scoped encrypted storage; Session attachment and exact-URL HTTPS MCP binding; OAuth, archive semantics and full hosted lifecycle parity remain missing |
+| vaults.credentials | create, retrieve, update, list, delete | Static-bearer and OAuth create/retrieve/list/replacement/deletion with scoped encrypted storage and dispatch-time refresh; Session attachment and exact-URL HTTPS MCP binding; archive semantics and full hosted lifecycle parity remain missing |
 
 ## Core extension inventory
 
@@ -174,9 +178,9 @@ user-managed enrollment remain outside this qualification.
 | --- | --- |
 | Subagents / multi_agent | Six reads and same-child recovery have three-harness Docker evidence; optional native operations, live child progress, full lifecycle/interactions and tool combinations remain explicit gaps |
 | Environment Templates | Unsupported restricted hostname forms, unqualified installation overrides/null network and exact hosted errors remain gaps. CRUD/list, files, env/setup/system/npm/Python, inline/referenced Skills, Plugins, workspace capability directories and Session references have recorded coverage. Environment Plugin MCP transport and placement limits are [listed separately](environment-templates.md#environment-origin-mcp-plugins) |
-| Input and configuration | Non-text initial input, broader content/configuration unions and reasoning/verbosity combinations; [structured output](structured-output.md) has a qualified Claude function profile, with other combinations remaining gaps |
-| Tools and interactions | Deferred functions, other tool types, effective tool-set enforcement and result/cancel publication ordering; MiniMax public functions and service-origin MCP remain unsupported |
-| Vault and Credentials | OAuth/refresh, archive semantics, revocation/concurrent mutation and exact hosted selection/error behavior; static bearer CRUD/token replacement is already present |
+| Input and configuration | Non-text initial input, broader content/configuration unions and reasoning/verbosity combinations; [structured output](structured-output.md) has qualified Claude function profiles on none and Core-managed Docker openai_hosted, with other combinations remaining gaps |
+| Tools and interactions | [Deferred discovery qualification](tool-search.md), other tool types, effective tool-set enforcement and result/cancel publication ordering; MiniMax public functions and service-origin MCP remain unsupported |
+| Vault and Credentials | Archive semantics, in-flight token withdrawal and exact hosted selection/error behavior; static/OAuth CRUD, replacement and scoped dispatch-time refresh are implemented (see credential guide for qualification) |
 | Existing resources | Full Item/SSE/Usage variants, omitted/null/default/error semantics, pagination and overlapping lifecycle behavior beyond recorded cases |
 
 An implementation gap and an unknown upstream behavior require different follow-up
@@ -187,8 +191,8 @@ including further deployment qualification; this inventory describes merged beha
 ## Public semantics
 
 - Credentials use `POST /vaults/{vault_id}/credentials` and
-  `GET /vaults/{vault_id}/credentials/{credential_id}`. The initial profile accepts
-  only `static_bearer` with required string token and HTTPS destination, plus a
+  `GET /vaults/{vault_id}/credentials/{credential_id}`. The static profile accepts
+  `static_bearer` with required string token and HTTPS destination, plus a
   required name trimmed to 1–256 UTF-8 bytes. Tokens remain opaque, including empty
   strings; exact hosted token validation is unverified. The local URL profile
   excludes userinfo/fragments and preserves queries without normalization or network
@@ -196,7 +200,9 @@ including further deployment qualification; this inventory describes merged beha
   auth type/destination; it never returns tokens or ciphertext and can be read
   without the encryption key. Missing encryption configuration locally rejects
   creation/replacement with 503. Attached Sessions can use static credentials for
-  exact-URL HTTPS MCP; OAuth, storage-key rotation, archive behavior and key scopes remain gaps. See the [credential storage guide](../../services/agents-api/credentials.md)
+  exact-URL HTTPS MCP. OAuth grants use the same binding plus
+  [scoped refresh and replacement](../../services/agents-api/oauth-credentials.md);
+  storage-key rotation, archive behavior and key scopes remain gaps. See the [credential storage guide](../../services/agents-api/credentials.md)
   for encryption and operational limits; this does not establish complete Credential
   or hosted error/retry compatibility.
 - `GET /vaults/{vault_id}/credentials` lists only safe metadata, with parent and
@@ -215,8 +221,9 @@ including further deployment qualification; this inventory describes merged beha
   Ciphertext/update time change atomically within the same tenant/Vault/ID/type/URL;
   name, destination, identity, creation time and Session bindings are unchanged. No
   old-token decryption or MCP call occurs. Subsequent dispatch reads use the committed
-  replacement; already-resolved requests may retain the old token. OAuth replacement,
-  storage-key rotation, hot reload/revocation and exact hosted concurrent-update,
+  replacement; already-resolved requests may retain the old token. OAuth partial
+  replacement follows its pinned union and authenticates the stored grant.
+  Storage-key rotation, hot reload/revocation and exact hosted concurrent-update,
   timestamp and retry semantics remain gaps.
 - `DELETE /vaults/{vault_id}/credentials/{credential_id}` returns only `id`,
   `deleted: true` and `object: vault.credential.deleted`. It removes one owned row
@@ -259,6 +266,20 @@ including further deployment qualification; this inventory describes merged beha
   multi-agent settings default to six concurrent subagents. Function defer-loading
   defaults to false and programmatic tool calling to true. Saving these values
   does not itself admit a native execution. Session references are admitted separately.
+- [Explicit disabled tools](tool-policy.md) can be saved, used inline or resolved from saved Agents:
+  `web_search.mode=disabled` and `programmatic_tool_calling.enabled=false`. Search
+  responses include `context_size=medium` for omitted/null size, nullable domains
+  and location; an empty domain list stays empty. Only explicit disabled mode is
+  qualified; omitted/null mode and enabled search remain gaps. Sessions reject
+  enabled programmatic execution, including the default true on a supplied PTC
+  declaration. An omitted PTC declaration preserves native behavior: this is an
+  approved difference from the official default-on behavior, not full compatibility.
+  Core carries the frozen disabled intent through the common Runtime contract;
+  native translation and inventory restrictions stay in adapters. Codex checks
+  managed requirements before new/resumed execution; conflicting forced features
+  reject before model input. Claude and MiniMax use their restricted tool profiles.
+  No independent executor or model/tool loop is introduced. Resource defaults and
+  hosted error parity beyond this supported subset remain unverified.
 - `POST /agents/{agent_id}` updates only supplied fields. Omitted fields remain
   unchanged; metadata replaces all pairs and null/empty clears it. Name/instructions
   null clears them. Concurrent updates preserve unrelated fields. Existing Session
@@ -309,12 +330,12 @@ including further deployment qualification; this inventory describes merged beha
   headers. Omitted/null `allowed_tools` is unrestricted; `[]` denies all tools.
   Session `vault_ids` attaches tenant-owned Vaults. Explicit `credential_id` must
   belong to an attached Vault and match the exact HTTPS URL; omission/null selects
-  one matching static credential, zero stays anonymous and ambiguity fails. Private
+  one matching static or OAuth credential, zero stays anonymous and ambiguity fails. Private
   immutable selections do not populate the public credential field. Scope is
   rechecked before dispatch-only decryption; authenticated execution requires the
   separate bearer capability and never downgrades on failure. Exact URL/selection
   timing, implicit response population and hosted errors remain local or unverified.
-  Other MCP variants and web-search remain gaps, not changes to the pinned target
+  Other MCP variants and enabled web-search remain gaps, not changes to the pinned target
   or claims of complete resource coverage.
 
 - Use `/agents/sessions` beneath the configured API base URL, bearer authentication
@@ -392,7 +413,7 @@ and cancellation. This does not close the remaining protocol/transport gaps.
 | Independent deployment | Source-free Core package and separate execution PostgreSQL ownership; Docker-hosted and user-managed Runtime colocate daemon, selected harness and workspace; Core owns Docker only; no Parsar dependency |
 | Saved Agents and Sessions | Saved Agent routes, immutable inline/referenced Session configuration, metadata updates, root-Agent filtering and scoped cursor pagination |
 | Public execution | Initial/later text, active input and cancellation through Codex, Claude Code or MiniMax Code; Codex/Claude additionally support qualified public functions; see profile limits below |
-| Pending function actions | Persisted calls/results/application receipts, `required_actions`, Session `requires_action`, Turn `waiting`, and live state snapshots; other interactions remain incomplete |
+| Required actions | Persisted function calls/results/application receipts and pending Environment connection actions; Session reads and live snapshots expose the two pinned variants. See the [operation matrix](execution-tools.md) for qualification and unresolved timing |
 | Public recovery and SSE | Persisted Turn/Items queries and partial Usage; live lifecycle/Item/text events, creation streaming and the official one-Turn tool-handler helper |
 | Execution ownership | Immutable Session engine/device, durable input receipts and database writer fencing; uncertain claimed work fails on restart, without blind replay |
 | Files and Artifacts | Bounded Environment listing and inline/file_id copies into qualified V1 workspaces; source-file lifecycle and immutable output capture/download/deletion; [Files limits](environment-files.md), [source limits](source-files.md) |
@@ -406,15 +427,16 @@ and cancellation. This does not close the remaining protocol/transport gaps.
 existing Sessions retain their immutable choice. `AGENTS_API_HARNESSES` explicitly
 adds installed deployment profiles without requiring a managed Provider. Model
 identity is independent.
-All three profiles require implicit reasoning, service tier `auto` and ordinary
-text output. Enabled `multi_agent` qualification is tracked separately in
+All three profiles require implicit reasoning and service tier `auto`. Ordinary
+text output is the baseline; [structured output](structured-output.md) has a
+separately qualified Claude profile. Enabled `multi_agent` qualification is tracked separately in
 [Subagents](subagents.md); other profiles continue to reject unsupported execution. Optional tools/configuration are qualified per
 operation and placement; native support is not public admission by itself.
 
 | Engine | Qualified placements and limits |
 | --- | --- |
 | `codex` (default) | Qualified `none` and Docker `openai_hosted`; public functions with ordered text/image results; service-origin HTTP MCP on `none` only; verbosity follows native policy |
-| `claude_sdk` | Qualified `none` and Docker `openai_hosted`; medium verbosity, object-root function schemas and text-only results; qualified anonymous/static-bearer service-origin HTTP MCP on `none` |
+| `claude_sdk` | Qualified `none` and Docker `openai_hosted`; medium verbosity, object-root function schemas and text or successful inline PNG/JPEG results; qualified anonymous/static-bearer service-origin HTTP MCP on `none` |
 | `mcode` | Qualified `none` text and Docker `openai_hosted`; medium verbosity; public functions/service-origin MCP, image input and complete public usage breakdown remain unsupported |
 
 All three profiles implement user-managed `self_hosted` enrollment at `/workspace`
@@ -462,8 +484,8 @@ errors, not successful placeholder resources. Add any provider or engine-specifi
 extension separately from upstream fields and document it here when implemented.
 
 `openapi.yaml` is our generated supported surface; it is not the full upstream
-specification. The shared Go wire types are in `v1`. Physical Session cleanup, non-text
-message input, broader structured-output combinations, broader options/tools, remaining Vault lifecycle,
+specification. The shared Go wire types are in `v1`. Physical Session cleanup, broader image
+message profiles, broader structured-output combinations, broader options/tools, remaining Vault lifecycle,
 Subagents and environment/provider resources remain incomplete. Reject unsupported
 requests explicitly; persisted saved configuration is not execution admission.
 
@@ -549,7 +571,7 @@ historical native transport evidence.
 ### Public execution admission
 
 `POST /v1/agents/sessions/{session_id}/events` accepts `agent.session.input.message`
-with user `input_text` content, `agent.session.input.cancel` and
+with ordered user `input_text` content and [qualified image content](message-input.md), `agent.session.input.cancel` and
 `agent.session.input.tool_result`. Successful atomic
 admission returns 204, as consumed by the official `events.create` method. A retry
 key identifies the entire ordered request; conflict does not partially admit it.
@@ -641,15 +663,18 @@ server validation define the supported alternatives.
 
 ### Public function configuration
 
-Inline `agent.tools` accepts non-deferred `function` definitions with the upstream
+Inline `agent.tools` accepts `function` definitions with the upstream
 required name, description and JSON Schema parameter object. Missing
 `defer_loading` resolves to `false`; null and other types are rejected. Omitted,
 null and empty tool lists resolve to an empty list. The resolved tools are part of
 the immutable Session configuration and creation retry identity. Saved-Agent
-inheritance uses the same resolved tools. Deferred discovery, other tool kinds,
+inheritance uses the same resolved tools. The bounded [deferred discovery path](tool-search.md)
+adds type-only `tool_search` for its qualified profile. Other discovery combinations, other tool kinds,
 the native 64-definition cap and unique nonblank names of at most 512 bytes remain
-compatibility gaps. Claude SDK additionally requires object-root schemas and
-text-only results. Codex internal Goal/Skills/user-input/discovery semantics need
+compatibility gaps. Claude SDK additionally requires object-root schemas. It accepts text and
+successful inline PNG/JPEG function results on `none` and Docker `openai_hosted`;
+failed images, unqualified placements and remote references
+remain gaps. See [function image coverage](function-result-images.md). Codex internal Goal/Skills/user-input/discovery semantics need
 upstream evidence; their presence alone does not prove a tool-set mismatch.
 
 The worker selects a same-tenant host advertising `function_tools` for configured
@@ -705,10 +730,11 @@ tool invocation. Omitted, null and explicit medium reused the same creation
 identity. The tool data was synthetic; model responses were live. This does not
 establish non-default verbosity, tool-set enforcement or full protocol conformance.
 
-### Initial text at Session creation
+### Initial input at Session creation
 
 Session creation accepts the pinned string and user-message-array input
-forms. It shares text validation and admission with the events endpoint. The
+forms. It shares message validation and admission with the events endpoint,
+including the [qualified image profile](message-input.md). The
 Session and its initial work commit atomically; an identical
 creation retry never re-admits the input, including after later or terminal Turns.
 With `none`, this includes the first Turn and input Items. With `self_hosted`, it
@@ -720,7 +746,7 @@ configured engine must support admission before any initial work is persisted.
 
 Fixed SDK/raw HTTP and PostgreSQL tests cover the accepted forms, saved and inline
 configuration, ordering, tenant isolation, retries, rollback and persistence.
-Non-text input remains a gap. Empty arrays and blank text
+Image support is bounded as documented above. Empty arrays and blank text
 currently fail the shared message validator; exact upstream handling of these
 cases, local size limits and error details remains unverified. Swagger 2 cannot
 express the string/array union, so input is unconstrained with a type description.

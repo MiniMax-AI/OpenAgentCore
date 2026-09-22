@@ -24,7 +24,7 @@ test "$ANTHROPIC_AUTH_TOKEN" = selected-provider-fixture || exit 23
 test "$TMPDIR" != "$CLAUDE_CONFIG_DIR/tmp" || exit 24
 case "$1" in
   */runtime_check.js)
-    printf '%s\n' '{"type":"runtime_ready","protocol":1,"node":"fixture","sdk":"fixture","mcp":"fixture","native":"fixture","features":["workspace_tools","workspace_prepare"]}' ;;
+    printf '%s\n' '{"type":"runtime_ready","protocol":2,"node":"fixture","sdk":"fixture","mcp":"fixture","native":"fixture","features":["workspace_tools","workspace_prepare"]}' ;;
   *)
     IFS= read -r request
     printf '%s\n' '{"type":"prepared"}'

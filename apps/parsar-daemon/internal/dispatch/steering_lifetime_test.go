@@ -42,7 +42,7 @@ func TestDurableSteeringWaitsBeyondTransportDeadline(t *testing.T) {
 	if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "durable", proto.PromptRequestPayload{AgentKind: "codex", ReleaseOnCompletion: true})); err != nil {
 		t.Fatal(err)
 	}
-	input := proto.PromptSteerPayload{InputID: "extra", Text: "additional", DurableReceipt: true}
+	input := proto.PromptSteerPayload{InputID: "extra", Input: proto.TextInput("additional"), DurableReceipt: true}
 	env := mustEnv(t, proto.TypePromptSteer, "durable", input)
 	if err := handleSteeringAndWait(t, h, env); err != nil {
 		t.Fatal(err)
@@ -93,7 +93,7 @@ func TestDurableSteeringTransportTimeoutAndShutdown(t *testing.T) {
 			if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "run", proto.PromptRequestPayload{AgentKind: "codex", ReleaseOnCompletion: true})); err != nil {
 				t.Fatal(err)
 			}
-			if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "one", Text: "text", DurableReceipt: true})); err != nil {
+			if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "one", Input: proto.TextInput("text"), DurableReceipt: true})); err != nil {
 				t.Fatal(err)
 			}
 			if phase == "blocked-write" {
@@ -142,7 +142,7 @@ func TestDurableSteeringRequiresOptInAndAdapter(t *testing.T) {
 			if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "run", proto.PromptRequestPayload{AgentKind: "codex", ReleaseOnCompletion: !supported})); err != nil {
 				t.Fatal(err)
 			}
-			if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "one", Text: "text", DurableReceipt: true})); err != nil {
+			if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "one", Input: proto.TextInput("text"), DurableReceipt: true})); err != nil {
 				t.Fatal(err)
 			}
 			if ack := lastSteeringAck(t, h.sender, "run", "one"); ack.ErrorCode != "unsupported" {

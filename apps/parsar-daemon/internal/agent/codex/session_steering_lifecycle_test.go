@@ -26,7 +26,9 @@ func TestSteeringReceiptTimeoutAndCompletionKeepProcessAlive(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
 			done := make(chan error, 1)
-			go func() { done <- s.Steer(ctx, proto.PromptSteerPayload{InputID: "input", Text: "extra"}) }()
+			go func() {
+				done <- s.Steer(ctx, proto.PromptSteerPayload{InputID: "input", Input: proto.TextInput("extra")})
+			}()
 			var request JsonRpcRequest
 			if err := json.NewDecoder(server.FromClient).Decode(&request); err != nil {
 				t.Fatal(err)
@@ -117,13 +119,13 @@ func TestBlockedSteeringWriteEndsRunWithTerminalFrames(t *testing.T) {
 		}
 		ready <- nil
 	}()
-	go s.run(SessionPlan{Model: "synthetic"}, proto.PromptRequestPayload{Prompt: "first"})
+	go s.run(SessionPlan{Model: "synthetic"}, proto.PromptRequestPayload{Input: proto.TextInput("first")})
 	if err := <-ready; err != nil {
 		t.Fatal(err)
 	}
 	callCtx, callCancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer callCancel()
-	if err := s.Steer(callCtx, proto.PromptSteerPayload{InputID: "blocked", Text: "extra"}); err == nil {
+	if err := s.Steer(callCtx, proto.PromptSteerPayload{InputID: "blocked", Input: proto.TextInput("extra")}); err == nil {
 		t.Fatal("blocked write accepted")
 	}
 	if client.Alive() {

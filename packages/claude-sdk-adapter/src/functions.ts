@@ -8,7 +8,7 @@ import {
 export type FunctionCall = { id: string; name: string; arguments: Record<string, unknown> };
 export type FunctionHandler = (call: FunctionCall, signal: AbortSignal) => Promise<CallToolResult>;
 
-export function createFunctionServer(definitions: Tool[], invoke: FunctionHandler): McpSdkServerConfigWithInstance {
+export function createFunctionServer(definitions: (Tool & { deferLoading?: boolean })[], invoke: FunctionHandler): McpSdkServerConfigWithInstance {
   const tools = structuredClone(definitions);
   const names = new Set<string>();
   for (const tool of tools) {
@@ -17,7 +17,7 @@ export function createFunctionServer(definitions: Tool[], invoke: FunctionHandle
   }
   const instance = new McpServer({ name: "functions", version: "1.0.0" }, { capabilities: { tools: {} } });
   instance.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: tools.map(tool => ({ ...tool, _meta: { ...tool._meta, "anthropic/alwaysLoad": true } })),
+    tools: tools.map(({ deferLoading, ...tool }) => ({ ...tool, _meta: { ...tool._meta, "anthropic/alwaysLoad": !deferLoading } })),
   }));
   instance.server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     if (!names.has(request.params.name)) throw new McpError(ErrorCode.InvalidParams, "Unknown function.");

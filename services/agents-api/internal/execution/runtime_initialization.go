@@ -102,10 +102,10 @@ func (r *runtimeLifecycle) advanceInitialization(ctx context.Context) error {
 		var body []byte
 		file, body, err = r.store.ReadInitialEnvironmentFile(operation, owner.TenantID, owner.SessionID, active.next)
 		if err == nil {
-			err = installInitialFile(operation, r.config.Providers[owner.ProviderKey], runtimeReference(owner), file, body)
+			err = installInitialFile(operation, r.config.Provider, runtimeReference(owner), file, body)
 		}
 	} else {
-		err = runRuntimeSetup(operation, r.config.Providers[owner.ProviderKey], runtimeReference(owner), active.operations[active.next-active.files])
+		err = runRuntimeSetup(operation, r.config.Provider, runtimeReference(owner), active.operations[active.next-active.files])
 	}
 	if err != nil {
 		// Clearing the in-memory owner makes the next observation request cleanup,

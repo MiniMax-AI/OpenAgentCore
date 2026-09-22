@@ -55,7 +55,7 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 	if req, err = r.localWorkspace.Configure(req); err != nil {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
-	if req.RunID != "" || req.Prompt != "" || req.ConversationID != "" || req.WorkspaceAuthoring || len(req.Attachments) != 0 || req.EnvironmentID() == "" || strings.TrimSpace(req.AgentStateKey) == "" || !req.StrictResume || !req.ReleaseOnCompletion {
+	if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" || req.WorkspaceAuthoring || req.EnvironmentID() == "" || strings.TrimSpace(req.AgentStateKey) == "" || !req.StrictResume || !req.ReleaseOnCompletion {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
 	if validateExecutionEnvironment(req, caps) != nil || (len(req.FunctionTools) > 0 && !caps.FunctionTools) {
@@ -175,7 +175,7 @@ func (r *Router) handleExecutionRelease(_ context.Context, env proto.Envelope) e
 
 func (r *Router) releasePreparation(p *preparationState, state, code string, publish, retryHandoff bool) {
 	r.mu.Lock()
-	if r.closed {
+	if r.closed || r.suspension != nil {
 		r.mu.Unlock()
 		return
 	}
@@ -252,7 +252,7 @@ func (r *Router) publishPreparation(p *preparationState, status proto.Preparatio
 			return
 		}
 	}
-	if r.closed {
+	if r.closed || r.suspension != nil {
 		r.mu.Unlock()
 		return
 	}

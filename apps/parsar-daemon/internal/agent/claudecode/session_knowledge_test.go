@@ -15,7 +15,7 @@ func TestStartupLogsDoNotContainReferenceDocuments(t *testing.T) {
 	var output bytes.Buffer
 	const privateDocument = "PRIVATE-REFERENCE-9481"
 	_, err := newSession(t.Context(), proto.PromptRequestPayload{
-		RunID: "knowledge-log-check", WorkDir: t.TempDir(), Prompt: "Answer from the reference.",
+		RunID: "knowledge-log-check", WorkDir: t.TempDir(), Input: proto.TextInput("Answer from the reference."),
 		AgentOptions: map[string]any{"system_prompt": privateDocument},
 	}, make(chan proto.Envelope, 8), sessionConfig{
 		claudeBinary: filepath.Join(t.TempDir(), "missing-claude"),

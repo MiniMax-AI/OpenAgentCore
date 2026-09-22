@@ -38,6 +38,22 @@ test("official MCP client receives a stable lossless schema snapshot", { timeout
   });
 });
 
+test("MCP discovery preserves mixed eager and deferred loading without changing callbacks", { timeout: 5000 }, async t => {
+  const deferred = { ...definition(), deferLoading: true };
+  const eager = { ...definition(), name: "eager" };
+  const calls = [];
+  const client = await connect(t, [deferred, eager], async request => { calls.push(request); return {content:[]}; });
+  deferred.deferLoading = false;
+  const listed = (await client.listTools()).tools;
+  assert.equal(listed[0]._meta["anthropic/alwaysLoad"], false);
+  assert.equal(listed[1]._meta["anthropic/alwaysLoad"], true);
+  assert.deepEqual(listed[0].inputSchema, schema);
+  assert.equal("deferLoading" in listed[0], false);
+  await client.callTool(call("native-deferred"));
+  assert.equal(calls[0].id, "native-deferred");
+  assert.equal(calls[0].name, "lookup");
+});
+
 test("identical concurrent calls retain native identity and ordered success/error content", { timeout: 5000 }, async t => {
   const pending = new Map();
   let bothStarted;

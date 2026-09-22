@@ -89,7 +89,7 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
 		defer cancel()
 		id := uuid.NewString()
-		request := proto.PromptRequestPayload{RunID: id, AgentKind: "claude_sdk", Prompt: prompt, AgentStateKey: "registered-acceptance", AgentSessionID: resume, StrictResume: true, ReleaseOnCompletion: true, ObserveMessages: true, ObserveToolObservations: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, AgentOptions: map[string]any{"model": "MiniMax-M3", "system_prompt": nil}}
+		request := proto.PromptRequestPayload{RunID: id, AgentKind: "claude_sdk", Input: proto.TextInput(prompt), AgentStateKey: "registered-acceptance", AgentSessionID: resume, StrictResume: true, ReleaseOnCompletion: true, ObserveMessages: true, ObserveToolObservations: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, AgentOptions: map[string]any{"model": "MiniMax-M3", "system_prompt": nil}}
 		if callFunction {
 			request.FunctionTools = []proto.FunctionTool{{Name: "lookup", Description: "Return a verification value.", Parameters: json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}},"required":["id"],"additionalProperties":false}`)}}
 		}
@@ -133,7 +133,7 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 				if !callFunction || proof.FunctionCalls != 1 || call.Name != "lookup" {
 					t.Fatal("unexpected registered function call")
 				}
-				handle(proto.TypeFunctionResult, proto.FunctionResultPayload{CallID: call.CallID, DeliveryID: "result", Success: true, Content: []proto.FunctionResultContent{{Type: "input_text", Text: &nonce}}})
+				handle(proto.TypeFunctionResult, proto.FunctionResultPayload{CallID: call.CallID, DeliveryID: "result", Success: true, Content: []proto.InputContent{{Type: "input_text", Text: &nonce}}})
 			case proto.TypeInteractionDecisionAck:
 				var ack proto.InteractionDecisionAckPayload
 				if err := event.DecodePayload(&ack); err != nil {

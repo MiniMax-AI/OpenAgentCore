@@ -33,7 +33,7 @@ func TestSteeringUsesNativeActiveTurnAndReceipt(t *testing.T) {
 			s.onTurnStarted(json.RawMessage(`{"threadId":"native-thread","turn":{"id":"native-turn"}}`))
 			done := make(chan error, 1)
 			go func() {
-				done <- s.Steer(ctx, proto.PromptSteerPayload{InputID: "input-1", Text: "追加输入"})
+				done <- s.Steer(ctx, proto.PromptSteerPayload{InputID: "input-1", Input: proto.TextInput("追加输入")})
 			}()
 			var request struct {
 				ID     string          `json:"id"`
@@ -77,7 +77,9 @@ func TestSteeringDeadlineReleasesBlockedNativeWrite(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	done := make(chan error, 1)
-	go func() { done <- s.Steer(ctx, proto.PromptSteerPayload{InputID: "blocked", Text: "extra"}) }()
+	go func() {
+		done <- s.Steer(ctx, proto.PromptSteerPayload{InputID: "blocked", Input: proto.TextInput("extra")})
+	}()
 	// No reader drains the pipe, so the request never reaches its response wait.
 	select {
 	case err := <-done:
@@ -97,7 +99,7 @@ func TestSteeringDoesNotStartOrReviveTurns(t *testing.T) {
 	defer cancel()
 	s := &Session{cancelCtx: ctx}
 	s.setThreadID("native-thread")
-	input := proto.PromptSteerPayload{InputID: "input-1", Text: "extra"}
+	input := proto.PromptSteerPayload{InputID: "input-1", Input: proto.TextInput("extra")}
 	// A nil RPC client proves these states do not issue a request.
 	for _, notification := range []json.RawMessage{nil, json.RawMessage(`{"threadId":"other-thread","turn":{"id":"other-turn"}}`)} {
 		s.onTurnStarted(notification)

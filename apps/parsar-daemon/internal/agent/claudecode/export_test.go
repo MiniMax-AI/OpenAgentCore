@@ -78,10 +78,6 @@ type (
 	Envelope = proto.Envelope
 )
 
-func BuildUserMessageForTest(prompt string, attachments []proto.PromptAttachment) ([]byte, error) {
-	return buildUserMessageWithAttachments(prompt, attachments)
-}
-
 // BuildAskUserToolResultForTest exposes the daemon-side tool_result
 // builder so ask_test.go can lock in the JSON shape claude's stdin
 // expects.

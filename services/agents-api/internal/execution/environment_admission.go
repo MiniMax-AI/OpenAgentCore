@@ -43,6 +43,9 @@ func (w *Worker) validateEnvironmentAdmission(engine string, configuration json.
 }
 
 func (w *Worker) validateCreation(ctx context.Context, input store.CreateSessionInput) error {
+	if err := w.dispatcher.validateEngineInputs(input.Engine, input.Configuration, input.InitialInputs); err != nil {
+		return err
+	}
 	if preparedEnvironmentConfiguration(input.Configuration) {
 		if err := w.validateEnvironmentAdmission(input.Engine, input.Configuration); err != nil {
 			return err
@@ -50,9 +53,6 @@ func (w *Worker) validateCreation(ctx context.Context, input store.CreateSession
 		var snapshot Snapshot
 		if err := json.Unmarshal(input.Configuration, &snapshot); err != nil {
 			return store.ErrInvalidInput
-		}
-		if snapshot.Environment.Type == "openai_hosted" && w.runtimes.config.ProviderForEngine(input.Engine) == "" {
-			return ErrExecutionUnavailable
 		}
 		if len(input.InitialInputs) == 0 && snapshot.Environment.Type == "self_hosted" {
 			return nil

@@ -251,28 +251,32 @@ const (
 // cancellation belong to the daemon connector itself; these bits are
 // the engine-specific surface the UI uses for filtering and copy.
 type AgentKindCapabilities struct {
-	SubagentObservations          bool `json:"subagent_observations,omitempty"`
-	Streaming                     bool `json:"streaming,omitempty"`
-	Permissions                   bool `json:"permissions,omitempty"`
-	Usage                         bool `json:"usage,omitempty"`
-	Resume                        bool `json:"resume,omitempty"`
-	NativeSessionRecovery         bool `json:"native_session_recovery,omitempty"`
-	WorkspaceAuthoring            bool `json:"workspace_authoring,omitempty"`
-	Steering                      bool `json:"steering,omitempty"`
-	MessageItems                  bool `json:"message_items,omitempty"`
-	ToolItems                     bool `json:"tool_items,omitempty"`
-	ToolObservations              bool `json:"tool_observations,omitempty"`
-	EnvironmentNone               bool `json:"environment_none,omitempty"`
-	LocalEnvironment              bool `json:"local_environment,omitempty"`
-	LocalEnvironmentNetworkPolicy bool `json:"local_environment_network_policy,omitempty"`
-	Preparation                   bool `json:"preparation,omitempty"`
-	WorkspaceReadPreparation      bool `json:"workspace_read_preparation,omitempty"`
-	WorkspaceOutputExport         bool `json:"workspace_output_export,omitempty"`
-	WebSearchControl              bool `json:"web_search_control,omitempty"`
+	SubagentObservations           bool `json:"subagent_observations,omitempty"`
+	Streaming                      bool `json:"streaming,omitempty"`
+	Permissions                    bool `json:"permissions,omitempty"`
+	Usage                          bool `json:"usage,omitempty"`
+	Resume                         bool `json:"resume,omitempty"`
+	NativeSessionRecovery          bool `json:"native_session_recovery,omitempty"`
+	WorkspaceAuthoring             bool `json:"workspace_authoring,omitempty"`
+	Steering                       bool `json:"steering,omitempty"`
+	MessageItems                   bool `json:"message_items,omitempty"`
+	ToolItems                      bool `json:"tool_items,omitempty"`
+	ToolObservations               bool `json:"tool_observations,omitempty"`
+	EnvironmentNone                bool `json:"environment_none,omitempty"`
+	LocalEnvironment               bool `json:"local_environment,omitempty"`
+	LocalEnvironmentNetworkPolicy  bool `json:"local_environment_network_policy,omitempty"`
+	Preparation                    bool `json:"preparation,omitempty"`
+	WorkspaceReadPreparation       bool `json:"workspace_read_preparation,omitempty"`
+	WorkspaceOutputExport          bool `json:"workspace_output_export,omitempty"`
+	ProgrammaticToolCallingDisable bool `json:"programmatic_tool_calling_disable,omitempty"`
+	WebSearchControl               bool `json:"web_search_control,omitempty"`
 	// ExecutionControls supports typed search and verbosity controls.
 	ExecutionControls    bool `json:"execution_controls,omitempty"`
 	TextVerbosity        bool `json:"text_verbosity,omitempty"`
 	StructuredOutput     bool `json:"structured_output,omitempty"`
+	ToolSearch           bool `json:"tool_search,omitempty"`
+	MessageImages        bool `json:"message_images,omitempty"`
+	FunctionResultImages bool `json:"function_result_images,omitempty"`
 	SubagentControl      bool `json:"subagent_control,omitempty"`
 	DurableInputReceipts bool `json:"durable_input_receipts,omitempty"`
 	// DurableTurns includes strict resume, completion release and cancellation snapshots.

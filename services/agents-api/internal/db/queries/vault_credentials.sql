@@ -3,10 +3,10 @@ INSERT INTO vault_credentials (id, vault_id, name, auth_type, mcp_server_url, to
 SELECT sqlc.arg(id), v.id, sqlc.arg(name), 'static_bearer', sqlc.arg(mcp_server_url), sqlc.arg(token_ciphertext)
 FROM vaults v
 WHERE v.tenant_id = sqlc.arg(tenant_id) AND v.id = sqlc.arg(vault_id)
-RETURNING id, vault_id, name, auth_type, mcp_server_url, created_at, updated_at;
+RETURNING id, vault_id, name, auth_type, mcp_server_url, created_at, updated_at, oauth_metadata;
 
 -- name: GetCredential :one
-SELECT c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at
+SELECT c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at, c.oauth_metadata
 FROM vault_credentials c
 JOIN vaults v ON v.id = c.vault_id
 WHERE v.tenant_id = sqlc.arg(tenant_id) AND v.id = sqlc.arg(vault_id) AND c.id = sqlc.arg(id);
@@ -18,10 +18,10 @@ FROM vaults v
 WHERE v.id = c.vault_id AND v.tenant_id = sqlc.arg(tenant_id)
   AND v.id = sqlc.arg(vault_id) AND c.id = sqlc.arg(id)
   AND c.auth_type = 'static_bearer' AND c.mcp_server_url = sqlc.arg(mcp_server_url)
-RETURNING c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at;
+RETURNING c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at, c.oauth_metadata;
 
 -- name: ListCredentials :many
-SELECT c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at
+SELECT c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at, c.oauth_metadata
 FROM vault_credentials c
 JOIN vaults v ON v.id = c.vault_id
 WHERE v.tenant_id = sqlc.arg(tenant_id) AND v.id = sqlc.arg(vault_id)

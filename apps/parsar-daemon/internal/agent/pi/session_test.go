@@ -119,8 +119,8 @@ func piHelperConfig() pi.SessionConfigForTest {
 
 func piHelperReq(runID, prompt, role string) proto.PromptRequestPayload {
 	return proto.PromptRequestPayload{
-		RunID:  runID,
-		Prompt: prompt,
+		RunID: runID,
+		Input: proto.TextInput(prompt),
 		AgentOptions: map[string]any{
 			"env": map[string]any{
 				piHelperEnvKey: role,
@@ -297,7 +297,7 @@ func TestSessionRejectsNilOut(t *testing.T) {
 func TestSessionRejectsEmptyPrompt(t *testing.T) {
 	out := make(chan proto.Envelope, 4)
 	_, err := pi.NewSessionForTest(context.Background(),
-		proto.PromptRequestPayload{RunID: "run_empty", Prompt: ""}, out, piHelperConfig())
+		proto.PromptRequestPayload{RunID: "run_empty", Input: proto.TextInput("")}, out, piHelperConfig())
 	if err == nil {
 		t.Fatal("expected error on empty prompt")
 	}

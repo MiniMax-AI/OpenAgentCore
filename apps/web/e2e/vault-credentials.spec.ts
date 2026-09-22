@@ -142,6 +142,8 @@ test("shows a fixed 503 storage error, clears the token, and does not retry the 
   const vaultCard = page.locator(".vault-card").filter({ hasText: "Unavailable storage" });
   await vaultCard.getByRole("button", { name: "Credential", exact: true }).click();
   const credentialDialog = page.getByRole("dialog", { name: "Add static bearer Credential" });
+  // Let the modal finish its initial focus before filling another field.
+  await expect(credentialDialog.getByLabel("Name")).toBeFocused();
   await credentialDialog.getByLabel("Name").fill("Unavailable MCP");
   await credentialDialog.getByLabel("Exact MCP server URL").fill("https://mcp.example/unavailable");
   await fillWriteOnlyBearer(credentialDialog);

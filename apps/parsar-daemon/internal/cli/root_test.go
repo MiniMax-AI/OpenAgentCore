@@ -60,6 +60,7 @@ func TestSubcommandsAreRegistered(t *testing.T) {
 	// Guards against dropping a subcommand off the commands slice —
 	// the public CLI surface is the shipped contract.
 	want := map[string]bool{
+		"resume":               false,
 		"runtime-capabilities": false,
 		"runtime-mcp-exec":     false,
 		"placement":            false,

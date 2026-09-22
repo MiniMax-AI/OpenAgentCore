@@ -13,7 +13,7 @@ func prepareLocalDirectory(context.Context, proto.PromptRequestPayload) (agent.P
 	return localDirectoryPreparation{}, nil
 }
 
-func (localDirectoryPreparation) Start(context.Context, string, string, chan<- proto.Envelope) (agent.Session, error) {
+func (localDirectoryPreparation) Start(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (agent.Session, error) {
 	return nil, agent.ErrWorkspaceReadUnsupported
 }
 

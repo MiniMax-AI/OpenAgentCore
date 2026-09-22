@@ -30,7 +30,7 @@ var _ agent.PreparedCancellation = (*Prepared)(nil)
 // Start consumes the preparation once. ctx bounds only this start operation;
 // cancellation after return does not cancel the transferred Session. The original
 // owner context remains its lifetime context. On success the Session owns out.
-func (p *Prepared) Start(ctx context.Context, runID, prompt string, out chan<- proto.Envelope) (agent.Session, error) {
+func (p *Prepared) Start(ctx context.Context, runID string, prompt proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 	session, err := p.start(ctx, runID, prompt, out)
 	if err != nil {
 		return nil, err
@@ -38,8 +38,8 @@ func (p *Prepared) Start(ctx context.Context, runID, prompt string, out chan<- p
 	return session, nil
 }
 
-func (p *Prepared) start(ctx context.Context, runID, prompt string, out chan<- proto.Envelope) (*Session, error) {
-	if out == nil || strings.TrimSpace(runID) == "" || strings.TrimSpace(prompt) == "" {
+func (p *Prepared) start(ctx context.Context, runID string, prompt proto.MessageInput, out chan<- proto.Envelope) (*Session, error) {
+	if out == nil || strings.TrimSpace(runID) == "" || prompt.Validate() != nil {
 		return nil, errors.New("codex: start requires a run identity, prompt and output channel")
 	}
 	p.mu.Lock()
@@ -70,7 +70,7 @@ func (p *Prepared) start(ctx context.Context, runID, prompt string, out chan<- p
 	p.started = true
 	close(p.transferred)
 	transferred = true
-	req := proto.PromptRequestPayload{RunID: runID, Prompt: prompt, AgentSessionID: p.resumeID, StrictResume: p.strictResume, RequireExistingNativeSession: p.requireExistingNativeSession}
+	req := proto.PromptRequestPayload{RunID: runID, Input: prompt, AgentSessionID: p.resumeID, StrictResume: p.strictResume, RequireExistingNativeSession: p.requireExistingNativeSession}
 	go s.run(p.plan, req)
 	return s, nil
 }

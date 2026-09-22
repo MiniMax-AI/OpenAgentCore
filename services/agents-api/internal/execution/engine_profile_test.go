@@ -45,9 +45,10 @@ func TestAdditionalProfileUsesCommonAdmission(t *testing.T) {
 			}
 			return nil
 		},
-		ValidateFunctionResult: func(content []proto.FunctionResultContent) error {
+		ValidateFunctionResult: func(placement string, result proto.FunctionResultPayload) error {
+			content := result.Content
 			resultChecked = true
-			if len(content) != 1 || content[0].Text == nil || *content[0].Text != "response" {
+			if placement != "none" || !result.Success || len(content) != 1 || content[0].Text == nil || *content[0].Text != "response" {
 				t.Fatal("common result decoding did not reach profile")
 			}
 			return engine.ErrInvalidInput
@@ -66,7 +67,7 @@ func TestAdditionalProfileUsesCommonAdmission(t *testing.T) {
 		t.Fatal("profile configuration lost public error mapping", err)
 	}
 	inputs := []store.Input{{Kind: "tool_result", Payload: json.RawMessage(`{"call_id":"call","result":{"success":true,"output":"response"}}`)}}
-	if err := validateProfileInputs(profile, inputs); !errors.Is(err, store.ErrInvalidInput) || !resultChecked {
+	if err := validateProfileInputs(profile, "none", inputs); !errors.Is(err, store.ErrInvalidInput) || !resultChecked {
 		t.Fatal("profile result lost public error mapping", err)
 	}
 }

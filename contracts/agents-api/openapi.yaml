@@ -148,7 +148,7 @@ definitions:
   v1.CreateCredentialRequest:
     properties:
       auth:
-        $ref: '#/definitions/v1.StaticBearerCredentialInput'
+        $ref: '#/definitions/v1.CredentialAuthInput'
       name:
         type: string
     required:
@@ -207,7 +207,7 @@ definitions:
   v1.Credential:
     properties:
       auth:
-        $ref: '#/definitions/v1.StaticBearerCredentialAuth'
+        $ref: '#/definitions/v1.CredentialAuth'
       created_at:
         type: integer
       id:
@@ -230,6 +230,72 @@ definitions:
     - object
     - updated_at
     - vault_id
+    type: object
+  v1.CredentialAuth:
+    properties:
+      expires_at:
+        type: string
+        x-nullable: true
+      mcp_server_url:
+        type: string
+      refresh:
+        allOf:
+        - $ref: '#/definitions/v1.OAuthCredentialRefresh'
+        x-nullable: true
+      type:
+        enum:
+        - static_bearer
+        - mcp_oauth
+        type: string
+    required:
+    - mcp_server_url
+    - type
+    type: object
+  v1.CredentialAuthInput:
+    properties:
+      access_token:
+        type: string
+      expires_at:
+        type: string
+        x-nullable: true
+      mcp_server_url:
+        type: string
+      refresh:
+        allOf:
+        - $ref: '#/definitions/v1.OAuthCredentialRefreshInput'
+        x-nullable: true
+      token:
+        type: string
+      type:
+        enum:
+        - static_bearer
+        - mcp_oauth
+        type: string
+    required:
+    - mcp_server_url
+    - type
+    type: object
+  v1.CredentialAuthReplacement:
+    properties:
+      access_token:
+        type: string
+        x-nullable: true
+      expires_at:
+        type: string
+        x-nullable: true
+      refresh:
+        allOf:
+        - $ref: '#/definitions/v1.OAuthCredentialRefreshReplacement'
+        x-nullable: true
+      token:
+        type: string
+      type:
+        enum:
+        - static_bearer
+        - mcp_oauth
+        type: string
+    required:
+    - type
     type: object
   v1.CredentialDeleted:
     properties:
@@ -656,14 +722,16 @@ definitions:
     type: object
   v1.InputContent:
     properties:
+      image_url:
+        type: string
       text:
         type: string
       type:
         enum:
         - input_text
+        - input_image
         type: string
     required:
-    - text
     - type
     type: object
   v1.InputMessage:
@@ -832,6 +900,97 @@ definitions:
         x-nullable: true
     required:
     - enabled
+    type: object
+  v1.OAuthCredentialRefresh:
+    properties:
+      client_id:
+        type: string
+      resource:
+        type: string
+        x-nullable: true
+      scope:
+        type: string
+        x-nullable: true
+      token_endpoint:
+        type: string
+      token_endpoint_auth:
+        $ref: '#/definitions/v1.OAuthEndpointAuth'
+    required:
+    - client_id
+    - token_endpoint
+    - token_endpoint_auth
+    type: object
+  v1.OAuthCredentialRefreshInput:
+    properties:
+      client_id:
+        type: string
+      refresh_token:
+        type: string
+      resource:
+        type: string
+        x-nullable: true
+      scope:
+        type: string
+        x-nullable: true
+      token_endpoint:
+        type: string
+      token_endpoint_auth:
+        $ref: '#/definitions/v1.OAuthEndpointAuthInput'
+    required:
+    - client_id
+    - refresh_token
+    - token_endpoint
+    - token_endpoint_auth
+    type: object
+  v1.OAuthCredentialRefreshReplacement:
+    properties:
+      refresh_token:
+        type: string
+        x-nullable: true
+      scope:
+        type: string
+        x-nullable: true
+      token_endpoint_auth:
+        allOf:
+        - $ref: '#/definitions/v1.OAuthEndpointAuthReplacement'
+        x-nullable: true
+    type: object
+  v1.OAuthEndpointAuth:
+    properties:
+      type:
+        enum:
+        - none
+        - client_secret_basic
+        - client_secret_post
+        type: string
+    required:
+    - type
+    type: object
+  v1.OAuthEndpointAuthInput:
+    properties:
+      client_secret:
+        type: string
+      type:
+        enum:
+        - none
+        - client_secret_basic
+        - client_secret_post
+        type: string
+    required:
+    - type
+    type: object
+  v1.OAuthEndpointAuthReplacement:
+    properties:
+      client_secret:
+        type: string
+        x-nullable: true
+      type:
+        enum:
+        - client_secret_basic
+        - client_secret_post
+        type: string
+    required:
+    - type
     type: object
   v1.OutputTokenDetails:
     properties:
@@ -1646,45 +1805,6 @@ definitions:
     - has_more
     - object
     type: object
-  v1.StaticBearerCredentialAuth:
-    properties:
-      mcp_server_url:
-        type: string
-      type:
-        enum:
-        - static_bearer
-        type: string
-    required:
-    - mcp_server_url
-    - type
-    type: object
-  v1.StaticBearerCredentialInput:
-    properties:
-      mcp_server_url:
-        type: string
-      token:
-        type: string
-      type:
-        enum:
-        - static_bearer
-        type: string
-    required:
-    - mcp_server_url
-    - token
-    - type
-    type: object
-  v1.StaticBearerCredentialReplacement:
-    properties:
-      token:
-        type: string
-      type:
-        enum:
-        - static_bearer
-        type: string
-    required:
-    - token
-    - type
-    type: object
   v1.StreamError:
     properties:
       code:
@@ -1937,7 +2057,7 @@ definitions:
   v1.UpdateCredentialRequest:
     properties:
       auth:
-        $ref: '#/definitions/v1.StaticBearerCredentialReplacement'
+        $ref: '#/definitions/v1.CredentialAuthReplacement'
     required:
     - auth
     type: object
@@ -2109,8 +2229,10 @@ paths:
         required defaulting to false. Saving credential_id grants no access: Session
         admission checks attached Vault ownership and destination. MCP allowed_tools
         preserves null versus empty; saved HTTP transport includes empty headers.
-        Model-derived reasoning defaults, other MCP variants, web_search and public
-        retry conformance remain incomplete. Session execution admits only its supported
+        Model-derived reasoning defaults, other MCP variants, enabled web_search and
+        public retry conformance remain incomplete. Explicit disabled web_search can
+        be saved; Session execution also accepts explicit disabled programmatic_tool_calling
+        through qualified Runtime controls. Session execution admits only its supported
         configuration subset.'
       parameters:
       - description: agents=v1
@@ -2915,26 +3037,31 @@ paths:
         keys or failed credential lookup/decryption never fall back to anonymous execution.
         Omitted stream defaults to false; stream and agent_id cannot be null. Metadata
         may be null, but its values must be strings. Initial input accepts a string
-        or user-message array containing text. None initial input atomically starts
-        a Turn; self_hosted initial input is reserved while returning its Environment
-        connection target, with execution deferred to native readiness and Session
-        failure on initial timeout. Omitted or null input creates an idle Session.
-        With stream=true, returns live Session events starting at creation; disconnect
-        does not cancel execution. New Sessions retain their authenticated creator;
-        all creation retries require the same typed subject, including across key
-        rotation. Saved-Agent retries and inline requests using Vault attachments
-        or credential references retain caller intent independently of later resource
-        changes; unrelated inline retries preserve resolved/default equivalences.
-        Unknown historical creators reject retries; known creators without recorded
-        intent retain resolved-snapshot retry rules. These conflict policies are local
-        and not verified hosted parity. Creation retries observe future events without
-        replay; retry with stream=false to retrieve the Session. Claude SDK environment:none
+        or ordered user-message array. Codex and Claude SDK on none and qualified
+        openai_hosted also accept inline PNG/JPEG image content; other image combinations
+        and remote URLs are unsupported. None initial input atomically starts a Turn;
+        self_hosted initial input is reserved while returning its Environment connection
+        target, with execution deferred to native readiness and Session failure on
+        initial timeout. Omitted or null input creates an idle Session. With stream=true,
+        returns live Session events starting at creation; disconnect does not cancel
+        execution. New Sessions retain their authenticated creator; all creation retries
+        require the same typed subject, including across key rotation. Saved-Agent
+        retries and inline requests using Vault attachments or credential references
+        retain caller intent independently of later resource changes; unrelated inline
+        retries preserve resolved/default equivalences. Unknown historical creators
+        reject retries; known creators without recorded intent retain resolved-snapshot
+        retry rules. These conflict policies are local and not verified hosted parity.
+        Creation retries observe future events without replay; retry with stream=false
+        to retrieve the Session. Claude SDK on none and Core-managed Docker openai_hosted
         supports qualified object-root json_schema output with medium verbosity, single-Agent
-        execution and ordinary functions; other combinations remain unsupported. Non-text
-        initial input remains unsupported. Basic Codex and Claude SDK openai_hosted
-        creation requires an explicitly configured managed provider. The Claude workspace
-        profile supports non-deferred function tools with text results alongside native
-        workspace tools; HTTP MCP remains unsupported. Idle Sessions provision automatically;
+        execution and ordinary functions. Hosted execution reuses native workspace
+        tools and Files/Artifacts; Skills, Plugins, capability directories, HTTP MCP,
+        Subagent and tool_search combinations remain unqualified, including inherited
+        template contents. Other non-text initial input remains unsupported. Basic
+        Codex and Claude SDK openai_hosted creation requires an explicitly configured
+        managed provider. The Claude workspace profile supports non-deferred function
+        tools with text or successful inline PNG/JPEG results alongside native workspace
+        tools; HTTP MCP remains unsupported. Idle Sessions provision automatically;
         initial provisioning has no caller connection action. Network defaults to
         enabled; disabled and restricted exact ASCII hostnames are supported. Restricted
         policy requires 1–100 allowed domains. Unsupported hostname forms and startup
@@ -2952,7 +3079,14 @@ paths:
         Session creation freezes concrete metadata and encrypted content atomically.
         Skill-list omission inherits and a supplied list replaces; null overrides
         and null version selectors remain unqualified and reject. Source deletion/default
-        updates cannot change committed Session Skill contents.
+        updates cannot change committed Session Skill contents. Deferred function
+        discovery uses type-only tool_search and per-function defer_loading in the
+        qualified single-agent Claude environment:none function profile, including
+        qualified inline image messages and text results. Explicit web_search mode
+        disabled and programmatic_tool_calling enabled false use frozen common Runtime
+        controls. Enabled forms remain unqualified. Omitted programmatic configuration
+        preserves native behavior, a documented difference from the official default-on
+        behavior. Other combinations remain unqualified; see the operation coverage.
       parameters:
       - description: agents=v1
         in: header
@@ -3444,26 +3578,33 @@ paths:
       - application/json
       description: For environment none, atomically accepts text messages, cancellation
         and function results. Messages steer active work or start a queued Turn. The
-        supported self_hosted and openai_hosted profiles accept text-only batches.
-        Under the Session lock, matching retries retain their original target; new
-        active messages append to the current Turn, while idle messages reserve work
-        and wait up to the original five-minute connection/admission deadline. Return
-        204 only after durable admission, without claiming native application; active
-        messages create no Turn or reservation. Cancellation-only prepared-environment
-        batches use existing durable cancellation admission and return 204 without
-        waiting for native exit; a new cancellation conflicts while a pre-Turn reservation
-        is pending. Homogeneous tool_result-only prepared-environment batches reuse
-        existing scoped result admission and application receipts without creating
-        a Turn or bypassing a pending reservation. Mixed prepared-environment batches
-        remain unsupported. HTTP expiry/cancellation use local 409 environment_input_expired/environment_input_cancelled
+        supported self_hosted profile accepts text-only messages; qualified Codex
+        and Claude SDK openai_hosted profiles also accept inline PNG/JPEG. Under the
+        Session lock, matching retries retain their original target; new active messages
+        append to the current Turn, while idle messages reserve work and wait up to
+        the original five-minute connection/admission deadline. Return 204 only after
+        durable admission, without claiming native application; active messages create
+        no Turn or reservation. Cancellation-only prepared-environment batches use
+        existing durable cancellation admission and return 204 without waiting for
+        native exit; a new cancellation conflicts while a pre-Turn reservation is
+        pending. Homogeneous tool_result-only prepared-environment batches reuse existing
+        scoped result admission and application receipts without creating a Turn or
+        bypassing a pending reservation. Mixed prepared-environment batches remain
+        unsupported. HTTP expiry/cancellation use local 409 environment_input_expired/environment_input_cancelled
         errors; exact hosted failure mapping is unverified. Losing execution ownership
         returns 503. The response write deadline accommodates the admission window
         for either prepared Environment, independently of new-hosted-admission and
         executor URL settings. Disconnecting the waiting HTTP request does not cancel
         retained work or restart its deadline. Retry keys identify the whole ordered
         batch. Function output accepts text or ordered text/image parts subject to
-        engine support; Claude SDK currently accepts text results only. Message images
-        are not supported yet.
+        engine support; Claude SDK accepts text results and, on none and qualified
+        openai_hosted, successful inline PNG/JPEG results, preserving ordered content;
+        error images and remote references reject before admission. Native image resizing
+        may change bytes. Runtime image-result support is checked only for image-bearing
+        delivery. Codex and Claude SDK on none and qualified openai_hosted accept
+        ordered inline PNG/JPEG image messages. Self-hosted profiles and other engines
+        remain text-only; remote image URLs are unsupported. Image references are
+        retained unchanged without service-side downloads.
       parameters:
       - description: agents=v1
         in: header
@@ -4981,16 +5122,16 @@ paths:
     post:
       consumes:
       - application/json
-      description: Stores the write-only token as execution-owned authenticated ciphertext.
-        Required name is trimmed to 1–256 UTF-8 bytes; auth requires static_bearer,
-        an HTTPS mcp_server_url and a string token. Token bytes are preserved, including
-        empty strings; hosted token edge validation is unverified. The initial URL
-        profile excludes userinfo and fragments, preserves queries and makes no network
-        request. Public responses contain only safe metadata. Missing encryption configuration
-        returns local 503. Session admission can bind static credentials from attached
-        Vaults to exact HTTPS MCP destinations; secret decryption occurs only at dispatch.
-        OAuth, storage-key rotation and exact hosted error/retry semantics remain
-        gaps.
+      description: Stores static_bearer or mcp_oauth secrets as execution-owned authenticated
+        ciphertext without contacting any endpoint. OAuth accepts a required access
+        token, nullable RFC3339 expiry and optional refresh configuration with none,
+        client_secret_basic or client_secret_post authentication. Required name is
+        trimmed to 1–256 UTF-8 bytes. Credential and token endpoints require HTTPS
+        without userinfo or fragments. Responses contain safe metadata only, including
+        explicit nullable OAuth expiry, refresh, resource and scope. Missing encryption
+        configuration returns local 503. External authorization and provider revocation
+        remain caller responsibilities; exact hosted error/default semantics remain
+        unverified.
       parameters:
       - description: agents=v1
         in: header
@@ -5002,7 +5143,7 @@ paths:
         name: vault_id
         required: true
         type: string
-      - description: Write-only static bearer credential
+      - description: Write-only credential authentication union
         in: body
         name: body
         required: true
@@ -5041,7 +5182,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Create a static-bearer Vault Credential
+      summary: Create a Vault Credential
       tags:
       - Credentials
   /vaults/{vault_id}/credentials/{credential_id}:
@@ -5155,16 +5296,17 @@ paths:
     post:
       consumes:
       - application/json
-      description: Requires auth with type=static_bearer and a string token; empty
-        and opaque token bytes are preserved. Only the write-only secret and updated_at
-        change, atomically within the authenticated project and owning Vault. Identity,
-        name, auth type, exact destination, created_at and Session bindings remain
-        unchanged. Responses contain only safe metadata; no old-token decryption or
-        network call occurs. Missing encryption configuration returns local 503 without
-        modifying the credential. Subsequent dispatch reads use the committed replacement;
-        already-resolved requests may retain the old token. OAuth, storage-key rotation,
-        hot reload/revocation and exact hosted concurrent-update/retry/timestamp semantics
-        remain gaps.
+      description: Updates the existing static_bearer or mcp_oauth authentication
+        method without network requests. OAuth access_token omission/null retains
+        the token; a new token clears omitted expiry, explicit null clears expiry,
+        and other omitted fields remain unchanged. OAuth refresh patches cannot add
+        configuration or change client, endpoint, resource or authentication method;
+        nullable token/client-secret values retain stored secrets while explicit null
+        scope clears scope. Whole-null refresh and token_endpoint_auth retain existing
+        configuration under local policy. Identity, destination, creation time and
+        Session bindings remain unchanged. Responses expose safe metadata only. Already-dispatched
+        work is not revoked; provider revocation, storage-key rotation and exact hosted
+        concurrent-update/error semantics remain separate.
       parameters:
       - description: agents=v1
         in: header
@@ -5181,7 +5323,7 @@ paths:
         name: credential_id
         required: true
         type: string
-      - description: Write-only static bearer replacement
+      - description: Write-only credential authentication replacement union
         in: body
         name: body
         required: true
@@ -5220,7 +5362,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Replace a static-bearer Vault Credential token
+      summary: Replace Vault Credential authentication secrets
       tags:
       - Credentials
 schemes:

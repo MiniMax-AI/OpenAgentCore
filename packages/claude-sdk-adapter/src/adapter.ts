@@ -1,4 +1,5 @@
 import { StructuredOutput } from "./structured_output.js";
+import { toolSearchEnvironment } from "./tool_search.js";
 import { Subagents } from "./subagents.js";
 import type { Fact } from "./subagent_history.js";
 import { WorkspaceDirectories, type WorkspaceDirectoryEvent } from "./workspace_directories.js";
@@ -14,7 +15,7 @@ import { MCPProfile } from "./mcp.js";
 import { MCPObserver, type MCPEvent } from "./mcp_observer.js";
 import { CommandObserver, type CommandEvent } from "./command_observer.js";
 import { WorkspaceProfile } from "./workspace.js";
-import { immediatePrompt, type Prepare, type Start } from "./request.js";
+import { immediateInput, type Prepare, type Start } from "./request.js";
 import { recoverSession } from "./recovery.js";
 export { parseStart, type Start } from "./request.js";
 
@@ -33,13 +34,14 @@ export type Event =
   | { type: "result"; session_id: string; text: string }
   | { type: "error"; code: "invalid_request" | "history_unavailable" | "execution_failed" | "cancelled" };
 
-export async function execute(request: Start | Prepare, emit: (event: Event) => Promise<void>, abort: AbortController, functions = new FunctionBridge(emit), inputs = new Inputs(immediatePrompt(request)), reads = new WorkspaceReads(emit, abort), directories = new WorkspaceDirectories(emit, abort)): Promise<void> {
-  const definitions = (request.functions ?? []).map(tool => ({ name: tool.name, description: tool.description, inputSchema: tool.parameters }));
+export async function execute(request: Start | Prepare, emit: (event: Event) => Promise<void>, abort: AbortController, functions = new FunctionBridge(emit), inputs = new Inputs(immediateInput(request)), reads = new WorkspaceReads(emit, abort), directories = new WorkspaceDirectories(emit, abort)): Promise<void> {
+  const definitions = (request.functions ?? []).map(tool => ({ name: tool.name, description: tool.description, inputSchema: tool.parameters, deferLoading: tool.defer_loading }));
   const names = definitions.map(tool => `mcp__functions__${tool.name}`);
+  const allowed = [...names, ...(request.tool_search ? ["ToolSearch"] : [])];
   const declarations = request.workspace?.mcp ?? request.mcp_http_servers;
   const profile = declarations === undefined ? undefined : new MCPProfile(declarations, names);
   const subagents = request.subagents ? new Subagents(request.cwd, request.subagents.max_concurrent, request.resume) : undefined;
-  const workspace = request.workspace === undefined ? undefined : new WorkspaceProfile(request.cwd, request.workspace, names, profile, subagents);
+  const workspace = request.workspace === undefined ? undefined : new WorkspaceProfile(request.cwd, request.workspace, names, profile, subagents, !!request.output_format);
   const commands = workspace ? new CommandObserver() : undefined;
   if (request.type === "prepare" && !workspace) throw new Error("invalid_request");
   if (workspace && "mcp_http_servers" in request) throw new Error("invalid_request");
@@ -77,12 +79,12 @@ export async function execute(request: Start | Prepare, emit: (event: Event) => 
     if (abort.signal.aborted) throw new Error("cancelled");
     const options: Options = {
         cwd: request.cwd,
-        env: workspace?.options.env ?? { ...process.env, ...(subagents ? { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" } : {}) },
+        env: request.tool_search ? toolSearchEnvironment(process.env, request.model) : workspace?.options.env ?? { ...process.env, ...(subagents ? { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" } : {}) },
         model: request.model,
         ...(request.output_format ? { outputFormat: request.output_format } : {}),
         systemPrompt: request.system_prompt,
         ...(request.resume ? { resume: request.resume } : {}),
-        tools: subagents ? ["Agent", "SendMessage"] : [], allowedTools: profile?.allowed ?? names, strictMcpConfig: true, settingSources: [],
+        tools: subagents ? ["Agent", "SendMessage"] : request.tool_search ? ["ToolSearch"] : [], allowedTools: profile?.allowed ?? allowed, strictMcpConfig: true, settingSources: [],
         ...(profile && !workspace ? {
           agent: "parsar_root", disallowedTools: profile.denied,
           hooks: { PreToolUse: [{ hooks: [profile.beforeTool] }] },
@@ -127,7 +129,7 @@ export async function execute(request: Start | Prepare, emit: (event: Event) => 
       if (initialized.hooks_applied !== true || children.length !== 1) throw new Error("MCP initialization unavailable");
       if (request.mcp_http_servers?.some(server => server.required)) profile.verifyRequired(await stream.mcpServerStatus());
       if (abort.signal.aborted || !nativeAlive) throw new Error("MCP initialization interrupted");
-      inputs.release(request.prompt);
+      inputs.release(request.input);
     } else stream = query({ prompt: inputs, options });
     for await (const message of stream) {
       subagents?.consume(message);
@@ -141,7 +143,7 @@ export async function execute(request: Start | Prepare, emit: (event: Event) => 
         if (!nativeID || (request.resume && nativeID !== request.resume)) throw new Error("unexpected native session");
         if (workspace) workspace.verify(message.tools, profile ? await stream.mcpServerStatus() : message.mcp_servers, nativeID);
         else if (profile) profile.verify(message.tools, await stream.mcpServerStatus(), nativeID);
-        else if (message.tools.length !== names.length + (subagents ? 2 : 0) + (structured ? 1 : 0) || message.tools.some(name => ![...names, ...(subagents ? ["Task", "SendMessage"] : []), ...(structured ? ["StructuredOutput"] : [])].includes(name)) ||
+        else if (message.tools.length !== allowed.length + (subagents ? 2 : 0) + (structured ? 1 : 0) || message.tools.some(name => ![...allowed, ...(subagents ? ["Task", "SendMessage"] : []), ...(structured ? ["StructuredOutput"] : [])].includes(name)) ||
             message.mcp_servers.length !== (definitions.length ? 1 : 0) ||
             message.mcp_servers.some(server => server.name !== "functions" || server.status !== "connected")) {
           throw new Error("unexpected native configuration");

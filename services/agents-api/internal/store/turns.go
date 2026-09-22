@@ -110,6 +110,11 @@ func transitionTurn(ctx context.Context, q *sqlc.Queries, params sqlc.GetTurnPar
 	} else if err != nil {
 		return sqlc.Turn{}, err
 	}
+	if input.ExpectedStatus == TurnQueued && input.Status == TurnInProgress {
+		if err := checkRuntimeComputeAdmission(ctx, q, params.SessionID); err != nil {
+			return sqlc.Turn{}, err
+		}
+	}
 	row, err := q.TransitionTurn(ctx, sqlc.TransitionTurnParams{
 		ID: params.ID, SessionID: params.SessionID, ExpectedStatus: input.ExpectedStatus,
 		NewStatus: input.Status, Outcome: input.Outcome,

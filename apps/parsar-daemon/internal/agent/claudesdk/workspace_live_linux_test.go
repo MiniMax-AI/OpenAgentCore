@@ -103,7 +103,7 @@ func testLiveClaudeWorkspace(t *testing.T, explicitPreparation bool) {
 		defer cancel()
 		out := make(chan proto.Envelope, 64)
 		req := workspaceRequest()
-		req.RunID, req.Prompt, req.AgentSessionID = uuid.NewString(), prompt, resume
+		req.RunID, req.Input, req.AgentSessionID = uuid.NewString(), proto.TextInput(prompt), resume
 		req.StrictResume, req.ReleaseOnCompletion, req.ObserveMessages, req.ObserveToolObservations = true, true, true, true
 		req.AgentOptions = map[string]any{"model": "MiniMax-M3", "system_prompt": "Follow the exact verification instructions using the requested native tools. Preserve conversation facts. No other files, network operations or background work."}
 		proof := evidence{RunID: req.RunID}
@@ -111,7 +111,7 @@ func testLiveClaudeWorkspace(t *testing.T, explicitPreparation bool) {
 		var owner agent.PreparedCancellation
 		if explicitPreparation {
 			preparation := req
-			preparation.RunID, preparation.Prompt = "", ""
+			preparation.RunID, preparation.Input = "", nil
 			var resource agent.Prepared
 			resource, err = NewPreparationFactory(config)(ctx, preparation)
 			if err == nil {
@@ -127,7 +127,7 @@ func testLiveClaudeWorkspace(t *testing.T, explicitPreparation bool) {
 				}
 				proof.Reads = append(proof.Reads, liveWorkspaceReads(t, ctx, resource.(agent.WorkspaceReader), config.Workspace.Directory, "prepared", "read-binary.bin", "read-empty.bin", "read-large.bin")...)
 				operation, stopOperation := context.WithCancel(ctx)
-				running, err = resource.Start(operation, req.RunID, req.Prompt, out)
+				running, err = resource.Start(operation, req.RunID, req.Input, out)
 				stopOperation()
 				proof.StartContextCancelled = true
 				if err == nil {

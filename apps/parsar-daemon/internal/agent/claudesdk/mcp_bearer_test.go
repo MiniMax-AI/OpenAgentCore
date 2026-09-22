@@ -22,7 +22,7 @@ func TestMCPBearerUsesFreshOwnedEnvironmentReferences(t *testing.T) {
 		{ServerLabel: "second", ServerURL: "https://second.example/mcp", BearerToken: &tokens[1]},
 		{ServerLabel: "anonymous", ServerURL: "http://anonymous.example/mcp"},
 	}
-	req := proto.PromptRequestPayload{RunID: "run", Prompt: "hello", DisableExecutionEnvironment: true, MCPHTTPServers: &servers, AgentOptions: map[string]any{"model": "fixture"}}
+	req := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true, MCPHTTPServers: &servers, AgentOptions: map[string]any{"model": "fixture"}}
 	seen := map[string]bool{}
 	for range 2 {
 		start, env, err := prepare(config, req)
@@ -66,7 +66,7 @@ func TestMCPBearerRejectsInvalidCredentialBeforeStateCreation(t *testing.T) {
 		t.Setenv("PARSAR_HOME", root)
 		config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
 		servers := []proto.MCPHTTPServer{{ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp", BearerToken: &token}}
-		req := proto.PromptRequestPayload{RunID: "run", Prompt: "hello", DisableExecutionEnvironment: true, MCPHTTPServers: &servers, AgentOptions: map[string]any{"model": "fixture"}}
+		req := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true, MCPHTTPServers: &servers, AgentOptions: map[string]any{"model": "fixture"}}
 		if _, _, err := prepare(config, req); err == nil || err.Error() != "claudesdk: unsupported HTTPS MCP bearer credential" {
 			t.Fatal("invalid bearer accepted or unsafe error returned")
 		}

@@ -27,7 +27,7 @@ func TestSteeringReceiptsAndLifecycle(t *testing.T) {
 			if mode == "phased" {
 				config.Env[1] = "SDK_HELPER_MODE=steering-timeout"
 			}
-			request := proto.PromptRequestPayload{RunID: "run", Prompt: "hello", AgentSessionID: "native", AgentOptions: map[string]any{"model": "fake-model", "system_prompt": "instructions"}}
+			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native", AgentOptions: map[string]any{"model": "fake-model", "system_prompt": "instructions"}}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)
@@ -40,9 +40,9 @@ func TestSteeringReceiptsAndLifecycle(t *testing.T) {
 			if frame := <-out; frame.Type != proto.TypeDelta {
 				t.Fatal("missing ready barrier", frame.Type)
 			}
-			input := proto.PromptSteerPayload{InputID: "extra", Text: "additional"}
+			input := proto.PromptSteerPayload{InputID: "extra", Input: proto.TextInput("additional")}
 			if mode == "blocked-write" {
-				input.Text = strings.Repeat("x", 512*1024)
+				input.Input = proto.TextInput(strings.Repeat("x", 512*1024))
 			}
 			receiptCtx, receiptCancel := context.WithTimeout(ctx, time.Second)
 			if mode == "timeout" {
@@ -158,11 +158,11 @@ func TestSteeringReceiptsAndLifecycle(t *testing.T) {
 
 func TestSteeringDoesNotSendBeforeReadiness(t *testing.T) {
 	s := &session{process: &clirunner.Process{}}
-	if err := s.Steer(context.Background(), proto.PromptSteerPayload{InputID: "one", Text: "hello"}); !errors.Is(err, agent.ErrSteeringNotReady) {
+	if err := s.Steer(context.Background(), proto.PromptSteerPayload{InputID: "one", Input: proto.TextInput("hello")}); !errors.Is(err, agent.ErrSteeringNotReady) {
 		t.Fatal(err)
 	}
 	s.stopSteering()
-	if err := s.Steer(context.Background(), proto.PromptSteerPayload{InputID: "one", Text: "hello"}); !errors.Is(err, agent.ErrSteeringInactive) {
+	if err := s.Steer(context.Background(), proto.PromptSteerPayload{InputID: "one", Input: proto.TextInput("hello")}); !errors.Is(err, agent.ErrSteeringInactive) {
 		t.Fatal(err)
 	}
 }
@@ -178,10 +178,11 @@ func runSteeringHelper(request startRequest, mode string, scanner *bufio.Scanner
 		os.Exit(2)
 	}
 	var input struct {
-		Type, Text string
-		InputID    string `json:"input_id"`
+		Type    string
+		Input   proto.MessageInput
+		InputID string `json:"input_id"`
 	}
-	if json.Unmarshal(scanner.Bytes(), &input) != nil || input.Type != "steer" || input.Text != "additional" || input.InputID != "extra" {
+	if json.Unmarshal(scanner.Bytes(), &input) != nil || input.Type != "steer" || *input.Input[0].Content[0].Text != "additional" || input.InputID != "extra" {
 		os.Exit(3)
 	}
 	if mode == "steering-cancel" {

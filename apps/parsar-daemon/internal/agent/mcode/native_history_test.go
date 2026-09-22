@@ -28,7 +28,7 @@ func TestNativeMCodeHistoryIsolation(t *testing.T) {
 			if json.Unmarshal(raw, &req.AgentOptions) != nil {
 				t.Fatal("invalid private options")
 			}
-			req.AgentSessionID, req.Prompt = id, "This input must never execute."
+			req.AgentSessionID, req.Input = id, proto.TextInput("This input must never execute.")
 			ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 64)

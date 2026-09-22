@@ -96,7 +96,7 @@ func (d *Dispatcher) awaitPreparation(ctx context.Context, tenant, session strin
 }
 
 func (p *preparedStart) start(ctx context.Context, request proto.PromptRequestPayload) error {
-	return send(ctx, p.peer, proto.TypeExecutionStart, p.requestID, proto.ExecutionStartPayload{Handle: p.handle, RunID: request.RunID, Prompt: request.Prompt})
+	return send(ctx, p.peer, proto.TypeExecutionStart, p.requestID, proto.ExecutionStartPayload{Handle: p.handle, RunID: request.RunID, Input: request.Input})
 }
 
 func (p *preparedStart) started(env proto.Envelope, runID string) (bool, error) {

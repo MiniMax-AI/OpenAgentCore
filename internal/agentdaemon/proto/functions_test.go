@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestFunctionResultContentWire(t *testing.T) {
+func TestInputContentWire(t *testing.T) {
 	for _, content := range []string{
 		`[]`,
 		`[{"type":"input_text","text":""}]`,

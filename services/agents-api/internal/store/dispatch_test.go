@@ -178,7 +178,7 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 	request := h.read(proto.TypePromptRequest)
 	var prompt proto.PromptRequestPayload
 	_ = request.DecodePayload(&prompt)
-	if prompt.Prompt != "Initial input" || prompt.ConversationID != h.session.ID || prompt.AgentOptions["model"] != "test-model" || prompt.AgentOptions["system_prompt"] != "Keep this instruction." {
+	if inputTextForTest(t, prompt.Input) != "Initial input" || prompt.ConversationID != h.session.ID || prompt.AgentOptions["model"] != "test-model" || prompt.AgentOptions["system_prompt"] != "Keep this instruction." {
 		t.Fatalf("wrong resolved request: %+v", prompt)
 	}
 	if _, err := h.d.Run(ctx, uuid.NewString(), h.session.ID, first.TurnID); !errors.Is(err, store.ErrNotFound) {
@@ -191,8 +191,8 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 	steer := h.read(proto.TypePromptSteer)
 	var input proto.PromptSteerPayload
 	_ = steer.DecodePayload(&input)
-	if input.Text != "Follow-up input" {
-		t.Fatal(input.Text)
+	if inputTextForTest(t, input.Input) != "Follow-up input" {
+		t.Fatal(inputTextForTest(t, input.Input))
 	}
 	h.write(first.TurnID, proto.TypePromptSteerAck, proto.PromptSteerAckPayload{InputID: input.InputID, ErrorCode: "not_ready"})
 	retry := h.read(proto.TypePromptSteer)

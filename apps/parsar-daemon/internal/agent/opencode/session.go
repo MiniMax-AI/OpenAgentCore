@@ -80,7 +80,11 @@ func newSession(parent context.Context, req proto.PromptRequestPayload, out chan
 		return nil, err
 	}
 
-	buildRes, err := BuildArgs(req.RunID, req.Prompt, req.WorkDir, opts)
+	prompt, err := req.Input.TextOnly()
+	if err != nil {
+		return nil, err
+	}
+	buildRes, err := BuildArgs(req.RunID, prompt, req.WorkDir, opts)
 	if err != nil {
 		return nil, fmt.Errorf("opencode: build args: %w", err)
 	}

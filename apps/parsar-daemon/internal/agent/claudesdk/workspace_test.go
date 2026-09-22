@@ -35,7 +35,7 @@ func workspaceFixture(t *testing.T) Config {
 }
 
 func workspaceRequest() proto.PromptRequestPayload {
-	return proto.PromptRequestPayload{RunID: "run", Prompt: "hello", DisableSubagents: true,
+	return proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableSubagents: true,
 		AgentOptions: map[string]any{"model": "fixture"}}
 }
 

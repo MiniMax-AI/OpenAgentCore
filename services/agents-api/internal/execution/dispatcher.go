@@ -35,7 +35,7 @@ type Dispatcher struct {
 	// Options resolves transient engine credentials; they are never stored here.
 	Options func(context.Context, store.Session) (map[string]any, error)
 	// ManagedRuntimes is optional internal provisioning; it does not admit hosted API requests.
-	ManagedRuntimes *RuntimeProviders
+	ManagedRuntimes *RuntimeProvider
 }
 
 type Result struct {
@@ -75,6 +75,9 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 	if err != nil {
 		return store.Turn{}, err
 	}
+	if err := d.messageInputSupport(peer, session.Engine, snapshot, text); err != nil {
+		return store.Turn{}, err
+	}
 	req, err := d.executionRequest(ctx, session, snapshot, caps, bound)
 	if err != nil {
 		return store.Turn{}, err
@@ -82,7 +85,7 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 	if _, err := d.Store.TransitionTurn(ctx, tenantID, sessionID, turnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
 		return store.Turn{}, err
 	}
-	req.ConversationID, req.RunID, req.Prompt = sessionID, turnID, text
+	req.ConversationID, req.RunID, req.Input = sessionID, turnID, text
 	req.WorkDir, req.DisableExecutionEnvironment = workDir, noEnvironment
 	result, status := d.deliver(ctx, tenantID, sessionID, peer, req, through, nil)
 	return d.finishRun(tenantID, sessionID, turnID, snapshot.Agent.Model, result, status)

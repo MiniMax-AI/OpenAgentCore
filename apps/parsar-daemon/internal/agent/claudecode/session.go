@@ -114,11 +114,8 @@ func newSession(parent context.Context, req proto.PromptRequestPayload, out chan
 	if out == nil {
 		return nil, errors.New("claudecode: nil out channel")
 	}
-	if req.Prompt == "" && len(req.Attachments) == 0 {
-		// A pure-image inbound (Feishu user pastes a screenshot
-		// without typing) is a valid prompt — Attachments alone
-		// drives the turn — and must not 400 here.
-		return nil, errors.New("claudecode: empty prompt and no attachments")
+	if err := req.Input.Validate(); err != nil {
+		return nil, err
 	}
 	if cfg.logger == nil {
 		cfg.logger = obslog.Bg()
@@ -132,7 +129,7 @@ func newSession(parent context.Context, req proto.PromptRequestPayload, out chan
 
 	cfg.logger.Info("claudecode: newSession start",
 		"run_id", req.RunID, "agent_kind", req.AgentKind,
-		"prompt_len", len(req.Prompt), "work_dir", req.WorkDir,
+		"prompt_len", len(req.Input), "work_dir", req.WorkDir,
 		"has_agent_options", req.AgentOptions != nil,
 		"agent_session_id", req.AgentSessionID,
 		"claude_binary", cfg.claudeBinary)
@@ -262,9 +259,9 @@ func newSession(parent context.Context, req proto.PromptRequestPayload, out chan
 	// first stdout line corresponds to the prompt we just sent. Best
 	// effort: write failure → pump sees EOF and synthesises
 	// error+done.
-	if msg, err := buildUserMessageWithAttachments(req.Prompt, req.Attachments); err == nil {
+	if msg, err := buildOrderedUserMessages(req.Input); err == nil {
 		cfg.logger.Info("claudecode: writing initial user message to stdin",
-			"run_id", req.RunID, "msg_bytes", len(msg), "attachments", len(req.Attachments))
+			"run_id", req.RunID, "msg_bytes", len(msg))
 		if _, werr := s.writeStdin(msg); werr != nil {
 			cfg.logger.Warn("claudecode: write initial user message",
 				"run_id", req.RunID, "err", werr)

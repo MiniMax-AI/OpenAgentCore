@@ -28,7 +28,7 @@ func TestNativeSteeringReceipt(t *testing.T) {
 			written := false
 			reply := make(chan error, 1)
 			go func() {
-				reply <- s.SteerWithReceipt(ctx, proto.PromptSteerPayload{InputID: "input-1", Text: "next"}, func() { written = true })
+				reply <- s.SteerWithReceipt(ctx, proto.PromptSteerPayload{InputID: "input-1", Input: proto.TextInput("next")}, func() { written = true })
 			}()
 			// Drain native output concurrently, as the router does.
 			drained := make(chan struct{})

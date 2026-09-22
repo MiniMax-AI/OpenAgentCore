@@ -58,7 +58,11 @@ func (s *Session) steer(ctx context.Context, input proto.PromptSteerPayload, wri
 	if turnID == "" || threadID == "" {
 		return agent.ErrSteeringNotReady
 	}
-	params := TurnSteerParams{ThreadID: threadID, ExpectedTurnID: turnID, Input: FirstUserInput(input.Text)}
+	content, err := nativeInput(input.Input)
+	if err != nil {
+		return agent.ErrSteeringRejected
+	}
+	params := TurnSteerParams{ThreadID: threadID, ExpectedTurnID: turnID, Input: content}
 	timeout := s.rpc.cfg.RequestTimeout
 	if written != nil {
 		timeout = 0

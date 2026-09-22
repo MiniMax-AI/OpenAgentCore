@@ -34,6 +34,9 @@ func (w *Worker) ReadEnvironmentDirectory(ctx context.Context, environment store
 	if current.SessionID != environment.SessionID {
 		return proto.WorkspaceDirectoryResult{}, store.ErrNotFound
 	}
+	if err := w.waitRuntimeAwake(ctx, current); err != nil {
+		return proto.WorkspaceDirectoryResult{}, err
+	}
 	request := directoryReadRequest{ctx: ctx, environment: current, path: path, result: make(chan directoryReadResult, 1)}
 	select {
 	case w.directoryReads <- request:
@@ -54,6 +57,16 @@ func (w *Worker) ReadEnvironmentDirectory(ctx context.Context, environment store
 
 func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRequest, reserved bool) (result directoryReadResult) {
 	result.err = ErrExecutionUnavailable
+	defer func() {
+		if w.runtimes == nil {
+			return
+		}
+		touch, stop := context.WithTimeout(context.WithoutCancel(owner), 5*time.Second)
+		defer stop()
+		if err := w.dispatcher.Store.TouchRuntimeActivity(touch, request.environment.TenantID, request.environment.ID); err != nil {
+			result.err = err
+		}
+	}()
 	check, cancel := context.WithTimeout(owner, 5*time.Second)
 	defer cancel()
 	if w.CheckOwnership(check) != nil {

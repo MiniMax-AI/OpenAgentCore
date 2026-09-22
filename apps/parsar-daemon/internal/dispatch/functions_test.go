@@ -46,7 +46,7 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 	}
 	defer router.Shutdown(context.Background())
 	for _, id := range []string{"one", "two"} {
-		env, _ := proto.NewEnvelope(proto.TypePromptRequest, id, proto.PromptRequestPayload{AgentKind: "function-test", Prompt: "lookup", FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}}})
+		env, _ := proto.NewEnvelope(proto.TypePromptRequest, id, proto.PromptRequestPayload{AgentKind: "function-test", Input: proto.TextInput("lookup"), FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}}})
 		if err := router.Handle(t.Context(), env); err != nil {
 			t.Fatal(err)
 		}
@@ -72,7 +72,7 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 		t.Fatal(a)
 	}
 
-	invalid, _ := proto.NewEnvelope(proto.TypeFunctionResult, "one", proto.FunctionResultPayload{CallID: "call", DeliveryID: "invalid", Content: []proto.FunctionResultContent{{Type: "input_audio"}}})
+	invalid, _ := proto.NewEnvelope(proto.TypeFunctionResult, "one", proto.FunctionResultPayload{CallID: "call", DeliveryID: "invalid", Content: []proto.InputContent{{Type: "input_audio"}}})
 	if err := router.Handle(t.Context(), invalid); err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestFunctionToolsRequireAdvertisedSupport(t *testing.T) {
 	}
 }
 
-func functionResultContent(text string) []proto.FunctionResultContent {
+func functionResultContent(text string) []proto.InputContent {
 	picture := image.NewRGBA(image.Rect(0, 0, 1, 1))
 	picture.Set(0, 0, color.RGBA{R: 255, A: 255})
 	var encoded bytes.Buffer
@@ -157,5 +157,22 @@ func functionResultContent(text string) []proto.FunctionResultContent {
 	}
 	imageURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(encoded.Bytes())
 	after := "AFTER-IMAGE"
-	return []proto.FunctionResultContent{{Type: "input_text", Text: &text}, {Type: "input_image", ImageURL: &imageURL}, {Type: "input_text", Text: &after}}
+	return []proto.InputContent{{Type: "input_text", Text: &text}, {Type: "input_image", ImageURL: &imageURL}, {Type: "input_text", Text: &after}}
+}
+
+func TestDiscoveryCannotReachAnEagerOnlyAdapter(t *testing.T) {
+	reg := agent.NewRegistry()
+	called := false
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "eager-only", Available: true, Capabilities: proto.AgentKindCapabilities{FunctionTools: true}}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+		called = true
+		return nil, nil
+	})
+	router, _ := dispatch.New(dispatch.Config{Registry: reg, Sender: &recSender{}})
+	defer router.Shutdown(context.Background())
+	for _, search := range []bool{false, true} {
+		env, _ := proto.NewEnvelope(proto.TypePromptRequest, "discovery", proto.PromptRequestPayload{AgentKind: "eager-only", ToolSearch: search, FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object"}`), DeferLoading: true}}})
+		if err := router.Handle(t.Context(), env); err == nil || called {
+			t.Fatal("deferred definitions reached an eager-only adapter", err)
+		}
+	}
 }

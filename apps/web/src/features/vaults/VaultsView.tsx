@@ -149,9 +149,9 @@ export function VaultsView({ busy, catalog, coreError, coreState, operations }: 
                     {credentials.length ? credentials.map((credential) => (
                       <article className="credential-row" key={credential.id}>
                         <KeyRound size={15} strokeWidth={1.5} aria-hidden="true" />
-                        <div><strong>{credential.name}</strong><code>{credential.auth.mcp_server_url}</code><small>Updated {formatTimestamp(credential.updated_at)} · token hidden</small></div>
+                        <div><strong>{credential.name}</strong><code>{credential.auth.mcp_server_url}</code><small>Updated {formatTimestamp(credential.updated_at)} · token hidden</small>{credential.auth.type === "mcp_oauth" ? <small>OAuth · Manage authorization and token replacement in your application.</small> : null}</div>
                         <div className="credential-actions">
-                          <button className="icon-button outline" type="button" aria-label={`Replace token for ${credential.name}`} title="Replace token" onClick={() => { setActionError(null); setCredentialDialog({ mode: "replace", vault, credential }); }} disabled={busy}><RotateCcw size={13} /></button>
+                          {credential.auth.type === "static_bearer" ? <button className="icon-button outline" type="button" aria-label={`Replace token for ${credential.name}`} title="Replace token" onClick={() => { setActionError(null); setCredentialDialog({ mode: "replace", vault, credential }); }} disabled={busy}><RotateCcw size={13} /></button> : null}
                           <button className="icon-button danger" type="button" aria-label={`Delete ${credential.name}`} onClick={() => { setActionError(null); setDeleteTarget({ kind: "credential", vault, credential }); }} disabled={busy}><Trash2 size={13} /></button>
                         </div>
                       </article>

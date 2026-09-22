@@ -14,7 +14,7 @@ import (
 
 func (r *Router) handleExecutionStart(_ context.Context, env proto.Envelope) error {
 	var input proto.ExecutionStartPayload
-	if env.DecodePayload(&input) != nil || input.Handle == "" || strings.TrimSpace(input.RunID) == "" || strings.TrimSpace(input.Prompt) == "" {
+	if env.DecodePayload(&input) != nil || input.Handle == "" || strings.TrimSpace(input.RunID) == "" || input.Input.Validate() != nil {
 		return r.rejectPreparation(env, "invalid_start")
 	}
 	encoded, _ := json.Marshal(input)
@@ -119,7 +119,7 @@ func (r *Router) startPreparedExecution(p *preparationState, state *sessionState
 	if blocked {
 		startErr = context.Canceled
 	} else {
-		session, startErr = handoff.target.Start(p.ctx, input.RunID, input.Prompt, state.out)
+		session, startErr = handoff.target.Start(p.ctx, input.RunID, input.Input, state.out)
 	}
 
 	r.mu.Lock()

@@ -7,10 +7,13 @@ the existing Agent/Session configuration resolution and immutable snapshot.
 
 ## Qualified execution profile
 
-Claude SDK supports object-root schemas with `environment:none`, medium verbosity,
-`multi_agent.enabled=false` and optional ordinary function tools returning text.
-The native SDK remains responsible for its model/tool loop and schema validation.
-Codex and MiniMax structured-output execution, workspace/HTTP MCP/Subagent
+Claude SDK supports object-root schemas with `environment:none` or Core-managed
+Docker `openai_hosted`, medium verbosity, `multi_agent.enabled=false` and optional
+ordinary function tools returning text. Hosted execution uses the existing native
+workspace tools, preparation, Files and Artifacts. The native SDK remains
+responsible for its model/tool loop and schema validation. Codex and MiniMax
+structured-output execution, self-hosted/E2B execution, Skills/Plugins/capability
+directories (including inherited template contents), HTTP MCP, Subagent/tool-search
 combinations and other root types are unqualified and explicitly rejected. These
 are implementation gaps, not a redefinition of the official protocol.
 
@@ -38,6 +41,12 @@ a completed `final_answer` Message with the native tool-use ID and unchanged
 and cancelled candidates cannot become a completed structured answer. No private
 history read, output repair, schema coercion or prompt wrapper supplies the result.
 
+Workspace preparation additionally verifies the installed bridge's
+`workspace_structured_output` feature and complete local Runtime contract. Native
+inventory includes `StructuredOutput` only when output configuration requests it;
+root tool identity, abort checks, filesystem and credential protections remain
+unchanged. A bundle feature alone does not qualify another public combination.
+
 Recovery uses the existing Session/Turn/Items queries and native continuation.
 SSE is still live-only. Frozen schemas apply to both initial and resumed execution;
 ordinary text configuration retains its prior behavior.
@@ -51,6 +60,16 @@ explicit private operator options and never supply model responses. The workflow
 covers a function-only random value, unchanged saved configuration, native result
 application receipts, ordered terminal SSE, persisted final JSON, daemon restart
 and same-history continuation, cancellation, text override and tenant isolation.
+
+`services/agents-api/tests/official_hosted_structured_native.py` extends public
+acceptance to an independently deployed Core, dedicated PostgreSQL and Docker
+Runtime using the real Kimi API. It covers initial saved configuration and inline
+prepared configuration, function-only random values, active input receipts,
+native file writes consistent with final JSON, Files/Artifact reads, unchanged
+terminal SSE, result retries/conflicts, cold Core/Runtime continuation, pending
+cancellation without a fabricated final, ordinary text and tenant/Session isolation.
+The accepted image retains the pinned SDK 0.3.269 and Claude Code 2.1.269. This
+qualifies that native/provider combination, not every model or schema dialect.
 
 Focused tests cover native failure/retry projection, exact result bytes, schema
 numeric admission, configuration transport and independent service qualification

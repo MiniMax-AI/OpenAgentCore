@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MCPProfile } from "../dist/mcp.js";
 import { parseEnvironmentMCP } from "../dist/mcp_environment.js";
-import { immediatePrompt, parseStart } from "../dist/request.js";
+import { immediateInput, parseStart } from "../dist/request.js";
 import { WorkspaceProfile } from "../dist/workspace.js";
 
 const stdio = { server_label: "installed", command: "/usr/bin/python3", allowed_tools: null,
@@ -24,14 +24,16 @@ function fixture(t, declarations = [stdio]) {
   const previous = process.env;
   process.env = { HOME: dirs.home, CLAUDE_CONFIG_DIR: dirs.state, ANTHROPIC_AUTH_TOKEN: "model-secret" };
   t.after(() => { process.env = previous; rmSync(root, { recursive: true, force: true }); });
-  const request = { type: "start", prompt: "fixture", model: "fixture", system_prompt: "", cwd: dirs.work, workspace: config };
+  const request = { type: "start", input: [{ content: [{ type: "input_text", text: "fixture" }] }], model: "fixture", system_prompt: "", cwd: dirs.work, workspace: config };
   return { dirs, config, request };
 }
 
 test("installed MCP private projection cannot launch arbitrary unsandboxed commands", t => {
   const { request } = fixture(t);
   assert.deepEqual(parseStart(JSON.stringify(request)), request);
-  assert.equal(immediatePrompt(request), undefined);
+  assert.throws(() => parseStart(JSON.stringify({ ...request, observe_messages: true,
+    output_format: { type: "json_schema", schema: { type: "object" } } })), /invalid_request/);
+  assert.equal(immediateInput(request), undefined);
   assert.deepEqual(parseEnvironmentMCP([stdio]), [stdio]);
   for (const value of [[stdio, stdio], [{ ...stdio, command: "/bin/sh" }], [{ ...stdio, env: { TOKEN: "secret" } }],
     [{ ...stdio, args: ["-c", "untrusted"] }], [{ ...stdio, allowed_tools: ["*"] }],

@@ -94,7 +94,7 @@ func TestClaudeSDKDiscoveryAndRegistration(t *testing.T) {
 				t.Fatalf("incorrect SDK capability scope: %+v", caps)
 			}
 			// Even a ready SDK must not acquire product write access through the wrapper.
-			_, err = factory(t.Context(), proto.PromptRequestPayload{RunID: "sdk", Prompt: "hello", WorkspaceAuthoring: true}, make(chan proto.Envelope, 1))
+			_, err = factory(t.Context(), proto.PromptRequestPayload{RunID: "sdk", Input: proto.TextInput("hello"), WorkspaceAuthoring: true}, make(chan proto.Envelope, 1))
 			if err == nil || (!tc.ready && !strings.Contains(err.Error(), "runtime is unavailable")) {
 				t.Fatalf("SDK request did not fail closed: %v", err)
 			}

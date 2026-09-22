@@ -58,7 +58,7 @@ func TestWorkerEnvironmentSharesCapacityThroughClaimAndCleanup(t *testing.T) {
 	firstRuntime.write(first.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "ready"})
 	frame := nextWorkerFrame(t, frames, proto.TypeExecutionStart)
 	var start proto.ExecutionStartPayload
-	if frame.ID != first.ID || frame.DecodePayload(&start) != nil || start.Handle != handle || start.Prompt != "first" {
+	if frame.ID != first.ID || frame.DecodePayload(&start) != nil || start.Handle != handle || inputTextForTest(t, start.Input) != "first" {
 		t.Fatal("worker changed preparation at Start")
 	}
 	firstRuntime.write(first.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "started", RunID: start.RunID})

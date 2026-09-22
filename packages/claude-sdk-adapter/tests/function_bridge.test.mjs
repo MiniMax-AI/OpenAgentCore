@@ -65,3 +65,50 @@ test("an aborted submitted result never becomes a native application receipt", {
   await bridge.consume(native(result("a", false)), "native");
   assert.deepEqual(events.map(event => event.type), ["function_call"]);
 });
+
+
+test("successful image results confirm native preprocessing with unchanged identity and block order", async () => {
+  const events = [];
+  const bridge = new FunctionBridge(async event => { events.push(event); });
+  const value = { ...result("visual"), content: [
+    { type: "input_text", text: "before" },
+    { type: "input_image", image_url: "data:image/png;base64,AQID" },
+    { type: "input_text", text: "after" },
+  ] };
+  const waiting = bridge.invoke(call("visual"), new AbortController().signal);
+  bridge.submit(JSON.stringify(value));
+  assert.deepEqual((await waiting).content, [
+    { type: "text", text: "before" }, { type: "image", mimeType: "image/png", data: "AQID" },
+    { type: "text", text: "after" },
+  ]);
+  const converted = [
+    { type: "text", text: "before" },
+    { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "BAUG" } },
+    { type: "text", text: "after" },
+  ];
+  for (const bad of [converted.slice(1), [...converted, converted[0]],
+    [converted[0], { type: "text", text: "Image could not be processed" }, converted[2]],
+    [converted[2], converted[1], converted[0]],
+    [converted[0], { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "!!" } }, converted[2]]]) {
+    await assert.rejects(bridge.consume(native(value, bad), "native"), /differs/);
+  }
+  await bridge.consume({ ...native(value, converted), isSynthetic: true }, "native");
+  await bridge.consume({ ...native(value, converted), isReplay: true }, "native");
+  await bridge.consume(native(value, converted), "other");
+  assert.equal(events.length, 1);
+  await bridge.consume(native(value, converted), "native");
+  assert.deepEqual(events[1], { type: "function_applied", call_id: "visual", delivery_id: "delivery-visual" });
+  bridge.assertComplete();
+});
+
+test("native error-image rejection leaves the pending call available for a supported result", async () => {
+  const events = [];
+  const bridge = new FunctionBridge(async event => { events.push(event); });
+  const waiting = bridge.invoke(call("error"), new AbortController().signal);
+  const value = { ...result("error", false), content: [{ type: "input_image", image_url: "data:image/png;base64,AQID" }] };
+  assert.throws(() => bridge.submit(JSON.stringify(value)), /cannot retain images/);
+  bridge.submit(JSON.stringify(result("error", false)));
+  assert.equal((await waiting).isError, true);
+  await bridge.consume(native(result("error", false)), "native");
+  bridge.assertComplete();
+});

@@ -21,8 +21,8 @@ func (s *Session) run(plan SessionPlan, req proto.PromptRequestPayload) {
 		return
 	}
 
-	input := FirstUserInput(req.Prompt)
-	if len(input) == 0 {
+	input, err := nativeInput(req.Input)
+	if err != nil {
 		s.emitTerminal("codex: empty prompt", true)
 		return
 	}

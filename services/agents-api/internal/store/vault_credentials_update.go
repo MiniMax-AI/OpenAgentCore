@@ -56,5 +56,5 @@ func (s *Store) UpdateStaticCredential(ctx context.Context, tenantID, vaultID, c
 	if err != nil {
 		return Credential{}, errors.New("credential update failed")
 	}
-	return credentialFromRow(sqlc.GetCredentialRow(row)), nil
+	return credentialFromRow(sqlc.GetCredentialRow(row))
 }

@@ -45,7 +45,7 @@ func TestCredentialUpdateRejectsInvalidBodiesBeforeStorage(t *testing.T) {
 		`{"auth":{"type":null,"token":"credential-canary"}}`, `{"auth":{"type":3,"token":"credential-canary"}}`,
 		`{"auth":{"type":"static_bearer","token":null}}`, `{"auth":{"type":"static_bearer","token":3}}`,
 		`{"auth":{"type":"static_bearer","token":{}}}`, `{"auth":{"type":"static_bearer","token":[]}}`,
-		`{"auth":{"type":"mcp_oauth","access_token":"credential-canary"}}`,
+		`{"auth":{"type":"mcp_oauth","access_token":3}}`,
 		`{"auth":{"type":"static_bearer","token":"credential-canary","mcp_server_url":"https://other.invalid"}}`,
 		`{"auth":{"type":"static_bearer","token":"credential-canary"},"name":"other"}`,
 		`{"auth":{"type":"static_bearer","token":"credential-canary"},"vault_id":"other"}`,

@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { parseRequest, preparedPrompt } from "../dist/request.js";
+import { parseRequest, preparedInput } from "../dist/request.js";
 
 // Exercise the packaged entrypoint and real child ownership with a controlled SDK.
 // Native dependency enforcement and model effects need separate native acceptance.
@@ -55,7 +55,7 @@ globalThis.startupFixture = async ({options, initializeTimeoutMs}) => {
           const iterator=prompt[Symbol.asyncIterator]();
           const first=await Promise.race([iterator.next(),closed.then(()=>({done:true}))]);
           if(first.done)return;
-          process.send({kind:"input",text:first.value.message.content});
+          process.send({kind:"input",text:first.value.message.content[0].text});
           yield {type:"system",subtype:"init",session_id:mode === "resume-mismatch"?"other":"native",mcp_servers:[],
             tools:mode === "bad-inventory"?["Bash","Read","Edit","Agent"]:["Bash","Read","Edit"]};
           const ids=[first.value.uuid];
@@ -96,14 +96,14 @@ test("prepare validates a workspace-only immutable configuration and prompt-only
   try {
     assert.deepEqual(parseRequest(JSON.stringify(request)), request);
     assert.deepEqual(parseRequest(JSON.stringify({ ...request, functions: [] })), { ...request, functions: [] });
-    for (const fields of [{ prompt: "" }, { prompt: "input" }, { workspace: undefined },
+    for (const fields of [{ input: [{ content: [{ type: "input_text", text: "" }] }] }, { input: [{ content: [{ type: "input_text", text: "input" }] }] }, { workspace: undefined },
       { mcp_http_servers: [] }, { env: {} }, { resume: "" }, { type: "prepared" }]) {
       assert.throws(() => parseRequest(JSON.stringify({ ...request, ...fields })), /invalid_request/);
     }
-    assert.equal(preparedPrompt({ type: "start", prompt: "first" }), "first");
-    for (const value of [{ type: "start", prompt: "" }, { type: "start", prompt: "first", model: "other" },
-      { type: "start", prompt: "first", resume: "other" }, { type: "start", prompt: "first", workspace: request.workspace },
-      { type: "steer", text: "first" }, null]) assert.throws(() => preparedPrompt(value), /invalid_request/);
+    assert.deepEqual(preparedInput({ type: "start", input: [{ content: [{ type: "input_text", text: "first" }] }] }), [{ content: [{ type: "input_text", text: "first" }] }]);
+    for (const value of [{ type: "start", input: [{ content: [{ type: "input_text", text: "" }] }] }, { type: "start", input: [{ content: [{ type: "input_text", text: "first" }] }], model: "other" },
+      { type: "start", input: [{ content: [{ type: "input_text", text: "first" }] }], resume: "other" }, { type: "start", input: [{ content: [{ type: "input_text", text: "first" }] }], workspace: request.workspace },
+      { type: "steer", text: "first" }, null]) assert.throws(() => preparedInput(value), /invalid_request/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -162,17 +162,17 @@ for (const mode of ["release", "resume", "steer", "commands", "unused", "owner-c
     if (mode === "unused") { child.stdin.end(); await finish("cancelled"); }
     else if (mode === "owner-cancel") { child.kill("SIGTERM"); await finish("cancelled"); }
     else if (mode === "native-exit") await finish("execution_failed");
-    else if (mode === "replacement") { send({ type: "start", prompt: "first", model: "changed" }); await finish("invalid_request"); }
-    else if (mode === "early-steer") { send({ type: "steer", input_id: "early", text: "first" }); await finish("invalid_request"); }
+    else if (mode === "replacement") { send({ type: "start", input: [{ content: [{ type: "input_text", text: "first" }] }], model: "changed" }); await finish("invalid_request"); }
+    else if (mode === "early-steer") { send({ type: "steer", input_id: "early", input: [{ content: [{ type: "input_text", text: "first" }] }] }); await finish("invalid_request"); }
     else {
-      send({ type: "start", prompt: "first" });
-      if (mode === "duplicate") { send({ type: "start", prompt: "second" }); await finish("invalid_request"); }
+      send({ type: "start", input: [{ content: [{ type: "input_text", text: "first" }] }] });
+      if (mode === "duplicate") { send({ type: "start", input: [{ content: [{ type: "input_text", text: "second" }] }] }); await finish("invalid_request"); }
       else if (["bad-inventory", "resume-mismatch"].includes(mode)) {
         await finish("execution_failed");
         assert.equal(events.some(event => event.type === "input_ready"), false);
       } else {
         await wait(() => events.some(event => event.type === "input_ready"));
-        if (mode === "steer") send({ type: "steer", input_id: "extra", text: "second" });
+        if (mode === "steer") send({ type: "steer", input_id: "extra", input: [{ content: [{ type: "input_text", text: "second" }] }] });
         await finish();
         assert.deepEqual(observations.filter(value => value.kind === "input"), [{ kind: "input", text: "first" }]);
         if (mode === "steer") assert.ok(events.some(event => event.type === "input_applied" && event.input_id === "extra"));
@@ -197,7 +197,7 @@ for (const mode of ["missing-history", "missing-hooks", "startup-error", "early-
   test(`preparation rejects before receipt: ${mode}`, { timeout: 10000 }, async t => {
     const { child, request, events, observations, send, wait, finish } = await launch(t, mode === "cancel-startup" ? "slow-startup" : mode);
     send(request);
-    if (mode === "early-start") send({ type: "start", prompt: "too early" });
+    if (mode === "early-start") send({ type: "start", input: [{ content: [{ type: "input_text", text: "too early" }] }] });
     if (mode === "cancel-startup") { await wait(() => observations.some(value => value.kind === "spawn")); child.kill("SIGTERM"); }
     await finish(mode === "missing-history" ? "history_unavailable" : mode === "early-start" ? "invalid_request" : mode === "cancel-startup" ? "cancelled" : "execution_failed");
     assert.equal(events.some(event => event.type === "prepared"), false);
@@ -212,7 +212,7 @@ test("prepared native reader stays on the same query across Start", { timeout: 1
   send(request); await wait(() => events.some(event => event.type === "prepared"));
   send({type:"workspace_read",id:"before",path:"binary",max_bytes:4});
   await wait(()=>observations.some(value=>value.kind === "read"));
-  send({type:"start",prompt:"first"});
+  send({type:"start",input: [{ content: [{ type: "input_text", text: "first" }] }]});
   await wait(()=>events.some(event=>event.type === "workspace_read"));
   assert.deepEqual(events.find(event=>event.type === "workspace_read"),{type:"workspace_read",id:"before",data_base64:"AP+AAQ==",truncated:false});
   await finish();

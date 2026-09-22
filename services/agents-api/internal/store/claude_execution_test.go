@@ -122,7 +122,7 @@ func TestClaudeDispatcherRejectsUnsupportedConfigurationBeforeClaim(t *testing.T
 	}
 }
 
-func TestClaudeImageResultRejectsWholeBatchBeforePersistence(t *testing.T) {
+func TestClaudeInvalidImageResultRejectsWholeBatchBeforePersistence(t *testing.T) {
 	h := newDispatchHarness(t)
 	claudeSession(t, h, functionConfiguration, false)
 	worker, err := execution.StartWorker(t.Context(), h.d)

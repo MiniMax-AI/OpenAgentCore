@@ -63,9 +63,13 @@ def main():
             session = sessions.create(agent={"model": model, "instructions": "Follow user instructions. Remember supplied markers. Do not use tools."}, environment={"type": "none"})
             record = {"session": session.id, "marker": marker, "model": model, "checks": []}
             Path(output).write_text(json.dumps(record, indent=2))
-            for agent_patch, environment in [({"tools": [{"type": "function", "name": "f", "parameters": {"type": "object"}}]}, {"type": "none"}), ({"text": {"verbosity": "high"}}, {"type": "none"}), ({}, {"type": "openai_hosted"})]:
+            for agent_patch, environment in [({"tools": [{"type": "function", "name": "f", "parameters": {"type": "object"}}]}, {"type": "none"}), ({"text": {"verbosity": "high"}}, {"type": "none"})]:
                 r = http.post(base + "/v1/agents/sessions", headers=headers, json={"agent": {"model": model, **agent_patch}, "environment": environment})
                 assert r.status_code == 400, r.status_code
+            # This text-only fixture deliberately has no hosted provisioner.
+            r = http.post(base + "/v1/agents/sessions", headers=headers, json={
+                "agent": {"model": model}, "environment": {"type": "openai_hosted"}})
+            assert r.status_code == 503 and r.json()["error"]["code"] == "execution_unavailable"
             record["initial_events"] = execute(session.id, "Remember " + marker + ". Write 120 numbered lines explaining addition, one sentence per line. Start immediately.", steer=True)
             turns = sessions.turns.list(session.id, order="asc", limit=100).data
             assert len(turns) == 1 and turns[0].status == "completed", [(t.id, t.status) for t in turns]

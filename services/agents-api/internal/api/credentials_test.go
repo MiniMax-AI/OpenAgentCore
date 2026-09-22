@@ -20,6 +20,8 @@ type credentialFixture struct {
 	credential        store.Credential
 	input             store.CreateStaticCredentialInput
 	replacement       store.UpdateStaticCredentialInput
+	oauthInput        store.CreateOAuthCredentialInput
+	oauthUpdate       store.UpdateOAuthCredentialInput
 	tenant, vault, id string
 	calls             int
 	err               error

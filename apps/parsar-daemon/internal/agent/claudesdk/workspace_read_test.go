@@ -121,7 +121,7 @@ func TestWorkspaceReadDetachAndTransfer(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := make(chan proto.Envelope, 16)
-	running, err := p.Start(t.Context(), "run", "hello", out)
+	running, err := p.Start(t.Context(), "run", proto.TextInput("hello"), out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +197,7 @@ func TestWorkspaceReadDeadlineStopsOwnerBeforeUnknown(t *testing.T) {
 	if p.session.process.Context().Err() == nil {
 		t.Fatal("uncertain deadline returned before owner cancellation")
 	}
-	if _, err := p.Start(t.Context(), "late", "hello", make(chan proto.Envelope, 8)); err == nil {
+	if _, err := p.Start(t.Context(), "late", proto.TextInput("hello"), make(chan proto.Envelope, 8)); err == nil {
 		t.Fatal("unknown owner accepted a new Start")
 	}
 }

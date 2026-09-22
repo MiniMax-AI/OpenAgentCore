@@ -23,7 +23,7 @@ func TestDurableSteeringBypassesOnlyNativeResponseDeadline(t *testing.T) {
 			written := make(chan struct{})
 			reply := make(chan error, 1)
 			go func() {
-				input := proto.PromptSteerPayload{InputID: "extra", Text: "text"}
+				input := proto.PromptSteerPayload{InputID: "extra", Input: proto.TextInput("text")}
 				if durable {
 					reply <- s.SteerWithReceipt(ctx, input, func() { close(written) })
 				} else {
@@ -85,7 +85,7 @@ func TestDurableSteeringKeepsConfirmedReceiptAtCompletion(t *testing.T) {
 			inWritten, releaseWritten := make(chan struct{}), make(chan struct{})
 			reply := make(chan error, 1)
 			go func() {
-				reply <- s.SteerWithReceipt(ctx, proto.PromptSteerPayload{InputID: "extra", Text: "text"}, func() { close(inWritten); <-releaseWritten })
+				reply <- s.SteerWithReceipt(ctx, proto.PromptSteerPayload{InputID: "extra", Input: proto.TextInput("text")}, func() { close(inWritten); <-releaseWritten })
 			}()
 			var request JsonRpcRequest
 			if err := json.NewDecoder(server.FromClient).Decode(&request); err != nil {

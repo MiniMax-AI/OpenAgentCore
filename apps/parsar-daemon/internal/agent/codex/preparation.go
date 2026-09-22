@@ -24,9 +24,9 @@ func newSession(parent context.Context, req proto.PromptRequestPayload, out chan
 	if out == nil {
 		return nil, errors.New("codex: nil out channel")
 	}
-	runID, prompt := req.RunID, req.Prompt
+	runID, prompt := req.RunID, req.Input
 	req.AgentStateKey = effectiveAgentStateKey(req)
-	req.RunID, req.Prompt = "", ""
+	req.RunID, req.Input = "", nil
 	prepared, err := newPreparation(parent, req, cfg)
 	if err != nil {
 		return nil, err
@@ -45,7 +45,7 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	if req.RequireExistingNativeSession && (!req.StrictResume || req.AgentStateKey == "" || req.WorkspaceReadOnly) {
 		return nil, errors.New("codex: native-session recovery requires strict private state")
 	}
-	if req.RunID != "" || req.Prompt != "" {
+	if req.RunID != "" || len(req.Input) != 0 {
 		return nil, errors.New("codex: preparation does not accept a run identity or prompt")
 	}
 	if cfg.logger == nil {
@@ -122,6 +122,11 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	}
 	if _, err := rpc.Start(cancelCtx, initParams); err != nil {
 		return p.preparationFailed(fmt.Errorf("codex: rpc start: %w", err))
+	}
+	if req.ExecutionControls != nil && req.ExecutionControls.DisableProgrammaticToolCalling {
+		if err := verifyProgrammaticToolsDisabled(cancelCtx, rpc); err != nil {
+			return p.preparationFailed(err)
+		}
 	}
 	if req.DisableExecutionEnvironment {
 		if err := verifyNoExecutionEnvironment(cancelCtx, rpc); err != nil {

@@ -23,7 +23,7 @@ func TestNewSessionMaterialisesPiProviderModelsJSON(t *testing.T) {
 		RunID:          "run_prov",
 		ConversationID: "conv-prov",
 		AgentStateKey:  "conv-prov/agent-prov/pi",
-		Prompt:         "hello",
+		Input:          proto.TextInput("hello"),
 		AgentOptions: map[string]any{
 			"model": "parsar/claude-opus-4-6-thinking-max",
 			"pi_provider": map[string]any{

@@ -53,6 +53,8 @@ func (s *Session) onItemCompleted(raw json.RawMessage) {
 	if !s.isRootTurn(p.ThreadID, p.TurnID) || p.Item.ID == "" {
 		return
 	}
+	// Record native application before observation backpressure can delay publication.
+	s.confirmFunctionResult(raw)
 	envs, text, err := DispatchCompletedItem(s.runID, p.Item, s.bufs)
 	if err != nil {
 		s.cfg.logger.Warn("codex: dispatch completed item failed", "run_id", s.runID, "err", err)

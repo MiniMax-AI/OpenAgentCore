@@ -119,7 +119,7 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 				t.Fatal("preparation became a Run")
 			}
 			if start {
-				input := proto.ExecutionStartPayload{Handle: ready.Handle, RunID: "actual-run", Prompt: "actual input"}
+				input := proto.ExecutionStartPayload{Handle: ready.Handle, RunID: "actual-run", Input: proto.TextInput("actual input")}
 				send(proto.TypeExecutionStart, "prepare-request", input)
 				await("started")
 				frames := waitPreparationMethod(t, root, "turn/start")

@@ -1,0 +1,56 @@
+package store_test
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
+	"github.com/google/uuid"
+)
+
+func TestManagedDeploymentStartupRejectsSwitchBeforeBackendAccess(t *testing.T) {
+	s, _ := store.NewManagedTestStore(t)
+	key := uuid.NewString()
+	old := &lifecycleProvider{resources: map[string]sandbox.Info{}}
+	worker, stop := managedWorker(t, s, key, old)
+	tenant, _, environment := managedSession(t, s)
+	owner, err := worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop()
+	replacement := &lifecycleProvider{resources: map[string]sandbox.Info{}}
+	config := &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: uuid.NewString(), BackendFingerprint: strings.Repeat("b", 64), Provider: replacement, Maintenance: true}
+	start := func(config *execution.RuntimeProvider) error {
+		_, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry(), ManagedRuntimes: config})
+		return err
+	}
+	if err := start(config); err == nil || !strings.Contains(err.Error(), "maintenance") {
+		t.Fatal("startup switched active deployment", err)
+	}
+	worker, stop = managedWorkerMode(t, s, key, old, true)
+	replay, err := worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, key)
+	if err != nil || !replay.Replayed || replay.ID != owner.ID {
+		t.Fatal("maintenance interrupted existing allocation", replay, err)
+	}
+	stop()
+	if err := start(config); err == nil || !strings.Contains(err.Error(), "unreleased allocations") {
+		t.Fatal("startup abandoned retained allocation", err)
+	}
+	if err := start(nil); err == nil || !strings.Contains(err.Error(), "unreleased allocations") {
+		t.Fatal("omitted configuration abandoned deployment", err)
+	}
+	if replacement.creates != 0 || replacement.kills != 0 {
+		t.Fatal("rejected startup touched new backend")
+	}
+	got, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
+	if err != nil || got.ID != owner.ID || got.ProviderKey != key {
+		t.Fatal("rejected startup rewrote resource owner", got, err)
+	}
+	// Failed startup relinquishes its lease, so the original backend can resume.
+	_, stop = managedWorker(t, s, key, old)
+	stop()
+}

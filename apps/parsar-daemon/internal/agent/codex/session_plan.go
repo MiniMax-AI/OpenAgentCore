@@ -28,6 +28,7 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 		plan.Cleanup()
 		return SessionPlan{}, nil, err
 	}
+	disableProgrammaticTools(&plan, req.ExecutionControls)
 	if profile != "" {
 		plan.Sandbox = ""
 		plan.Permissions = profile
