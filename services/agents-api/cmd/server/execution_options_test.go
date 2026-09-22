@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,5 +70,52 @@ func TestExecutionOptionsSeparateHarnessCredentials(t *testing.T) {
 	}
 	if _, err := resolve(t.Context(), store.Session{Engine: "mcode"}); err == nil {
 		t.Fatal("legacy credentials crossed harness boundary")
+	}
+}
+
+func TestExecutionOptionsConfigurationReportsOnlyEndpointPresence(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "options.json")
+	t.Setenv("AGENTS_API_EXECUTION_OPTIONS_FILE", file)
+	t.Setenv("AGENTS_API_ENGINE", "codex")
+	raw := `{"by_harness":{"codex":{"codex_provider":{"base_url":"https://user:secret@example.test/v1?token=private","bearer_token":"codex-secret"}},"claude_sdk":{"claude_provider":{"base_url":"   ","bearer_token":"claude-secret"}},"mcode":{"mcode_provider":{"options":{"baseURL":"https://mcode.example.test","apiKey":"mcode-secret"}}}}}`
+	if err := os.WriteFile(file, []byte(raw), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, configured, err := executionOptionsConfiguration()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !configured["codex"] || configured["claude_sdk"] || !configured["mcode"] {
+		t.Fatalf("endpoint presence = %#v", configured)
+	}
+	for _, value := range configured {
+		if value != true && value != false {
+			t.Fatal("non-boolean projection")
+		}
+	}
+	encoded, err := json.Marshal(coreStartupConfiguration("codex", []string{"claude_sdk", "codex", "mcode"}, true, configured, "", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, private := range []string{"example.test", "user:secret", "token=private", "codex-secret", "claude-secret", "mcode-secret", "base_url", "baseURL", "apiKey", "bearer_token"} {
+		if strings.Contains(string(encoded), private) {
+			t.Fatalf("private execution option %q leaked into startup projection: %s", private, encoded)
+		}
+	}
+}
+
+func TestExecutionOptionsConfigurationRejectsLegacyMCodeEndpointShape(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "options.json")
+	t.Setenv("AGENTS_API_EXECUTION_OPTIONS_FILE", file)
+	t.Setenv("AGENTS_API_ENGINE", "mcode")
+	if err := os.WriteFile(file, []byte(`{"mcode_provider":{"base_url":"https://legacy.example.test","api_key":"private"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, configured, err := executionOptionsConfiguration()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if configured["mcode"] {
+		t.Fatalf("legacy mcode endpoint shape reported as configured: %#v", configured)
 	}
 }

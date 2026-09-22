@@ -1,106 +1,113 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import type { CoreStartupConfiguration } from "@agents-core-web/agents-client";
+
 import { safeCoreBaseUrlLabel, SystemView } from "./SystemView";
 
-describe("SystemView", () => {
-  it("shows only the four operator-facing status cards", () => {
-    const html = renderToStaticMarkup(
-      <SystemView
-        coreState="ready"
-        coreBaseUrl="https://user:pass@core.example/v1?token=secret#fragment"
-        selfHostedEnabled
-        vaultCollectionState="ready"
-        vaultSupported
-        refreshing={false}
-        onRefresh={() => undefined}
-      />,
-    );
+const startup: CoreStartupConfiguration = {
+  object: "agents.core.startup_configuration",
+  schema_version: 1,
+  supported: {
+    harnesses: ["claude_sdk", "codex", "mcode"],
+    managed_sandbox_providers: ["docker", "microsandbox"],
+  },
+  configured: {
+    default_harness: "codex",
+    enabled_harnesses: ["claude_sdk", "codex"],
+    daemon_gateway: true,
+    self_hosted: true,
+    managed_sandbox: { enabled: true, provider: "docker", maintenance: false },
+    model_providers: [
+      { harness: "claude_sdk", endpoint_configured: false },
+      { harness: "codex", endpoint_configured: true },
+    ],
+  },
+};
 
-    expect(html).toContain("Connection status");
-    expect(html.match(/role="listitem"/g)).toHaveLength(4);
-    expect(html).toContain('aria-live="polite"');
-    expect(html).toContain('aria-busy="false"');
-    expect(html).toContain("Core API");
-    expect(html).toContain("https://core.example/v1");
-    expect(html).toContain("confirmed by an Agent or Session API request");
-    expect(html).toContain("Vaults");
+function render(overrides: Partial<Parameters<typeof SystemView>[0]> = {}): string {
+  return renderToStaticMarkup(
+    <SystemView
+      coreState="ready"
+      coreBaseUrl="https://user:pass@core.example/v1?token=secret#fragment"
+      startupConfiguration={startup}
+      startupConfigurationState="ready"
+      startupConfigurationSupported
+      vaultCollectionState="ready"
+      vaultSupported
+      selfHostedWebEnabled
+      managedWebEnabled
+      refreshing={false}
+      onRefresh={() => undefined}
+      {...overrides}
+    />,
+  );
+}
+
+describe("SystemView", () => {
+  it("renders startup support and configuration without claiming Runtime readiness", () => {
+    const html = render();
+
+    expect(html).toContain("Core startup configuration");
+    expect(html.match(/role="listitem"/g)).toHaveLength(5);
     expect(html).toContain("Vault catalog loaded");
-    expect(html).toContain("Self-hosted");
-    expect(html).toContain("Enabled");
-    expect(html).toContain("Runtime status");
-    expect(html).toContain("Cannot be pre-checked");
-    expect(html).toContain("Runtime availability is verified when a Session executes");
-    expect(html).toContain("Refresh System status");
-    expect(html).not.toContain("Source Files");
-    expect(html).not.toContain("Public capability surface");
-    expect(html).not.toContain("Ownership layers");
-    expect(html).not.toContain("Environment profiles");
-    expect(html).not.toContain("Core contract");
-    expect(html).not.toContain("What this page proves");
+    expect(html).toContain("Default harness");
+    expect(html).toContain("Managed sandbox");
+    expect(html).toContain("LLM endpoints");
+    expect(html).toContain("1/2 configured");
+    expect(html).toContain("Configured for this process");
+    expect(html).toContain("Daemon gateway");
+    expect(html).toContain("Supported by this build: Docker, Microsandbox");
+    expect(html).toContain("Claude SDK");
+    expect(html).toContain("MiniMax Code");
+    expect(html).toContain("Operator LLM endpoint: configured");
+    expect(html).toContain("Runtime connection, native binary availability, sandbox health, and model execution belong to the relevant Session or Environment");
+    expect(html).not.toContain("Runtime status");
+    expect(html).not.toContain("ready");
     expect(html).not.toContain("user:pass");
     expect(html).not.toContain("token=secret");
     expect(html).not.toContain("fragment");
-    expect(html).not.toContain('role="img"');
   });
 
-  it("keeps unsupported and disabled states explicit", () => {
-    const html = renderToStaticMarkup(
-      <SystemView
-        coreState="connecting"
-        coreBaseUrl="/v1"
-        selfHostedEnabled={false}
-        vaultCollectionState="failed"
-        vaultSupported={false}
-        refreshing
-        onRefresh={() => undefined}
-      />,
-    );
+  it("shows maintenance and Web-build boundaries separately from Core configuration", () => {
+    const maintenance: CoreStartupConfiguration = {
+      ...startup,
+      configured: {
+        ...startup.configured,
+        managed_sandbox: { enabled: true, provider: "microsandbox", maintenance: true },
+      },
+    };
+    const html = render({ startupConfiguration: maintenance, selfHostedWebEnabled: false, managedWebEnabled: false });
 
-    expect(html).toContain("Checking…");
-    expect(html).toContain("This Core does not expose the Vaults API");
-    expect(html).toContain("Disabled");
-    expect(html).toContain("Self-hosted Session creation is disabled in this Web build");
-    expect(html).toContain("Refreshing…");
-    expect(html).toContain('aria-busy="true"');
-    expect(html).toContain("disabled");
-    expect(html).toContain("/v1");
+    expect(html).toContain("Microsandbox · Maintenance");
+    expect(html).toContain("Selected provider is in maintenance mode");
+    expect(html).toContain("This Web build cannot request managed Sessions");
+    expect(html).toContain("This Web build cannot request self-hosted Sessions");
   });
 
-  it("shows a failed Vault capability check instead of a permanent pending state", () => {
-    const html = renderToStaticMarkup(
-      <SystemView
-        coreState="ready"
-        coreBaseUrl="/v1"
-        selfHostedEnabled
-        vaultCollectionState="failed"
-        vaultSupported={null}
-        refreshing={false}
-        onRefresh={() => undefined}
-      />,
-    );
+  it("handles an older Core without leaving a pending state", () => {
+    const html = render({
+      startupConfiguration: null,
+      startupConfigurationState: "ready",
+      startupConfigurationSupported: false,
+    });
 
-    expect(html).toContain("Check failed");
-    expect(html).toContain("The Vaults API check failed");
+    expect(html).toContain("Not exposed");
+    expect(html).toContain("This Core version does not expose the startup configuration extension");
+    expect(html).not.toContain("Configured for this process");
     expect(html).not.toContain("Checking…");
   });
 
-  it("distinguishes a failed Vault refresh from an unsupported Core", () => {
-    const html = renderToStaticMarkup(
-      <SystemView
-        coreState="ready"
-        coreBaseUrl="/v1"
-        selfHostedEnabled
-        vaultCollectionState="failed"
-        vaultSupported
-        refreshing={false}
-        onRefresh={() => undefined}
-      />,
-    );
+  it("fails closed when the startup configuration read fails", () => {
+    const html = render({
+      startupConfiguration: null,
+      startupConfigurationState: "failed",
+      startupConfigurationSupported: null,
+    });
 
-    expect(html).toContain("Refresh failed");
-    expect(html).toContain("The latest Vault catalog request failed");
-    expect(html).not.toContain("This Core does not expose the Vaults API");
+    expect(html).toContain("Unavailable");
+    expect(html).toContain("No configuration is inferred");
+    expect(html).not.toContain("Configured for this process");
   });
 
   it("sanitizes Core labels independently from connection storage", () => {

@@ -715,7 +715,35 @@ export interface CreateSessionStreamOptions extends StreamOptions {
   onSession: (session: AgentSession) => void;
 }
 
+export type CoreHarnessKind = "claude_sdk" | "codex" | "mcode";
+export type CoreManagedSandboxProvider = "docker" | "microsandbox";
+
+export interface CoreStartupConfiguration {
+  object: "agents.core.startup_configuration";
+  schema_version: 1;
+  supported: {
+    harnesses: CoreHarnessKind[];
+    managed_sandbox_providers: CoreManagedSandboxProvider[];
+  };
+  configured: {
+    default_harness: CoreHarnessKind;
+    enabled_harnesses: CoreHarnessKind[];
+    daemon_gateway: boolean;
+    self_hosted: boolean;
+    managed_sandbox: {
+      enabled: boolean;
+      provider: CoreManagedSandboxProvider | null;
+      maintenance: boolean;
+    };
+    model_providers: Array<{
+      harness: CoreHarnessKind;
+      endpoint_configured: boolean;
+    }>;
+  };
+}
+
 export interface AgentCore {
+  retrieveStartupConfiguration(options?: ReadOptions): Promise<CoreStartupConfiguration>;
   listAgents(options?: PageOptions): Promise<ListPage<SavedAgent>>;
   createAgent(input: CreateAgentInput): Promise<SavedAgent>;
   retrieveAgent(agentId: string): Promise<SavedAgent>;

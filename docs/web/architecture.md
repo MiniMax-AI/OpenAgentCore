@@ -98,7 +98,7 @@ capability and its lifecycle behavior is verified.
 | Boundary | Wire protocol | Authentication | Contract owner |
 | --- | --- | --- | --- |
 | Browser → proxy/BFF | Same-origin HTTP under `/v1` | Web deployment policy; local proxy holds a Core bearer | Agents Core Web deployment |
-| Proxy/BFF → Core | HTTP JSON/SSE under `/v1/agents/**`; HTTP JSON under `/v1/vaults/**`; multipart/JSON/binary under `/v1/files**` | `Authorization: Bearer …`; route-specific `OpenAI-Beta: agents=v1` | Pinned Agents, Vault/Credential, and Source Files subset |
+| Proxy/BFF → Core | HTTP JSON/SSE under `/v1/agents/**`, including the read-only startup configuration extension; HTTP JSON under `/v1/vaults/**`; multipart/JSON/binary under `/v1/files**` | `Authorization: Bearer …`; route-specific `OpenAI-Beta: agents=v1` | Pinned Agents, Core extensions, Vault/Credential, and Source Files subset |
 | Core ↔ daemon | Private reverse WebSocket, Parsar JSON envelope protocol | Separate device credential | Parsar internal protocol |
 | Core ↔ self-hosted executor | Native registration plus opaque relay outside `/v1/agents/**` | Operator-issued executor principal credential | Parsar native executor contract |
 | Daemon ↔ Codex | `codex app-server --stdio`; JSON-RPC 2.0 over newline-delimited JSON | Native host configuration | Codex adapter |
@@ -111,6 +111,8 @@ These interfaces are not interchangeable. In particular:
 - the daemon WebSocket URL is not an Agents API base URL;
 - OpenAI Agents API is not the same thing as OpenAI Agents SDK or Responses API;
 - saving a model ID does not select an executor or prove provider availability;
+- startup support/configuration does not report daemon or Runtime observations and
+  does not prove model endpoint reachability, credentials or sandbox readiness;
 - a Session Environment ID, connection state, or copied launcher command does not
   prove native readiness, isolation, or completed execution;
 - multiple saved Agents do not imply protocol multi-agent/Subagent support.

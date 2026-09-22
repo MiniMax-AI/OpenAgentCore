@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
@@ -12,17 +13,22 @@ import (
 // Operator options use the existing transient adapter configuration path. They
 // are not public Session configuration and are never persisted with its snapshot.
 func executionOptions() (func(context.Context, store.Session) (map[string]any, error), error) {
+	resolve, _, err := executionOptionsConfiguration()
+	return resolve, err
+}
+
+func executionOptionsConfiguration() (func(context.Context, store.Session) (map[string]any, error), map[string]bool, error) {
 	file := os.Getenv("AGENTS_API_EXECUTION_OPTIONS_FILE")
 	if file == "" {
-		return nil, nil
+		return nil, map[string]bool{}, nil
 	}
 	raw, err := os.ReadFile(file)
 	if err != nil {
-		return nil, errors.New("cannot read AGENTS_API_EXECUTION_OPTIONS_FILE")
+		return nil, nil, errors.New("cannot read AGENTS_API_EXECUTION_OPTIONS_FILE")
 	}
 	var check map[string]any
 	if json.Unmarshal(raw, &check) != nil || check == nil {
-		return nil, errors.New("execution options must contain a JSON object")
+		return nil, nil, errors.New("execution options must contain a JSON object")
 	}
 	defaultEngine := os.Getenv("AGENTS_API_ENGINE")
 	if defaultEngine == "" {
@@ -32,16 +38,26 @@ func executionOptions() (func(context.Context, store.Session) (map[string]any, e
 	if value, exists := check["by_harness"]; exists {
 		encoded, _ := json.Marshal(value)
 		if len(check) != 1 || json.Unmarshal(encoded, &byHarness) != nil || byHarness == nil {
-			return nil, errors.New("execution by_harness options must be an exclusive object")
+			return nil, nil, errors.New("execution by_harness options must be an exclusive object")
 		}
 		for _, entry := range byHarness {
 			var object map[string]any
 			if json.Unmarshal(entry, &object) != nil || object == nil {
-				return nil, errors.New("execution harness options must be objects")
+				return nil, nil, errors.New("execution harness options must be objects")
 			}
 		}
 	}
-	return func(_ context.Context, session store.Session) (map[string]any, error) {
+	configured := make(map[string]bool)
+	if byHarness != nil {
+		for harness, entry := range byHarness {
+			var object map[string]any
+			_ = json.Unmarshal(entry, &object)
+			configured[harness] = modelProviderEndpointConfigured(harness, object)
+		}
+	} else {
+		configured[defaultEngine] = modelProviderEndpointConfigured(defaultEngine, check)
+	}
+	resolve := func(_ context.Context, session store.Session) (map[string]any, error) {
 		selected := raw
 		if byHarness != nil {
 			var ok bool
@@ -56,5 +72,24 @@ func executionOptions() (func(context.Context, store.Session) (map[string]any, e
 		var options map[string]any
 		err := json.Unmarshal(selected, &options)
 		return options, err
-	}, nil
+	}
+	return resolve, configured, nil
+}
+
+func modelProviderEndpointConfigured(harness string, options map[string]any) bool {
+	key := map[string]string{"codex": "codex_provider", "claude_sdk": "claude_provider", "mcode": "mcode_provider"}[harness]
+	provider, ok := options[key].(map[string]any)
+	if !ok {
+		return false
+	}
+	if harness == "mcode" {
+		nativeOptions, ok := provider["options"].(map[string]any)
+		if !ok {
+			return false
+		}
+		baseURL, ok := nativeOptions["baseURL"].(string)
+		return ok && strings.TrimSpace(baseURL) != ""
+	}
+	baseURL, ok := provider["base_url"].(string)
+	return ok && strings.TrimSpace(baseURL) != ""
 }

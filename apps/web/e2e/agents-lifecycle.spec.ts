@@ -2373,11 +2373,18 @@ test("presents Dashboard page-chain results and System boundaries without extra 
   const system = page.locator(".system-page");
   await expect(system.getByRole("listitem").filter({ hasText: "Core API" })).toContainText("Available");
   await expect(system.getByRole("listitem").filter({ hasText: "Vaults" })).toContainText("Available");
-  await expect(system.getByRole("listitem").filter({ hasText: "Self-hosted" })).toContainText("Enabled");
-  await expect(system.getByRole("listitem").filter({ hasText: "Runtime status" })).toContainText("Cannot be pre-checked");
-  await expect(system.getByRole("listitem")).toHaveCount(4);
+  await expect(system.getByRole("listitem").filter({ hasText: "Default harness" })).toContainText("Codex");
+  await expect(system.getByRole("listitem").filter({ hasText: "Managed sandbox" })).toContainText("Docker");
+  await expect(system.getByRole("listitem").filter({ hasText: "LLM endpoints" })).toContainText("1/2 configured");
+  await expect(system.getByRole("listitem")).toHaveCount(5);
+  await expect(system).toContainText("Configured for this process");
+  await expect(system).toContainText("Daemon gateway");
+  await expect(system).toContainText("Operator LLM endpoint: configured");
+  await expect(system).toContainText("Known by this build but not enabled for this process");
+  await expect(system).toContainText("Runtime connection, native binary availability, sandbox health, and model execution belong to the relevant Session or Environment");
   await expect(system).not.toContainText("Source Files");
   await expect(system).not.toContainText("Public capability surface");
+  await expect(system).not.toContainText("Cannot be pre-checked");
 
   const beforeSystemRefresh = await fixtureRequests(request);
   const systemRefresh = system.getByRole("button", { name: "Refresh System status" });
@@ -2392,6 +2399,9 @@ test("presents Dashboard page-chain results and System boundaries without extra 
   const afterSystemRefresh = await fixtureRequests(request);
   expect(count(afterSystemRefresh, "/v1/agents")).toBe(count(beforeSystemRefresh, "/v1/agents") + 1);
   expect(count(afterSystemRefresh, "/v1/agents/sessions")).toBe(count(beforeSystemRefresh, "/v1/agents/sessions") + 1);
+  expect(count(afterSystemRefresh, "/v1/agents/core/startup-configuration")).toBe(
+    count(beforeSystemRefresh, "/v1/agents/core/startup-configuration") + 1,
+  );
   for (const path of detailPaths) expect(count(afterSystemRefresh, path)).toBe(count(beforeSystemRefresh, path));
   await attachScreenshot(page, testInfo, "desktop-system-contract-boundary");
 

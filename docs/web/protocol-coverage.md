@@ -14,7 +14,8 @@ OpenAI-hosted service compatibility.
   both supported Environment resource projections, and Environment Files.create
   for that qualified managed placement. `OpenAI-Beta: agents=v1` plus the
   `/v1/agents/**` resources and Session events endpoint remain the versioned Web/Core
-  contract. Core exposes no public execution-readiness, capability-discovery, or
+  contract. The Core startup extension exposes a safe build-support and process-
+  configuration snapshot, but no execution-readiness, live Runtime capability, or
   build-version resource. It exposes Codex-only, Session-scoped `self_hosted`
   creation; basic Codex/Docker `openai_hosted` creation when Core is explicitly
   configured with a qualified managed provider; Environment retrieval; bounded
@@ -30,8 +31,9 @@ OpenAI-hosted service compatibility.
   three harnesses, alongside the earlier Docker qualification. E2B is a Core-side
   provider behind the unchanged `openai_hosted` discriminator: the public contract
   exposes no provider field, no image or sandbox template selector, and no
-  provider-discovery route, so Web cannot select, name, or verify which provider
-  backs a managed Runtime. A Core build without the Template resource rejects that
+  provider configuration route. The startup extension can name the selected
+  provider kind without exposing provider identity or proving Runtime readiness;
+  Web still cannot select or configure it. A Core build without the Template resource rejects that
   collection path, and Web reports the absent capability instead of an empty
   configuration list.
 - Upstream resource source: `openai-python` 3.13.0 beta Agents resources at
@@ -54,6 +56,7 @@ the Core key binding. Agents Core Web's local proxy owns the bearer server-side.
 
 | Resource / behavior | TypeScript client | Initial UI | Notes |
 | --- | --- | --- | --- |
+| Core startup configuration extension | Yes | Yes, System | Strictly projects build-supported harness/provider kinds and validated process selections. Operator endpoint reporting is boolean; URLs, credentials, paths, daemon/Runtime identity and Session/Environment observations are excluded. Unsupported older Core versions remain explicit |
 | Saved Agents create/list | Yes | Yes | Dedicated setup covers model, name, instructions, bounded metadata, the Session-safe text/medium/implicit-reasoning/auto-tier profile, and the strictly bounded Function/service-origin HTTP MCP form profiles; the broader Saved Agent contract is not execution proof |
 | Saved Agents retrieve/update/delete | Yes | Yes | Agent details support viewing, editing, and deleting saved Agents; unsupported or saved-only Tool values remain read-only and are omitted from unrelated updates |
 | Function form profile | Yes | Yes | Web validates at most 64 non-deferred definitions, unique non-whitespace names of at most 512 UTF-8 bytes, descriptions, and object JSON-Schema parameters before writing |

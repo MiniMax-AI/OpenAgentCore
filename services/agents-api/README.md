@@ -202,6 +202,8 @@ The SDK base URL is `http://127.0.0.1:8091/v1`. Requests require a bearer key.
 Agents and Vault routes also require `OpenAI-Beta: agents=v1` (set by their SDK
 resources); general Files routes do not. Supported operations include:
 
+- Safe read-only [Core startup configuration](../../contracts/agents-api/startup-configuration.md)
+  for build support and process selections, without Runtime or Session observations.
 - Saved Agent create/retrieve/update/list/delete.
 - Session create/retrieve/list/delete and metadata-only update. Creation supports inline
   configuration or a saved `agent_id`, field replacements, optional initial text

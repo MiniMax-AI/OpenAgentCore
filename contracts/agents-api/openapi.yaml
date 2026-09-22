@@ -97,6 +97,112 @@ definitions:
     required:
     - harness
     type: object
+  v1.CoreConfiguredStartupConfiguration:
+    properties:
+      daemon_gateway:
+        type: boolean
+      default_harness:
+        enum:
+        - codex
+        - claude_sdk
+        - mcode
+        type: string
+      enabled_harnesses:
+        items:
+          enum:
+          - claude_sdk
+          - codex
+          - mcode
+          type: string
+        type: array
+      managed_sandbox:
+        $ref: '#/definitions/v1.CoreManagedSandboxConfiguration'
+      model_providers:
+        items:
+          $ref: '#/definitions/v1.CoreHarnessModelProviderConfiguration'
+        type: array
+      self_hosted:
+        type: boolean
+    required:
+    - daemon_gateway
+    - default_harness
+    - enabled_harnesses
+    - managed_sandbox
+    - model_providers
+    - self_hosted
+    type: object
+  v1.CoreHarnessModelProviderConfiguration:
+    properties:
+      endpoint_configured:
+        type: boolean
+      harness:
+        enum:
+        - codex
+        - claude_sdk
+        - mcode
+        type: string
+    required:
+    - endpoint_configured
+    - harness
+    type: object
+  v1.CoreManagedSandboxConfiguration:
+    properties:
+      enabled:
+        type: boolean
+      maintenance:
+        type: boolean
+      provider:
+        enum:
+        - docker
+        - microsandbox
+        type: string
+        x-nullable: true
+    required:
+    - enabled
+    - maintenance
+    - provider
+    type: object
+  v1.CoreStartupConfiguration:
+    properties:
+      configured:
+        $ref: '#/definitions/v1.CoreConfiguredStartupConfiguration'
+      object:
+        enum:
+        - agents.core.startup_configuration
+        type: string
+      schema_version:
+        enum:
+        - 1
+        type: integer
+      supported:
+        $ref: '#/definitions/v1.CoreSupportedConfiguration'
+    required:
+    - configured
+    - object
+    - schema_version
+    - supported
+    type: object
+  v1.CoreSupportedConfiguration:
+    properties:
+      harnesses:
+        items:
+          enum:
+          - claude_sdk
+          - codex
+          - mcode
+          type: string
+        type: array
+      managed_sandbox_providers:
+        items:
+          enum:
+          - docker
+          - microsandbox
+          type: string
+        type: array
+    required:
+    - harnesses
+    - managed_sandbox_providers
+    type: object
   v1.CreateAgentRequest:
     properties:
       instructions:
@@ -2248,6 +2354,43 @@ paths:
       summary: Update a reusable Agent
       tags:
       - Agents
+  /agents/core/startup-configuration:
+    get:
+      description: Returns a secret-free snapshot of supported build capabilities
+        and validated process startup selections. It does not inspect or aggregate
+        daemon heartbeats, Sessions, Environments or Runtime state, and does not prove
+        model-provider reachability, credentials, native readiness, sandbox isolation
+        or successful execution.
+      parameters:
+      - description: agents=v1
+        in: header
+        name: OpenAI-Beta
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.CoreStartupConfiguration'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Retrieve safe Core startup configuration
+      tags:
+      - Core extensions
   /agents/environments/{environment_id}:
     get:
       description: Returns durable connection status and safe installed metadata for

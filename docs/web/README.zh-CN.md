@@ -47,8 +47,9 @@ Session 的对话和工作历史保存在 Core 中。一个页面同时提供 Se
 
 ### System 与连接状态
 
-System 展示当前 Core 对 Web 暴露的能力，并区分 API 访问、Vault、self-hosted 展示
-开关和运行时就绪状态，避免把 HTTP 服务正常误认为模型执行链路已经可用。
+System 展示当前 Core 构建支持的 harness，以及本次进程启动时配置的 daemon gateway、
+self-hosted、managed sandbox 和 LLM endpoint 是否存在。页面不聚合 Runtime/daemon
+运行态，避免把已配置误认为模型执行链路已经就绪。
 
 ![Core 连接和能力状态](images/system.png)
 
@@ -64,7 +65,7 @@ System 展示当前 Core 对 Web 暴露的能力，并区分 API 访问、Vault�
 | Vaults | 创建项目 Vault，管理只写 MCP Bearer 凭据，Web 不会读回 Token |
 | Environments | 默认执行、可选 self-hosted executor 连接和可选 managed Runtime |
 | Workspace 与 Files | 在 Core 支持时查看 Environment 文件并管理项目 Source Files |
-| System | 查看连接、已暴露能力、Core 所有权边界和本地恢复引导 |
+| System | 查看连接、构建支持项和安全的进程启动配置，并与 Session/Environment 运行态明确分离 |
 
 只有连接的 Core 和 Web 运维配置明确暴露的能力才会显示。Agent 保存成功只代表定义
 已经持久化；实际执行仍依赖 Core 的运行时、模型提供商、凭据和工具连接。
