@@ -215,7 +215,7 @@ func TestSelfHostedCreationRequiresOperatorExecution(t *testing.T) {
 func TestHostedCreationRequiresOperatorExecution(t *testing.T) {
 	for _, stream := range []bool{false, true} {
 		handler, fixture := environmentCreationHandler(t, "codex", WithExecution(&inputRecorder{}), WithEnvironmentRemoteURL(environmentOrigin))
-		body := fmt.Sprintf(`{"agent":{"model":"model"},"environment":{"type":"openai_hosted"},"stream":%t}`, stream)
+		body := fmt.Sprintf(`{"agent":{"model":"model"},"environment":{"type":"openai_hosted"},"stream":%t,"input":"Initialize the hosted execution."}`, stream)
 		request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer key")
 		request.Header.Set("OpenAI-Beta", "agents=v1")

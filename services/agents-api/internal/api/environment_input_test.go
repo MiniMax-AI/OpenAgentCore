@@ -68,7 +68,8 @@ func TestPreparedEnvironmentInputWaitExtendsOnlyItsResponseDeadline(t *testing.T
 				options = append(options, WithEnvironmentRemoteURL(environmentOrigin))
 			}
 			handler, fixture := environmentCreationHandler(t, "codex", options...)
-			create := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"MiniMax-M3"},"environment":`+environmentJSON+`}`))
+			waiting.InputSubmitter = &inputRecorder{ResourceStore: fixture}
+			create := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"MiniMax-M3"},"environment":`+environmentJSON+`,"input":"Prepare the response deadline fixture."}`))
 			create.Header.Set("Authorization", "Bearer key")
 			create.Header.Set("OpenAI-Beta", "agents=v1")
 			created := httptest.NewRecorder()

@@ -33,8 +33,10 @@ func TestSessionHarnessAdmission(t *testing.T) {
 			if tc.enabled {
 				options = append(options, WithHarnesses([]string{"claude_sdk", "mcode"}))
 			}
-			h, s, _ := testHandler(t, options...)
-			r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"fixture"`+tc.extension+tc.extra+`},"environment":`+tc.environment+`}`))
+			s := &recordingStore{}
+			options = append(options, WithExecution(&inputRecorder{ResourceStore: s}))
+			h, _, _ := testHandler(t, options...)
+			r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"fixture"`+tc.extension+tc.extra+`},"environment":`+tc.environment+`,"input":"Run on the selected harness."}`))
 			r.Header.Set("Authorization", "Bearer test-api-key")
 			r.Header.Set("OpenAI-Beta", "agents=v1")
 			w := httptest.NewRecorder()

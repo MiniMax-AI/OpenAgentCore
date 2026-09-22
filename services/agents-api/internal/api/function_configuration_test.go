@@ -13,8 +13,9 @@ import (
 func TestPublicFunctionConfiguration(t *testing.T) {
 	tool := `{"type":"function","name":"lookup","description":"","parameters":{"const":9007199254740993}}`
 	for _, suffix := range []string{"", `,"tools":null`, `,"tools":[]`, `,"tools":[` + tool + `]`, `,"tools":[` + strings.TrimSuffix(tool, "}") + `,"defer_loading":false}]`} {
-		h, s, _ := testHandler(t)
-		req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"model"`+suffix+`},"environment":{"type":"none"}}`))
+		s := &recordingStore{}
+		h, _, _ := testHandler(t, WithExecution(&inputRecorder{ResourceStore: s}))
+		req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"model"`+suffix+`},"environment":{"type":"none"},"input":"Use the configured function when needed."}`))
 		req.Header.Set("Authorization", "Bearer test-api-key")
 		req.Header.Set("OpenAI-Beta", "agents=v1")
 		w := httptest.NewRecorder()
@@ -53,7 +54,7 @@ func TestPublicFunctionConfigurationRejectsInvalidOrUnsupported(t *testing.T) {
 		`[{` + base + `,"unexpected":true}]`, `[{` + base + `},{` + base + `}]`,
 	} {
 		h, s, _ := testHandler(t)
-		req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"model","tools":`+raw+`},"environment":{"type":"none"}}`))
+		req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"model","tools":`+raw+`},"environment":{"type":"none"},"input":"Use the configured function when needed."}`))
 		req.Header.Set("Authorization", "Bearer test-api-key")
 		req.Header.Set("OpenAI-Beta", "agents=v1")
 		w := httptest.NewRecorder()

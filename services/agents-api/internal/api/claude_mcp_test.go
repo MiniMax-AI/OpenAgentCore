@@ -40,11 +40,11 @@ func TestClaudeMCPAdmitsResolvedCredentials(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			h, err := NewHandler(s, auth, "claude_sdk")
+			h, err := NewHandler(s, auth, "claude_sdk", WithExecution(&inputRecorder{ResourceStore: s}))
 			if err != nil {
 				t.Fatal(err)
 			}
-			body := fmt.Sprintf(`{"agent":{"model":"model","tools":[%s]},"environment":{"type":"none"},"vault_ids":[%q]}`, tool, vault)
+			body := fmt.Sprintf(`{"agent":{"model":"model","tools":[%s]},"environment":{"type":"none"},"vault_ids":[%q],"input":"Use the configured records server."}`, tool, vault)
 			response := credentialRequest(h, "POST", "/v1/agents/sessions", body)
 			if response.Code != 201 || s.calls != 1 || s.tenant == "" {
 				t.Fatal("credential selection or admission failed", response.Code, response.Body, s.calls)

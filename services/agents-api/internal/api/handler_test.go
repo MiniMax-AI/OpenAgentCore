@@ -56,8 +56,9 @@ func testHandler(t *testing.T, options ...Option) (http.Handler, *recordingStore
 }
 
 func TestHTTPConfigurationAndTenantIdentity(t *testing.T) {
-	h, s, tenant := testHandler(t)
-	body := `{"agent":{"model":"requested-model","instructions":"Keep this."},"environment":{"type":"none"},"metadata":{"tenant_id":"untrusted-tenant"}}`
+	s := &recordingStore{}
+	h, _, tenant := testHandler(t, WithExecution(&inputRecorder{ResourceStore: s}))
+	body := `{"agent":{"model":"requested-model","instructions":"Keep this."},"environment":{"type":"none"},"metadata":{"tenant_id":"untrusted-tenant"},"input":"Follow the configured instructions."}`
 	request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer test-api-key")
 	request.Header.Set("OpenAI-Beta", "agents=v1")
@@ -78,7 +79,7 @@ func TestHTTPConfigurationAndTenantIdentity(t *testing.T) {
 }
 
 func TestHTTPRejectsUntrustedOrUnsupportedRequests(t *testing.T) {
-	valid := `{"agent":{"model":"example"},"environment":{"type":"none"}}`
+	valid := `{"agent":{"model":"example"},"environment":{"type":"none"},"input":"Run the configured request."}`
 	for _, test := range []struct {
 		name, auth, beta, path, body string
 		status                       int
@@ -90,7 +91,7 @@ func TestHTTPRejectsUntrustedOrUnsupportedRequests(t *testing.T) {
 		{"tenant body", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"tenant_id":"other","agent":`, 1), 400},
 		{"hosted environment without managed deployment", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"none"`, `"openai_hosted"`, 1), 503},
 		{"self-hosted environment", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"none"`, `"self_hosted"`, 1), 400},
-		{"initial input", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"input":"run it","agent":`, 1), 503},
+		{"initial input", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", valid, 503},
 		{"stream unavailable", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"stream":true,"agent":`, 1), 503},
 		{"unknown saved agent", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"agent_id":"saved","agent":`, 1), 404},
 		{"unknown agent option", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"model":`, `"tools":[{}],"model":`, 1), 400},

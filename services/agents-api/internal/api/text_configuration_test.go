@@ -19,8 +19,9 @@ func TestTextConfigurationHTTP(t *testing.T) {
 		{`,"text":{"verbosity":"high","format":{"type":"text"}}`, "high"},
 	} {
 		t.Run(tc.text, func(t *testing.T) {
-			h, s, _ := testHandler(t)
-			req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"example"`+tc.text+`},"environment":{"type":"none"}}`))
+			s := &recordingStore{}
+			h, _, _ := testHandler(t, WithExecution(&inputRecorder{ResourceStore: s}))
+			req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"example"`+tc.text+`},"environment":{"type":"none"},"input":"Describe the configured response format."}`))
 			req.Header.Set("Authorization", "Bearer test-api-key")
 			req.Header.Set("OpenAI-Beta", "agents=v1")
 			response := httptest.NewRecorder()
@@ -44,7 +45,7 @@ func TestTextConfigurationHTTP(t *testing.T) {
 	}
 	for _, invalid := range []string{`{"verbosity":""}`, `{"verbosity":"verbose"}`, `{"verbosity":4}`, `{"format":{}}`, `{"format":{"type":"json_schema","schema":{}}}`, `{"format":{"type":"text","extra":true}}`, `{"unknown":true}`} {
 		h, s, _ := testHandler(t)
-		req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"example","text":`+invalid+`},"environment":{"type":"none"}}`))
+		req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"example","text":`+invalid+`},"environment":{"type":"none"},"input":"Describe the configured response format."}`))
 		req.Header.Set("Authorization", "Bearer test-api-key")
 		req.Header.Set("OpenAI-Beta", "agents=v1")
 		response := httptest.NewRecorder()

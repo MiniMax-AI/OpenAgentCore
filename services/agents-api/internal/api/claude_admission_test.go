@@ -14,7 +14,7 @@ import (
 
 func TestClaudeSessionConfigurationAdmission(t *testing.T) {
 	for _, stream := range []bool{false, true} {
-		for _, initial := range []bool{false, true} {
+		for _, input := range []string{`"Check the configured response."`, `[{"role":"user","content":[{"type":"input_text","text":"Check the configured response."}]}]`} {
 			for _, test := range []struct {
 				name, fields string
 				accepted     bool
@@ -41,22 +41,18 @@ func TestClaudeSessionConfigurationAdmission(t *testing.T) {
 				{"MCP wildcard name", `,"tools":[` + strings.TrimSuffix(publicMCP, "}") + `,"allowed_tools":["*"]}]`, false},
 				{"MCP empty fragment", `,"tools":[` + strings.Replace(publicMCP, `/tools"`, `/tools#"`, 1) + `]`, false},
 			} {
-				t.Run(fmt.Sprintf("%s/stream=%t/initial=%t", test.name, stream, initial), func(t *testing.T) {
+				t.Run(fmt.Sprintf("%s/stream=%t/input=%s", test.name, stream, input), func(t *testing.T) {
 					digest := sha256.Sum256([]byte("test-api-key"))
 					auth, err := NewAuthenticator([]APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: hex.EncodeToString(digest[:]), TenantID: uuid.NewString()}})
 					if err != nil {
 						t.Fatal(err)
 					}
 					saved := &recordingStore{}
-					handler, err := NewHandler(saved, auth, "claude_sdk")
+					handler, err := NewHandler(saved, auth, "claude_sdk", WithExecution(&inputRecorder{ResourceStore: saved}))
 					if err != nil {
 						t.Fatal(err)
 					}
-					input := ""
-					if initial {
-						input = `,"input":"Hello"`
-					}
-					body := fmt.Sprintf(`{"agent":{"model":"MiniMax-M3"%s},"environment":{"type":"none"},"stream":%t%s}`, test.fields, stream, input)
+					body := fmt.Sprintf(`{"agent":{"model":"MiniMax-M3"%s},"environment":{"type":"none"},"stream":%t,"input":%s}`, test.fields, stream, input)
 					request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 					request.Header.Set("Authorization", "Bearer test-api-key")
 					request.Header.Set("OpenAI-Beta", "agents=v1")
@@ -65,7 +61,7 @@ func TestClaudeSessionConfigurationAdmission(t *testing.T) {
 					want := http.StatusBadRequest
 					if test.accepted {
 						want = http.StatusCreated
-						if stream || initial {
+						if stream {
 							want = http.StatusServiceUnavailable
 						}
 					}

@@ -81,7 +81,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 		return res
 	}
 	for _, fields := range []string{`,"text":{"verbosity":"high"}`, `,"tools":[{"type":"function","name":"f","parameters":{"type":"object"}}]`} {
-		request("POST", "/v1/agents/sessions", `{"agent":{"model":"fixture"`+fields+`},"environment":{"type":"none"}}`, 400)
+		request("POST", "/v1/agents/sessions", `{"agent":{"model":"fixture"`+fields+`},"environment":{"type":"none"},"input":"Check the requested harness capability."}`, 400)
 	}
 	res := request("POST", "/v1/agents/sessions", `{"agent":{"model":"fixture"},"environment":{"type":"none"},"input":"hold"}`, 201)
 	var created struct {
