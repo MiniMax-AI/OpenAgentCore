@@ -414,8 +414,9 @@ and cancellation. This does not close the remaining protocol/transport gaps.
 existing Sessions retain their immutable choice. `AGENTS_API_HARNESSES` explicitly
 adds installed deployment profiles without requiring a managed Provider. Model
 identity is independent.
-All three profiles require implicit reasoning, service tier `auto` and ordinary
-text output. Enabled `multi_agent` qualification is tracked separately in
+All three profiles require implicit reasoning and service tier `auto`. Ordinary
+text output is the baseline; [structured output](structured-output.md) has a
+separately qualified Claude profile. Enabled `multi_agent` qualification is tracked separately in
 [Subagents](subagents.md); other profiles continue to reject unsupported execution. Optional tools/configuration are qualified per
 operation and placement; native support is not public admission by itself.
 
