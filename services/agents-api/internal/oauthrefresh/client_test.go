@@ -109,15 +109,20 @@ func TestRefreshFailuresAreSecretSafeAndDoNotRetry(t *testing.T) {
 
 func TestRefreshRetainsTokenAndHonorsCancellation(t *testing.T) {
 	var block atomic.Bool
+	release := make(chan struct{})
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if block.Load() {
-			<-r.Context().Done()
+			select {
+			case <-r.Context().Done():
+			case <-release:
+			}
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"access_token":"next","token_type":"bearer"}`))
 	}))
 	defer server.Close()
+	defer close(release)
 	client := trustedClient(t, server)
 	input := Request{TokenEndpoint: server.URL, AuthMethod: "none", ClientID: "public", RefreshToken: "retain"}
 	token, err := client.Refresh(context.Background(), input)
