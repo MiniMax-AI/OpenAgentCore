@@ -1962,7 +1962,8 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   or user-message array through the same parser and admission path. Commit the
   Session, initial input, first Turn and Item/event projections in one transaction.
   A creation retry returns the existing Session without re-admitting initial work,
-  including after terminal or later Turns. Omitted/null input retains idle creation.
+  including after terminal or later Turns. Omitted/null input is permitted only
+  for non-streaming hosted creation and self-hosted creation.
   Creation streaming uses the shared live path above; non-text messages remain a gap.
 - Enabling `AGENTS_API_DAEMON_WS_URL` also starts a bounded execution worker. Select
   only connected, capable devices owned by the authenticated tenant; bind once and

@@ -755,8 +755,9 @@ configured engine must support admission before any initial work is persisted.
 Fixed SDK/raw HTTP and PostgreSQL tests cover the accepted forms, saved and inline
 configuration, ordering, tenant isolation, retries, rollback and persistence.
 Image support is bounded as documented above. Empty arrays and blank text
-currently fail the shared message validator; exact upstream handling of these
-cases, local size limits and error details remains unverified. Swagger 2 cannot
+fail the shared message validator. Official probes also rejected empty arrays
+and empty strings, but accepted whitespace-only strings; the latter is a queued
+difference. Full local size-limit and error-detail parity remains unverified. Swagger 2 cannot
 express the string/array union, so input is unconstrained with a type description.
 
 ### Session creation streaming
