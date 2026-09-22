@@ -1931,6 +1931,8 @@ definitions:
           type: string
         type: object
         x-nullable: true
+    required:
+    - metadata
     type: object
   v1.Vault:
     properties:

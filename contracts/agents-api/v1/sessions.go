@@ -20,7 +20,7 @@ type CreateSessionRequest struct {
 
 // UpdateSessionRequest requires metadata; null and an empty object clear it.
 type UpdateSessionRequest struct {
-	Metadata map[string]string `json:"metadata,omitempty" extensions:"x-nullable"`
+	Metadata map[string]string `json:"metadata" extensions:"x-nullable" binding:"required"`
 }
 
 // InlineAgent supplies a complete inline configuration or per-Session overrides.
