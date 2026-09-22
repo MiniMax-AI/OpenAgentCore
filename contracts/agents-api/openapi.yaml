@@ -148,7 +148,7 @@ definitions:
   v1.CreateCredentialRequest:
     properties:
       auth:
-        $ref: '#/definitions/v1.StaticBearerCredentialInput'
+        $ref: '#/definitions/v1.CredentialAuthInput'
       name:
         type: string
     required:
@@ -207,7 +207,7 @@ definitions:
   v1.Credential:
     properties:
       auth:
-        $ref: '#/definitions/v1.StaticBearerCredentialAuth'
+        $ref: '#/definitions/v1.CredentialAuth'
       created_at:
         type: integer
       id:
@@ -230,6 +230,72 @@ definitions:
     - object
     - updated_at
     - vault_id
+    type: object
+  v1.CredentialAuth:
+    properties:
+      expires_at:
+        type: string
+        x-nullable: true
+      mcp_server_url:
+        type: string
+      refresh:
+        allOf:
+        - $ref: '#/definitions/v1.OAuthCredentialRefresh'
+        x-nullable: true
+      type:
+        enum:
+        - static_bearer
+        - mcp_oauth
+        type: string
+    required:
+    - mcp_server_url
+    - type
+    type: object
+  v1.CredentialAuthInput:
+    properties:
+      access_token:
+        type: string
+      expires_at:
+        type: string
+        x-nullable: true
+      mcp_server_url:
+        type: string
+      refresh:
+        allOf:
+        - $ref: '#/definitions/v1.OAuthCredentialRefreshInput'
+        x-nullable: true
+      token:
+        type: string
+      type:
+        enum:
+        - static_bearer
+        - mcp_oauth
+        type: string
+    required:
+    - mcp_server_url
+    - type
+    type: object
+  v1.CredentialAuthReplacement:
+    properties:
+      access_token:
+        type: string
+        x-nullable: true
+      expires_at:
+        type: string
+        x-nullable: true
+      refresh:
+        allOf:
+        - $ref: '#/definitions/v1.OAuthCredentialRefreshReplacement'
+        x-nullable: true
+      token:
+        type: string
+      type:
+        enum:
+        - static_bearer
+        - mcp_oauth
+        type: string
+    required:
+    - type
     type: object
   v1.CredentialDeleted:
     properties:
@@ -834,6 +900,97 @@ definitions:
         x-nullable: true
     required:
     - enabled
+    type: object
+  v1.OAuthCredentialRefresh:
+    properties:
+      client_id:
+        type: string
+      resource:
+        type: string
+        x-nullable: true
+      scope:
+        type: string
+        x-nullable: true
+      token_endpoint:
+        type: string
+      token_endpoint_auth:
+        $ref: '#/definitions/v1.OAuthEndpointAuth'
+    required:
+    - client_id
+    - token_endpoint
+    - token_endpoint_auth
+    type: object
+  v1.OAuthCredentialRefreshInput:
+    properties:
+      client_id:
+        type: string
+      refresh_token:
+        type: string
+      resource:
+        type: string
+        x-nullable: true
+      scope:
+        type: string
+        x-nullable: true
+      token_endpoint:
+        type: string
+      token_endpoint_auth:
+        $ref: '#/definitions/v1.OAuthEndpointAuthInput'
+    required:
+    - client_id
+    - refresh_token
+    - token_endpoint
+    - token_endpoint_auth
+    type: object
+  v1.OAuthCredentialRefreshReplacement:
+    properties:
+      refresh_token:
+        type: string
+        x-nullable: true
+      scope:
+        type: string
+        x-nullable: true
+      token_endpoint_auth:
+        allOf:
+        - $ref: '#/definitions/v1.OAuthEndpointAuthReplacement'
+        x-nullable: true
+    type: object
+  v1.OAuthEndpointAuth:
+    properties:
+      type:
+        enum:
+        - none
+        - client_secret_basic
+        - client_secret_post
+        type: string
+    required:
+    - type
+    type: object
+  v1.OAuthEndpointAuthInput:
+    properties:
+      client_secret:
+        type: string
+      type:
+        enum:
+        - none
+        - client_secret_basic
+        - client_secret_post
+        type: string
+    required:
+    - type
+    type: object
+  v1.OAuthEndpointAuthReplacement:
+    properties:
+      client_secret:
+        type: string
+        x-nullable: true
+      type:
+        enum:
+        - client_secret_basic
+        - client_secret_post
+        type: string
+    required:
+    - type
     type: object
   v1.OutputTokenDetails:
     properties:
@@ -1474,45 +1631,6 @@ definitions:
     - has_more
     - object
     type: object
-  v1.StaticBearerCredentialAuth:
-    properties:
-      mcp_server_url:
-        type: string
-      type:
-        enum:
-        - static_bearer
-        type: string
-    required:
-    - mcp_server_url
-    - type
-    type: object
-  v1.StaticBearerCredentialInput:
-    properties:
-      mcp_server_url:
-        type: string
-      token:
-        type: string
-      type:
-        enum:
-        - static_bearer
-        type: string
-    required:
-    - mcp_server_url
-    - token
-    - type
-    type: object
-  v1.StaticBearerCredentialReplacement:
-    properties:
-      token:
-        type: string
-      type:
-        enum:
-        - static_bearer
-        type: string
-    required:
-    - token
-    - type
-    type: object
   v1.StreamError:
     properties:
       code:
@@ -1765,7 +1883,7 @@ definitions:
   v1.UpdateCredentialRequest:
     properties:
       auth:
-        $ref: '#/definitions/v1.StaticBearerCredentialReplacement'
+        $ref: '#/definitions/v1.CredentialAuthReplacement'
     required:
     - auth
     type: object
@@ -4721,16 +4839,16 @@ paths:
     post:
       consumes:
       - application/json
-      description: Stores the write-only token as execution-owned authenticated ciphertext.
-        Required name is trimmed to 1–256 UTF-8 bytes; auth requires static_bearer,
-        an HTTPS mcp_server_url and a string token. Token bytes are preserved, including
-        empty strings; hosted token edge validation is unverified. The initial URL
-        profile excludes userinfo and fragments, preserves queries and makes no network
-        request. Public responses contain only safe metadata. Missing encryption configuration
-        returns local 503. Session admission can bind static credentials from attached
-        Vaults to exact HTTPS MCP destinations; secret decryption occurs only at dispatch.
-        OAuth, storage-key rotation and exact hosted error/retry semantics remain
-        gaps.
+      description: Stores static_bearer or mcp_oauth secrets as execution-owned authenticated
+        ciphertext without contacting any endpoint. OAuth accepts a required access
+        token, nullable RFC3339 expiry and optional refresh configuration with none,
+        client_secret_basic or client_secret_post authentication. Required name is
+        trimmed to 1–256 UTF-8 bytes. Credential and token endpoints require HTTPS
+        without userinfo or fragments. Responses contain safe metadata only, including
+        explicit nullable OAuth expiry, refresh, resource and scope. Missing encryption
+        configuration returns local 503. External authorization and provider revocation
+        remain caller responsibilities; exact hosted error/default semantics remain
+        unverified.
       parameters:
       - description: agents=v1
         in: header
@@ -4742,7 +4860,7 @@ paths:
         name: vault_id
         required: true
         type: string
-      - description: Write-only static bearer credential
+      - description: Write-only credential authentication union
         in: body
         name: body
         required: true
@@ -4781,7 +4899,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Create a static-bearer Vault Credential
+      summary: Create a Vault Credential
       tags:
       - Credentials
   /vaults/{vault_id}/credentials/{credential_id}:
@@ -4895,16 +5013,17 @@ paths:
     post:
       consumes:
       - application/json
-      description: Requires auth with type=static_bearer and a string token; empty
-        and opaque token bytes are preserved. Only the write-only secret and updated_at
-        change, atomically within the authenticated project and owning Vault. Identity,
-        name, auth type, exact destination, created_at and Session bindings remain
-        unchanged. Responses contain only safe metadata; no old-token decryption or
-        network call occurs. Missing encryption configuration returns local 503 without
-        modifying the credential. Subsequent dispatch reads use the committed replacement;
-        already-resolved requests may retain the old token. OAuth, storage-key rotation,
-        hot reload/revocation and exact hosted concurrent-update/retry/timestamp semantics
-        remain gaps.
+      description: Updates the existing static_bearer or mcp_oauth authentication
+        method without network requests. OAuth access_token omission/null retains
+        the token; a new token clears omitted expiry, explicit null clears expiry,
+        and other omitted fields remain unchanged. OAuth refresh patches cannot add
+        configuration or change client, endpoint, resource or authentication method;
+        nullable token/client-secret values retain stored secrets while explicit null
+        scope clears scope. Whole-null refresh and token_endpoint_auth retain existing
+        configuration under local policy. Identity, destination, creation time and
+        Session bindings remain unchanged. Responses expose safe metadata only. Already-dispatched
+        work is not revoked; provider revocation, storage-key rotation and exact hosted
+        concurrent-update/error semantics remain separate.
       parameters:
       - description: agents=v1
         in: header
@@ -4921,7 +5040,7 @@ paths:
         name: credential_id
         required: true
         type: string
-      - description: Write-only static bearer replacement
+      - description: Write-only credential authentication replacement union
         in: body
         name: body
         required: true
@@ -4960,7 +5079,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Replace a static-bearer Vault Credential token
+      summary: Replace Vault Credential authentication secrets
       tags:
       - Credentials
 schemes:
