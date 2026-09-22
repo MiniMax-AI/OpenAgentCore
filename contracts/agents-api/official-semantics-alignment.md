@@ -56,3 +56,22 @@ credential values belong in the repository or task board.
 These observations establish a bounded comparison, not complete official protocol
 compatibility. Core regression and real-model validation are recorded with the
 implementation acceptance before merge.
+
+## Core acceptance
+
+The deployed server/runtime at `7c80d604` passed seven real-PostgreSQL resource and
+safety groups, including unchanged credential-row hashes after rejected writes
+and restart. Codex and Claude Code used Kimi K3; MiniMax Code used MiniMax M2.7.
+Each completed three real Turns covering JSON creation, live SSE creation and
+event continuation, with history paging, empty no-op requests and tenant isolation.
+Four earlier attempts were interrupted by failed test-network relays and retained
+as unsuccessful evidence. After end-to-end TLS checks, the controlled rerun passed.
+
+The server `make check` gate passed with Web checks run separately: type checks,
+production build, 287 client tests, 573 Web tests and 74 fixture browser cases
+(the corrected Beta-error fixture was rerun separately). Full standalone fixed
+Python SDK and Go-client acceptance passed. A fresh Astra high full-diff review
+found no blockers and independently ran API/contract tests. Rebase onto main
+`c96ea82` preserved every batch patch; the combined tree passed API/execution and
+three PostgreSQL scheduling regressions. Test resources were scoped to this batch.
+E2B, OAuth provider refresh and new native capability combinations were not requalified.
