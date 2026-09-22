@@ -59,8 +59,11 @@ Core Web no longer offers a source download action that the API rejects; the SDK
 retains the official content operation and propagates its error.
 
 Skill metadata updates use the owning row lock and validated version metadata in
-the existing transaction. No additional decrypt-on-read, cache, schema migration,
-Runtime interface or lifecycle owner is needed. Nondefault uploads leave parent
+the existing transaction. A data-only migration corrects existing stale parent
+metadata from the matching tenant and default version before the updated service
+serves requests. It changes no identifiers, pointers, encrypted contents or Session
+snapshots. No decrypt-on-read, cache, Runtime interface or lifecycle owner is added.
+Nondefault uploads leave parent
 metadata unchanged. Exact version bytes remain encrypted and immutable; previously
 frozen Session metadata/content and retry intent remain independent of later source
 changes.
