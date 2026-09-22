@@ -1668,6 +1668,9 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   retry/conflict and terminal ordering; Core never parses native tool events.
   Record native confirmation before potentially blocking observation publication;
   output backpressure cannot turn a known application into an unknown outcome.
+  The function submission owns raw write completion and receipt failure together;
+  its writer never applies an independent timeout/close decision. A confirmed
+  receipt releases submission even if writer completion has not yet been scheduled.
 - Internal function execution requires an advertised `function_tools` capability
   before claiming a Turn. Translate resolved definitions in the execution adapter,
   persist declared callbacks before exposing actions, and deliver each saved result

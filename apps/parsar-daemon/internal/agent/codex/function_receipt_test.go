@@ -216,7 +216,7 @@ func TestFunctionReceiptWinsSimultaneousDeadline(t *testing.T) {
 		s.confirmFunctionResult(nativeFunctionReceipt("thread", "turn", "call", "lookup", "true", "completed", "[]"))
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
-		err := s.waitFunctionResult(ctx, "call", pending)
+		err := s.waitFunctionResult(ctx, "call", pending, nil)
 		cancelled := s.cancelCtx.Err()
 		cleanup()
 		if err != nil || cancelled != nil {

@@ -56,29 +56,47 @@ func (s *Session) SubmitFunctionResult(ctx context.Context, result proto.Functio
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	if err := s.rpc.writeFrameContext(ctx, JsonRpcResponse{JsonRpc: JsonRpcVersion, ID: pending.rpcID, Result: reply}); err != nil {
-		if s.settleFunctionResult(result.CallID, fmt.Errorf("write function result: %w", err)) {
-			s.cancelFn()
+	// This operation owns both transport failure and native application. A generic
+	// write deadline must not close the process after a native receipt has won.
+	written := make(chan error, 1)
+	go func() {
+		if err := ctx.Err(); err != nil {
+			written <- err
+			return
 		}
-	}
-	return s.waitFunctionResult(ctx, result.CallID, pending)
+		written <- s.rpc.writeFrame(JsonRpcResponse{JsonRpc: JsonRpcVersion, ID: pending.rpcID, Result: reply})
+	}()
+	return s.waitFunctionResult(ctx, result.CallID, pending, written)
 }
 
-func (s *Session) waitFunctionResult(ctx context.Context, callID string, pending *pendingFunction) error {
-	select {
-	case err := <-pending.receipt:
-		return err
-	case <-s.rpc.Done():
-		s.settleFunctionResult(callID, agent.ErrUnknownFunctionCall)
-	case <-s.cancelCtx.Done():
-		s.settleFunctionResult(callID, agent.ErrUnknownFunctionCall)
-	case <-ctx.Done():
-		// Only the owner of an unconfirmed outcome may cancel execution.
-		if s.settleFunctionResult(callID, ctx.Err()) {
-			s.cancelFn()
+func (s *Session) waitFunctionResult(ctx context.Context, callID string, pending *pendingFunction, written <-chan error) error {
+	for {
+		var failure error
+		select {
+		case err := <-pending.receipt:
+			return err
+		case err := <-written:
+			written = nil
+			if err == nil {
+				continue
+			}
+			failure = fmt.Errorf("write function result: %w", err)
+		case <-s.rpc.Done():
+			failure = agent.ErrUnknownFunctionCall
+		case <-s.cancelCtx.Done():
+			failure = agent.ErrUnknownFunctionCall
+		case <-ctx.Done():
+			failure = ctx.Err()
 		}
+		// Only the unconfirmed-outcome owner may terminate native execution. Do not
+		// join a confirmed writer: native consumption already proves the full frame,
+		// and its final buffered completion cannot block submission or Run release.
+		if s.settleFunctionResult(callID, failure) {
+			s.cancelFn()
+			_ = s.rpc.Close()
+		}
+		return <-pending.receipt
 	}
-	return <-pending.receipt
 }
 
 // The map owns settlement. Removing a call and writing its buffered receipt are
