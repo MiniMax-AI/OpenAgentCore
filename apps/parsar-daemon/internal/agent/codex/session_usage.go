@@ -33,8 +33,16 @@ func (s *Session) onUsageUpdated(raw json.RawMessage) {
 	if s.terminal.Load() {
 		return
 	}
+	var observed *TurnUsage
 	s.usageMu.Lock()
-	defer s.usageMu.Unlock()
+	defer func() {
+		s.usageMu.Unlock()
+		// Native notifications are ordered by the RPC reader. Publish before it
+		// reads completion, without holding the snapshot lock across backpressure.
+		if observed != nil {
+			s.emitUsage(*observed)
+		}
+	}()
 	if p.TokenUsage != nil && p.TokenUsage.Total != nil && p.TurnID != "" {
 		// app-server replays the previous thread total after resume and
 		// before turn/started. It establishes a baseline, not new usage.
@@ -47,19 +55,20 @@ func (s *Session) onUsageUpdated(raw json.RawMessage) {
 		}
 		s.usageTotal = *p.TokenUsage.Total
 		u := subtractUsage(s.usageTotal, s.usageBaseline)
-		s.latestUsage = &u
-		return
-	}
-	if p.Usage != nil && s.usageTurnID != "" && (p.TurnID == "" || p.TurnID == s.usageTurnID) {
+		observed = &u
+	} else if p.Usage != nil && s.usageTurnID != "" && (p.TurnID == "" || p.TurnID == s.usageTurnID) {
 		u := *p.Usage
-		s.latestUsage = &u
+		observed = &u
+	}
+	if observed != nil {
+		s.latestUsage = observed
 	}
 }
 
 func subtractUsage(total, baseline TurnUsage) TurnUsage {
 	return TurnUsage{
 		observed: true,
-		complete: total.complete && (!baseline.observed || baseline.complete) &&
+		complete: total.completeTokens() && (!baseline.observed || baseline.completeTokens()) &&
 			total.InputTokens >= baseline.InputTokens && total.OutputTokens >= baseline.OutputTokens &&
 			total.CachedInputTokens >= baseline.CachedInputTokens &&
 			total.ReasoningOutputTokens >= baseline.ReasoningOutputTokens && total.TotalTokens >= baseline.TotalTokens,
@@ -93,9 +102,14 @@ func (u *TurnUsage) UnmarshalJSON(raw []byte) error {
 	return nil
 }
 
+func (u TurnUsage) completeTokens() bool {
+	return u.complete && u.CachedInputTokens <= u.InputTokens && u.ReasoningOutputTokens <= u.OutputTokens &&
+		u.InputTokens <= u.TotalTokens && u.OutputTokens == u.TotalTokens-u.InputTokens
+}
+
 func (s *Session) usagePayload(u TurnUsage) proto.Usage {
 	result := proto.Usage{Provider: "openai", Model: s.resolvedModel, InputTokens: int32(u.InputTokens), OutputTokens: int32(u.OutputTokens)}
-	if u.complete {
+	if u.completeTokens() {
 		result.Tokens = &proto.TokenUsage{InputTokens: int64(u.InputTokens), OutputTokens: int64(u.OutputTokens), CachedInputTokens: int64(u.CachedInputTokens), ReasoningOutputTokens: int64(u.ReasoningOutputTokens), TotalTokens: int64(u.TotalTokens)}
 	}
 	return result
