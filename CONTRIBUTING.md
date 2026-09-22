@@ -380,11 +380,12 @@ Resolve references inside the Session creation transaction, after the creation
 upsert establishes ownership. Lock referenced resources in a stable order; freeze
 the selected version, descriptive metadata and bytes together. Creation retries
 recover the recorded intent before reading mutable templates or Skill sources.
-Templates preserve omitted/default, latest and explicit version selectors. Session
-responses contain concrete versions; only validated installation metadata crosses
-the Runtime boundary. A supplied Session Skill list replaces the template list;
-omission inherits. Explicit null reference selectors and null list overrides remain
-unqualified and reject rather than silently changing selection.
+Templates preserve default, latest and explicit version selectors. An omitted or
+null reference version selects the default at Session creation and projects as
+`version: null` in Template responses. Session responses contain concrete versions;
+only validated installation metadata crosses the Runtime boundary. A supplied
+Session Skill list replaces the template list; omission inherits. Null list
+overrides remain unqualified and reject rather than silently changing selection.
 
 Inline and referenced Skill ZIPs use the same confidential initialization snapshot and installer.
 Core validates portable manifests and bounded regular-file archives, returns only

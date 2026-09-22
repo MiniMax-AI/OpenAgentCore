@@ -118,13 +118,15 @@ SDK 3.13.0 drops a single FileTypes tuple during multipart extraction before sen
 it. Use raw HTTP for a single ZIP with this fixed client; Core does not synthesize
 missing bytes or alter the pinned SDK.
 
-Templates preserve reference selectors: omission selects default at Session
+Templates preserve reference selectors: omission or null selects default at Session
 creation, `"latest"` selects latest, and a positive version string selects that
 version. A Session freezes tenant-authorized bytes and concrete version metadata
 in its creation transaction. Later source deletion, default changes or template
 updates cannot change that Session or its committed creation retry. A supplied
-Session Skill list replaces the template list; omission inherits. Explicit null
-reference versions and null list overrides are not qualified and reject.
+Session Skill list replaces the template list; omission inherits. Template
+responses include `version: null` for an unresolved default selector; resolved
+Session references retain a concrete version string. Null list overrides remain
+unqualified and reject. See [resource selector qualification](resource-selector-semantics.md).
 References return type/skill_id/version/name/description in Session metadata,
 while template responses retain unresolved selectors. Confidential bundle content
 never appears in these metadata responses. The common Runtime installation path
@@ -803,7 +805,7 @@ index under `~/.parsar/remediation/20260921/template-capabilities-design/`.
 
 The current upload profile accepts at most 500 regular files, 5 MiB compressed
 and 20 MiB expanded per bundle. These are qualified implementation limits, not
-published protocol maxima. Exact hosted error parity, null version selection,
+published protocol maxima. Exact hosted error parity,
 unversioned content selection, top-level metadata across version changes and
 last/default/latest deletion semantics remain recorded gaps. Current resource
 behavior selects default for unversioned content, preserves initial top-level

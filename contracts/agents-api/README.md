@@ -14,6 +14,10 @@ Python **SDK** is a separate future dependency for business Team orchestration i
 Parsar, not the HTTP contract. Design rules live in
 [CONTRIBUTING.md](../../CONTRIBUTING.md#design-and-compatibility-requirements).
 
+The [resource selector and error qualification](resource-selector-semantics.md)
+records nullable Skill references and source Files not-found parameter fields,
+with official observations separated from Core acceptance.
+
 ## Implementation direction
 
 Keep the independent service, authentication, PostgreSQL/sqlc persistence,

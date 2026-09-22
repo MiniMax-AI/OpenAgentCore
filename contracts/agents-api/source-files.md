@@ -63,6 +63,10 @@ These concurrency/error choices are local policies, not verified hosted parity.
 Ambiguous upload commits are not automatically retried; clients may need to retain
 their source request evidence. Destination unknown-write handling remains unchanged.
 
+Missing source Files and missing cursors expose the measured `id` and `after`
+error parameters without revealing foreign resource existence. See the bounded
+[resource error qualification](resource-selector-semantics.md#source-file-errors).
+
 ## Remaining scope and verification
 
 Other upload purposes, `expires_after`, resumable Uploads, quotas,
