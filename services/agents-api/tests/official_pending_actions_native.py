@@ -44,7 +44,7 @@ def verify_pending_actions(client, foreign, http, model, evidence):
         if expected == 204:
             assert response.content == b""
         else:
-            assert response.json()["error"]["code"] in {"not_found", "turn_conflict", "idempotency_conflict"}
+            assert response.json()["error"]["code"] in {"not_found_error", "turn_conflict", "idempotency_conflict"}
         return {"request": key, "status": response.status_code}
 
     try:

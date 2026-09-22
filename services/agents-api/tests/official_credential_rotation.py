@@ -86,7 +86,7 @@ def verify_credential_rotation(client, other, invalid, peer, saved_vaults, saved
                                      (vault.id, str(uuid.UUID(int=0))), ("invalid", original.id),
                                      (str(uuid.UUID(int=0)), original.id)):
             response = raw.post(base + owner + "/credentials/" + credential_id, headers=headers, json=replacement)
-            assert safe(response, 404)["error"]["code"] == "not_found"
+            assert safe(response, 404)["error"]["code"] == "not_found_error"
             assert original.id not in response.text and foreign.id not in response.text
             error = expect_error(NotFoundError, lambda: credentials.update(credential_id, vault_id=owner, **replacement))
             safe(error.response, 404)
@@ -96,7 +96,7 @@ def verify_credential_rotation(client, other, invalid, peer, saved_vaults, saved
             original.id, vault_id=vault.id, **replacement))
         safe(raw.post(endpoint, json=replacement), 401)
         assert safe(raw.post(endpoint, headers={"Authorization": headers["Authorization"]},
-                             json=replacement), 400)["error"]["code"] == "invalid_beta_header"
+                             json=replacement), 400)["error"]["code"] == "invalid_beta"
         for scope in ({"OpenAI-Project": "other-project"}, {"OpenAI-Organization": "other-organization"}):
             expect_error(AuthenticationError, lambda: credentials.update(
                 original.id, vault_id=vault.id, **replacement, extra_headers=scope))

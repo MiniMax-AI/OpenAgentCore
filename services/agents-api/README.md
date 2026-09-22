@@ -527,7 +527,7 @@ Neither disconnect nor deletion promises immediate native process quiescence or
 reclaims user-owned E2B/local compute. The user must stop and destroy it explicitly.
 
 Pending input retains its durable identity/deadline through HTTP disconnects. Later
-idle input returns 204 after preparation/admission, not after model completion;
+idle input returns 202 after preparation/admission, not after model completion;
 use client/proxy timeouts above five minutes and recover progress through events
 and reads. Exact upstream failure/error timing remains unverified.
 

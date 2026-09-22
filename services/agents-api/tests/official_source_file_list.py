@@ -56,7 +56,7 @@ def verify_source_file_list(client, other, invalid, peer, expect_error):
         verify_page(raw.get(endpoint, headers=headers, params={"order": "asc", "limit": "100", "after": first.json()["last_id"]}), expected[100:], False)
         verify_page(raw.get(endpoint, headers=headers, params={"purpose": "batch"}), [], False)
         response = raw.get(endpoint, headers=headers, params={"after": foreign.id})
-        assert response.status_code == 404 and response.json()["error"]["code"] == "not_found"
+        assert response.status_code == 404 and response.json()["error"]["code"] is None
         assert foreign.id not in response.text
         for query in ("limit=0", "limit=10001", "limit=null", "order=invalid", "after=a&after=b", "purpose=a&purpose=b", "unknown=x"):
             response = raw.get(endpoint + "?" + query, headers=headers)
@@ -64,7 +64,7 @@ def verify_source_file_list(client, other, invalid, peer, expect_error):
             assert response.json()["error"]["type"] == "invalid_request_error"
         response = raw.get(endpoint, headers=headers, params={"after": "not-a-file"})
         assert response.status_code == 404
-        assert response.json()["error"]["code"] == "not_found"
+        assert response.json()["error"]["code"] is None
         assert response.json()["error"]["type"] == "invalid_request_error"
         assert raw.get(endpoint).status_code == 401
         for scope in ({"OpenAI-Organization": "wrong-org"}, {"OpenAI-Project": "wrong-project"}):

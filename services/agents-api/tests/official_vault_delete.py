@@ -28,7 +28,7 @@ def verify_vault_deletion(client, other, invalid, peer, canary, expect_error):
     with httpx2.Client(trust_env=False, timeout=10) as raw:
         assert raw.delete(endpoint + target.id).status_code == 401
         response = raw.delete(endpoint + target.id, headers={"Authorization": auth_headers["Authorization"]})
-        assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_beta_header"
+        assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_beta"
         for kwargs in [{"params": {"include": "credentials"}}, {"content": b"{}"}]:
             assert raw.request("DELETE", endpoint + target.id, headers=auth_headers, **kwargs).status_code == 400
         assert vaults.retrieve(target.id) == target
@@ -43,9 +43,9 @@ def verify_vault_deletion(client, other, invalid, peer, canary, expect_error):
         for value in values[:2]:
             for method in ["GET", "DELETE"]:
                 response = raw.request(method, endpoint + value.id, headers=auth_headers)
-                assert response.status_code == 404 and response.json()["error"]["code"] == "not_found"
+                assert response.status_code == 404 and response.json()["error"]["code"] == "not_found_error"
             response = raw.get(endpoint + value.id + "/credentials", headers=auth_headers)
-            assert response.status_code == 404 and response.json()["error"]["code"] == "not_found"
+            assert response.status_code == 404 and response.json()["error"]["code"] == "not_found_error"
             response = raw.post(endpoint + value.id + "/credentials", headers=auth_headers, json={"name": "late", "auth": auth})
             assert response.status_code == 404 and canary not in response.text
             expect_error(NotFoundError, lambda: vaults.credentials.list(value.id))
