@@ -92,7 +92,12 @@ func TestManagedInitialFilesGateFairnessCompletionAndRestart(t *testing.T) {
 			if err != nil || !ok || credential.ID != owner.DeviceID {
 				t.Fatal("pending initialization blocks daemon authentication")
 			}
+			lastStepGets := 0
 			p.check = func() {
+				if p.gets-lastStepGets < 33 {
+					t.Fatal("initialization advanced before a full allocation scan", p.gets-lastStepGets)
+				}
+				lastStepGets = p.gets
 				if _, err := s.GetSessionDevice(t.Context(), tenant, session.ID); !errors.Is(err, store.ErrNotFound) {
 					t.Fatal("pending file access", err)
 				}
@@ -100,10 +105,12 @@ func TestManagedInitialFilesGateFairnessCompletionAndRestart(t *testing.T) {
 					t.Fatal("premature native preparation", err)
 				}
 			}
-			// Another allocation is observed between file steps, rather than after the full batch.
-			otherTenant, _, otherEnv := managedSession(t, s)
-			if _, err := w.ProvisionEnvironment(t.Context(), otherTenant, otherEnv.ID, key); err != nil {
-				t.Fatal(err)
+			// A full page of other allocations is serviced between initialization steps.
+			for range 32 {
+				otherTenant, _, otherEnv := managedSession(t, s)
+				if _, err := w.ProvisionEnvironment(t.Context(), otherTenant, otherEnv.ID, key); err != nil {
+					t.Fatal(err)
+				}
 			}
 			for n := 0; p.writes == 0 && n < 100; n++ {
 				if err := w.ReconcileManagedRuntimes(t.Context()); err != nil {
