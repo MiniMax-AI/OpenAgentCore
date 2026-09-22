@@ -561,6 +561,59 @@ accounting, cleanup and credential scans. This covers the observed fixtures rath
 than all possible combinations. Null network and null Skill/Plugin/directory list
 selection remain outside this batch. No new protocol version is introduced.
 
+### Core checks for composition (2026-09-23)
+
+`TestTemplateCompositionOfficialClientPostgres` uses the fixed strict SDK and raw
+HTTP against real Core handlers and PostgreSQL. Six accepted cases and seven
+rejected creation keys cover effective metadata, confidential frozen bytes and
+ordered commands, tenant/source isolation, combined setup-size rejection without
+partial records, and same-intent retries after template and source deletion.
+A second Store/handler verifies reopened persistence; it is not an OS process
+restart and does not run a model. API tests additionally cover raw caller intent,
+non-mutating composition and retained field validation.
+
+The integrated server gate ran `make -o check-web check` at `5589df0`; this includes
+real PostgreSQL tests, byte-for-byte sqlc generation, builds, native bridge checks
+and Rust tests/format/Clippy. A fresh `make check-web` ran locally against the same
+unchanged production diff: 287 client, 583 Web and 76 browser tests passed. Together
+they cover every required `make check` target. `make openapi` regenerated the
+Session description. The optional MiniMax packaged-native scratch/large-output
+probe was skipped because its optional profile variables were unset; this batch
+does not add MiniMax, Claude or E2B native qualification.
+
+### Real Codex Docker composition acceptance (2026-09-23)
+
+The exact `8019ac5` production build ran independently with Core, PostgreSQL and
+Docker Runtime against the real Kimi API. Three completed native model Turns prove:
+
+- A populated-inline Session observed env key precedence, whole-file replacement,
+  ordered replacement commands, Python `packaging==26.0`, and inherited npm/system
+  tools. Its prompt named only the read operation, not the expected canary values.
+- A separate inheritance Session observed null env/files/commands inheritance,
+  retained npm/system tools and absence of the explicitly cleared Python installation
+  directory. After template mutation/deletion and an actual Core process restart,
+  identical-key creation recovered its existing identity/configuration. A second
+  native Turn returned the exact same values and append trace: initialization did
+  not run again. The populated Session itself was not resumed in this run.
+
+Five owned Core Sessions were created over the acceptance attempts. The first two
+failed before any model Turn because the reused private Skill-only runner omitted
+Docker `nested_sandbox: true`, already required by the documented initialization
+profile. Correcting that operator setting resolved the proc-mount failure without
+production changes. In the corrected pair, the populated Session completed its
+native command, but the private runner then required an optional assistant `phase`
+and unwrapped JSON. The original message instead contained matching fenced JSON
+without phase. An offline check preserved and verified the original native output
+and message bytes; no model call was repeated. One new inheritance Session completed
+the remaining two Turns. These failed assertions and operator diagnostics are
+retained alongside successful evidence, not counted as extra successful runs.
+
+Private evidence is under the same batch's `live/` directory and records source,
+binary/image hashes, operator-setting changes, exact native output and cleanup.
+This is Codex/Docker qualification for the described composition paths, not renewed
+qualification of other harnesses or Providers, every package manager combination,
+or complete Template/Agents API semantics.
+
 ## Verification
 
 ### Restricted-network Docker acceptance (2026-09-21)
