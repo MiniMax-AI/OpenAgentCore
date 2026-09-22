@@ -117,6 +117,30 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	if _, err := h.s.TransitionTurn(ctx, h.tenant, h.session.ID, first.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
+	// A native measurement committed before process loss must survive startup
+	// reconciliation even when no Done frame can be recovered.
+	usage := json.RawMessage(`{"tokens":{"input_tokens":10,"cached_input_tokens":4,"output_tokens":3,"reasoning_output_tokens":2,"total_tokens":13}}`)
+	if err := h.s.AppendTurnEvents(ctx, h.tenant, h.session.ID, first.TurnID, 1, []store.ExecutionEvent{{Kind: proto.TypeUsage, Payload: usage}}); err != nil {
+		t.Fatal(err)
+	}
+	checkMeasurement := func() {
+		t.Helper()
+		turn, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, first.TurnID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got struct {
+			TotalTokens int64 `json:"total_tokens"`
+		}
+		if json.Unmarshal(turn.Usage, &got) != nil || got.TotalTokens != 13 {
+			t.Fatalf("lost observed usage: %s", turn.Usage)
+		}
+		session, err := h.s.GetSession(ctx, h.tenant, h.session.ID)
+		if err != nil || string(session.Usage) != string(turn.Usage) {
+			t.Fatalf("Session and Turn measurement differ: %+v %v", session, err)
+		}
+	}
+	checkMeasurement()
 	queued := publicSession(t, h, "queued")
 	if _, err := h.s.SubmitMessage(ctx, h.tenant, queued.ID, "first", json.RawMessage(`{"text":"Not sent"}`)); err != nil {
 		t.Fatal(err)
@@ -152,4 +176,5 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	if err := restarted.Run(stopped); err != context.Canceled {
 		t.Fatal(err)
 	}
+	checkMeasurement()
 }
