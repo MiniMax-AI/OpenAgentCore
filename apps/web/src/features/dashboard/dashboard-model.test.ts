@@ -275,6 +275,8 @@ describe("Dashboard loaded-snapshot model", () => {
       sessionCount: 2,
       managedRuntimeCount: 1,
       observedRuntimeCount: 1,
+      unavailableRuntimeCount: 0,
+      unsupportedRuntimeCount: 1,
       cpuUsageSecondsTotal: 3.5,
       cpuCapacityCores: 2,
       cpuCoverageCount: 1,
@@ -319,5 +321,51 @@ describe("Dashboard loaded-snapshot model", () => {
     };
 
     expect(buildRuntimeDashboardModel([stopped], [observation]).rows[0]?.allocationAgeSeconds).toBeNull();
+  });
+
+  it("does not count capacity-only or limit-only samples as usage coverage", () => {
+    const managed = session("11111111-1111-4111-8111-111111111111", {
+      environment: {
+        type: "openai_hosted",
+        id: "33333333-3333-4333-8333-333333333333",
+        capability_directories: [],
+        network: { access: "disabled", allowed_domains: [] },
+        packages: { npm: [], python: [], system: [] },
+        files: [],
+        plugins: [],
+        skills: [],
+      },
+    });
+    const observation: RuntimeObservation = {
+      id: managed.id,
+      object: "agent.runtime_observation",
+      session_id: managed.id,
+      environment_id: "33333333-3333-4333-8333-333333333333",
+      mode: "openai_hosted",
+      provider_type: "docker",
+      instance: {
+        kind: "managed_allocation",
+        allocation_id: "44444444-4444-4444-8444-444444444444",
+        device_id: null,
+        connection_generation: null,
+      },
+      status: "observed",
+      reason: null,
+      allocation_created_at: null,
+      resolved_at: 220,
+      observed_at: 210,
+      started_at: null,
+      cpu: { usage_seconds_total: null, capacity_cores: 2, usage_cores: null, utilization_ratio: null },
+      memory: { usage_bytes: null, limit_bytes: 2048 },
+    };
+
+    expect(buildRuntimeDashboardModel([managed], [observation]).summary).toMatchObject({
+      cpuUsageSecondsTotal: null,
+      cpuCapacityCores: 2,
+      cpuCoverageCount: 0,
+      memoryUsageBytes: null,
+      memoryLimitBytes: 2048,
+      memoryCoverageCount: 0,
+    });
   });
 });

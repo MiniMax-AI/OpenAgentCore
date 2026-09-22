@@ -32,8 +32,10 @@ credentials or execution into the browser.
 Dashboard is the starting point. It summarizes the current Agent and Session results,
 loads a complete tenant-scoped Runtime observation snapshot, shows current Docker
 resource evidence and coverage without inventing missing values, highlights Sessions
-that need attention, and links directly to Agent creation or a new Session. Historical
-charts remain absent until an operator configures a separate history capability.
+that need attention, and links directly to Agent creation or a new Session. Runtime
+health and coverage cards sit above a searchable, filterable, sortable, paginated
+semantic table. Historical charts remain absent until an operator configures a
+separate history capability.
 
 ### Agents
 
