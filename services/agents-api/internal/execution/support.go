@@ -69,10 +69,8 @@ func (p Policy) engineCapabilities(peer *gateway.Session, engine string, snapsho
 	if !ok || (snapshot.Environment != nil && !profile.Accepts(snapshot.Environment.Type)) {
 		return fail("execution engine placement is not supported")
 	}
-	if profile.ValidateConfiguration != nil {
-		if err := validateProfileConfiguration(profile, snapshot); err != nil {
-			return device.KindCapabilities{}, err
-		}
+	if err := validateProfileConfiguration(profile, snapshot); err != nil {
+		return device.KindCapabilities{}, err
 	}
 	info, found, known := peer.AgentKindStatus(engine)
 	caps := info.Capabilities
