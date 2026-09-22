@@ -20,7 +20,7 @@ func WithStartupConfiguration(configuration v1.CoreStartupConfiguration) Option 
 			provider := *configuration.Configured.ManagedSandbox.Provider
 			copy.Configured.ManagedSandbox.Provider = &provider
 		}
-		h.startupConfiguration = &copy
+		h.startup = &copy
 	}
 }
 
@@ -38,10 +38,10 @@ func (h *Handler) getStartupConfiguration(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Core startup configuration does not accept query parameters.")
 		return
 	}
-	if h.startupConfiguration == nil {
+	if h.startup == nil {
 		writeError(w, http.StatusServiceUnavailable, "startup_configuration_unavailable", "Core startup configuration is unavailable.")
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, h.startupConfiguration)
+	writeJSON(w, http.StatusOK, h.startup)
 }

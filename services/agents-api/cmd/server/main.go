@@ -80,7 +80,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	managed, managedProviderKind, closeManaged, err := managedRuntimesWithKind()
+	managed, closeManaged, err := managedRuntimes()
 	if err != nil {
 		return err
 	}
@@ -132,7 +132,7 @@ func run() error {
 			options = append(options, api.WithHostedEnvironments())
 		}
 	}
-	options = append(options, api.WithStartupConfiguration(coreStartupConfiguration(engine, kinds, registry != nil, modelProviderEndpoints, managedProviderKind, managed)))
+	options = append(options, api.WithStartupConfiguration(coreStartupConfiguration(engine, kinds, registry != nil, modelProviderEndpoints, managedRuntimeProviderKind(managed), managed)))
 	handler, err := api.NewHandler(executionStore, auth, engine, options...)
 	if err != nil {
 		return err

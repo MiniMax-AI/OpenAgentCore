@@ -35,21 +35,21 @@ type ResourceStore interface {
 }
 
 type Handler struct {
-	policy               execution.Policy
-	store                ResourceStore
-	auth                 *Authenticator
-	harnesses            map[string]bool
-	engine               string
-	inputs               InputSubmitter
-	executorURL          string
-	hostedEnvironments   bool
-	directoryReader      EnvironmentDirectoryReader
-	fileWriter           EnvironmentFileWriter
-	skills               SkillStore
-	sourceFiles          SourceFileStore
-	artifacts            SessionArtifactStore
-	subagents            SubagentStore
-	startupConfiguration *v1.CoreStartupConfiguration
+	policy             execution.Policy
+	store              ResourceStore
+	auth               *Authenticator
+	harnesses          map[string]bool
+	engine             string
+	inputs             InputSubmitter
+	executorURL        string
+	hostedEnvironments bool
+	directoryReader    EnvironmentDirectoryReader
+	fileWriter         EnvironmentFileWriter
+	skills             SkillStore
+	sourceFiles        SourceFileStore
+	artifacts          SessionArtifactStore
+	subagents          SubagentStore
+	startup            *v1.CoreStartupConfiguration
 }
 
 func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...Option) (http.Handler, error) {
