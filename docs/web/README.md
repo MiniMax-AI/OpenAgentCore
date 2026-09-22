@@ -111,7 +111,7 @@ Only the local Web server reads the caller-key file. Do not place a plaintext ke
 
 1. Open **Agents** and choose **Create agent** or a starter template.
 2. Set a name, model, and instructions; add supported tools only when needed.
-3. Select **Start Session**, choose an Environment, and optionally send the first message.
+3. Select **Start Session**, choose an Environment, and enter the first message for conversation-only execution. Hosted Sessions may be created without input.
 4. Continue in **Sessions** while live events and durable history update.
 5. Use **Trace**, **Vaults**, **Environment**, or **System** when the workflow needs them.
 
