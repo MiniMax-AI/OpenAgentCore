@@ -197,6 +197,14 @@ starts the Runtime and its daemon authenticates and initiates the Core connectio
 Core verifies principal ownership and the exact Environment binding. These are
 management responsibilities, not separate execution architectures.
 
+Runtime telemetry uses a separate read-only service boundary documented in
+[`contracts/agents-api/runtime-observability.md`](contracts/agents-api/runtime-observability.md).
+Resolve durable Session, Environment and Runtime-instance identity before selecting
+a provider source. Observation never extends a lease or changes compute lifecycle.
+Keep observed zero, unavailable data and unsupported Runtime modes distinct. Metrics
+may inform operators, but automatic suspension requires durable Core-owned activity
+state and must not use a monitoring backend as lifecycle authority.
+
 In V1, our daemon fills the user-side executor role. Users deploy daemon, the
 selected harness, local tools and workspace together. Do not require Codex
 `exec-server`, a service-side harness, registry/Noise transport or remote tool

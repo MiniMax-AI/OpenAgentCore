@@ -1,0 +1,73 @@
+# Runtime observability contract
+
+This document defines the internal Runtime observation boundary. It does not add
+an Agents API resource or change the pinned public protocol.
+
+## Ownership and identity
+
+Runtime telemetry is attributed to durable Core identity before it is sampled:
+
+```text
+managed:     tenant_id -> session_id -> environment_id -> runtime_allocation_id
+self-hosted: tenant_id -> session_id -> environment_id -> device_id + connection_generation
+none:        tenant_id -> session_id (no Session-owned Runtime instance)
+```
+
+The managed allocation's persisted `provider_key` selects exactly one configured
+observation source. A provider must independently verify the allocation labels or
+equivalent ownership data. A Session, daemon connection, process, container, and
+native harness Session are different identities and must not be substituted for
+one another.
+
+The first implementation supports managed Docker allocations. `self_hosted` and
+`none` are recognized but explicitly unsupported. A future self-hosted source must
+use authenticated daemon telemetry fenced by the current connection generation.
+Core must not attribute shared host statistics to an `environment:none` Session.
+
+## Sample semantics
+
+One sample contains:
+
+- `observed_at`, the provider observation time;
+- `started_at`, the current compute incarnation start time;
+- cumulative CPU usage in seconds;
+- configured CPU capacity in cores, when known;
+- current memory usage in bytes; and
+- configured memory limit in bytes, when known.
+
+Measurements are optional. A present pointer with value zero means the provider
+observed zero. An absent measurement means it was unavailable and must never be
+rendered or aggregated as zero. A whole observation has one of three states:
+`observed`, `unsupported`, or `unavailable`. Provider and permission failures are
+errors, not ordinary unavailability.
+
+Docker reports cumulative cgroup CPU time and current cgroup memory usage. CPU and
+memory capacity come from the inspected container configuration. Inspect and Stats
+are read-only; observation must not renew, restart, create, or stop the container.
+The Docker `StartedAt` value defines current compute uptime and resets after a
+container restart.
+
+## Duration boundaries
+
+These durations answer different questions and must remain separate:
+
+- allocation age: `runtime_allocations.created_at` through `released_at` or now;
+- compute uptime: provider `started_at` through `observed_at`; and
+- busy Turn duration: `turns.started_at` through `completed_at` or now.
+
+This phase supplies compute uptime evidence and retains the existing durable
+allocation and Turn timestamps. It does not infer idle time. CPU quietness,
+heartbeat age, connection status, and `kept_at` are not authoritative idle state.
+
+Future automatic suspension requires a separate durable control model, including
+an activity revision and timestamps such as `idle_since` and
+`shutdown_requested_at`. Metrics, an in-memory cache, or a monitoring backend must
+not become the lifecycle authority.
+
+## First-phase boundary
+
+The first phase adds no migration, public endpoint, Web view, metrics backend,
+token aggregation, Kubernetes/E2B source, or automatic lifecycle action. The
+internal source interface is intended to admit those providers without changing
+Session attribution or the existing sandbox lifecycle interface.
+

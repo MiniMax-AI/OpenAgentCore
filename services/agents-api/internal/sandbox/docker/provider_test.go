@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/containerd/errdefs"
 	"github.com/google/uuid"
@@ -66,7 +67,8 @@ func TestDockerProviderLifecycle(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer c.Close()
-	p, e := New(c, Config{InstallationID: uuid.NewString(), Image: image, Network: "bridge", Seccomp: string(seccomp)})
+	installationID := uuid.NewString()
+	p, e := New(c, Config{InstallationID: installationID, Image: image, Network: "bridge", Seccomp: string(seccomp)})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -110,6 +112,13 @@ func TestDockerProviderLifecycle(t *testing.T) {
 	}
 	if info.State != "running" || info.ProviderID == "" {
 		t.Fatalf("bad compute observation: %+v", info)
+	}
+	resources, e := p.Observe(ctx, runtimeobs.Target{
+		TenantID: b.TenantID, SessionID: b.SessionID, EnvironmentID: b.EnvironmentID, Mode: runtimeobs.ModeManaged,
+		Instance: runtimeobs.Instance{AllocationID: b.AllocationID, ProviderKey: installationID, DeviceID: b.DeviceID},
+	})
+	if e != nil || resources.StartedAt == nil || resources.CPUUsageSecondsTotal == nil || resources.MemoryUsageBytes == nil || resources.CPUCapacityCores == nil || resources.MemoryLimitBytes == nil {
+		t.Fatalf("bad resource observation: %+v %v", resources, e)
 	}
 	inspected, e := p.inspect(ctx, b.Reference)
 	if e != nil {
