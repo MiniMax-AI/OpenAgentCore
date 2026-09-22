@@ -31,6 +31,12 @@ validation errors or make every Files error share one parameter. Other endpoints
 using the same order enum may share the parser, but were not independently probed
 here. Authentication and ownership checks retain their existing boundaries.
 
+The fixed Python SDK's query serializer drops empty string values. Consequently,
+`list(order="")` does not send `order=` and follows omission/default behavior.
+Explicit-empty rejection requires raw HTTP evidence; nonempty invalid SDK order
+values exercise the rejected path normally. Do not alter Core or the SDK to hide
+that request-serialization distinction.
+
 ## Deferred differences and uncertainty
 
 - Query limits require separate qualification. Missing cursors or parents can mask
