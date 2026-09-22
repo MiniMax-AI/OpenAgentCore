@@ -1171,7 +1171,12 @@ The connection owner spans preparation and the transferred Run without a reserva
 deadline; every exit releases it.
 
 The existing Worker scans pending inputs using the same bounded scheduling slots,
-Session locks, durable deadlines and engine capability checks. A self-hosted Session
+Session locks, durable deadlines and engine capability checks. Keep the five-second
+Environment-input scan cadence and at most 100 candidates per scan. At EOF after a
+nonempty cursor, refill the first page once in the same scan; an empty queue must
+not spin. Advance the cursor before readiness checks so an unavailable Runtime
+cannot starve later candidates. Preserve the four active slots and alternation
+between ordinary Turns and Environment inputs. A self-hosted Session
 waits for its dedicated enrolled device; it cannot select an arbitrary same-tenant
 device or migrate an existing binding. Preparation failure can retry while still
 pending without extending the deadline. Unknown promotion results or errors after

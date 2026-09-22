@@ -35,8 +35,14 @@ func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []st
 			return nil, err
 		}
 		s.nextEnvironmentScan = time.Now().Add(5 * time.Second)
-		if len(environments) == 0 {
+		if len(environments) == 0 && s.environmentCursor != "" {
 			s.environmentCursor = ""
+			// Retry the first page now instead of spending a scan interval on EOF.
+			// A single refill preserves the candidate bound and cannot spin when empty.
+			environments, err = w.dispatcher.Store.ListEnvironmentInputWork(ctx, "", devices)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var selected []scheduledWork

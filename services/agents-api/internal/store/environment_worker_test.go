@@ -147,8 +147,8 @@ func TestWorkerEnvironmentRetriesPendingWithoutExtendingDeadline(t *testing.T) {
 	h.write(request.ID, proto.TypeDone, proto.DonePayload{Content: "complete"})
 	waitTurn(t, h, request.ID, store.TurnCompleted)
 	second := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
-	if time.Since(started) < 4*time.Second || first.ID == second.ID {
-		t.Fatal("pending preparation retried rapidly or reused a released owner")
+	if elapsed := time.Since(started); elapsed < 4*time.Second || elapsed > 8*time.Second || first.ID == second.ID {
+		t.Fatal("pending preparation missed its next scan or reused a released owner")
 	}
 	acknowledgePreparation(runtime, second.ID)
 	select {
