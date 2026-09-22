@@ -57,7 +57,11 @@ func TestAgentUpdateRollbackAndCompleteSizeBound(t *testing.T) {
 		t.Fatal("resource timestamps changed incorrectly")
 	}
 	unchanged, err := s.UpdateAgent(ctx, tenant, original.ID, UpdateAgentInput{})
-	if err != nil || !reflect.DeepEqual(unchanged, updated) {
-		t.Fatalf("empty update: %v", err)
+	if err != nil || !unchanged.UpdatedAt.After(updated.UpdatedAt) {
+		t.Fatalf("empty update did not advance timestamp: %v", err)
+	}
+	updated.UpdatedAt = unchanged.UpdatedAt
+	if !reflect.DeepEqual(unchanged, updated) {
+		t.Fatal("empty update changed saved configuration")
 	}
 }

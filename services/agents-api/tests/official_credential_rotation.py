@@ -50,7 +50,7 @@ def verify_credential_rotation(client, other, invalid, peer, saved_vaults, saved
         assert response.parse() == current
         # The public boundary accepts opaque values; private Store tests verify
         # their bytes. The final value also supplies a log-scan canary.
-        for token in ("", " \t" + canary + "\n雪 ", canary + "final"):
+        for token in (" ", " \t" + canary + "\n雪 ", canary + "final"):
             response = raw.post(endpoint, headers=headers, json={"auth": {"type": "static_bearer", "token": token}})
             current = metadata(response, current)
         response = peer.beta.agents.vaults.credentials.with_raw_response.update(
@@ -63,6 +63,7 @@ def verify_credential_rotation(client, other, invalid, peer, saved_vaults, saved
             {"auth": {"type": "static_bearer"}}, {"auth": {"token": canary}},
             {"auth": {"type": None, "token": canary}},
             {"auth": {"type": 3, "token": canary}},
+            {"auth": {"type": "static_bearer", "token": ""}},
             {"auth": {"type": "static_bearer", "token": None}},
             {"auth": {"type": "static_bearer", "token": 3}},
             {"auth": {"type": "mcp_oauth", "access_token": canary}},

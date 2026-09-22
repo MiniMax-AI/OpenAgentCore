@@ -30,7 +30,7 @@ def verify_vaults(client, other, invalid, peer, binding, expect_error):
         for request, name, expected_metadata in cases:
             response = vaults.with_raw_response.create(**request)
             body, value = response.http_response.json(), response.parse()
-            assert response.status_code == 200
+            assert response.status_code == 201
             verify_vault(body, name, expected_metadata)
             assert value.to_dict() == body and abs(value.created_at - time.time()) < 10
             assert vaults.retrieve(value.id) == value
@@ -38,7 +38,7 @@ def verify_vaults(client, other, invalid, peer, binding, expect_error):
             saved.append(value)
 
         response = raw.post(base, headers=headers, json={"name": "\nRaw Vault\t", "metadata": {}})
-        assert response.status_code == 200
+        assert response.status_code == 201
         verify_vault(response.json(), "Raw Vault", {})
         saved.append(vaults.retrieve(response.json()["id"]))
         assert saved[-1].to_dict() == response.json()

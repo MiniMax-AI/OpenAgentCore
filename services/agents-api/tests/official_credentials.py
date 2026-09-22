@@ -36,17 +36,17 @@ def verify_credentials(client, other, invalid, peer, saved_vaults, canary, expec
 
     with httpx2.Client(trust_env=False, timeout=10) as raw:
         response = credentials.with_raw_response.create(vault.id, **request)
-        body, value = safe_body(response.http_response, 200), response.parse()
+        body, value = safe_body(response.http_response, 201), response.parse()
         verify_credential(body, vault.id, "Credential 資源", destination)
         assert value.to_dict() == body and abs(value.created_at - time.time()) < 10
         saved.append(value)
 
         # These successful writes exercise opaque strings, not a public token
         # round-trip. Byte preservation is verified by private Store tests.
-        for name, token in (("🧪" * 64, canary + "x" * 1024), ("Empty opaque token", "")):
+        for name, token in (("🧪" * 64, canary + "x" * 1024), ("Whitespace opaque token", " ")):
             response = raw.post(endpoint, headers=headers, json={"name": " " + name + "\n",
                                 "auth": {**auth, "token": token}})
-            body = safe_body(response, 200)
+            body = safe_body(response, 201)
             verify_credential(body, vault.id, name, destination)
             saved.append(credentials.retrieve(body["id"], vault_id=vault.id))
             assert saved[-1].to_dict() == body
@@ -70,6 +70,7 @@ def verify_credentials(client, other, invalid, peer, saved_vaults, canary, expec
             {**request, "name": " " + "🧪" * 64 + "a "},
             {**request, "auth": None}, {**request, "auth": []},
             {**request, "auth": {**auth, "token": 3}},
+            {**request, "auth": {**auth, "token": ""}},
             {**request, "auth": {"type": "mcp_oauth", "mcp_server_url": destination, "access_token": None}},
             {**request, "metadata": {"unexpected": "field"}},
         ]

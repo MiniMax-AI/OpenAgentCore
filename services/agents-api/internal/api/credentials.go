@@ -22,7 +22,7 @@ type CredentialStore interface {
 }
 
 // @Summary Create a Vault Credential
-// @Description Stores static_bearer or mcp_oauth secrets as execution-owned authenticated ciphertext without contacting any endpoint. OAuth accepts a required access token, nullable RFC3339 expiry and optional refresh configuration with none, client_secret_basic or client_secret_post authentication. Required name is trimmed to 1–256 UTF-8 bytes. Credential and token endpoints require HTTPS without userinfo or fragments. Responses contain safe metadata only, including explicit nullable OAuth expiry, refresh, resource and scope. Missing encryption configuration returns local 503. External authorization and provider revocation remain caller responsibilities; exact hosted error/default semantics remain unverified.
+// @Description Stores static_bearer or mcp_oauth secrets as execution-owned authenticated ciphertext without contacting any endpoint. Static bearer and OAuth access tokens must be nonempty strings; their bytes are preserved. OAuth accepts a required access token, nullable RFC3339 expiry and optional refresh configuration with none, client_secret_basic or client_secret_post authentication. Required name is trimmed to 1–256 UTF-8 bytes. Credential and token endpoints require HTTPS without userinfo or fragments. Responses contain safe metadata only, including explicit nullable OAuth expiry, refresh, resource and scope. Missing encryption configuration returns local 503. External authorization and provider revocation remain caller responsibilities; exact hosted error/default semantics remain unverified.
 // @Tags Credentials
 // @Accept json
 // @Produce json
@@ -30,7 +30,7 @@ type CredentialStore interface {
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param vault_id path string true "Vault ID"
 // @Param body body v1.CreateCredentialRequest true "Write-only credential authentication union"
-// @Success 200 {object} v1.Credential
+// @Success 201 {object} v1.Credential
 // @Failure 400,401,404,413,500,503 {object} v1.ErrorResponse
 // @Router /vaults/{vault_id}/credentials [post]
 func (h *Handler) createCredential(w http.ResponseWriter, r *http.Request) {
@@ -63,8 +63,8 @@ func (h *Handler) createCredential(w http.ResponseWriter, r *http.Request) {
 	switch credentialAuthType(request.Auth) {
 	case "static_bearer":
 		var auth v1.CredentialAuthInput
-		if decodeInputObject(request.Auth, &auth, "type", "mcp_server_url", "token") != nil || auth.Token == nil || !credentialHTTPSURL(auth.MCPServerURL) {
-			writeError(w, http.StatusBadRequest, "invalid_request", "static_bearer requires string token and an absolute HTTPS mcp_server_url without userinfo or a fragment.")
+		if decodeInputObject(request.Auth, &auth, "type", "mcp_server_url", "token") != nil || auth.Token == nil || *auth.Token == "" || !credentialHTTPSURL(auth.MCPServerURL) {
+			writeError(w, http.StatusBadRequest, "invalid_request", "static_bearer requires a nonempty string token and an absolute HTTPS mcp_server_url without userinfo or a fragment.")
 			return
 		}
 		credential, err = h.store.CreateStaticCredential(r.Context(), tenantID(r), vaultID, store.CreateStaticCredentialInput{Name: name, MCPServerURL: *auth.MCPServerURL, Token: *auth.Token})
@@ -83,7 +83,7 @@ func (h *Handler) createCredential(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, credentialResponse(credential))
+	writeJSON(w, http.StatusCreated, credentialResponse(credential))
 }
 
 // @Summary Retrieve safe Vault Credential metadata

@@ -101,7 +101,7 @@ func readTemplateInput(w http.ResponseWriter, r *http.Request) (store.Environmen
 // @Security BearerAuth
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param body body v1.EnvironmentTemplateRequest true "Reusable configuration"
-// @Success 200 {object} v1.EnvironmentTemplate
+// @Success 201 {object} v1.EnvironmentTemplate
 // @Failure 400,401,413,500 {object} v1.ErrorResponse
 // @Router /agents/environments/templates [post]
 func (h *Handler) createEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
@@ -114,7 +114,7 @@ func (h *Handler) createEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 		writeStoreError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, templateResponse(value))
+	writeJSON(w, http.StatusCreated, templateResponse(value))
 }
 
 // @Summary Retrieve an Environment Template
@@ -140,7 +140,7 @@ func (h *Handler) getEnvironmentTemplate(w http.ResponseWriter, r *http.Request)
 }
 
 // @Summary Update an Environment Template
-// @Description Supplied fields replace atomically; omitted fields remain unchanged. Null name clears and null network resets to the pinned enabled default. Existing Session snapshots and creation retries remain unchanged. Initial files replace as a list; null/empty clears. File data is encrypted separately and excluded from response metadata. Skills replace as a list; null/empty clears. Skill archives are encrypted separately and omitted from responses. Plugins and capability directories replace as lists; null/empty clears. Plugin archives are encrypted and omitted from responses. Capability directories are snapshotted after setup. Environment MCP execution requires a qualified native transport and runtime network policy. Exact hosted no-op timestamp behavior remains unverified.
+// @Description Supplied fields replace atomically; omitted fields remain unchanged. Null name clears and null network resets to the pinned enabled default. Existing Session snapshots and creation retries remain unchanged. Initial files replace as a list; null/empty clears. File data is encrypted separately and excluded from response metadata. Skills replace as a list; null/empty clears. Skill archives are encrypted separately and omitted from responses. Plugins and capability directories replace as lists; null/empty clears. Plugin archives are encrypted and omitted from responses. Capability directories are snapshotted after setup. Environment MCP execution requires a qualified native transport and runtime network policy. Empty updates advance updated_at without changing saved fields or confidential contents.
 // @Tags Environment Templates
 // @Accept json
 // @Produce json

@@ -39,8 +39,13 @@ def main():
         assert fresh.agent.model == updated.model
         assert [t.to_dict() for t in fresh.agent.tools] == [t.to_dict() for t in updated.tools]
         assert fresh.metadata == {} and old.agent.instructions == original.instructions
-        # A request without fields is a local no-op, including its update timestamp.
-        assert agents.update(original.id) == updated
+        # An empty update touches time while retaining configuration and Session snapshots.
+        touched = agents.update(original.id)
+        assert touched.updated_at >= updated.updated_at
+        assert {k: v for k, v in touched.to_dict().items() if k != "updated_at"} == {
+            k: v for k, v in updated.to_dict().items() if k != "updated_at"}
+        assert sessions.retrieve(old.id) == old
+        updated = touched
         for body in (None, [], {"model": None}, {"model": 3}, {"name": "x" * 129},
                      {"metadata": {"bad": None}}, {"text": {"unexpected": True}},
                      {"metadata": {"replace": "no"}, "instructions": False},

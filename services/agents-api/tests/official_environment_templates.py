@@ -23,6 +23,7 @@ def verify_environment_templates(client, foreign, http):
                        {'name': ' preserved ', 'network': {'access': 'disabled'}, 'files': [],
                         'plugins': [], 'skills': [], 'packages': {'python': [], 'npm': None}}):
             response = api.with_raw_response.create(**values)
+            assert response.status_code == 201
             body, template = response.http_response.json(), response.parse()
             owned.append(template.id)
             assert set(body) == {'id', 'object', 'created_at', 'updated_at', 'name', 'network',
@@ -43,7 +44,10 @@ def verify_environment_templates(client, foreign, http):
         assert updated.created_at == before.created_at
         updated = api.update(owned[-1], name=None, network=None)
         assert updated.name is None and updated.network.access == 'enabled'
-        assert api.update(owned[-1]).to_dict() == updated.to_dict()
+        touched = api.update(owned[-1])
+        assert touched.updated_at >= updated.updated_at
+        assert {k: v for k, v in touched.to_dict().items() if k != "updated_at"} == {
+            k: v for k, v in updated.to_dict().items() if k != "updated_at"}
         assert [v.id for v in api.list(order='asc', limit=1)] == owned
         assert [v.id for v in api.list(order='desc', limit=2)] == owned[::-1]
         page = api.list(order='asc', limit=2)

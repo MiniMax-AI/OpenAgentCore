@@ -9,7 +9,7 @@ import (
 )
 
 // @Summary Replace Vault Credential authentication secrets
-// @Description Updates the existing static_bearer or mcp_oauth authentication method without network requests. OAuth access_token omission/null retains the token; a new token clears omitted expiry, explicit null clears expiry, and other omitted fields remain unchanged. OAuth refresh patches cannot add configuration or change client, endpoint, resource or authentication method; nullable token/client-secret values retain stored secrets while explicit null scope clears scope. Whole-null refresh and token_endpoint_auth retain existing configuration under local policy. Identity, destination, creation time and Session bindings remain unchanged. Responses expose safe metadata only. Already-dispatched work is not revoked; provider revocation, storage-key rotation and exact hosted concurrent-update/error semantics remain separate.
+// @Description Explicitly empty static bearer or OAuth access tokens and OAuth patches without a mutable field are rejected before storage. Omitted OAuth access tokens preserve the existing grant when expiry or refresh fields change. Updates the existing static_bearer or mcp_oauth authentication method without network requests. OAuth access_token omission/null retains the token; a new token clears omitted expiry, explicit null clears expiry, and other omitted fields remain unchanged. OAuth refresh patches cannot add configuration or change client, endpoint, resource or authentication method; nullable token/client-secret values retain stored secrets while explicit null scope clears scope. Whole-null refresh and token_endpoint_auth retain existing configuration under local policy. Identity, destination, creation time and Session bindings remain unchanged. Responses expose safe metadata only. Already-dispatched work is not revoked; provider revocation, storage-key rotation and exact hosted concurrent-update/error semantics remain separate.
 // @Tags Credentials
 // @Accept json
 // @Produce json
@@ -50,8 +50,8 @@ func (h *Handler) updateCredential(w http.ResponseWriter, r *http.Request) {
 	switch credentialAuthType(request.Auth) {
 	case "static_bearer":
 		var auth v1.CredentialAuthReplacement
-		if decodeInputObject(request.Auth, &auth, "type", "token") != nil || auth.Token == nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "static_bearer auth requires a string token.")
+		if decodeInputObject(request.Auth, &auth, "type", "token") != nil || auth.Token == nil || *auth.Token == "" {
+			writeError(w, http.StatusBadRequest, "invalid_request", "static_bearer auth requires a nonempty string token.")
 			return
 		}
 		credential, err = h.store.UpdateStaticCredential(r.Context(), tenantID(r), vaultID, id, store.UpdateStaticCredentialInput{Token: *auth.Token})
