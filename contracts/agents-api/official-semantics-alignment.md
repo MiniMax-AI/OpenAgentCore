@@ -122,5 +122,17 @@ network forward were removed, and temporary devices were revoked.
 The integrated Web gate passed 287 client and 583 Web unit tests, type checks,
 builds and all 76 fixture browser cases. These controlled UI checks include
 empty-input prevention and same-key JSON recovery after a lost creation response;
-they are separate from the real-model evidence. Final server gate and blind-review
-results are recorded at batch closure.
+they are separate from the real-model evidence. The server `make -o check-web check`
+passed at `01f9356` with dedicated PostgreSQL, generated-query checks, Go service
+and adapter tests/builds, and Rust tests/format/Clippy. The optional packaged
+MiniMax native-tools probe was skipped; the separate real-model evidence above
+qualifies this batch, not every native capability. Fixed Python SDK and Go-client
+service acceptance also passed. The subsequent tool-policy evidence-count test
+change compiled; its opt-in native run was not repeated.
+
+A fresh independent Astra high reviewer inspected all 66 changed files and found
+no grounded in-scope blockers; API/contract tests, 39 focused Web tests and whitespace
+checks passed independently. Rebase onto main `6a3131e` preserved every batch patch.
+The combined tree at `4981580` passed API, execution, contract and dedicated-PostgreSQL
+Environment scheduling/initial-input/creation-stream regressions. No new E2B,
+OAuth provider or native capability combination was qualified.
