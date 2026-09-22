@@ -60,8 +60,9 @@ performed real native child delegation and an ordinary root Turn. All three pass
 history identity/content agreement, both paging directions at limits one and two,
 SSE disconnect/reconnect, wrong-tenant denial and stable history after idle Core
 restart without another Turn. Captured coordination events passed the TS parser.
-Claude's final run did not emit a child Turn SSE snapshot; its child query recovery
-passed. This preserves the native publication boundary above.
+Claude's first run had coordination events but no child Turn SSE snapshot; the
+final run also captured and parsed child Turn snapshots. Both observations retain
+the native publication boundary above, without a continuous-progress guarantee.
 
 Codex additionally exposed measured usage while a tool-separated Turn was still
 in progress, then retained it after cancellation, repeated reads and Core restart.
