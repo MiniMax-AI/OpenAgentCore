@@ -53,6 +53,11 @@ The three-harness Docker V1 MVP is accepted: Codex, Claude Code and MiniMax Code
 share the execution/workspace contract, with independent Core/database deployment,
 Files/Artifacts, cancellation and owned-history continuation. Optional features
 still differ. See the [accepted scope and evidence](#accepted-milestone-and-evidence).
+The opt-in [CubeSandbox remote profile](environments.md#opt-in-remote-microvm-managed-profile)
+reuses that contract, but it currently has offline contract tests and operator
+packaging only: template creation and public acceptance are outstanding, so it is
+not part of any accepted scope in this ledger and must not be reported as
+qualified.
 The same three harnesses passed historical Core-managed E2B V1 qualification in
 PR #705. That route is retired; it does not qualify the new user-managed daemon
 enrollment chain. The [user-managed V1 qualification](user-managed-runtime-v1.md)
@@ -397,7 +402,7 @@ and cancellation. This does not close the remaining protocol/transport gaps.
 
 | Capability | Current state |
 | --- | --- |
-| Independent deployment | Source-free Core package and separate execution PostgreSQL ownership; Docker-hosted and user-managed Runtime colocate daemon, selected harness and workspace; Core owns Docker only; no Parsar dependency |
+| Independent deployment | Source-free Core package and separate execution PostgreSQL ownership; Docker-hosted and user-managed Runtime colocate daemon, selected harness and workspace; Core owns Docker for the default backend and owns remote compute only when the operator opts into the CubeSandbox profile; no Parsar dependency |
 | Saved Agents and Sessions | Saved Agent routes, immutable inline/referenced Session configuration, metadata updates, root-Agent filtering and scoped cursor pagination |
 | Public execution | Initial/later text, active input and cancellation through Codex, Claude Code or MiniMax Code; Codex/Claude additionally support qualified public functions; see profile limits below |
 | Required actions | Persisted function calls/results/application receipts and pending Environment connection actions; Session reads and live snapshots expose the two pinned variants. See the [operation matrix](execution-tools.md) for qualification and unresolved timing |

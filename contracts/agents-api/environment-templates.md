@@ -83,11 +83,14 @@ idle Session and wait for connected status before submitting input.
 Uncertain writes and Core restart during initialization fail the new Environment and
 reclaim it; they do not replay partial installation. After completion, reconnect and
 native-history recovery preserve user modifications instead of reinstalling files.
-Current Core-hosted Docker and all three harnesses use this lifecycle. The Provider
-API remains five operations; public Templates are never E2B image templates and
-remain hosted-only. E2B now uses user-managed Runtime enrollment through the official
-SDK. Historical Core-managed E2B evidence below retains its original scope and does
-not qualify that new chain.
+Current Core-hosted profiles and all three harnesses use this lifecycle. The
+Provider API remains five operations; public Templates are never E2B image
+templates and remain hosted-only, and they are operator packaging configuration
+for whichever backend the operator selected rather than a provider selector: the
+same public Template resolves to the Docker image or to the pinned CubeSandbox
+template without any caller-visible difference. E2B now uses user-managed Runtime
+enrollment through the official SDK. Historical Core-managed E2B evidence below
+retains its original scope and does not qualify that new chain.
 
 ## Skills and versioned references
 

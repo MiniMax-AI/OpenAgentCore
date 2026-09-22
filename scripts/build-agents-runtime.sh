@@ -30,6 +30,11 @@ trap 'rm -rf "$context"' EXIT
   cd "$repo_root"
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -trimpath \
     -o "$context/parsar-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
+  # The readiness endpoint is part of every Runtime bundle: the Docker profile
+  # ignores it, and the CubeSandbox image uses it as the template probe and the
+  # sandbox readiness contract.
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -trimpath \
+    -o "$context/parsar-runtime-readiness" ./apps/parsar-runtime-readiness/cmd/parsar-runtime-readiness
 )
 cp "$helpers_dir/agents-api-codex-directory" "$helpers_dir/agents-api-codex-write" "$helpers_dir/agents-api-workspace-export" "$context/"
 cp "$native_dir/bin/codex" "$context/codex"
@@ -37,6 +42,7 @@ cp -R "$native_dir/codex-resources" "$context/codex-resources"
 cp "$repo_root/services/agents-api/deploy/codex/tool-env.py" "$context/tool-env.py"
 cp "$repo_root/services/agents-api/deploy/codex/requirements.toml" "$context/requirements.toml"
 cp "$repo_root/services/agents-api/deploy/codex/Dockerfile" "$context/Dockerfile"
+cp "$repo_root/services/agents-api/deploy/cubesandbox/runtime-entrypoint.sh" "$context/runtime-entrypoint.sh"
 cp "$repo_root/services/agents-api/deploy/runtime/initialize.py" "$context/runtime-initialize.py"
 cp "$repo_root/services/agents-api/deploy/runtime/build-system-seed.py" "$repo_root/services/agents-api/deploy/runtime/tool-root.py" "$context/"
 # Preserve the previous bundle if compilation or validation failed.

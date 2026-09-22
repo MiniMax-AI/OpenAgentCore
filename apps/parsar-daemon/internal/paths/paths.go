@@ -105,3 +105,14 @@ func SessionsFile(profile string) (string, error) {
 	}
 	return filepath.Join(dir, "sessions.json"), nil
 }
+
+// ConnectedStateFile returns the absolute path to connect.state: the daemon's
+// statement that it currently holds an authenticated connection to Core. The
+// Runtime readiness endpoint reads it; the daemon owns it.
+func ConnectedStateFile(profile string) (string, error) {
+	dir, err := ProfileDir(profile)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "connect.state"), nil
+}

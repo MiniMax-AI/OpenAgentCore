@@ -3,7 +3,8 @@
 The complete protocol target remains the SDK pinned in [upstream.json](upstream.json).
 The public GET and POST `/agents/environments/{id}/files` have partial coverage.
 Inline and source-file (`file_id`) creation target a qualified V1 local Environment,
-including the Core-managed Docker profiles for Codex, Claude Code and MiniMax Code.
+including the Core-managed hosted profiles (local Docker by default, opt-in
+CubeSandbox microVMs) for Codex, Claude Code and MiniMax Code.
 [Source Files](source-files.md) have their own project-owned lifecycle. Managed
 hosted provisioning and shared Artifacts are accepted within the
 [recorded Docker MVP scope](README.md#accepted-milestone-and-evidence) and separate
@@ -84,7 +85,8 @@ stored local profile, immutable exact device/Environment binding and live capabi
 It never starts a model for upload or supplies a filesystem root from the request.
 The deployment must qualify the protected sibling workspace/staging layout and
 its selected native adapter. The [engine profile guides](README.md#public-engine-profiles)
-describe accepted Docker configurations; the [E2B operator guide](../../services/agents-api/deploy/e2b/README.md)
+describe accepted hosted configurations (local Docker by default, opt-in
+CubeSandbox microVMs), and the [E2B operator guide](../../services/agents-api/deploy/e2b/README.md)
 covers user-managed E2B Runtime packaging and links its separate real acceptance.
 A capability or path declaration alone
 does not establish isolation or public hosted admission.

@@ -343,11 +343,16 @@ func mainLoopRemote(rc *runContext, profile string, prof auth.Profile, agentCLIs
 			return fmt.Errorf("connect: dial: %w", err)
 		}
 		obslog.Bg().Info("ws connected", "device_id", conn.DeviceID())
+		// The Runtime readiness endpoint reports this statement. Publishing it is
+		// best-effort: a failure can only make the Runtime look less ready than it
+		// is, never more.
+		publishConnectedState(profile, conn.DeviceID())
 
 		// pumpConn returns on conn close (peer hangup, transport
 		// error, root ctx cancel). Loop back into Reconnect unless
 		// root ctx is cancelled.
 		pumpErr := pumpConn(rootCtx, conn, registry, boot, agentCLIs)
+		clearConnectedState(profile)
 		if pumpErr != nil {
 			obslog.Bg().Warn("ws session ended", "err", pumpErr)
 		} else {

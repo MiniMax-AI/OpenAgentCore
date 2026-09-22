@@ -78,6 +78,35 @@ changing a provider target requires a new key. No image is qualified merely by
 being named in this map. Existing provider security and native capability checks
 still apply. This change adds no provider or native harness implementation.
 
+A provider key may instead name a CubeSandbox backend, or a deployment may mix
+both backends. The choice is operator-owned and never appears in the public
+contract:
+
+```json
+{
+  "cubesandbox": {
+    "33333333-3333-4333-8333-333333333333": {
+      "api_url": "https://cubeapi.internal/cubeapi/v1",
+      "proxy_node_ip": "10.0.0.20",
+      "sandbox_domain": "cube.app",
+      "proxy_scheme": "http",
+      "template": "<pinned-template-id>",
+      "lease_seconds": 43200,
+      "api_key_file": "/etc/parsar/cube.key",
+      "host_mount_root": "/data/shared/parsar",
+      "platform_egress": ["models.internal"]
+    }
+  }
+}
+```
+
+`api_key_file` must be a private file with a non-empty value; an unreadable or
+empty file fails startup instead of registering a half-configured provider. A
+CubeSandbox deployment may omit the `docker` section entirely, and one provider
+key may never appear in both sections. See the
+[CubeSandbox operator guide](../../services/agents-api/deploy/cubesandbox/README.md)
+for the image, template, storage and egress prerequisites.
+
 For multiple engines, use an exclusive `by_harness` object in the private
 `AGENTS_API_EXECUTION_OPTIONS_FILE`, with one existing adapter-options object per
 engine. No engine inherits another engine's credentials. A legacy flat options

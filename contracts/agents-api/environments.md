@@ -60,6 +60,46 @@ outcomes; new inputs reject terminal Environments. Expiry has no invented SSE
 variant. Local failure codes and exact event ordering remain unverified upstream
 semantics; this profile does not establish complete Environment compatibility.
 
+## Opt-in remote microVM managed profile
+
+An operator may additionally configure a CubeSandbox provider, either as the
+default backend or per engine, through the same
+`AGENTS_API_MANAGED_RUNTIMES_FILE`. Each provider key pins exactly one backend,
+so retained entries keep their cleanup backend when the default changes, and the
+public surface is unchanged: callers still see `type=openai_hosted` and cannot
+tell which backend the operator chose. See the
+[operator guide](../../services/agents-api/deploy/cubesandbox/README.md).
+
+The remote profile reuses the same Runtime image content, daemon contract, auth
+profile (`server_url`, `runtime_id`, `runner_credential`, mode 0600 under an
+owner-1000 directory) and initialization operations as the Docker profile. Its
+differences are the placement and the isolation boundary:
+
+- One microVM per Session, provisioned from an operator-pinned template on a
+  CubeSandbox cluster. Core needs neither Docker nor KVM nor cluster membership.
+- Storage is a per-allocation host directory under the operator's allowed mount
+  prefix, mounted at `/environment` and again at `/workspace`, so the trusted
+  atomic staging rename never crosses a mount point. Host mounts are node-local
+  and outside snapshots.
+- The virtualization boundary replaces the Docker host-policy relaxations of
+  §8.7 of the implementation specification instead of reproducing them.
+- Domain-restricted network policy is still rejected before create, exactly as in
+  the hosted Docker profile. A disabled policy keeps Core and the operator-listed
+  platform addresses reachable, because the daemon's connection and the harness's
+  model calls share that interface.
+
+Readiness evidence differs, and it is provider evidence only: the sandbox is
+reported ready when the Runtime's own readiness endpoint answers 2xx, which
+requires the daemon to have authenticated to Core. Reversible expiry (pause and
+resume) is not part of this profile: an idle sandbox terminates at the platform
+TTL or on explicit cleanup, and a stopped or missing sandbox never authorizes
+destroying retained workspace or history.
+
+This profile has not yet passed the public end-to-end acceptance on a real
+cluster. The packaging, the pinned contract and the offline contract tests exist;
+template creation, the opt-in cluster checks and the public acceptance are
+recorded as outstanding in the operator guide's "Not yet verified" section.
+
 ## User-managed E2B profile
 
 The application creates, renews and destroys its E2B sandbox through the official

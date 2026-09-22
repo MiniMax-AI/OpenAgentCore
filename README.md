@@ -13,7 +13,9 @@ product application, product backend, product database, business CLI or product
 deployment stack.
 
 V1 user-managed deployments colocate our daemon, selected harness, tools and
-`/workspace`. Core manages Docker only; users provision, renew and destroy E2B
+`/workspace`. Core manages hosted execution on local Docker by default, and on an
+operator-configured CubeSandbox cluster when that opt-in backend is enabled; users
+provision, renew and destroy E2B
 through the official SDK. The returned `remote_url` uses our private daemon
 transport, not stock `exec-server`. See the
 [Runtime enrollment guide](services/agents-api/README.md#user-managed-runtime-enrollment)
@@ -25,6 +27,7 @@ for tested deployments and remaining limits.
 - [API setup, authentication and execution](services/agents-api/README.md)
 - [Standalone containers](services/agents-api/CONTAINER.md)
 - [Docker Runtime](services/agents-api/deploy/codex/README.md)
+- [CubeSandbox Runtime (opt-in)](services/agents-api/deploy/cubesandbox/README.md)
 - [Protocol coverage and known gaps](contracts/agents-api/README.md)
 - [Harness selection](contracts/agents-api/harness-selection.md)
 - [Core Web overview](docs/web/README.md)

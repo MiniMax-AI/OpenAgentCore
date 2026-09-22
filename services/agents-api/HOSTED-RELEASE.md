@@ -169,8 +169,53 @@ controls and cleanup available. Back up the independent PostgreSQL database
 (including large objects) and retained Runtime state together under an operator
 recovery plan; the archive itself contains no deployment data.
 
-## Acceptance limits
+## CubeSandbox remote profile (opt-in)
 
+The same Core can host the same Runtime on a CubeSandbox cluster instead of a local
+Docker daemon. The provider choice is operator configuration, so the public
+`/v1/agents/**` contract, OpenAPI and Core Web are unchanged and callers cannot
+tell which backend was selected. Local Docker remains the default; a mixed
+deployment is valid.
+
+Configure it in the same `AGENTS_API_MANAGED_RUNTIMES_FILE`, adding or replacing
+the `docker` section with a `cubesandbox` map:
+
+```json
+{
+  "core_url": "http://core:8091/api/v1",
+  "default_provider": "33333333-3333-4333-8333-333333333333",
+  "engine_providers": { "codex": "33333333-3333-4333-8333-333333333333" },
+  "cubesandbox": {
+    "33333333-3333-4333-8333-333333333333": {
+      "api_url": "https://cubeapi.internal/cubeapi/v1",
+      "proxy_node_ip": "10.0.0.20",
+      "sandbox_domain": "cube.app",
+      "proxy_scheme": "http",
+      "template": "<pinned-template-id>",
+      "lease_seconds": 43200,
+      "api_key_file": "/etc/parsar/cube.key",
+      "host_mount_root": "/data/shared/parsar",
+      "platform_egress": ["models.internal"]
+    }
+  }
+}
+```
+
+`lease_seconds` is the Cube idle TTL and must be between 7200 and 86400: Core's own
+one-hour lease stays authoritative and the platform TTL is only a safety net.
+`api_key_file` must be a private, non-empty file; the key is never logged, echoed,
+placed in argv or written into metadata. `host_mount_root` must be a prefix
+CubeMaster allows, and `platform_egress` must list the model endpoints (and any MCP
+hosts) a Session with network access disabled still needs.
+
+Prerequisites, image build, template creation, the local image self-check and the
+storage/egress/isolation limits are in the
+[CubeSandbox profile guide](deploy/cubesandbox/README.md). Its "Not yet verified"
+section is authoritative about what has and has not been proven: template creation
+and the public end-to-end acceptance have not run yet, so do not report this
+profile as qualified.
+
+## Acceptance limits
 The qualified basic profile covers public creation, native execution, inline and
 source-file copies/listing, cancellation, retained-history restart and owned
 cleanup. Network access defaults to enabled; explicit disabled confines native

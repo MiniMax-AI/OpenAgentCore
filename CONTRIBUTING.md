@@ -44,6 +44,14 @@ logs. Update this guide when architecture, ownership or generated contracts chan
 Comments and documentation are English. Reuse existing helpers and error mapping;
 split oversized components before extending them. Use `internal/obs/log` for logs.
 
+Core owns hosted compute only through explicitly configured providers. Local Docker
+is the default backend; the opt-in CubeSandbox backend in
+`services/agents-api/internal/sandbox/cubesandbox/` owns a remote microVM for the
+same Session contract, and its provider selection is operator-owned and invisible to
+callers. Do not add a product database dependency, a second execution owner, or any
+provider concept (template id, node name, cluster address, egress internals) to the
+public API, OpenAPI or Core Web.
+
 ## Required checks
 
 Run `make check` before completion. The standalone gate includes all daemon/shared
