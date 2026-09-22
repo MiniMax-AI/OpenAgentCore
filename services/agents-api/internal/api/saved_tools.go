@@ -34,21 +34,11 @@ func resolveSavedTools(input []json.RawMessage) ([]json.RawMessage, error) {
 			}
 			value, _ = json.Marshal(kind)
 		case "programmatic_tool_calling":
-			var input struct {
-				Type    string          `json:"type"`
-				Enabled json.RawMessage `json:"enabled"`
-			}
-			if decodeInputObject(raw, &input, "type", "enabled") != nil {
-				return nil, errors.New("Invalid programmatic_tool_calling fields.")
-			}
-			enabled, err := optionalBoolean(input.Enabled, true)
+			resolved, err := resolveProgrammaticTool(raw)
 			if err != nil {
-				return nil, errors.New("programmatic_tool_calling.enabled must be a boolean.")
+				return nil, err
 			}
-			value, _ = json.Marshal(struct {
-				Type    string `json:"type"`
-				Enabled bool   `json:"enabled"`
-			}{kind.Type, enabled})
+			value = resolved
 		case "mcp":
 			resolved, err := resolveMCPTool(raw, true)
 			if err != nil {
@@ -56,7 +46,11 @@ func resolveSavedTools(input []json.RawMessage) ([]json.RawMessage, error) {
 			}
 			value = resolved
 		case "web_search":
-			return nil, errors.New("Persisted web_search configuration is not implemented yet.")
+			resolved, err := resolveDisabledWebSearch(raw)
+			if err != nil {
+				return nil, err
+			}
+			value = resolved
 		default:
 			return nil, errors.New("Unknown persisted tool type.")
 		}

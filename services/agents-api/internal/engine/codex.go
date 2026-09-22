@@ -9,9 +9,10 @@ import (
 
 func codexProfile() Profile {
 	return Profile{
-		Placements:             []string{"none", "self_hosted", "openai_hosted"},
-		MessageImagePlacements: []string{"none"},
-		WebSearchControl:       true, TextVerbosity: true, MCPBearer: true,
+		ProgrammaticToolCallingDisable: true,
+		Placements:                     []string{"none", "self_hosted", "openai_hosted"},
+		MessageImagePlacements:         []string{"none"},
+		WebSearchControl:               true, TextVerbosity: true, MCPBearer: true,
 		ValidateConfiguration: func(agent v1.Agent, _ *v1.Environment, _ bool) error {
 			return rejectSubagentTools(agent, "function", "mcp")
 		},

@@ -12,6 +12,7 @@ var ErrInvalidInput = errors.New("invalid engine configuration")
 
 // Profile records qualified public behavior, independently of Runtime advertisements.
 type Profile struct {
+	ProgrammaticToolCallingDisable             bool
 	Placements                                 []string
 	WebSearchControl, TextVerbosity, MCPBearer bool
 	StructuredOutput                           bool

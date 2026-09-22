@@ -1937,8 +1937,10 @@ paths:
         required defaulting to false. Saving credential_id grants no access: Session
         admission checks attached Vault ownership and destination. MCP allowed_tools
         preserves null versus empty; saved HTTP transport includes empty headers.
-        Model-derived reasoning defaults, other MCP variants, web_search and public
-        retry conformance remain incomplete. Session execution admits only its supported
+        Model-derived reasoning defaults, other MCP variants, enabled web_search and
+        public retry conformance remain incomplete. Explicit disabled web_search can
+        be saved; Session execution also accepts explicit disabled programmatic_tool_calling
+        through qualified Runtime controls. Session execution admits only its supported
         configuration subset.'
       parameters:
       - description: agents=v1
@@ -2723,8 +2725,11 @@ paths:
         updates cannot change committed Session Skill contents. Deferred function
         discovery uses type-only tool_search and per-function defer_loading in the
         qualified single-agent Claude environment:none function profile, including
-        qualified inline image messages and text results. Other combinations remain
-        unqualified; see the operation coverage.
+        qualified inline image messages and text results. Explicit web_search mode
+        disabled and programmatic_tool_calling enabled false use frozen common Runtime
+        controls. Enabled forms remain unqualified. Omitted programmatic configuration
+        preserves native behavior, a documented difference from the official default-on
+        behavior. Other combinations remain unqualified; see the operation coverage.
       parameters:
       - description: agents=v1
         in: header

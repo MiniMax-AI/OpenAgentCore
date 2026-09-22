@@ -31,6 +31,7 @@ func discoverClaudeSDK(rc *runContext, profile string, check func(context.Contex
 		Streaming: true, Usage: true, Resume: true, Steering: true, MessageItems: true,
 		ToolObservations: true, EnvironmentNone: true, SubagentControl: true,
 		DurableTurns: true, DurableInputReceipts: true, FunctionTools: true, ExecutionControls: true,
+		ProgrammaticToolCallingDisable: true,
 	}}}
 	fail := func(err error) *claudeSDKDiscovery {
 		fmt.Fprintf(rc.stderr, "parsar-daemon: configured Claude SDK runtime unavailable: %v\n", err)

@@ -107,17 +107,20 @@ func (p Policy) engineCapabilities(peer *gateway.Session, engine string, snapsho
 	if !snapshot.Agent.MultiAgent.Enabled && !caps.SubagentControl {
 		return fail("device must advertise subagent_control")
 	}
-	functions, mcp, search, err := executionTools(snapshot.Agent.Tools)
+	tools, err := executionTools(snapshot.Agent.Tools)
 	if err != nil {
 		return fail("invalid execution tool configuration")
 	}
-	if err := (proto.PromptRequestPayload{ToolSearch: search, FunctionTools: functions}).ValidateToolSearch(caps.ToolSearch); err != nil {
+	if err := (proto.PromptRequestPayload{ToolSearch: tools.Search, FunctionTools: tools.Functions}).ValidateToolSearch(caps.ToolSearch); err != nil {
 		return fail(err.Error())
 	}
-	if len(functions) > 0 && !caps.FunctionTools {
+	if tools.DisableProgrammatic && !caps.ProgrammaticToolCallingDisable {
+		return fail("device must support disabling programmatic tool calling")
+	}
+	if len(tools.Functions) > 0 && !caps.FunctionTools {
 		return fail("device must advertise function_tools")
 	}
-	if _, err := p.mcpExecutionCredentials(engine, snapshot, mcp, caps); err != nil {
+	if _, err := p.mcpExecutionCredentials(engine, snapshot, tools.MCP, caps); err != nil {
 		return device.KindCapabilities{}, err
 	}
 	if snapshot.Environment != nil && (snapshot.Environment.Type == "openai_hosted" || snapshot.Environment.Type == "self_hosted") {

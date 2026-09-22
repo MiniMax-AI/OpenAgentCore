@@ -11,10 +11,11 @@ import (
 
 func claudeProfile() Profile {
 	return Profile{
-		StructuredOutput:       true,
-		ToolSearch:             true,
-		MessageImagePlacements: []string{"none"},
-		Placements:             []string{"none", "openai_hosted", "self_hosted"}, MCPBearer: true,
+		ProgrammaticToolCallingDisable: true,
+		StructuredOutput:               true,
+		ToolSearch:                     true,
+		MessageImagePlacements:         []string{"none"},
+		Placements:                     []string{"none", "openai_hosted", "self_hosted"}, MCPBearer: true,
 		ValidateConfiguration: validateClaudeConfiguration,
 		ValidateTools:         validateClaudeTools,
 		ValidateFunctionResult: func(content []proto.InputContent) error {
@@ -49,7 +50,7 @@ func validateClaudeConfiguration(agent v1.Agent, environment *v1.Environment, ha
 			var tool struct {
 				Type string `json:"type"`
 			}
-			if json.Unmarshal(raw, &tool) != nil || tool.Type != "function" {
+			if json.Unmarshal(raw, &tool) != nil || (tool.Type != "function" && tool.Type != "web_search" && tool.Type != "programmatic_tool_calling") {
 				return ErrInvalidInput
 			}
 		}
@@ -65,7 +66,7 @@ func validateClaudeConfiguration(agent v1.Agent, environment *v1.Environment, ha
 			return ErrInvalidInput
 		}
 		search = search || tool.Type == "tool_search"
-		otherTools = otherTools || (tool.Type != "function" && tool.Type != "tool_search")
+		otherTools = otherTools || (tool.Type != "function" && tool.Type != "tool_search" && tool.Type != "web_search" && tool.Type != "programmatic_tool_calling")
 	}
 	if search && (environment.Type != "none" || agent.MultiAgent.Enabled || otherTools || agent.Text.Format.Type == "json_schema") {
 		return errors.New("Tool discovery currently requires a single-agent environment:none function profile.")

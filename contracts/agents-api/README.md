@@ -249,6 +249,20 @@ including further deployment qualification; this inventory describes merged beha
   multi-agent settings default to six concurrent subagents. Function defer-loading
   defaults to false and programmatic tool calling to true. Saving these values
   does not itself admit a native execution. Session references are admitted separately.
+- [Explicit disabled tools](tool-policy.md) can be saved, used inline or resolved from saved Agents:
+  `web_search.mode=disabled` and `programmatic_tool_calling.enabled=false`. Search
+  responses include `context_size=medium` for omitted/null size, nullable domains
+  and location; an empty domain list stays empty. Only explicit disabled mode is
+  qualified; omitted/null mode and enabled search remain gaps. Sessions reject
+  enabled programmatic execution, including the default true on a supplied PTC
+  declaration. An omitted PTC declaration preserves native behavior: this is an
+  approved difference from the official default-on behavior, not full compatibility.
+  Core carries the frozen disabled intent through the common Runtime contract;
+  native translation and inventory restrictions stay in adapters. Codex checks
+  managed requirements before new/resumed execution; conflicting forced features
+  reject before model input. Claude and MiniMax use their restricted tool profiles.
+  No independent executor or model/tool loop is introduced. Resource defaults and
+  hosted error parity beyond this supported subset remain unverified.
 - `POST /agents/{agent_id}` updates only supplied fields. Omitted fields remain
   unchanged; metadata replaces all pairs and null/empty clears it. Name/instructions
   null clears them. Concurrent updates preserve unrelated fields. Existing Session
@@ -304,7 +318,7 @@ including further deployment qualification; this inventory describes merged beha
   rechecked before dispatch-only decryption; authenticated execution requires the
   separate bearer capability and never downgrades on failure. Exact URL/selection
   timing, implicit response population and hosted errors remain local or unverified.
-  Other MCP variants and web-search remain gaps, not changes to the pinned target
+  Other MCP variants and enabled web-search remain gaps, not changes to the pinned target
   or claims of complete resource coverage.
 
 - Use `/agents/sessions` beneath the configured API base URL, bearer authentication

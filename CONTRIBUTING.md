@@ -80,6 +80,14 @@ databases, credentials and migrations. The product uses Core exclusively; it has
   field presence, nullability, discriminators, defaults, status transitions,
   pagination, errors and streaming behavior. Engine limitations are implementation
   gaps to solve, not grounds for narrowing or redefining the upstream contract.
+- Preserve qualified native capability differences across harnesses. If a material
+  difference from the official API has no clear mapping, pause that part and ask
+  the user before changing its semantics. Explicit unsupported enablement rejects;
+  ordinary requests retain native behavior with any official default discrepancy
+  recorded in the coverage ledger. In particular, native programmatic tool calling
+  is not currently qualified as the official default-on behavior. Do not build
+  a separate executor or model loop to fabricate parity. This does not relax
+  authentication, isolation, credential protection or data consistency.
 - Pin upstream source and SDK versions in `contracts/agents-api/upstream.json`.
   Use official SDKs for clients and reuse upstream types or schemas where suitable.
   SDK deserialization alone is not server validation or proof of compatibility:
@@ -1531,6 +1539,18 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   both valid fields. This internal contract does not add public configuration or
   engine support. Future native adapters must verify the same semantics before
   advertising the capability.
+- Explicit public `programmatic_tool_calling.enabled=false` uses the common
+  `ExecutionControls.DisableProgrammaticToolCalling` field and the operation-specific
+  `programmatic_tool_calling_disable` capability. Both public qualification and
+  Runtime support are required for that request; omission creates no prerequisite.
+  New and resumed executions retain the frozen setting. Codex disables native
+  code-mode features and checks managed requirements before starting/resuming a
+  thread, rejecting a conflicting requirement. Claude and MiniMax retain their
+  restricted native inventories, which exclude programmatic execution. This does
+  not remove unrelated native utilities or claim enabled programmatic support.
+  Explicit `web_search.mode=disabled` reuses the existing disabled search control.
+  Search remains off when omitted. Optional search settings are resource data and
+  do not cause execution while disabled. Enabled search remains unqualified here.
 - `web_search_control` advertises the Codex adapter's explicit `web_search` option
   (`disabled`, `cached`, or `live`). Agents API requires this capability before Codex dispatch;
   the typed execution controls force search off on new and resumed Turns. Native configuration translation stays in the

@@ -35,11 +35,11 @@ func TestDiscoveryKeepsMixedFunctionDefinitions(t *testing.T) {
 	if err := json.Unmarshal([]byte(discoveryConfiguration), &snapshot); err != nil {
 		t.Fatal(err)
 	}
-	functions, mcp, search, err := executionTools(snapshot.Agent.Tools)
-	if err != nil || len(mcp) != 0 || !search || len(functions) != 2 || !functions[0].DeferLoading || functions[1].DeferLoading {
-		t.Fatal(functions, mcp, search, err)
+	tools, err := executionTools(snapshot.Agent.Tools)
+	if err != nil || len(tools.MCP) != 0 || !tools.Search || len(tools.Functions) != 2 || !tools.Functions[0].DeferLoading || tools.Functions[1].DeferLoading {
+		t.Fatal(tools, err)
 	}
-	request := proto.PromptRequestPayload{ToolSearch: search, FunctionTools: functions}
+	request := proto.PromptRequestPayload{ToolSearch: tools.Search, FunctionTools: tools.Functions}
 	if request.ValidateToolSearch(true) != nil || request.ValidateToolSearch(false) == nil {
 		t.Fatal("Runtime support is not operation-specific")
 	}

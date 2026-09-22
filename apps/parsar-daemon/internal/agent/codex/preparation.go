@@ -123,6 +123,11 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	if _, err := rpc.Start(cancelCtx, initParams); err != nil {
 		return p.preparationFailed(fmt.Errorf("codex: rpc start: %w", err))
 	}
+	if req.ExecutionControls != nil && req.ExecutionControls.DisableProgrammaticToolCalling {
+		if err := verifyProgrammaticToolsDisabled(cancelCtx, rpc); err != nil {
+			return p.preparationFailed(err)
+		}
+	}
 	if req.DisableExecutionEnvironment {
 		if err := verifyNoExecutionEnvironment(cancelCtx, rpc); err != nil {
 			cancelFn()

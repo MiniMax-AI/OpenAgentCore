@@ -26,19 +26,22 @@ func validateProfileConfiguration(profile engine.Profile, snapshot Snapshot) err
 			return profileError(err)
 		}
 	}
-	functions, mcp, search, err := executionTools(snapshot.Agent.Tools)
+	tools, err := executionTools(snapshot.Agent.Tools)
 	// Preserve each profile's admission error precedence when tool decoding fails.
 	if profile.ValidateConfiguration != nil && err != nil {
 		return err
 	}
 	if err == nil {
-		request := proto.PromptRequestPayload{ToolSearch: search, FunctionTools: functions}
+		if tools.DisableProgrammatic && !profile.ProgrammaticToolCallingDisable {
+			return errors.New("Disabling programmatic tool calling is not qualified for this engine.")
+		}
+		request := proto.PromptRequestPayload{ToolSearch: tools.Search, FunctionTools: tools.Functions}
 		if err := request.ValidateToolSearch(profile.ToolSearch); err != nil {
 			return err
 		}
 	}
 	if profile.ValidateTools != nil {
-		if validationErr := profile.ValidateTools(snapshot.Environment, snapshot.Daemon != nil, functions, mcp); validationErr != nil {
+		if validationErr := profile.ValidateTools(snapshot.Environment, snapshot.Daemon != nil, tools.Functions, tools.MCP); validationErr != nil {
 			return profileError(validationErr)
 		}
 	}

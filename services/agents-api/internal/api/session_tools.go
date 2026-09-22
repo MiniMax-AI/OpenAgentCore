@@ -13,6 +13,7 @@ func resolveSessionTools(input []json.RawMessage) ([]json.RawMessage, error) {
 	positions := make([]int, 0, len(input))
 	servers := map[string]bool{}
 	search := false
+	controls := map[string]bool{}
 	for i, raw := range input {
 		var kind struct {
 			Type string `json:"type"`
@@ -21,6 +22,31 @@ func resolveSessionTools(input []json.RawMessage) ([]json.RawMessage, error) {
 			return nil, errors.New("Invalid execution tool configuration.")
 		}
 		switch kind.Type {
+		case "programmatic_tool_calling", "web_search":
+			if controls[kind.Type] {
+				return nil, errors.New("Execution requires distinct tool controls.")
+			}
+			controls[kind.Type] = true
+			var resolved json.RawMessage
+			var err error
+			if kind.Type == "web_search" {
+				resolved, err = resolveDisabledWebSearch(raw)
+			} else {
+				resolved, err = resolveProgrammaticTool(raw)
+				var value struct {
+					Enabled bool `json:"enabled"`
+				}
+				if err == nil {
+					_ = json.Unmarshal(resolved, &value)
+					if value.Enabled {
+						err = errors.New("Programmatic tool calling is not qualified for execution.")
+					}
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+			tools[i] = resolved
 		case "tool_search":
 			if search || decodeInputObject(raw, &kind, "type") != nil {
 				return nil, errors.New("Execution requires one type-only tool_search declaration.")
@@ -46,7 +72,7 @@ func resolveSessionTools(input []json.RawMessage) ([]json.RawMessage, error) {
 			functions = append(functions, function)
 			positions = append(positions, i)
 		default:
-			return nil, errors.New("Execution currently supports functions, tool_search and the service-origin HTTP MCP profile only.")
+			return nil, errors.New("Unsupported execution tool; supported tools include functions, qualified tool_search, service-origin HTTP MCP and explicit disabled controls.")
 		}
 	}
 	resolved, err := resolveFunctions(functions)

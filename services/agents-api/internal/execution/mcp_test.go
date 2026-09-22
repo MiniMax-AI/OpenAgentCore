@@ -27,7 +27,8 @@ func TestMCPRequiresSupportedServicePlacement(t *testing.T) {
 		}
 	}
 	function := json.RawMessage(`{"type":"function","name":"lookup","description":"Read","parameters":{"type":"object"},"defer_loading":false}`)
-	functions, servers, _, err := executionTools([]json.RawMessage{tool, function})
+	tools, err := executionTools([]json.RawMessage{tool, function})
+	functions, servers := tools.Functions, tools.MCP
 	if err != nil || len(functions) != 1 || functions[0].Name != "lookup" || len(servers) != 1 || servers[0].AllowedTools == nil || len(*servers[0].AllowedTools) != 0 {
 		t.Fatal("mixed tool configuration lost the deny-all declaration", functions, servers, err)
 	}

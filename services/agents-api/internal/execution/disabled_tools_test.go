@@ -1,0 +1,52 @@
+package execution
+
+import (
+	"encoding/json"
+	"testing"
+
+	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/engine"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
+)
+
+func TestDisabledToolsUseCommonOperationQualification(t *testing.T) {
+	raw := json.RawMessage(`{"agent":{"model":"model","tools":[{"type":"web_search","mode":"disabled"},{"type":"programmatic_tool_calling","enabled":false}]},"environment":{"type":"none"}}`)
+	for _, kind := range []string{"codex", "claude_sdk", "mcode"} {
+		if err := (Policy{}).ValidateSessionConfiguration(kind, raw); err != nil {
+			t.Fatal(kind, err)
+		}
+	}
+	for _, qualified := range []bool{false, true} {
+		policy := Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"new_harness": {Placements: []string{"none"}, ProgrammaticToolCallingDisable: qualified}})}
+		if err := policy.ValidateSessionConfiguration("new_harness", raw); (err == nil) != qualified {
+			t.Fatal("qualification differs", qualified, err)
+		}
+		if err := policy.ValidateSessionConfiguration("new_harness", json.RawMessage(`{"agent":{"model":"model"},"environment":{"type":"none"}}`)); err != nil {
+			t.Fatal("omission acquired a new prerequisite", err)
+		}
+	}
+}
+
+func TestDisabledToolRequestPreservesIntentOnResume(t *testing.T) {
+	for _, disabled := range []bool{false, true} {
+		snapshot := Snapshot{Agent: v1.Agent{Model: "model"}}
+		if disabled {
+			snapshot.Agent.Tools = []json.RawMessage{json.RawMessage(`{"type":"programmatic_tool_calling","enabled":false}`)}
+		}
+		before, _ := json.Marshal(snapshot)
+		for _, nativeID := range []string{"", "native-session"} {
+			request, err := (&Dispatcher{}).executionRequest(t.Context(), store.Session{ID: "session"}, snapshot, device.KindCapabilities{}, store.SessionExecutionBinding{NativeSessionID: nativeID})
+			if err != nil || request.ExecutionControls.DisableProgrammaticToolCalling != disabled || request.ExecutionControls.WebSearch != "disabled" || request.AgentSessionID != nativeID {
+				t.Fatal(request, err)
+			}
+			if request.ValidateProgrammaticToolCallingDisable(true) != nil || (request.ValidateProgrammaticToolCallingDisable(false) != nil) != disabled {
+				t.Fatal("runtime operation qualification differs")
+			}
+		}
+		after, _ := json.Marshal(snapshot)
+		if string(before) != string(after) {
+			t.Fatal("snapshot mutated")
+		}
+	}
+}

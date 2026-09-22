@@ -15,7 +15,7 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session store.Session
 	if recoverNativeSession && !caps.NativeSessionRecovery {
 		return proto.PromptRequestPayload{}, errors.New("native session recovery is unavailable")
 	}
-	functions, mcp, search, err := executionTools(snapshot.Agent.Tools)
+	tools, err := executionTools(snapshot.Agent.Tools)
 	if err != nil {
 		return proto.PromptRequestPayload{}, err
 	}
@@ -41,11 +41,11 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session store.Session
 	if verbosity == "" {
 		verbosity = "medium"
 	}
-	controls := &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: verbosity}
+	controls := &proto.ExecutionControls{DisableProgrammaticToolCalling: tools.DisableProgrammatic, WebSearch: "disabled", TextVerbosity: verbosity}
 	if snapshot.Agent.Text.Format.Type == "json_schema" {
 		controls.OutputFormat = &proto.OutputFormat{Type: "json_schema", Schema: snapshot.Agent.Text.Format.Schema}
 	}
-	request := proto.PromptRequestPayload{AgentKind: session.Engine, FunctionTools: functions, ToolSearch: search,
+	request := proto.PromptRequestPayload{AgentKind: session.Engine, FunctionTools: tools.Functions, ToolSearch: tools.Search,
 		AgentOptions: options, ExecutionControls: controls, AgentStateKey: "agents-api-" + session.ID,
 		AgentSessionID: bound.NativeSessionID, ReleaseOnCompletion: true, StrictResume: true,
 		RequireExistingNativeSession: recoverNativeSession,
@@ -53,24 +53,24 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session store.Session
 		ObserveSubagentIdentities: snapshot.Agent.MultiAgent.Enabled,
 		MaxConcurrentSubagents:    snapshot.Agent.MultiAgent.MaxConcurrentSubagents,
 		DisableSubagents:          !snapshot.Agent.MultiAgent.Enabled}
-	if len(mcp) != 0 {
-		selected, err := d.mcpExecutionCredentials(session.Engine, snapshot, mcp, caps)
+	if len(tools.MCP) != 0 {
+		selected, err := d.mcpExecutionCredentials(session.Engine, snapshot, tools.MCP, caps)
 		if err != nil {
 			return proto.PromptRequestPayload{}, err
 		}
 		if len(selected) > 0 && d.Store == nil {
 			return proto.PromptRequestPayload{}, errors.New("authenticated MCP execution is unavailable")
 		}
-		for i := range mcp {
-			if binding, ok := selected[mcp[i].ServerLabel]; ok {
+		for i := range tools.MCP {
+			if binding, ok := selected[tools.MCP[i].ServerLabel]; ok {
 				token, err := d.Store.MCPBearerToken(ctx, session.TenantID, snapshot.VaultIDs, binding)
 				if err != nil {
 					return proto.PromptRequestPayload{}, err
 				}
-				mcp[i].BearerToken = &token
+				tools.MCP[i].BearerToken = &token
 			}
 		}
-		request.MCPHTTPServers = &mcp
+		request.MCPHTTPServers = &tools.MCP
 	}
 	return request, nil
 }

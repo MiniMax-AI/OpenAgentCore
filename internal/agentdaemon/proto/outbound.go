@@ -149,9 +149,10 @@ type DeviceShutdownPayload struct {
 // ExecutionControls requires both values when supplied; omitting the block preserves agent options.
 // Send only to a peer advertising execution_controls, independently of older option capabilities.
 type ExecutionControls struct {
-	WebSearch     string        `json:"web_search"`
-	TextVerbosity string        `json:"text_verbosity"`
-	OutputFormat  *OutputFormat `json:"output_format,omitempty"`
+	DisableProgrammaticToolCalling bool          `json:"disable_programmatic_tool_calling,omitempty"`
+	WebSearch                      string        `json:"web_search"`
+	TextVerbosity                  string        `json:"text_verbosity"`
+	OutputFormat                   *OutputFormat `json:"output_format,omitempty"`
 }
 
 // OutputFormat passes the public schema unchanged to a qualified native adapter.

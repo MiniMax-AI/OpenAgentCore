@@ -17,13 +17,13 @@ func mcpSupportFixture(t *testing.T) (Snapshot, []proto.MCPHTTPServer, device.Ki
 	tool := json.RawMessage(`{"type":"mcp","server_label":"tickets","connection_origin":"service","transport":{"type":"http","server_url":"https://mcp.example/tools"}}`)
 	snapshot := Snapshot{Agent: v1.Agent{Model: "model", Tools: []json.RawMessage{tool}}, Environment: &v1.Environment{Type: "none"}, VaultIDs: []string{vault},
 		MCPCredentials: []store.MCPCredentialBinding{{ServerLabel: "tickets", ServerURL: "https://mcp.example/tools", VaultID: vault, CredentialID: credential, AuthType: "static_bearer"}}}
-	_, servers, _, err := executionTools(snapshot.Agent.Tools)
+	tools, err := executionTools(snapshot.Agent.Tools)
 	if err != nil {
 		t.Fatal(err)
 	}
 	caps := device.KindCapabilities{EnvironmentNone: true, MCPHTTPTools: true, MCPHTTPBearerAuth: true, MCPHTTPRequired: true,
 		Preparation: true}
-	return snapshot, servers, caps
+	return snapshot, tools.MCP, caps
 }
 
 func TestMCPPublicBearerPolicyIsIndependentOfRuntimeCapabilities(t *testing.T) {
