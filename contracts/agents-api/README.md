@@ -1,6 +1,8 @@
 # Agents API contract
 
 See the [58-operation evidence inventory](operation-evidence.md) for observed official behavior, local verification and remaining unknowns.
+The [list-query comparison](list-query-semantics.md) distinguishes measured order
+errors from unresolved range, cursor and lookup semantics.
 The external reference is [openai-python beta/agents](https://github.com/openai/openai-python/tree/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents),
 pinned in `upstream.json`. Its resource methods, corresponding types, pagination
 and streaming helpers define the compatibility target. This directory records
