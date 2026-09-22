@@ -19,6 +19,9 @@ and coordination Items. `agent_message` has no status; reasoning status can be
 absent or null. Child discovery can publish an already terminal native Turn in a
 `turn.created` snapshot; clients must not reinterpret it as newly queued work.
 This does not widen the server's Item or interim reasoning-event coverage.
+Claude and MiniMax retain their settlement-based child-history boundary; accepting
+coordination events does not guarantee continuous child progress or a child Turn
+event on every execution. Recover child state through the Subagent queries.
 
 Use response cursors to page history in the requested direction. Session Turn
 lists can include root and child Turns. Root Items and child Items have separate
