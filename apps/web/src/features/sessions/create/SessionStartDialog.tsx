@@ -31,6 +31,7 @@ import {
 import { SessionInitialInputEditor } from "./SessionInitialInputEditor";
 import {
   projectSessionInitialInput,
+  sessionInitialInputError,
   sessionInitialInputDraftReducer,
 } from "./session-initial-input";
 import {
@@ -80,13 +81,6 @@ export interface SessionStartDialogProps {
 }
 
 export const genericSessionStartError = "Agent Core could not create the Session. Review the Core connection and try again.";
-
-export function sessionCreationUsesStream(
-  requestedStream: boolean,
-  environment: AgentEnvironmentInput,
-): boolean {
-  return requestedStream || environment.type === "openai_hosted";
-}
 
 export function safeSessionStartError(error: unknown): string {
   return error instanceof AgentCoreError && error.message.trim()
@@ -277,6 +271,7 @@ export function SessionStartDialog({
     || applicableManualVaultIds.length > 0
   ));
   const initialInput = projectSessionInitialInput(details.initialInput);
+  const initialInputError = initialInput.ok ? sessionInitialInputError(initialInput.input, environmentType) : initialInput.error;
   const workspaceError = environmentType === "self_hosted" ? environment.error : null;
   const formDisabled = disabled || submitting;
   const canSubmit = open
@@ -287,7 +282,7 @@ export function SessionStartDialog({
     && !vaultPlan?.blocker
     && !environmentAdmissionBlocker
     && !templateNetworkBlocker
-    && initialInput.ok
+    && !initialInputError
     && Boolean(environment.input);
   const advancedNeedsAttention = Boolean(
     agentValidation.overrideError
@@ -336,6 +331,7 @@ export function SessionStartDialog({
       agentMode,
       selectedAgent,
       vaultCatalog,
+      environment.input.type,
     );
     setMetadataError(validation.metadataError ?? null);
     setAgentError(validation.agentError ?? null);
@@ -363,7 +359,7 @@ export function SessionStartDialog({
     const common = {
       environment: environment.input,
       metadata: validation.request.metadata,
-      stream: sessionCreationUsesStream(validation.request.stream, environment.input),
+      stream: validation.request.stream,
       vaultIds: submittedVaultPlan.vaultIds,
       manualVaultIds: sorted(submittedManualVaultIds),
       ...(validation.request.input === undefined ? {} : { input: validation.request.input }),
@@ -381,12 +377,14 @@ export function SessionStartDialog({
           ...(validation.request.agent === undefined ? {} : { agent: validation.request.agent }),
         };
     const attempt = beginSessionCreateAttempt(draft, attemptRef.current);
+    const retry = attemptRef.current?.fingerprint === attempt.fingerprint;
     attemptRef.current = attempt;
     submittingRef.current = true;
     setSubmitting(true);
     setRequestError(null);
     try {
-      await onSubmit({ ...draft, idempotencyKey: attempt.idempotencyKey } as SessionStartInput);
+      // A creation SSE retry has no created event. JSON recovers the same Session ID.
+      await onSubmit({ ...draft, stream: retry ? false : draft.stream, idempotencyKey: attempt.idempotencyKey } as SessionStartInput);
       onClose();
     } catch (error) {
       setRequestError(safeSessionStartError(error));
@@ -521,7 +519,9 @@ export function SessionStartDialog({
               value={details.initialInput.text}
               onChange={(event) => updateInitialText(event.target.value)}
               rows={4}
-              placeholder="Optional first message…"
+              placeholder={environmentType === "none" ? "Write the first message…" : "Optional first message…"}
+              aria-required={environmentType === "none"}
+              aria-describedby={`${formId}-first-message-help`}
               disabled={formDisabled}
             />
           ) : (
@@ -530,7 +530,7 @@ export function SessionStartDialog({
               <button className="button outline" type="button" onClick={() => setAdvancedOpen(true)} disabled={formDisabled}>Edit messages</button>
             </span>
           )}
-          <small>Optional. A nonblank message starts the first Turn during Session creation.</small>
+          <small id={`${formId}-first-message-help`}>{environmentType === "none" ? "Required without an Environment. " : "Optional. "}A nonblank message starts the first Turn during Session creation.</small>
         </div>
 
         <fieldset className="session-environment-options" disabled={formDisabled}>
@@ -730,7 +730,7 @@ export function SessionStartDialog({
                 </section>
               ) : null}
 
-              <SessionInitialInputEditor draft={details.initialInput} disabled={formDisabled} showTextField={false} onChange={(draft) => updateDetails("initialInput", draft)} />
+              <SessionInitialInputEditor required={environmentType === "none"} draft={details.initialInput} disabled={formDisabled} showTextField={false} onChange={(draft) => updateDetails("initialInput", draft)} />
             </section>
           ) : null}
         </div>

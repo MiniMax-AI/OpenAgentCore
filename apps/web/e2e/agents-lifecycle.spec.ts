@@ -75,6 +75,7 @@ async function createFixtureSession(request: APIRequestContext, label: string) {
       agent_id: "agent_b",
       environment: { type: "none" },
       metadata: { filter_fixture: label },
+      input: `Review the filter fixture ${label}.`,
       stream: false,
       vault_ids: [],
     },
@@ -137,7 +138,12 @@ async function startSessionWithSecondAgent(page: Page) {
   await page.getByRole("button", { name: /^Start a Session with Second Agent/ }).click();
   const dialog = page.getByRole("dialog", { name: "Create a Session" });
   await expect(dialog).toBeVisible();
+  await dialog.getByRole("textbox", { name: /^First message\b/u }).fill("Review the selected Agent configuration.");
+  const liveHandoff = page.waitForResponse((response) => (
+    response.request().method() === "GET" && /\/agents\/sessions\/session_created_[^/]+\/events$/u.test(new URL(response.url()).pathname)
+  ));
   await dialog.getByRole("button", { name: "Create Session" }).click();
+  await liveHandoff;
 }
 
 async function openAdvancedSessionSettings(dialog: Locator) {
@@ -536,7 +542,7 @@ test("supports global Create keyboard navigation and consumes setup requests onc
   expect(creates[0]?.body).not.toHaveProperty("reasoning");
 });
 
-test("continues from a default Agent definition into an admitted idle Session", async ({ page, request }) => {
+test("continues from a default Agent definition into a Session with initial input", async ({ page, request }) => {
   await openAgents(page, request);
   await page.getByRole("button", { name: /^Create agent/ }).click();
   await page.getByLabel("Name").fill("Session-safe Agent");
@@ -555,6 +561,7 @@ test("continues from a default Agent definition into an admitted idle Session", 
   await expect(page.getByRole("button", { name: "Start Session" })).toBeEnabled();
   await page.getByRole("button", { name: "Start Session" }).click();
   const sessionDialog = page.getByRole("dialog", { name: "Create a Session" });
+  await sessionDialog.getByRole("textbox", { name: /^First message\b/u }).fill("Review this Agent definition.");
   await expect(sessionDialog).toBeVisible();
   await expect(sessionDialog.getByLabel("Saved Agent", { exact: true })).toHaveValue(/^agent_created_/);
   await expect(sessionDialog.getByRole("button", { name: /Advanced settings/ })).toHaveAttribute("aria-expanded", "false");
@@ -575,7 +582,7 @@ test("continues from a default Agent definition into an admitted idle Session", 
   expect(sessionCreates[0]?.body).toMatchObject({
     agent_id: expect.stringMatching(/^agent_created_/),
     environment: { type: "none" },
-    stream: false,
+    stream: true,
   });
 });
 
@@ -644,6 +651,7 @@ test("starts only Agents that pass known Session admission", async ({ page, requ
   )).length;
   await page.getByRole("button", { name: /^Start a Session with Second Agent/ }).click();
   const sessionDialog = page.getByRole("dialog", { name: "Create a Session" });
+  await sessionDialog.getByRole("textbox", { name: /^First message\b/u }).fill("Check the selected Agent configuration.");
   await expect(sessionDialog).toBeVisible();
   await expect(sessionDialog.getByLabel("Saved Agent", { exact: true })).toHaveValue("agent_b");
   await sessionDialog.getByRole("button", { name: "Create Session" }).click();
@@ -656,15 +664,16 @@ test("starts only Agents that pass known Session admission", async ({ page, requ
   expect(sessionCreates.at(-1)?.body).toMatchObject({
     agent_id: "agent_b",
     environment: { type: "none" },
-    stream: false,
+    stream: true,
   });
 });
 
-test("serializes complete saved-Agent overrides while keeping idle creation unstreamed", async ({ page, request }) => {
+test("serializes complete saved-Agent overrides with initial input", async ({ page, request }) => {
   await openAgents(page, request);
   await page.getByRole("button", { name: "Sessions", exact: true }).click();
   await page.getByRole("button", { name: "New Session" }).click();
   let dialog = page.getByRole("dialog", { name: "Create a Session" });
+  await dialog.getByRole("textbox", { name: /^First message\b/u }).fill("Review the Session-specific settings.");
   await dialog.getByLabel("Saved Agent", { exact: true }).selectOption("agent_a");
   await expect(dialog.getByRole("alert")).toContainText("multi-agent execution is not supported");
 
@@ -687,6 +696,7 @@ test("serializes complete saved-Agent overrides while keeping idle creation unst
 
   await page.getByRole("button", { name: "New Session" }).click();
   dialog = page.getByRole("dialog", { name: "Create a Session" });
+  await dialog.getByRole("textbox", { name: /^First message\b/u }).fill("Review the Session-specific settings.");
   await dialog.getByLabel("Saved Agent", { exact: true }).selectOption("agent_b");
   await openAdvancedSessionSettings(dialog);
   await expect(dialog.getByRole("checkbox", { name: /Stream idle creation events/ })).toHaveCount(0);
@@ -710,18 +720,20 @@ test("serializes complete saved-Agent overrides while keeping idle creation unst
     },
     environment: { type: "none" },
     metadata: {},
-    stream: false,
+    input: "Review the Session-specific settings.",
+    stream: true,
     vault_ids: [],
   });
   expect(creates[1]?.body).toMatchObject({
     agent_id: "agent_b",
     environment: { type: "none" },
     metadata: {},
-    stream: false,
+    input: "Review the Session-specific settings.",
+    stream: true,
     vault_ids: [],
   });
   expect(creates[1]?.body).not.toHaveProperty("agent");
-  expect(creates[1]?.body).not.toHaveProperty("input");
+  expect(creates[1]?.body?.input).toBe("Review the Session-specific settings.");
 });
 
 test("derives manual Vault attachments for anonymous and explicit MCP Credentials", async ({ page, request }) => {
@@ -772,6 +784,7 @@ test("derives manual Vault attachments for anonymous and explicit MCP Credential
 
   await page.getByRole("button", { name: /^Start a Session with Anonymous MCP Agent/ }).click();
   let dialog = page.getByRole("dialog", { name: "Create a Session" });
+  await dialog.getByRole("textbox", { name: /^First message\b/u }).fill("List the available documentation resources.");
   await openAdvancedSessionSettings(dialog);
   await expect(dialog).toContainText("Anonymous for this Session");
   await dialog.getByRole("button", { name: "Create Session" }).click();
@@ -780,6 +793,7 @@ test("derives manual Vault attachments for anonymous and explicit MCP Credential
   await page.getByRole("button", { name: "Agents", exact: true }).click();
   await page.getByRole("button", { name: /^Start a Session with Anonymous MCP Agent/ }).click();
   dialog = page.getByRole("dialog", { name: "Create a Session" });
+  await dialog.getByRole("textbox", { name: /^First message\b/u }).fill("List the available documentation resources.");
   await openAdvancedSessionSettings(dialog);
   await dialog.getByRole("checkbox", { name: "Vault Alpha" }).check();
   await expect(dialog).toContainText("Implicit unique match · Credential Alpha · Vault Alpha");
@@ -789,6 +803,7 @@ test("derives manual Vault attachments for anonymous and explicit MCP Credential
   await page.getByRole("button", { name: "Agents", exact: true }).click();
   await page.getByRole("button", { name: /^Start a Session with Anonymous MCP Agent/ }).click();
   dialog = page.getByRole("dialog", { name: "Create a Session" });
+  await dialog.getByRole("textbox", { name: /^First message\b/u }).fill("List the available documentation resources.");
   await openAdvancedSessionSettings(dialog);
   await dialog.getByRole("checkbox", { name: "Vault Alpha" }).check();
   await dialog.getByRole("checkbox", { name: "Vault Beta" }).check();
@@ -799,6 +814,7 @@ test("derives manual Vault attachments for anonymous and explicit MCP Credential
   await page.getByRole("button", { name: "Agents", exact: true }).click();
   await page.getByRole("button", { name: /^Start a Session with Explicit MCP Agent/ }).click();
   dialog = page.getByRole("dialog", { name: "Create a Session" });
+  await dialog.getByRole("textbox", { name: /^First message\b/u }).fill("List the available documentation resources.");
   await openAdvancedSessionSettings(dialog);
   const requiredVault = dialog.getByRole("checkbox", { name: /Vault Alpha · attached automatically/ });
   await expect(requiredVault).toBeChecked();
@@ -821,6 +837,7 @@ test("derives manual Vault attachments for anonymous and explicit MCP Credential
   await page.getByRole("button", { name: "Agents", exact: true }).click();
   await page.getByRole("button", { name: /^Start a Session with Explicit MCP Agent/ }).click();
   dialog = page.getByRole("dialog", { name: "Create a Session" });
+  await dialog.getByRole("textbox", { name: /^First message\b/u }).fill("List the available documentation resources.");
   const deleted = await request.delete(`${fixtureBaseUrl}/v1/vaults/${vaultAlpha.id}/credentials/${credentialAlpha.id}`);
   expect(deleted.ok()).toBe(true);
   await dialog.getByRole("button", { name: "Create Session" }).click();
@@ -859,6 +876,7 @@ test("clears manual Vault attachments when overrides remove HTTP MCP tools", asy
   await page.getByRole("button", { name: "Agents", exact: true }).click();
   await page.getByRole("button", { name: /^Start a Session with MCP Clear Agent/ }).click();
   const dialog = page.getByRole("dialog", { name: "Create a Session" });
+  await dialog.getByRole("textbox", { name: /^First message\b/u }).fill("Explain the Session without MCP tools.");
   await openAdvancedSessionSettings(dialog);
   await dialog.getByRole("checkbox", { name: "Vault to clear" }).check();
   await dialog.getByRole("checkbox", { name: /Configure Session-only overrides/ }).check();
@@ -990,7 +1008,7 @@ test("saves a reusable Environment Template and references it from a managed Ses
     type: "openai_hosted",
     environment_template_id: selectedTemplateId,
   });
-  expect(latest?.stream).toBe(true);
+  expect(latest?.stream).toBe(false);
 });
 
 test("hides Template selection when the connected Core lacks the resource", async ({ page, request }) => {
@@ -1008,7 +1026,7 @@ test("hides Template selection when the connected Core lacks the resource", asyn
   await expect(dialog.getByRole("button", { name: "Create Session" })).toBeEnabled();
 });
 
-test("creates managed hosted default, enabled and disabled profiles through POST SSE", async ({ page, request }) => {
+test("creates managed hosted profiles with JSON for empty input and SSE for initial input", async ({ page, request }) => {
   await openAgents(page, request);
   const profiles = [
     { label: "default", option: "default", environment: { type: "openai_hosted" }, input: undefined },
@@ -1037,7 +1055,7 @@ test("creates managed hosted default, enabled and disabled profiles through POST
     expect(latest).toMatchObject({
       agent_id: "agent_b",
       environment: profile.environment,
-      stream: true,
+      stream: profile.input !== undefined,
       vault_ids: [],
     });
     expect(latest?.environment).toEqual(profile.environment);
@@ -1151,7 +1169,7 @@ test("blocks hosted MCP before persistence while allowing a Function-only manage
     entry.method === "POST" && entry.path === "/v1/agents/sessions"
   ));
   expect(creates).toHaveLength(before + 1);
-  expect(creates.at(-1)?.body).toMatchObject({ environment: { type: "openai_hosted" }, stream: true });
+  expect(creates.at(-1)?.body).toMatchObject({ environment: { type: "openai_hosted" }, stream: false });
 });
 
 test("keeps managed Environment resource and terminal event states fail-closed", async ({ page, request }) => {
@@ -1513,6 +1531,42 @@ test("keeps the Agent card grid, setup, and delete confirmation usable at 390 px
   await expect(editSetup.getByRole("button", { name: "Delete Agent" })).toBeFocused();
 });
 
+test("requires a first message without an Environment and preserves the draft across environment changes", async ({ page, request }) => {
+  await openAgents(page, request);
+  const before = await fixtureState(request);
+  for (const input of [undefined, null]) {
+    for (const fields of [{ environment: { type: "none" } }, { environment: { type: "openai_hosted" }, stream: true }]) {
+      const response = await request.post(`${fixtureBaseUrl}/v1/agents/sessions`, { data: {
+        agent_id: "agent_b", ...fields, ...(input === undefined ? {} : { input }),
+      } });
+      expect(response.status()).toBe(400);
+    }
+  }
+  expect((await fixtureState(request)).sessions).toEqual(before.sessions);
+  const postsBefore = (await fixtureRequests(request)).filter((entry) => entry.method === "POST" && entry.path === "/v1/agents/sessions").length;
+  await page.getByRole("button", { name: /^Start a Session with Second Agent/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Create a Session" });
+  const firstMessage = dialog.getByRole("textbox", { name: /^First message\b/u });
+  const create = dialog.getByRole("button", { name: "Create Session" });
+  await expect(firstMessage).toHaveAttribute("aria-required", "true");
+  await expect(create).toBeDisabled();
+  await firstMessage.fill(" \t\u0085 ");
+  await expect(create).toBeDisabled();
+  expect((await fixtureRequests(request)).filter((entry) => entry.method === "POST" && entry.path === "/v1/agents/sessions")).toHaveLength(postsBefore);
+  await dialog.getByRole("radio", { name: /Managed hosted/ }).check();
+  await expect(create).toBeEnabled();
+  await expect(firstMessage).toHaveAttribute("aria-required", "false");
+  const input = "  Explain this Agent's capabilities.\n";
+  await firstMessage.fill(input);
+  await dialog.getByRole("radio", { name: /No environment/ }).check();
+  await expect(firstMessage).toHaveValue(input);
+  await create.click();
+  await expect(dialog).toHaveCount(0);
+  const creates = (await fixtureRequests(request)).filter((entry) => entry.method === "POST" && entry.path === "/v1/agents/sessions");
+  expect(creates).toHaveLength(postsBefore + 1);
+  expect(creates.at(-1)?.body).toMatchObject({ environment: { type: "none" }, input, stream: true });
+});
+
 test("starts one Session with an idempotency key and without browser authorization", async ({ page, request }) => {
   await openAgents(page, request);
   await startSessionWithSecondAgent(page);
@@ -1522,7 +1576,7 @@ test("starts one Session with an idempotency key and without browser authorizati
   const creates = requests.filter((entry) => entry.method === "POST" && entry.path === "/v1/agents/sessions");
   expect(creates).toHaveLength(1);
   expect(creates[0]?.idempotencyKeyPresent).toBe(true);
-  expect(creates[0]?.body).toMatchObject({ agent_id: "agent_b", environment: { type: "none" }, stream: false });
+  expect(creates[0]?.body).toMatchObject({ agent_id: "agent_b", environment: { type: "none" }, input: "Review the selected Agent configuration.", stream: true });
   for (const entry of requests.filter((candidate) => candidate.path.startsWith("/v1/"))) {
     expect(entry.beta).toBe("agents=v1");
     expect(entry.authorizationPresent).toBe(false);
@@ -1713,37 +1767,51 @@ test("streams initial Session creation, captures early events, then hands off to
   ).toBeVisible();
 });
 
-test("keeps one Session create attempt across response loss and an unchanged manual retry", async ({ page, request }) => {
-  await openAgents(page, request);
-  await page.getByRole("button", { name: /^Start a Session with Second Agent/ }).click();
-  const dialog = page.getByRole("dialog", { name: "Create a Session" });
-  const create = dialog.getByRole("button", { name: "Create Session" });
-  await controlFixture(request, { sessionCreateDelayMs: 1_500, sessionCreateResponseLoss: 1 });
+for (const failure of [
+  { label: "response loss", control: { sessionCreateResponseLoss: 1 }, message: "Agent core request failed (502)." },
+  { label: "creation-stream EOF before identity", control: { sessionCreateStreamMissingIdentity: 1 }, message: "Agent core returned an empty event stream." },
+]) {
+  test(`keeps one Session create attempt across ${failure.label} and an unchanged manual retry`, async ({ page, request }) => {
+    await openAgents(page, request);
+    await page.getByRole("button", { name: /^Start a Session with Second Agent/ }).click();
+    const dialog = page.getByRole("dialog", { name: "Create a Session" });
+    await dialog.getByRole("textbox", { name: /^First message\b/u }).fill("Review this request once after response recovery.");
+    const create = dialog.getByRole("button", { name: "Create Session" });
+    await controlFixture(request, { sessionCreateDelayMs: 1_500, ...failure.control });
 
-  await create.evaluate((button) => {
-    button.click();
-    button.click();
+    await create.evaluate((button) => {
+      button.click();
+      button.click();
+    });
+    await expect(dialog.getByRole("alert")).toContainText(failure.message);
+    await expect(dialog.getByText("Retrying this unchanged request reuses the original idempotency key.")).toBeVisible();
+
+    let creates = (await fixtureRequests(request)).filter((entry) => (
+      entry.method === "POST" && entry.path === "/v1/agents/sessions"
+    ));
+    expect(creates).toHaveLength(1);
+    const originalKey = creates[0]?.idempotencyKey;
+    expect(originalKey).toBeTruthy();
+    expect((await fixtureState(request)).sessions).toHaveLength(2);
+
+    await create.click();
+    await expect(page.getByRole("heading", { name: "Sessions" })).toBeVisible();
+    creates = (await fixtureRequests(request)).filter((entry) => (
+      entry.method === "POST" && entry.path === "/v1/agents/sessions"
+    ));
+    expect(creates).toHaveLength(2);
+    expect(creates[1]?.idempotencyKey).toBe(originalKey);
+    expect(creates.map((entry) => entry.body?.stream)).toEqual([true, false]);
+    expect(creates[1]?.body?.input).toBe(creates[0]?.body?.input);
+    const recovered = (await fixtureState(request)).sessions;
+    expect(recovered).toHaveLength(2);
+    const sessionId = recovered.find((session) => session.id !== "session_snapshot")?.id;
+    const turns = await request.get(`${fixtureBaseUrl}/v1/agents/sessions/${sessionId}/turns`);
+    const items = await request.get(`${fixtureBaseUrl}/v1/agents/sessions/${sessionId}/items`);
+    expect((await turns.json() as { data: unknown[] }).data).toHaveLength(1);
+    expect((await items.json() as { data: unknown[] }).data).toHaveLength(1);
   });
-  await expect(dialog.getByRole("alert")).toContainText("Agent core request failed (502).");
-  await expect(dialog.getByText("Retrying this unchanged request reuses the original idempotency key.")).toBeVisible();
-
-  let creates = (await fixtureRequests(request)).filter((entry) => (
-    entry.method === "POST" && entry.path === "/v1/agents/sessions"
-  ));
-  expect(creates).toHaveLength(1);
-  const originalKey = creates[0]?.idempotencyKey;
-  expect(originalKey).toBeTruthy();
-  expect((await fixtureState(request)).sessions).toHaveLength(2);
-
-  await create.click();
-  await expect(page.getByRole("heading", { name: "Sessions" })).toBeVisible();
-  creates = (await fixtureRequests(request)).filter((entry) => (
-    entry.method === "POST" && entry.path === "/v1/agents/sessions"
-  ));
-  expect(creates).toHaveLength(2);
-  expect(creates[1]?.idempotencyKey).toBe(originalKey);
-  expect((await fixtureState(request)).sessions).toHaveLength(2);
-});
+}
 
 test("shows composer activity only for a Core-reported in-progress Session", async ({ page, request }, testInfo) => {
   await resetFixture(request);
@@ -3032,7 +3100,7 @@ test("drops a delayed Turn page after switching Sessions", async ({ page, reques
   const nextDiagnostics = page.locator("details.trace-turn-diagnostics");
   await nextDiagnostics.locator("summary").click();
   const nextTimeline = nextDiagnostics.getByRole("region", { name: "Turn timeline" });
-  await expect(nextTimeline).toContainText("No Turns reported yet.");
+  await expect(nextTimeline).toContainText("Queued");
   await page.waitForTimeout(3_000);
   await expect(nextTimeline).not.toContainText("turn_queued");
   await expect(page.getByText("Completed Turn output remains in the conversation.")).toHaveCount(0);

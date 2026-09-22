@@ -213,8 +213,9 @@ test("creates, replaces, uses, and deletes a write-only Vault Credential", async
   await openAdvancedSessionSettings(sessionDialog);
   await expect(sessionDialog.getByRole("heading", { name: "Tools & Vaults" })).toBeVisible();
   await expect(sessionDialog).toContainText("Private docs MCP · Runtime credentials");
+  await sessionDialog.getByRole("textbox", { name: /^First message\b/u }).fill("Find the documentation available through this Credential.");
   await sessionDialog.getByRole("button", { name: "Create Session" }).click();
-  await expect(page.locator(".toast-region:not(.toast-region-assertive)")).toContainText("Idle Session created");
+  await expect(page.locator(".toast-region:not(.toast-region-assertive)")).toContainText("Session created with initial input");
 
   requests = await fixtureRequests(request);
   const vaultCreate = requests.find((entry) => entry.method === "POST" && entry.path === "/v1/vaults");

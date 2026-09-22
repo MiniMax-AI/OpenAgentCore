@@ -389,6 +389,7 @@ function initialState() {
       sessionCreateDelayMs: 0,
       sessionCreateStatus: 201,
       sessionCreateResponseLoss: 0,
+      sessionCreateStreamMissingIdentity: 0,
       sessionCreateStreamCloseDelayMs: 120,
       sessionListDelayMs: 0,
       sessionListStatus: 200,
@@ -1012,6 +1013,13 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "POST" && url.pathname === "/v1/agents/sessions") {
+      const hasInitialInput = body.input !== undefined && body.input !== null;
+      const initialInputMessages = hasInitialInput ? sessionInitialInputMessages(body.input) : [];
+      const requiresInitialInput = body.environment?.type === "none"
+        || (body.stream === true && body.environment?.type !== "self_hosted");
+      if ((requiresInitialInput && !hasInitialInput) || (hasInitialInput && !initialInputMessages)) {
+        return sendError(response, 400, "Fixture Session requires valid initial input for this Environment and response mode.");
+      }
       const idempotencyKey = request.headers["idempotency-key"];
       const { stream: _streamResponseMode, ...creationIntent } = body;
       const fingerprint = JSON.stringify(creationIntent);
@@ -1038,6 +1046,8 @@ const server = http.createServer(async (request, response) => {
       const control = consumeControl("sessionCreate", 201);
       const responseLoss = state.controls.sessionCreateResponseLoss;
       state.controls.sessionCreateResponseLoss = 0;
+      const missingIdentity = state.controls.sessionCreateStreamMissingIdentity;
+      state.controls.sessionCreateStreamMissingIdentity = 0;
       if (control.delayMs) await wait(control.delayMs);
       if (control.status !== 201) return sendError(response, control.status, "Fixture Session create failed.");
       const savedAgent = typeof body.agent_id === "string"
@@ -1067,11 +1077,6 @@ const server = http.createServer(async (request, response) => {
           typeof value !== "string" || [...key].length > 64 || [...value].length > 512
         )) || Object.keys(body.metadata).length > 16)
       ) return sendError(response, 400, "Fixture Session metadata is invalid.");
-      const hasInitialInput = body.input !== undefined && body.input !== null;
-      const initialInputMessages = hasInitialInput ? sessionInitialInputMessages(body.input) : [];
-      if (hasInitialInput && !initialInputMessages) {
-        return sendError(response, 400, "Fixture initial Session input is invalid.");
-      }
       state.sequence += 1;
       const created = {
         id: `session_created_${state.sequence}`,
@@ -1087,6 +1092,38 @@ const server = http.createServer(async (request, response) => {
         created_at: baseline + state.sequence,
         last_active_at: baseline + state.sequence,
       };
+      const createdSnapshot = structuredClone(created);
+      let initialTurn = null;
+      let initialItems = [];
+      if (hasInitialInput && initialInputMessages) {
+        state.sequence += 1;
+        const turn = {
+          id: `turn_created_${state.sequence}`,
+          agent_id: created.agent.id,
+          session_id: created.id,
+          object: "agent.session.turn",
+          status: "queued",
+          created_at: baseline + state.sequence,
+          started_at: null,
+          completed_at: null,
+          error: null,
+          usage: null,
+        };
+        const items = initialInputMessages.map((message, index) => ({
+          id: `item_created_${state.sequence}_${index + 1}`,
+          turn_id: turn.id,
+          type: "message",
+          status: "completed",
+          role: "user",
+          content: message.content,
+        }));
+        state.turns.push(turn);
+        state.createdSessionItems.set(created.id, items);
+        initialTurn = turn;
+        initialItems = items;
+        created.status = "in_progress";
+        created.last_active_at = baseline + state.sequence;
+      }
       state.sessions.unshift(created);
       if (typeof idempotencyKey === "string") {
         state.sessionCreateReceipts.set(idempotencyKey, { fingerprint, session: created });
@@ -1096,43 +1133,25 @@ const server = http.createServer(async (request, response) => {
         return;
       }
       if (body.stream === true) {
-        const createdSnapshot = structuredClone(created);
         response.writeHead(201, {
           "content-type": "text/event-stream; charset=utf-8",
           "cache-control": "no-cache, no-transform",
           connection: "keep-alive",
         });
         response.write(": connected\n\n");
+        if (missingIdentity) {
+          response.end();
+          return;
+        }
         state.sequence += 1;
         response.write(`event: agent.session.created\nid: create_${state.sequence}\ndata: ${JSON.stringify({
           type: "agent.session.created",
           event_id: `create_${state.sequence}`,
           session: createdSnapshot,
         })}\n\n`);
-        if (hasInitialInput && initialInputMessages) {
-          state.sequence += 1;
-          const turn = {
-            id: `turn_created_${state.sequence}`,
-            agent_id: created.agent.id,
-            session_id: created.id,
-            object: "agent.session.turn",
-            status: "queued",
-            created_at: baseline + state.sequence,
-            started_at: null,
-            completed_at: null,
-            error: null,
-            usage: null,
-          };
-          const items = initialInputMessages.map((message, index) => ({
-            id: `item_created_${state.sequence}_${index + 1}`,
-            turn_id: turn.id,
-            type: "message",
-            status: "completed",
-            role: "user",
-            content: message.content,
-          }));
-          state.turns.push(turn);
-          state.createdSessionItems.set(created.id, items);
+        if (initialTurn) {
+          const turn = initialTurn;
+          const items = initialItems;
           response.write(`event: agent.session.turn.created\nid: turn_${state.sequence}\ndata: ${JSON.stringify({
             type: "agent.session.turn.created",
             event_id: `turn_${state.sequence}`,
@@ -1140,8 +1159,6 @@ const server = http.createServer(async (request, response) => {
             turn_id: turn.id,
             turn,
           })}\n\n`);
-          created.status = "in_progress";
-          created.last_active_at = baseline + state.sequence;
           response.write(`event: agent.session.in_progress\nid: progress_${state.sequence}\ndata: ${JSON.stringify({
             type: "agent.session.in_progress",
             event_id: `progress_${state.sequence}`,

@@ -13,6 +13,7 @@ import "./SessionInitialInputEditor.css";
 export interface SessionInitialInputEditorProps {
   draft: SessionInitialInputDraft;
   disabled?: boolean;
+  required?: boolean;
   showTextField?: boolean;
   onChange: (draft: SessionInitialInputDraft) => void;
 }
@@ -20,6 +21,7 @@ export interface SessionInitialInputEditorProps {
 export function SessionInitialInputEditor({
   draft,
   disabled = false,
+  required = false,
   showTextField = true,
   onChange,
 }: SessionInitialInputEditorProps) {
@@ -96,10 +98,11 @@ export function SessionInitialInputEditor({
             value={draft.text}
             onChange={(event) => dispatch({ type: "set-text", value: event.target.value })}
             rows={5}
-            placeholder="Optional first message…"
+            placeholder={required ? "Write the first message…" : "Optional first message…"}
+            aria-required={required}
             disabled={disabled}
           />
-          <small>Optional. Nonblank input is preserved exactly and starts the initial Turn during Session creation.</small>
+          <small>{required ? "Required without an Environment. " : "Optional. "}Nonblank input is preserved exactly and starts the initial Turn during Session creation.</small>
         </label>
       ) : draft.mode === "text" ? (
         <p className="session-initial-input-switch-note">

@@ -473,6 +473,7 @@ export interface CreateSessionInput {
   agent_id?: string;
   agent?: InlineAgentInput;
   environment: AgentEnvironmentInput;
+  /** A nonempty initial input is required for environment:none. */
   input?: string | InputMessage[] | null;
   metadata?: Record<string, string> | null;
   /** This JSON-returning method does not support the endpoint's streaming create variant. */
