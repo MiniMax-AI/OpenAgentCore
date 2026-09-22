@@ -35,7 +35,7 @@ type Dispatcher struct {
 	// Options resolves transient engine credentials; they are never stored here.
 	Options func(context.Context, store.Session) (map[string]any, error)
 	// ManagedRuntimes is optional internal provisioning; it does not admit hosted API requests.
-	ManagedRuntimes *RuntimeProviders
+	ManagedRuntimes *RuntimeProvider
 }
 
 type Result struct {

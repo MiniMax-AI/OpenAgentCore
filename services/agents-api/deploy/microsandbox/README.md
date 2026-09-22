@@ -15,18 +15,46 @@ real-model continuation and isolation still require deployment acceptance.
 
 ## Choose a hosted provider
 
-The existing [Docker deployment](../codex/README.md#standalone-operator-configuration)
-remains supported with its current configuration and behavior. Docker and
-microsandbox implement the same Core Provider contract. Snapshot suspension is
-available only on the microsandbox provider; selecting this profile does not
-replace or remove a Docker installation.
+Choose either the [Docker deployment](../codex/README.md#standalone-operator-configuration)
+or this microsandbox deployment during setup. Both adapters implement the same
+Core Provider contract. One Core deployment uses one provider, one installation
+identity and one backend configuration. Snapshot suspension is available only on
+microsandbox. Docker remains supported with its ordinary lifecycle.
 
-A managed-runtimes file may contain both `docker` and `microsandbox` maps, with
-different installation UUIDs. Choose the provider for new Sessions through
-`default_provider` or the existing `engine_providers` mapping. Existing
-allocations keep their persisted provider identity, so retain their original
-configuration until cleanup has completed. An existing Docker-only file needs
-no microsandbox configuration and preserves its previous deployment behavior.
+Set `provider` to `docker` or `microsandbox` and include only that configuration
+object. Provider selection applies to the entire deployment, independently of
+harness selection. Legacy provider maps, `default_provider` and `engine_providers`
+are rejected. The setup remains a private configuration file and a Core restart;
+there is no separate setup service or automatic migration.
+
+## Change the deployment provider
+
+1. Keep the old provider, installation ID and backend path configured. Set
+   `maintenance: true` and restart Core. Maintenance blocks new compute; the old
+   adapter remains available for observing and explicitly cleaning up resources.
+2. Handle or delete the old hosted Sessions and resources explicitly. Confirm all
+   retained allocations, including snapshots and pending hosted Sessions, are
+   gone. A public deletion acknowledgement alone does not prove physical cleanup.
+3. Configure the new provider with a fresh `installation_id`, its backend object
+   and `maintenance: true`, then restart Core. Core validates that the old
+   deployment is empty before accepting the new identity.
+4. Keep the new identity unchanged, set `maintenance: false` and restart Core to
+   allow new compute.
+
+The installation ID and backend namespace are persisted. Changing the Docker
+socket or microsandbox `runtime_home` counts as a provider switch even if the UUID
+is reused. Image, resource limits and idle policy do not change that identity.
+Maintenance itself never initiates deletion; ordinary expiry, revocation and
+explicit deletion keep their existing cleanup behavior. A switch requires both
+the persisted old configuration and incoming configuration to be in maintenance.
+Switching never deletes resources automatically or migrates Sessions between
+providers. Do not repoint a configured backend path to another installation.
+
+When upgrading a database that has retained allocations but no recorded provider
+identity, Core cannot verify their original backend and refuses initial adoption.
+Keep the previous Core and its configuration available to finish cleanup before
+starting this profile. An empty legacy deployment can select its first provider;
+previously unallocated Sessions have no provider ownership to migrate.
 
 ## Host and binaries
 
@@ -83,8 +111,9 @@ commands or initial file writes.
 Copy [managed-runtimes.example.json](managed-runtimes.example.json) to a private
 file under the service account's `~/.parsar/` directory and set mode 0600. Replace
 all placeholder paths, hashes, image digest and hostnames. Generate a fresh
-installation UUID and use it consistently as the map key and selected provider.
-Keep that key and its original backend while any allocation needs cleanup.
+installation UUID for `installation_id`. Keep that identity and its original
+backend while any allocation needs cleanup. Set `provider: "microsandbox"` and
+include the single `microsandbox` object; do not include a `docker` object.
 
 Set VM memory, CPU and disk limits explicitly. `max_active` bounds active compute.
 `max_retained` bounds all retained allocations, including suspended snapshots, and

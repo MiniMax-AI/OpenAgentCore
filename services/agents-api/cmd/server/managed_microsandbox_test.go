@@ -16,14 +16,14 @@ func managedMicrosandboxFixture(t *testing.T) (managedRuntimeConfig, string, fun
 	t.Helper()
 	key := uuid.NewString()
 	config := managedRuntimeConfig{
-		CoreURL: "http://core.example/api/v1", DefaultProvider: key,
-		Microsandbox: map[string]managedMicrosandboxConfig{key: {
+		CoreURL: "http://core.example/api/v1", Provider: "microsandbox", InstallationID: key,
+		Microsandbox: &managedMicrosandboxConfig{
 			HelperPath: "/opt/parsar/microsandbox-provider", RuntimeHome: "/var/lib/parsar/microsandbox", RuntimePath: "/opt/parsar/msb", FirmwarePath: "/opt/parsar/libkrunfw.so",
 			RuntimeSHA256: strings.Repeat("a", 64), FirmwareSHA256: strings.Repeat("b", 64), Image: "registry.example/parsar-runtime@sha256:" + strings.Repeat("c", 64),
 			MemoryMiB: 1024, CPUs: 1, RootDiskMiB: 4096,
 			Network:     managedMicrosandboxNetwork{DefaultEgress: "deny", DefaultIngress: "deny", Rules: []managedMicrosandboxRule{{Action: "allow", Direction: "egress", Destination: "core.example", Protocol: "tcp", Port: "443"}}},
 			IdleSeconds: 300, RetentionSeconds: 86400, MaxActive: 4, MaxRetained: 8,
-		}},
+		},
 	}
 	file := filepath.Join(t.TempDir(), "providers.json")
 	t.Setenv("AGENTS_API_MANAGED_RUNTIMES_FILE", file)
@@ -49,20 +49,20 @@ func TestManagedMicrosandboxConfigurationAndPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer close()
-	if result.DefaultProvider != key || result.EngineProviders["codex"] != key || len(result.Providers) != 1 {
-		t.Fatal("microsandbox mapping lost")
+	if result.InstallationID != key || result.Provider == nil || result.Maintenance {
+		t.Fatal("microsandbox identity lost")
 	}
-	if _, ok := result.Providers[key].(sandbox.CheckpointProvider); !ok {
+	if _, ok := result.Provider.(sandbox.CheckpointProvider); !ok {
 		t.Fatal("microsandbox checkpoint capability missing")
 	}
-	policy, ok := result.Suspension[key]
-	if !ok || policy.IdleTimeout != 5*time.Minute || policy.Retention != 24*time.Hour || policy.MaxActive != 4 || policy.MaxRetained != 8 {
+	policy := result.Suspension
+	if policy == nil || policy.IdleTimeout != 5*time.Minute || policy.Retention != 24*time.Hour || policy.MaxActive != 4 || policy.MaxRetained != 8 {
 		t.Fatalf("incorrect suspension policy: %+v", policy)
 	}
 }
 
 func TestManagedMicrosandboxRejectsUnboundedOrImplicitConfiguration(t *testing.T) {
-	config, key, write := managedMicrosandboxFixture(t)
+	config, _, write := managedMicrosandboxFixture(t)
 	cases := map[string]func(*managedMicrosandboxConfig){
 		"retained_missing":      func(c *managedMicrosandboxConfig) { c.MaxRetained = 0 },
 		"retained_below_active": func(c *managedMicrosandboxConfig) { c.MaxRetained = c.MaxActive - 1 },
@@ -78,6 +78,7 @@ func TestManagedMicrosandboxRejectsUnboundedOrImplicitConfiguration(t *testing.T
 		"cpus_missing":          func(c *managedMicrosandboxConfig) { c.CPUs = 0 },
 		"disk_missing":          func(c *managedMicrosandboxConfig) { c.RootDiskMiB = 0 },
 		"relative_helper":       func(c *managedMicrosandboxConfig) { c.HelperPath = "./helper" },
+		"unclean_home":          func(c *managedMicrosandboxConfig) { c.RuntimeHome = "/private/state/../msb" },
 		"relative_home":         func(c *managedMicrosandboxConfig) { c.RuntimeHome = ".cache" },
 		"runtime_missing":       func(c *managedMicrosandboxConfig) { c.RuntimePath = "" },
 		"firmware_missing":      func(c *managedMicrosandboxConfig) { c.FirmwarePath = "" },
@@ -89,9 +90,9 @@ func TestManagedMicrosandboxRejectsUnboundedOrImplicitConfiguration(t *testing.T
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
 			changed := config
-			entry := config.Microsandbox[key]
+			entry := *config.Microsandbox
 			mutate(&entry)
-			changed.Microsandbox = map[string]managedMicrosandboxConfig{key: entry}
+			changed.Microsandbox = &entry
 			write(changed)
 			if _, close, err := managedRuntimes(); err == nil {
 				close()
@@ -101,78 +102,34 @@ func TestManagedMicrosandboxRejectsUnboundedOrImplicitConfiguration(t *testing.T
 	}
 }
 
-func TestManagedMicrosandboxAndDockerKeepDistinctOwnership(t *testing.T) {
-	config, microKey, write := managedMicrosandboxFixture(t)
-	dockerKey := uuid.NewString()
-	seccomp := filepath.Join(t.TempDir(), "seccomp.json")
-	if err := os.WriteFile(seccomp, []byte(`{"defaultAction":"SCMP_ACT_ERRNO","syscalls":[]}`), 0600); err != nil {
-		t.Fatal(err)
-	}
-	docker := managedDockerConfig{Host: "unix:///var/run/docker.sock", Image: "sha256:" + strings.Repeat("d", 64), Network: "bridge", SeccompFile: seccomp}
-	config.Docker = map[string]managedDockerConfig{dockerKey: docker}
-	write(config)
-	result, close, err := managedRuntimes()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer close()
-	if len(result.Providers) != 2 || result.Providers[dockerKey] == nil || result.Providers[microKey] == nil || len(result.Suspension) != 1 {
-		t.Fatal("mixed provider ownership lost")
-	}
-	if _, exists := result.Suspension[dockerKey]; exists {
-		t.Fatal("Docker unexpectedly acquired suspension policy")
-	}
-	config.Docker = map[string]managedDockerConfig{microKey: docker}
-	write(config)
-	if _, close, err := managedRuntimes(); err == nil {
-		close()
-		t.Fatal("same provider identity accepted for two backends")
-	}
-}
-
-func TestManagedMicrosandboxMappingsAndStrictJSON(t *testing.T) {
-	config, key, write := managedMicrosandboxFixture(t)
-	config.DefaultProvider = ""
-	write(config)
-	result, close, err := managedRuntimes()
+func TestManagedMicrosandboxFingerprintPinsOnlyBackendNamespace(t *testing.T) {
+	config, _, write := managedMicrosandboxFixture(t)
+	original, close, err := managedRuntimes()
 	if err != nil {
 		t.Fatal(err)
 	}
 	close()
-	if result.DefaultProvider != "" || len(result.Providers) != 1 || len(result.Suspension) != 1 {
-		t.Fatal("cleanup-only microsandbox configuration lost")
-	}
-	config.EngineProviders = map[string]string{"codex": key}
+	config.Maintenance = true
+	config.Microsandbox.Image = "registry.example/parsar-runtime@sha256:" + strings.Repeat("d", 64)
+	config.Microsandbox.MaxActive++
+	config.Microsandbox.IdleSeconds++
 	write(config)
-	if _, close, err := managedRuntimes(); err != nil {
-		t.Fatal(err)
-	} else {
-		close()
-	}
-	config.EngineProviders = map[string]string{"codex": uuid.NewString()}
-	write(config)
-	if _, close, err := managedRuntimes(); err == nil {
-		close()
-		t.Fatal("unconfigured engine provider accepted")
-	}
-	config.EngineProviders = nil
-	config.DefaultProvider = uuid.NewString()
-	write(config)
-	if _, close, err := managedRuntimes(); err == nil {
-		close()
-		t.Fatal("unconfigured default accepted")
-	}
-	config.DefaultProvider = key
-	raw, err := json.Marshal(config)
+	changed, close, err := managedRuntimes()
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw = []byte(strings.Replace(string(raw), `"idle_seconds":300`, `"idle_timeout":300`, 1))
-	if err := os.WriteFile(os.Getenv("AGENTS_API_MANAGED_RUNTIMES_FILE"), raw, 0600); err != nil {
+	close()
+	if !changed.Maintenance || changed.BackendFingerprint != original.BackendFingerprint {
+		t.Fatal("policy/image change replaced backend identity")
+	}
+	config.Microsandbox.RuntimeHome = "/var/lib/parsar/another-installation"
+	write(config)
+	changed, close, err = managedRuntimes()
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, close, err := managedRuntimes(); err == nil {
-		close()
-		t.Fatal("misspelled policy field accepted")
+	close()
+	if changed.BackendFingerprint == original.BackendFingerprint || len(changed.BackendFingerprint) != 64 {
+		t.Fatal("backend namespace change was not fenced")
 	}
 }

@@ -37,46 +37,41 @@ resources and native histories. Agent edits do not change accepted Sessions.
 `AGENTS_API_ENGINE` selects the default engine. `AGENTS_API_HARNESSES` explicitly
 adds comma-separated deployment-supported engines, for example
 `codex,claude_sdk,mcode`, without requiring a managed Provider. The default engine
-and configured managed engine profiles remain enabled; unknown names fail startup.
+remains enabled; unknown names fail startup.
 This setting does not install a harness or qualify a native deployment.
 
-Existing `default_provider` deployments keep their default behavior. A deployment enabling multiple hosted harnesses adds `engine_providers`
-to `AGENTS_API_MANAGED_RUNTIMES_FILE`:
+Hosted placement uses one provider per deployment. Set `provider` to `docker` or
+`microsandbox` in `AGENTS_API_MANAGED_RUNTIMES_FILE`, with a stable
+`installation_id`, a `maintenance` boolean and one matching backend object.
+For example:
 
 ```json
 {
   "core_url": "http://core:8091/api/v1",
-  "default_provider": "11111111-1111-4111-8111-111111111111",
-  "engine_providers": {
-    "codex": "11111111-1111-4111-8111-111111111111",
-    "claude_sdk": "22222222-2222-4222-8222-222222222222"
-  },
+  "provider": "docker",
+  "installation_id": "11111111-1111-4111-8111-111111111111",
+  "maintenance": false,
   "docker": {
-    "11111111-1111-4111-8111-111111111111": {
-      "host": "unix:///var/run/docker.sock",
-      "image": "sha256:<qualified-codex-image>",
-      "network": "bridge",
-      "seccomp_file": "/private/seccomp.json"
-    },
-    "22222222-2222-4222-8222-222222222222": {
-      "host": "unix:///var/run/docker.sock",
-      "image": "sha256:<qualified-claude-image>",
-      "network": "bridge",
-      "seccomp_file": "/private/seccomp.json",
-      "nested_sandbox": true
-    }
+    "host": "unix:///var/run/docker.sock",
+    "image": "sha256:<qualified-runtime-image>",
+    "network": "bridge",
+    "seccomp_file": "/private/seccomp.json",
+    "nested_sandbox": true
   }
 }
 ```
 
-Each reference must name an existing qualified provider entry. The default engine
-inherits `default_provider` when no explicit mapping exists. Other engines have no
-fallback. Admission and initial allocation use the same engine mapping. Once an
-allocation exists, its persisted provider identity remains authoritative across
-restarts and configuration changes. Keep retained provider entries for cleanup;
-changing a provider target requires a new key. No image is qualified merely by
-being named in this map. Existing provider security and native capability checks
-still apply. This change adds no provider or native harness implementation.
+There is no engine-to-provider routing or mixed-provider configuration. Enabling
+another harness does not choose another image or backend; the selected Runtime
+image must contain and qualify each enabled harness. Capability checks still
+apply. Legacy `default_provider`, `engine_providers` and provider maps are rejected.
+
+Before changing provider or backend namespace, restart the original configuration
+with `maintenance: true`, explicitly settle or delete its hosted resources and
+confirm cleanup is complete. Restart the new provider configuration in maintenance
+to validate the switch, then disable maintenance without changing its identity.
+Switching never migrates Sessions or deletes resources automatically. See the
+[deployment procedure](../../services/agents-api/deploy/microsandbox/README.md#change-the-deployment-provider).
 
 For multiple engines, use an exclusive `by_harness` object in the private
 `AGENTS_API_EXECUTION_OPTIONS_FILE`, with one existing adapter-options object per

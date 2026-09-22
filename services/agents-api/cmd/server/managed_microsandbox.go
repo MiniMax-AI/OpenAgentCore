@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"path/filepath"
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
@@ -42,30 +43,28 @@ type managedMicrosandboxRule struct {
 	Port        string `json:"port"`
 }
 
-func addManagedMicrosandbox(entries map[string]managedMicrosandboxConfig, result *execution.RuntimeProviders) error {
-	if len(entries) == 0 {
-		return nil
-	}
-	result.Suspension = make(map[string]execution.RuntimeSuspensionPolicy, len(entries))
+func configureManagedMicrosandbox(entry managedMicrosandboxConfig, result *execution.RuntimeProvider) error {
 	const maxSeconds = int64((1<<63 - 1) / time.Second)
-	for key, entry := range entries {
-		if entry.IdleSeconds <= 0 || entry.IdleSeconds > maxSeconds || entry.RetentionSeconds <= 0 || entry.RetentionSeconds > maxSeconds || entry.MaxActive <= 0 || entry.MaxRetained < entry.MaxActive {
-			return errors.New("managed microsandbox requires positive bounded idle_seconds, retention_seconds and max_active, with max_retained >= max_active")
-		}
-		network := sandboxmicro.NetworkPolicy{DefaultEgress: entry.Network.DefaultEgress, DefaultIngress: entry.Network.DefaultIngress}
-		for _, rule := range entry.Network.Rules {
-			network.Rules = append(network.Rules, sandboxmicro.NetworkRule{Action: rule.Action, Direction: rule.Direction, Destination: rule.Destination, Protocol: rule.Protocol, Port: rule.Port})
-		}
-		provider, err := sandboxmicro.New(sandboxmicro.Config{
-			InstallationID: key, HelperPath: entry.HelperPath, RuntimeHome: entry.RuntimeHome, RuntimePath: entry.RuntimePath, FirmwarePath: entry.FirmwarePath,
-			RuntimeSHA256: entry.RuntimeSHA256, FirmwareSHA256: entry.FirmwareSHA256, Image: entry.Image,
-			MemoryMiB: entry.MemoryMiB, CPUs: entry.CPUs, RootDiskMiB: entry.RootDiskMiB, Network: network,
-		})
-		if err != nil {
-			return errors.New("invalid managed microsandbox provider configuration")
-		}
-		result.Providers[key] = provider
-		result.Suspension[key] = execution.RuntimeSuspensionPolicy{IdleTimeout: time.Duration(entry.IdleSeconds) * time.Second, Retention: time.Duration(entry.RetentionSeconds) * time.Second, MaxActive: entry.MaxActive, MaxRetained: entry.MaxRetained}
+	if entry.IdleSeconds <= 0 || entry.IdleSeconds > maxSeconds || entry.RetentionSeconds <= 0 || entry.RetentionSeconds > maxSeconds || entry.MaxActive <= 0 || entry.MaxRetained < entry.MaxActive {
+		return errors.New("managed microsandbox requires positive bounded idle_seconds, retention_seconds and max_active, with max_retained >= max_active")
 	}
+	if !filepath.IsAbs(entry.RuntimeHome) || filepath.Clean(entry.RuntimeHome) != entry.RuntimeHome {
+		return errors.New("managed microsandbox runtime_home must be a canonical absolute path")
+	}
+	network := sandboxmicro.NetworkPolicy{DefaultEgress: entry.Network.DefaultEgress, DefaultIngress: entry.Network.DefaultIngress}
+	for _, rule := range entry.Network.Rules {
+		network.Rules = append(network.Rules, sandboxmicro.NetworkRule{Action: rule.Action, Direction: rule.Direction, Destination: rule.Destination, Protocol: rule.Protocol, Port: rule.Port})
+	}
+	provider, err := sandboxmicro.New(sandboxmicro.Config{
+		InstallationID: result.InstallationID, HelperPath: entry.HelperPath, RuntimeHome: entry.RuntimeHome, RuntimePath: entry.RuntimePath, FirmwarePath: entry.FirmwarePath,
+		RuntimeSHA256: entry.RuntimeSHA256, FirmwareSHA256: entry.FirmwareSHA256, Image: entry.Image,
+		MemoryMiB: entry.MemoryMiB, CPUs: entry.CPUs, RootDiskMiB: entry.RootDiskMiB, Network: network,
+	})
+	if err != nil {
+		return errors.New("invalid managed microsandbox provider configuration")
+	}
+	result.Provider = provider
+	result.BackendFingerprint = managedBackendFingerprint("microsandbox", entry.RuntimeHome)
+	result.Suspension = &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Duration(entry.IdleSeconds) * time.Second, Retention: time.Duration(entry.RetentionSeconds) * time.Second, MaxActive: entry.MaxActive, MaxRetained: entry.MaxRetained}
 	return nil
 }

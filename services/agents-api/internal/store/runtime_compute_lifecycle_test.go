@@ -250,7 +250,7 @@ type computeLifecycleFixture struct {
 
 func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *computeLifecycleFixture {
 	t.Helper()
-	s, pool := store.NewTestStore(t)
+	s, pool := store.NewManagedTestStore(t)
 	registry := gateway.NewRegistry()
 	p := &fakeCheckpointProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.SnapshotIdentity{}, bootstraps: map[string]sandbox.Bootstrap{}, peers: map[string]*websocket.Conn{}, registry: registry}
 	handler := gateway.NewHandler(gateway.HandlerConfig{Authenticator: gateway.NewAuthenticator(s), Registry: registry})
@@ -271,7 +271,7 @@ func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *compu
 func (f *computeLifecycleFixture) start() {
 	t := f.t
 	t.Helper()
-	w, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: f.store, Registry: f.provider.registry, ManagedRuntimes: &execution.RuntimeProviders{CoreURL: "http://core.invalid/api/v1", Providers: map[string]sandbox.Provider{f.key: f.provider}, Suspension: map[string]execution.RuntimeSuspensionPolicy{f.key: f.policy}}})
+	w, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: f.store, Registry: f.provider.registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: f.provider, Suspension: &f.policy}})
 	if err != nil {
 		t.Fatal(err)
 	}

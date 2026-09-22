@@ -7,18 +7,12 @@ import (
 	"strings"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/engine"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 )
 
 // Engine selection is independent of compute ownership. Operators may enable
 // user-managed Runtime profiles without configuring a managed Provider.
-func enabledHarnesses(defaultEngine string, managed *execution.RuntimeProviders) ([]string, error) {
+func enabledHarnesses(defaultEngine string) ([]string, error) {
 	kinds := []string{defaultEngine}
-	if managed != nil {
-		for kind := range managed.EngineProviders {
-			kinds = append(kinds, kind)
-		}
-	}
 	if value := os.Getenv("AGENTS_API_HARNESSES"); value != "" {
 		kinds = append(kinds, strings.Split(value, ",")...)
 	}

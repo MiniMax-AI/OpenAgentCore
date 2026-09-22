@@ -38,7 +38,10 @@ Go tests, Core contract/client/service tests, Core Web and TypeScript client
 checks (including fixture-only Playwright acceptance), a real dedicated PostgreSQL test
 database, byte-for-byte sqlc regeneration checks, standalone API builds, Claude SDK
 tests and packaging, MiniMax companion checks, and Rust filesystem-helper
-tests/format/Clippy. It intentionally has no product Web/server/installer gates. The full gate fails when the database variable is missing.
+tests/format/Clippy. It intentionally has no product Web/server/installer gates. The full gate fails when the database variable is missing. The test database role
+needs CREATE DATABASE permission: managed-provider tests create and drop isolated
+`parsar_agents_api_*_tests` databases because provider identity is deployment-wide.
+Tests must not bypass the production provider-switch guard.
 
 Use Go from `go.mod`, Node 22, pnpm 10.30.3, Python 3.9+, Rust 1.95.0 with rustfmt
 and Clippy, and Linux OpenSSL development libraries. `make sqlc-generate` owns only
@@ -456,7 +459,28 @@ does not qualify its isolation or enable public creation.
 
 ### Optional single-host sandbox suspension
 
-Keep Docker and microsandbox as selectable deployment providers. The common
+Each Core deployment enables exactly one sandbox provider, selected at setup:
+Docker or microsandbox. Keep both adapters but reject multiple provider entries,
+legacy default-provider maps and engine-based placement. Harness selection is
+independent. The configuration has one installation UUID, one provider kind and
+one backend object. No compatibility parser or parallel provider route remains.
+
+The execution database pins the selected installation and backend namespace.
+Under the existing execution lease, startup validates that identity before
+reconciling work. Changing an installation or backend requires a previous startup
+of the old configuration in maintenance, with new configuration still in
+maintenance. Maintenance prevents fresh hosted Sessions and fresh allocations,
+while retaining known receipts, existing Session use and explicit cleanup.
+Unreleased allocation receipts include live/stopped compute, snapshots, uncertain
+operations and pending cleanup; all must be released before a switch. Pending
+hosted Environments that have not yet received an allocation also block a switch.
+A failed check reports why and performs no resource deletion or provider change.
+After a successful switch, restart the same configuration with maintenance off to
+admit new sandboxes. Retain immutable historical allocation ownership; never
+migrate an existing Session to another provider or recreate a released allocation.
+Fresh adoption of a deployment with unverified retained allocations fails closed.
+
+The common
 `services/agents-api/internal/sandbox` contract owns the five base operations
 (Create, GetInfo, Renew, Kill, RunCommand) and the optional CheckpointProvider
 capability. Core orchestration must not import an adapter or SDK. Exact compute

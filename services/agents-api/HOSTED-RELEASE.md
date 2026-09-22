@@ -54,20 +54,20 @@ export AGENTS_API_MANAGED_RUNTIMES_FILE="$PARSAR_HOME/managed-runtimes.json"
 export AGENTS_API_EXECUTION_OPTIONS_FILE="$PARSAR_HOME/execution-options.json"
 ```
 
-Create the private managed configuration with a fresh stable provider UUID. Replace
-both occurrences of `<provider UUID>`, the gateway and the absolute package path:
+Create the private managed configuration with a fresh stable installation UUID. Replace
+`<installation UUID>`, the gateway and the absolute package path:
 
 ```json
 {
   "core_url": "http://<Docker bridge gateway>:8091/api/v1",
-  "default_provider": "<provider UUID>",
+  "provider": "docker",
+  "installation_id": "<installation UUID>",
+  "maintenance": false,
   "docker": {
-    "<provider UUID>": {
-      "host": "unix:///var/run/docker.sock",
-      "image": "@RUNTIME_IMAGE@",
-      "network": "bridge",
-      "seccomp_file": "<absolute package path>/runtime/seccomp.json"
-    }
+    "host": "unix:///var/run/docker.sock",
+    "image": "@RUNTIME_IMAGE@",
+    "network": "bridge",
+    "seccomp_file": "<absolute package path>/runtime/seccomp.json"
   }
 }
 ```
@@ -163,9 +163,17 @@ request or delete native history to make a retry succeed.
 When finished, `client.beta.agents.sessions.delete(session.id)` requests owned
 Runtime cleanup. Core must remain running with the original Provider configured
 until its labelled container and volumes are gone. Public deletion acknowledgment
-is not physical cleanup confirmation. Do not use broad Docker pruning. An empty
-`default_provider` disables new hosted admission while keeping existing Session
-controls and cleanup available. Back up the independent PostgreSQL database
+is not physical cleanup confirmation. Do not use broad Docker pruning.
+
+To change providers, restart the old configuration with `maintenance: true`,
+explicitly handle or delete old hosted resources and verify cleanup. Restart the
+new provider configuration in maintenance to validate the empty deployment, then
+restart the same identity with `maintenance: false`. Maintenance blocks new compute
+without deleting retained resources. One deployment runs either Docker or
+[microsandbox](deploy/microsandbox/README.md), with no mixed configuration,
+engine-to-provider routing or automatic Session migration.
+
+Back up the independent PostgreSQL database
 (including large objects) and retained Runtime state together under an operator
 recovery plan; the archive itself contains no deployment data.
 

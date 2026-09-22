@@ -119,12 +119,12 @@ func run() error {
 			}
 		}()
 		options = append(options, api.WithExecution(worker), api.WithEnvironmentDirectoryReader(worker), api.WithEnvironmentFileWriter(worker))
-		kinds, err := enabledHarnesses(engine, managed)
+		kinds, err := enabledHarnesses(engine)
 		if err != nil {
 			return err
 		}
 		options = append(options, api.WithHarnesses(kinds))
-		if managed != nil && (managed.DefaultProvider != "" || len(managed.EngineProviders) > 0) {
+		if managed != nil {
 			options = append(options, api.WithHostedEnvironments())
 		}
 	}

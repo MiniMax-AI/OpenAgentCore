@@ -17,21 +17,21 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
-// RuntimeProviders is trusted operator wiring, not public Environment input.
-// Each stable key identifies one provider backend/installation across restarts;
-// changing that target requires a new key, preserving the old cleanup adapter.
-type RuntimeProviders struct {
-	CoreURL         string
-	DefaultProvider string
-	EngineProviders map[string]string
-	Providers       map[string]sandbox.Provider
-	Suspension      map[string]RuntimeSuspensionPolicy
+// RuntimeProvider binds one deployment to one sandbox installation.
+// BackendFingerprint identifies its namespace independently of mutable sizing.
+type RuntimeProvider struct {
+	CoreURL            string
+	InstallationID     string
+	BackendFingerprint string
+	Provider           sandbox.Provider
+	Maintenance        bool
+	Suspension         *RuntimeSuspensionPolicy
 }
 
 type runtimeLifecycle struct {
 	store         *store.Store
 	registry      *gateway.Registry
-	config        RuntimeProviders
+	config        RuntimeProvider
 	gate          chan struct{}
 	ctx           context.Context
 	stop          context.CancelFunc
@@ -41,37 +41,26 @@ type runtimeLifecycle struct {
 	initializing  *runtimeInitialization
 }
 
-func newRuntimeLifecycle(s *store.Store, registry *gateway.Registry, config *RuntimeProviders) (*runtimeLifecycle, error) {
+func newRuntimeLifecycle(s *store.Store, registry *gateway.Registry, config *RuntimeProvider) (*runtimeLifecycle, error) {
 	if config == nil {
 		return nil, nil
 	}
 	u, err := url.Parse(config.CoreURL)
-	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || len(config.Providers) == 0 || registry == nil {
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || config.Provider == nil || registry == nil {
 		return nil, sandbox.ErrInvalid
 	}
-	copied := RuntimeProviders{EngineProviders: make(map[string]string, len(config.EngineProviders)), CoreURL: config.CoreURL, DefaultProvider: config.DefaultProvider, Providers: make(map[string]sandbox.Provider, len(config.Providers))}
-	for key, provider := range config.Providers {
-		id, err := uuid.Parse(key)
-		if err != nil || id == uuid.Nil || id.String() != key || provider == nil {
-			return nil, sandbox.ErrInvalid
-		}
-		copied.Providers[key] = provider
-	}
-	for kind, key := range config.EngineProviders {
-		if key == "" || copied.Providers[key] == nil {
-			return nil, sandbox.ErrInvalid
-		}
-		copied.EngineProviders[kind] = key
-	}
-	if copied.DefaultProvider != "" && copied.Providers[copied.DefaultProvider] == nil {
+	id, err := uuid.Parse(config.InstallationID)
+	fingerprint, fingerprintErr := hex.DecodeString(config.BackendFingerprint)
+	if err != nil || id == uuid.Nil || id.String() != config.InstallationID || fingerprintErr != nil || len(fingerprint) != 32 || hex.EncodeToString(fingerprint) != config.BackendFingerprint {
 		return nil, sandbox.ErrInvalid
 	}
-	copied.Suspension = make(map[string]RuntimeSuspensionPolicy, len(config.Suspension))
-	for key, policy := range config.Suspension {
-		if _, ok := copied.Providers[key].(sandbox.CheckpointProvider); !ok || policy.IdleTimeout < time.Second || policy.Retention < time.Second || policy.MaxActive < 1 || policy.MaxRetained < policy.MaxActive {
+	copied := *config
+	if config.Suspension != nil {
+		policy := *config.Suspension
+		if _, ok := config.Provider.(sandbox.CheckpointProvider); !ok || policy.IdleTimeout < time.Second || policy.Retention < time.Second || policy.MaxActive < 1 || policy.MaxRetained < policy.MaxActive {
 			return nil, sandbox.ErrInvalid
 		}
-		copied.Suspension[key] = policy
+		copied.Suspension = &policy
 	}
 	ctx, stop := context.WithCancel(context.Background())
 	return &runtimeLifecycle{store: s, registry: registry, config: copied, gate: make(chan struct{}, 1), ctx: ctx, stop: stop, connections: make(map[string]*runtimeConnection)}, nil
@@ -115,8 +104,8 @@ func (w *Worker) ProvisionEnvironment(ctx context.Context, tenant, environment, 
 
 // provision runs under the lifecycle gate and uses the durable one-shot receipt.
 func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, providerKey string) (store.RuntimeAllocation, error) {
-	provider := r.config.Providers[providerKey]
-	if provider == nil {
+	provider := r.config.Provider
+	if providerKey != r.config.InstallationID {
 		return store.RuntimeAllocation{}, sandbox.ErrInvalid
 	}
 	environmentValue, err := r.store.GetEnvironment(ctx, tenant, environment)
@@ -128,10 +117,13 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 		return store.RuntimeAllocation{}, sandbox.ErrInvalid
 	}
 	if _, err := r.store.GetRuntimeAllocation(ctx, tenant, environment); errors.Is(err, store.ErrNotFound) {
+		if r.config.Maintenance {
+			return store.RuntimeAllocation{}, ErrExecutionUnavailable
+		}
 		if err := r.computeCapacity(ctx, providerKey); err != nil {
 			return store.RuntimeAllocation{}, err
 		}
-		if policy, enabled := r.config.Suspension[providerKey]; enabled {
+		if policy := r.config.Suspension; policy != nil {
 			count, err := r.store.CountRuntimeRetainedAllocations(ctx, providerKey)
 			if err != nil {
 				return store.RuntimeAllocation{}, err
@@ -223,6 +215,9 @@ func (w *Worker) ReconcileManagedRuntimes(ctx context.Context) error {
 }
 
 func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAllocation) error {
+	if owner.ProviderKey != r.config.InstallationID {
+		return sandbox.ErrOwnership
+	}
 	if owner.Initialization == "running" && (r.initializing == nil || r.initializing.owner.ID != owner.ID) {
 		var err error
 		owner, err = r.store.RequestRuntimeCleanup(ctx, owner)
@@ -245,8 +240,8 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAlloc
 	if owner.ComputePhase != "disabled" {
 		return r.observeCompute(ctx, owner)
 	}
-	provider := r.config.Providers[owner.ProviderKey]
-	if provider == nil {
+	provider := r.config.Provider
+	if owner.ProviderKey != r.config.InstallationID {
 		return sandbox.ErrInvalid
 	}
 	if err := r.store.CheckExecutionOwnership(ctx); err != nil {
@@ -296,7 +291,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAlloc
 	if err := r.observeInitialization(ctx, owner); err != nil {
 		return err
 	}
-	if _, enabled := r.config.Suspension[owner.ProviderKey]; enabled && owner.Initialization == "complete" {
+	if r.config.Suspension != nil && owner.Initialization == "complete" {
 		return r.enableCompute(ctx, owner)
 	}
 	if peer, err := r.registry.LookupDevice(owner.DeviceID); err != nil || peer.IsClosed() {

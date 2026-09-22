@@ -13,7 +13,7 @@ import (
 )
 
 func TestManagedRuntimeAutomaticBootstrapRecoversCommittedSessions(t *testing.T) {
-	s, _ := store.NewTestStore(t)
+	s, _ := store.NewManagedTestStore(t)
 	tenant, idle, idleEnvironment := managedSession(t, s)
 	initial, err := s.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted"}}`), InitialInputs: []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"hello"}`)}}})
 	if err != nil {
@@ -26,7 +26,7 @@ func TestManagedRuntimeAutomaticBootstrapRecoversCommittedSessions(t *testing.T)
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	start := func() *execution.Worker {
-		w, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry(), ManagedRuntimes: &execution.RuntimeProviders{CoreURL: "http://core.invalid/api/v1", DefaultProvider: key, Providers: map[string]sandbox.Provider{key: p}}})
+		w, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry(), ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p}})
 		if err != nil {
 			t.Fatal(err)
 		}

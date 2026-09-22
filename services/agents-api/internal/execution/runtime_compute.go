@@ -31,8 +31,11 @@ type runtimeCompute struct {
 }
 
 func (r *runtimeLifecycle) computeCapacity(ctx context.Context, key string) error {
-	policy, enabled := r.config.Suspension[key]
-	if !enabled {
+	policy := r.config.Suspension
+	if key != r.config.InstallationID {
+		return sandbox.ErrOwnership
+	}
+	if policy == nil {
 		return nil
 	}
 	count, err := r.store.CountRuntimeComputeReservations(ctx, key)
@@ -51,8 +54,8 @@ func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner store.RuntimeA
 	}
 	idleBefore := time.Time{}
 	if phase == "quiescing" {
-		policy, ok := r.config.Suspension[owner.ProviderKey]
-		if !ok {
+		policy := r.config.Suspension
+		if policy == nil {
 			return owner, sandbox.ErrInvalid
 		}
 		idleBefore = time.Now().Add(-policy.IdleTimeout)
@@ -60,7 +63,7 @@ func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner store.RuntimeA
 	return r.store.SetRuntimeCompute(ctx, owner, phase, raw, until, idleBefore)
 }
 func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner store.RuntimeAllocation) error {
-	p, ok := r.config.Providers[owner.ProviderKey].(sandbox.CheckpointProvider)
+	p, ok := r.config.Provider.(sandbox.CheckpointProvider)
 	if !ok {
 		return sandbox.ErrInvalid
 	}
@@ -76,7 +79,7 @@ func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner store.Runtim
 }
 
 func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner store.RuntimeAllocation) error {
-	p, ok := r.config.Providers[owner.ProviderKey].(sandbox.CheckpointProvider)
+	p, ok := r.config.Provider.(sandbox.CheckpointProvider)
 	if !ok {
 		return sandbox.ErrInvalid
 	}
@@ -138,8 +141,8 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.Checkpoint
 		// Clearing only the observed timestamp cannot consume a newer live request.
 		return r.store.ClearRuntimeWake(ctx, owner, owner.ComputeActivityAt)
 	}
-	policy, enabled := r.config.Suspension[owner.ProviderKey]
-	if !enabled || activity.Busy || !activity.HasCompletedTurn || time.Since(activity.LastActivity) < policy.IdleTimeout {
+	policy := r.config.Suspension
+	if policy == nil || activity.Busy || !activity.HasCompletedTurn || time.Since(activity.LastActivity) < policy.IdleTimeout {
 		return nil
 	}
 	state.SuspendID, state.RestoreID, state.Rollback = uuid.NewString(), "", false

@@ -60,7 +60,7 @@ func TestManagedInitialFilesGateFairnessCompletionAndRestart(t *testing.T) {
 			setupOnly := strings.HasPrefix(mode, "setup-")
 			mode = strings.TrimPrefix(mode, "setup-")
 			expectedSteps := 2
-			_, pool := store.NewTestStore(t)
+			_, pool := store.NewManagedTestStore(t)
 			cipher, err := credentialcrypto.New(bytes.Repeat([]byte{9}, 32))
 			if err != nil {
 				t.Fatal(err)

@@ -161,6 +161,14 @@ type RuntimeAllocation struct {
 	ComputeRetainedUntil pgtype.Timestamptz `json:"compute_retained_until"`
 }
 
+type RuntimeDeployment struct {
+	Singleton          bool               `json:"singleton"`
+	InstallationID     pgtype.UUID        `json:"installation_id"`
+	BackendFingerprint string             `json:"backend_fingerprint"`
+	Maintenance        bool               `json:"maintenance"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
 type RuntimeDeviceAuthority struct {
 	ID             pgtype.UUID `json:"id"`
 	TenantID       pgtype.UUID `json:"tenant_id"`

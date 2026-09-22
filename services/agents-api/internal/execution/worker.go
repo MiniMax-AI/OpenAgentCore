@@ -37,6 +37,18 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher) (*Worker, error) {
 		_ = lease.Close(context.Background())
 		return nil, err
 	}
+	var deployment *store.RuntimeDeployment
+	if worker.runtimes != nil {
+		config := worker.runtimes.config
+		deployment = &store.RuntimeDeployment{InstallationID: config.InstallationID, BackendFingerprint: config.BackendFingerprint, Maintenance: config.Maintenance}
+	}
+	if err := owned.Store.ConfigureRuntimeDeployment(ctx, deployment); err != nil {
+		if worker.runtimes != nil {
+			worker.runtimes.stop()
+		}
+		_ = lease.Close(context.Background())
+		return nil, err
+	}
 	if err := owned.Store.ReconcileEnvironmentConnections(ctx); err != nil {
 		if worker.runtimes != nil {
 			worker.runtimes.stop()
