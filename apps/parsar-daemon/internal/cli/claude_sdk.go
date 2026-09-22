@@ -30,7 +30,7 @@ func discoverClaudeSDK(rc *runContext, profile string, check func(context.Contex
 	out := &claudeSDKDiscovery{Info: proto.SupportedAgentKind{Kind: "claude_sdk", Capabilities: proto.AgentKindCapabilities{
 		Streaming: true, Usage: true, Resume: true, Steering: true, MessageItems: true,
 		ToolObservations: true, EnvironmentNone: true, SubagentControl: true,
-		DurableTurns: true, DurableInputReceipts: true, FunctionTools: true, ExecutionControls: true, StructuredOutput: true,
+		DurableTurns: true, DurableInputReceipts: true, FunctionTools: true, ExecutionControls: true,
 	}}}
 	fail := func(err error) *claudeSDKDiscovery {
 		fmt.Fprintf(rc.stderr, "parsar-daemon: configured Claude SDK runtime unavailable: %v\n", err)
@@ -97,6 +97,7 @@ func discoverClaudeSDK(rc *runContext, profile string, check func(context.Contex
 		caps.WorkspaceReadPreparation, caps.NativeSessionRecovery = true, true
 	}
 	out.Info.Available, out.Info.Version = true, info.SDK
+	out.Info.Capabilities.StructuredOutput = out.Config.Workspace == nil && info.SupportsStructuredOutput()
 	out.Info.Capabilities.SubagentObservations = info.SupportsSubagents()
 	out.Info.Capabilities.MCPHTTPTools = info.SupportsHTTPMCP()
 	out.Info.Capabilities.MCPHTTPBearerAuth = info.SupportsHTTPMCPBearer()

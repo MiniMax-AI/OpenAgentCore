@@ -1518,7 +1518,8 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   Unsupported `low`/`high` and unreadable catalogs fail before model execution;
   unsupported non-default levels remain an explicit implementation gap.
   Product requests that omit the native option retain their existing defaults.
-  Structured output formats remain a separate protocol gap.
+  Structured output has a separately qualified profile described in
+  [Structured output execution](#structured-output-execution).
 - `subagent_control` advertises native subagent tool control. Agents API requires
   it when resolved `multi_agent.enabled` is false and sends the typed internal
   `disable_subagents` policy on both new and resumed Turns. Native translation
@@ -1916,7 +1917,9 @@ validate/retry model answers, repair JSON or select native tool names. Public
 admission requires the selected profile's structured-output qualification, and
 only requests using this option require the Runtime's `structured_output` and
 message-observation capabilities. A capability advertisement does not qualify a
-new public combination.
+new public combination. Claude advertises this operation only when the installed
+SDK bridge reports its `structured_output` feature and the selected Runtime is
+not a workspace profile.
 
 The current qualified path is Claude SDK, `environment:none`, medium verbosity,
 single Agent, with optional ordinary function tools and text results. Workspace,

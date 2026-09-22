@@ -25,6 +25,10 @@ type RuntimeInfo struct {
 	Features []string `json:"features"`
 }
 
+func (info RuntimeInfo) SupportsStructuredOutput() bool {
+	return slices.Contains(info.Features, "structured_output")
+}
+
 func (info RuntimeInfo) SupportsSubagents() bool {
 	return slices.Contains(info.Features, "subagent_resources")
 }

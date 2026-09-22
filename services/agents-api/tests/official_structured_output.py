@@ -61,7 +61,7 @@ def run(session, prompt, respond=False, cancel=False):
     return events, turns[-1]
 
 
-def final(session):
+def final(session, events=None):
     items = sessions.items.list(session, order="asc", limit=100).data
     answers = [item for item in items if item.type == "message" and item.role == "assistant" and item.phase == "final_answer"]
     assert answers
@@ -71,6 +71,13 @@ def final(session):
         response = raw.get(base + "/v1/agents/sessions/" + session + "/items", headers=headers, params={"order": "asc", "limit": 100})
         assert response.status_code == 200
         assert any(i["id"] == answers[-1].id and i["content"][0]["text"] == text for i in response.json()["data"])
+    if events is not None:
+        item_id = answers[-1].id
+        added = next(i for i, e in enumerate(events) if e["type"] == "agent.session.turn.item.added" and e["item"]["id"] == item_id)
+        done = next(i for i, e in enumerate(events) if e["type"] == "agent.session.turn.item.done" and e["item"]["id"] == item_id)
+        terminal = next(i for i, e in enumerate(events) if e["type"] == "agent.session.turn.completed")
+        assert added < done < terminal
+        assert next(e["text"] for e in events if e["type"] == "agent.session.turn.output_text.done" and e["item_id"] == item_id) == text
     return answers[-1].id
 
 
@@ -85,7 +92,7 @@ try:
         proof.update(session=session.id, agent=saved.id, memory=str(uuid.uuid4()), format=config["text"]["format"])
         assert session.agent.text.format.to_dict() == proof["format"]
         events, turn = run(session.id, "Call remember exactly once and return its exact memory value as the requested JSON. Do not invent it.", respond=True)
-        proof.update(first_events=events, first_output=final(session.id))
+        proof.update(first_events=events, first_output=final(session.id, events))
         assert len([i for i in sessions.items.list(session.id, limit=100).data if i.type == "function_call"]) == 1
         try:
             other.beta.agents.sessions.retrieve(session.id)
@@ -111,7 +118,7 @@ try:
         assert session.agent.text.format.to_dict() == proof["format"]
         assert final(session.id) == proof["first_output"]
         events, turn = run(session.id, "Recall the exact memory from the previous turn and return it using the same JSON format. Do not call remember again.")
-        proof.update(resume_events=events, resumed_output=final(session.id), resumed_turn=turn.id)
+        proof.update(resume_events=events, resumed_output=final(session.id, events), resumed_turn=turn.id)
         assert proof["resumed_output"] != proof["first_output"]
         assert len(sessions.turns.list(session.id).data) == 2
         assert len([i for i in sessions.items.list(session.id, limit=100).data if i.type == "function_call"]) == 1
