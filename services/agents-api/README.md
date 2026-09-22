@@ -226,7 +226,8 @@ Ordinary JSON requests have a 1 MiB body limit; file transfers use the separate
 bounds in the Files contracts. Session lists support `after`, `limit` (1..100),
 `order` (`asc`/`desc`) and optional immutable root `agent_id`. The local defaults
 are 20 and descending order; exact hosted limits/error semantics remain unverified.
-Metadata updates preserve omission, clear on null/empty and replace supplied pairs.
+Session updates require the metadata field; null/empty clears it and an object
+replaces supplied pairs. An empty update body rejects before resource lookup.
 
 Delete with `client.beta.agents.sessions.delete(session.id)`. Confirmation means
 public removal: Session/history reads and new input become unavailable. Active

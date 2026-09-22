@@ -11,13 +11,14 @@ type CreateSessionRequest struct {
 	AgentID     *string                `json:"agent_id,omitempty"`
 	Environment *Environment           `json:"environment" binding:"required"`
 	// Input accepts a string or an ordered array of user InputMessage objects.
-	// Omission and null create an idle Session; non-text content is not supported yet.
+	// Required for none and streamed creation outside self_hosted; otherwise optional.
 	Input    any               `json:"input,omitempty" extensions:"x-nullable"`
 	Metadata map[string]string `json:"metadata,omitempty" extensions:"x-nullable"`
 	Stream   bool              `json:"stream,omitempty" default:"false"`
 	VaultIDs []string          `json:"vault_ids,omitempty"`
 }
 
+// UpdateSessionRequest requires metadata; null and an empty object clear it.
 type UpdateSessionRequest struct {
 	Metadata map[string]string `json:"metadata,omitempty" extensions:"x-nullable"`
 }

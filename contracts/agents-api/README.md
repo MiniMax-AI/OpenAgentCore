@@ -1,5 +1,6 @@
 # Agents API contract
 
+See the [58-operation evidence inventory](operation-evidence.md) for observed official behavior, local verification and remaining unknowns.
 The external reference is [openai-python beta/agents](https://github.com/openai/openai-python/tree/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents),
 pinned in `upstream.json`. Its resource methods, corresponding types, pagination
 and streaming helpers define the compatibility target. This directory records
@@ -358,8 +359,8 @@ upgrade the protocol.
   `stream` nor `agent_id` permits null. Metadata omission/null defaults to an empty
   map; individual values must be strings, including valid empty strings. Validate
   these distinctions before persistence rather than coercing null to Go zero values.
-- `POST /agents/sessions/{id}` updates metadata only: omission preserves it,
-  null or `{}` clears it, and an object replaces all pairs. Apply the same string
+- `POST /agents/sessions/{id}` updates metadata only: an empty update body
+  rejects; `metadata: null` or `metadata: {}` clears it, and an object replaces all pairs. Apply the same string
   and character limits as creation. Preserve execution state, effective configuration
   and the original creation retry identity. Fixed SDK/raw HTTP checks cover these
   distinctions, tenant isolation, active Session reads and restart persistence.
@@ -744,7 +745,11 @@ With `none`, this includes the first Turn and input Items. With `self_hosted`, i
 includes the initial reservation and connection action; preparation and Turn
 admission belong to the existing Worker. Creation returns while the executor is
 offline, and an initial deadline failure leaves a failed Session without a Turn.
-Omitted/null input creates an idle Session. Execution must be enabled and the
+Initial input is required for `none`, and for streamed creation outside
+`self_hosted`. Non-streaming hosted and self-hosted creation may omit input or
+supply null. These conditions apply before creation retry lookup; valid retries
+retain the same Session and never duplicate initial work. Existing Session reads
+and subsequent events are unaffected. Execution must be enabled and the
 configured engine must support admission before any initial work is persisted.
 
 Fixed SDK/raw HTTP and PostgreSQL tests cover the accepted forms, saved and inline

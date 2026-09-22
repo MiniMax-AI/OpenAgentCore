@@ -38,14 +38,17 @@ credential values belong in the repository or task board.
 - Current documentation supports Session Agent configuration updates; the fixed
   `SessionUpdateParams` exposes only metadata. New fields and newer Environment
   status/configuration shapes are a queued baseline upgrade, as approved by the user.
-- Official `none` creation rejected omitted, null and empty initial input. Core
-  still permits idle `none` Sessions. Changing this requires a coordinated client
-  and acceptance-flow migration and is separately queued.
+- The Session admission batch rejects missing/null input for `none` and for
+  streaming creation outside `self_hosted`. September 23 official probes confirmed
+  these conditions and idle self-hosted creation. Existing blank-text validation
+  remains stricter: official whitespace-only string input returned 201. This
+  newly found difference is queued rather than expanding the admission batch.
 - Two otherwise identical official creates with the same `Idempotency-Key`
   returned 201 and distinct Session IDs. Core retains its durable creation retry
   guarantee. This is a local behavior, not evidence of official idempotency parity.
-- An empty Session update body, generic validation codes/field `param`, malformed
-  queries, page limits and overlapping mutation behavior need separate qualification.
+- Empty Session update now returns the observed 400 error; explicit metadata null
+  and empty-object clearing remain supported. Generic validation codes/field `param`,
+  malformed queries, page limits and overlapping mutation behavior need qualification.
   The error mapping above must not be extrapolated to every status or resource.
 - Template references with inline installation overrides, optional Skill version
   semantics and the other active board entries remain outstanding.
@@ -75,3 +78,25 @@ found no blockers and independently ran API/contract tests. Rebase onto main
 `c96ea82` preserved every batch patch; the combined tree passed API/execution and
 three PostgreSQL scheduling regressions. Test resources were scoped to this batch.
 E2B, OAuth provider refresh and new native capability combinations were not requalified.
+
+## Session admission batch — September 23
+
+The conditional input requirements are checked before creation lookup, credential
+binding or execution. No idle-none legacy creation exception is retained; existing
+Session GET and events remain available. Valid creation requests keep the local
+same-key guarantee. An empty metadata update is rejected after authentication and
+before resource lookup; supplied metadata still uses the existing tenant-scoped
+update path.
+
+Core Web requires initial input for conversation-only creation. Hosted creation
+without input uses JSON; input-bearing creation retains SSE. If a creation stream
+fails before revealing the Session ID, the next user-initiated retry sends the
+same draft and key as JSON to recover that creation. It does not replay an input
+or introduce an automatic retry loop.
+
+The official probe made nine bounded create requests and created two owned
+Sessions (self-hosted without input and none with whitespace). Both were deleted
+successfully; no hosted environment was created. Metadata observations are reused
+from September 22. Evidence: `~/.parsar/remediation/20260923/session-admission-alignment/official/`.
+See [operation evidence](operation-evidence.md) for the wider 58-operation audit.
+Implementation validation is recorded separately when this batch completes.
