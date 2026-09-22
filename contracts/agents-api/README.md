@@ -320,7 +320,7 @@ including further deployment qualification; this inventory describes merged beha
   headers. Omitted/null `allowed_tools` is unrestricted; `[]` denies all tools.
   Session `vault_ids` attaches tenant-owned Vaults. Explicit `credential_id` must
   belong to an attached Vault and match the exact HTTPS URL; omission/null selects
-  one matching static credential, zero stays anonymous and ambiguity fails. Private
+  one matching static or OAuth credential, zero stays anonymous and ambiguity fails. Private
   immutable selections do not populate the public credential field. Scope is
   rechecked before dispatch-only decryption; authenticated execution requires the
   separate bearer capability and never downgrades on failure. Exact URL/selection

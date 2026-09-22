@@ -19,11 +19,11 @@ Parsar product execution and its eventual public-client cutover are separate.
 
 ## Reusable Agents
 
-Static-bearer Vault Credentials support creation, token replacement, deletion and
-safe metadata retrieval/listing. Vault deletion atomically removes its Credentials.
-Configure their independent encryption key and authenticated
-Session use through the [credential guide](credentials.md). OAuth remains a
-separate implementation gap.
+Static-bearer and OAuth Vault Credentials support creation, replacement, deletion
+and safe metadata retrieval/listing. Vault deletion atomically removes its
+Credentials. Configure their independent encryption key and authenticated Session
+use through the [credential guide](credentials.md); see [OAuth credentials](oauth-credentials.md)
+for application authorization, dispatch-time refresh and revocation boundaries.
 
 The pinned Python client can save configuration independently of execution:
 
@@ -604,7 +604,7 @@ name collisions, changing inventories and original MCP metadata fidelity remain
 gaps. Items retain the observed native JSON, which may differ from the original
 MCP envelope. See the [Claude SDK profile](../../CONTRIBUTING.md#claude-sdk-adapter-foundation).
 
-The current subset rejects OAuth, inline authorization, nonempty headers or
+The current subset rejects native OAuth login, inline authorization, nonempty headers or
 request metadata, URL userinfo/query/fragment, implicit/other origins, stdio
 and engines other than Codex/Claude SDK. The Codex adapter also
 rejects reserved native labels and stored native MCP credentials. It verifies

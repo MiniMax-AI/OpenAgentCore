@@ -169,8 +169,9 @@ an already-resolved or running request may still hold the previous token. Updati
 this resource performs no MCP call, changes no server-side token independently,
 and provides no in-flight revocation, hot reload or cancellation. Coordinate the
 destination's token change operationally. Replacing this token does not rotate the
-storage encryption key or reset its encryption budget. OAuth replacement and exact
-hosted overlapping-update, replay and timestamp semantics remain unverified.
+storage encryption key or reset its encryption budget. OAuth partial replacement
+is described in [OAuth credentials](oauth-credentials.md). Exact hosted
+overlapping-update, replay and timestamp semantics remain unverified.
 
 ## Delete a stored credential
 

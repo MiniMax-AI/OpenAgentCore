@@ -1313,7 +1313,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   pinned resource types. Saved-Agent updates never change existing Session
   snapshots; per-Session tools replace the whole field. The initial profile admits
   HTTP(S), boolean `required` (default false), empty/null metadata and empty/null headers.
-  Static bearer authentication requires HTTPS and the attached-Vault rules below.
+  Static and OAuth bearer authentication require HTTPS and the attached-Vault rules below.
   Inline authorization, URL userinfo/query/fragment,
   other origins and stdio remain explicitly unsupported.
 - Codex required MCP initialization additionally needs `mcp_http_required`, advertised
@@ -1352,8 +1352,8 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   with TLS verification.
   This execution profile rejects empty values and bytes outside RFC 6750 b64token
   syntax with generic errors; it never trims tokens or narrows opaque Credential
-  storage. OAuth and hosted redirect/error equivalence
-  remain separate work.
+  storage. Core-managed OAuth uses this same access-token path; native OAuth
+  login/refresh and hosted redirect/error equivalence remain separate work.
 - Session `vault_ids` omission/null/empty means `[]`; nonempty attachments must all
   belong to the authenticated tenant. Preserve caller order and public MCP
   `credential_id`. Saved Agents may store a nullable/nonempty credential reference
