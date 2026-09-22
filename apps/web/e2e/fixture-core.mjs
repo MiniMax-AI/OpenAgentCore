@@ -399,7 +399,7 @@ function initialState() {
       updateStatus: 200,
       deleteDelayMs: 0,
       deleteStatus: 200,
-      sendStatus: 204,
+      sendStatus: 202,
       sendResponseLoss: 0,
       itemsScenario: 0,
       turnsScenario: 0,
@@ -894,7 +894,7 @@ const server = http.createServer(async (request, response) => {
           metadata: body.metadata ?? {},
         };
         state.vaults.unshift(vault);
-        return sendJson(response, vault);
+        return sendJson(response, vault, 201);
       }
     }
 
@@ -924,7 +924,7 @@ const server = http.createServer(async (request, response) => {
         };
         state.credentials.unshift(credential);
         state.credentialTokens.add(credential.id);
-        return sendJson(response, credential);
+        return sendJson(response, credential, 201);
       }
     }
 
@@ -1023,7 +1023,7 @@ const server = http.createServer(async (request, response) => {
           return sendError(response, 409, "Fixture idempotency key was reused with a different Session request.");
         }
         if (body.stream === true) {
-          response.writeHead(200, {
+          response.writeHead(201, {
             "content-type": "text/event-stream; charset=utf-8",
             "cache-control": "no-cache, no-transform",
             connection: "keep-alive",
@@ -1032,7 +1032,7 @@ const server = http.createServer(async (request, response) => {
           setTimeout(() => response.end(), state.controls.sessionCreateStreamCloseDelayMs);
           return;
         }
-        return sendJson(response, receipt.session, 200);
+        return sendJson(response, receipt.session, 201);
       }
 
       const control = consumeControl("sessionCreate", 201);
@@ -1097,7 +1097,7 @@ const server = http.createServer(async (request, response) => {
       }
       if (body.stream === true) {
         const createdSnapshot = structuredClone(created);
-        response.writeHead(200, {
+        response.writeHead(201, {
           "content-type": "text/event-stream; charset=utf-8",
           "cache-control": "no-cache, no-transform",
           connection: "keep-alive",
@@ -1358,7 +1358,7 @@ const server = http.createServer(async (request, response) => {
           updated_at: created,
         };
         state.environmentTemplates.push(template);
-        return sendJson(response, template);
+        return sendJson(response, template, 201);
       }
       return sendError(response, 405, "This API method is not supported.", "unsupported_operation");
     }
@@ -1557,6 +1557,8 @@ const server = http.createServer(async (request, response) => {
         object: "list",
         data,
         has_more: start + data.length < sessionTurns.length,
+        first_id: data[0]?.id ?? null,
+        last_id: data.at(-1)?.id ?? null,
       });
     }
 
@@ -1564,14 +1566,14 @@ const server = http.createServer(async (request, response) => {
     if (request.method === "POST" && eventsMatch) {
       const status = state.controls.sendStatus;
       const responseLoss = state.controls.sendResponseLoss;
-      state.controls.sendStatus = 204;
+      state.controls.sendStatus = 202;
       state.controls.sendResponseLoss = 0;
       if (responseLoss) {
         response.destroy();
         return;
       }
-      if (status !== 204) return sendError(response, status, "Fixture send failed.");
-      response.writeHead(204);
+      if (status !== 202) return sendError(response, status, "Fixture send failed.");
+      response.writeHead(202);
       response.end();
       return;
     }

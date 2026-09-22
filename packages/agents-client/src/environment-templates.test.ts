@@ -84,7 +84,7 @@ describe("Environment Template resource", () => {
   });
 
   it("creates a Template with the supported fields only", async () => {
-    const { client, calls } = recordingClient(jsonResponse(template()));
+    const { client, calls } = recordingClient(jsonResponse(template(), 201));
 
     const created = await client.createEnvironmentTemplate({
       name: "Restricted outbound access",
@@ -111,7 +111,7 @@ describe("Environment Template resource", () => {
   });
 
   it("rejects a created Template whose configuration differs from the request", async () => {
-    const { client } = recordingClient(jsonResponse(template({ network: { access: "enabled", allowed_domains: [] } })));
+    const { client } = recordingClient(jsonResponse(template({ network: { access: "enabled", allowed_domains: [] } }), 201));
 
     await expect(client.createEnvironmentTemplate({ network: { access: "disabled" } }))
       .rejects.toBeInstanceOf(AgentCoreError);
