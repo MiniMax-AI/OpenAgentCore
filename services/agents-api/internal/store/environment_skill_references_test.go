@@ -86,6 +86,14 @@ func TestSkillReferencesFreezeWithinSessionCreation(t *testing.T) {
 		}
 	}
 	assertFrozen(sessionID, "1", first)
+	latest := input
+	latest.IdempotencyKey = uuid.NewString()
+	latest.Initialization.Skills = []EnvironmentSkill{{Metadata: EnvironmentSkillMetadata{Type: "skill_reference", SkillID: skill.ID, Version: "latest"}}}
+	latestSession, err := s.CreateSession(t.Context(), tenant, latest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFrozen(latestSession.ID, "2", second)
 	if input.Initialization.Skills[0].Metadata.Version != "" || len(input.Initialization.Skills[0].Archive) != 0 {
 		t.Fatal("creation mutated caller intent")
 	}
