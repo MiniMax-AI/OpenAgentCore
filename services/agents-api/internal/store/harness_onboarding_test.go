@@ -83,7 +83,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	for _, fields := range []string{`,"text":{"verbosity":"high"}`, `,"tools":[{"type":"function","name":"f","parameters":{"type":"object"}}]`} {
 		request("POST", "/v1/agents/sessions", `{"agent":{"model":"fixture"`+fields+`},"environment":{"type":"none"}}`, 400)
 	}
-	res := request("POST", "/v1/agents/sessions", `{"agent":{"model":"fixture"},"environment":{"type":"none"},"input":"hold"}`, 200)
+	res := request("POST", "/v1/agents/sessions", `{"agent":{"model":"fixture"},"environment":{"type":"none"},"input":"hold"}`, 201)
 	var created struct {
 		ID string `json:"id"`
 	}
@@ -98,7 +98,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	if first.AgentKind != "fixture_harness" || first.AgentSessionID != "" {
 		t.Fatal(first)
 	}
-	request("POST", "/v1/agents/sessions/"+created.ID+"/events", `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"finish"}]}]}]}`, 204)
+	request("POST", "/v1/agents/sessions/"+created.ID+"/events", `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"finish"}]}]}]}`, 202)
 	waitTurn(t, h, first.RunID, store.TurnCompleted)
 	turn, err := h.s.GetTurn(ctx, h.tenant, created.ID, first.RunID)
 	if err != nil {
@@ -116,12 +116,12 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	if err != nil || bound.NativeSessionID == "" {
 		t.Fatal(bound, err)
 	}
-	request("POST", "/v1/agents/sessions/"+created.ID+"/events", `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"hold"}]}]}]}`, 204)
+	request("POST", "/v1/agents/sessions/"+created.ID+"/events", `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"hold"}]}]}]}`, 202)
 	next := awaitOnboardingPrompt(t, started)
 	if next.RunID == first.RunID || next.AgentSessionID != bound.NativeSessionID || !next.StrictResume {
 		t.Fatal(next)
 	}
-	request("POST", "/v1/agents/sessions/"+created.ID+"/events", `{"events":[{"type":"agent.session.input.cancel"}]}`, 204)
+	request("POST", "/v1/agents/sessions/"+created.ID+"/events", `{"events":[{"type":"agent.session.input.cancel"}]}`, 202)
 	waitTurn(t, h, next.RunID, store.TurnCancelled)
 	// A missing mandatory receipt capability must prevent claiming queued work.
 	peer, _ := h.registry.LookupDevice(h.device.ID)
@@ -147,7 +147,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	res = request("POST", "/v1/agents/sessions", `{"agent":{"model":"fixture"},"environment":{"type":"none"},"input":"hold"}`, 200)
+	res = request("POST", "/v1/agents/sessions", `{"agent":{"model":"fixture"},"environment":{"type":"none"},"input":"hold"}`, 201)
 	if err = json.Unmarshal(res.Body.Bytes(), &created); err != nil {
 		t.Fatal(err)
 	}

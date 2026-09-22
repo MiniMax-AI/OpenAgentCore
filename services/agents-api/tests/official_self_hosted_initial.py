@@ -58,7 +58,7 @@ def main():
             value = current(case, status)
             assert sessions.create(**case["request"], extra_headers={"Idempotency-Key": case["key"]}).to_dict() == value
             response = post(case["request"], case["key"])
-            assert response.status_code == 200 and response.json() == value
+            assert response.status_code == 201 and response.json() == value
             return value
 
         phase = settings.get("phase", "create")
@@ -80,7 +80,7 @@ def main():
                             with client() as creator:
                                 return creator.beta.agents.sessions.create(**request, extra_headers={"Idempotency-Key": key}).to_dict()
                         reply = post(request, key)
-                        assert reply.status_code == 200
+                        assert reply.status_code == 201
                         return reply.json()
 
                     with ThreadPoolExecutor(max_workers=4) as workers:
@@ -100,7 +100,7 @@ def main():
                         assert created["session"]["created_at"] == created["session"]["last_active_at"]
                 elif mode == "raw_disconnect":
                     with raw.stream("POST", endpoint, json={**request, "stream": True}, headers={"Idempotency-Key": key}) as response:
-                        assert response.status_code == 200 and response.headers["content-type"] == "text/event-stream"
+                        assert response.status_code == 201 and response.headers["content-type"] == "text/event-stream"
                         created = next(json.loads(line[6:]) for line in response.iter_lines() if line.startswith("data: "))
                         assert created["type"] == "agent.session.created"
                         check(created["session"], "idle")
@@ -124,7 +124,7 @@ def main():
                 for suffix in ("", "/events", "/turns", "/items"):
                     assert raw.get(endpoint + "/" + case["id"] + suffix, headers={"Authorization": "Bearer " + settings["foreign_token"]}).status_code == 404
             foreign = post(cases[0]["request"], cases[0]["key"], key_token=settings["foreign_token"])
-            assert foreign.status_code == 200 and foreign.json()["id"] != cases[0]["id"]
+            assert foreign.status_code == 201 and foreign.json()["id"] != cases[0]["id"]
             assert raw.get(endpoint + "/" + foreign.json()["id"]).status_code == 404
             result = {"cases": cases}
         else:
@@ -184,7 +184,7 @@ def main():
                         response = post({**cases[0]["request"], "stream": streaming}, str(uuid.uuid4()), url=target)
                         assert response.status_code == 503 and response.json()["error"]["code"] == "execution_unavailable"
                     response = post(cases[1]["request"], cases[1]["key"], url=target)
-                    assert response.status_code == 200 and response.json() == cases[1]["snapshot"]
+                    assert response.status_code == 201 and response.json() == cases[1]["snapshot"]
                 assert {session.id for session in sessions.list()} == before
             else:
                 raise AssertionError("unknown test phase")
