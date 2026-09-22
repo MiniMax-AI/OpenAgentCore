@@ -217,8 +217,10 @@ func TestRuntimeObservationListRejectsWholePageOnIntegrityFailure(t *testing.T) 
 	if response.Code != http.StatusInternalServerError {
 		t.Fatalf("integrity failure returned %d: %s", response.Code, response.Body)
 	}
-	var envelope v1.ErrorResponse
-	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil || envelope.Error.Code == "" {
+	var envelope struct {
+		Error map[string]json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil || len(envelope.Error) == 0 {
 		t.Fatalf("integrity failure leaked a partial page: %s", response.Body)
 	}
 }
