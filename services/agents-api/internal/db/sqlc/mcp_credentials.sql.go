@@ -11,27 +11,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const findMCPStaticCredentials = `-- name: FindMCPStaticCredentials :many
+const findMCPCredentials = `-- name: FindMCPCredentials :many
 SELECT c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at
 FROM vault_credentials c
 JOIN vaults v ON v.id = c.vault_id
 WHERE v.tenant_id = $1
   AND v.id = ANY($2::uuid[])
-  AND c.auth_type = 'static_bearer'
+  AND c.auth_type IN ('static_bearer', 'mcp_oauth')
   AND c.mcp_server_url = $3
   AND ($4::uuid IS NULL OR c.id = $4::uuid)
 ORDER BY c.id
 LIMIT 2
 `
 
-type FindMCPStaticCredentialsParams struct {
+type FindMCPCredentialsParams struct {
 	TenantID     pgtype.UUID   `json:"tenant_id"`
 	VaultIds     []pgtype.UUID `json:"vault_ids"`
 	McpServerUrl string        `json:"mcp_server_url"`
 	CredentialID pgtype.UUID   `json:"credential_id"`
 }
 
-type FindMCPStaticCredentialsRow struct {
+type FindMCPCredentialsRow struct {
 	ID           pgtype.UUID        `json:"id"`
 	VaultID      pgtype.UUID        `json:"vault_id"`
 	Name         string             `json:"name"`
@@ -41,8 +41,8 @@ type FindMCPStaticCredentialsRow struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
-func (q *Queries) FindMCPStaticCredentials(ctx context.Context, arg FindMCPStaticCredentialsParams) ([]FindMCPStaticCredentialsRow, error) {
-	rows, err := q.db.Query(ctx, findMCPStaticCredentials,
+func (q *Queries) FindMCPCredentials(ctx context.Context, arg FindMCPCredentialsParams) ([]FindMCPCredentialsRow, error) {
+	rows, err := q.db.Query(ctx, findMCPCredentials,
 		arg.TenantID,
 		arg.VaultIds,
 		arg.McpServerUrl,
@@ -52,9 +52,9 @@ func (q *Queries) FindMCPStaticCredentials(ctx context.Context, arg FindMCPStati
 		return nil, err
 	}
 	defer rows.Close()
-	items := []FindMCPStaticCredentialsRow{}
+	items := []FindMCPCredentialsRow{}
 	for rows.Next() {
-		var i FindMCPStaticCredentialsRow
+		var i FindMCPCredentialsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.VaultID,

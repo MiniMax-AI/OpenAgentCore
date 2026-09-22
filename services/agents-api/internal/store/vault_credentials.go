@@ -2,12 +2,14 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/credentialcrypto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/oauthrefresh"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -21,6 +23,7 @@ var ErrCredentialStorageUnavailable = errors.New("credential encryption is not c
 type Credential struct {
 	ID, VaultID, Name, AuthType, MCPServerURL string
 	CreatedAt, UpdatedAt                      time.Time
+	OAuth                                     *OAuthMetadata
 }
 
 type CreateStaticCredentialInput struct {
@@ -30,9 +33,8 @@ type CreateStaticCredentialInput struct {
 // NewWithCredentialCipher configures immutable credential encryption before the
 // Store is published. A nil cipher leaves non-secret resource operations available.
 func NewWithCredentialCipher(pool *pgxpool.Pool, cipher *credentialcrypto.Cipher) *Store {
-	s := New(pool)
-	s.credentialCipher = cipher
-	return s
+	refresher, _ := oauthrefresh.NewClient(nil)
+	return NewWithCredentialCipherAndOAuthRefresh(pool, cipher, refresher)
 }
 
 func (s *Store) CreateStaticCredential(ctx context.Context, tenantID, vaultID string, input CreateStaticCredentialInput) (Credential, error) {
@@ -66,7 +68,7 @@ func (s *Store) CreateStaticCredential(ctx context.Context, tenantID, vaultID st
 	if err != nil {
 		return Credential{}, fmt.Errorf("create credential: %w", err)
 	}
-	return credentialFromRow(sqlc.GetCredentialRow(row)), nil
+	return credentialFromRow(sqlc.GetCredentialRow(row))
 }
 
 func (s *Store) GetCredential(ctx context.Context, tenantID, vaultID, credentialID string) (Credential, error) {
@@ -89,13 +91,27 @@ func (s *Store) GetCredential(ctx context.Context, tenantID, vaultID, credential
 	if err != nil {
 		return Credential{}, fmt.Errorf("get credential: %w", err)
 	}
-	return credentialFromRow(row), nil
+	return credentialFromRow(row)
 }
 
-func credentialFromRow(row sqlc.GetCredentialRow) Credential {
-	return Credential{
+func credentialFromRow(row sqlc.GetCredentialRow) (Credential, error) {
+	result := Credential{
 		ID: uuid.UUID(row.ID.Bytes).String(), VaultID: uuid.UUID(row.VaultID.Bytes).String(),
 		Name: row.Name, AuthType: row.AuthType, MCPServerURL: row.McpServerUrl,
 		CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
 	}
+	if row.AuthType == "mcp_oauth" {
+		result.OAuth = &OAuthMetadata{}
+		if err := json.Unmarshal(row.OauthMetadata, result.OAuth); err != nil {
+			return Credential{}, errors.New("invalid stored OAuth metadata")
+		}
+	}
+	return result, nil
+}
+
+// NewWithCredentialCipherAndOAuthRefresh configures the execution-only refresh boundary.
+func NewWithCredentialCipherAndOAuthRefresh(pool *pgxpool.Pool, cipher *credentialcrypto.Cipher, refresher oauthrefresh.Refresher) *Store {
+	s := New(pool)
+	s.credentialCipher, s.oauthRefresher = cipher, refresher
+	return s
 }

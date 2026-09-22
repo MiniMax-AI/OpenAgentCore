@@ -52,7 +52,11 @@ func (s *Store) ListCredentials(ctx context.Context, tenantID, vaultID, cursor s
 		rows = rows[:limit]
 	}
 	for _, row := range rows {
-		page.Credentials = append(page.Credentials, credentialFromRow(sqlc.GetCredentialRow(row)))
+		credential, err := credentialFromRow(sqlc.GetCredentialRow(row))
+		if err != nil {
+			return CredentialPage{}, err
+		}
+		page.Credentials = append(page.Credentials, credential)
 	}
 	return page, nil
 }
