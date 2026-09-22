@@ -19,7 +19,7 @@ func TestInitialInputUsesExecutionAdmissionAndSharedMessageValidation(t *testing
 		r.Header.Set("Idempotency-Key", "create-key")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
-		if w.Code != 200 || idle.tenant != "" || execution.tenant != tenant || execution.input.IdempotencyKey != "create-key" || len(execution.input.InitialInputs) != 1 || recorder.inputs != nil {
+		if w.Code != 201 || idle.tenant != "" || execution.tenant != tenant || execution.input.IdempotencyKey != "create-key" || len(execution.input.InitialInputs) != 1 || recorder.inputs != nil {
 			t.Fatal(w.Code, w.Body, execution.input)
 		}
 		expected, err := executionInputs([]json.RawMessage{json.RawMessage(`{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"First"}]}]}`)})
@@ -27,7 +27,7 @@ func TestInitialInputUsesExecutionAdmissionAndSharedMessageValidation(t *testing
 			t.Fatal(execution.input, err)
 		}
 	}
-	for _, value := range []string{`0`, `true`, `{}`, `[]`, `" "`, `[{"role":"user","unknown":true,"content":[{"type":"input_text","text":"x"}]}]`, `[{"role":"user","content":[{"type":"input_text","text":"x","unknown":true}]}]`, `[{"role":"assistant","content":[{"type":"input_text","text":"x"}]}]`} {
+	for _, value := range []string{`[{"type":null,"role":"user","content":[{"type":"input_text","text":"x"}]}]`, `[{"type":"","role":"user","content":[{"type":"input_text","text":"x"}]}]`, `0`, `true`, `{}`, `[]`, `" "`, `[{"role":"user","unknown":true,"content":[{"type":"input_text","text":"x"}]}]`, `[{"role":"user","content":[{"type":"input_text","text":"x","unknown":true}]}]`, `[{"role":"assistant","content":[{"type":"input_text","text":"x"}]}]`} {
 		if _, err := initialSessionInputs(json.RawMessage(value)); err == nil {
 			t.Fatal("invalid initial input accepted", value)
 		}

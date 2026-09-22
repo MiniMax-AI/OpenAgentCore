@@ -119,8 +119,5 @@ func (h *Handler) listSubagentItems(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	if page.Data == nil {
-		page.Data = []v1.Item{}
-	}
-	writeJSON(w, http.StatusOK, page)
+	writeJSON(w, http.StatusOK, itemListResponse(page.Data, page.HasMore))
 }

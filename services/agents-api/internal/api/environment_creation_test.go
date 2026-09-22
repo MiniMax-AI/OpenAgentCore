@@ -92,7 +92,7 @@ func TestSelfHostedEmptyCreationAndStream(t *testing.T) {
 						t.Fatal(err)
 					}
 					defer response.Body.Close()
-					if response.StatusCode != http.StatusOK {
+					if response.StatusCode != http.StatusCreated {
 						t.Fatal("empty creation rejected", response.StatusCode)
 					}
 					var session v1.Session

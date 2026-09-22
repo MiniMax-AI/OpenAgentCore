@@ -17,10 +17,10 @@ func TestSessionHarnessAdmission(t *testing.T) {
 		enabled                                     bool
 		status                                      int
 	}{
-		{"default", "", "", `{"type":"none"}`, "codex", false, 200},
-		{"explicit default", `,"x_agents_core":{"harness":"codex"}`, "", `{"type":"none"}`, "codex", false, 200},
-		{"claude", `,"x_agents_core":{"harness":"claude_sdk"}`, "", `{"type":"none"}`, "claude_sdk", true, 200},
-		{"mcode", `,"x_agents_core":{"harness":"mcode"}`, "", `{"type":"none"}`, "mcode", true, 200},
+		{"default", "", "", `{"type":"none"}`, "codex", false, 201},
+		{"explicit default", `,"x_agents_core":{"harness":"codex"}`, "", `{"type":"none"}`, "codex", false, 201},
+		{"claude", `,"x_agents_core":{"harness":"claude_sdk"}`, "", `{"type":"none"}`, "claude_sdk", true, 201},
+		{"mcode", `,"x_agents_core":{"harness":"mcode"}`, "", `{"type":"none"}`, "mcode", true, 201},
 		{"unavailable", `,"x_agents_core":{"harness":"claude_sdk"}`, "", `{"type":"none"}`, "", false, 400},
 		{"unknown", `,"x_agents_core":{"harness":"other"}`, "", `{"type":"none"}`, "", true, 400},
 		{"empty", `,"x_agents_core":{}`, "", `{"type":"none"}`, "", true, 400},

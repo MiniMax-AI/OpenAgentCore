@@ -33,7 +33,7 @@ def main():
 
         def mutate(**values):
             response = transport.post(control, json={"id":agent.id, **values})
-            assert response.status_code == 204
+            assert response.status_code == 202
 
         mutate(patch={"model":"changed-model", "instructions":"changed"})
         assert sessions.create(**spec, extra_headers=headers) == first

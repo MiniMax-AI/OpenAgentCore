@@ -53,12 +53,15 @@ def main():
         first = http.get(endpoint, headers=headers, params={"agent_id": root.id, "order": "asc", "limit": 2})
         assert first.status_code == 200 and first.json()["has_more"] is True
         assert [s["id"] for s in first.json()["data"]] == [s.id for s in selected[:2]]
+        assert first.json()["object"] == "list"
+        assert (first.json()["first_id"], first.json()["last_id"]) == (selected[0].id, selected[1].id)
         tail = http.get(endpoint, headers=headers, params={"agent_id": root.id, "order": "asc", "limit": 2, "after": selected[1].id})
         assert tail.status_code == 200 and tail.json()["has_more"] is False
         assert [s["id"] for s in tail.json()["data"]] == [s.id for s in selected[2:]]
+        assert (tail.json()["first_id"], tail.json()["last_id"]) == (selected[2].id, selected[-1].id)
         for value in ("", "unknown", root.id + " ", "' OR true --"):
             reply = http.get(endpoint, headers=headers, params={"agent_id": value})
-            assert reply.status_code == 200 and reply.json() == {"data": [], "has_more": False}
+            assert reply.status_code == 200 and reply.json() == {"object": "list", "data": [], "has_more": False, "first_id": None, "last_id": None}
         for query in ([("agent_id", root.id), ("agent_id", peer.id)], {"agent_id": root.id, "tenant_id": "other"}):
             assert http.get(endpoint, headers=headers, params=query).status_code == 400
         assert http.get(endpoint, headers=headers, params={"agent_id": root.id, "after": foreign_session.id}).status_code == 404

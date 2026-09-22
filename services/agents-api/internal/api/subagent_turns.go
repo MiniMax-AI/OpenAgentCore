@@ -3,7 +3,6 @@ package api
 import (
 	"net/http"
 
-	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -59,10 +58,7 @@ func (h *Handler) listSubagentTurns(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	if page.Data == nil {
-		page.Data = []v1.Turn{}
-	}
-	writeJSON(w, http.StatusOK, page)
+	writeJSON(w, http.StatusOK, turnListResponse(page.Data, page.HasMore))
 }
 
 // @Summary List a Subagent Turn's Items
@@ -90,8 +86,5 @@ func (h *Handler) listSubagentTurnItems(w http.ResponseWriter, r *http.Request) 
 		writeStoreError(w, r, err)
 		return
 	}
-	if page.Data == nil {
-		page.Data = []v1.Item{}
-	}
-	writeJSON(w, http.StatusOK, page)
+	writeJSON(w, http.StatusOK, itemListResponse(page.Data, page.HasMore))
 }

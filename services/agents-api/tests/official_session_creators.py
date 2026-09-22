@@ -42,7 +42,7 @@ def verify_session_creators(client, owner, other, rotated, peer, same_id, spec, 
                     assert response.json()["error"]["code"] == "idempotency_conflict"
                     assert_no_creator_fields(response.json()["error"])
             response = raw.post(endpoint, headers=auth | key, json=request)
-            assert response.status_code == 200 and response.json() == current.to_dict()
+            assert response.status_code == 201 and response.json() == current.to_dict()
             assert_no_creator_fields(response.json())
 
         # Inline requests reach the authoritative creation upsert. Untrusted
@@ -102,7 +102,7 @@ def verify_session_creators(client, owner, other, rotated, peer, same_id, spec, 
         key = {"Idempotency-Key": str(uuid.uuid4())}
         headers = auth | key | forged | {"Authorization": "Bearer " + typed_peer.api_key}
         with raw.stream("POST", endpoint, headers=headers, json=spec | {"stream": True}) as response:
-            assert response.status_code == 200 and response.headers["content-type"] == "text/event-stream"
+            assert response.status_code == 201 and response.headers["content-type"] == "text/event-stream"
             created = event_data(response.iter_lines())
             assert created["type"] == "agent.session.created"
             assert_no_creator_fields(created["session"])

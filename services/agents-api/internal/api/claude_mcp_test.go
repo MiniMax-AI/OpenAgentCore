@@ -46,7 +46,7 @@ func TestClaudeMCPAdmitsResolvedCredentials(t *testing.T) {
 			}
 			body := fmt.Sprintf(`{"agent":{"model":"model","tools":[%s]},"environment":{"type":"none"},"vault_ids":[%q]}`, tool, vault)
 			response := credentialRequest(h, "POST", "/v1/agents/sessions", body)
-			if response.Code != 200 || s.calls != 1 || s.tenant == "" {
+			if response.Code != 201 || s.calls != 1 || s.tenant == "" {
 				t.Fatal("credential selection or admission failed", response.Code, response.Body, s.calls)
 			}
 		})

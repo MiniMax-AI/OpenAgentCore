@@ -89,7 +89,7 @@ def run(sid, output=None, expected=None, cancel=False, failed_text=False, valida
                         assert post(sid, [{**result, "call_id": "unknown-call"}]).status_code in {400, 404, 409}
                         assert items(sid) == before
                     assert sessions.events.create(sid, events=[result], idempotency_key=key) is None
-                    assert post(sid, [result], key).status_code == 204
+                    assert post(sid, [result], key).status_code == 202
                     assert post(sid, [{**result, "output": "different"}], key).status_code == 409
                     proof["calls"].append({"turn": action.turn_id, "call": action.call_id, "output": output, "success": not failed_text})
             assert event.type not in {"agent.session.failed", "agent.session.turn.failed"}, event.to_dict()

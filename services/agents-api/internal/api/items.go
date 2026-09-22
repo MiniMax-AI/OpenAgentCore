@@ -1,7 +1,6 @@
 package api
 
 import (
-	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/go-chi/chi/v5"
 	"net/http"
 )
@@ -29,5 +28,5 @@ func (h *Handler) listItems(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, v1.ItemList{Data: page.Items, HasMore: page.HasMore})
+	writeJSON(w, http.StatusOK, itemListResponse(page.Items, page.HasMore))
 }

@@ -55,14 +55,15 @@ func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	h.serveSessionEvents(w, r, events, session, cursor, nil)
+	h.serveSessionEvents(w, r, events, session, cursor, nil, http.StatusOK)
 }
 
-func (h *Handler) serveSessionEvents(w http.ResponseWriter, r *http.Request, events eventStore, session store.Session, cursor int64, initial *v1.SessionEvent) {
+func (h *Handler) serveSessionEvents(w http.ResponseWriter, r *http.Request, events eventStore, session store.Session, cursor int64, initial *v1.SessionEvent, status int) {
 	id, tenant := session.ID, tenantID(r)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(status)
 	controller := http.NewResponseController(w)
 	write := func(data []byte) error {
 		if err := controller.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {

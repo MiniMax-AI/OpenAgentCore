@@ -52,7 +52,7 @@ def verify_creation_streams(client, raw, base, headers, foreign, unsupported):
         # A creation retry observes from the upsert cursor, with no old created/Turn/Item replay.
         with raw.stream("POST", base + "/v1/agents/sessions", headers={**headers, **key, "Last-Event-ID": first.event_id},
                         json={**request, "stream": True}) as response:
-            assert response.status_code == 200 and response.headers["content-type"] == "text/event-stream"
+            assert response.status_code == 201 and response.headers["content-type"] == "text/event-stream"
             lines = response.iter_lines()
             assert next(lines) == ": connected"
             previous_turns = {turn.id for turn in sessions.turns.list(session.id)}

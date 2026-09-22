@@ -25,7 +25,7 @@ func TestTextConfigurationHTTP(t *testing.T) {
 			req.Header.Set("OpenAI-Beta", "agents=v1")
 			response := httptest.NewRecorder()
 			h.ServeHTTP(response, req)
-			if response.Code != 200 {
+			if response.Code != 201 {
 				t.Fatal(response.Code, response.Body)
 			}
 			var got v1.Session

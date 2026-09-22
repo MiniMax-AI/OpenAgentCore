@@ -83,7 +83,7 @@ func (h *Handler) listTurns(w http.ResponseWriter, r *http.Request) {
 		}
 		response.Data = append(response.Data, item)
 	}
-	writeJSON(w, http.StatusOK, response)
+	writeJSON(w, http.StatusOK, turnListResponse(response.Data, response.HasMore))
 }
 
 func turnResponse(session store.Session, turn store.Turn) (v1.Turn, error) {

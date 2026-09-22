@@ -19,7 +19,7 @@ func TestPublicFunctionConfiguration(t *testing.T) {
 		req.Header.Set("OpenAI-Beta", "agents=v1")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, req)
-		if w.Code != 200 {
+		if w.Code != 201 {
 			t.Fatal(suffix, w.Code, w.Body)
 		}
 		var response v1.Session

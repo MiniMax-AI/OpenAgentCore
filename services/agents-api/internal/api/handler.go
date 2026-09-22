@@ -132,7 +132,7 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param Idempotency-Key header string false "Creation retry key, up to 128 bytes"
 // @Param body body v1.CreateSessionRequest true "Session configuration"
-// @Success 200 {object} v1.Session
+// @Success 201 {object} v1.Session
 // @Failure 400,401,404,409,413,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions [post]
 func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
@@ -266,7 +266,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	h.respondSession(w, r, session)
+	h.respondSessionStatus(w, r, session, http.StatusCreated)
 }
 
 // @Summary Retrieve an execution Session
@@ -293,12 +293,16 @@ func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) respondSession(w http.ResponseWriter, r *http.Request, session store.Session) {
+	h.respondSessionStatus(w, r, session, http.StatusOK)
+}
+
+func (h *Handler) respondSessionStatus(w http.ResponseWriter, r *http.Request, session store.Session, status int) {
 	response, err := sessionResponse(session, h.executorURL)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, response)
+	writeJSON(w, status, response)
 }
 
 // @Summary List execution Sessions
@@ -337,5 +341,5 @@ func (h *Handler) listSessions(w http.ResponseWriter, r *http.Request) {
 		}
 		response.Data = append(response.Data, item)
 	}
-	writeJSON(w, http.StatusOK, response)
+	writeJSON(w, http.StatusOK, sessionListResponse(response.Data, response.HasMore))
 }

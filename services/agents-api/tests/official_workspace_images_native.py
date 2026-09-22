@@ -143,7 +143,7 @@ def verify_workspace_images(client, foreign, http, model, kind, restart, evidenc
             assert post([{**result, "call_id": "unknown-call"}]).status_code in {400, 404, 409}
             assert items() == before
         sessions.events.create(sid, events=[result], idempotency_key=key)
-        assert post([result], key).status_code == 204
+        assert post([result], key).status_code == 202
         assert post([{**result, "output": "conflict"}], key).status_code == 409
         proof["calls"].append(result)
 
@@ -184,7 +184,7 @@ def verify_workspace_images(client, foreign, http, model, kind, restart, evidenc
             batch = [event(incoming)]
             sessions.events.create(sid, events=batch, idempotency_key="active-image")
             expected_messages.extend(incoming)
-            assert post(batch, "active-image").status_code == 204
+            assert post(batch, "active-image").status_code == 202
             assert post([event(messages([text("conflict")]))], "active-image").status_code == 409
             submit(action, "The user supplied an image. Follow its instructions, then stop.")
         turn = run(messages([text("Call get_visual once and wait. Then follow the incoming image instructions.")]), active)

@@ -64,7 +64,7 @@ func TestClaudeSessionConfigurationAdmission(t *testing.T) {
 					handler.ServeHTTP(response, request)
 					want := http.StatusBadRequest
 					if test.accepted {
-						want = http.StatusOK
+						want = http.StatusCreated
 						if stream || initial {
 							want = http.StatusServiceUnavailable
 						}
@@ -72,10 +72,10 @@ func TestClaudeSessionConfigurationAdmission(t *testing.T) {
 					if response.Code != want {
 						t.Fatalf("status %d, expected %d: %s", response.Code, want, response.Body)
 					}
-					if want != http.StatusOK && saved.tenant != "" {
+					if want != http.StatusCreated && saved.tenant != "" {
 						t.Fatal("rejected request persisted a Session")
 					}
-					if want == http.StatusOK && saved.input.Engine != "claude_sdk" {
+					if want == http.StatusCreated && saved.input.Engine != "claude_sdk" {
 						t.Fatal("wrong engine persisted")
 					}
 				})

@@ -73,7 +73,7 @@ func TestPreparedEnvironmentInputWaitExtendsOnlyItsResponseDeadline(t *testing.T
 			create.Header.Set("OpenAI-Beta", "agents=v1")
 			created := httptest.NewRecorder()
 			handler.ServeHTTP(created, create)
-			if created.Code != http.StatusOK {
+			if created.Code != http.StatusCreated {
 				t.Fatal("fixture creation failed", created.Code, created.Body.String())
 			}
 			if environment == "openai_hosted" {
@@ -121,7 +121,7 @@ func TestPreparedEnvironmentInputWaitExtendsOnlyItsResponseDeadline(t *testing.T
 					defer outcome.response.Body.Close()
 				}
 				if environment != "none" {
-					if outcome.err != nil || outcome.response.StatusCode != http.StatusNoContent {
+					if outcome.err != nil || outcome.response.StatusCode != http.StatusAccepted {
 						t.Fatal("prepared Environment wait lost its response to the ordinary timeout", outcome.err)
 					}
 				} else if outcome.err == nil {
