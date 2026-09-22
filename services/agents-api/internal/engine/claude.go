@@ -14,13 +14,13 @@ func claudeProfile() Profile {
 		ProgrammaticToolCallingDisable: true,
 		StructuredOutput:               true,
 		ToolSearch:                     true,
-		MessageImagePlacements:         []string{"none"},
+		MessageImagePlacements:         []string{"none", "openai_hosted"},
 		Placements:                     []string{"none", "openai_hosted", "self_hosted"}, MCPBearer: true,
 		ValidateConfiguration: validateClaudeConfiguration,
 		ValidateTools:         validateClaudeTools,
 		ValidateFunctionResult: func(placement string, result proto.FunctionResultPayload) error {
 			for _, part := range result.Content {
-				if part.Type == "input_image" && (!result.Success || placement != "none") {
+				if part.Type == "input_image" && (!result.Success || (placement != "none" && placement != "openai_hosted")) {
 					return ErrInvalidInput
 				}
 			}

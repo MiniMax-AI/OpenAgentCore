@@ -7,8 +7,8 @@ events share validation and atomic admission.
 
 ## Supported profile
 
-Codex and Claude SDK support inline PNG/JPEG data URIs on `environment:none`, for
-initial and active input and subsequent Turns. Use a real vision-capable model.
+Codex and Claude SDK support inline PNG/JPEG data URIs on `environment:none` and
+Core-managed Docker `openai_hosted`, for initial, prepared and active input. Use a real vision-capable model.
 The existing 1 MiB HTTP and 512 KiB durable input limits still apply. A successful
 events response acknowledges persistence, not native consumption. Active input
 advances its durable receipt only after the adapter confirms application.
@@ -90,11 +90,50 @@ five repetitions, and shared input/dispatch race checks passed. These checks do
 not qualify workspace images or additional native/provider combinations.
 Native-only probes are feasibility evidence, not public qualification.
 
-Workspace image workflows, MiniMax Code image input, remote HTTP(S) image URLs,
+## Docker workspace acceptance
+
+`tests/official_workspace_images_native.py` exposes `verify_workspace_images`
+for an operator-owned standalone deployment. Supply the fixed SDK clients for
+two tenants, their raw HTTP transport, a real vision model, the selected harness,
+a cold Core/Runtime restart callback and a private evidence path. It creates and
+deletes its own hosted Sessions; it never supplies model responses or credentials.
+
+The common workflow covers initial text/PNG/text input, prepared image-only JPEG
+followed by a separate message, active PNG input while a function waits, and a
+6000x2100 PNG function result. The model must read the band order from image pixels
+and write the corresponding bytes with native tools. Files listing and immutable
+Artifact downloads verify those bytes. SDK and HTTP Items must retain the original
+ordered input/results. The same workflow checks retry/conflict, unsupported-input
+non-mutation, tenant and same-tenant Session isolation, cold history continuation,
+pending cancellation and ordinary text after cancellation.
+
+Real Kimi K3 acceptance on 2026-09-22 passed this workflow for Codex 0.153.4 and
+Claude SDK 0.3.269/native 2.1.269. Evidence is retained under
+`zju_a100_2:~/.parsar/remediation/20260922/workspace-images/`:
+`codex/public-run-_lr5uiy_/` (152.78s) and
+`claude_sdk/public-run-sb65p9e9/` (197.84s). Each run completed seven public Turns,
+including one cancelled Turn, and cleaned up both owned hosted Sessions. Initial
+Codex attempts exposed two acceptance-script errors: treating an earlier idle
+event as the submitted Turn's completion and sending a scalar message to the
+array-only events endpoint in a conflict probe. Both failures are retained;
+production lifecycle behavior was not changed to obtain passing results.
+
+Here `openai_hosted` means the Core-managed Docker deployment, with daemon, native
+harness, tools and workspace in one sandbox. Image admission uses Environment type
+and the common operation-specific Runtime support; it adds no provider-name branch,
+media downloader, file permission or preparation lifecycle. Docker evidence does
+not qualify other providers or user-managed deployment. Claude keeps its native
+image-result receipt; Codex retains its documented transport-only result
+acknowledgement. Neither implies crash-safe exactly-once tool effects.
+
+## Remaining gaps
+
+Self-hosted/user-managed image workflows, MiniMax Code image input, remote HTTP(S) image URLs,
 other media types and full upstream error/default semantics remain unqualified.
 MiniMax's fixed ACP advertises `image:false`; its adapter rejects images. These are
 implementation gaps, not changes to the official protocol. JPEG parsing/conversion
-has deterministic coverage; the recorded real visual fixtures are PNG. Empty
+has deterministic coverage; the original `none` message fixtures are PNG, and
+the hosted workflow also exercises JPEG. Empty
 messages, local payload limits and native batch-size parity need upstream evidence.
-Function-result image support is unchanged by this batch. No full protocol
+Function-result image support has its own [coverage record](function-result-images.md). No full protocol
 compatibility or support for arbitrary vision-model/provider combinations is claimed.

@@ -33,7 +33,7 @@ func TestFunctionImageAdmission(t *testing.T) {
 			}
 		})
 	}
-	for _, placement := range []string{"openai_hosted", "self_hosted"} {
+	for _, placement := range []string{"self_hosted"} {
 		url := image
 		if err := profile.ValidateFunctionResult(placement, proto.FunctionResultPayload{Success: true, Content: []proto.InputContent{{Type: "input_image", ImageURL: &url}}}); !errors.Is(err, engine.ErrInvalidInput) {
 			t.Fatal("unqualified image placement", placement, err)

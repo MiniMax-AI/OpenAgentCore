@@ -2,7 +2,8 @@
 
 The pinned official function result accepts a string or ordered text/image content,
 independently of success. Our qualified Claude subset is successful inline PNG/JPEG
-on `environment:none`. Error images, workspace images and remote URLs reject before
+on `environment:none` and Core-managed Docker `openai_hosted`. Error images,
+unqualified placements and remote URLs reject before
 batch persistence, without consuming the pending call. These are implementation
 gaps, not narrower official types. MiniMax public functions remain unqualified.
 
@@ -50,7 +51,13 @@ unsupported placement, operation-specific Runtime support and batch atomicity.
 The bundled JPEG fixture has yellow, blue, red and green vertical bands; it contains
 no metadata or credentials. PNG markers are generated with randomized band order.
 
+The [Docker workspace workflow](message-input.md#docker-workspace-acceptance)
+uses the same function-result contract alongside native file tools, public
+Files/Artifacts and cold Core/Runtime continuation. It checks Claude's rejected
+error/remote result directly on an outstanding call before accepting a valid
+image on that same call; no mixed-message rejection substitutes for this check.
+
 The accepted combinations and run evidence are recorded in the task board. This
-batch does not qualify workspace image results, all native image limits, provider
+coverage does not qualify self-hosted/user-managed image results, all native image limits, provider
 parity, arbitrary managed output rewrites, crash recovery or full Agents API
 compatibility. No downloader, image converter or second tool loop belongs in Core.

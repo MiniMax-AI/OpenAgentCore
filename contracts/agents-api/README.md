@@ -418,7 +418,7 @@ operation and placement; native support is not public admission by itself.
 | Engine | Qualified placements and limits |
 | --- | --- |
 | `codex` (default) | Qualified `none` and Docker `openai_hosted`; public functions with ordered text/image results; service-origin HTTP MCP on `none` only; verbosity follows native policy |
-| `claude_sdk` | Qualified `none` and Docker `openai_hosted`; medium verbosity, object-root function schemas and text-only results; qualified anonymous/static-bearer service-origin HTTP MCP on `none` |
+| `claude_sdk` | Qualified `none` and Docker `openai_hosted`; medium verbosity, object-root function schemas and text or successful inline PNG/JPEG results; qualified anonymous/static-bearer service-origin HTTP MCP on `none` |
 | `mcode` | Qualified `none` text and Docker `openai_hosted`; medium verbosity; public functions/service-origin MCP, image input and complete public usage breakdown remain unsupported |
 
 All three profiles implement user-managed `self_hosted` enrollment at `/workspace`
@@ -654,7 +654,8 @@ inheritance uses the same resolved tools. The bounded [deferred discovery path](
 adds type-only `tool_search` for its qualified profile. Other discovery combinations, other tool kinds,
 the native 64-definition cap and unique nonblank names of at most 512 bytes remain
 compatibility gaps. Claude SDK additionally requires object-root schemas. It accepts text and
-successful inline PNG/JPEG function results on `none`; failed/workspace images and remote references
+successful inline PNG/JPEG function results on `none` and Docker `openai_hosted`;
+failed images, unqualified placements and remote references
 remain gaps. See [function image coverage](function-result-images.md). Codex internal Goal/Skills/user-input/discovery semantics need
 upstream evidence; their presence alone does not prove a tool-set mismatch.
 

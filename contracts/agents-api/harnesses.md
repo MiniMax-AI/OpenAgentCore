@@ -72,17 +72,18 @@ syntactically or everything either upstream harness can theoretically perform.
 | Docker hosted text execution, native local tools | Qualified | Qualified |
 | Files, immutable Artifacts, cancellation, restart/history recovery | Qualified | Qualified |
 | Public functions in `none` | Qualified | Qualified; object-root schemas; text or successful inline PNG/JPEG results |
-| Public functions alongside hosted workspace tools | Qualified | Qualified; object-root schemas and text results |
+| Public functions alongside hosted workspace tools | Qualified | Qualified; object-root schemas and text or successful inline PNG/JPEG results |
 | HTTP MCP and static-bearer Vault credentials in `none` | Qualified | Qualified subset |
 | Required MCP initialization | Qualified | Qualified on `none`; native readiness before initial input |
 | Hosted HTTP MCP | Gap | Gap |
-| Function image results | Supported subset; early acknowledgement is transport-only | Successful inline PNG/JPEG on `none`; native resizing allowed, error/workspace images rejected |
+| Function image results | Supported subset; early acknowledgement is transport-only | Successful inline PNG/JPEG on `none` and Docker `openai_hosted`; native resizing allowed, error images rejected |
 | Non-default verbosity | Native/model-dependent support | No equivalent qualified; medium only |
 | Public detailed Usage | Supported native counters | Native raw usage retained; public breakdown gap |
 | V1 `self_hosted` daemon enrollment at `/workspace` | [Qualified deployment scope](user-managed-runtime-v1.md) | [Qualified deployment scope](user-managed-runtime-v1.md) |
 | Deferred function discovery | Unqualified; explicit rejection | [Single-agent text/function profile](tool-search.md) |
 | Structured output | Unqualified; explicit rejection | [Qualified single-agent function profile](structured-output.md) |
-| Explicit reasoning, message images | Shared service gaps | Shared service gaps |
+| Message images | Inline PNG/JPEG on `none` and Docker `openai_hosted` | Inline PNG/JPEG on `none` and Docker `openai_hosted` |
+| Explicit reasoning | Shared service gap | Shared service gap |
 | Six Subagent reads | [Qualified scope](subagents.md) | [Qualified scope](subagents.md) |
 
 This inventory records supported combinations, not a feature-equality checklist.

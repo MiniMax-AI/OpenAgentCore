@@ -242,8 +242,11 @@ Image-bearing messages require a qualified profile/placement before persistence
 and image support from the selected Runtime before native delivery. These checks
 apply to that operation only; ordinary text retains offline queueing. Initial,
 prepared and active paths use the same content and preserve receipt ownership.
-The qualified public profile is inline PNG/JPEG on Codex/Claude `none`; workspace
-images, MiniMax images and remote URLs remain explicit implementation gaps. Core
+The qualified public profile is inline PNG/JPEG on Codex/Claude `none` and
+Core-managed Docker `openai_hosted`. Self-hosted/user-managed images, MiniMax
+images and remote URLs remain explicit implementation gaps. Hosted images reuse
+the existing preparation, active-input and workspace authority; they do not add
+a downloader, a mount or a separate execution lifecycle. Core
 does not fetch or transform media. See [message input coverage](contracts/agents-api/message-input.md).
 
 User-managed onboarding creates a `self_hosted` Session first, then passes its
@@ -2264,8 +2267,8 @@ Idle and initial-input Session creation qualify the resolved configuration befor
 persistence; saved Agent resources remain independent of engine restrictions.
 Claude additionally requires medium verbosity and explicit object-root function
 schemas. Function-result batches normalize through the existing shared parser. Claude accepts
-text results and, on `none`, successful ordered inline PNG/JPEG results;
-workspace images, failed image results and
+text results and, on `none` and Core-managed Docker `openai_hosted`, successful
+ordered inline PNG/JPEG results. Unqualified placements, failed image results and
 invalid/remote references reject before any batch write, preserving pending calls
 and retry identity. Public qualification receives the full neutral result so
 success-dependent limitations remain in the profile. Image-bearing delivery alone
