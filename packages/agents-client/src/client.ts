@@ -1,3 +1,6 @@
+import { exactFields, onlyFields, isRecord, hasOwn, canonicalUuid, isNonnegativeInteger, sameResourceId } from "./response-projection";
+import { projectTokenUsage } from "./usage-projection";
+import { projectAgentTurn, projectSessionItem, projectItemContent, projectHistoryPage, validateHistoryPageOptions } from "./history-projection";
 import { createSSEDecoder } from "./sse";
 import { projectVaultCredentialAuth, validCredentialURL } from "./vault-credential-auth";
 import type {
@@ -25,7 +28,6 @@ import type {
   FunctionResultContent,
   FunctionResultInput,
   InputMessage,
-  ItemContent,
   ListPage,
   PageOptions,
   ReadOptions,
@@ -151,8 +153,6 @@ const sourceFileFields = new Set([
 ]);
 const sourceFileDeletedFields = new Set(["id", "object", "deleted"]);
 const canonicalUuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const nilUuid = "00000000-0000-0000-0000-000000000000";
 const sourceFileIdPattern = /^file-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const maxSourceFileBytes = 512 * 1024 * 1024;
 const maxEnvironmentFileBytes = 50 * 1024 * 1024;
@@ -182,11 +182,6 @@ const agentSnapshotFields = new Set([
 const multiAgentFields = new Set(["enabled", "max_concurrent_subagents"]);
 const reasoningFields = new Set(["effort", "summary"]);
 const textFields = new Set(["format", "verbosity"]);
-const tokenUsageFields = new Set([
-  "input_tokens", "output_tokens", "total_tokens", "input_tokens_details", "output_tokens_details",
-]);
-const inputTokenDetailsFields = new Set(["cached_tokens"]);
-const outputTokenDetailsFields = new Set(["reasoning_tokens"]);
 const sessionStatuses = new Set(["idle", "in_progress", "requires_action", "failed"]);
 const serviceTiers = new Set(["auto", "default", "flex", "priority", "fast"]);
 const reasoningEfforts = new Set(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
@@ -200,16 +195,6 @@ const inputImageFields = new Set(["type", "image_url"]);
 const maxSessionInputEvents = 64;
 const maxSessionInputRequestBytes = 1024 * 1024;
 const goWhitespaceOnlyPattern = /^[\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*$/u;
-const turnFields = new Set([
-  "id", "agent_id", "session_id", "object", "status", "created_at", "started_at", "completed_at", "error", "usage",
-]);
-const turnErrorFields = new Set(["code", "message"]);
-const sessionItemFields = new Set([
-  "id", "turn_id", "type", "status", "role", "phase", "content", "command", "cwd", "duration_ms", "exit_code",
-  "name", "call_id", "server_label", "arguments", "output", "error", "action",
-]);
-const itemContentTextFields = new Set(["type", "text"]);
-const itemContentImageFields = new Set(["type", "image_url"]);
 const streamErrorFields = new Set(["code", "type", "message"]);
 const environmentStateFields = new Set(["id", "type", "status", "error"]);
 const snapshotEventFields = new Set(["type", "event_id", "session_id", "session"]);
@@ -229,31 +214,8 @@ const errorEventFields = new Set(["type", "event_id", "session_id", "error"]);
 const unsafeUnknownEventFields = new Set([
   "session", "turn", "turn_id", "item", "item_id", "output_index", "content_index", "part", "delta", "text", "error", "environment",
 ]);
-const knownItemTypes = new Set([
-  "message", "command_execution", "mcp_call", "function_call", "function_call_output", "web_search_call",
-]);
-const itemStatuses = new Set(["in_progress", "completed", "failed", "incomplete"]);
-const turnStatuses = new Set(["queued", "in_progress", "waiting", "completed", "failed", "cancelled"]);
-
-function exactFields(value: Record<string, unknown>, fields: Set<string>): boolean {
-  const keys = Object.keys(value);
-  return keys.length === fields.size && keys.every((key) => fields.has(key));
-}
-
-function onlyFields(value: Record<string, unknown>, fields: Set<string>): boolean {
-  return Object.keys(value).every((key) => fields.has(key));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
 function utf8Length(value: string): number {
   return new TextEncoder().encode(value).length;
-}
-
-function hasOwn(value: Record<string, unknown>, field: string): boolean {
-  return Object.prototype.hasOwnProperty.call(value, field);
 }
 
 function invalidSessionInputBatch(message = "Invalid Session input event batch."): never {
@@ -371,12 +333,6 @@ function isTrimmedName(value: unknown): value is string {
 
 function validMetadata(value: unknown): value is Record<string, string> {
   return isRecord(value) && Object.values(value).every((entry) => typeof entry === "string");
-}
-
-function canonicalUuid(value: unknown): string | null {
-  if (typeof value !== "string" || !uuidPattern.test(value)) return null;
-  const canonical = value.toLowerCase();
-  return canonical === nilUuid ? null : canonical;
 }
 
 function sameUuid(value: unknown, expected: string): boolean {
@@ -604,17 +560,6 @@ function environmentTemplateRequestBody(
 
 function invalidSessionResource(message = "Agent Core returned an invalid Session resource."): never {
   throw new AgentCoreError(message, 502, "invalid_session_resource");
-}
-
-function isNonnegativeInteger(value: unknown): value is number {
-  return Number.isSafeInteger(value) && Number(value) >= 0;
-}
-
-function sameResourceId(actual: string, expected: string): boolean {
-  if (actual === expected) return true;
-  const canonicalActual = canonicalUuid(actual);
-  const canonicalExpected = canonicalUuid(expected);
-  return canonicalActual !== null && canonicalExpected !== null && canonicalActual === canonicalExpected;
 }
 
 function projectAgentSnapshot(value: unknown): AgentSession["agent"] {
@@ -885,29 +830,6 @@ function projectRequiredActions(value: unknown): AgentSession["required_actions"
   });
 }
 
-function projectTokenUsage(value: unknown): AgentSession["usage"] {
-  if (value === null) return null;
-  if (!isRecord(value) || !exactFields(value, tokenUsageFields)) return invalidSessionResource();
-  const inputDetails = value.input_tokens_details;
-  const outputDetails = value.output_tokens_details;
-  if (
-    !isNonnegativeInteger(value.input_tokens) ||
-    !isNonnegativeInteger(value.output_tokens) ||
-    !isNonnegativeInteger(value.total_tokens) ||
-    !isRecord(inputDetails) || !exactFields(inputDetails, inputTokenDetailsFields) ||
-    !isNonnegativeInteger(inputDetails.cached_tokens) ||
-    !isRecord(outputDetails) || !exactFields(outputDetails, outputTokenDetailsFields) ||
-    !isNonnegativeInteger(outputDetails.reasoning_tokens)
-  ) return invalidSessionResource();
-  return {
-    input_tokens: value.input_tokens,
-    output_tokens: value.output_tokens,
-    total_tokens: value.total_tokens,
-    input_tokens_details: { cached_tokens: inputDetails.cached_tokens },
-    output_tokens_details: { reasoning_tokens: outputDetails.reasoning_tokens },
-  };
-}
-
 function projectAgentSession(
   value: unknown,
   expectedVaultIds?: string[],
@@ -972,7 +894,7 @@ function projectAgentSession(
     metadata: { ...value.metadata },
     required_actions: requiredActions,
     vault_ids: [...vaultIds] as string[],
-    usage: projectTokenUsage(value.usage),
+    usage: projectTokenUsage(value.usage, invalidSessionResource),
     created_at: value.created_at,
     last_active_at: value.last_active_at,
   };
@@ -991,163 +913,6 @@ function projectStreamError(value: unknown): StreamError {
     typeof value.message !== "string"
   ) return invalidStreamEvent();
   return { code: value.code, type: value.type, message: value.message };
-}
-
-function projectItemContent(value: unknown): ItemContent {
-  if (!isRecord(value) || typeof value.type !== "string") return invalidStreamEvent();
-  if (value.type === "input_text" || value.type === "output_text") {
-    if (!exactFields(value, itemContentTextFields) || typeof value.text !== "string") {
-      return invalidStreamEvent();
-    }
-    return { type: value.type, text: value.text };
-  }
-  if (
-    value.type !== "input_image" || !exactFields(value, itemContentImageFields) ||
-    typeof value.image_url !== "string"
-  ) return invalidStreamEvent();
-  return { type: "input_image", image_url: value.image_url };
-}
-
-function validOptionalInteger(value: unknown): boolean {
-  return value === undefined || value === null || isNonnegativeInteger(value);
-}
-
-function validOptionalSafeInteger(value: unknown): boolean {
-  return value === undefined || value === null || Number.isSafeInteger(value);
-}
-
-function projectWebSearchAction(value: unknown): SessionItem["action"] {
-  const fields = new Set(["type", "query", "queries", "url", "pattern"]);
-  if (
-    !isRecord(value) || !onlyFields(value, fields) ||
-    (value.type !== "search" && value.type !== "open_page" && value.type !== "find_in_page" && value.type !== "other") ||
-    !(value.query === undefined || value.query === null || typeof value.query === "string") ||
-    !(value.url === undefined || value.url === null || typeof value.url === "string") ||
-    !(value.pattern === undefined || value.pattern === null || typeof value.pattern === "string") ||
-    !(value.queries === undefined || (Array.isArray(value.queries) && value.queries.every((entry) => typeof entry === "string")))
-  ) return invalidStreamEvent();
-  return { ...value } as unknown as SessionItem["action"];
-}
-
-function itemVariantFields(type: string): Set<string> {
-  const common = ["id", "turn_id", "type", "status"];
-  switch (type) {
-    case "message": return new Set([...common, "role", "phase", "content"]);
-    case "command_execution": return new Set([...common, "command", "cwd", "duration_ms", "exit_code", "output"]);
-    case "mcp_call": return new Set([...common, "server_label", "name", "arguments", "output", "error"]);
-    case "function_call": return new Set([...common, "name", "call_id", "arguments"]);
-    case "function_call_output": return new Set([...common, "call_id", "output", "error", "duration_ms"]);
-    case "web_search_call": return new Set([...common, "action"]);
-    default: return new Set(common);
-  }
-}
-
-function projectSessionItem(value: unknown): SessionItem {
-  if (
-    !isRecord(value) || !onlyFields(value, sessionItemFields) ||
-    typeof value.id !== "string" || value.id === "" ||
-    typeof value.turn_id !== "string" || value.turn_id === "" ||
-    typeof value.type !== "string" || !knownItemTypes.has(value.type) ||
-    typeof value.status !== "string" || !itemStatuses.has(value.status) ||
-    !onlyFields(value, itemVariantFields(value.type))
-  ) return invalidStreamEvent();
-
-  const projected: Record<string, unknown> = {
-    id: value.id,
-    turn_id: value.turn_id,
-    type: value.type,
-    status: value.status,
-  };
-  switch (value.type) {
-    case "message":
-      if (
-        (value.role !== "user" && value.role !== "assistant") || !Array.isArray(value.content) ||
-        !(value.phase === undefined || value.phase === "commentary" || value.phase === "final_answer")
-      ) return invalidStreamEvent();
-      projected.role = value.role;
-      projected.content = Array.from(value.content, projectItemContent);
-      if (value.phase !== undefined) projected.phase = value.phase;
-      break;
-    case "command_execution":
-      if (
-        typeof value.command !== "string" ||
-        !(value.cwd === undefined || value.cwd === null || typeof value.cwd === "string") ||
-        !validOptionalInteger(value.duration_ms) || !validOptionalSafeInteger(value.exit_code)
-      ) return invalidStreamEvent();
-      projected.command = value.command;
-      for (const field of ["cwd", "duration_ms", "exit_code", "output"] as const) {
-        if (hasOwn(value, field)) projected[field] = value[field];
-      }
-      break;
-    case "mcp_call":
-      if (
-        typeof value.server_label !== "string" || value.server_label === "" ||
-        typeof value.name !== "string" || value.name === "" ||
-        !hasOwn(value, "arguments") || !hasOwn(value, "output") || !hasOwn(value, "error")
-      ) return invalidStreamEvent();
-      projected.server_label = value.server_label;
-      projected.name = value.name;
-      projected.arguments = value.arguments;
-      projected.output = value.output;
-      projected.error = value.error;
-      break;
-    case "function_call":
-      if (
-        typeof value.call_id !== "string" || value.call_id === "" ||
-        typeof value.name !== "string" || value.name === "" || !hasOwn(value, "arguments")
-      ) return invalidStreamEvent();
-      projected.call_id = value.call_id;
-      projected.name = value.name;
-      projected.arguments = value.arguments;
-      break;
-    case "function_call_output":
-      if (typeof value.call_id !== "string" || value.call_id === "" || !validOptionalInteger(value.duration_ms)) {
-        return invalidStreamEvent();
-      }
-      projected.call_id = value.call_id;
-      for (const field of ["output", "error", "duration_ms"] as const) {
-        if (hasOwn(value, field)) projected[field] = value[field];
-      }
-      break;
-    case "web_search_call":
-      // Parsar omits action when the runtime has not reported one yet.
-      if (hasOwn(value, "action")) projected.action = projectWebSearchAction(value.action);
-      break;
-  }
-  return projected as unknown as SessionItem;
-}
-
-function projectAgentTurn(value: unknown, expectedSessionId: string): AgentTurn {
-  if (
-    !isRecord(value) || !exactFields(value, turnFields) ||
-    typeof value.id !== "string" || value.id === "" ||
-    typeof value.agent_id !== "string" || value.agent_id === "" ||
-    typeof value.session_id !== "string" || !sameResourceId(value.session_id, expectedSessionId) ||
-    value.object !== "agent.session.turn" || typeof value.status !== "string" || !turnStatuses.has(value.status) ||
-    !isNonnegativeInteger(value.created_at) ||
-    !(value.started_at === null || isNonnegativeInteger(value.started_at)) ||
-    !(value.completed_at === null || isNonnegativeInteger(value.completed_at))
-  ) return invalidStreamEvent();
-  let error: AgentTurn["error"] = null;
-  if (value.error !== null) {
-    if (
-      !isRecord(value.error) || !exactFields(value.error, turnErrorFields) ||
-      value.error.code !== "internal_error" || typeof value.error.message !== "string"
-    ) return invalidStreamEvent();
-    error = { code: "internal_error", message: value.error.message };
-  }
-  return {
-    id: value.id,
-    agent_id: value.agent_id,
-    session_id: value.session_id,
-    object: "agent.session.turn",
-    status: value.status as AgentTurn["status"],
-    created_at: value.created_at,
-    started_at: value.started_at,
-    completed_at: value.completed_at,
-    error,
-    usage: projectTokenUsage(value.usage),
-  };
 }
 
 function requiredEventString(event: Record<string, unknown>, field: string, allowEmpty = false): string {
@@ -1188,6 +953,10 @@ function projectEnvironmentState(value: unknown, status: string): AgentSessionEn
 
 function invalidStreamEvent(message = "Agent Core returned an invalid event stream payload."): never {
   throw new AgentCoreError(message, 502, "invalid_stream_event");
+}
+
+function invalidHistoryResource(): never {
+  throw new AgentCoreError("Agent Core returned an invalid history resource.", 502, "invalid_history_resource");
 }
 
 function parseStreamEvent(message: { event?: string; data: string }): SessionEvent {
@@ -1268,10 +1037,12 @@ function projectStreamEventSession(
     if (!exactFields(value, turnEventFields) || event.turn === undefined) return invalidStreamEvent();
     const sessionId = eventSessionId(value, expectedSessionId, true)!;
     const turnId = requiredEventString(value, "turn_id");
-    const turn = projectAgentTurn(event.turn, expectedSessionId);
+    const turn = projectAgentTurn(event.turn, expectedSessionId, invalidStreamEvent);
     if (
-      !sameResourceId(turn.id, turnId) || turn.status !== turnStatusByEvent[event.type] ||
-      (immutable !== undefined && !sameResourceId(turn.agent_id, immutable.agent.id))
+      !sameResourceId(turn.id, turnId) ||
+      // Native child history can first appear as a completed created snapshot.
+      (!(event.type === "agent.session.turn.created" && turn.subagent_id != null) && turn.status !== turnStatusByEvent[event.type]) ||
+      (immutable !== undefined && turn.subagent_id == null && !sameResourceId(turn.agent_id, immutable.agent.id))
     ) return invalidStreamEvent();
     return { ...base, session_id: sessionId, turn_id: turnId, turn } as SessionEvent;
   }
@@ -1280,7 +1051,7 @@ function projectStreamEventSession(
     if (!onlyFields(value, itemEventFields) || event.item === undefined) return invalidStreamEvent();
     const sessionId = eventSessionId(value, expectedSessionId, true)!;
     const turnId = requiredEventString(value, "turn_id");
-    const item = projectSessionItem(event.item);
+    const item = projectSessionItem(event.item, invalidStreamEvent);
     if (!sameResourceId(item.turn_id, turnId)) return invalidStreamEvent();
     const itemId = value.item_id === undefined ? undefined : requiredEventString(value, "item_id");
     if (itemId !== undefined && !sameResourceId(item.id, itemId)) return invalidStreamEvent();
@@ -1302,7 +1073,7 @@ function projectStreamEventSession(
     const itemId = requiredEventString(value, "item_id");
     const outputIndex = optionalEventIndex(value, "output_index", true)!;
     const contentIndex = optionalEventIndex(value, "content_index", true)!;
-    const part = projectItemContent(value.part);
+    const part = projectItemContent(value.part, invalidStreamEvent);
     return { ...base, session_id: sessionId, turn_id: turnId, item_id: itemId, output_index: outputIndex, content_index: contentIndex, part } as SessionEvent;
   }
 
@@ -2331,26 +2102,32 @@ export class OpenAIAgentsClient implements AgentCore {
     return this.request(`/agents/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
   }
 
-  listItems(sessionId: string, options?: PageOptions & { signal?: AbortSignal }): Promise<ListPage<SessionItem>> {
+  async listItems(sessionId: string, options?: PageOptions & ReadOptions): Promise<ListPage<SessionItem>> {
+    validateHistoryPageOptions(options);
     const params = new URLSearchParams();
     addPageOptions(params, options);
-    return this.request(withQuery(`/agents/sessions/${encodeURIComponent(sessionId)}/items`, params), {
+    const value = await this.request<unknown>(withQuery(`/agents/sessions/${encodeURIComponent(sessionId)}/items`, params), {
       signal: options?.signal,
     });
+    return projectHistoryPage(value, options, (entry) => projectSessionItem(entry, invalidHistoryResource), invalidHistoryResource);
   }
 
-  listTurns(sessionId: string, options?: PageOptions & ReadOptions): Promise<ListPage<AgentTurn>> {
+  async listTurns(sessionId: string, options?: PageOptions & ReadOptions): Promise<ListPage<AgentTurn>> {
+    validateHistoryPageOptions(options);
     const params = new URLSearchParams();
     addPageOptions(params, options);
-    return this.request(withQuery(`/agents/sessions/${encodeURIComponent(sessionId)}/turns`, params), {
+    const value = await this.request<unknown>(withQuery(`/agents/sessions/${encodeURIComponent(sessionId)}/turns`, params), {
       signal: options?.signal,
     });
+    return projectHistoryPage(value, options, (entry) => projectAgentTurn(entry, sessionId, invalidHistoryResource), invalidHistoryResource);
   }
 
-  retrieveTurn(sessionId: string, turnId: string): Promise<AgentTurn> {
-    return this.request(
+  async retrieveTurn(sessionId: string, turnId: string, options?: ReadOptions): Promise<AgentTurn> {
+    const value = await this.request<unknown>(
       `/agents/sessions/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(turnId)}`,
+      { signal: options?.signal },
     );
+    return projectAgentTurn(value, sessionId, invalidHistoryResource, turnId);
   }
 
   submitEvents(

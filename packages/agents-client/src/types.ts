@@ -494,9 +494,10 @@ export interface InputMessage {
 export type ItemStatus = "in_progress" | "completed" | "failed" | "incomplete";
 
 export interface ItemContent {
-  type: "input_text" | "output_text" | "input_image";
+  type: "input_text" | "output_text" | "input_image" | "encrypted_content";
   text?: string | null;
   image_url?: string;
+  encrypted_content?: string;
 }
 
 export type KnownSessionItemType =
@@ -505,14 +506,23 @@ export type KnownSessionItemType =
   | "mcp_call"
   | "function_call"
   | "function_call_output"
-  | "web_search_call";
+  | "web_search_call"
+  | "reasoning"
+  | "agent_message"
+  | "create_subagent_call"
+  | "send_subagent_input_call"
+  | "resume_subagent_call"
+  | "wait_for_subagents_call"
+  | "interrupt_subagent_call"
+  | "close_subagent_call";
 
 export type UnknownSessionItemType = string & { readonly [unknownItemType]: true };
 
 export interface SessionItemBase {
   id: string;
   turn_id: string;
-  status: ItemStatus;
+  /** Inter-agent messages have no status; reasoning may have an unknown status. */
+  status?: ItemStatus | null;
   role?: "user" | "assistant";
   phase?: "commentary" | "final_answer";
   content?: ItemContent[];
@@ -527,6 +537,13 @@ export interface SessionItemBase {
   output?: unknown;
   error?: unknown;
   action?: WebSearchAction;
+  agent_id?: string;
+  sender_agent_id?: string;
+  recipient_agent_id?: string;
+  recipient_agent_ids?: string[];
+  model?: string | null;
+  reasoning_effort?: string | null;
+  summary?: { type: "summary_text"; text: string }[];
 }
 
 export interface KnownSessionItem extends SessionItemBase {
@@ -553,6 +570,7 @@ export type TurnStatus = "queued" | "in_progress" | "waiting" | "completed" | "f
 export interface AgentTurn {
   id: string;
   agent_id: string;
+  subagent_id?: string | null;
   session_id: string;
   object: "agent.session.turn";
   status: TurnStatus;
@@ -736,7 +754,7 @@ export interface AgentCore {
   deleteSession(sessionId: string): Promise<SessionDeleted>;
   listItems(sessionId: string, options?: PageOptions & ReadOptions): Promise<ListPage<SessionItem>>;
   listTurns(sessionId: string, options?: PageOptions & ReadOptions): Promise<ListPage<AgentTurn>>;
-  retrieveTurn(sessionId: string, turnId: string): Promise<AgentTurn>;
+  retrieveTurn(sessionId: string, turnId: string, options?: ReadOptions): Promise<AgentTurn>;
   submitEvents(sessionId: string, events: readonly SessionInputEvent[], idempotencyKey: string): Promise<void>;
   sendMessage(sessionId: string, text: string, idempotencyKey: string): Promise<void>;
   cancelTurn(sessionId: string, idempotencyKey: string): Promise<void>;
