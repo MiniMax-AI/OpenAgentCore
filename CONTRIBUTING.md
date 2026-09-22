@@ -1666,6 +1666,8 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   Uncertain receipt timeout ends that native execution without resending the result.
   The common Runtime interface and router continue to own delivery identity,
   retry/conflict and terminal ordering; Core never parses native tool events.
+  Record native confirmation before potentially blocking observation publication;
+  output backpressure cannot turn a known application into an unknown outcome.
 - Internal function execution requires an advertised `function_tools` capability
   before claiming a Turn. Translate resolved definitions in the execution adapter,
   persist declared callbacks before exposing actions, and deliver each saved result

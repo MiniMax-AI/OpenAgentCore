@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
+	"runtime"
 	"testing"
 	"time"
 
@@ -51,10 +54,15 @@ func TestFunctionResultWaitsForNativeCompletion(t *testing.T) {
 }
 
 func pendingReceipt(t *testing.T) (*Session, ServerSide, <-chan error, proto.FunctionResultPayload) {
+	return pendingReceiptContext(t, t.Context())
+}
+
+func pendingReceiptContext(t *testing.T, ctx context.Context) (*Session, ServerSide, <-chan error, proto.FunctionResultPayload) {
 	t.Helper()
 	client, server, cleanup := NewTestClient()
 	t.Cleanup(cleanup)
 	s, out := newInteractionTestSession(client.JSONRPCClient)
+	s.cfg.logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	s.setThreadID("thread")
 	s.startSteering("thread", "turn")
 	s.functions, _ = prepareFunctionTools([]proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object"}`)}})
@@ -65,7 +73,7 @@ func pendingReceipt(t *testing.T) (*Session, ServerSide, <-chan error, proto.Fun
 	value := "unpredictable caller result"
 	result := proto.FunctionResultPayload{CallID: "call", DeliveryID: "delivery", Success: true, Content: []proto.InputContent{{Type: "input_text", Text: &value}}}
 	done := make(chan error, 1)
-	go func() { done <- s.SubmitFunctionResult(t.Context(), result) }()
+	go func() { done <- s.SubmitFunctionResult(ctx, result) }()
 	var frame JsonRpcResponse
 	if err := json.NewDecoder(server.FromClient).Decode(&frame); err != nil {
 		t.Fatal(err)
@@ -214,5 +222,58 @@ func TestFunctionReceiptWinsSimultaneousDeadline(t *testing.T) {
 		if err != nil || cancelled != nil {
 			t.Fatalf("confirmed result lost to deadline: result=%v execution=%v", err, cancelled)
 		}
+	}
+}
+
+func TestFunctionReceiptSurvivesObservationBackpressure(t *testing.T) {
+	for _, cause := range []string{"deadline", "cancel", "terminal"} {
+		t.Run(cause, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			s, _, receipt, _ := pendingReceiptContext(t, ctx)
+			out := make(chan proto.Envelope, 1)
+			s.out = out
+			out <- proto.Envelope{Type: "occupied"}
+			published := make(chan struct{})
+			go func() {
+				defer close(published)
+				s.onItemCompleted(nativeFunctionReceipt("thread", "turn", "call", "lookup", "true", "completed", `[{"type":"inputText","text":"unpredictable caller result"}]`))
+			}()
+			// A held output lock proves the native event passed identity checks and is
+			// now blocked publishing into the deliberately full observation channel.
+			deadline := time.Now().Add(time.Second)
+			for s.outMu.TryLock() {
+				s.outMu.Unlock()
+				if time.Now().After(deadline) {
+					t.Fatal("completion did not reach blocked publication")
+				}
+				runtime.Gosched()
+			}
+			switch cause {
+			case "deadline":
+				cancel()
+			case "cancel":
+				s.cancelled.Store(true)
+				s.stopFunctionCalls()
+				s.cancelFn()
+			case "terminal":
+				s.terminal.Store(true)
+				s.stopFunctionCalls()
+			}
+			select {
+			case err := <-receipt:
+				if err != nil {
+					t.Fatalf("known native result lost during %s: %v", cause, err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("receipt waited for observation publication")
+			}
+			<-out
+			select {
+			case <-published:
+			case <-time.After(time.Second):
+				t.Fatal("observation publisher did not settle")
+			}
+		})
 	}
 }
