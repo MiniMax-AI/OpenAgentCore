@@ -39,7 +39,7 @@ func writeError(w http.ResponseWriter, status int, code, message string, param .
 	writeJSON(w, status, v1.ErrorResponse{Error: v1.APIError{Message: message, Type: kind, Code: errorCode, Param: errorParam}})
 }
 
-func writeStoreError(w http.ResponseWriter, r *http.Request, err error) {
+func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFoundParam ...string) {
 	switch {
 	case errors.Is(err, store.ErrDefaultSkillVersion):
 		writeError(w, http.StatusBadRequest, "invalid_request", "Change the default version before deleting this Skill version.")
@@ -61,7 +61,7 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error) {
 		if strings.HasPrefix(r.URL.Path, "/v1/files/") || strings.HasPrefix(r.URL.Path, "/v1/skills/") || r.URL.Path == "/v1/files" || r.URL.Path == "/v1/skills" {
 			code = ""
 		}
-		writeError(w, http.StatusNotFound, code, "Resource not found.")
+		writeError(w, http.StatusNotFound, code, "Resource not found.", notFoundParam...)
 	case errors.Is(err, store.ErrTurnConflict):
 		writeError(w, http.StatusConflict, "turn_conflict", "The Turn cannot accept this input in its current state.")
 	case errors.Is(err, store.ErrIdempotencyConflict):

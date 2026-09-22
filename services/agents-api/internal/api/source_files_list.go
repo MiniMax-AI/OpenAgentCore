@@ -28,7 +28,7 @@ func (h *Handler) listSourceFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	page, err := h.sourceFiles.ListSourceFiles(r.Context(), tenantID(r), options.after, options.limit, options.ascending, purpose)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeStoreError(w, r, err, "after")
 		return
 	}
 	response := v1.SourceFileList{Object: "list", Data: make([]v1.SourceFile, 0, len(page.Files)), HasMore: page.NextCursor != ""}

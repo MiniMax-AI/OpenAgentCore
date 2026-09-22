@@ -29,10 +29,10 @@ func (h *Handler) sourceFileContent(w http.ResponseWriter, r *http.Request) {
 		return h.sourceFiles.ReadSourceFile(ctx, tenantID(r), chi.URLParam(r, "file_id"), func(file store.SourceFile, body io.Reader) error {
 			return consume(file.Filename, file.SizeBytes, body)
 		})
-	})
+	}, "id")
 }
 
-func serveStoredContent(w http.ResponseWriter, r *http.Request, read func(context.Context, func(string, int64, io.Reader) error) error) {
+func serveStoredContent(w http.ResponseWriter, r *http.Request, read func(context.Context, func(string, int64, io.Reader) error) error, notFoundParam ...string) {
 	deadline := time.Now().Add(sourceTransferTimeout)
 	if http.NewResponseController(w).SetWriteDeadline(deadline) != nil {
 		writeError(w, http.StatusServiceUnavailable, "file_transfer_unavailable", "Bounded file transfer is unavailable.")
@@ -59,6 +59,6 @@ func serveStoredContent(w http.ResponseWriter, r *http.Request, read func(contex
 		if started {
 			panic(http.ErrAbortHandler)
 		}
-		writeStoreError(w, r, err)
+		writeStoreError(w, r, err, notFoundParam...)
 	}
 }
