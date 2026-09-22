@@ -66,7 +66,7 @@ def main():
         equivalent = spec | {"input":[{"role":"user","content":[{"type":"input_text","text":"initial"}]}], "metadata":{}, "stream":False}
         assert transport.post(endpoint, headers=auth, json=equivalent).json()["id"] == first.id
         with transport.stream("POST", endpoint, headers=auth, json=spec | {"stream":True}) as stream:
-            assert stream.status_code == 200
+            assert stream.status_code == 201
             sessions.events.create(first.id, events=[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"future-after-retry"}]}]}])
             found = False
             deadline = time.monotonic() + 15

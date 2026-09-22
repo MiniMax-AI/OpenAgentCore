@@ -4,6 +4,7 @@ definitions:
     properties:
       code:
         type: string
+        x-nullable: true
       message:
         type: string
       param:
@@ -12,7 +13,6 @@ definitions:
       type:
         type: string
     required:
-    - code
     - message
     - type
     type: object
@@ -254,6 +254,7 @@ definitions:
   v1.CredentialAuthInput:
     properties:
       access_token:
+        minLength: 1
         type: string
       expires_at:
         type: string
@@ -265,6 +266,7 @@ definitions:
         - $ref: '#/definitions/v1.OAuthCredentialRefreshInput'
         x-nullable: true
       token:
+        minLength: 1
         type: string
       type:
         enum:
@@ -278,6 +280,7 @@ definitions:
   v1.CredentialAuthReplacement:
     properties:
       access_token:
+        minLength: 1
         type: string
         x-nullable: true
       expires_at:
@@ -288,6 +291,7 @@ definitions:
         - $ref: '#/definitions/v1.OAuthCredentialRefreshReplacement'
         x-nullable: true
       token:
+        minLength: 1
         type: string
       type:
         enum:
@@ -869,11 +873,22 @@ definitions:
         items:
           $ref: '#/definitions/v1.Item'
         type: array
+      first_id:
+        type: string
+        x-nullable: true
       has_more:
         type: boolean
+      last_id:
+        type: string
+        x-nullable: true
+      object:
+        enum:
+        - list
+        type: string
     required:
     - data
     - has_more
+    - object
     type: object
   v1.ModelProviderInput:
     properties:
@@ -1409,11 +1424,22 @@ definitions:
         items:
           $ref: '#/definitions/v1.Session'
         type: array
+      first_id:
+        type: string
+        x-nullable: true
       has_more:
         type: boolean
+      last_id:
+        type: string
+        x-nullable: true
+      object:
+        enum:
+        - list
+        type: string
     required:
     - data
     - has_more
+    - object
     type: object
   v1.Skill:
     properties:
@@ -1828,11 +1854,22 @@ definitions:
         items:
           $ref: '#/definitions/v1.Turn'
         type: array
+      first_id:
+        type: string
+        x-nullable: true
       has_more:
         type: boolean
+      last_id:
+        type: string
+        x-nullable: true
+      object:
+        enum:
+        - list
+        type: string
     required:
     - data
     - has_more
+    - object
     type: object
   v1.UpdateAgentRequest:
     properties:
@@ -2075,8 +2112,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/v1.SavedAgent'
         "400":
@@ -2196,9 +2233,10 @@ paths:
       - application/json
       description: Preserves omitted fields and replaces supplied fields using shared
         saved-configuration validation. Null name/instructions clear; null or empty
-        metadata clears all pairs. Existing Session snapshots are unchanged. Nested
-        replacement/null defaults, model-derived reasoning and exact hosted error/no-op
-        timestamp behavior remain incompletely verified.
+        metadata clears all pairs. Existing Session snapshots are unchanged. Empty
+        updates advance updated_at without changing saved fields. Nested replacement/null
+        defaults, model-derived reasoning and exact hosted error behavior remain incompletely
+        verified.
       parameters:
       - description: agents=v1
         in: header
@@ -2530,8 +2568,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/v1.EnvironmentTemplate'
         "400":
@@ -2652,8 +2690,8 @@ paths:
         capability directories replace as lists; null/empty clears. Plugin archives
         are encrypted and omitted from responses. Capability directories are snapshotted
         after setup. Environment MCP execution requires a qualified native transport
-        and runtime network policy. Exact hosted no-op timestamp behavior remains
-        unverified.
+        and runtime network policy. Empty updates advance updated_at without changing
+        saved fields or confidential contents.
       parameters:
       - description: agents=v1
         in: header
@@ -2871,8 +2909,8 @@ paths:
       - application/json
       - text/event-stream
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/v1.Session'
         "400":
@@ -3340,21 +3378,22 @@ paths:
     post:
       consumes:
       - application/json
-      description: For environment none, atomically accepts text messages, cancellation
-        and function results. Messages steer active work or start a queued Turn. The
-        supported self_hosted profile accepts text-only messages; qualified Codex
-        and Claude SDK openai_hosted profiles also accept inline PNG/JPEG. Under the
-        Session lock, matching retries retain their original target; new active messages
-        append to the current Turn, while idle messages reserve work and wait up to
-        the original five-minute connection/admission deadline. Return 204 only after
-        durable admission, without claiming native application; active messages create
-        no Turn or reservation. Cancellation-only prepared-environment batches use
-        existing durable cancellation admission and return 204 without waiting for
-        native exit; a new cancellation conflicts while a pre-Turn reservation is
-        pending. Homogeneous tool_result-only prepared-environment batches reuse existing
-        scoped result admission and application receipts without creating a Turn or
-        bypassing a pending reservation. Mixed prepared-environment batches remain
-        unsupported. HTTP expiry/cancellation use local 409 environment_input_expired/environment_input_cancelled
+      description: An empty events array is a resource-authorized no-op; it creates
+        no execution retry identity, Turn, Item or input receipt. For environment
+        none, atomically accepts text messages, cancellation and function results.
+        Messages steer active work or start a queued Turn. The supported self_hosted
+        profile accepts text-only messages; qualified Codex and Claude SDK openai_hosted
+        profiles also accept inline PNG/JPEG. Under the Session lock, matching retries
+        retain their original target; new active messages append to the current Turn,
+        while idle messages reserve work and wait up to the original five-minute connection/admission
+        deadline. Return 202 only after durable admission, without claiming native
+        application; active messages create no Turn or reservation. Cancellation-only
+        prepared-environment batches use existing durable cancellation admission and
+        return 202 without waiting for native exit; a new cancellation conflicts while
+        a pre-Turn reservation is pending. Homogeneous tool_result-only prepared-environment
+        batches reuse existing scoped result admission and application receipts without
+        creating a Turn or bypassing a pending reservation. Mixed prepared-environment
+        batches remain unsupported. HTTP expiry/cancellation use local 409 environment_input_expired/environment_input_cancelled
         errors; exact hosted failure mapping is unverified. Losing execution ownership
         returns 503. The response write deadline accommodates the admission window
         for either prepared Environment, independently of new-hosted-admission and
@@ -3391,8 +3430,8 @@ paths:
         schema:
           $ref: '#/definitions/v1.CreateEventsRequest'
       responses:
-        "204":
-          description: No Content
+        "202":
+          description: Accepted
         "400":
           description: Bad Request
           schema:
@@ -4633,8 +4672,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/v1.Vault'
         "400":
@@ -4840,15 +4879,16 @@ paths:
       consumes:
       - application/json
       description: Stores static_bearer or mcp_oauth secrets as execution-owned authenticated
-        ciphertext without contacting any endpoint. OAuth accepts a required access
-        token, nullable RFC3339 expiry and optional refresh configuration with none,
-        client_secret_basic or client_secret_post authentication. Required name is
-        trimmed to 1–256 UTF-8 bytes. Credential and token endpoints require HTTPS
-        without userinfo or fragments. Responses contain safe metadata only, including
-        explicit nullable OAuth expiry, refresh, resource and scope. Missing encryption
-        configuration returns local 503. External authorization and provider revocation
-        remain caller responsibilities; exact hosted error/default semantics remain
-        unverified.
+        ciphertext without contacting any endpoint. Static bearer and OAuth access
+        tokens must be nonempty strings; their bytes are preserved. OAuth accepts
+        a required access token, nullable RFC3339 expiry and optional refresh configuration
+        with none, client_secret_basic or client_secret_post authentication. Required
+        name is trimmed to 1–256 UTF-8 bytes. Credential and token endpoints require
+        HTTPS without userinfo or fragments. Responses contain safe metadata only,
+        including explicit nullable OAuth expiry, refresh, resource and scope. Missing
+        encryption configuration returns local 503. External authorization and provider
+        revocation remain caller responsibilities; exact hosted error/default semantics
+        remain unverified.
       parameters:
       - description: agents=v1
         in: header
@@ -4869,8 +4909,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/v1.Credential'
         "400":
@@ -5013,17 +5053,20 @@ paths:
     post:
       consumes:
       - application/json
-      description: Updates the existing static_bearer or mcp_oauth authentication
-        method without network requests. OAuth access_token omission/null retains
-        the token; a new token clears omitted expiry, explicit null clears expiry,
-        and other omitted fields remain unchanged. OAuth refresh patches cannot add
-        configuration or change client, endpoint, resource or authentication method;
-        nullable token/client-secret values retain stored secrets while explicit null
-        scope clears scope. Whole-null refresh and token_endpoint_auth retain existing
-        configuration under local policy. Identity, destination, creation time and
-        Session bindings remain unchanged. Responses expose safe metadata only. Already-dispatched
-        work is not revoked; provider revocation, storage-key rotation and exact hosted
-        concurrent-update/error semantics remain separate.
+      description: Explicitly empty static bearer or OAuth access tokens and OAuth
+        patches without a mutable field are rejected before storage. Omitted OAuth
+        access tokens preserve the existing grant when expiry or refresh fields change.
+        Updates the existing static_bearer or mcp_oauth authentication method without
+        network requests. OAuth access_token omission/null retains the token; a new
+        token clears omitted expiry, explicit null clears expiry, and other omitted
+        fields remain unchanged. OAuth refresh patches cannot add configuration or
+        change client, endpoint, resource or authentication method; nullable token/client-secret
+        values retain stored secrets while explicit null scope clears scope. Whole-null
+        refresh and token_endpoint_auth retain existing configuration under local
+        policy. Identity, destination, creation time and Session bindings remain unchanged.
+        Responses expose safe metadata only. Already-dispatched work is not revoked;
+        provider revocation, storage-key rotation and exact hosted concurrent-update/error
+        semantics remain separate.
       parameters:
       - description: agents=v1
         in: header

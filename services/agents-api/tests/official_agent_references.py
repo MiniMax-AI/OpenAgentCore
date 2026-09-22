@@ -79,7 +79,7 @@ def verify_agent_references(client, other, expect_error):
     auth = {"Authorization": f"Bearer {client.api_key}", "OpenAI-Beta": "agents=v1"}
     with httpx2.Client(trust_env=False, timeout=10) as raw:
         body = raw.post(base, headers=auth, json=spec)
-        assert body.status_code == 200 and body.json()["agent"] == expected
+        assert body.status_code == 201 and body.json()["agent"] == expected
         recovered.append(sessions.retrieve(body.json()["id"]))
         before = {item.id for item in sessions.list()}
         for override in (None, [], {"model": None}, {"model": 1}, {"model": ""},

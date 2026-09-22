@@ -81,7 +81,7 @@ def verify_mcp_credentials(client, other, peer, canary, expect_error):
         stream_key = {"Idempotency-Key": "mcp-vault-stream-" + str(uuid.uuid4())}
         with raw.stream("POST", base + "/agents/sessions", headers={**headers, **stream_key},
                         json={**inline, "stream": True}) as response:
-            assert response.status_code == 200
+            assert response.status_code == 201
             assert response.headers["content-type"].startswith("text/event-stream")
             event = event_data(response.iter_lines())
             assert event["type"] == "agent.session.created"
