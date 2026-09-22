@@ -45,7 +45,7 @@ func TestSourceFileListParametersAndEnvelope(t *testing.T) {
 func TestSourceFileListRejectsInvalidQueriesBeforeStorage(t *testing.T) {
 	for _, query := range []string{
 		"limit=", "limit=0", "limit=10001", "limit=1.5", "limit=1&limit=2",
-		"order=invalid", "after=a&after=b", "purpose=a&purpose=b", "tenant_id=foreign",
+		"order=", "order=invalid", "after=a&after=b", "purpose=a&purpose=b", "tenant_id=foreign",
 	} {
 		f := &sourceFilesFixture{}
 		h, _ := environmentFileCreateHandler(t, WithSourceFiles(f))

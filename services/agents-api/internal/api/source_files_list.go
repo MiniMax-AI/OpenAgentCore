@@ -44,7 +44,7 @@ func (h *Handler) listSourceFiles(w http.ResponseWriter, r *http.Request) {
 
 func readSourceFilePage(w http.ResponseWriter, r *http.Request) (pageOptions, *string, bool) {
 	q := r.URL.Query()
-	options, ok := readPageQueryLimits(w, q, 10000, 10000, true, "purpose")
+	options, ok := readPageQueryLimits(w, r, q, 10000, 10000, true, "purpose")
 	if !ok {
 		return pageOptions{}, nil, false
 	}

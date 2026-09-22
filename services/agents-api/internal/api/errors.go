@@ -19,7 +19,7 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 
-func writeError(w http.ResponseWriter, status int, code, message string) {
+func writeError(w http.ResponseWriter, status int, code, message string, param ...string) {
 	kind := "invalid_request_error"
 	if status >= 500 {
 		kind = "server_error"
@@ -32,7 +32,11 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 	if code != "" {
 		errorCode = &code
 	}
-	writeJSON(w, status, v1.ErrorResponse{Error: v1.APIError{Message: message, Type: kind, Code: errorCode}})
+	var errorParam *string
+	if len(param) > 0 {
+		errorParam = &param[0]
+	}
+	writeJSON(w, status, v1.ErrorResponse{Error: v1.APIError{Message: message, Type: kind, Code: errorCode, Param: errorParam}})
 }
 
 func writeStoreError(w http.ResponseWriter, r *http.Request, err error) {
