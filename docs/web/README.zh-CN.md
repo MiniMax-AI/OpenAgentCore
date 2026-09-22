@@ -37,6 +37,8 @@ Session 的流程。live window 从打开 Dashboard 后开始采集，可选择 
 相邻样本属于同一已验证 Runtime incarnation 时计算区间利用率；重启或计数回退会形成
 数据缺口，不会制造峰值。
 
+![Runtime 监控实时趋势](images/runtime-dashboard.png)
+
 ### Agents
 
 Agent 是可以反复使用的工作配置。可以从空白 Agent 开始，也可以使用事故响应、

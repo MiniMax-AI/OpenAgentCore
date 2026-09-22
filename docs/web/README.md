@@ -41,6 +41,8 @@ cumulative CPU time, Web derives interval utilization only across adjacent sampl
 from the same verified Runtime incarnation; restarts and counter regressions create
 gaps instead of false spikes.
 
+![Runtime monitoring live trends](images/runtime-dashboard.png)
+
 ### Agents
 
 Agents are reusable working profiles. Create one from scratch or begin with a starter
