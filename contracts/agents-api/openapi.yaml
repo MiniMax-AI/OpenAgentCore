@@ -2879,13 +2879,15 @@ paths:
         initialization lifecycle; requested network applies after setup. Initial inline
         and tenant-owned file_id files freeze encrypted bytes before provisioning,
         then install through the common Core lifecycle before native execution or
-        live Files access. Referenced files/env/packages/setup overrides are rejected
-        pending semantic verification. Tenant-owned environment_template_id references
-        inherit omitted network and allow only narrowing overrides. Referenced network:null
-        is explicitly unsupported pending semantic verification. Core freezes effective
-        configuration; template updates/deletion do not alter Session snapshots or
-        same-intent creation retries. Inline or tenant-owned skill_reference Skills
-        share initialization. Templates preserve default/latest/explicit selectors;
+        live Files access. With a template reference, omitted/null files, env, packages
+        and setup_commands inherit. Non-null files and command lists replace; env
+        overlays by key; each package manager inherits on omission/null and otherwise
+        replaces its list. Empty lists clear their selected field. Tenant-owned environment_template_id
+        references inherit omitted network and allow only narrowing overrides. Referenced
+        network:null is explicitly unsupported pending semantic verification. Core
+        freezes effective configuration; template updates/deletion do not alter Session
+        snapshots or same-intent creation retries. Inline or tenant-owned skill_reference
+        Skills share initialization. Templates preserve default/latest/explicit selectors;
         Session creation freezes concrete metadata and encrypted content atomically.
         Skill-list omission inherits and a supplied list replaces; null overrides
         and null version selectors remain unqualified and reject. Source deletion/default

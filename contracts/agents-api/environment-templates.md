@@ -67,10 +67,10 @@ sizes for both variants. Initialization keeps file data out of ordinary configur
 resource responses, lifecycle events and command arguments. Templates keep references; each Session authorizes and
 freezes its own encrypted source bytes. Later source deletion cannot change them.
 
-Template `files` omission preserves on update; null/[] clears. Referenced Sessions
-inherit files. Supplying `files` together with `environment_template_id`, including
-null/[], explicitly rejects while replacement/merge/null semantics remain unconfirmed.
-Use a complete standalone inline configuration when a different file set is needed.
+Template `files` omission preserves on update; null/[] clears. In a referencing
+Session, omission and null inherit, while a supplied list replaces the entire file
+set, including `[]` clearing it. Paths are not merged between the two sources.
+The effective list retains the existing validation and tenant-owned source checks.
 
 Core initializes both paths with the same trusted file installer through Provider
 RunCommand. Daemon authentication remains available, but native preparation and live
@@ -495,8 +495,8 @@ precede setup commands, nonzero setup prevents start, and runtime-reserved env n
 must reject. The shared initialization batch implements those fields with encrypted snapshots
 and the existing readiness gate. Public reads show packages but omit env/commands.
 Template updates replace each supplied field; omission preserves it and null clears
-it. Referenced Sessions inherit the snapshot; explicit env/packages/setup overrides
-with a template ID reject while override semantics remain unconfirmed.
+it. Referencing Sessions use the composition rules below; these differ from
+Template.update replacement rules.
 
 Files and resolved Skills are installed first, followed by system, npm/Python packages and ordered commands;
 the default cwd is `/workspace`. One command or package operation has the existing
@@ -519,6 +519,47 @@ mentions different GA/beta defaults; this service retains `agents=v1` and the
 errors, no-op timestamps, concurrent pagination and referenced Session null-network
 override semantics remain unverified. The last case explicitly rejects in this
 batch rather than guessing inheritance. This batch is not full protocol compatibility.
+
+## Template and inline configuration composition
+
+The pinned Session description applies the template before inline configuration.
+Owned official API probes on 2026-09-23 establish the following narrower behavior:
+
+| Session field | Omitted or null | Non-null inline value |
+|---|---|---|
+| `env` | Inherit template keys | Overlay by key; inline value wins, `{}` preserves all keys |
+| `setup_commands` | Inherit template sequence | Replace the sequence; `[]` clears it |
+| `files` | Inherit template file set | Replace the complete set; `[]` clears it |
+| `packages` | Inherit all managers | Resolve Python/npm/system independently; `{}` inherits all |
+| Individual package manager | Inherit its template list | Replace that list; `[]` clears it |
+
+Core performs this composition once, before the existing encrypted Session snapshot
+transaction. Env values, command bodies and inline bytes remain absent from public
+metadata. Effective package/file metadata reflects the selected inputs. Caller
+intent still distinguishes omission, null and explicit fields for the local creation
+retry policy; composition does not rewrite it. Later template/source changes do not
+rewrite committed initialization. Existing per-source and effective-size validation,
+network narrowing, Skill/Plugin selection and source authorization remain in place.
+No harness or Provider participates in the merge.
+
+The official evidence used SDK 3.13.0, upstream `d7c41ef`, and `agents=v1`:
+86 authenticated calls, nine owned Sessions, four lifetime Templates (including two
+cleaned setup-script assertion failures), and six completed real `gpt-6-astra` Turns.
+Four exit-zero command outputs confirmed env values and command replacement/order
+for omitted, populated, empty and null inputs. Two further outputs confirmed full
+file replacement and null inheritance, and an initialized empty listing confirmed
+`files=[]`. The omitted-files case reached the bounded readiness limit, so its
+inheritance proof is metadata-only. Package composition is also metadata evidence;
+these official probes do not independently establish installed package versions.
+All owned resources have successful public DELETE receipts; physical upstream
+sandbox destruction was not independently observed.
+
+Private evidence: `~/.parsar/remediation/20260923/template-inline-composition/`,
+subdirectories `official-env-setup` and `official-files-packages`. Reports retain
+fixed-source snapshots, raw status/body/request IDs, command-output proofs,
+accounting, cleanup and credential scans. This covers the observed fixtures rather
+than all possible combinations. Null network and null Skill/Plugin/directory list
+selection remain outside this batch. No new protocol version is introduced.
 
 ## Verification
 

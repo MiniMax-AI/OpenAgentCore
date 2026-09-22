@@ -311,6 +311,13 @@ creation, freeze the effective ordinary hosted configuration and reuse inline
 initialization. Do not pass template IDs into Provider or Runtime. Omitted network
 inherits; overrides may only narrow policy. Preserve unresolved caller intent for
 creation retries and recover committed results before reading mutable templates.
+For template-reference Session initialization, omitted/null env, files, commands
+and packages inherit. Overlay non-null env keys; replace non-null files and command
+lists, including empty lists. Select each package manager independently: omitted/null
+inherits, while a supplied list replaces that manager. Revalidate the effective
+configuration through the existing validators and freeze it through the same
+transaction as inline initialization. Keep caller intent separate from resolved
+configuration; do not add a second installer or pass merge rules to adapters.
 Updates and deletion cannot rewrite existing Session snapshots. Initial files use
 one Core-owned installer for template and inline configurations. Keep confidential
 bytes encrypted under the execution-service key and resource-bound AEAD, separately
