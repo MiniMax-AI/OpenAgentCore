@@ -382,7 +382,7 @@ export function DashboardView({
           <header>
             <div>
               <h2 id="dashboard-runtime-heading">Runtime monitoring</h2>
-              <p>Current provider samples joined to an exact complete Session snapshot · no historical series</p>
+              <p>Current provider samples · browser-local live window · no durable history</p>
             </div>
             {runtimeModel ? (
               <span className="dashboard-runtime-freshness">

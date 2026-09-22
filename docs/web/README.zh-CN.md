@@ -28,10 +28,11 @@ Core 部署提供完整的产品界面，同时让凭据和执行能力始终留
 ### Dashboard
 
 Dashboard 是默认首页，集中展示当前 Agent 和 Session 结果，加载完整的租户级 Runtime
-观测快照，并在不把缺失值伪装成 0 的前提下展示当前 Docker 资源和数据覆盖率。页面也
-展示 Runtime health 与 coverage 卡片，以及支持搜索、状态/模式筛选、排序、分页的语义
-表格；同时展示需要关注的 Session，并可直接进入创建 Agent 或启动 Session 的流程。
-在运维方配置独立历史能力之前，页面不会伪造历史趋势图，也不会引入趋势图组件。
+观测快照，并保留有界的浏览器本地 live window，展示 CPU、内存、compute uptime 和
+token throughput 趋势，不会把缺失值伪装成 0。支持搜索、状态/模式筛选、排序、分页的
+语义表格按需展开；页面也展示需要关注的 Session，并可直接进入创建 Agent 或启动
+Session 的流程。live window 从打开 Dashboard 后开始采集，不是跨浏览器持久历史；
+持久保留仍需运维方配置独立 history 能力。
 
 ### Agents
 

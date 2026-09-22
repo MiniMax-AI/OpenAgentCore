@@ -2458,12 +2458,18 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
     created_at: baseline - 9_000,
     last_active_at: baseline - 20,
   };
-  const list = (data: unknown[]) => ({
+  const runtimeSessions = Array.from({ length: 12 }, (_, index) => ({
+    ...runtimeSession,
+    id: index === 0 ? sessionId : `11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
+    metadata: { title: `Repository migration ${index + 1}` },
+    usage: { ...runtimeSession.usage, input_tokens: 420_000 + index, total_tokens: 486_000 + index },
+  }));
+  const list = (data: Array<{ id: string }>) => ({
     object: "list",
     data,
     has_more: false,
-    first_id: data.length > 0 ? sessionId : null,
-    last_id: data.length > 0 ? sessionId : null,
+    first_id: data[0]?.id ?? null,
+    last_id: data.at(-1)?.id ?? null,
   });
 
   await page.goto("/");
@@ -2472,39 +2478,52 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
 
   await page.route("**/v1/agents/sessions*", async (route) => {
     if (new URL(route.request().url()).pathname !== "/v1/agents/sessions") return route.fallback();
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(list([runtimeSession])) });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(list(runtimeSessions)) });
   });
   await page.route("**/v1/agents/runtime-observations*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(list([{
-        id: sessionId,
+      body: JSON.stringify(list(runtimeSessions.map((runtime, index) => ({
+        id: runtime.id,
         object: "agent.runtime_observation",
-        session_id: sessionId,
+        session_id: runtime.id,
         environment_id: environmentId,
         mode: "openai_hosted",
         provider_type: "docker",
-        instance: { kind: "managed_allocation", allocation_id: allocationId, device_id: null, connection_generation: null },
+        instance: {
+          kind: "managed_allocation",
+          allocation_id: index === 0 ? allocationId : `33333333-3333-4333-8333-${String(index + 1).padStart(12, "0")}`,
+          device_id: null,
+          connection_generation: null,
+        },
         status: "observed",
         reason: null,
         allocation_created_at: baseline - 8_500,
         resolved_at: baseline,
         observed_at: baseline - 1,
         started_at: baseline - 8_100,
-        cpu: { usage_seconds_total: 7_350, capacity_cores: 2, usage_cores: 0.72, utilization_ratio: 0.36 },
+        cpu: { usage_seconds_total: 7_350 + index, capacity_cores: 2, usage_cores: 0.72 + index / 100, utilization_ratio: 0.36 + index / 200 },
         memory: { usage_bytes: 1_288_490_188, limit_bytes: 2_147_483_648 },
-      }])),
+      })))),
     });
   });
 
-  await dashboard.getByRole("button", { name: "Refresh Dashboard snapshot" }).click();
-  await expect(dashboard.getByRole("heading", { name: "Runtime health" })).toBeVisible();
-  await expect(dashboard.getByRole("heading", { name: "Resource load" })).toBeVisible();
-  await expect(dashboard.getByRole("heading", { name: "Longest-running Runtimes" })).toBeVisible();
-  await expect(dashboard.getByRole("heading", { name: "Token consumption" })).toBeVisible();
-  await expect(dashboard.getByLabel("CPU now: 36%")).toBeVisible();
-  await expect(dashboard.getByLabel("Memory now: 60%")).toBeVisible();
+  const refresh = dashboard.getByRole("button", { name: "Refresh Dashboard snapshot" });
+  await refresh.click();
+  await expect(dashboard.getByRole("heading", { name: "CPU usage" })).toBeVisible();
+  await expect(dashboard.getByRole("heading", { name: "Memory usage" })).toBeVisible();
+  await expect(dashboard.getByRole("heading", { name: "Compute uptime" })).toBeVisible();
+  await expect(dashboard.getByRole("heading", { name: "Token throughput" })).toBeVisible();
+  await page.waitForTimeout(20);
+  await refresh.click();
+  await page.waitForTimeout(20);
+  await refresh.click();
+  await expect(dashboard.getByLabel("CPU usage: 3 live samples")).toBeVisible();
+  await expect(dashboard.getByLabel("Memory usage: 3 live samples")).toBeVisible();
+  await expect(dashboard.getByLabel("Compute uptime: 3 live samples")).toBeVisible();
+  await expect(dashboard.getByLabel("Token throughput: 3 live samples")).toBeVisible();
+  await expect(dashboard).not.toContainText("Collecting live samples");
   await expect(dashboard.getByRole("table", { name: "Runtime targets" })).not.toBeVisible();
   for (const close of await page.getByRole("button", { name: "Close notification" }).all()) await close.click();
   await expect(page.getByRole("button", { name: "Close notification" })).toHaveCount(0);
@@ -2512,9 +2531,19 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
 
   await dashboard.getByText("Runtime targets", { exact: true }).click();
   await expect(dashboard.getByRole("table", { name: "Runtime targets" })).toBeVisible();
+  await expect(dashboard.getByText("Page 1 of 2")).toBeVisible();
+  const runtimeSearch = dashboard.getByPlaceholder("Search Session, provider, or identity");
+  await runtimeSearch.fill("Repository migration 12");
+  await expect(dashboard.getByText("1 visible")).toBeVisible();
+  await expect(dashboard.getByRole("table", { name: "Runtime targets" }).getByRole("row", { name: /Repository migration 12/ })).toBeVisible();
+  await runtimeSearch.fill("");
+  await dashboard.getByRole("button", { name: "Tokens" }).click();
+  await expect(dashboard.getByRole("columnheader", { name: "Tokens" })).toHaveAttribute("aria-sort", "descending");
+  await dashboard.getByRole("button", { name: "Next" }).click();
+  await expect(dashboard.getByText("Page 2 of 2")).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(dashboard.getByRole("heading", { name: "Resource load" })).toBeVisible();
+  await expect(dashboard.getByRole("heading", { name: "Memory usage" })).toBeVisible();
   for (const close of await page.getByRole("button", { name: "Close notification" }).all()) await close.click();
   const widths = await dashboard.locator(".dashboard-runtime-panel").evaluate((element) => ({
     viewport: innerWidth,

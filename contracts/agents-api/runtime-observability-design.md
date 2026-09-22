@@ -292,17 +292,19 @@ seams separate:
 3. A feature-local state model retains `last_complete`, current refresh status,
    local filters, and the selected time range. It aborts an overlapping refresh
    and marks old data stale after a failed or incomplete refresh.
-4. Presentational components render summary metrics, a compact health matrix,
-   explicit usage coverage, the Runtime table, and an identity detail surface.
-   Trend components and chart dependencies are absent unless a later history
-   capability and contract are configured.
+4. Presentational components render summary metrics, a browser-local live window,
+   the Runtime table, and an identity detail surface. The live window contains only
+   complete snapshots collected while this Dashboard instance is mounted; it is
+   bounded, ephemeral, and never presented as durable operator history.
 
 The initial implementation uses a 30-second Web cadence plus up to five seconds
 of jitter and a 15-second whole-refresh budget. These are Web configuration, not
 API guarantees. Web pauses periodic reads when hidden, refreshes when visibility
 returns, and adds jitter so multiple browsers do not synchronize. Filtering is
 local to the last complete snapshot and never changes tenant authorization or
-provider selection.
+provider selection. The same complete snapshots feed the one-hour, 120-sample
+browser-local live window; reload, navigation, or connection replacement may reset
+it, and no point is interpolated or persisted by Core.
 
 ## 12. Token usage boundary
 
@@ -367,12 +369,14 @@ this does not add an upstream OpenAI operation.
 - Publish only complete traversals and retain the previous snapshot on failure.
 - Join existing Session Usage and Turn status by exact Session ID.
 - Add responsive, keyboard-accessible current-resource views.
+- Build an explicitly ephemeral live window from complete Web snapshots.
 
 ### Phase 4: optional history
 
 - Add telemetry exporter and qualified operator backend.
 - Define a separate history query adapter and retention/security policy.
-- Add trend charts only when this capability is advertised.
+- Replace or extend the ephemeral live window with explicitly advertised durable
+  history reads; never merge the two retention semantics implicitly.
 
 ### Phase 5: additional sources
 

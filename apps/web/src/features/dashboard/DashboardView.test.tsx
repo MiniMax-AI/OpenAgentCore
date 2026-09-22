@@ -233,7 +233,7 @@ describe("Dashboard loaded-result presentation", () => {
       resolved_at: 1_700_000_100,
       observed_at: 1_700_000_090,
       started_at: 1_700_000_010,
-      cpu: { usage_seconds_total: 73.5, capacity_cores: 2, usage_cores: null, utilization_ratio: null },
+      cpu: { usage_seconds_total: 73.5, capacity_cores: 2, usage_cores: 3, utilization_ratio: 1.5 },
       memory: { usage_bytes: 536_870_912, limit_bytes: 2_147_483_648 },
     };
     const html = render({
@@ -245,17 +245,17 @@ describe("Dashboard loaded-result presentation", () => {
     expect(html).toContain("Cumulative CPU / capacity");
     expect(html).toContain("1m 13s / 2 cores");
     expect(html).toContain("512 MiB / 2.00 GiB");
-    expect(html).toContain('aria-label="Runtime snapshot visualizations"');
-    expect(html).toContain("Runtime health");
-    expect(html).toContain('aria-label="1 of 1 Runtimes observed"');
-    expect(html).toContain("Resource load");
-    expect(html).toContain("CPU now");
-    expect(html).toContain("Instantaneous CPU is unavailable; cumulative CPU time remains in Explorer");
-    expect(html).toContain('aria-label="CPU now: Unavailable"');
-    expect(html).toContain('aria-label="Memory now: 25%"');
-    expect(html).toContain("Longest-running Runtimes");
-    expect(html).toContain("1m 20s");
-    expect(html).toContain("Token consumption");
+    expect(html).toContain('aria-label="Runtime live-window charts"');
+    expect(html).toContain("CPU usage");
+    expect(html).toContain("Memory usage");
+    expect(html).toContain("Compute uptime");
+    expect(html).toContain("Token throughput");
+    expect(html).toContain("150%");
+    expect(html).toContain("Collecting live samples");
+    expect(html).toContain("1/2 minimum · no history is synthesized");
+    expect(html).toContain("CPU usage collecting live samples; 1 of 2 minimum");
+    expect(html).toContain("Latest value");
+    expect(html).toContain("Missing samples");
     expect(html).toContain("Runtime targets");
     expect(html).toContain('<details class="dashboard-runtime-explorer">');
     expect(html).toContain("Search Runtime targets");
@@ -267,7 +267,7 @@ describe("Dashboard loaded-result presentation", () => {
     expect(html).toContain("Identity");
     expect(html).toContain("unknown remains unknown, never zero");
     expect(html).not.toContain("CPU %");
-    expect(html).not.toContain("CPU now: 25%");
+    expect(html).not.toContain("CPU now");
     expect(html).not.toContain("historical chart");
   });
 
