@@ -70,3 +70,11 @@ records, secret scans and verified owned-resource cleanup are retained under
 The integrated Files error change does not alter Skill selection, initialization,
 Runtime or adapter code. This live run does not qualify another harness/Provider,
 upstream physical retention, or omitted/null cross-form retry equivalence.
+
+At integrated source `9d9639bd90bc74e7c27832b28dca27aac6c18781`, server
+`make -o check-web check` passed, including the real PostgreSQL suite, fixed SDK
+resource checks, byte-for-byte sqlc generation, native package checks and builds.
+`make openapi` produced no schema change. Web/client/dependencies are byte-unchanged
+from `c86b5bb`; the preceding full Web acceptance is reused, not claimed as a new
+run. Optional live adapter profiles and the 512 MiB storage stress case are not
+newly qualified. Subsequent changes only record evidence in documentation.
