@@ -33,7 +33,7 @@ func TestWorkerEnvironmentRetriesNewlyReadyAtNextScan(t *testing.T) {
 	waitTurn(t, h, barrier.ID, store.TurnCompleted)
 
 	prepare := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
-	if elapsed := time.Since(scanned); elapsed < 4*time.Second || elapsed > 8*time.Second {
+	if elapsed := time.Since(scanned); elapsed < 750*time.Millisecond || elapsed > 3*time.Second {
 		t.Fatal("readiness retry must use the next scan, without an empty scan interval", elapsed)
 	}
 	if workerRuntimeForPreparation(t, h, prepare) != runtime {
@@ -79,7 +79,7 @@ func TestWorkerEnvironmentPaginationReachesReadyTail(t *testing.T) {
 	// The first 100 unbound inputs must not pin the cursor, and the ready
 	// tail must wait for its own bounded page rather than an unbounded drain.
 	prepare := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
-	if elapsed := time.Since(scanned); elapsed < 4*time.Second || elapsed > 8*time.Second {
+	if elapsed := time.Since(scanned); elapsed < 750*time.Millisecond || elapsed > 3*time.Second {
 		t.Fatal("pagination lost the scan bound or starved the ready tail", elapsed)
 	}
 	if workerRuntimeForPreparation(t, h, prepare) != runtime {

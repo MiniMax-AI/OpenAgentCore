@@ -34,7 +34,7 @@ func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []st
 		if err != nil {
 			return nil, err
 		}
-		s.nextEnvironmentScan = time.Now().Add(5 * time.Second)
+		s.nextEnvironmentScan = time.Now().Add(time.Second)
 		if len(environments) == 0 && s.environmentCursor != "" {
 			s.environmentCursor = ""
 			// Retry the first page now instead of spending a scan interval on EOF.
