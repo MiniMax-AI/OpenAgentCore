@@ -64,7 +64,7 @@ export interface OpenAIAgentsClientOptions {
 
 interface APIErrorEnvelope {
   error?: {
-    code?: string;
+    code?: string | null;
     message?: string;
     param?: string | null;
     type?: string;
@@ -73,14 +73,14 @@ interface APIErrorEnvelope {
 
 export class AgentCoreError extends Error {
   readonly status: number;
-  readonly code?: string;
+  readonly code?: string | null;
   readonly param?: string | null;
   readonly errorType?: string;
 
   constructor(
     message: string,
     status: number,
-    code?: string,
+    code?: string | null,
     param?: string | null,
     errorType?: string,
   ) {

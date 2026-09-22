@@ -529,6 +529,20 @@ describe("OpenAIAgentsClient", () => {
     }
   });
 
+  it("preserves a nullable resource error code", async () => {
+    const client = new OpenAIAgentsClient({
+      fetch: recordingFetch(jsonResponse({ error: {
+        code: null,
+        message: "Resource not found.",
+        type: "invalid_request_error",
+        param: null,
+      } }, 404), []),
+    });
+    await expect(client.retrieveSourceFile("missing")).rejects.toMatchObject({
+      status: 404, code: null, param: null, errorType: "invalid_request_error",
+    });
+  });
+
   it("preserves a pre-stream Session creation API error without opening or retrying", async () => {
     const calls: FetchCall[] = [];
     const onOpen = vi.fn();
