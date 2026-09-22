@@ -6,6 +6,7 @@ import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";
 import {
   appendRuntimeTrendSample,
   RUNTIME_TREND_MAX_TARGETS,
+  runtimeTrendRange,
   runtimeTrendSample,
   tokenThroughput,
 } from "./runtime-trends";
@@ -113,6 +114,19 @@ describe("Runtime live-window trends", () => {
     samples = appendRuntimeTrendSample(samples, snapshot(180_000), 120_000, 2);
     expect(samples.map((sample) => sample.sampledAt)).toEqual([120_000, 180_000]);
     expect(samples[0]?.memoryUsageBytes).toBe(768);
+  });
+
+  it("selects a live range relative to the newest complete snapshot", () => {
+    const samples = [
+      runtimeTrendSample(snapshot(0)),
+      runtimeTrendSample(snapshot(10 * 60_000)),
+      runtimeTrendSample(snapshot(30 * 60_000)),
+      runtimeTrendSample(snapshot(60 * 60_000)),
+    ];
+    expect(runtimeTrendRange(samples, 15 * 60_000).map((sample) => sample.sampledAt))
+      .toEqual([60 * 60_000]);
+    expect(runtimeTrendRange(samples, 60 * 60_000).map((sample) => sample.sampledAt))
+      .toEqual([0, 10 * 60_000, 30 * 60_000, 60 * 60_000]);
   });
 
   it("derives throughput only between monotonic cumulative samples", () => {

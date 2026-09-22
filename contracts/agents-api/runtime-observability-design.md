@@ -310,8 +310,11 @@ API guarantees. Web pauses periodic reads when hidden, refreshes when visibility
 returns, and adds jitter so multiple browsers do not synchronize. Filtering is
 local to the last complete snapshot and never changes tenant authorization or
 provider selection. The same complete snapshots feed the one-hour, 120-sample
-browser-local live window; reload, navigation, or connection replacement may reset
-it, and no point is interpolated or persisted by Core.
+browser-local live window. Operators can select a 15-minute or one-hour view
+without discarding the retained buffer. The range is measured back from the newest
+complete snapshot rather than browser wall-clock time. Reload, navigation, or
+connection replacement may reset the window, and no point is interpolated or
+persisted by Core.
 
 ## 12. Token usage boundary
 
@@ -379,6 +382,7 @@ Implemented for the browser-local current-snapshot live window.
 - Join existing Session Usage and Turn status by exact Session ID.
 - Add responsive, keyboard-accessible current-resource views.
 - Build an explicitly ephemeral live window from complete Web snapshots.
+- Expose 15-minute and one-hour views with an explicit browser-local source label.
 
 ### Phase 4: optional history
 

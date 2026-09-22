@@ -246,6 +246,10 @@ describe("Dashboard loaded-result presentation", () => {
     expect(html).toContain("1m 13s / 2 cores");
     expect(html).toContain("512 MiB / 2.00 GiB");
     expect(html).toContain('aria-label="Runtime live-window charts"');
+    expect(html).toContain("Live resource trends");
+    expect(html).toContain("Browser-local samples · no durable history");
+    expect(html).toContain('aria-label="Runtime live range"');
+    expect(html).toContain('aria-pressed="true">1h</button>');
     expect(html).toContain("CPU usage");
     expect(html).toContain("Memory usage");
     expect(html).toContain("Compute uptime");

@@ -36,7 +36,14 @@ import {
 } from "./dashboard-model";
 import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";
 import { RuntimeTrendCharts } from "./RuntimeTrendCharts";
-import { appendRuntimeTrendSample, type RuntimeTrendSample } from "./runtime-trends";
+import {
+  appendRuntimeTrendSample,
+  RUNTIME_TREND_RANGES,
+  RUNTIME_TREND_WINDOW_MS,
+  runtimeTrendRange,
+  type RuntimeTrendRange,
+  type RuntimeTrendSample,
+} from "./runtime-trends";
 
 const PAGE_SIZE = 10;
 
@@ -287,6 +294,11 @@ export function RuntimeObservabilityContent({
   const model = useMemo(() => buildRuntimeDashboardModel(snapshot.sessions, snapshot.observations), [snapshot]);
   const summary = model.summary;
   const [trendSamples, setTrendSamples] = useState<RuntimeTrendSample[]>(() => appendRuntimeTrendSample([], snapshot));
+  const [selectedTrendRange, setSelectedTrendRange] = useState<RuntimeTrendRange>(RUNTIME_TREND_WINDOW_MS);
+  const visibleTrendSamples = useMemo(
+    () => runtimeTrendRange(trendSamples, selectedTrendRange),
+    [selectedTrendRange, trendSamples],
+  );
 
   useEffect(() => {
     setTrendSamples((current) => appendRuntimeTrendSample(current, snapshot));
@@ -301,7 +313,27 @@ export function RuntimeObservabilityContent({
         <RuntimeMetric icon={<Gauge size={17} />} label="Reported tokens" value={formatDashboardTokens(summary.totalTokens)} detail={`${summary.tokenCoverageCount}/${summary.sessionCount} Sessions report usage`} />
       </div>
 
-      <RuntimeTrendCharts samples={trendSamples} />
+      <section className="dashboard-runtime-live" aria-labelledby="dashboard-runtime-live-heading">
+        <header className="dashboard-runtime-live-toolbar">
+          <div>
+            <h3 id="dashboard-runtime-live-heading">Live resource trends</h3>
+            <p>Browser-local samples · no durable history</p>
+          </div>
+          <div className="dashboard-runtime-range" role="group" aria-label="Runtime live range">
+            {RUNTIME_TREND_RANGES.map((range) => (
+              <button
+                key={range.label}
+                type="button"
+                aria-pressed={selectedTrendRange === range.milliseconds}
+                onClick={() => setSelectedTrendRange(range.milliseconds)}
+              >
+                {range.label}
+              </button>
+            ))}
+          </div>
+        </header>
+        <RuntimeTrendCharts samples={visibleTrendSamples} />
+      </section>
 
       <details className="dashboard-runtime-explorer">
         <summary>

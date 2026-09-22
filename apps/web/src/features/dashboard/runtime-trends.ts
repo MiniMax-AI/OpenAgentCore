@@ -6,6 +6,11 @@ export const RUNTIME_TREND_WINDOW_MS = 60 * 60 * 1_000;
 export const RUNTIME_TREND_MAX_SAMPLES = 120;
 export const RUNTIME_TREND_SERIES_LIMIT = 3;
 export const RUNTIME_TREND_MAX_TARGETS = RUNTIME_TREND_SERIES_LIMIT * 2;
+export const RUNTIME_TREND_RANGES = [
+  { label: "15m", milliseconds: 15 * 60 * 1_000 },
+  { label: "1h", milliseconds: RUNTIME_TREND_WINDOW_MS },
+] as const;
+export type RuntimeTrendRange = typeof RUNTIME_TREND_RANGES[number]["milliseconds"];
 
 export interface RuntimeTrendTarget {
   sessionId: string;
@@ -271,4 +276,14 @@ export function tokenThroughput(samples: readonly RuntimeTrendSample[]): TokenTh
     inputPerMinute: sample.inputTokensPerMinute,
     outputPerMinute: sample.outputTokensPerMinute,
   }));
+}
+
+export function runtimeTrendRange(
+  samples: readonly RuntimeTrendSample[],
+  range: RuntimeTrendRange,
+): RuntimeTrendSample[] {
+  const newest = samples.at(-1)?.sampledAt;
+  if (newest === undefined) return [];
+  const start = newest - range;
+  return samples.filter((sample) => sample.sampledAt >= start && sample.sampledAt <= newest);
 }

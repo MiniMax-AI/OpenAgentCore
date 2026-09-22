@@ -2524,6 +2524,10 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
   await expect(dashboard.getByRole("heading", { name: "Memory usage" })).toBeVisible();
   await expect(dashboard.getByRole("heading", { name: "Compute uptime" })).toBeVisible();
   await expect(dashboard.getByRole("heading", { name: "Token throughput" })).toBeVisible();
+  const liveRange = dashboard.getByRole("group", { name: "Runtime live range" });
+  await expect(liveRange.getByRole("button", { name: "1h" })).toHaveAttribute("aria-pressed", "true");
+  await liveRange.getByRole("button", { name: "15m" }).click();
+  await expect(liveRange.getByRole("button", { name: "15m" })).toHaveAttribute("aria-pressed", "true");
   await page.waitForTimeout(20);
   await refresh.click();
   await page.waitForTimeout(20);
