@@ -136,7 +136,8 @@ def main():
                 try:
                     operation()
                 except error as result:
-                    assert isinstance(result.body, dict) and result.body.get("code")
+                    assert isinstance(result.body, dict) and "code" in result.body
+                    assert isinstance(result.body.get("type"), str) and isinstance(result.body.get("message"), str)
                     return result
                 else:
                     raise AssertionError(f"Expected {error.__name__}")
