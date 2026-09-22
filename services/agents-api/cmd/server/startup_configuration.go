@@ -7,6 +7,10 @@ import (
 )
 
 func coreStartupConfiguration(defaultHarness string, enabledHarnesses []string, daemonGateway bool, endpoints map[string]bool, managedProviderKind string, managed *execution.RuntimeProvider) v1.CoreStartupConfiguration {
+	if !daemonGateway {
+		enabledHarnesses = []string{}
+		managed = nil
+	}
 	modelProviders := make([]v1.CoreHarnessModelProviderConfiguration, 0, len(enabledHarnesses))
 	for _, kind := range enabledHarnesses {
 		modelProviders = append(modelProviders, v1.CoreHarnessModelProviderConfiguration{Harness: kind, EndpointConfigured: endpoints[kind]})

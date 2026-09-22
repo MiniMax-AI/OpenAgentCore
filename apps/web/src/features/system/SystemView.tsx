@@ -93,6 +93,7 @@ export function SystemView({
     : null;
   const configuredEndpoints = configuration?.configured.model_providers.filter((provider) => provider.endpoint_configured).length ?? 0;
   const endpointTotal = configuration?.configured.model_providers.length ?? 0;
+  const executionAdaptersEnabled = (configuration?.configured.enabled_harnesses.length ?? 0) > 0;
   const startupUnavailable = startupConfigurationSupported === false;
 
   const startupValue = (value: string): string => {
@@ -134,10 +135,14 @@ export function SystemView({
     },
     vaultStatus,
     {
-      label: "Default harness",
+      label: "Default adapter",
       status: startupStatus,
       value: startupValue(configuration ? harnessLabel(configuration.configured.default_harness) : ""),
-      detail: startupDetail,
+      detail: configuration
+        ? executionAdaptersEnabled
+          ? "Used by Agents created in this Web UI unless an API request selects another enabled harness."
+          : "Configured default; execution adapters are inactive because this Core process has no daemon gateway."
+        : startupDetail,
     },
     {
       label: "Managed sandbox",
@@ -148,13 +153,11 @@ export function SystemView({
         : startupDetail,
     },
     {
-      label: "LLM endpoints",
+      label: "Endpoint overrides",
       status: startupStatus,
-      value: startupValue(endpointTotal === 0 || configuredEndpoints === 0
-        ? "Not configured"
-        : configuredEndpoints === endpointTotal ? "Configured" : `${configuredEndpoints}/${endpointTotal} configured`),
+      value: startupValue(`${configuredEndpoints} explicit`),
       detail: configuration
-        ? "Reports operator endpoint configuration presence only; addresses and credentials stay hidden."
+        ? `Across ${endpointTotal} startup-enabled adapter${endpointTotal === 1 ? "" : "s"}. No override may mean the harness uses its native default.`
         : startupDetail,
     },
   ];
@@ -223,9 +226,14 @@ export function SystemView({
 
           <section className="system-config-section" aria-labelledby="configured-harnesses-heading">
             <header>
-              <h2 id="configured-harnesses-heading">Harnesses</h2>
-              <span>Configuration, not execution readiness</span>
+              <h2 id="configured-harnesses-heading">Execution adapters <span>(harnesses)</span></h2>
+              <span>Build support vs startup enablement</span>
             </header>
+            <p className="system-config-explanation">
+              {executionAdaptersEnabled
+                ? <>Agents created in this Web UI use {harnessLabel(configuration.configured.default_harness)}. Another enabled adapter can be selected through the API extension; this UI does not expose that control.</>
+                : <>{harnessLabel(configuration.configured.default_harness)} is the configured default, but execution adapters are inactive because this Core process has no daemon gateway.</>}
+            </p>
             <div className="system-harness-grid">
               {configuration.supported.harnesses.map((harness) => {
                 const enabled = configuration.configured.enabled_harnesses.includes(harness);
@@ -234,12 +242,19 @@ export function SystemView({
                   <article className="system-harness-card" key={harness}>
                     <div>
                       <strong>{harnessLabel(harness)}</strong>
-                      <StartupStatus enabled={enabled} label={enabled ? "Configured" : "Supported"} />
+                      <StartupStatus
+                        enabled={enabled}
+                        label={enabled
+                          ? harness === configuration.configured.default_harness ? "Enabled · default" : "Enabled"
+                          : "Build only"}
+                      />
                     </div>
                     <small>
                       {enabled
-                        ? `Operator LLM endpoint: ${endpoint?.endpoint_configured ? "configured" : "not configured"}.`
-                        : "Known by this build but not enabled for this process."}
+                        ? endpoint?.endpoint_configured
+                          ? "Operator endpoint override: configured."
+                          : "Operator endpoint override: not set; the harness may use its native default."
+                        : "Compiled into this build, but not enabled when this Core process started."}
                     </small>
                   </article>
                 );

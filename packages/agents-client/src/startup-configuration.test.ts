@@ -56,6 +56,11 @@ describe("Core startup configuration", () => {
     ["unsorted harnesses", (value: any) => { value.supported.harnesses.reverse(); }],
     ["enabled harness missing from supported", (value: any) => { value.supported.harnesses = ["codex", "mcode"]; }],
     ["default not enabled", (value: any) => { value.configured.enabled_harnesses = ["claude_sdk"]; value.configured.model_providers = [{ harness: "claude_sdk", endpoint_configured: false }]; }],
+    ["enabled harness without gateway", (value: any) => {
+      value.configured.daemon_gateway = false;
+      value.configured.self_hosted = false;
+      value.configured.managed_sandbox = { enabled: false, provider: null, maintenance: false };
+    }],
     ["managed provider without gateway", (value: any) => { value.configured.daemon_gateway = false; value.configured.self_hosted = false; }],
     ["managed provider missing from supported", (value: any) => { value.supported.managed_sandbox_providers = ["microsandbox"]; }],
     ["mismatched provider projection", (value: any) => { value.configured.model_providers[0].harness = "codex"; }],
@@ -82,10 +87,12 @@ describe("Core startup configuration", () => {
     body.configured.daemon_gateway = false;
     body.configured.self_hosted = false;
     body.configured.managed_sandbox = { enabled: false, provider: null, maintenance: false };
-    body.configured.enabled_harnesses = ["codex"];
-    body.configured.model_providers = [{ harness: "codex", endpoint_configured: false }];
+    body.configured.enabled_harnesses = [];
+    body.configured.model_providers = [];
     const client = new OpenAIAgentsClient({ fetch: (async () => response(body)) as typeof fetch });
 
-    await expect(client.retrieveStartupConfiguration()).resolves.toMatchObject({ configured: { daemon_gateway: false } });
+    await expect(client.retrieveStartupConfiguration()).resolves.toMatchObject({
+      configured: { daemon_gateway: false, enabled_harnesses: [], model_providers: [] },
+    });
   });
 });

@@ -61,6 +61,11 @@
   font-weight: 500;
 }
 
+.system-config-section > header h2 span {
+  color: var(--fg-muted);
+  font-weight: 400;
+}
+
 .system-config-section > header span {
   color: var(--fg-muted);
   font-size: 11px;
@@ -130,6 +135,13 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+.system-config-explanation {
+  margin: -2px 0 12px;
+  color: var(--fg-muted);
+  font-size: 11px;
+  line-height: 16px;
 }
 
 .system-harness-card {

@@ -51,16 +51,21 @@ describe("SystemView", () => {
     expect(html).toContain("Core startup configuration");
     expect(html.match(/role="listitem"/g)).toHaveLength(5);
     expect(html).toContain("Vault catalog loaded");
-    expect(html).toContain("Default harness");
+    expect(html).toContain("Default adapter");
     expect(html).toContain("Managed sandbox");
-    expect(html).toContain("LLM endpoints");
-    expect(html).toContain("1/2 configured");
+    expect(html).toContain("Endpoint overrides");
+    expect(html).toContain("1 explicit");
     expect(html).toContain("Configured for this process");
     expect(html).toContain("Daemon gateway");
     expect(html).toContain("Supported by this build: Docker, Microsandbox");
     expect(html).toContain("Claude SDK");
     expect(html).toContain("MiniMax Code");
-    expect(html).toContain("Operator LLM endpoint: configured");
+    expect(html).toContain("Execution adapters");
+    expect(html).toContain("Agents created in this Web UI use Codex");
+    expect(html).toContain("Enabled · default");
+    expect(html).toContain("Operator endpoint override: configured");
+    expect(html).toContain("Operator endpoint override: not set; the harness may use its native default");
+    expect(html).toContain("Build only");
     expect(html).toContain("Runtime connection, native binary availability, sandbox health, and model execution belong to the relevant Session or Environment");
     expect(html).not.toContain("Runtime status");
     expect(html).not.toContain("ready");
@@ -83,6 +88,27 @@ describe("SystemView", () => {
     expect(html).toContain("Selected provider is in maintenance mode");
     expect(html).toContain("This Web build cannot request managed Sessions");
     expect(html).toContain("This Web build cannot request self-hosted Sessions");
+  });
+
+  it("distinguishes build support from an inactive execution surface", () => {
+    const inactive: CoreStartupConfiguration = {
+      ...startup,
+      configured: {
+        ...startup.configured,
+        enabled_harnesses: [],
+        daemon_gateway: false,
+        self_hosted: false,
+        managed_sandbox: { enabled: false, provider: null, maintenance: false },
+        model_providers: [],
+      },
+    };
+    const html = render({ startupConfiguration: inactive });
+
+    expect(html).toContain("0 explicit");
+    expect(html).toContain("Across 0 startup-enabled adapters");
+    expect(html).toContain("Codex is the configured default, but execution adapters are inactive because this Core process has no daemon gateway");
+    expect(html.match(/Build only/g)).toHaveLength(3);
+    expect(html).not.toContain("Enabled · default");
   });
 
   it("handles an older Core without leaving a pending state", () => {

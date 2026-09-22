@@ -25,8 +25,9 @@ func TestCoreStartupConfigurationSeparatesSupportAndConfiguration(t *testing.T) 
 }
 
 func TestCoreStartupConfigurationWithoutExecution(t *testing.T) {
-	got := coreStartupConfiguration("codex", []string{"codex"}, false, nil, "", nil)
-	if got.Configured.DaemonGateway || got.Configured.SelfHosted || got.Configured.ManagedSandbox.Enabled || got.Configured.ManagedSandbox.Provider != nil || got.Configured.ManagedSandbox.Maintenance || got.Configured.ModelProviders[0].EndpointConfigured {
+	managed := &execution.RuntimeProvider{Maintenance: true}
+	got := coreStartupConfiguration("codex", []string{"claude_sdk", "codex"}, false, map[string]bool{"codex": true}, "docker", managed)
+	if got.Configured.DaemonGateway || got.Configured.SelfHosted || got.Configured.EnabledHarnesses == nil || len(got.Configured.EnabledHarnesses) != 0 || got.Configured.ManagedSandbox.Enabled || got.Configured.ManagedSandbox.Provider != nil || got.Configured.ManagedSandbox.Maintenance || len(got.Configured.ModelProviders) != 0 {
 		t.Fatalf("unconfigured execution was reported: %#v", got.Configured)
 	}
 }

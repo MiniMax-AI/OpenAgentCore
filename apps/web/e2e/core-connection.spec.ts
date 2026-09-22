@@ -318,7 +318,7 @@ test("clears startup configuration synchronously and fences a stale read when th
   await boot(page, request);
   await page.getByRole("button", { name: "System", exact: true }).click();
   const system = page.locator(".system-page");
-  await expect(system.getByRole("listitem").filter({ hasText: "Default harness" })).toContainText("Codex");
+  await expect(system.getByRole("listitem").filter({ hasText: "Default adapter" })).toContainText("Codex");
   await page.evaluate(() => {
     (window as ProbeInstrumentationWindow).__holdNextLocalStartup = true;
   });
@@ -331,7 +331,7 @@ test("clears startup configuration synchronously and fences a stale read when th
   await dialog.getByLabel("Bearer token").fill("replacement-token");
   await dialog.getByRole("button", { name: "Apply connection" }).click();
 
-  const defaultHarness = system.getByRole("listitem").filter({ hasText: "Default harness" });
+  const defaultHarness = system.getByRole("listitem").filter({ hasText: "Default adapter" });
   await expect(defaultHarness).toContainText("Checking…");
   await expect(system).not.toContainText("Configured for this process");
   await expect.poll(() => page.evaluate(() => (window as ProbeInstrumentationWindow).__oldStartupAbortCount ?? 0)).toBe(1);
@@ -356,7 +356,7 @@ for (const status of [404, 405]) {
     await page.getByRole("button", { name: "System", exact: true }).click();
 
     const system = page.locator(".system-page");
-    await expect(system.getByRole("listitem").filter({ hasText: "Default harness" })).toContainText("Not exposed");
+    await expect(system.getByRole("listitem").filter({ hasText: "Default adapter" })).toContainText("Not exposed");
     await expect(system).toContainText("This Core version does not expose the startup configuration extension");
     await expect(system).not.toContainText("Configured for this process");
     await expect(system).not.toContainText("Checking…");

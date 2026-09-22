@@ -2373,14 +2373,15 @@ test("presents Dashboard page-chain results and System boundaries without extra 
   const system = page.locator(".system-page");
   await expect(system.getByRole("listitem").filter({ hasText: "Core API" })).toContainText("Available");
   await expect(system.getByRole("listitem").filter({ hasText: "Vaults" })).toContainText("Available");
-  await expect(system.getByRole("listitem").filter({ hasText: "Default harness" })).toContainText("Codex");
+  await expect(system.getByRole("listitem").filter({ hasText: "Default adapter" })).toContainText("Codex");
   await expect(system.getByRole("listitem").filter({ hasText: "Managed sandbox" })).toContainText("Docker");
-  await expect(system.getByRole("listitem").filter({ hasText: "LLM endpoints" })).toContainText("1/2 configured");
+  await expect(system.getByRole("listitem").filter({ hasText: "Endpoint overrides" })).toContainText("1 explicit");
   await expect(system.getByRole("listitem")).toHaveCount(5);
   await expect(system).toContainText("Configured for this process");
   await expect(system).toContainText("Daemon gateway");
-  await expect(system).toContainText("Operator LLM endpoint: configured");
-  await expect(system).toContainText("Known by this build but not enabled for this process");
+  await expect(system).toContainText("Agents created in this Web UI use Codex");
+  await expect(system).toContainText("Operator endpoint override: configured");
+  await expect(system).toContainText("Compiled into this build, but not enabled when this Core process started");
   await expect(system).toContainText("Runtime connection, native binary availability, sandbox health, and model execution belong to the relevant Session or Environment");
   await expect(system).not.toContainText("Source Files");
   await expect(system).not.toContainText("Public capability surface");
@@ -2404,6 +2405,17 @@ test("presents Dashboard page-chain results and System boundaries without extra 
   );
   for (const path of detailPaths) expect(count(afterSystemRefresh, path)).toBe(count(beforeSystemRefresh, path));
   await attachScreenshot(page, testInfo, "desktop-system-contract-boundary");
+
+  await page.setViewportSize({ width: 778, height: 844 });
+  const compactSystemBounds = await system.evaluate((element) => ({
+    viewportWidth: innerWidth,
+    documentWidth: document.documentElement.scrollWidth,
+    bodyWidth: document.body.scrollWidth,
+    right: element.getBoundingClientRect().right,
+  }));
+  expect(compactSystemBounds.documentWidth).toBeLessThanOrEqual(compactSystemBounds.viewportWidth);
+  expect(compactSystemBounds.bodyWidth).toBeLessThanOrEqual(compactSystemBounds.viewportWidth);
+  expect(compactSystemBounds.right).toBeLessThanOrEqual(compactSystemBounds.viewportWidth);
 
   await page.setViewportSize({ width: 390, height: 844 });
   const systemBounds = await system.evaluate((element) => {

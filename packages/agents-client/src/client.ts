@@ -130,8 +130,7 @@ function projectStartupConfiguration(value: unknown): CoreStartupConfiguration {
     !isRecord(value.supported) || !exactFields(value.supported, startupSupportedFields) ||
     !sortedUnique(value.supported.harnesses, isHarnessKind) || !sortedUnique(value.supported.managed_sandbox_providers, isSandboxProvider) ||
     !isRecord(value.configured) || !exactFields(value.configured, startupConfiguredFields) ||
-    !isHarnessKind(value.configured.default_harness) || !sortedUnique(value.configured.enabled_harnesses, isHarnessKind) || value.configured.enabled_harnesses.length === 0 ||
-    !value.configured.enabled_harnesses.includes(value.configured.default_harness) || typeof value.configured.daemon_gateway !== "boolean" ||
+    !isHarnessKind(value.configured.default_harness) || !sortedUnique(value.configured.enabled_harnesses, isHarnessKind) || typeof value.configured.daemon_gateway !== "boolean" ||
     typeof value.configured.self_hosted !== "boolean" || value.configured.self_hosted !== value.configured.daemon_gateway ||
     !isRecord(value.configured.managed_sandbox) || !exactFields(value.configured.managed_sandbox, startupManagedSandboxFields) ||
     typeof value.configured.managed_sandbox.enabled !== "boolean" || typeof value.configured.managed_sandbox.maintenance !== "boolean" ||
@@ -143,6 +142,11 @@ function projectStartupConfiguration(value: unknown): CoreStartupConfiguration {
   const supportedHarnesses = value.supported.harnesses as CoreHarnessKind[];
   const supportedSandboxProviders = value.supported.managed_sandbox_providers as CoreManagedSandboxProvider[];
   const enabledHarnesses = configured.enabled_harnesses as CoreHarnessKind[];
+  if (configured.daemon_gateway
+    ? !enabledHarnesses.includes(configured.default_harness as CoreHarnessKind)
+    : enabledHarnesses.length !== 0) {
+    return invalidStartupConfiguration();
+  }
   if (managed.enabled
     ? !isSandboxProvider(managed.provider) || !supportedSandboxProviders.includes(managed.provider) || !configured.daemon_gateway
     : managed.provider !== null || managed.maintenance) {
