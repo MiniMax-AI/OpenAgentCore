@@ -2,9 +2,11 @@
 
 Status: provider abstraction with Docker and microsandbox sampling, the
 current-snapshot API/client contract, and the initial Core Web current-snapshot
-Dashboard are implemented. The history backend and other provider sources are not
-implemented. Microsandbox idle suspension is a separate durable lifecycle feature;
-it does not consume this telemetry as authority.
+Dashboard are implemented. Phase 4 backend qualification and the bounded,
+sanitized exporter seam are implemented, but no concrete export transport,
+history backend, or history API is configured. Other provider sources are not
+implemented. Microsandbox idle suspension is a separate durable lifecycle
+feature; it does not consume this telemetry as authority.
 
 ## 1. Problem statement
 
@@ -238,6 +240,51 @@ Provider type, Runtime mode, and coarse status are safe low-cardinality labels.
 High-cardinality identities require tenant-scoped access and retention policies;
 they are not global Prometheus labels by default.
 
+### 10.1 Qualified public implementation reference
+
+The first Phase 4 qualification uses E2B Runtime commit
+`ccf2a64ee40472645209b92525a5459d413bce76` as implementation evidence, not as
+an API contract to copy. Its sandbox observer samples every five seconds, exports
+provider metrics through OTLP, and attaches sandbox and team identity. The
+OpenTelemetry Collector sends ordinary operational metrics to Mimir but routes
+the high-cardinality `e2b.*` sandbox series to ClickHouse. Its authenticated API
+derives team identity from the caller, queries with both `team_id` and
+`sandbox_id`, validates the requested time range, calculates a bounded step, and
+retains the specialized sandbox table for seven days. Relevant public files are:
+
+- [`packages/orchestrator/pkg/metrics/sandboxes.go`](https://github.com/e2b-dev/runtime/blob/ccf2a64ee40472645209b92525a5459d413bce76/packages/orchestrator/pkg/metrics/sandboxes.go)
+  for bounded collection and identity attributes;
+- [`packages/local-dev/otel-collector.yaml`](https://github.com/e2b-dev/runtime/blob/ccf2a64ee40472645209b92525a5459d413bce76/packages/local-dev/otel-collector.yaml)
+  for OTLP fan-out to Mimir and ClickHouse;
+- [`packages/clickhouse/migrations/20250717135224_sandbox_metrics.sql`](https://github.com/e2b-dev/runtime/blob/ccf2a64ee40472645209b92525a5459d413bce76/packages/clickhouse/migrations/20250717135224_sandbox_metrics.sql)
+  for the high-cardinality history schema and retention; and
+- [`packages/api/internal/clusters/resources_local.go`](https://github.com/e2b-dev/runtime/blob/ccf2a64ee40472645209b92525a5459d413bce76/packages/api/internal/clusters/resources_local.go)
+  plus [`packages/clickhouse/pkg/sandbox.go`](https://github.com/e2b-dev/runtime/blob/ccf2a64ee40472645209b92525a5459d413bce76/packages/clickhouse/pkg/sandbox.go)
+  for tenant-scoped, downsampled reads.
+
+Dify commit `a068c47ea993ccc0f943131c274b7830b16de9f4` independently demonstrates an
+optional OTLP exporter that becomes a no-op when disabled, but it does not
+provide a Runtime-incarnation history query boundary. It supports the exporter
+choice, not the history adapter design.
+
+For Core, the qualified topology is therefore:
+
+1. a bounded, best-effort provider-neutral handoff after validated current
+   observations;
+2. an optional operator-managed OTLP Collector;
+3. a high-cardinality history store behind a separate server-side adapter; and
+4. authenticated Core history routes that resolve tenant and Session ownership
+   before issuing a backend query.
+
+Mimir remains suitable for low-cardinality service health. The initial Runtime
+history qualification does not treat a shared Prometheus label filter as a
+tenant security boundary and does not let Web query Mimir, ClickHouse, or the
+Collector directly. ClickHouse is the first reference backend because its query
+shape can require tenant, Session, allocation, and incarnation predicates, but
+the public API and `runtimehistory` interface must remain backend-neutral. The
+backend, Collector, and exporter are disabled by default and are not required for
+Session execution or current observations.
+
 ## 11. Dashboard information architecture
 
 ### 11.1 Overview
@@ -386,6 +433,15 @@ Implemented for the browser-local current-snapshot live window.
 
 ### Phase 4: optional history
 
+- Implemented: bounded asynchronous handoff of sanitized, validated current
+  observation results. It is disabled by default, drops on queue saturation, and
+  cannot fail the current-observation request path.
+- Qualified: optional OTLP Collector fan-out with a separate high-cardinality
+  history store and server-side tenant-scoped query adapter. ClickHouse is the
+  first reference backend; no backend is a Core execution dependency.
+- Not implemented: a concrete OTLP exporter, `runtimehistory` query adapter,
+  public history extension, durable Web ranges, retention configuration, and
+  exporter coverage telemetry.
 - Add telemetry exporter and qualified operator backend.
 - Define a separate history query adapter and retention/security policy.
 - Replace or extend the ephemeral live window with explicitly advertised durable

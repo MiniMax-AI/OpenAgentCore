@@ -109,6 +109,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = observationService.Close(closeCtx)
+	}()
 	var workerDone chan error
 	var worker *execution.Worker
 	options := []api.Option{api.WithSubagents(executionStore), api.WithSkills(executionStore), api.WithSourceFiles(executionStore), api.WithSessionArtifacts(executionStore), api.WithRuntimeObservations(observationService)}
