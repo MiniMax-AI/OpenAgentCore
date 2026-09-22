@@ -2945,7 +2945,8 @@ test("presents an honest searchable Trace workbench without changing the convers
   await search.fill("");
 
   const patchRow = trace.locator(".trace-ledger-row-tools").filter({ hasText: "apply_patch" }).first();
-  await expect(patchRow.locator('.trace-row-duration [aria-hidden="true"]')).toHaveText("41 ms");
+  await expect(patchRow.locator('.trace-row-duration [aria-hidden="true"]')).toHaveText("—");
+  await expect(patchRow.locator(".trace-row-duration")).toHaveAttribute("title", "Core does not provide per-item timing.");
   await patchRow.click();
   const detail = page.getByRole("complementary", { name: "Trace item details" });
   await expect(detail).toBeVisible();
@@ -3072,6 +3073,8 @@ test("renders Parsar patches as accessible read-only diffs in desktop and narrow
   const failedStep = failedTrace.locator('[data-trace-step="patch_failed"]');
   await failedStep.getByRole("button", { name: /apply_patch/ }).click();
   await expect(failedStep.locator('[data-patch-status="failed"]')).toContainText("Failed");
+  await failedStep.getByText("Raw result").click();
+  await expect(failedStep).toContainText("fixture failure");
   const fallback = page.locator('[data-trace-step="patch_alternate"]');
   await fallback.getByRole("button", { name: /apply_patch/ }).click();
   await expect(fallback).toContainText("malformed alternate shape");

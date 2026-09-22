@@ -20,9 +20,10 @@ function patchItems() {
         { path: "src/delete.ts", kind: { type: "delete", move_path: null }, diff: "@@ -1 +0,0 @@\n-removed" },
       ] },
     },
-    { id: "patch_output", turn_id: "turn_patch_completed", type: "function_call_output", status: "completed", call_id: "call_completed", output: { applied: true }, duration_ms: 41 },
+    { id: "patch_output", turn_id: "turn_patch_completed", type: "function_call_output", status: "completed", call_id: "call_completed", output: '{"applied": true}' },
     { id: "patch_running", turn_id: "turn_patch_running", type: "function_call", status: "in_progress", name: "apply_patch", call_id: "call_running", arguments: { changes: [{ path: "src/running.ts", kind: { type: "update" }, diff: "@@ -1 +1 @@\n-wait\n+working" }] } },
-    { id: "patch_failed", turn_id: "turn_patch_failed", type: "function_call", status: "failed", name: "apply_patch", call_id: "call_failed", arguments: { changes: [{ path: "src/failed.ts", kind: { type: "delete" }, diff: "@@ -1 +0,0 @@\n-failed" }] }, error: { message: "fixture failure" } },
+    { id: "patch_failed", turn_id: "turn_patch_failed", type: "function_call", status: "failed", name: "apply_patch", call_id: "call_failed", arguments: { changes: [{ path: "src/failed.ts", kind: { type: "delete" }, diff: "@@ -1 +0,0 @@\n-failed" }] } },
+    { id: "patch_failed_output", turn_id: "turn_patch_failed", type: "function_call_output", status: "failed", call_id: "call_failed", error: "fixture failure" },
     { id: "patch_alternate", turn_id: "turn_patch_alternate", type: "function_call", status: "in_progress", name: "apply_patch", call_id: "call_alternate", arguments: { patch: "*** Begin Patch\nmalformed alternate shape" } },
   ];
 }
