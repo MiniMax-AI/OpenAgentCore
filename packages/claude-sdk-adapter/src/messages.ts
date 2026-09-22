@@ -2,7 +2,7 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
 export type MessageEvent =
   | { type: "delta"; delta: string; item_id: string }
-  | { type: "output_message"; message: { id: string; status: "in_progress" | "completed"; text?: string } };
+  | { type: "output_message"; message: { id: string; status: "in_progress" | "completed"; phase?: "final_answer"; text?: string } };
 
 type ActiveMessage = {
   id: string;

@@ -84,7 +84,8 @@ type TextConfig struct {
 }
 
 type TextFormat struct {
-	Type string `json:"type" enums:"text" binding:"required"`
+	Type   string          `json:"type" enums:"text,json_schema" binding:"required"`
+	Schema json.RawMessage `json:"schema,omitempty" swaggertype:"object"`
 }
 
 type Session struct {

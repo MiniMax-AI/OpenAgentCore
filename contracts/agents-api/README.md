@@ -164,7 +164,7 @@ user-managed enrollment remain outside this qualification.
 | --- | --- |
 | Subagents / multi_agent | Six reads and same-child recovery have three-harness Docker evidence; optional native operations, live child progress, full lifecycle/interactions and tool combinations remain explicit gaps |
 | Environment Templates | Unsupported restricted hostname forms, unqualified installation overrides/null network and exact hosted errors remain gaps. CRUD/list, files, env/setup/system/npm/Python, inline/referenced Skills, Plugins, workspace capability directories and Session references have recorded coverage. Environment Plugin MCP transport and placement limits are [listed separately](environment-templates.md#environment-origin-mcp-plugins) |
-| Input and configuration | Non-text initial input, broader content/configuration unions, structured output and reasoning/verbosity combinations |
+| Input and configuration | Non-text initial input, broader content/configuration unions and reasoning/verbosity combinations; [structured output](structured-output.md) has a qualified Claude function profile, with other combinations remaining gaps |
 | Tools and interactions | Deferred functions, other tool types, effective tool-set enforcement and result/cancel publication ordering; MiniMax public functions and service-origin MCP remain unsupported |
 | Vault and Credentials | OAuth/refresh, archive semantics, revocation/concurrent mutation and exact hosted selection/error behavior; static bearer CRUD/token replacement is already present |
 | Existing resources | Full Item/SSE/Usage variants, omitted/null/default/error semantics, pagination and overlapping lifecycle behavior beyond recorded cases |
@@ -453,7 +453,7 @@ extension separately from upstream fields and document it here when implemented.
 
 `openapi.yaml` is our generated supported surface; it is not the full upstream
 specification. The shared Go wire types are in `v1`. Physical Session cleanup, non-text
-message input, structured output execution, broader options/tools, remaining Vault lifecycle,
+message input, broader structured-output combinations, broader options/tools, remaining Vault lifecycle,
 Subagents and environment/provider resources remain incomplete. Reject unsupported
 requests explicitly; persisted saved configuration is not execution admission.
 

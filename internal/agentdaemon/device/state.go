@@ -80,6 +80,7 @@ type KindCapabilities struct {
 	// ExecutionControls supports typed search and verbosity controls.
 	ExecutionControls    bool `json:"execution_controls,omitempty"`
 	TextVerbosity        bool `json:"text_verbosity,omitempty"`
+	StructuredOutput     bool `json:"structured_output,omitempty"`
 	SubagentControl      bool `json:"subagent_control,omitempty"`
 	FunctionTools        bool `json:"function_tools,omitempty"`
 	MCPHTTPTools         bool `json:"mcp_http_tools,omitempty"`

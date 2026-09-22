@@ -75,3 +75,27 @@ func TestMCPWithoutEnvironmentNoneRejectedBeforeSetup(t *testing.T) {
 		t.Fatal("MCP reached native setup", err)
 	}
 }
+
+func TestStructuredOutputConfigurationReachesNativeUnchanged(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("PARSAR_HOME", root)
+	config := Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
+	schema := json.RawMessage(`{"type":"object","properties":{"n":{"const":9007199254740992}}}`)
+	request := proto.PromptRequestPayload{RunID: "run", Prompt: "Original input.", ObserveMessages: true, DisableSubagents: true, AgentOptions: map[string]any{"model": "model", "system_prompt": "Original instructions."}, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: schema}}}
+	start, _, err := prepare(config, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if start.OutputFormat == nil || string(start.OutputFormat.Schema) != string(schema) || start.Prompt != request.Prompt || start.SystemPrompt != "Original instructions." {
+		t.Fatal("native configuration changed")
+	}
+	request.ExecutionControls.OutputFormat.Schema = json.RawMessage(`{"type":"object","const":9007199254740993}`)
+	if _, _, err := prepare(config, request); err == nil {
+		t.Fatal("lossy schema accepted")
+	}
+	request.ExecutionControls.OutputFormat.Schema = schema
+	request.DisableSubagents = false
+	if _, _, err := prepare(config, request); err == nil {
+		t.Fatal("unqualified subagent combination accepted")
+	}
+}

@@ -85,6 +85,9 @@ func (p Policy) engineCapabilities(peer *gateway.Session, engine string, snapsho
 	if profile.WebSearchControl && !caps.WebSearchControl {
 		return fail("device must advertise web_search_control")
 	}
+	if snapshot.Agent.Text.Format.Type == "json_schema" && (!caps.StructuredOutput || !caps.MessageItems) {
+		return fail("device must support structured output and message observations")
+	}
 	if profile.TextVerbosity && !caps.TextVerbosity {
 		return fail("device must advertise text_verbosity")
 	}

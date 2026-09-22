@@ -16,6 +16,9 @@ func profileError(err error) error {
 }
 
 func validateProfileConfiguration(profile engine.Profile, snapshot Snapshot) error {
+	if snapshot.Agent.Text.Format.Type == "json_schema" && !profile.StructuredOutput {
+		return errors.New("Structured output is not qualified for this engine.")
+	}
 	if profile.ValidateConfiguration != nil {
 		if err := profile.ValidateConfiguration(snapshot.Agent, snapshot.Environment, snapshot.Daemon != nil); err != nil {
 			return profileError(err)

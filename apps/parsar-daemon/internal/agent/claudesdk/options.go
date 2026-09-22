@@ -24,6 +24,7 @@ type subagentOptions struct {
 
 type startRequest struct {
 	Subagents        *subagentOptions     `json:"subagents,omitempty"`
+	OutputFormat     *proto.OutputFormat  `json:"output_format,omitempty"`
 	Type             string               `json:"type"`
 	Prompt           string               `json:"prompt,omitempty"`
 	Model            string               `json:"model"`
@@ -65,6 +66,16 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	// SDK's default text generation; it has no native verbosity-level option.
 	if controls := req.ExecutionControls; controls != nil && (controls.WebSearch != "disabled" || controls.TextVerbosity != "medium") {
 		return fail("execution controls require disabled web search and medium text verbosity")
+	}
+	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
+		format := req.ExecutionControls.OutputFormat
+		if format.Type != "json_schema" || !req.ObserveMessages || !req.DisableSubagents || config.Workspace != nil || req.MCPHTTPServers != nil {
+			return fail("structured output requires the qualified message-observing single-agent function profile")
+		}
+		if err := proto.ValidateBinary64Schema(format.Schema); err != nil {
+			return startRequest{}, nil, err
+		}
+		start.OutputFormat = format
 	}
 	if req.ObserveSubagentIdentities {
 		if req.DisableSubagents || len(req.FunctionTools) != 0 || req.MCPHTTPServers != nil || (req.LocalEnvironment != nil && len(req.LocalEnvironment.MCP) != 0) {

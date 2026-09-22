@@ -81,9 +81,14 @@ An engine without native tools can guarantee their absence; an engine with tools
 must actually disable them when requested. Configuration acceptance is not proof
 of enforcement.
 
-MCP, public function calls, image inputs, verbosity controls and other optional
+MCP, public function calls, structured output, image inputs, verbosity controls and other optional
 operations do not need to match another engine. Reject unqualified combinations
 explicitly and record the gap. Never advertise a capability to bypass selection.
+
+Structured-output adapters consume `ExecutionControls.OutputFormat` and publish
+confirmed native output through the existing Message contract. Register public
+qualification separately from the Runtime capability; see the
+[structured-output boundary](structured-output.md). No Core engine-name branch is required.
 
 Hosted workspace execution additionally requires verified preparation, workspace
 reads/output export, network behavior and credential/history isolation. Reuse the

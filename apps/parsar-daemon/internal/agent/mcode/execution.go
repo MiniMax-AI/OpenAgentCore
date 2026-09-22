@@ -16,7 +16,7 @@ func validateExecutionRequest(req proto.PromptRequestPayload) error {
 	if !req.ReleaseOnCompletion || !req.DisableExecutionEnvironment || req.WorkDir != "" || req.AgentStateKey == "" || req.LocalEnvironment != nil || req.RequireExistingNativeSession || len(req.FunctionTools) != 0 || (req.MCPHTTPServers != nil && len(*req.MCPHTTPServers) != 0) {
 		return fmt.Errorf("mcode: unsupported execution configuration")
 	}
-	if req.ExecutionControls == nil || req.ExecutionControls.WebSearch != "disabled" || (req.ExecutionControls.TextVerbosity != "" && req.ExecutionControls.TextVerbosity != "medium") {
+	if req.ExecutionControls == nil || req.ExecutionControls.OutputFormat != nil || req.ExecutionControls.WebSearch != "disabled" || (req.ExecutionControls.TextVerbosity != "" && req.ExecutionControls.TextVerbosity != "medium") {
 		return fmt.Errorf("mcode: unsupported execution controls")
 	}
 	if !req.DisableSubagents {

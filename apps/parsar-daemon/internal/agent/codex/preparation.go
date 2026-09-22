@@ -36,6 +36,9 @@ func newSession(parent context.Context, req proto.PromptRequestPayload, out chan
 }
 
 func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (*Prepared, error) {
+	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
+		return nil, errors.New("codex: structured output is not qualified")
+	}
 	if req.WorkspaceReadOnly {
 		return nil, errors.New("codex: workspace reads use the local Runtime interface")
 	}

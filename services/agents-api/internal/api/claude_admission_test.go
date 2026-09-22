@@ -20,6 +20,11 @@ func TestClaudeSessionConfigurationAdmission(t *testing.T) {
 				accepted     bool
 			}{
 				{"defaults", `,"instructions":null`, true},
+				{"schema", `,"text":{"format":{"type":"json_schema","schema":{"type":"object","properties":{"value":{"type":"string"}}}}}`, true},
+				{"lossy schema", `,"text":{"format":{"type":"json_schema","schema":{"type":"object","const":9007199254740993}}}`, false},
+				{"array schema", `,"text":{"format":{"type":"json_schema","schema":{"type":"array"}}}`, false},
+				{"schema and MCP", `,"text":{"format":{"type":"json_schema","schema":{"type":"object"}}},"tools":[` + publicMCP + `]`, false},
+				{"schema and subagents", `,"text":{"format":{"type":"json_schema","schema":{"type":"object"}}},"multi_agent":{"enabled":true}`, false},
 				{"medium", `,"text":{"verbosity":"medium"}`, true},
 				{"low", `,"text":{"verbosity":"low"}`, false},
 				{"high", `,"text":{"verbosity":"high"}`, false},

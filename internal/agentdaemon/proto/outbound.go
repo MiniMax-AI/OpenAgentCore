@@ -1,5 +1,7 @@
 package proto
 
+import "encoding/json"
+
 // Type constants for server → daemon frames.
 const (
 	// TypePromptRequest triggers one prompt cycle. Envelope.ID = RunID;
@@ -169,6 +171,13 @@ type DeviceShutdownPayload struct {
 // ExecutionControls requires both values when supplied; omitting the block preserves agent options.
 // Send only to a peer advertising execution_controls, independently of older option capabilities.
 type ExecutionControls struct {
-	WebSearch     string `json:"web_search"`
-	TextVerbosity string `json:"text_verbosity"`
+	WebSearch     string        `json:"web_search"`
+	TextVerbosity string        `json:"text_verbosity"`
+	OutputFormat  *OutputFormat `json:"output_format,omitempty"`
+}
+
+// OutputFormat passes the public schema unchanged to a qualified native adapter.
+type OutputFormat struct {
+	Type   string          `json:"type"`
+	Schema json.RawMessage `json:"schema"`
 }

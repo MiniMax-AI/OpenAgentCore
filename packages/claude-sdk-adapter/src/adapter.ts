@@ -1,3 +1,4 @@
+import { StructuredOutput } from "./structured_output.js";
 import { Subagents } from "./subagents.js";
 import type { Fact } from "./subagent_history.js";
 import { WorkspaceDirectories, type WorkspaceDirectoryEvent } from "./workspace_directories.js";
@@ -65,6 +66,7 @@ export async function execute(request: Start | Prepare, emit: (event: Event) => 
   const resultIDs = new Set<string>();
   let failed = false;
   let cancellationFactsFailed = false;
+  const structured = request.output_format ? new StructuredOutput() : undefined;
   const messages = request.observe_messages ? new MessageObserver() : undefined;
   let stream: ReturnType<typeof query> | undefined;
   let warm: WarmQuery | undefined;
@@ -77,6 +79,7 @@ export async function execute(request: Start | Prepare, emit: (event: Event) => 
         cwd: request.cwd,
         env: workspace?.options.env ?? { ...process.env, ...(subagents ? { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" } : {}) },
         model: request.model,
+        ...(request.output_format ? { outputFormat: request.output_format } : {}),
         systemPrompt: request.system_prompt,
         ...(request.resume ? { resume: request.resume } : {}),
         tools: subagents ? ["Agent", "SendMessage"] : [], allowedTools: profile?.allowed ?? names, strictMcpConfig: true, settingSources: [],
@@ -128,6 +131,7 @@ export async function execute(request: Start | Prepare, emit: (event: Event) => 
     } else stream = query({ prompt: inputs, options });
     for await (const message of stream) {
       subagents?.consume(message);
+      structured?.consume(message, nativeID);
       await functions.consume(message, nativeID);
       if (mcp) for (const event of mcp.consume(message, nativeID)) await emit(event);
       if (commands) for (const event of commands.consume(message, nativeID, inputs.hasInput)) await emit(event);
@@ -137,7 +141,7 @@ export async function execute(request: Start | Prepare, emit: (event: Event) => 
         if (!nativeID || (request.resume && nativeID !== request.resume)) throw new Error("unexpected native session");
         if (workspace) workspace.verify(message.tools, profile ? await stream.mcpServerStatus() : message.mcp_servers, nativeID);
         else if (profile) profile.verify(message.tools, await stream.mcpServerStatus(), nativeID);
-        else if (message.tools.length !== names.length + (subagents ? 2 : 0) || message.tools.some(name => ![...names, ...(subagents ? ["Task", "SendMessage"] : [])].includes(name)) ||
+        else if (message.tools.length !== names.length + (subagents ? 2 : 0) + (structured ? 1 : 0) || message.tools.some(name => ![...names, ...(subagents ? ["Task", "SendMessage"] : []), ...(structured ? ["StructuredOutput"] : [])].includes(name)) ||
             message.mcp_servers.length !== (definitions.length ? 1 : 0) ||
             message.mcp_servers.some(server => server.name !== "functions" || server.status !== "connected")) {
           throw new Error("unexpected native configuration");
@@ -152,6 +156,7 @@ export async function execute(request: Start | Prepare, emit: (event: Event) => 
         await emit({ type: "usage", session_id: nativeID, result_id: message.uuid, usage: resultUsage(message) });
         for (const event of inputs.consume(message)) await emit(event);
         if (message.subtype !== "success" || message.is_error) throw new Error("unsuccessful native result");
+        if (structured) await emit(structured.complete(message));
         result = { type: "result", session_id: nativeID, text: message.result };
       }
       if (message.type !== "result") for (const event of inputs.consume(message)) await emit(event);

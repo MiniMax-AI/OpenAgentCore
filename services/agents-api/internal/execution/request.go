@@ -42,6 +42,9 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session store.Session
 		verbosity = "medium"
 	}
 	controls := &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: verbosity}
+	if snapshot.Agent.Text.Format.Type == "json_schema" {
+		controls.OutputFormat = &proto.OutputFormat{Type: "json_schema", Schema: snapshot.Agent.Text.Format.Schema}
+	}
 	request := proto.PromptRequestPayload{AgentKind: session.Engine, FunctionTools: functions,
 		AgentOptions: options, ExecutionControls: controls, AgentStateKey: "agents-api-" + session.ID,
 		AgentSessionID: bound.NativeSessionID, ReleaseOnCompletion: true, StrictResume: true,

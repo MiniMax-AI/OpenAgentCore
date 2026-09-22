@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -36,7 +37,7 @@ func TestTextConfigurationHTTP(t *testing.T) {
 				t.Fatal(err)
 			}
 			want := v1.TextConfig{Format: v1.TextFormat{Type: "text"}, Verbosity: tc.want}
-			if got.Agent.Text != want || saved.Agent.Text != want {
+			if !reflect.DeepEqual(got.Agent.Text, want) || !reflect.DeepEqual(saved.Agent.Text, want) {
 				t.Fatal(got.Agent.Text, saved.Agent.Text)
 			}
 		})

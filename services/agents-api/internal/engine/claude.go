@@ -11,7 +11,8 @@ import (
 
 func claudeProfile() Profile {
 	return Profile{
-		Placements: []string{"none", "openai_hosted", "self_hosted"}, MCPBearer: true,
+		StructuredOutput: true,
+		Placements:       []string{"none", "openai_hosted", "self_hosted"}, MCPBearer: true,
 		ValidateConfiguration: validateClaudeConfiguration,
 		ValidateTools:         validateClaudeTools,
 		ValidateFunctionResult: func(content []proto.FunctionResultContent) error {
@@ -32,7 +33,25 @@ func validateClaudeConfiguration(agent v1.Agent, environment *v1.Environment, ha
 	if agent.Text.Verbosity != "" && agent.Text.Verbosity != "medium" {
 		return errors.New("The configured engine currently supports medium text verbosity only.")
 	}
-	if agent.Reasoning.Effort != nil || agent.Reasoning.Summary != nil || (agent.ServiceTier != "" && agent.ServiceTier != "auto") || (agent.Text.Format.Type != "" && agent.Text.Format.Type != "text") {
+	if agent.Reasoning.Effort != nil || agent.Reasoning.Summary != nil || (agent.ServiceTier != "" && agent.ServiceTier != "auto") {
+		return ErrInvalidInput
+	}
+	if agent.Text.Format.Type == "json_schema" {
+		if err := proto.ValidateBinary64Schema(agent.Text.Format.Schema); err != nil {
+			return err
+		}
+		if environment.Type != "none" || agent.MultiAgent.Enabled {
+			return errors.New("Structured output currently requires a single-agent environment:none profile.")
+		}
+		for _, raw := range agent.Tools {
+			var tool struct {
+				Type string `json:"type"`
+			}
+			if json.Unmarshal(raw, &tool) != nil || tool.Type != "function" {
+				return ErrInvalidInput
+			}
+		}
+	} else if agent.Text.Format.Type != "" && agent.Text.Format.Type != "text" {
 		return ErrInvalidInput
 	}
 	return rejectSubagentTools(agent, "function", "mcp")

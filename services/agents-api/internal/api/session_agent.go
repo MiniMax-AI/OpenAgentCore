@@ -70,13 +70,11 @@ func admitSessionAgent(cfg v1.SavedAgentConfiguration) (v1.Agent, error) {
 	if cfg.ServiceTier != "auto" {
 		return v1.Agent{}, errors.New("Execution currently supports service_tier=auto only.")
 	}
-	if cfg.Text.Format.Type != "text" || len(cfg.Text.Format.Schema) > 0 {
-		return v1.Agent{}, errors.New("Execution currently supports text.format.type=text only.")
-	}
 	text, err := resolveText(&v1.TextConfigInput{Verbosity: &cfg.Text.Verbosity})
 	if err != nil {
 		return v1.Agent{}, err
 	}
+	text.Format = v1.TextFormat{Type: cfg.Text.Format.Type, Schema: cfg.Text.Format.Schema}
 	tools, err := resolveSessionTools(cfg.Tools)
 	if err != nil {
 		return v1.Agent{}, err

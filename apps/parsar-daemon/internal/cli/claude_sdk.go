@@ -30,7 +30,7 @@ func discoverClaudeSDK(rc *runContext, profile string, check func(context.Contex
 	out := &claudeSDKDiscovery{Info: proto.SupportedAgentKind{Kind: "claude_sdk", Capabilities: proto.AgentKindCapabilities{
 		Streaming: true, Usage: true, Resume: true, Steering: true, MessageItems: true,
 		ToolObservations: true, EnvironmentNone: true, SubagentControl: true,
-		DurableTurns: true, DurableInputReceipts: true, FunctionTools: true, ExecutionControls: true,
+		DurableTurns: true, DurableInputReceipts: true, FunctionTools: true, ExecutionControls: true, StructuredOutput: true,
 	}}}
 	fail := func(err error) *claudeSDKDiscovery {
 		fmt.Fprintf(rc.stderr, "parsar-daemon: configured Claude SDK runtime unavailable: %v\n", err)

@@ -73,7 +73,7 @@ func TestNativeMCodePublicExecution(t *testing.T) {
 	}
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	stop := startMCodeDaemon(t, h, home, binary)
+	stop := startNativeEngineDaemon(t, h, home, binary, "mcode")
 	defer func() { stop() }()
 	evidence := filepath.Join(home, "public.json")
 	run := func(stage string) {
@@ -128,7 +128,7 @@ func TestNativeMCodePublicExecution(t *testing.T) {
 		t.Fatal("native binding missing", err)
 	}
 	stop()
-	stop = startMCodeDaemon(t, h, home, binary)
+	stop = startNativeEngineDaemon(t, h, home, binary, "mcode")
 	run("resume")
 	after, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
 	if err != nil || before.NativeSessionID != after.NativeSessionID {
@@ -140,7 +140,7 @@ func TestNativeMCodePublicExecution(t *testing.T) {
 	t.Logf("Real mcode common-contract acceptance passed: %s", home)
 }
 
-func startMCodeDaemon(t *testing.T, h *dispatchHarness, home, binary string) func() {
+func startNativeEngineDaemon(t *testing.T, h *dispatchHarness, home, binary, engine string) func() {
 	t.Helper()
 	if h.conn != nil {
 		_ = h.conn.Close()
@@ -149,7 +149,7 @@ func startMCodeDaemon(t *testing.T, h *dispatchHarness, home, binary string) fun
 	if err := os.MkdirAll(profile, 0700); err != nil {
 		t.Fatal(err)
 	}
-	auth, _ := json.Marshal(map[string]string{"server_url": h.url + "/api/v1", "runtime_id": h.device.ID, "runner_credential": h.credential, "device_name": "mcode native proof"})
+	auth, _ := json.Marshal(map[string]string{"server_url": h.url + "/api/v1", "runtime_id": h.device.ID, "runner_credential": h.credential, "device_name": "native proof"})
 	if err := os.WriteFile(filepath.Join(profile, "auth.json"), auth, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func startMCodeDaemon(t *testing.T, h *dispatchHarness, home, binary string) fun
 	deadline := time.Now().Add(45 * time.Second)
 	for time.Now().Before(deadline) {
 		if peer, err := h.registry.LookupDevice(h.device.ID); err == nil && peer != old {
-			if info, found, known := peer.AgentKindStatus("mcode"); found && known && info.Available && info.Capabilities.EnvironmentNone {
+			if info, found, known := peer.AgentKindStatus(engine); found && known && info.Available && info.Capabilities.EnvironmentNone {
 				return stop
 			}
 		}
@@ -197,6 +197,6 @@ func startMCodeDaemon(t *testing.T, h *dispatchHarness, home, binary string) fun
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	t.Fatalf("native mcode daemon not ready; evidence %s", home)
+	t.Fatalf("native daemon not ready; evidence %s", home)
 	return stop
 }

@@ -1598,9 +1598,12 @@ definitions:
     type: object
   v1.TextFormat:
     properties:
+      schema:
+        type: object
       type:
         enum:
         - text
+        - json_schema
         type: string
     required:
     - type
@@ -2689,11 +2692,13 @@ paths:
         Unknown historical creators reject retries; known creators without recorded
         intent retain resolved-snapshot retry rules. These conflict policies are local
         and not verified hosted parity. Creation retries observe future events without
-        replay; retry with stream=false to retrieve the Session. Non-text initial
-        input remains unsupported. Basic Codex and Claude SDK openai_hosted creation
-        requires an explicitly configured managed provider. The Claude workspace profile
-        supports non-deferred function tools with text results alongside native workspace
-        tools; HTTP MCP remains unsupported. Idle Sessions provision automatically;
+        replay; retry with stream=false to retrieve the Session. Claude SDK environment:none
+        supports qualified object-root json_schema output with medium verbosity, single-Agent
+        execution and ordinary functions; other combinations remain unsupported. Non-text
+        initial input remains unsupported. Basic Codex and Claude SDK openai_hosted
+        creation requires an explicitly configured managed provider. The Claude workspace
+        profile supports non-deferred function tools with text results alongside native
+        workspace tools; HTTP MCP remains unsupported. Idle Sessions provision automatically;
         initial provisioning has no caller connection action. Network defaults to
         enabled; disabled and restricted exact ASCII hostnames are supported. Restricted
         policy requires 1–100 allowed domains. Unsupported hostname forms and startup

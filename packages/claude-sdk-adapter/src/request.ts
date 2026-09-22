@@ -5,6 +5,7 @@ import { parseWorkspace, type Workspace } from "./workspace.js";
 
 export type Start = {
   type: "start";
+  output_format?: { type: "json_schema"; schema: Record<string, unknown> };
   prompt: string;
   model: string;
   system_prompt: string;
@@ -28,7 +29,7 @@ export function parseRequest(line: string): Start | Prepare {
   const value: unknown = JSON.parse(line);
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_request");
   const request = value as Record<string, unknown>;
-  const allowed = new Set(["type", "prompt", "model", "system_prompt", "cwd", "resume", "require_history", "observe_messages", "subagents", "functions", "mcp_http_servers", "workspace"]);
+  const allowed = new Set(["type", "prompt", "model", "system_prompt", "cwd", "resume", "require_history", "observe_messages", "output_format", "subagents", "functions", "mcp_http_servers", "workspace"]);
   if (Object.keys(request).some(key => !allowed.has(key)) ||
       (request.type !== "start" && request.type !== "prepare") ||
       (request.type === "start" ? typeof request.prompt !== "string" || !request.prompt.trim() : "prompt" in request) ||
@@ -45,6 +46,12 @@ export function parseRequest(line: string): Start | Prepare {
     const value = request.subagents as Record<string, unknown>;
     if (!value || typeof value !== "object" || Object.keys(value).length !== 1 || !Number.isSafeInteger(value.max_concurrent) || (value.max_concurrent as number) < 1 ||
         (request.functions as unknown[] | undefined)?.length || request.mcp_http_servers !== undefined) throw new Error("invalid_request");
+  }
+  if (request.output_format !== undefined) {
+    const format = request.output_format as Start["output_format"];
+    if (!format || format.type !== "json_schema" || Object.keys(format).some(key => !["type", "schema"].includes(key)) ||
+        !format.schema || format.schema.type !== "object" || !request.observe_messages || request.subagents ||
+        request.workspace || request.mcp_http_servers !== undefined) throw new Error("invalid_request");
   }
   parseHTTPServers(request.mcp_http_servers);
   const workspace = parseWorkspace(request.workspace, request.cwd);

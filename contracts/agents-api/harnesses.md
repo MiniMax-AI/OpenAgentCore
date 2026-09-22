@@ -80,7 +80,9 @@ syntactically or everything either upstream harness can theoretically perform.
 | Non-default verbosity | Native/model-dependent support | No equivalent qualified; medium only |
 | Public detailed Usage | Supported native counters | Native raw usage retained; public breakdown gap |
 | V1 `self_hosted` daemon enrollment at `/workspace` | [Qualified deployment scope](user-managed-runtime-v1.md) | [Qualified deployment scope](user-managed-runtime-v1.md) |
-| Explicit reasoning, structured output, enabled `multi_agent`, message images | Shared service gaps | Shared service gaps |
+| Structured output | Unqualified; explicit rejection | [Qualified single-agent function profile](structured-output.md) |
+| Explicit reasoning, message images | Shared service gaps | Shared service gaps |
+| Six Subagent reads | [Qualified scope](subagents.md) | [Qualified scope](subagents.md) |
 
 This inventory records supported combinations, not a feature-equality checklist.
 Do not silently drop options, fabricate measurements, weaken isolation or remove

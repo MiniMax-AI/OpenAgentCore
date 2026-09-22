@@ -14,6 +14,7 @@ var ErrInvalidInput = errors.New("invalid engine configuration")
 type Profile struct {
 	Placements                                 []string
 	WebSearchControl, TextVerbosity, MCPBearer bool
+	StructuredOutput                           bool
 	ValidateConfiguration                      func(agent v1.Agent, environment *v1.Environment, hasDaemon bool) error
 	ValidateTools                              func(environment *v1.Environment, hasDaemon bool, functions []proto.FunctionTool, mcp []proto.MCPHTTPServer) error
 	ValidateFunctionResult                     func([]proto.FunctionResultContent) error
