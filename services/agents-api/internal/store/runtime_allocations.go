@@ -29,6 +29,18 @@ type RuntimeAllocation struct {
 	CreatedAt, KeptAt                                             time.Time
 }
 
+// RuntimeObservationSession is the minimum durable Core identity needed by the
+// deployment-wide read-only sampler. Provider identity is resolved again by the
+// observation service before any external read.
+type RuntimeObservationSession struct {
+	TenantID, SessionID string
+}
+
+type RuntimeObservationSessionPage struct {
+	Sessions   []RuntimeObservationSession
+	NextCursor string
+}
+
 // ReserveRuntimeAllocation commits the allocation and dedicated device together
 // before external Create. Only a fresh receipt authorizes that one Create call.
 func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environment, providerKey, credentialHash string) (RuntimeAllocation, error) {
@@ -137,6 +149,39 @@ func (s *Store) ListRuntimeAllocations(ctx context.Context, after string) ([]Run
 		result = append(result, runtimeAllocationFromRow(row.RuntimeAllocation, row.SessionID, row.TenantID, row.DeletedAt, row.Expired))
 	}
 	return result, nil
+}
+
+// ListRuntimeObservationSessions performs a deployment-wide, read-only keyset
+// scan of live managed Session identities. It excludes deleted Sessions and
+// released allocations; it does not acquire, renew, or mutate Runtime state.
+func (s *Store) ListRuntimeObservationSessions(ctx context.Context, after string, limit int) (RuntimeObservationSessionPage, error) {
+	if limit < 1 || limit > 100 {
+		return RuntimeObservationSessionPage{}, ErrInvalidInput
+	}
+	id := pgtype.UUID{Valid: true}
+	if after != "" {
+		var err error
+		id, err = parseID(after)
+		if err != nil {
+			return RuntimeObservationSessionPage{}, err
+		}
+	}
+	rows, err := s.queries.ListRuntimeObservationSessions(ctx, sqlc.ListRuntimeObservationSessionsParams{ID: id, Limit: int32(limit + 1)})
+	if err != nil {
+		return RuntimeObservationSessionPage{}, err
+	}
+	page := RuntimeObservationSessionPage{Sessions: make([]RuntimeObservationSession, 0, min(limit, len(rows)))}
+	if len(rows) > limit {
+		page.NextCursor = uuid.UUID(rows[limit-1].ID.Bytes).String()
+		rows = rows[:limit]
+	}
+	for _, row := range rows {
+		page.Sessions = append(page.Sessions, RuntimeObservationSession{
+			TenantID:  uuid.UUID(row.TenantID.Bytes).String(),
+			SessionID: uuid.UUID(row.ID.Bytes).String(),
+		})
+	}
+	return page, nil
 }
 
 func runtimeAllocationFromRow(row sqlc.RuntimeAllocation, session, tenant pgtype.UUID, deleted pgtype.Timestamptz, expired bool) RuntimeAllocation {

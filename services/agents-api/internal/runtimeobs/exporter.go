@@ -22,10 +22,11 @@ type ExportRecord struct {
 	EnvironmentID string
 	AllocationID  string
 
-	Mode         Mode
-	ProviderType string
-	Status       Status
-	Reason       string
+	Mode             Mode
+	ProviderType     string
+	Status           Status
+	Reason           string
+	CollectionSource CollectionSource
 
 	ResolvedAt     time.Time
 	SourceDuration time.Duration
@@ -151,19 +152,20 @@ func (d *exportDispatcher) close(ctx context.Context) error {
 	}
 }
 
-func exportRecord(observation Observation) ExportRecord {
+func exportRecord(observation Observation, collectionSource CollectionSource) ExportRecord {
 	return ExportRecord{
-		TenantID:       observation.Target.TenantID,
-		SessionID:      observation.Target.SessionID,
-		EnvironmentID:  observation.Target.EnvironmentID,
-		AllocationID:   observation.Target.Instance.AllocationID,
-		Mode:           observation.Target.Mode,
-		ProviderType:   observation.ProviderType,
-		Status:         observation.Status,
-		Reason:         observation.Reason,
-		ResolvedAt:     observation.ResolvedAt,
-		SourceDuration: observation.SourceDuration,
-		Sample:         cloneSample(observation.Sample),
+		TenantID:         observation.Target.TenantID,
+		SessionID:        observation.Target.SessionID,
+		EnvironmentID:    observation.Target.EnvironmentID,
+		AllocationID:     observation.Target.Instance.AllocationID,
+		Mode:             observation.Target.Mode,
+		ProviderType:     observation.ProviderType,
+		Status:           observation.Status,
+		Reason:           observation.Reason,
+		CollectionSource: collectionSource,
+		ResolvedAt:       observation.ResolvedAt,
+		SourceDuration:   observation.SourceDuration,
+		Sample:           cloneSample(observation.Sample),
 	}
 }
 

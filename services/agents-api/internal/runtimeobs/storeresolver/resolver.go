@@ -13,6 +13,7 @@ import (
 type sessionStore interface {
 	GetSession(context.Context, string, string) (store.Session, error)
 	GetRuntimeAllocation(context.Context, string, string) (store.RuntimeAllocation, error)
+	ListRuntimeObservationSessions(context.Context, string, int) (store.RuntimeObservationSessionPage, error)
 }
 
 type Resolver struct{ store sessionStore }
@@ -80,4 +81,16 @@ func (r *Resolver) Resolve(ctx context.Context, tenantID, sessionID string) (run
 	default:
 		return runtimeobs.Target{}, errors.New("invalid stored Runtime environment type")
 	}
+}
+
+func (r *Resolver) ListRuntimeObservationSessions(ctx context.Context, after string, limit int) (runtimeobs.SessionPage, error) {
+	page, err := r.store.ListRuntimeObservationSessions(ctx, after, limit)
+	if err != nil {
+		return runtimeobs.SessionPage{}, err
+	}
+	result := runtimeobs.SessionPage{Sessions: make([]runtimeobs.SessionIdentity, 0, len(page.Sessions)), NextCursor: page.NextCursor}
+	for _, session := range page.Sessions {
+		result.Sessions = append(result.Sessions, runtimeobs.SessionIdentity{TenantID: session.TenantID, SessionID: session.SessionID})
+	}
+	return result, nil
 }

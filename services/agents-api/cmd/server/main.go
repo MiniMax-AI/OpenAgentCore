@@ -105,20 +105,20 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	historyOption, historyExporter, err := runtimeHistory(ctx)
+	history, err := runtimeHistory(ctx)
 	if err != nil {
 		return err
 	}
 	observationOptions := []runtimeobs.ServiceOption{}
-	if historyOption != nil {
-		observationOptions = append(observationOptions, historyOption)
+	if history.Option != nil {
+		observationOptions = append(observationOptions, history.Option)
 	}
 	observationService, err := runtimeobs.NewService(resolver, observationSources, observationOptions...)
 	if err != nil {
-		if historyExporter != nil {
+		if history.Exporter != nil {
 			closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			closeRuntimeHistory(closeCtx, historyExporter)
+			closeRuntimeHistory(closeCtx, history.Exporter)
 		}
 		return err
 	}
@@ -126,8 +126,8 @@ func run() error {
 		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = observationService.Close(closeCtx)
-		if historyExporter != nil {
-			closeRuntimeHistory(closeCtx, historyExporter)
+		if history.Exporter != nil {
+			closeRuntimeHistory(closeCtx, history.Exporter)
 		}
 	}()
 	var workerDone chan error
@@ -168,6 +168,32 @@ func run() error {
 		if managed != nil {
 			options = append(options, api.WithHostedEnvironments())
 		}
+	}
+	if history.SampleInterval > 0 {
+		if worker == nil {
+			return errors.New("Runtime history periodic sampling requires the execution worker")
+		}
+		sampler, err := runtimeobs.NewSampler(resolver, observationService, worker, runtimeobs.SamplerOptions{
+			Interval: history.SampleInterval,
+			Report: func(result runtimeobs.SweepResult) {
+				fields := []any{"listed", result.Listed, "observed", result.Observed, "failed", result.Failed, "complete", result.Complete}
+				if result.Complete {
+					log.Bg().Debug("Runtime history sampling sweep complete", fields...)
+				} else {
+					log.Bg().Warn("Runtime history sampling sweep incomplete", fields...)
+				}
+			},
+		})
+		if err != nil {
+			return err
+		}
+		samplerCtx, cancelSampler := context.WithCancel(ctx)
+		samplerDone := make(chan error, 1)
+		go func() { samplerDone <- sampler.Run(samplerCtx) }()
+		defer func() {
+			cancelSampler()
+			<-samplerDone
+		}()
 	}
 	handler, err := api.NewHandler(executionStore, auth, engine, options...)
 	if err != nil {

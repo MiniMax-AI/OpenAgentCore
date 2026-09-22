@@ -18,19 +18,28 @@ import (
 )
 
 const (
-	defaultRuntimeHistoryQueueCapacity  = 256
-	defaultRuntimeHistoryTimeoutSeconds = 2
-	maxRuntimeHistoryQueueCapacity      = 4096
-	maxRuntimeHistoryTimeoutSeconds     = 30
+	defaultRuntimeHistoryQueueCapacity     = 256
+	defaultRuntimeHistoryTimeoutSeconds    = 2
+	maxRuntimeHistoryQueueCapacity         = 4096
+	maxRuntimeHistoryTimeoutSeconds        = 30
+	minRuntimeHistorySampleIntervalSeconds = 5
+	maxRuntimeHistorySampleIntervalSeconds = 300
 )
 
 type runtimeHistoryConfig struct {
-	Transport      string            `json:"transport"`
-	Endpoint       string            `json:"endpoint"`
-	Insecure       bool              `json:"insecure"`
-	Headers        map[string]string `json:"headers,omitempty"`
-	QueueCapacity  int               `json:"queue_capacity,omitempty"`
-	TimeoutSeconds int               `json:"timeout_seconds,omitempty"`
+	Transport             string            `json:"transport"`
+	Endpoint              string            `json:"endpoint"`
+	Insecure              bool              `json:"insecure"`
+	Headers               map[string]string `json:"headers,omitempty"`
+	QueueCapacity         int               `json:"queue_capacity,omitempty"`
+	TimeoutSeconds        int               `json:"timeout_seconds,omitempty"`
+	SampleIntervalSeconds int               `json:"sample_interval_seconds,omitempty"`
+}
+
+type runtimeHistorySetup struct {
+	Option         runtimeobs.ServiceOption
+	Exporter       runtimeHistoryExporter
+	SampleInterval time.Duration
 }
 
 type runtimeHistoryExporter interface {
@@ -38,23 +47,23 @@ type runtimeHistoryExporter interface {
 	Close(context.Context) error
 }
 
-func runtimeHistory(ctx context.Context) (runtimeobs.ServiceOption, runtimeHistoryExporter, error) {
+func runtimeHistory(ctx context.Context) (runtimeHistorySetup, error) {
 	file := os.Getenv("AGENTS_API_RUNTIME_HISTORY_FILE")
 	if file == "" {
-		return nil, nil, nil
+		return runtimeHistorySetup{}, nil
 	}
 	raw, err := os.ReadFile(file)
 	if err != nil {
-		return nil, nil, errors.New("cannot read AGENTS_API_RUNTIME_HISTORY_FILE")
+		return runtimeHistorySetup{}, errors.New("cannot read AGENTS_API_RUNTIME_HISTORY_FILE")
 	}
 	var config runtimeHistoryConfig
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&config) != nil || decoder.Decode(new(any)) != io.EOF {
-		return nil, nil, errors.New("invalid Runtime history configuration")
+		return runtimeHistorySetup{}, errors.New("invalid Runtime history configuration")
 	}
 	if err := validateRuntimeHistoryConfig(config); err != nil {
-		return nil, nil, err
+		return runtimeHistorySetup{}, err
 	}
 	if config.QueueCapacity == 0 {
 		config.QueueCapacity = defaultRuntimeHistoryQueueCapacity
@@ -67,9 +76,13 @@ func runtimeHistory(ctx context.Context) (runtimeobs.ServiceOption, runtimeHisto
 		Endpoint: config.Endpoint, Headers: config.Headers, Insecure: config.Insecure, RequestTimeout: timeout,
 	})
 	if err != nil {
-		return nil, nil, err
+		return runtimeHistorySetup{}, err
 	}
-	return runtimeobs.WithExporter(exporter, runtimeobs.ExportOptions{QueueCapacity: config.QueueCapacity, Timeout: timeout}), exporter, nil
+	return runtimeHistorySetup{
+		Option:         runtimeobs.WithExporter(exporter, runtimeobs.ExportOptions{QueueCapacity: config.QueueCapacity, Timeout: timeout}),
+		Exporter:       exporter,
+		SampleInterval: time.Duration(config.SampleIntervalSeconds) * time.Second,
+	}, nil
 }
 
 func closeRuntimeHistory(ctx context.Context, exporter runtimeHistoryExporter) {
@@ -104,6 +117,9 @@ func validateRuntimeHistoryConfig(config runtimeHistoryConfig) error {
 	}
 	if config.TimeoutSeconds < 0 || config.TimeoutSeconds > maxRuntimeHistoryTimeoutSeconds {
 		return errors.New("Runtime history timeout_seconds is out of range")
+	}
+	if config.SampleIntervalSeconds != 0 && (config.SampleIntervalSeconds < minRuntimeHistorySampleIntervalSeconds || config.SampleIntervalSeconds > maxRuntimeHistorySampleIntervalSeconds) {
+		return errors.New("Runtime history sample_interval_seconds is out of range")
 	}
 	for key, value := range config.Headers {
 		lower := strings.ToLower(key)

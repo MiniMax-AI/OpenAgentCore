@@ -17,6 +17,18 @@ JOIN sessions s ON s.id = e.session_id
 WHERE a.id > $1 AND a.state <> 'released'
 ORDER BY a.id LIMIT 32;
 
+-- name: ListRuntimeObservationSessions :many
+SELECT s.id, s.tenant_id
+FROM sessions s
+LEFT JOIN environments e ON e.session_id = s.id
+LEFT JOIN runtime_allocations a ON a.environment_id = e.id
+WHERE s.id > $1
+  AND s.deleted_at IS NULL
+  AND s.configuration->'environment'->>'type' = 'openai_hosted'
+  AND (a.id IS NULL OR a.state <> 'released')
+ORDER BY s.id
+LIMIT $2;
+
 -- name: ObserveRuntimeRunning :one
 UPDATE runtime_allocations SET state = 'running', create_settled = true
 WHERE id = $1 AND state IN ('creating', 'running')

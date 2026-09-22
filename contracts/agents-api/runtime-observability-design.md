@@ -3,10 +3,11 @@
 Status: provider abstraction with Docker and microsandbox sampling, the
 current-snapshot API/client contract, and the initial Core Web current-snapshot
 Dashboard are implemented. Phase 4 backend qualification, the bounded sanitized
-exporter seam, and its optional OTLP/HTTP transport are implemented. No history
-backend, history query API, or durable Web range is configured. Other provider
-sources are not implemented. Microsandbox idle suspension is a separate durable
-lifecycle feature; it does not consume this telemetry as authority.
+exporter seam, its optional OTLP/HTTP transport, and execution-owner singleton
+background sampling are implemented. No history backend, history query API, or
+durable Web range is configured. Other provider sources are not implemented.
+Microsandbox idle suspension is a separate durable lifecycle feature; it does
+not consume this telemetry as authority.
 
 ## 1. Problem statement
 
@@ -298,7 +299,8 @@ required. A minimal configuration is:
   "endpoint": "https://collector.example.com/v1/metrics",
   "headers": {"Authorization": "Bearer operator-managed-secret"},
   "queue_capacity": 256,
-  "timeout_seconds": 2
+  "timeout_seconds": 2,
+  "sample_interval_seconds": 30
 }
 ```
 
@@ -307,7 +309,11 @@ committed. Plain HTTP requires the explicit combination of an `http` endpoint
 and `"insecure": true`; HTTPS rejects that flag. Endpoint userinfo, query
 strings, fragments, invalid headers, reserved transport headers, queues above
 4096 records, and timeouts above 30 seconds fail startup without echoing config
-contents. Export is best effort through the bounded queue documented above.
+contents. `sample_interval_seconds` is optional; values from 5 through 300 enable
+the deployment sampler, while omission retains on-read export only. Periodic
+sampling requires the execution Worker because its database lease is the
+deployment singleton boundary. Export is best effort through the bounded queue
+documented above.
 
 The OTLP request uses standard protobuf metrics and these instruments:
 
@@ -321,7 +327,8 @@ The OTLP request uses standard protobuf metrics and these instruments:
 | `agents.runtime.sample.duration` | delta histogram, seconds | bounded provider read duration |
 
 Core-owned tenant, Session, Environment, allocation, mode, provider type,
-status, and safe reason are metric attributes. CPU, capacity, and memory points
+status, safe reason, and collection source (`on_read` or `periodic`) are metric
+attributes. CPU, capacity, and memory points
 are exported only when the sample also carries the compute `started_at` fence;
 that fence is included as an attribute on every such point. Provider keys,
 provider receipts, native container/pod/instance
@@ -329,11 +336,22 @@ identifiers, raw errors, paths, and credentials are not attributes. Missing
 measurements produce no value point; they are represented only by the explicit
 sample status and reason.
 
-The initial transport exports observations produced by the current read path; it
-does not yet run a deployment-wide background sampler. Consequently, a future
-history API must expose actual sample coverage and Core Web must not advertise a
-durable range until the operator backend and a qualified collection cadence are
-both configured.
+When periodic sampling is enabled, the execution-owner service performs one
+immediate, non-overlapping full keyset scan and repeats it after the configured
+interval. The read-only scan covers nondeleted managed Sessions across tenants,
+uses bounded pages and provider concurrency, gives each source an independent
+deadline, and reuses the same resolver and observation service as current reads.
+It never keeps, wakes, pauses, stops, or otherwise mutates compute. Failed rows
+do not prevent later rows from being attempted, and a failed sweep is retried on
+the next interval. The sampler monitors the execution lease during a sweep,
+cancels in-flight provider reads on detected ownership loss, and rechecks the
+lease before every periodic export handoff. `on_read` remains distinct from
+`periodic`, so ad hoc API
+traffic cannot be counted as qualified cadence coverage.
+
+A future history API must expose actual sample coverage. Core Web must not
+advertise a durable range until the operator backend, query adapter, and a
+qualified periodic collection cadence are all configured.
 
 ## 11. Dashboard information architecture
 
@@ -489,12 +507,15 @@ Implemented for the browser-local current-snapshot live window.
 - Implemented: optional server-only OTLP/HTTP protobuf transport for the six
   documented Runtime instruments, including allocation and compute-incarnation
   fencing attributes. Configuration is strict and secrets never reach Web.
+- Implemented: optional execution-owner singleton sampling across all nondeleted
+  managed Sessions. Keyset scans, provider concurrency, source deadlines, and
+  non-overlapping sweeps are bounded; collection source is exported explicitly.
 - Qualified: optional OTLP Collector fan-out with a separate high-cardinality
   history store and server-side tenant-scoped query adapter. ClickHouse is the
   first reference backend; no backend is a Core execution dependency.
-- Not implemented: deployment-wide sampling cadence, `runtimehistory` query
-  adapter, public history extension, durable Web ranges, retention configuration,
-  and exporter queue/drop/error coverage telemetry.
+- Not implemented: `runtimehistory` query adapter, public history extension,
+  durable Web ranges, retention configuration, and exporter queue/drop/error
+  coverage telemetry.
 - Add telemetry exporter and qualified operator backend.
 - Define a separate history query adapter and retention/security policy.
 - Replace or extend the ephemeral live window with explicitly advertised durable

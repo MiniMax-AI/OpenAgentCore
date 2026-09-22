@@ -165,6 +165,11 @@ func validateRecord(record runtimeobs.ExportRecord) error {
 	default:
 		return errors.New("invalid Runtime history status")
 	}
+	switch record.CollectionSource {
+	case runtimeobs.CollectionSourceOnRead, runtimeobs.CollectionSourcePeriodic:
+	default:
+		return errors.New("invalid Runtime history collection source")
+	}
 	if record.SourceDuration < 0 {
 		return errors.New("invalid Runtime history source duration")
 	}
@@ -206,6 +211,7 @@ func recordAttributes(record runtimeobs.ExportRecord) attribute.Set {
 		attribute.String("agents.session.id", record.SessionID),
 		attribute.String("agents.runtime.mode", string(record.Mode)),
 		attribute.String("agents.runtime.status", string(record.Status)),
+		attribute.String("agents.runtime.collection.source", string(record.CollectionSource)),
 	}
 	if record.EnvironmentID != "" {
 		values = append(values, attribute.String("agents.environment.id", record.EnvironmentID))

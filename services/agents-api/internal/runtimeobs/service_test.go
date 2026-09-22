@@ -199,7 +199,7 @@ func TestServiceExportsOnlySanitizedValidatedRecords(t *testing.T) {
 		if record.TenantID != "tenant" || record.SessionID != "session" || record.EnvironmentID != "environment" || record.AllocationID != "allocation" {
 			t.Fatalf("exported identity mismatch: %+v", record)
 		}
-		if record.ProviderType != "docker" || record.Mode != ModeManaged || record.Status != StatusObserved || record.Reason != "" {
+		if record.ProviderType != "docker" || record.Mode != ModeManaged || record.Status != StatusObserved || record.Reason != "" || record.CollectionSource != CollectionSourceOnRead {
 			t.Fatalf("exported classification mismatch: %+v", record)
 		}
 		if record.Sample == nil || record.Sample.CPUUsageSecondsTotal == nil || *record.Sample.CPUUsageSecondsTotal != 12.5 || record.Sample.MemoryUsageBytes == nil || *record.Sample.MemoryUsageBytes != 1024 {
@@ -207,6 +207,70 @@ func TestServiceExportsOnlySanitizedValidatedRecords(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for Runtime observation export")
+	}
+	if err := service.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestServiceMarksPeriodicHistoryCollection(t *testing.T) {
+	now := time.Date(2026, 9, 23, 4, 0, 0, 0, time.UTC)
+	startedAt := now.Add(-time.Minute)
+	target := Target{
+		TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", Mode: ModeManaged,
+		Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"},
+	}
+	records := make(chan ExportRecord, 1)
+	service, err := NewService(
+		fixedResolver{target: target},
+		map[string]Source{"provider": &fixedSource{sample: Sample{ObservedAt: now, StartedAt: &startedAt}}},
+		WithExporter(channelExporter{records: records}, ExportOptions{}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.now = func() time.Time { return now }
+	if _, err := service.ObserveSessionForHistory(t.Context(), "tenant", "session", samplerOwner{}, time.Second); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case record := <-records:
+		if record.CollectionSource != CollectionSourcePeriodic {
+			t.Fatalf("history collection source = %q", record.CollectionSource)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for periodic Runtime export")
+	}
+	if err := service.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestServiceDoesNotExportPeriodicSampleAfterOwnershipLoss(t *testing.T) {
+	now := time.Date(2026, 9, 23, 4, 0, 0, 0, time.UTC)
+	startedAt := now.Add(-time.Minute)
+	target := Target{
+		TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", Mode: ModeManaged,
+		Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"},
+	}
+	records := make(chan ExportRecord, 1)
+	service, err := NewService(
+		fixedResolver{target: target},
+		map[string]Source{"provider": &fixedSource{sample: Sample{ObservedAt: now, StartedAt: &startedAt}}},
+		WithExporter(channelExporter{records: records}, ExportOptions{}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.now = func() time.Time { return now }
+	owner := &sequenceOwner{failAfter: 2}
+	if _, err := service.ObserveSessionForHistory(t.Context(), "tenant", "session", owner, time.Second); err == nil {
+		t.Fatal("periodic sample crossed a lost execution lease")
+	}
+	select {
+	case record := <-records:
+		t.Fatalf("lease-lost periodic sample reached exporter: %+v", record)
+	default:
 	}
 	if err := service.Close(t.Context()); err != nil {
 		t.Fatal(err)
@@ -420,6 +484,41 @@ func TestServiceMapsAnActualSourceDeadlineWithoutLeakingIt(t *testing.T) {
 	observation, err := service.ObserveSession(ctx, "tenant", "session")
 	if err != nil || observation.Status != StatusUnavailable || observation.Reason != "sample_timeout" || observation.ProviderType != "docker" {
 		t.Fatalf("source deadline was not safely classified: %+v %v", observation, err)
+	}
+}
+
+func TestServiceExportsPeriodicSourceTimeoutAfterFinalOwnershipFence(t *testing.T) {
+	target := Target{
+		TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", Mode: ModeManaged,
+		Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"},
+	}
+	records := make(chan ExportRecord, 1)
+	service, err := NewService(
+		fixedResolver{target: target},
+		map[string]Source{"provider": blockingSource{}},
+		WithExporter(channelExporter{records: records}, ExportOptions{}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := &sequenceOwner{}
+	observation, err := service.ObserveSessionForHistory(t.Context(), "tenant", "session", owner, 10*time.Millisecond)
+	if err != nil || observation.Status != StatusUnavailable || observation.Reason != "sample_timeout" {
+		t.Fatalf("periodic source timeout was not safely classified: %+v %v", observation, err)
+	}
+	if calls := owner.calls.Load(); calls != 2 {
+		t.Fatalf("ownership checks = %d, want entry and pre-export fences", calls)
+	}
+	select {
+	case record := <-records:
+		if record.Status != StatusUnavailable || record.Reason != "sample_timeout" || record.CollectionSource != CollectionSourcePeriodic {
+			t.Fatalf("periodic timeout export mismatch: %+v", record)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for periodic timeout export")
+	}
+	if err := service.Close(t.Context()); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -89,11 +89,16 @@ errors, paths, and credentials are excluded from metric attributes. CPU,
 capacity, and memory points require the provider-qualified compute `started_at`
 fence; unfenced observations export coverage and read duration only.
 
-This transport currently exports observations produced by the current read path;
-it is not a deployment-wide background sampler. The Collector,
-high-cardinality history backend, server-side history query adapter, collection
-cadence, and durable Web ranges remain separate optional capabilities in the
-[full design](runtime-observability-design.md).
+The server-only file may also enable a bounded periodic cadence. Only the Core
+service holding the execution database lease runs that deployment-wide sampler;
+it scans nondeleted managed Sessions with bounded pages and concurrency, gives
+each provider read an independent deadline, monitors lease ownership throughout
+the sweep, rechecks ownership before export, and never mutates Runtime state.
+Exports distinguish `periodic` samples from `on_read` samples.
+
+The Collector, high-cardinality history backend, server-side history query
+adapter, retention policy, and durable Web ranges remain separate optional
+capabilities in the [full design](runtime-observability-design.md).
 
 ## First-phase boundary
 

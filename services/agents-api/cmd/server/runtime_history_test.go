@@ -18,26 +18,26 @@ func (panicHistoryExporter) Close(context.Context) error                        
 
 func TestRuntimeHistoryIsDisabledByDefault(t *testing.T) {
 	t.Setenv("AGENTS_API_RUNTIME_HISTORY_FILE", "")
-	option, exporter, err := runtimeHistory(t.Context())
-	if err != nil || option != nil || exporter != nil {
-		t.Fatalf("disabled history created dependencies: option=%v exporter=%v err=%v", option != nil, exporter != nil, err)
+	setup, err := runtimeHistory(t.Context())
+	if err != nil || setup.Option != nil || setup.Exporter != nil || setup.SampleInterval != 0 {
+		t.Fatalf("disabled history created dependencies: option=%v exporter=%v interval=%v err=%v", setup.Option != nil, setup.Exporter != nil, setup.SampleInterval, err)
 	}
 }
 
 func TestRuntimeHistoryLoadsStrictServerOnlyConfig(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "runtime-history.json")
-	config := `{"transport":"otlp_http","endpoint":"https://collector.example.test/v1/metrics","headers":{"Authorization":"Bearer test-only"},"queue_capacity":12,"timeout_seconds":3}`
+	config := `{"transport":"otlp_http","endpoint":"https://collector.example.test/v1/metrics","headers":{"Authorization":"Bearer test-only"},"queue_capacity":12,"timeout_seconds":3,"sample_interval_seconds":30}`
 	if err := os.WriteFile(file, []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("AGENTS_API_RUNTIME_HISTORY_FILE", file)
-	option, exporter, err := runtimeHistory(t.Context())
-	if err != nil || option == nil || exporter == nil {
-		t.Fatalf("valid history config was rejected: option=%v exporter=%v err=%v", option != nil, exporter != nil, err)
+	setup, err := runtimeHistory(t.Context())
+	if err != nil || setup.Option == nil || setup.Exporter == nil || setup.SampleInterval != 30*time.Second {
+		t.Fatalf("valid history config was rejected: option=%v exporter=%v interval=%v err=%v", setup.Option != nil, setup.Exporter != nil, setup.SampleInterval, err)
 	}
 	closeCtx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
-	if err := exporter.Close(closeCtx); err != nil {
+	if err := setup.Exporter.Close(closeCtx); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -54,6 +54,8 @@ func TestRuntimeHistoryConfigFailsClosedWithoutLeakingSecrets(t *testing.T) {
 		{name: "reserved header", config: `{"transport":"otlp_http","endpoint":"https://collector.example.test/v1/metrics","headers":{"Host":"must-not-leak"}}`},
 		{name: "oversized queue", config: `{"transport":"otlp_http","endpoint":"https://collector.example.test/v1/metrics","queue_capacity":4097}`},
 		{name: "oversized timeout", config: `{"transport":"otlp_http","endpoint":"https://collector.example.test/v1/metrics","timeout_seconds":31}`},
+		{name: "too frequent sampling", config: `{"transport":"otlp_http","endpoint":"https://collector.example.test/v1/metrics","sample_interval_seconds":4}`},
+		{name: "oversized sampling interval", config: `{"transport":"otlp_http","endpoint":"https://collector.example.test/v1/metrics","sample_interval_seconds":301}`},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -62,9 +64,9 @@ func TestRuntimeHistoryConfigFailsClosedWithoutLeakingSecrets(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Setenv("AGENTS_API_RUNTIME_HISTORY_FILE", file)
-			option, exporter, err := runtimeHistory(t.Context())
-			if err == nil || option != nil || exporter != nil {
-				t.Fatalf("unsafe history config was accepted: option=%v exporter=%v err=%v", option != nil, exporter != nil, err)
+			setup, err := runtimeHistory(t.Context())
+			if err == nil || setup.Option != nil || setup.Exporter != nil {
+				t.Fatalf("unsafe history config was accepted: option=%v exporter=%v err=%v", setup.Option != nil, setup.Exporter != nil, err)
 			}
 			if strings.Contains(err.Error(), "must-not-leak") {
 				t.Fatalf("history error leaked config content: %v", err)

@@ -190,6 +190,49 @@ func (q *Queries) ListRuntimeAllocations(ctx context.Context, id pgtype.UUID) ([
 	return items, nil
 }
 
+const listRuntimeObservationSessions = `-- name: ListRuntimeObservationSessions :many
+SELECT s.id, s.tenant_id
+FROM sessions s
+LEFT JOIN environments e ON e.session_id = s.id
+LEFT JOIN runtime_allocations a ON a.environment_id = e.id
+WHERE s.id > $1
+  AND s.deleted_at IS NULL
+  AND s.configuration->'environment'->>'type' = 'openai_hosted'
+  AND (a.id IS NULL OR a.state <> 'released')
+ORDER BY s.id
+LIMIT $2
+`
+
+type ListRuntimeObservationSessionsParams struct {
+	ID    pgtype.UUID `json:"id"`
+	Limit int32       `json:"limit"`
+}
+
+type ListRuntimeObservationSessionsRow struct {
+	ID       pgtype.UUID `json:"id"`
+	TenantID pgtype.UUID `json:"tenant_id"`
+}
+
+func (q *Queries) ListRuntimeObservationSessions(ctx context.Context, arg ListRuntimeObservationSessionsParams) ([]ListRuntimeObservationSessionsRow, error) {
+	rows, err := q.db.Query(ctx, listRuntimeObservationSessions, arg.ID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRuntimeObservationSessionsRow{}
+	for rows.Next() {
+		var i ListRuntimeObservationSessionsRow
+		if err := rows.Scan(&i.ID, &i.TenantID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUnallocatedHostedEnvironments = `-- name: ListUnallocatedHostedEnvironments :many
 SELECT e.id, s.tenant_id
 FROM environments e JOIN sessions s ON s.id = e.session_id

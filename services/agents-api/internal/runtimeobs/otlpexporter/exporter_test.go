@@ -42,7 +42,8 @@ func observedRecord() runtimeobs.ExportRecord {
 	return runtimeobs.ExportRecord{
 		TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", AllocationID: "allocation",
 		Mode: runtimeobs.ModeManaged, ProviderType: "docker", Status: runtimeobs.StatusObserved,
-		ResolvedAt: observedAt, SourceDuration: 50 * time.Millisecond,
+		CollectionSource: runtimeobs.CollectionSourceOnRead,
+		ResolvedAt:       observedAt, SourceDuration: 50 * time.Millisecond,
 		Sample: &runtimeobs.Sample{
 			ObservedAt: observedAt, StartedAt: &startedAt,
 			CPUUsageSecondsTotal: &cpuUsage, CPUCapacityCores: &capacity,
@@ -83,6 +84,7 @@ func TestExporterBuildsFencedProviderNeutralMetrics(t *testing.T) {
 		"agents.tenant.id": "tenant", "agents.session.id": "session", "agents.environment.id": "environment",
 		"agents.runtime.allocation.id": "allocation", "agents.runtime.mode": "openai_hosted",
 		"agents.runtime.provider.type": "docker", "agents.runtime.status": "observed",
+		"agents.runtime.collection.source": "on_read",
 	} {
 		if attrs[key] != want {
 			t.Fatalf("attribute %q = %q, want %q", key, attrs[key], want)
@@ -102,7 +104,8 @@ func TestExporterPreservesUnavailableWithoutInventingResourceValues(t *testing.T
 	record := runtimeobs.ExportRecord{
 		TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", AllocationID: "allocation",
 		Mode: runtimeobs.ModeManaged, Status: runtimeobs.StatusUnavailable, Reason: "sample_timeout",
-		ResolvedAt: time.Date(2026, 9, 23, 3, 0, 0, 0, time.UTC),
+		CollectionSource: runtimeobs.CollectionSourcePeriodic,
+		ResolvedAt:       time.Date(2026, 9, 23, 3, 0, 0, 0, time.UTC),
 	}
 	if err := exporter.Export(t.Context(), record); err != nil {
 		t.Fatal(err)

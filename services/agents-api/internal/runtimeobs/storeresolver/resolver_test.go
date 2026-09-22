@@ -13,6 +13,7 @@ type resolverStore struct {
 	session       store.Session
 	allocation    store.RuntimeAllocation
 	allocationErr error
+	page          store.RuntimeObservationSessionPage
 }
 
 func (s resolverStore) GetSession(context.Context, string, string) (store.Session, error) {
@@ -21,6 +22,24 @@ func (s resolverStore) GetSession(context.Context, string, string) (store.Sessio
 
 func (s resolverStore) GetRuntimeAllocation(context.Context, string, string) (store.RuntimeAllocation, error) {
 	return s.allocation, s.allocationErr
+}
+
+func (s resolverStore) ListRuntimeObservationSessions(context.Context, string, int) (store.RuntimeObservationSessionPage, error) {
+	return s.page, nil
+}
+
+func TestResolverListsOnlyProviderNeutralSessionIdentity(t *testing.T) {
+	r, err := NewResolver(resolverStore{page: store.RuntimeObservationSessionPage{
+		Sessions:   []store.RuntimeObservationSession{{TenantID: "tenant", SessionID: "session"}},
+		NextCursor: "session",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := r.ListRuntimeObservationSessions(t.Context(), "", 32)
+	if err != nil || len(page.Sessions) != 1 || page.Sessions[0].TenantID != "tenant" || page.Sessions[0].SessionID != "session" || page.NextCursor != "session" {
+		t.Fatalf("unexpected observation scan identity: %+v %v", page, err)
+	}
 }
 
 func TestResolverBindsManagedSessionEnvironmentAndAllocation(t *testing.T) {
