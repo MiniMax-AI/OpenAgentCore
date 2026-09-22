@@ -1,9 +1,10 @@
 # Runtime observability and Dashboard design
 
-Status: Phase 1 provider abstraction/Docker sampling, Phase 2 current-snapshot
-API/client contract, and the initial Core Web current-snapshot Dashboard are
-implemented. The history backend, additional providers, and lifecycle automation
-described below are not implemented.
+Status: provider abstraction with Docker and microsandbox sampling, the
+current-snapshot API/client contract, and the initial Core Web current-snapshot
+Dashboard are implemented. The history backend and other provider sources are not
+implemented. Microsandbox idle suspension is a separate durable lifecycle feature;
+it does not consume this telemetry as authority.
 
 ## 1. Problem statement
 
@@ -90,6 +91,7 @@ flowchart LR
     Resolver --> DB[(Core PostgreSQL)]
     Service --> Registry[provider source registry]
     Registry --> Docker[Docker Inspect and one-shot Stats]
+    Registry --> Micro[microsandbox exact-compute one-shot Metrics]
     Registry -. future .-> K8s[Kubernetes Metrics API or cAdvisor]
     Registry -. future .-> E2B[E2B metrics adapter]
     Registry -. future .-> Self[authenticated daemon telemetry]
@@ -114,6 +116,13 @@ Docker uses Inspect followed by non-streaming one-shot Stats. Kubernetes should
 retain pod UID, container identity, and restart boundaries. E2B must use an
 API-supported instance identity rather than display names. Self-hosted metrics
 require authenticated daemon messages fenced by the current connection generation.
+
+Microsandbox uses the persisted allocation's opaque compute receipt to select the
+exact current generation. The pure-Go Core adapter sends a read-only request to the
+existing one-shot Linux helper; the helper verifies allocation labels, compute ID,
+generation and snapshot provenance before calling `SandboxHandle.Metrics`. It maps
+`VCPUTimeNs`, memory usage/limit and uptime into the common sample. Instantaneous
+`CPUPercent`, host RSS, disk/network counters and overlay usage remain unprojected.
 
 ### 6.3 API composition
 
@@ -329,10 +338,11 @@ transitions. That migration cannot read a monitoring backend as authority.
 
 ### Phase 1: provider-neutral foundation
 
-Implemented in the Docker observability foundation.
+Implemented for Docker and microsandbox.
 
 - `runtimeobs` identity, resolver, source, sample, and service.
 - Managed Docker Inspect/Stats source.
+- Managed microsandbox exact-compute point-in-time Metrics source.
 - CPU, memory, and current compute start time.
 - Explicit unsupported and unavailable states.
 
@@ -377,6 +387,8 @@ this does not add an upstream OpenAI operation.
 - Every observation proves tenant, Session, Environment, and Runtime-instance
   association.
 - Managed Docker emits correct present/absent semantics and never mutates compute.
+- Managed microsandbox verifies the exact current generation and never mutates,
+  resumes, pauses, snapshots, stops, or removes compute while observing it.
 - Unsupported modes never look like zero usage.
 - Collection calls are bounded and one ordinary unavailable source invents no data.
 - Ownership/integrity mismatch fails closed.

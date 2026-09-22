@@ -75,6 +75,8 @@ func code(err error) string {
 		return "not_found"
 	case errors.Is(err, sandbox.ErrCommandUnconfirmed):
 		return "command_unconfirmed"
+	case sdk.IsKind(err, sdk.ErrMetricsDisabled), sdk.IsKind(err, sdk.ErrMetricsUnavailable):
+		return "metrics_unavailable"
 	default:
 		return "unconfirmed"
 	}

@@ -119,6 +119,14 @@ successful stdin completion and an explicit guest exit before returning a result
 Timeouts, output overflow and missing receipts return ErrCommandUnconfirmed.
 Closing an SDK exec handle alone does not prove the guest process exited.
 
+The read-only metrics operation verifies the same exact allocation and compute
+incarnation before calling the pinned SDK's point-in-time `SandboxHandle.Metrics`.
+It returns only observation time, uptime, cumulative vCPU time and guest memory
+usage/limit to Core. It does not connect to the guest, renew activity, resume paused
+compute or mutate lifecycle state. SDK metrics-disabled and no-current-sample errors
+are reduced to one safe unavailable code; raw diagnostics never cross the helper
+boundary.
+
 ## Acceptance boundary
 
 The feature is idle-only: Core must reserve a terminal Session with no pending

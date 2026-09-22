@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 )
 
@@ -58,6 +59,8 @@ func (p *Provider) call(ctx context.Context, q Request) (Response, error) {
 		return out, sandbox.ErrNotFound
 	case "command_unconfirmed":
 		return out, sandbox.ErrCommandUnconfirmed
+	case "metrics_unavailable":
+		return out, runtimeobs.ErrUnavailable
 	default:
 		return out, ErrUnconfirmed
 	}

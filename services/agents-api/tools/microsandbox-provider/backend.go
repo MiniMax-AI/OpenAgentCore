@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	wire "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/microsandbox"
@@ -23,6 +24,9 @@ func (b backend) run(ctx context.Context) (wire.Response, error) {
 	case "inspect":
 		_, s, e := b.inspect(ctx, b.q.Compute)
 		return wire.Response{State: &s}, e
+	case "metrics":
+		m, e := b.metrics(ctx, b.q.Compute)
+		return wire.Response{Metrics: m}, e
 	case "kill":
 		return wire.Response{}, b.kill(ctx, b.q.Compute)
 	case "resume_compute":
@@ -59,6 +63,31 @@ func (b backend) run(ctx context.Context) (wire.Response, error) {
 		return wire.Response{}, sdk.Snapshot.Remove(ctx, b.q.Snapshot.Reference, false)
 	}
 	return wire.Response{}, sandbox.ErrInvalid
+}
+
+func (b backend) metrics(ctx context.Context, c wire.Compute) (*wire.Metrics, error) {
+	h, state, err := b.inspect(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	if state.Status != string(sdk.SandboxStatusRunning) && state.Status != "draining" {
+		return nil, sandbox.ErrNotFound
+	}
+	metricsCtx, cancel := context.WithDeadline(ctx, b.q.Deadline)
+	defer cancel()
+	metrics, err := h.Metrics(metricsCtx)
+	if err != nil {
+		return nil, err
+	}
+	return projectMetrics(metrics, time.Now().UTC()), nil
+}
+
+func projectMetrics(metrics *sdk.Metrics, observedAt time.Time) *wire.Metrics {
+	return &wire.Metrics{
+		ObservedAt: observedAt, Uptime: metrics.Uptime,
+		VCPUTimeNs: metrics.VCPUTimeNs, MemoryBytes: metrics.MemoryBytes,
+		MemoryLimitBytes: metrics.MemoryLimitBytes,
+	}
 }
 func (b backend) inspect(ctx context.Context, c wire.Compute) (*sdk.SandboxHandle, wire.State, error) {
 	state := wire.State{Compute: c}

@@ -27,7 +27,7 @@ func TestResolverBindsManagedSessionEnvironmentAndAllocation(t *testing.T) {
 		session: store.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Environment: &store.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
 		allocation: store.RuntimeAllocation{
 			ID: "allocation", TenantID: "tenant", SessionID: "session", EnvironmentID: "environment",
-			ProviderKey: "provider", DeviceID: "device",
+			ProviderKey: "provider", DeviceID: "device", ComputePhase: "running", ComputeState: []byte(`{"current":{"name":"sandbox"}}`),
 		},
 	})
 	if err != nil {
@@ -39,6 +39,12 @@ func TestResolverBindsManagedSessionEnvironmentAndAllocation(t *testing.T) {
 	}
 	if target.TenantID != "tenant" || target.SessionID != "session" || target.EnvironmentID != "environment" || target.Mode != ModeManaged || target.Instance.AllocationID != "allocation" || target.Instance.ProviderKey != "provider" || target.Instance.DeviceID != "device" {
 		t.Fatalf("incorrect managed identity binding: %+v", target)
+	}
+	if string(target.Instance.ProviderState) != `{"current":{"name":"sandbox"}}` {
+		t.Fatalf("provider state was not retained: %s", target.Instance.ProviderState)
+	}
+	if target.Instance.ComputePhase != "running" {
+		t.Fatalf("compute phase was not retained: %s", target.Instance.ComputePhase)
 	}
 }
 

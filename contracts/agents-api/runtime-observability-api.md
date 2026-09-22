@@ -101,7 +101,7 @@ Session returns the existing indistinguishable not-found error.
 | `session_id` | string | yes | Authorized Core Session. |
 | `environment_id` | string or null | yes | Null only for mode `none`. |
 | `mode` | enum | yes | `none`, `self_hosted`, `openai_hosted`. |
-| `provider_type` | string or null | yes | Forward-compatible safe source kind such as `docker`; null when no provider applies. Clients must not treat an unknown nonempty value as an error. |
+| `provider_type` | string or null | yes | Forward-compatible safe source kind such as `docker` or `microsandbox`; null when no provider applies. Clients must not treat an unknown nonempty value as an error. |
 | `instance` | object | yes | Provider-neutral current incarnation identity; explicit `kind=none` when no compute applies. |
 | `status` | enum | yes | `observed`, `unsupported`, `unavailable`. |
 | `reason` | enum or null | yes | Safe reason when status is not `observed`. |

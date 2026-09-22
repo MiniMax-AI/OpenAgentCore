@@ -243,6 +243,12 @@ a provider source. Observation never extends a lease or changes compute lifecycl
 Keep observed zero, unavailable data and unsupported Runtime modes distinct. Metrics
 may inform operators, but automatic suspension requires durable Core-owned activity
 state and must not use a monitoring backend as lifecycle authority.
+Managed Docker observes one non-streaming Inspect/Stats sample. Managed microsandbox
+observes the exact persisted compute generation through the existing one-shot helper
+and pinned SDK Metrics call. Preserve cumulative CPU seconds, memory usage/limit and
+compute uptime semantics across both. Do not use microsandbox's instantaneous CPU
+percent, wake suspended compute, or expose provider-native identifiers to fill a
+common field.
 
 In V1, our daemon fills the user-side executor role. Users deploy daemon, the
 selected harness, local tools and workspace together. Do not require Codex

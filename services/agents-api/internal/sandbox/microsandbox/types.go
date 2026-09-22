@@ -9,7 +9,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 )
 
-const ProtocolVersion = 1
+const ProtocolVersion = 2
 const SDKVersion = "v0.7.2"
 const MaxOutputBytes = 1024 * 1024
 const MaxRequestBytes = 72 * 1024 * 1024
@@ -65,7 +65,18 @@ type Response struct {
 	Version   int
 	State     *State
 	Command   *sandbox.CommandResult
+	Metrics   *Metrics
 	ErrorCode string
+}
+
+// Metrics is the bounded provider-helper projection used by Core observability.
+// It intentionally excludes instantaneous CPU percent and provider-native names.
+type Metrics struct {
+	ObservedAt       time.Time
+	Uptime           time.Duration
+	VCPUTimeNs       uint64
+	MemoryBytes      uint64
+	MemoryLimitBytes uint64
 }
 
 type Caller interface {

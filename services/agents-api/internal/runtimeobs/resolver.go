@@ -78,6 +78,7 @@ func (r *Resolver) Resolve(ctx context.Context, tenantID, sessionID string) (Tar
 		target.Instance = Instance{
 			AllocationID: allocation.ID, ProviderKey: allocation.ProviderKey, DeviceID: allocation.DeviceID,
 			AllocationState: allocation.State, AllocationCreatedAt: allocation.CreatedAt,
+			ComputePhase: allocation.ComputePhase, ProviderState: append(json.RawMessage(nil), allocation.ComputeState...),
 		}
 		return target, nil
 	default:

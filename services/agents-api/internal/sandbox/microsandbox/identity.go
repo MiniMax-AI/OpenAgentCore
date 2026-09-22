@@ -103,7 +103,7 @@ func ValidateRequest(q Request) error {
 		if q.Bootstrap == nil || q.Bootstrap.Reference != q.Reference || ValidateBootstrap(*q.Bootstrap) != nil {
 			return sandbox.ErrInvalid
 		}
-	case "inspect", "kill", "resume_compute":
+	case "inspect", "kill", "resume_compute", "metrics":
 		if q.Operation == "resume_compute" && q.Compute.ID == "" {
 			return sandbox.ErrInvalid
 		}

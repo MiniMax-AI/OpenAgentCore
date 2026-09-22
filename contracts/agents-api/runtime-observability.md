@@ -19,8 +19,8 @@ equivalent ownership data. A Session, daemon connection, process, container, and
 native harness Session are different identities and must not be substituted for
 one another.
 
-The first implementation supports managed Docker allocations. `self_hosted` and
-`none` are recognized but explicitly unsupported. A future self-hosted source must
+The current implementation supports managed Docker and microsandbox allocations.
+`self_hosted` and `none` are recognized but explicitly unsupported. A future self-hosted source must
 use authenticated daemon telemetry fenced by the current connection generation.
 Core must not attribute shared host statistics to an `environment:none` Session.
 
@@ -47,6 +47,17 @@ are read-only; observation must not renew, restart, create, or stop the containe
 The Docker `StartedAt` value defines current compute uptime and resets after a
 container restart.
 
+Microsandbox reports cumulative vCPU time, current guest memory usage, its effective
+memory limit, and compute uptime through the pinned SDK's point-in-time metrics
+operation. Core invokes that SDK only through the existing one-shot Linux helper.
+The helper first verifies the allocation labels and exact persisted compute
+generation/ID, then reads metrics under the allocation lock. Restored generations
+therefore reset compute uptime without resetting allocation age. Paused, stopped,
+suspended, metrics-disabled, and no-current-sample states are unavailable, never
+observed zero. The SDK also supplies instantaneous CPU percent, host RSS, disk,
+network, and overlay values; those are intentionally outside this public sample
+until their cross-provider semantics and API fields are designed.
+
 ## Duration boundaries
 
 These durations answer different questions and must remain separate:
@@ -66,10 +77,10 @@ not become the lifecycle authority.
 
 ## First-phase boundary
 
-The first phase adds no migration, public endpoint, Web view, metrics backend,
-token aggregation, Kubernetes/E2B source, or automatic lifecycle action. The
-internal source interface is intended to admit those providers without changing
-Session attribution or the existing sandbox lifecycle interface.
+The current-snapshot implementation adds no migration, metrics backend, token
+duplication, Kubernetes/E2B source, or telemetry-driven lifecycle action. The
+internal source interface admits Docker and microsandbox without changing Session
+attribution or the existing sandbox lifecycle interface.
 
 The review proposal for later API and Web phases is split into the
 [full design](runtime-observability-design.md) and the
