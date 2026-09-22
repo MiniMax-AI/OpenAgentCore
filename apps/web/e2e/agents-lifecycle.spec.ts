@@ -2412,10 +2412,26 @@ test("presents Dashboard page-chain results and System boundaries without extra 
     documentWidth: document.documentElement.scrollWidth,
     bodyWidth: document.body.scrollWidth,
     right: element.getBoundingClientRect().right,
+    sectionInset: element.querySelector(".system-config-section")!.getBoundingClientRect().left - element.getBoundingClientRect().left,
+    sectionEdges: [...element.querySelectorAll(".system-config-section")].map((section) => ({
+      left: section.getBoundingClientRect().left - element.getBoundingClientRect().left,
+      right: element.getBoundingClientRect().right - section.getBoundingClientRect().right,
+      header: section.querySelector("header")!.getBoundingClientRect().left,
+      content: section.querySelector(".system-config-list, .system-harness-grid")!.getBoundingClientRect().left,
+      explanation: section.querySelector(".system-config-explanation")?.getBoundingClientRect().left ?? null,
+    })),
+    boundaryInset: element.querySelector(".system-boundary-note")!.getBoundingClientRect().left - element.getBoundingClientRect().left,
   }));
   expect(compactSystemBounds.documentWidth).toBeLessThanOrEqual(compactSystemBounds.viewportWidth);
   expect(compactSystemBounds.bodyWidth).toBeLessThanOrEqual(compactSystemBounds.viewportWidth);
   expect(compactSystemBounds.right).toBeLessThanOrEqual(compactSystemBounds.viewportWidth);
+  expect(compactSystemBounds.sectionInset).toBe(24);
+  expect(compactSystemBounds.boundaryInset).toBe(24);
+  for (const edge of compactSystemBounds.sectionEdges) {
+    expect({ left: edge.left, right: edge.right }).toEqual({ left: 24, right: 24 });
+    expect(edge.header).toBe(edge.content);
+    if (edge.explanation !== null) expect(edge.explanation).toBe(edge.header);
+  }
 
   await page.setViewportSize({ width: 390, height: 844 });
   const systemBounds = await system.evaluate((element) => {
@@ -2423,10 +2439,16 @@ test("presents Dashboard page-chain results and System boundaries without extra 
     return {
       viewportWidth: innerWidth,
       documentWidth: document.documentElement.scrollWidth,
+      sectionInset: element.querySelector(".system-config-section")!.getBoundingClientRect().left - element.getBoundingClientRect().left,
+      sectionRightInset: element.getBoundingClientRect().right - element.querySelector(".system-config-section")!.getBoundingClientRect().right,
+      boundaryInset: element.querySelector(".system-boundary-note")!.getBoundingClientRect().left - element.getBoundingClientRect().left,
       rowBounds: rows.map((row) => ({ top: row.top, bottom: row.bottom, height: row.height })),
     };
   });
   expect(systemBounds.documentWidth).toBeLessThanOrEqual(systemBounds.viewportWidth);
+  expect(systemBounds.sectionInset).toBe(12);
+  expect(systemBounds.sectionRightInset).toBe(12);
+  expect(systemBounds.boundaryInset).toBe(12);
   for (let index = 1; index < systemBounds.rowBounds.length; index += 1) {
     expect(systemBounds.rowBounds[index]!.top).toBeGreaterThanOrEqual(systemBounds.rowBounds[index - 1]!.bottom);
   }

@@ -43,7 +43,7 @@
 }
 
 .system-config-section {
-  margin-top: 30px;
+  margin: 30px 24px 0;
 }
 
 .system-config-section > header {
@@ -168,7 +168,7 @@
   display: flex;
   align-items: flex-start;
   gap: 9px;
-  margin: 24px 0 0;
+  margin: 24px 24px 30px;
   padding: 13px 15px;
   border-radius: 9px;
   background: var(--surface-subtle);
@@ -214,6 +214,17 @@
 }
 
 @media (max-width: 560px) {
+  .system-config-section {
+    margin-right: 12px;
+    margin-left: 12px;
+  }
+
+  .system-boundary-note {
+    margin-right: 12px;
+    margin-bottom: 20px;
+    margin-left: 12px;
+  }
+
   .system-summary {
     grid-template-columns: 1fr;
   }
