@@ -41,7 +41,7 @@ func TestModelExecutionHTTPWriteOnlyAndStrictAdmission(t *testing.T) {
 	body := `{"agent":{"model":"actual-model","x_agents_core":{"harness":"codex"}},"environment":{"type":"openai_hosted"},"x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://example.com/v1","api_key":"model-http-canary"}}}`
 	key := uuid.NewString()
 	w := call("POST", "/v1/agents/sessions", body, key)
-	if w.Code != 200 {
+	if w.Code != 201 {
 		t.Fatalf("create: %d %s", w.Code, w.Body)
 	}
 	var session struct{ ID string }
@@ -51,7 +51,7 @@ func TestModelExecutionHTTPWriteOnlyAndStrictAdmission(t *testing.T) {
 	if w := call("GET", "/v1/agents/sessions/"+session.ID, "", ""); w.Code != 200 {
 		t.Fatal(w.Code)
 	}
-	if w := call("POST", "/v1/agents/sessions", body, key); w.Code != 200 {
+	if w := call("POST", "/v1/agents/sessions", body, key); w.Code != 201 {
 		t.Fatal("creation retry failed", w.Code)
 	}
 	if w := call("POST", "/v1/agents/sessions", strings.Replace(body, "model-http-canary", "changed-key", 1), key); w.Code != 409 {
