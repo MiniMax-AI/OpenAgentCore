@@ -2375,7 +2375,7 @@ test("presents Dashboard page-chain results and System boundaries without extra 
   await expect(system.getByRole("listitem").filter({ hasText: "Vaults" })).toContainText("Available");
   await expect(system.getByRole("listitem").filter({ hasText: "Default adapter" })).toContainText("Codex");
   await expect(system.getByRole("listitem").filter({ hasText: "Managed sandbox" })).toContainText("Docker");
-  await expect(system.getByRole("listitem").filter({ hasText: "Endpoint overrides" })).toContainText("1 explicit");
+  await expect(system.getByRole("listitem").filter({ hasText: "Endpoint overrides" })).toContainText("Configured");
   await expect(system.getByRole("listitem")).toHaveCount(5);
   await expect(system).toContainText("Configured for this process");
   await expect(system).toContainText("Daemon gateway");

@@ -91,8 +91,7 @@ export function SystemView({
   const configuration = startupConfigurationState === "ready" && startupConfigurationSupported === true
     ? startupConfiguration
     : null;
-  const configuredEndpoints = configuration?.configured.model_providers.filter((provider) => provider.endpoint_configured).length ?? 0;
-  const endpointTotal = configuration?.configured.model_providers.length ?? 0;
+  const endpointOverrideConfigured = configuration?.configured.model_providers.some((provider) => provider.endpoint_configured) ?? false;
   const executionAdaptersEnabled = (configuration?.configured.enabled_harnesses.length ?? 0) > 0;
   const startupUnavailable = startupConfigurationSupported === false;
 
@@ -155,9 +154,13 @@ export function SystemView({
     {
       label: "Endpoint overrides",
       status: startupStatus,
-      value: startupValue(`${configuredEndpoints} explicit`),
+      value: startupValue(endpointOverrideConfigured ? "Configured" : "Not configured"),
       detail: configuration
-        ? `Across ${endpointTotal} startup-enabled adapter${endpointTotal === 1 ? "" : "s"}. No override may mean the harness uses its native default.`
+        ? endpointOverrideConfigured
+          ? "Explicit operator overrides are shown per adapter below; others may use native defaults."
+          : executionAdaptersEnabled
+            ? "No explicit operator overrides; enabled adapters may use native defaults."
+            : "No execution adapters are enabled for this Core process."
         : startupDetail,
     },
   ];

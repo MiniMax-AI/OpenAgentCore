@@ -54,7 +54,9 @@ describe("SystemView", () => {
     expect(html).toContain("Default adapter");
     expect(html).toContain("Managed sandbox");
     expect(html).toContain("Endpoint overrides");
-    expect(html).toContain("1 explicit");
+    expect(html).toContain("<strong>Configured</strong>");
+    expect(html).not.toContain("1 explicit");
+    expect(html).toContain("Explicit operator overrides are shown per adapter below; others may use native defaults");
     expect(html).toContain("Configured for this process");
     expect(html).toContain("Daemon gateway");
     expect(html).toContain("Supported by this build: Docker, Microsandbox");
@@ -104,11 +106,30 @@ describe("SystemView", () => {
     };
     const html = render({ startupConfiguration: inactive });
 
-    expect(html).toContain("0 explicit");
-    expect(html).toContain("Across 0 startup-enabled adapters");
+    expect(html).toContain("<strong>Not configured</strong>");
+    expect(html).not.toContain("0 explicit");
+    expect(html).toContain("No execution adapters are enabled for this Core process");
     expect(html).toContain("Codex is the configured default, but execution adapters are inactive because this Core process has no daemon gateway");
     expect(html.match(/Build only/g)).toHaveLength(3);
     expect(html).not.toContain("Enabled · default");
+  });
+
+  it("does not treat native endpoint defaults as unavailable", () => {
+    const nativeDefaults: CoreStartupConfiguration = {
+      ...startup,
+      configured: {
+        ...startup.configured,
+        model_providers: startup.configured.model_providers.map((provider) => ({
+          ...provider,
+          endpoint_configured: false,
+        })),
+      },
+    };
+    const html = render({ startupConfiguration: nativeDefaults });
+
+    expect(html).toContain("<strong>Not configured</strong>");
+    expect(html).toContain("No explicit operator overrides; enabled adapters may use native defaults");
+    expect(html).toContain("Enabled · default");
   });
 
   it("handles an older Core without leaving a pending state", () => {
