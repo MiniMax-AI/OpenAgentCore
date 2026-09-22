@@ -13,7 +13,7 @@ import (
 // @Security BearerAuth
 // @Param after query string false "Last File ID from the previous page"
 // @Param limit query integer false "Maximum page size, 1–10000" default(10000) minimum(1) maximum(10000)
-// @Param order query string false "Creation order" Enums(asc,desc) default(desc)
+// @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Param purpose query string false "Only return Files with this purpose"
 // @Success 200 {object} v1.SourceFileList
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse

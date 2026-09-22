@@ -75,7 +75,7 @@ func (h *Handler) getSubagent(w http.ResponseWriter, r *http.Request) {
 // @Param session_id path string true "Session ID"
 // @Param after query string false "Last Subagent ID from the previous page"
 // @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
-// @Param order query string false "Resource order" Enums(asc,desc) default(desc)
+// @Param order query string false "Resource order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.SubagentList
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/subagents [get]
@@ -105,7 +105,7 @@ func (h *Handler) listSubagents(w http.ResponseWriter, r *http.Request) {
 // @Param subagent_id path string true "Subagent ID"
 // @Param after query string false "Last Item ID from the previous page"
 // @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
-// @Param order query string false "Resource order" Enums(asc,desc) default(desc)
+// @Param order query string false "Resource order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.ItemList
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/subagents/{subagent_id}/items [get]

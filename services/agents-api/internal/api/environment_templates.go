@@ -194,7 +194,7 @@ func (h *Handler) deleteEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param after query string false "Previous Template ID"
 // @Param limit query integer false "Page size" default(20) minimum(1) maximum(100)
-// @Param order query string false "Creation order" Enums(asc,desc) default(desc)
+// @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.EnvironmentTemplateList
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/environments/templates [get]

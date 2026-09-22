@@ -54,7 +54,7 @@ func (h *Handler) getTurn(w http.ResponseWriter, r *http.Request) {
 // @Param session_id path string true "Session ID"
 // @Param after query string false "Last Turn ID from the previous page"
 // @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
-// @Param order query string false "Creation order" Enums(asc,desc) default(desc)
+// @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.TurnList
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/turns [get]

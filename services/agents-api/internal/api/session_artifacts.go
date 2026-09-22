@@ -44,7 +44,7 @@ func (h *Handler) artifactsReady(w http.ResponseWriter, r *http.Request, list bo
 // @Param environment_id query string false "Producing Environment ID"
 // @Param after query string false "Last immutable artifact ID"
 // @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
-// @Param order query string false "Publication order" Enums(asc,desc) default(desc)
+// @Param order query string false "Publication order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.SessionArtifactList
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts [get]

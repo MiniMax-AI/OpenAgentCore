@@ -44,7 +44,7 @@ func (h *Handler) getSubagentTurn(w http.ResponseWriter, r *http.Request) {
 // @Param subagent_id path string true "Subagent ID"
 // @Param after query string false "Last Turn ID from the previous page"
 // @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
-// @Param order query string false "Creation order" Enums(asc,desc) default(desc)
+// @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.TurnList
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/subagents/{subagent_id}/turns [get]
@@ -72,7 +72,7 @@ func (h *Handler) listSubagentTurns(w http.ResponseWriter, r *http.Request) {
 // @Param turn_id path string true "Turn ID"
 // @Param after query string false "Last Item ID from the previous page"
 // @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
-// @Param order query string false "Resource order" Enums(asc,desc) default(desc)
+// @Param order query string false "Resource order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.ItemList
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/subagents/{subagent_id}/turns/{turn_id}/items [get]

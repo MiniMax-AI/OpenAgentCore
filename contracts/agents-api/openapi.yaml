@@ -2050,7 +2050,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Creation order
+        description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -2373,7 +2374,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Case-sensitive path-component order
+        description: Case-sensitive path-component order; omit for descending, explicit
+          empty values are invalid
         enum:
         - asc
         - desc
@@ -2509,7 +2511,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Creation order
+        description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -2772,7 +2775,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Creation order
+        description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -3133,7 +3137,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Publication order
+        description: Publication order; omit for descending, explicit empty values
+          are invalid
         enum:
         - asc
         - desc
@@ -3497,7 +3502,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Creation order
+        description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -3559,7 +3565,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Resource order
+        description: Resource order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -3683,7 +3690,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Resource order
+        description: Resource order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -3754,7 +3762,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Creation order
+        description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -3888,7 +3897,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Resource order
+        description: Resource order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -3955,7 +3965,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Creation order
+        description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -4056,7 +4067,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Creation order
+        description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -4296,7 +4308,8 @@ paths:
         in: query
         name: limit
         type: integer
-      - description: Creation order
+      - description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -4452,7 +4465,8 @@ paths:
         in: query
         name: limit
         type: integer
-      - description: Version order
+      - description: Version order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -4601,7 +4615,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Creation order
+        description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -4827,7 +4842,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Creation order
+        description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc

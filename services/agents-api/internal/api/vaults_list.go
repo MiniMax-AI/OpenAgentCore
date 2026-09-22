@@ -14,7 +14,7 @@ import (
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param after query string false "Last Vault ID from the previous page"
 // @Param limit query integer false "Requested page size, clamped to 1–100" default(20)
-// @Param order query string false "Creation order" Enums(asc,desc) default(desc)
+// @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Param status query string false "Scalar status filter" Enums(active,archived)
 // @Param status[] query []string false "Array status filter; cannot be combined with status" collectionFormat(multi) Enums(active,archived)
 // @Success 200 {object} v1.VaultList

@@ -14,7 +14,7 @@ import (
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param after query string false "Last Agent ID from the previous page"
 // @Param limit query int64 false "Maximum requested resources; pages contain at most 100" minimum(1)
-// @Param order query string false "Creation order" Enums(asc,desc) default(desc)
+// @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.SavedAgentList
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents [get]
