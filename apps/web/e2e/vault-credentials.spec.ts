@@ -171,6 +171,7 @@ test("creates, replaces, uses, and deletes a write-only Vault Credential", async
   await expect(vaultCard).toBeVisible();
   await vaultCard.getByRole("button", { name: "Credential", exact: true }).click();
   const credentialDialog = page.getByRole("dialog", { name: "Add static bearer Credential" });
+  await expect(credentialDialog.getByLabel("Name")).toBeFocused();
   await credentialDialog.getByLabel("Name").fill("Private docs MCP");
   await credentialDialog.getByLabel("Exact MCP server URL").fill(mcpURL);
   await fillWriteOnlyBearer(credentialDialog);
