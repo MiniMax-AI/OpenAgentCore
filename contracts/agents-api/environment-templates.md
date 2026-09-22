@@ -899,9 +899,9 @@ index under `~/.parsar/remediation/20260921/template-capabilities-design/`.
 
 The current upload profile accepts at most 500 regular files, 5 MiB compressed
 and 20 MiB expanded per bundle. These are qualified implementation limits, not
-published protocol maxima. Exact hosted error parity,
-unversioned content selection, top-level metadata across version changes and
-last/default/latest deletion semantics remain recorded gaps. Current resource
-behavior selects default for unversioned content, preserves initial top-level
-metadata, rejects default-version deletion and never reuses version numbers.
-These choices are not verified upstream guarantees.
+published protocol maxima. [File resource qualification](file-resource-semantics.md)
+records default-selected unversioned content and descriptive metadata, default
+deletion rejection with multiple versions, and nondefault latest pointer fallback.
+Core updates the default pointer and top-level name/description atomically, while
+concrete version bytes and previously frozen Sessions remain immutable. Last-version
+deletion, version-number reuse and complete errors/visibility timing remain gaps.

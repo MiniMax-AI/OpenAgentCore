@@ -335,7 +335,6 @@ export function App() {
   const sourceFilesOperations = useMemo<SourceFilesOperations>(() => ({
     uploadSourceFile: (input, options) => core.uploadSourceFile(input, options),
     retrieveSourceFile: (fileId, options) => core.retrieveSourceFile(fileId, options),
-    downloadSourceFile: (fileId, options) => core.downloadSourceFile(fileId, options),
     deleteSourceFile: (fileId, options) => core.deleteSourceFile(fileId, options),
     retrieveEnvironment: (environmentId, options) => core.retrieveEnvironment(environmentId, options),
     createEnvironmentFile: (environmentId, input, options) => core.createEnvironmentFile(environmentId, input, options),

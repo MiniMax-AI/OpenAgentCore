@@ -13,7 +13,7 @@ and [FileObject](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79
 | `POST /files` | Multipart `file` and `purpose=user_data`; either part order; immutable bytes and metadata commit after full validation |
 | `GET /files` | Project-scoped metadata listing with `after`, `limit`, `order` and `purpose`; deterministic creation-time/ID keysets |
 | `GET /files/{id}` | Project-owned metadata, without reading the body |
-| `GET /files/{id}/content` | Immutable binary stream with declared length; incomplete transfer aborts rather than returning a JSON error as file content |
+| `GET /files/{id}/content` | Tenant-scoped lookup, then 400 for the supported `user_data` purpose; internal initialization/copy reads remain available |
 | `DELETE /files/{id}` | Atomic metadata removal and body unlink; `id`, `object: file`, `deleted: true` |
 
 The configured SDK base URL includes `/v1`. These routes reuse bearer and optional
@@ -27,9 +27,13 @@ Listing defaults to 10,000 resources and rejects limits outside the pinned
 use the stored timestamp plus ID as a deterministic keyset. The response includes
 `object`, `data`, `first_id`, `last_id` and `has_more`; empty pages use null IDs.
 The cursor must name a currently visible File in the same project. The optional
-purpose filter is exact; unsupported purposes return an empty page because this
-profile stores only `user_data`. Exact hosted default order, invalid/deleted cursor
-errors and pagination during concurrent mutation remain unverified local policies.
+purpose filter accepts the nine values qualified by validation probes (including
+`evals` and output-purpose names); an unknown or case-variant value returns 400
+with `param: purpose` before cursor resolution. Valid other-purpose filters return
+an empty page because storage currently accepts only `user_data`. Explicit empty
+purpose remains an exact empty filter locally; its upstream successful-page meaning
+is unverified. Successful official filtering/order, deleted-cursor behavior and
+pagination during concurrent mutation remain unqualified.
 
 Metadata includes `id`, `object: file`, `bytes`, Unix-second `created_at`,
 `filename`, `purpose: user_data`, deprecated `status: processed`, and nullable
@@ -55,7 +59,7 @@ Backups must include PostgreSQL large objects. Physical deletion from the live
 database does not erase historical WAL/backups; database maintenance governs
 reclamation. Downgrade refuses to drop a populated source table.
 
-An admitted content read uses an immutable database snapshot and may finish after
+An admitted internal content read uses an immutable database snapshot and may finish after
 deletion. Later source lookups reject. Environment copy resolves up to its existing
 50 MiB destination limit before invoking the same durable writer used by inline
 uploads. Source deletion does not undo an admitted or completed workspace copy.
@@ -66,6 +70,15 @@ their source request evidence. Destination unknown-write handling remains unchan
 Missing source Files and missing cursors expose the measured `id` and `after`
 error parameters without revealing foreign resource existence. See the bounded
 [resource error qualification](resource-selector-semantics.md#source-file-errors).
+
+## Qualified resource semantics
+
+See [file resource qualification](file-resource-semantics.md) for owned official
+metadata/content/purpose probes and the corresponding Core acceptance. Public
+`user_data` content rejects with `invalid_request_error`, null code and null param;
+missing or foreign IDs return the existing safe 404 before purpose is considered.
+This does not restrict internal source consumption by Environment initialization
+or workspace copies. Skill and Artifact downloads retain their separate rules.
 
 ## Remaining scope and verification
 

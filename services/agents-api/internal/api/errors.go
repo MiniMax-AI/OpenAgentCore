@@ -42,7 +42,7 @@ func writeError(w http.ResponseWriter, status int, code, message string, param .
 func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFoundParam ...string) {
 	switch {
 	case errors.Is(err, store.ErrDefaultSkillVersion):
-		writeError(w, http.StatusBadRequest, "invalid_request", "Change the default version before deleting this Skill version.")
+		writeError(w, http.StatusBadRequest, "invalid_value", "Cannot delete the default skill version.", "version")
 	case errors.Is(err, store.ErrSourceFileTooLarge):
 		writeError(w, http.StatusRequestEntityTooLarge, "request_too_large", "File exceeds this operation's content limit.")
 	case errors.Is(err, store.ErrCredentialStorageUnavailable):

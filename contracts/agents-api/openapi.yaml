@@ -4051,11 +4051,12 @@ paths:
       - Turns
   /files:
     get:
-      description: Lists project-owned Files without reading their bodies. Supports
-        the pinned after, limit, order and purpose query surface. The limit defaults
-        to 10000 and must be 1–10000. Equal creation times use ID ordering. Current
-        storage contains only user_data; exact hosted default order, invalid-cursor
-        errors and concurrent-page behavior remain unverified. No Beta header is required.
+      description: Lists project-owned Files without reading their bodies. The limit
+        defaults to 10000 and must be 1–10000. Equal creation times use ID ordering.
+        Purpose validation precedes cursor lookup; current storage contains only user_data.
+        An explicit empty purpose retains the local exact-filter behavior. Hosted
+        positive filtering, default order and concurrent-page behavior remain unverified.
+        No Beta header is required.
       parameters:
       - description: Last File ID from the previous page
         in: query
@@ -4255,10 +4256,10 @@ paths:
       - Files
   /files/{file_id}/content:
     get:
-      description: Streams an authorized immutable source snapshot. Already-admitted
-        reads may finish after deletion; later reads reject. No Beta header is required.
-        Range requests and exact hosted headers/error behavior are not implemented
-        or verified.
+      description: Resolves project-owned File metadata before enforcing download
+        policy. Public download of user_data Files returns 400; missing and foreign
+        Files return the same 404. Internal initial-file and workspace copies remain
+        available. No Beta header is required.
       parameters:
       - description: Source file ID
         in: path
@@ -4266,12 +4267,8 @@ paths:
         required: true
         type: string
       produces:
-      - application/octet-stream
+      - application/json
       responses:
-        "200":
-          description: OK
-          schema:
-            type: file
         "400":
           description: Bad Request
           schema:

@@ -843,15 +843,10 @@ const server = http.createServer(async (request, response) => {
       if (request.headers["openai-beta"] != null) return sendError(response, 400, "Source Files do not accept the Agents beta header in this fixture.");
       const source = state.sourceFiles.get(id);
       if (!source) return sendError(response, 404, "Fixture Source File not found.");
-      response.writeHead(200, {
-        "content-type": "application/octet-stream",
-        "content-disposition": `attachment; filename="${source.metadata.filename}"`,
-        "content-length": source.data.length,
-        "cache-control": "no-store",
-        "x-content-type-options": "nosniff",
-      });
-      response.end(source.data);
-      return;
+      return sendJson(response, { error: {
+        message: "Not allowed to download files of purpose: user_data",
+        type: "invalid_request_error", code: null, param: null,
+      } }, 400);
     }
 
     const sourceFileMatch = url.pathname.match(/^\/v1\/files\/([^/]+)$/);

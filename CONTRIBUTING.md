@@ -375,7 +375,9 @@ tools. This requirement does not add execution prerequisites to Files reads.
 
 Skills and their immutable versions are Core-owned tenant resources, independent of
 Sessions and native Skill installations. Serialize version allocation and pointer
-mutations under the owning Skill row; preserve unique version identities across
+mutations under the owning Skill row. Keep top-level name and description aligned
+with the default version in the same transaction, including default-changing uploads;
+nondefault uploads preserve that metadata. Preserve unique version identities across
 concurrent uploads and deletion. Metadata reads never load or decrypt bundle bytes.
 Encrypt bundle contents with a tenant, Skill and version binding using the existing
 service cipher. Deleting a Skill reclaims its versions without affecting already
@@ -784,7 +786,11 @@ metadata insertion and bytes commit atomically; deletion removes metadata and
 unlinks the object in one transaction. Keep OIDs private and authorize every
 metadata/content/delete lookup by tenant before opening a body. Stream bounded
 chunks; never hold an entire general Files upload in memory or use filenames as
-filesystem paths. A read-only repeatable-read transaction preserves an admitted
+filesystem paths. Public source download admission is separate from internal byte
+consumption: reject direct downloads of the supported `user_data` purpose after
+tenant-scoped metadata lookup; initialization and workspace copies keep their
+authorized Store read. Core Web must not offer that unavailable download action.
+A read-only repeatable-read transaction preserves an admitted
 source snapshot across concurrent deletion. Resolve that snapshot before entering
 the existing Environment write path; deleting a source does not undo a completed
 workspace copy. Bound request/transaction lifetimes, roll back incomplete bodies,
