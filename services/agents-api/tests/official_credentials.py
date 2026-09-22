@@ -70,7 +70,7 @@ def verify_credentials(client, other, invalid, peer, saved_vaults, canary, expec
             {**request, "name": " " + "🧪" * 64 + "a "},
             {**request, "auth": None}, {**request, "auth": []},
             {**request, "auth": {**auth, "token": 3}},
-            {**request, "auth": {"type": "mcp_oauth", "mcp_server_url": destination, "access_token": canary}},
+            {**request, "auth": {"type": "mcp_oauth", "mcp_server_url": destination, "access_token": None}},
             {**request, "metadata": {"unexpected": "field"}},
         ]
         for field in ("type", "mcp_server_url", "token"):

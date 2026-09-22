@@ -100,7 +100,7 @@ paths start at `/vaults`, not `/agents/vaults`.
 | environments.files | create, list | [Bounded live listing and inline/source-file creation](environment-files.md) on qualified Docker workspaces; [user-managed enrollment](user-managed-runtime-v1.md) reuses the local implementation with separate real public acceptance. Full listing, overwrite and error semantics remain partial |
 | environments.templates | create, retrieve, update, list, delete | [Reusable network, files, env/setup/packages, inline/referenced Skills and Session snapshots](environment-templates.md); other initialization and full semantics remain gaps |
 | vaults | create, retrieve, list, delete | Create/retrieve/list/delete with independent tenant persistence, stored status filtering, atomic Credential cascade and frozen Session attachments; archive semantics and full hosted lifecycle parity remain missing |
-| vaults.credentials | create, retrieve, update, list, delete | Static-bearer create/retrieve/list/token replacement/deletion with scoped encrypted storage; Session attachment and exact-URL HTTPS MCP binding; OAuth, archive semantics and full hosted lifecycle parity remain missing |
+| vaults.credentials | create, retrieve, update, list, delete | Static-bearer and OAuth create/retrieve/list/replacement/deletion with scoped encrypted storage and dispatch-time refresh; Session attachment and exact-URL HTTPS MCP binding; archive semantics and full hosted lifecycle parity remain missing |
 
 ## Core extension inventory
 
@@ -180,7 +180,7 @@ user-managed enrollment remain outside this qualification.
 | Environment Templates | Unsupported restricted hostname forms, unqualified installation overrides/null network and exact hosted errors remain gaps. CRUD/list, files, env/setup/system/npm/Python, inline/referenced Skills, Plugins, workspace capability directories and Session references have recorded coverage. Environment Plugin MCP transport and placement limits are [listed separately](environment-templates.md#environment-origin-mcp-plugins) |
 | Input and configuration | Non-text initial input, broader content/configuration unions and reasoning/verbosity combinations; [structured output](structured-output.md) has qualified Claude function profiles on none and Core-managed Docker openai_hosted, with other combinations remaining gaps |
 | Tools and interactions | [Deferred discovery qualification](tool-search.md), other tool types, effective tool-set enforcement and result/cancel publication ordering; MiniMax public functions and service-origin MCP remain unsupported |
-| Vault and Credentials | OAuth/refresh, archive semantics, revocation/concurrent mutation and exact hosted selection/error behavior; static bearer CRUD/token replacement is already present |
+| Vault and Credentials | Archive semantics, in-flight token withdrawal and exact hosted selection/error behavior; static/OAuth CRUD, replacement and scoped dispatch-time refresh are implemented (see credential guide for qualification) |
 | Existing resources | Full Item/SSE/Usage variants, omitted/null/default/error semantics, pagination and overlapping lifecycle behavior beyond recorded cases |
 
 An implementation gap and an unknown upstream behavior require different follow-up
@@ -191,8 +191,8 @@ including further deployment qualification; this inventory describes merged beha
 ## Public semantics
 
 - Credentials use `POST /vaults/{vault_id}/credentials` and
-  `GET /vaults/{vault_id}/credentials/{credential_id}`. The initial profile accepts
-  only `static_bearer` with required string token and HTTPS destination, plus a
+  `GET /vaults/{vault_id}/credentials/{credential_id}`. The static profile accepts
+  `static_bearer` with required string token and HTTPS destination, plus a
   required name trimmed to 1–256 UTF-8 bytes. Tokens remain opaque, including empty
   strings; exact hosted token validation is unverified. The local URL profile
   excludes userinfo/fragments and preserves queries without normalization or network
@@ -200,7 +200,9 @@ including further deployment qualification; this inventory describes merged beha
   auth type/destination; it never returns tokens or ciphertext and can be read
   without the encryption key. Missing encryption configuration locally rejects
   creation/replacement with 503. Attached Sessions can use static credentials for
-  exact-URL HTTPS MCP; OAuth, storage-key rotation, archive behavior and key scopes remain gaps. See the [credential storage guide](../../services/agents-api/credentials.md)
+  exact-URL HTTPS MCP. OAuth grants use the same binding plus
+  [scoped refresh and replacement](../../services/agents-api/oauth-credentials.md);
+  storage-key rotation, archive behavior and key scopes remain gaps. See the [credential storage guide](../../services/agents-api/credentials.md)
   for encryption and operational limits; this does not establish complete Credential
   or hosted error/retry compatibility.
 - `GET /vaults/{vault_id}/credentials` lists only safe metadata, with parent and
@@ -219,8 +221,9 @@ including further deployment qualification; this inventory describes merged beha
   Ciphertext/update time change atomically within the same tenant/Vault/ID/type/URL;
   name, destination, identity, creation time and Session bindings are unchanged. No
   old-token decryption or MCP call occurs. Subsequent dispatch reads use the committed
-  replacement; already-resolved requests may retain the old token. OAuth replacement,
-  storage-key rotation, hot reload/revocation and exact hosted concurrent-update,
+  replacement; already-resolved requests may retain the old token. OAuth partial
+  replacement follows its pinned union and authenticates the stored grant.
+  Storage-key rotation, hot reload/revocation and exact hosted concurrent-update,
   timestamp and retry semantics remain gaps.
 - `DELETE /vaults/{vault_id}/credentials/{credential_id}` returns only `id`,
   `deleted: true` and `object: vault.credential.deleted`. It removes one owned row
@@ -327,7 +330,7 @@ including further deployment qualification; this inventory describes merged beha
   headers. Omitted/null `allowed_tools` is unrestricted; `[]` denies all tools.
   Session `vault_ids` attaches tenant-owned Vaults. Explicit `credential_id` must
   belong to an attached Vault and match the exact HTTPS URL; omission/null selects
-  one matching static credential, zero stays anonymous and ambiguity fails. Private
+  one matching static or OAuth credential, zero stays anonymous and ambiguity fails. Private
   immutable selections do not populate the public credential field. Scope is
   rechecked before dispatch-only decryption; authenticated execution requires the
   separate bearer capability and never downgrades on failure. Exact URL/selection

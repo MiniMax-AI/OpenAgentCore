@@ -2,13 +2,9 @@ import {
   AlertTriangle,
   ArrowRight,
   Bot,
-  Cpu,
-  Gauge,
-  MemoryStick,
   MessageSquare,
   RefreshCw,
   Rows3,
-  Server,
 } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 
@@ -21,14 +17,11 @@ import {
   buildRuntimeDashboardModel,
   dashboardEnvironmentLabel,
   dashboardStatusLabel,
-  formatDashboardBytes,
-  formatDashboardDuration,
-  formatDashboardTokens,
   formatDashboardTimestamp,
-  runtimeObservationStatusLabel,
   type DashboardCollectionState,
   type DashboardSessionRow,
 } from "./dashboard-model";
+import { RuntimeObservabilityContent } from "./RuntimeObservabilityContent";
 import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";
 import "./DashboardView.css";
 
@@ -52,109 +45,6 @@ export interface DashboardViewProps {
   onViewSessions: () => void;
   onConfigureConnection: () => void;
   onOpenSession: (sessionId: string) => void;
-}
-
-function RuntimeMetric({
-  icon,
-  label,
-  value,
-  detail,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-  detail: string;
-}) {
-  return (
-    <div className="dashboard-runtime-metric">
-      <span className="dashboard-runtime-metric-icon" aria-hidden="true">{icon}</span>
-      <span>
-        <small>{label}</small>
-        <strong>{value}</strong>
-        <span>{detail}</span>
-      </span>
-    </div>
-  );
-}
-
-function percent(usage: number | null | undefined, limit: number | null | undefined): number | null {
-  if (typeof usage !== "number" || typeof limit !== "number" || limit <= 0) return null;
-  return Math.min(100, Math.max(0, usage / limit * 100));
-}
-
-function RuntimeTable({
-  snapshot,
-  onOpenSession,
-}: {
-  snapshot: RuntimeDashboardSnapshot;
-  onOpenSession: (sessionId: string) => void;
-}) {
-  const model = buildRuntimeDashboardModel(snapshot.sessions, snapshot.observations);
-  return (
-    <div className="dashboard-runtime-ledger" role="table" aria-label="Current Runtime observations">
-      <div className="dashboard-runtime-header" role="row">
-        <span role="columnheader">Session / Runtime</span>
-        <span role="columnheader">Observation</span>
-        <span role="columnheader">CPU</span>
-        <span role="columnheader">Memory</span>
-        <span role="columnheader">Uptime</span>
-        <span role="columnheader">Tokens</span>
-      </div>
-      {model.rows.map((row) => {
-        const observation = row.observation;
-        const memoryPercent = observation.status === "observed"
-          ? percent(observation.memory?.usage_bytes, observation.memory?.limit_bytes)
-          : null;
-        return (
-          <div className="dashboard-runtime-entry" key={observation.id}>
-            <div className="dashboard-runtime-row" role="row">
-              <span className="dashboard-runtime-identity" role="cell">
-                <button type="button" onClick={() => onOpenSession(observation.session_id)}>{row.session.title}</button>
-                <small>{row.session.agentLabel} · {dashboardStatusLabel(row.session.status)}</small>
-              </span>
-              <span role="cell">
-                <span className={`dashboard-runtime-status dashboard-runtime-status-${observation.status}`}>
-                  <span aria-hidden="true" />{runtimeObservationStatusLabel(observation)}
-                </span>
-                <small>{observation.mode === "openai_hosted" ? observation.provider_type ?? "Managed" : dashboardEnvironmentLabel(row.session.environmentProfile)}</small>
-              </span>
-              <span className="dashboard-runtime-value" role="cell">
-                <strong>{observation.status === "observed" ? formatDashboardDuration(observation.cpu?.usage_seconds_total ?? null) : "—"}</strong>
-                <small>{observation.status === "observed" && typeof observation.cpu?.capacity_cores === "number"
-                  ? `${observation.cpu.capacity_cores.toLocaleString("en-US")} cores capacity`
-                  : "No current sample"}</small>
-              </span>
-              <span className="dashboard-runtime-value" role="cell">
-                <strong>{observation.status === "observed" ? formatDashboardBytes(observation.memory?.usage_bytes ?? null) : "—"}</strong>
-                <small>{observation.status === "observed" ? `of ${formatDashboardBytes(observation.memory?.limit_bytes ?? null)}` : "No current sample"}</small>
-                {memoryPercent !== null ? <span className="dashboard-runtime-bar" aria-label={`${memoryPercent.toFixed(1)}% memory used`}><i style={{ width: `${memoryPercent}%` }} /></span> : null}
-              </span>
-              <span className="dashboard-runtime-value" role="cell">
-                <strong>{formatDashboardDuration(row.computeUptimeSeconds)}</strong>
-                <small>{row.allocationAgeSeconds === null ? "Allocation age unavailable" : `${formatDashboardDuration(row.allocationAgeSeconds)} allocation age`}</small>
-              </span>
-              <span className="dashboard-runtime-value" role="cell">
-                <strong>{formatDashboardTokens(row.session.totalTokens)}</strong>
-                <small>{row.session.totalTokens === null ? "Usage not reported" : "Session reported"}</small>
-              </span>
-            </div>
-            <details className="dashboard-runtime-detail">
-              <summary>Identity and sample details</summary>
-              <dl>
-                <div><dt>Session</dt><dd>{observation.session_id}</dd></div>
-                <div><dt>Environment</dt><dd>{observation.environment_id ?? "Not applicable"}</dd></div>
-                <div><dt>Allocation</dt><dd>{observation.instance.allocation_id ?? "Not available"}</dd></div>
-                <div><dt>Provider</dt><dd>{observation.provider_type ?? "Not available"}</dd></div>
-                <div><dt>Resolved</dt><dd>{formatDashboardTimestamp(observation.resolved_at)}</dd></div>
-                <div><dt>Observed</dt><dd>{formatDashboardTimestamp(observation.observed_at)}</dd></div>
-              </dl>
-              <button type="button" onClick={() => onOpenSession(observation.session_id)}>Open Session <ArrowRight size={13} aria-hidden="true" /></button>
-            </details>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 function collectionHasSnapshot(state: DashboardCollectionState, hasSnapshot: boolean): boolean {
@@ -514,38 +404,12 @@ export function DashboardView({
             </p>
           ) : (
             <>
-              <div className="dashboard-runtime-summary" aria-label="Runtime resource snapshot">
-                <RuntimeMetric
-                  icon={<Server size={17} />}
-                  label="Active Runtimes"
-                  value={runtimeModel.summary.observedRuntimeCount.toLocaleString("en-US")}
-                  detail={`${runtimeModel.summary.managedRuntimeCount} managed · ${runtimeModel.summary.unavailableRuntimeCount} unavailable`}
-                />
-                <RuntimeMetric
-                  icon={<Cpu size={17} />}
-                  label="CPU time / capacity"
-                  value={runtimeModel.summary.cpuUsageSecondsTotal === null && runtimeModel.summary.cpuCapacityCores === null
-                    ? "No current sample"
-                    : `${formatDashboardDuration(runtimeModel.summary.cpuUsageSecondsTotal)} / ${runtimeModel.summary.cpuCapacityCores?.toLocaleString("en-US") ?? "—"} cores`}
-                  detail={`${runtimeModel.summary.cpuCoverageCount}/${runtimeModel.summary.observedRuntimeCount} observed Runtimes report CPU`}
-                />
-                <RuntimeMetric
-                  icon={<MemoryStick size={17} />}
-                  label="Memory"
-                  value={runtimeModel.summary.memoryUsageBytes === null && runtimeModel.summary.memoryLimitBytes === null
-                    ? "No current sample"
-                    : `${formatDashboardBytes(runtimeModel.summary.memoryUsageBytes)} / ${formatDashboardBytes(runtimeModel.summary.memoryLimitBytes)}`}
-                  detail={`${runtimeModel.summary.memoryCoverageCount}/${runtimeModel.summary.observedRuntimeCount} observed Runtimes report memory`}
-                />
-                <RuntimeMetric
-                  icon={<Gauge size={17} />}
-                  label="Reported tokens"
-                  value={runtimeModel.summary.totalTokens === null ? "Not reported" : formatDashboardTokens(runtimeModel.summary.totalTokens)}
-                  detail={`${runtimeModel.summary.tokenCoverageCount}/${runtimeModel.summary.sessionCount} Sessions report usage`}
-                />
-              </div>
               {runtimeModel.rows.length ? (
-                <RuntimeTable snapshot={runtimeSnapshot} onOpenSession={onOpenSession} />
+                <RuntimeObservabilityContent
+                  snapshot={runtimeSnapshot}
+                  stale={runtimeCollectionState === "failed" && runtimeCollectionHasSnapshot}
+                  onOpenSession={onOpenSession}
+                />
               ) : (
                 <p className="dashboard-empty dashboard-empty-positive">No Session-owned Runtime contexts in this snapshot.</p>
               )}

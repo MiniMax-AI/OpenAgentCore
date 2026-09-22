@@ -245,10 +245,25 @@ describe("Dashboard loaded-result presentation", () => {
     expect(html).toContain("CPU time / capacity");
     expect(html).toContain("1m 13s / 2 cores");
     expect(html).toContain("512 MiB / 2.00 GiB");
-    expect(html).toContain("Current Runtime observations");
+    expect(html).toContain("Runtime health");
+    expect(html).toContain("Observed · 2023-11-14 22:14 UTC");
+    expect(html).not.toContain("Observed · 10s");
+    expect(html).toContain("Usage coverage");
+    expect(html).toContain("CPU 1/1");
+    expect(html).toContain("Memory 1/1");
+    expect(html).toContain("Tokens 1/1");
+    expect(html).toContain("Unsupported 0");
+    expect(html).toContain("Runtime targets");
+    expect(html).toContain("Search Runtime targets");
+    expect(html).toContain("All statuses");
+    expect(html).toContain("All modes");
+    expect(html).toContain('<table class="dashboard-runtime-table" aria-label="Runtime targets">');
+    expect(html).toContain("CPU time");
     expect(html).toContain("Managed research");
-    expect(html).toContain("Identity and sample details");
+    expect(html).toContain("Identity");
+    expect(html).toContain("Unknown remains unknown, never zero");
     expect(html).not.toContain("CPU %");
+    expect(html).not.toContain("CPU now");
     expect(html).not.toContain("historical chart");
   });
 

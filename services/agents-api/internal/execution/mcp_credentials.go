@@ -47,7 +47,7 @@ func selectedMCPCredentials(snapshot Snapshot) (map[string]store.MCPCredentialBi
 			continue
 		}
 		vaultID, err := uuid.Parse(binding.VaultID)
-		if err != nil || !attached[vaultID] || binding.AuthType != "static_bearer" {
+		if err != nil || !attached[vaultID] || (binding.AuthType != "static_bearer" && binding.AuthType != "mcp_oauth") {
 			return nil, invalid
 		}
 		id, err := uuid.Parse(binding.CredentialID)

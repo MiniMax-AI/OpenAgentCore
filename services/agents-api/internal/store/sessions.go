@@ -21,6 +21,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/credentialcrypto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/oauthrefresh"
 )
 
 var (
@@ -71,6 +72,7 @@ type Store struct {
 	pool             *pgxpool.Pool
 	executionLease   *ExecutionLease
 	credentialCipher *credentialcrypto.Cipher
+	oauthRefresher   oauthrefresh.Refresher
 }
 
 func New(pool *pgxpool.Pool) *Store { return &Store{queries: sqlc.New(pool), pool: pool} }

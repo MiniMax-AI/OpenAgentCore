@@ -188,6 +188,7 @@ func (w *Worker) ReconcileManagedRuntimes(ctx context.Context) error {
 		return err
 	}
 	if len(rows) == 0 {
+		wrapped := r.cursor != ""
 		r.cursor = ""
 		if err := r.advanceInitialization(ctx); err != nil {
 			if ownership := r.store.CheckExecutionOwnership(ctx); ownership != nil {
@@ -195,7 +196,14 @@ func (w *Worker) ReconcileManagedRuntimes(ctx context.Context) error {
 			}
 			log.Ctx(ctx).Warn("managed Runtime file initialization incomplete")
 		}
-		return r.provisionPending(ctx)
+		if wrapped {
+			// Service the next page now instead of spending a ticker interval on EOF.
+			// Refill only once so an empty store still returns without spinning.
+			rows, err = r.store.ListRuntimeAllocations(ctx, "")
+			if err != nil {
+				return err
+			}
+		}
 	}
 	for _, owner := range rows {
 		r.cursor = owner.ID

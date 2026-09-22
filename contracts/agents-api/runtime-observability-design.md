@@ -253,8 +253,10 @@ as zero.
 ### 11.2 Runtime table
 
 Each row shows Session, Agent/harness when already available from the Session
-snapshot, mode, observation status, CPU, memory, compute uptime, Turn state, and
-reported tokens. Rows navigate to the existing Session view. No stop, restart,
+snapshot, mode, observation status, cumulative CPU time, memory, compute uptime,
+Session state, and reported tokens. The semantic table supports local search,
+status and mode filters, sortable columns, and bounded pagination over the last
+complete snapshot. Rows navigate to the existing Session view. No stop, restart,
 pause, or delete actions appear in the first release.
 
 ### 11.3 Detail view
@@ -290,8 +292,9 @@ seams separate:
 3. A feature-local state model retains `last_complete`, current refresh status,
    local filters, and the selected time range. It aborts an overlapping refresh
    and marks old data stale after a failed or incomplete refresh.
-4. Presentational components render summary coverage, the Runtime table, and a
-   Session detail surface. Trend components are absent unless a later history
+4. Presentational components render summary metrics, a compact health matrix,
+   explicit usage coverage, the Runtime table, and an identity detail surface.
+   Trend components and chart dependencies are absent unless a later history
    capability and contract are configured.
 
 The initial implementation uses a 30-second Web cadence plus up to five seconds

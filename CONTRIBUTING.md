@@ -317,8 +317,10 @@ The allocation lifecycle owns pending/running/complete initialization. Authentic
 may connect the daemon during initialization; execution bindings, native preparation,
 live Files and connected publication wait for completion. Keep Provider bootstrap
 settlement distinct. Advance at most one bounded initialization operation per full
-maintenance scan,
-using process-local progress and the existing lifecycle gate. A recovered or uncertain
+maintenance scan. At allocation EOF, begin the next page in the same call rather
+than consume an observation interval on an empty page. Refill at most once, retain
+the 32-allocation per-call bound and the five-second ticker, and never loop on an
+empty store. Use process-local progress and the existing lifecycle gate. A recovered or uncertain
 running installation fails and uses existing cleanup, without replaying writes.
 Completed environments never reinstall initial files on reconnect or native recovery.
 Provider RunCommand carries bounded stdin, not confidential argv. Only fixed trusted
@@ -1318,10 +1320,10 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   attached Vault or anonymous MCP. Already-resolved tokens and running Sessions
   are not revoked. Exact hosted archive, visibility, overlapping-mutation and error
   semantics remain unverified; row removal does not prove physical storage erasure.
-- Static-bearer Credentials are children of tenant-owned Vaults in the execution
+- Static-bearer and OAuth Credentials are children of tenant-owned Vaults in the execution
   database. Creation admits the owner in the same SQL statement as the insert;
-  retrieval joins the owning Vault and selects public metadata only. No public
-  operation decrypts or returns a token. Encrypt before passing secret values to
+  retrieval joins the owning Vault and selects public metadata only. Public reads do not decrypt or return a token. OAuth replacement authenticates
+  the stored grant before applying a partial update. Encrypt before passing secret values to
   SQL, using the execution service's separately configured random 32-byte key and
   the standard library's random-nonce AES-GCM. The versioned authenticated binding
   includes tenant, Vault, Credential, authentication purpose and exact destination.
@@ -1329,8 +1331,8 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   this storage boundary. Missing key configuration disables credential writes;
   malformed explicit configuration fails startup. See
   [`services/agents-api/credentials.md`](services/agents-api/credentials.md) for
-  key persistence and current limits. OAuth and storage-key rotation remain
-  separate gaps; resource creation never contacts the destination.
+  key persistence and current limits. Storage-key rotation remains
+  separate work; resource creation never contacts the destination.
 - `GET /v1/vaults/{vault_id}/credentials` lists safe metadata only, with both
   project and Vault ownership enforced on the parent, cursor and row query. An
   inaccessible parent returns not-found, even when the collection would be empty.
@@ -1341,10 +1343,10 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   Synthetic archived fixtures prove filtering only. There is no public archive writer,
   timestamp or delete-to-archive inference; existing create/retrieve/token replacement,
   Session bindings and dispatch keep their rules. Migration rollback refuses to lose
-  archived classification. Archive/revocation lifecycle, OAuth and hosted
-  query/concurrency semantics remain gaps.
-- Credential `POST /v1/vaults/{vault_id}/credentials/{credential_id}` replaces only
-  the static-bearer token and update time. Require `auth.type=static_bearer` and a
+  archived classification. Archive lifecycle and hosted query/concurrency
+  semantics remain gaps.
+- For static auth, Credential `POST /v1/vaults/{vault_id}/credentials/{credential_id}`
+  replaces only the token and update time. Require `auth.type=static_bearer` and a
   string `auth.token`, preserving opaque bytes; reject extra mutation fields before
   writing. Reuse safe metadata for the immutable encryption binding, then scope the
   atomic SQL mutation independently by tenant, Vault, Credential, static auth type
@@ -1354,7 +1356,29 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   and Session snapshots stay unchanged. Subsequent dispatch reads use the committed
   replacement through existing scoped lookup; already-resolved requests may retain
   the old token. This is not storage-key rotation, in-flight revocation or hot reload.
-  OAuth and exact hosted concurrent-update/retry/timestamp semantics remain gaps.
+  Exact hosted concurrent-update/retry/timestamp semantics remain gaps.
+- OAuth grant ownership stays in Core. The application performs authorization and
+  provider revocation; do not add public login/callback/refresh/revoke routes.
+  Store access/refresh/client secrets together under existing authenticated tenant,
+  Vault, Credential, auth-type and destination encryption. Authenticate refresh
+  metadata against its encrypted copy before using an endpoint or grant. Read/list
+  queries still select safe metadata only. Shared MCP selection admits both auth
+  types and freezes one identity without changing native adapter contracts.
+  At dispatch, a known-expired grant is refreshed through the declared endpoint
+  auth method, with stored scope/resource, then persisted before returning access.
+  Serialize refresh and replacement with the same PostgreSQL Credential row lock;
+  deletion and Vault cascade cannot be undone by a stale refresh. Network exchanges
+  are bounded and fail closed; never return provider error bodies or claim an
+  uncertain grant exchange was committed. No background scheduler, 401 retry,
+  hot replacement, output repair or harness-specific OAuth path is introduced.
+  Refresh uses verified HTTPS, rejects redirects, and checks resolved addresses
+  before dialing them. Private issuer origins need explicit operator configuration
+  in `AGENTS_API_OAUTH_TRUSTED_ORIGINS`; tenants cannot relax that boundary and TLS
+  verification remains mandatory. Keycloak is acceptance infrastructure only.
+  Preserve the pinned update omission/null and immutable-field rules described in
+  [OAuth credentials](services/agents-api/oauth-credentials.md); record unspecified
+  hosted semantics. Native processes receive only access tokens. Provider revocation,
+  withdrawal of already-dispatched tokens and Session cancellation remain distinct.
 - Credential `DELETE /v1/vaults/{vault_id}/credentials/{credential_id}` removes one
   owned row, including ciphertext, with tenant/Vault/ID checked in the same SQL
   mutation. It needs no encryption key, secret read or network call. Local reads,
@@ -1401,7 +1425,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   pinned resource types. Saved-Agent updates never change existing Session
   snapshots; per-Session tools replace the whole field. The initial profile admits
   HTTP(S), boolean `required` (default false), empty/null metadata and empty/null headers.
-  Static bearer authentication requires HTTPS and the attached-Vault rules below.
+  Static and OAuth bearer authentication require HTTPS and the attached-Vault rules below.
   Inline authorization, URL userinfo/query/fragment,
   other origins and stdio remain explicitly unsupported.
 - Codex required MCP initialization additionally needs `mcp_http_required`, advertised
@@ -1440,19 +1464,19 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   with TLS verification.
   This execution profile rejects empty values and bytes outside RFC 6750 b64token
   syntax with generic errors; it never trims tokens or narrows opaque Credential
-  storage. OAuth and hosted redirect/error equivalence
-  remain separate work.
+  storage. Core-managed OAuth uses this same access-token path; native OAuth
+  login/refresh and hosted redirect/error equivalence remain separate work.
 - Session `vault_ids` omission/null/empty means `[]`; nonempty attachments must all
   belong to the authenticated tenant. Preserve caller order and public MCP
   `credential_id`. Saved Agents may store a nullable/nonempty credential reference
   without authorizing its use. Session admission resolves an explicit credential
   only inside attached Vaults for the exact declared URL, or selects the unique
-  matching static credential when the ID is omitted/null. No match remains
+  matching static or OAuth credential when the ID is omitted/null. No match remains
   anonymous; ambiguity is a local 400 and unavailable references use the same 404.
   Resolve before any Session, initial input or event write. Freeze safe bindings,
   including anonymous decisions, in private Session configuration; never populate
   the public credential field from implicit resolution. At actual dispatch, recheck
-  tenant, attached Vault, selected ID, static auth type and exact URL before scoped
+  tenant, attached Vault, selected ID, frozen auth type and exact URL before scoped
   decryption. Metadata queries select no ciphertext; tokens enter only the existing
   transient daemon request. Selected authentication requires `mcp_http_bearer_auth`
   during device selection and the final preclaim check. Missing/wrong keys or

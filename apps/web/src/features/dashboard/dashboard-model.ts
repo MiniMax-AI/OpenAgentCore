@@ -58,6 +58,7 @@ export interface RuntimeDashboardSummary {
   managedRuntimeCount: number;
   observedRuntimeCount: number;
   unavailableRuntimeCount: number;
+  unsupportedRuntimeCount: number;
   cpuUsageSecondsTotal: number | null;
   cpuCapacityCores: number | null;
   cpuCoverageCount: number;
@@ -283,6 +284,7 @@ export function buildRuntimeDashboardModel(
   let managedRuntimeCount = 0;
   let observedRuntimeCount = 0;
   let unavailableRuntimeCount = 0;
+  let unsupportedRuntimeCount = 0;
   let cpuUsageSecondsTotal = 0;
   let cpuUsageKnown = false;
   let cpuUsageSafe = true;
@@ -332,7 +334,7 @@ export function buildRuntimeDashboardModel(
           cpuCapacityKnown = true;
         } else cpuCapacitySafe = false;
       }
-      if (cpuUsage !== null || cpuCapacity !== null) cpuCoverageCount += 1;
+      if (cpuUsage !== null) cpuCoverageCount += 1;
 
       const memoryUsage = safeNonNegativeInteger(observation.memory?.usage_bytes);
       const memoryLimit = safeNonNegativeInteger(observation.memory?.limit_bytes);
@@ -350,9 +352,11 @@ export function buildRuntimeDashboardModel(
           memoryLimitKnown = true;
         } else memoryLimitSafe = false;
       }
-      if (memoryUsage !== null || memoryLimit !== null) memoryCoverageCount += 1;
+      if (memoryUsage !== null) memoryCoverageCount += 1;
     } else if (observation.status === "unavailable") {
       unavailableRuntimeCount += 1;
+    } else {
+      unsupportedRuntimeCount += 1;
     }
 
     if (sessionRow.totalTokens !== null) {
@@ -386,6 +390,7 @@ export function buildRuntimeDashboardModel(
       managedRuntimeCount,
       observedRuntimeCount,
       unavailableRuntimeCount,
+      unsupportedRuntimeCount,
       cpuUsageSecondsTotal: cpuUsageKnown && cpuUsageSafe ? cpuUsageSecondsTotal : null,
       cpuCapacityCores: cpuCapacityKnown && cpuCapacitySafe ? cpuCapacityCores : null,
       cpuCoverageCount,

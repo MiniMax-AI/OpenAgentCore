@@ -19,11 +19,11 @@ Parsar product execution and its eventual public-client cutover are separate.
 
 ## Reusable Agents
 
-Static-bearer Vault Credentials support creation, token replacement, deletion and
-safe metadata retrieval/listing. Vault deletion atomically removes its Credentials.
-Configure their independent encryption key and authenticated
-Session use through the [credential guide](credentials.md). OAuth remains a
-separate implementation gap.
+Static-bearer and OAuth Vault Credentials support creation, replacement, deletion
+and safe metadata retrieval/listing. Vault deletion atomically removes its
+Credentials. Configure their independent encryption key and authenticated Session
+use through the [credential guide](credentials.md); see [OAuth credentials](oauth-credentials.md)
+for application authorization, dispatch-time refresh and revocation boundaries.
 
 The pinned Python client can save configuration independently of execution:
 
@@ -214,8 +214,8 @@ resources); general Files routes do not. Supported operations include:
 - Project-owned `user_data` source file upload/list, metadata/content retrieval and
   deletion; see [source Files](../../contracts/agents-api/source-files.md).
 - Vault create/retrieve/list/delete, project-scoped pagination and stored status
-  filtering; static-bearer Credential create/retrieve/list/token replacement/delete.
-  Public archive semantics and OAuth remain gaps. Already-delivered credentials
+  filtering; static-bearer and OAuth Credential create/retrieve/list/replacement/delete,
+  plus [dispatch-time OAuth refresh](oauth-credentials.md). Public archive semantics remain gaps. Already-delivered credentials
   are not withdrawn by local deletion. Session attachments support
   [authenticated HTTPS MCP](credentials.md#use-a-credential-in-a-session).
 
@@ -604,7 +604,7 @@ name collisions, changing inventories and original MCP metadata fidelity remain
 gaps. Items retain the observed native JSON, which may differ from the original
 MCP envelope. See the [Claude SDK profile](../../CONTRIBUTING.md#claude-sdk-adapter-foundation).
 
-The current subset rejects OAuth, inline authorization, nonempty headers or
+The current subset rejects native OAuth login, inline authorization, nonempty headers or
 request metadata, URL userinfo/query/fragment, implicit/other origins, stdio
 and engines other than Codex/Claude SDK. The Codex adapter also
 rejects reserved native labels and stored native MCP credentials. It verifies
