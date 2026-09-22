@@ -78,6 +78,23 @@ an activity revision and timestamps such as `idle_since` and
 `shutdown_requested_at`. Metrics, an in-memory cache, or a monitoring backend must
 not become the lifecycle authority.
 
+## Optional history export boundary
+
+An optional server-only OTLP/HTTP exporter can forward validated observation
+results to an operator Collector when `AGENTS_API_RUNTIME_HISTORY_FILE` is set.
+It is disabled by default and does not change the current API result, execution
+ownership, or lifecycle authority. The file may contain endpoint authorization
+headers and is never returned to Web. Provider receipts, native identifiers, raw
+errors, paths, and credentials are excluded from metric attributes. CPU,
+capacity, and memory points require the provider-qualified compute `started_at`
+fence; unfenced observations export coverage and read duration only.
+
+This transport currently exports observations produced by the current read path;
+it is not a deployment-wide background sampler. The Collector,
+high-cardinality history backend, server-side history query adapter, collection
+cadence, and durable Web ranges remain separate optional capabilities in the
+[full design](runtime-observability-design.md).
+
 ## First-phase boundary
 
 The current-snapshot implementation adds no migration, metrics backend, token
@@ -87,5 +104,5 @@ attribution or the existing sandbox lifecycle interface.
 
 The current API and browser-local Web live window are documented in the
 [full design](runtime-observability-design.md) and the
-[public extension](runtime-observability-api.md). Durable history, additional
+[public extension](runtime-observability-api.md). History queries, additional
 providers, self-hosted telemetry, and idle-policy authority remain later phases.

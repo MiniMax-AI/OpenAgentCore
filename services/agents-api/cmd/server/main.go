@@ -105,14 +105,30 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	observationService, err := runtimeobs.NewService(resolver, observationSources)
+	historyOption, historyExporter, err := runtimeHistory(ctx)
 	if err != nil {
+		return err
+	}
+	observationOptions := []runtimeobs.ServiceOption{}
+	if historyOption != nil {
+		observationOptions = append(observationOptions, historyOption)
+	}
+	observationService, err := runtimeobs.NewService(resolver, observationSources, observationOptions...)
+	if err != nil {
+		if historyExporter != nil {
+			closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			closeRuntimeHistory(closeCtx, historyExporter)
+		}
 		return err
 	}
 	defer func() {
 		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = observationService.Close(closeCtx)
+		if historyExporter != nil {
+			closeRuntimeHistory(closeCtx, historyExporter)
+		}
 	}()
 	var workerDone chan error
 	var worker *execution.Worker

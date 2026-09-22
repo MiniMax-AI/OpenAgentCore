@@ -2,11 +2,11 @@
 
 Status: provider abstraction with Docker and microsandbox sampling, the
 current-snapshot API/client contract, and the initial Core Web current-snapshot
-Dashboard are implemented. Phase 4 backend qualification and the bounded,
-sanitized exporter seam are implemented, but no concrete export transport,
-history backend, or history API is configured. Other provider sources are not
-implemented. Microsandbox idle suspension is a separate durable lifecycle
-feature; it does not consume this telemetry as authority.
+Dashboard are implemented. Phase 4 backend qualification, the bounded sanitized
+exporter seam, and its optional OTLP/HTTP transport are implemented. No history
+backend, history query API, or durable Web range is configured. Other provider
+sources are not implemented. Microsandbox idle suspension is a separate durable
+lifecycle feature; it does not consume this telemetry as authority.
 
 ## 1. Problem statement
 
@@ -285,6 +285,56 @@ the public API and `runtimehistory` interface must remain backend-neutral. The
 backend, Collector, and exporter are disabled by default and are not required for
 Session execution or current observations.
 
+### 10.2 OTLP transport configuration and instruments
+
+Core enables Runtime history export only when
+`AGENTS_API_RUNTIME_HISTORY_FILE` points to a server-only JSON file. With the
+variable unset, no exporter is created and no Collector or history store is
+required. A minimal configuration is:
+
+```json
+{
+  "transport": "otlp_http",
+  "endpoint": "https://collector.example.com/v1/metrics",
+  "headers": {"Authorization": "Bearer operator-managed-secret"},
+  "queue_capacity": 256,
+  "timeout_seconds": 2
+}
+```
+
+The file may contain transport credentials and must never be served to Web or
+committed. Plain HTTP requires the explicit combination of an `http` endpoint
+and `"insecure": true`; HTTPS rejects that flag. Endpoint userinfo, query
+strings, fragments, invalid headers, reserved transport headers, queues above
+4096 records, and timeouts above 30 seconds fail startup without echoing config
+contents. Export is best effort through the bounded queue documented above.
+
+The OTLP request uses standard protobuf metrics and these instruments:
+
+| Instrument | OTLP aggregation | Source |
+| --- | --- | --- |
+| `agents.runtime.cpu.usage` | monotonic cumulative sum, seconds | provider cumulative CPU counter |
+| `agents.runtime.cpu.capacity` | gauge, cores | configured provider capacity |
+| `agents.runtime.memory.usage` | gauge, bytes | provider memory usage |
+| `agents.runtime.memory.limit` | gauge, bytes | configured provider limit |
+| `agents.runtime.sample` | monotonic delta sum | one validated result, including unavailable/unsupported |
+| `agents.runtime.sample.duration` | delta histogram, seconds | bounded provider read duration |
+
+Core-owned tenant, Session, Environment, allocation, mode, provider type,
+status, and safe reason are metric attributes. CPU, capacity, and memory points
+are exported only when the sample also carries the compute `started_at` fence;
+that fence is included as an attribute on every such point. Provider keys,
+provider receipts, native container/pod/instance
+identifiers, raw errors, paths, and credentials are not attributes. Missing
+measurements produce no value point; they are represented only by the explicit
+sample status and reason.
+
+The initial transport exports observations produced by the current read path; it
+does not yet run a deployment-wide background sampler. Consequently, a future
+history API must expose actual sample coverage and Core Web must not advertise a
+durable range until the operator backend and a qualified collection cadence are
+both configured.
+
 ## 11. Dashboard information architecture
 
 ### 11.1 Overview
@@ -436,12 +486,15 @@ Implemented for the browser-local current-snapshot live window.
 - Implemented: bounded asynchronous handoff of sanitized, validated current
   observation results. It is disabled by default, drops on queue saturation, and
   cannot fail the current-observation request path.
+- Implemented: optional server-only OTLP/HTTP protobuf transport for the six
+  documented Runtime instruments, including allocation and compute-incarnation
+  fencing attributes. Configuration is strict and secrets never reach Web.
 - Qualified: optional OTLP Collector fan-out with a separate high-cardinality
   history store and server-side tenant-scoped query adapter. ClickHouse is the
   first reference backend; no backend is a Core execution dependency.
-- Not implemented: a concrete OTLP exporter, `runtimehistory` query adapter,
-  public history extension, durable Web ranges, retention configuration, and
-  exporter coverage telemetry.
+- Not implemented: deployment-wide sampling cadence, `runtimehistory` query
+  adapter, public history extension, durable Web ranges, retention configuration,
+  and exporter queue/drop/error coverage telemetry.
 - Add telemetry exporter and qualified operator backend.
 - Define a separate history query adapter and retention/security policy.
 - Replace or extend the ephemeral live window with explicitly advertised durable
