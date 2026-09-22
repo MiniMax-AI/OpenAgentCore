@@ -21,8 +21,9 @@ type prepared struct {
 }
 
 type preparedStart struct {
-	runID, prompt string
-	out           chan<- proto.Envelope
+	runID  string
+	prompt proto.MessageInput
+	out    chan<- proto.Envelope
 }
 
 func NewPreparationFactory(config WorkspaceConfig) agent.PreparationFactory {
@@ -30,7 +31,7 @@ func NewPreparationFactory(config WorkspaceConfig) agent.PreparationFactory {
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		if req.RunID != "" || req.Prompt != "" || req.ConversationID != "" {
+		if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" {
 			return nil, fmt.Errorf("mcode: preparation cannot contain input or product context")
 		}
 		opts, err := prepareWorkspaceOptions(ctx, config, req)
@@ -56,7 +57,7 @@ func NewPreparationFactory(config WorkspaceConfig) agent.PreparationFactory {
 	}
 }
 
-func (p *prepared) Start(ctx context.Context, runID, prompt string, out chan<- proto.Envelope) (agent.Session, error) {
+func (p *prepared) Start(ctx context.Context, runID string, prompt proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -65,7 +66,7 @@ func (p *prepared) Start(ctx context.Context, runID, prompt string, out chan<- p
 	if p.closed || p.binding != nil {
 		return nil, fmt.Errorf("mcode: preparation is no longer available")
 	}
-	if strings.TrimSpace(runID) == "" || strings.TrimSpace(prompt) == "" || out == nil || ctx.Err() != nil {
+	if strings.TrimSpace(runID) == "" || prompt.Validate() != nil || out == nil || ctx.Err() != nil {
 		return nil, fmt.Errorf("mcode: start requires a live context, identity, prompt and output")
 	}
 	select {
@@ -136,7 +137,7 @@ func (p *prepared) awaitStart(err error) error {
 		}
 		p.mu.Lock()
 		if b := p.binding; b != nil {
-			p.session.req.RunID, p.session.req.Prompt, p.session.out = b.runID, b.prompt, b.out
+			p.session.req.RunID, p.session.req.Input, p.session.out = b.runID, b.prompt, b.out
 		} else {
 			p.closed = true
 		}

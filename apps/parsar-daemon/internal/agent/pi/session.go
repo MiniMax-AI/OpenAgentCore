@@ -104,7 +104,11 @@ func newSession(parent context.Context, req proto.PromptRequestPayload, out chan
 	}
 	opts = provOpts
 
-	buildRes, err := BuildArgs(req.RunID, req.Prompt, req.WorkDir, opts, req.AgentSessionID)
+	prompt, err := req.Input.TextOnly()
+	if err != nil {
+		return nil, err
+	}
+	buildRes, err := BuildArgs(req.RunID, prompt, req.WorkDir, opts, req.AgentSessionID)
 	if err != nil {
 		return nil, fmt.Errorf("pi: build args: %w", err)
 	}

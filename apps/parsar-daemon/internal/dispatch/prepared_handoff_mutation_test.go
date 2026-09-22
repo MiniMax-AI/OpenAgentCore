@@ -89,7 +89,7 @@ func TestPreparedHandoffReleaseWaitsForMutationReceipt(t *testing.T) {
 			}
 			session := &preparedMutationSession{fakeSession: &fakeSession{closeOutOnCancel: true}, cancelEntered: make(chan struct{})}
 			p := &controlledPreparation{closed: make(chan struct{})}
-			p.start = func(_ context.Context, _, _ string, out chan<- proto.Envelope) (agent.Session, error) {
+			p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 				session.out = out
 				return session, nil
 			}
@@ -110,7 +110,7 @@ func TestPreparedHandoffReleaseWaitsForMutationReceipt(t *testing.T) {
 				waitFor(t, func() bool { return hasFrame(sender.recSender, proto.TypePromptForUserChoice, "run") }, "choice request")
 				mutation = mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask", proto.PromptForUserChoiceDecisionPayload{DeliveryID: sender.deliveryID, Answers: []string{"yes"}})
 			case "steering":
-				mutation = mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: sender.inputID, Text: "continue"})
+				mutation = mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: sender.inputID, Input: proto.TextInput("continue")})
 			}
 
 			returned := make(chan error, 1)
@@ -152,7 +152,7 @@ func TestPreparedHandoffReleaseWaitsForMutationReceipt(t *testing.T) {
 				}
 				assertDecisionAck(t, sender.recSender, "new-choice", false, "not_pending")
 			case "steering":
-				late := mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "late-steering", Text: "late"})
+				late := mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "late-steering", Input: proto.TextInput("late")})
 				if err := r.Handle(t.Context(), late); err != nil {
 					t.Fatal(err)
 				}
@@ -242,7 +242,7 @@ func TestPreparedHandoffRouterShutdownWaitsForReceiptAttempt(t *testing.T) {
 			var cancelBeforeReceipt atomic.Bool
 			session := &preparedMutationSession{fakeSession: &fakeSession{closeOutOnCancel: true}, cancelEntered: make(chan struct{})}
 			p := &controlledPreparation{closed: make(chan struct{})}
-			p.start = func(_ context.Context, _, _ string, out chan<- proto.Envelope) (agent.Session, error) {
+			p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 				session.out = out
 				return session, nil
 			}
@@ -270,7 +270,7 @@ func TestPreparedHandoffRouterShutdownWaitsForReceiptAttempt(t *testing.T) {
 				waitFor(t, func() bool { return hasFrame(sender.recSender, proto.TypePromptForUserChoice, "run") }, "choice request")
 				mutation = mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask", proto.PromptForUserChoiceDecisionPayload{DeliveryID: sender.deliveryID, Answers: []string{"yes"}})
 			case "steering":
-				mutation = mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: sender.inputID, Text: "continue"})
+				mutation = mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: sender.inputID, Input: proto.TextInput("continue")})
 			}
 			go func() { _ = r.Handle(t.Context(), mutation) }()
 			select {
@@ -295,7 +295,7 @@ func TestPreparedHandoffEarlyDonePublishesAfterStarted(t *testing.T) {
 	emitted, allowReturn := make(chan struct{}), make(chan struct{})
 	session := &fakeSession{closeOutOnCancel: true}
 	p := &controlledPreparation{closed: make(chan struct{})}
-	p.start = func(ctx context.Context, _, _ string, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(ctx context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 		session.out = out
 		out <- mustEnv(t, proto.TypeDone, "run", proto.DonePayload{Content: "complete"})
 		close(emitted)

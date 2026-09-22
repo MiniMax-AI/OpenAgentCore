@@ -17,9 +17,9 @@ type ExecutionPreparePayload struct {
 }
 
 type ExecutionStartPayload struct {
-	Handle string `json:"handle"`
-	RunID  string `json:"run_id"`
-	Prompt string `json:"prompt"`
+	Handle string       `json:"handle"`
+	RunID  string       `json:"run_id"`
+	Input  MessageInput `json:"input"`
 }
 
 type ExecutionReleasePayload struct {

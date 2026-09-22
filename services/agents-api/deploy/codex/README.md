@@ -149,22 +149,31 @@ Set `AGENTS_API_DAEMON_WS_URL` to the outward URL reachable from the Runtime and
 ```json
 {
   "core_url": "https://core.example/api/v1",
-  "default_provider": "11111111-1111-4111-8111-111111111111",
+  "provider": "docker",
+  "installation_id": "11111111-1111-4111-8111-111111111111",
+  "maintenance": false,
   "docker": {
-    "11111111-1111-4111-8111-111111111111": {
-      "host": "unix:///var/run/docker.sock",
-      "image": "sha256:<qualified immutable image digest>",
-      "network": "bridge",
-      "seccomp_file": "/absolute/path/to/seccomp.json"
-    }
+    "host": "unix:///var/run/docker.sock",
+    "image": "sha256:<qualified immutable image digest>",
+    "network": "bridge",
+    "seccomp_file": "/absolute/path/to/seccomp.json"
   }
 }
 ```
 
-The provider key identifies this Docker installation permanently. Keep its entry
-while any allocation needs cleanup; changing the endpoint requires a new key.
-An empty default disables new hosted admission/bootstrap while preserving existing
-Session controls, input retry outcomes and cleanup of retained allocations.
+Choose Docker or [microsandbox](../microsandbox/README.md) at setup. A Core
+deployment accepts one provider and one backend object; legacy provider maps and
+engine-to-provider routing are rejected. The installation ID and explicit socket
+identify this backend. Harness selection does not choose a different provider.
+
+Set `maintenance: true` and restart with the old configuration before changing
+providers. Explicitly handle or delete old hosted Sessions and resources, then
+verify cleanup has completed. Configure the new provider and fresh installation
+ID with maintenance still enabled, restart to validate the switch, then restart
+with `maintenance: false` to resume new compute. See the
+[provider switch procedure](../microsandbox/README.md#change-the-deployment-provider).
+No resources are automatically deleted and no Sessions migrate between providers.
+
 V1 supports explicit local Unix Docker sockets, ignoring ambient
 `DOCKER_HOST`. Optional `extra_hosts` is trusted operator configuration. No Docker
 socket is mounted in a Runtime. User-managed enrollment remains separate work.
@@ -176,7 +185,7 @@ read at startup, copied for each execution and never persisted as public Session
 configuration. Omit it for the adapter's existing model configuration. Changes
 require a Core restart. Do not place credentials in public requests or images.
 
-With the qualified Codex image and default provider configured, create an idle or
+With the qualified Codex image and Docker provider configured, create an idle or
 initial-text Session using `environment: {"type": "openai_hosted"}`. Core commits
 its identity before automatically provisioning it. Queries expose durable
 connection status; execution separately prepares the native harness. Session

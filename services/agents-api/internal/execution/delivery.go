@@ -13,7 +13,7 @@ import (
 
 type pendingInput struct {
 	sequence int64
-	text     string
+	input    proto.MessageInput
 	started  time.Time
 	waiting  bool
 	written  bool
@@ -97,7 +97,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 	var pending *pendingInput
 	var cancelSent time.Time
 	var cancelReply <-chan cancellationResult
-	functions := &functionExchange{store: d.Store, tenant: tenantID, session: sessionID, turn: request.RunID, tools: request.FunctionTools}
+	functions := &functionExchange{kind: request.AgentKind, store: d.Store, tenant: tenantID, session: sessionID, turn: request.RunID, tools: request.FunctionTools}
 	done := false
 	cancelCtx, stopCancellation := context.WithCancel(ctx)
 	defer stopCancellation()
@@ -268,19 +268,23 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				if inputs[0].Kind == "cancel" {
 					continue
 				}
-				text, err := messageText(inputs[0].Payload)
+				text, err := messageInput(inputs[0].Payload)
 				if err != nil || inputs[0].Kind != "message" {
 					result.ErrorCode = "invalid_input"
 					return
 				}
-				pending = &pendingInput{sequence: inputs[0].Sequence, text: text, started: time.Now()}
+				pending = &pendingInput{sequence: inputs[0].Sequence, input: text, started: time.Now()}
 			}
 			if !pending.written && time.Since(pending.started) > 30*time.Second {
 				result.ErrorCode = "input_outcome_unknown"
 				return
 			}
 			if !pending.waiting && !pending.written {
-				if send(ctx, peer, proto.TypePromptSteer, request.RunID, proto.PromptSteerPayload{InputID: strconv.FormatInt(pending.sequence, 10), Text: pending.text, DurableReceipt: true}) != nil {
+				if requireMessageImages(peer, request.AgentKind, pending.input) != nil {
+					result.ErrorCode = "message_input_unsupported"
+					return
+				}
+				if send(ctx, peer, proto.TypePromptSteer, request.RunID, proto.PromptSteerPayload{InputID: strconv.FormatInt(pending.sequence, 10), Input: pending.input, DurableReceipt: true}) != nil {
 					result.ErrorCode = "input_outcome_unknown"
 					return
 				}

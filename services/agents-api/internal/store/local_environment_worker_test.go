@@ -16,6 +16,10 @@ import (
 func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *execution.Worker, store.Environment) {
 	t.Helper()
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`), scoped)
+	if scoped {
+		_, pool := store.NewTestStore(t)
+		insertWorkerRuntimeAllocation(t, pool, h, "disabled")
+	}
 	environment, err := h.s.GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -137,7 +141,7 @@ func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *test
 	h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "ready"})
 	startFrame := h.read(proto.TypeExecutionStart)
 	var start proto.ExecutionStartPayload
-	if startFrame.DecodePayload(&start) != nil || start.Handle != handle || start.RunID == "" || start.Prompt != "first" {
+	if startFrame.DecodePayload(&start) != nil || start.Handle != handle || start.RunID == "" || inputTextForTest(t, start.Input) != "first" {
 		t.Fatal("local Start changed reservation identity")
 	}
 	h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "started", RunID: start.RunID})

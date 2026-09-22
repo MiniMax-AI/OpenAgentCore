@@ -110,7 +110,7 @@ func TestTurnStartParams_CollaborationModeUsesPlanWireShape(t *testing.T) {
 	developerInstructions := "stay within the configured workspace"
 	params := TurnStartParams{
 		ThreadID: "thread-1",
-		Input:    FirstUserInput("ask me a question"),
+		Input:    []UserInput{{Type: UserInputText, Text: "ask me a question"}},
 		CollaborationMode: &CollaborationMode{
 			Mode: CollaborationModePlan,
 			Settings: CollaborationModeSettings{

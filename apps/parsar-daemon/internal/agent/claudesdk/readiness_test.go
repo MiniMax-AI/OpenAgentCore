@@ -15,7 +15,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 )
 
-const readyReport = `{"type":"runtime_ready","protocol":1,"node":"22.22.2","sdk":"0.3.269","mcp":"1.30.0","native":"2.1.269 (Claude Code)"}`
+const readyReport = `{"type":"runtime_ready","protocol":2,"node":"22.22.2","sdk":"0.3.269","mcp":"1.30.0","native":"2.1.269 (Claude Code)"}`
 
 func TestRequiredMCPNeedsQualifiedRuntime(t *testing.T) {
 	root := t.TempDir()
@@ -23,7 +23,7 @@ func TestRequiredMCPNeedsQualifiedRuntime(t *testing.T) {
 	config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state"), Env: []string{
 		"GO_CLAUDE_READINESS_HELPER=1", "READINESS_MODE=ready-http-mcp", "GORACE=atexit_sleep_ms=0",
 	}}
-	req := proto.PromptRequestPayload{RunID: "run", Prompt: "hello", DisableExecutionEnvironment: true,
+	req := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true,
 		AgentOptions: map[string]any{"model": "fixture"}, MCPHTTPServers: &[]proto.MCPHTTPServer{{ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp", Required: true}}}
 	if _, err := NewFactory(config)(t.Context(), req, make(chan proto.Envelope, 1)); err == nil || err.Error() != "claudesdk: packaged runtime does not support required HTTP MCP" {
 		t.Fatalf("unqualified runtime executed required MCP: %v", err)
@@ -44,7 +44,7 @@ func TestHTTPMCPRejectsOldPackagedRuntime(t *testing.T) {
 	if !info.SupportsHTTPMCP() {
 		t.Fatal("runtime feature not recognized")
 	}
-	req := proto.PromptRequestPayload{RunID: "run", Prompt: "hello", DisableExecutionEnvironment: true,
+	req := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true,
 		AgentOptions: map[string]any{"model": "fixture"}, MCPHTTPServers: &[]proto.MCPHTTPServer{{ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp"}}}
 	if _, err := NewFactory(config)(t.Context(), req, make(chan proto.Envelope, 1)); err == nil || !strings.Contains(err.Error(), "packaged runtime does not support HTTP MCP") {
 		t.Fatalf("old runtime was not rejected before execution: %v", err)
@@ -81,7 +81,7 @@ func TestMCPBearerRejectsAnonymousOnlyRuntimeWithoutProbeSecrets(t *testing.T) {
 		"GO_CLAUDE_READINESS_HELPER=1", "READINESS_MODE=ready-http-mcp", "GORACE=atexit_sleep_ms=0",
 	}}
 	token := "private-fixture-token"
-	req := proto.PromptRequestPayload{RunID: "run", Prompt: "hello", DisableExecutionEnvironment: true,
+	req := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true,
 		AgentOptions: map[string]any{"model": "fixture"}, MCPHTTPServers: &[]proto.MCPHTTPServer{{ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp", BearerToken: &token}}}
 	if _, err := NewFactory(config)(t.Context(), req, make(chan proto.Envelope, 1)); err == nil || err.Error() != "claudesdk: packaged runtime does not support authenticated HTTP MCP" {
 		t.Fatalf("old runtime executed authenticated request or readiness received its secret: %v", err)
@@ -128,11 +128,11 @@ func runReadinessHelper() {
 				os.Exit(5)
 			}
 		}
-		_, _ = fmt.Fprintln(os.Stdout, strings.Replace(readyReport, `"protocol":1`, `"protocol":1,"features":["mcp_http_tools"]`, 1))
+		_, _ = fmt.Fprintln(os.Stdout, strings.Replace(readyReport, `"protocol":2`, `"protocol":2,"features":["mcp_http_tools"]`, 1))
 	case "malformed":
 		_, _ = fmt.Fprintln(os.Stdout, "not-json")
 	case "wrong-protocol":
-		_, _ = fmt.Fprintln(os.Stdout, strings.Replace(readyReport, `"protocol":1`, `"protocol":2`, 1))
+		_, _ = fmt.Fprintln(os.Stdout, strings.Replace(readyReport, `"protocol":2`, `"protocol":1`, 1))
 	case "missing-version":
 		_, _ = fmt.Fprintln(os.Stdout, strings.Replace(readyReport, `"mcp":"1.30.0"`, `"mcp":""`, 1))
 	case "multiple":

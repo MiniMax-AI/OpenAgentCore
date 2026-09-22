@@ -1,16 +1,16 @@
 package proto
 
-// TypePromptSteer appends text to an active run; Envelope.ID is the run ID.
+// TypePromptSteer appends messages to an active run; Envelope.ID is the run ID.
 const TypePromptSteer = "prompt_steer"
 
 // TypePromptSteerAck reports input receipt phases on the originating run ID.
 const TypePromptSteerAck = "prompt_steer_ack"
 
-// PromptSteerPayload identifies one text input within an active run.
+// PromptSteerPayload identifies one input batch within an active run.
 type PromptSteerPayload struct {
-	InputID        string `json:"input_id"`
-	Text           string `json:"text"`
-	DurableReceipt bool   `json:"durable_receipt,omitempty"`
+	InputID        string       `json:"input_id"`
+	Input          MessageInput `json:"input"`
+	DurableReceipt bool         `json:"durable_receipt,omitempty"`
 }
 
 // PromptSteerAckPayload distinguishes a completed write from native acceptance.

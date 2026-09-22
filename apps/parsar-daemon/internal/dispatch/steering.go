@@ -3,6 +3,7 @@ package dispatch
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -32,7 +33,7 @@ func (r *Router) handlePromptSteer(ctx context.Context, env proto.Envelope) erro
 		ack.ErrorCode, ack.Error = "invalid_input", "Invalid steering payload."
 	} else {
 		ack.InputID = input.InputID
-		if env.ID == "" || strings.TrimSpace(input.InputID) == "" || len(input.InputID) > 256 || strings.TrimSpace(input.Text) == "" {
+		if env.ID == "" || strings.TrimSpace(input.InputID) == "" || len(input.InputID) > 256 || input.Input.Validate() != nil {
 			ack.ErrorCode, ack.Error = "invalid_input", "Run ID, input ID (up to 256 bytes), and non-empty text are required."
 		} else {
 			pending := r.queueSteering(ctx, env, input)
@@ -62,7 +63,8 @@ func (r *Router) queueSteering(ctx context.Context, env proto.Envelope, input pr
 		ack.ErrorCode, ack.Error = "run_inactive", "The run is no longer active."
 		return &ack
 	}
-	fingerprint := sha256.Sum256([]byte(input.Text))
+	encoded, _ := json.Marshal(input.Input)
+	fingerprint := sha256.Sum256(encoded)
 	if previous, ok := state.steering[input.InputID]; ok {
 		if previous.fingerprint != fingerprint || previous.durable != input.DurableReceipt {
 			ack.ErrorCode, ack.Error = "input_conflict", "This input ID was already used with different text."

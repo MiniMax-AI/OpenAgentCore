@@ -169,7 +169,7 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 			}
 			defer p.Close()
 			assertPreparationOnly(t, root)
-			s, err := p.start(t.Context(), "actual-run", "actual prompt", make(chan proto.Envelope, 8))
+			s, err := p.start(t.Context(), "actual-run", proto.TextInput("actual prompt"), make(chan proto.Envelope, 8))
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -43,7 +43,7 @@ func TestExecutionFunctionInputBatchStillSteersMessages(t *testing.T) {
 			h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: result.DeliveryID, Applied: true})
 		case proto.TypePromptSteer:
 			var steer proto.PromptSteerPayload
-			if env.DecodePayload(&steer) != nil || messageSeen || steer.Text != "Follow up" || steer.InputID != strconv.FormatInt(receipts[1].Sequence, 10) {
+			if env.DecodePayload(&steer) != nil || messageSeen || inputTextForTest(t, steer.Input) != "Follow up" || steer.InputID != strconv.FormatInt(receipts[1].Sequence, 10) {
 				t.Fatal(steer)
 			}
 			messageSeen = true

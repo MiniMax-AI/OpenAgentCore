@@ -19,7 +19,7 @@ func TestPreparedHandoffDrainsBurstBeforeStartReturns(t *testing.T) {
 	sent, allowReturn := make(chan struct{}), make(chan struct{})
 	session := &fakeSession{closeOutOnCancel: true}
 	p := &controlledPreparation{closed: make(chan struct{})}
-	p.start = func(ctx context.Context, _, _ string, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(ctx context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 		session.out = out
 		for sequence := uint64(1); sequence <= preparedBurstFrames; sequence++ {
 			select {
@@ -113,7 +113,7 @@ func (s *blockingStartingSender) Send(ctx context.Context, env proto.Envelope) e
 func TestPreparedHandoffAbortBeforeStartAdmissionSkipsNativeStart(t *testing.T) {
 	sender := &blockingStartingSender{recSender: &recSender{}, entered: make(chan struct{}), release: make(chan struct{})}
 	p := &cancellationPreparation{controlledPreparation: &controlledPreparation{closed: make(chan struct{})}}
-	p.start = func(context.Context, string, string, chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (agent.Session, error) {
 		t.Fatal("abort that won admission called native Start")
 		return nil, errors.New("unexpected Start")
 	}
@@ -159,7 +159,7 @@ func TestPreparedHandoffDuplicateStartDoesNotReexecuteDuringPublication(t *testi
 	sender := &blockingStartedSender{recSender: &recSender{}, entered: make(chan struct{}), release: make(chan struct{})}
 	session := &preparedMutationSession{fakeSession: &fakeSession{closeOutOnCancel: true}, cancelEntered: make(chan struct{})}
 	p := &controlledPreparation{closed: make(chan struct{})}
-	p.start = func(_ context.Context, _, _ string, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 		session.out = out
 		out <- mustEnv(t, proto.TypePermissionRequest, "run", proto.PermissionRequestPayload{RequestID: "publication-permission"})
 		out <- mustEnv(t, proto.TypePromptForUserChoice, "run", proto.PromptForUserChoicePayload{AskID: "publication-choice"})
@@ -187,7 +187,7 @@ func TestPreparedHandoffDuplicateStartDoesNotReexecuteDuringPublication(t *testi
 	assertDecisionAck(t, sender.recSender, "publication-function", false, "not_ready")
 	assertDecisionAck(t, sender.recSender, "publication-permission", false, "not_ready")
 	assertDecisionAck(t, sender.recSender, "publication-choice", false, "not_ready")
-	if err := r.Handle(t.Context(), mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "publication-steering", Text: "continue"})); err != nil {
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "publication-steering", Input: proto.TextInput("continue")})); err != nil {
 		t.Fatal(err)
 	}
 	if ack := lastSteeringAck(t, sender.recSender, "run", "publication-steering"); ack.ErrorCode != "not_ready" {
@@ -208,7 +208,7 @@ func TestPreparedHandoffDuplicateStartDoesNotReexecuteDuringPublication(t *testi
 	if session.functions.Load() != 0 || session.steers.Load() != 0 || session.reads.Load() != 0 || len(session.submissions()) != 0 || askCalls != 0 {
 		t.Fatal("private Session accepted work before started publication")
 	}
-	duplicate := mustEnv(t, proto.TypeExecutionStart, "request", proto.ExecutionStartPayload{Handle: ready.Handle, RunID: "run", Prompt: "input"})
+	duplicate := mustEnv(t, proto.TypeExecutionStart, "request", proto.ExecutionStartPayload{Handle: ready.Handle, RunID: "run", Input: proto.TextInput("input")})
 	if err := r.Handle(t.Context(), duplicate); err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +225,7 @@ func TestPreparedHandoffUnsupportedFunctionReleasesOperationBarrier(t *testing.T
 	sender := &recSender{}
 	session := &fakeSession{closeOutOnCancel: true}
 	p := &controlledPreparation{closed: make(chan struct{})}
-	p.start = func(_ context.Context, _, _ string, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 		session.out = out
 		return session, nil
 	}
@@ -250,7 +250,7 @@ func TestPreparedHandoffEarlyDoneStillAllowsExplicitAbort(t *testing.T) {
 	var once sync.Once
 	unblock := func() { once.Do(func() { close(cancelled) }) }
 	p := &cancellationPreparation{controlledPreparation: &controlledPreparation{closed: make(chan struct{})}}
-	p.start = func(_ context.Context, _, _ string, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 		out <- mustEnv(t, proto.TypeDone, "run", proto.DonePayload{})
 		<-cancelled
 		return nil, context.Canceled
@@ -276,7 +276,7 @@ func TestPreparedHandoffExpiresDuringStartedPublication(t *testing.T) {
 	sender := &blockingStartedSender{recSender: &recSender{}, entered: make(chan struct{}), release: make(chan struct{})}
 	session := &fakeSession{closeOutOnCancel: true}
 	p := &controlledPreparation{closed: make(chan struct{})}
-	p.start = func(_ context.Context, _, _ string, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 		session.out = out
 		return session, nil
 	}
@@ -308,7 +308,7 @@ func TestPreparedHandoffEarlyDoneDetachesPublishedPreparation(t *testing.T) {
 	defer unblock()
 	session := &fakeSession{closeOutOnCancel: true}
 	p := &cancellationPreparation{controlledPreparation: &controlledPreparation{closed: make(chan struct{})}}
-	p.start = func(_ context.Context, _, _ string, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 		session.out = out
 		out <- mustEnv(t, proto.TypeDone, "run", proto.DonePayload{})
 		<-allowReturn

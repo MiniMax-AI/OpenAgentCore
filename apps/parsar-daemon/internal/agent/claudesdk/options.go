@@ -23,10 +23,11 @@ type subagentOptions struct {
 }
 
 type startRequest struct {
+	ToolSearch       bool                 `json:"tool_search,omitempty"`
 	Subagents        *subagentOptions     `json:"subagents,omitempty"`
 	OutputFormat     *proto.OutputFormat  `json:"output_format,omitempty"`
 	Type             string               `json:"type"`
-	Prompt           string               `json:"prompt,omitempty"`
+	Input            proto.MessageInput   `json:"input,omitempty"`
 	Model            string               `json:"model"`
 	SystemPrompt     string               `json:"system_prompt"`
 	Cwd              string               `json:"cwd"`
@@ -40,14 +41,14 @@ type startRequest struct {
 }
 
 func prepare(config Config, req proto.PromptRequestPayload) (startRequest, []string, error) {
-	if req.RunID == "" || strings.TrimSpace(req.Prompt) == "" {
+	if req.RunID == "" || req.Input.Validate() != nil {
 		return startRequest{}, nil, fmt.Errorf("claudesdk: run id and prompt are required")
 	}
 	start, env, err := prepareConfiguration(config, req)
 	if err != nil {
 		return startRequest{}, nil, err
 	}
-	start.Prompt = req.Prompt
+	start.Input = req.Input
 	return start, env, nil
 }
 
@@ -56,8 +57,17 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	fail := func(reason string) (startRequest, []string, error) {
 		return startRequest{}, nil, fmt.Errorf("claudesdk: %s", reason)
 	}
-	if len(req.Attachments) > 0 || req.WorkspaceAuthoring || req.ObserveTools {
+	if req.WorkspaceAuthoring || req.ObserveTools {
 		return fail("requested capability is not available in the private SDK adapter")
+	}
+	if err := req.ValidateToolSearch(true); err != nil {
+		return startRequest{}, nil, err
+	}
+	if req.ToolSearch {
+		if config.Workspace != nil || req.LocalEnvironment != nil || req.MCPHTTPServers != nil || !req.DisableSubagents || (req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil) {
+			return fail("tool discovery requires the single-agent text/function profile")
+		}
+		start.ToolSearch = true
 	}
 	if err := validateMCP(req); err != nil {
 		return startRequest{}, nil, err
@@ -69,7 +79,7 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	}
 	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
 		format := req.ExecutionControls.OutputFormat
-		if format.Type != "json_schema" || !req.ObserveMessages || !req.DisableSubagents || config.Workspace != nil || req.MCPHTTPServers != nil {
+		if format.Type != "json_schema" || !req.ObserveMessages || !req.DisableSubagents || req.MCPHTTPServers != nil || (req.LocalEnvironment != nil && (len(req.LocalEnvironment.MCP) != 0 || len(req.LocalEnvironment.Skills) != 0)) {
 			return fail("structured output requires the qualified message-observing single-agent function profile")
 		}
 		if err := proto.ValidateBinary64Schema(format.Schema); err != nil {

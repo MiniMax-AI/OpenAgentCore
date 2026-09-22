@@ -26,7 +26,7 @@ func TestNewSessionInstallsSkillsAndInjectsSkillFlag(t *testing.T) {
 	req := proto.PromptRequestPayload{
 		RunID:          "run_skill",
 		ConversationID: "conv-skill",
-		Prompt:         "hello",
+		Input:          proto.TextInput("hello"),
 		AgentOptions: map[string]any{
 			"skills": []any{
 				map[string]any{

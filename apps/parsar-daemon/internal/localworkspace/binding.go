@@ -90,7 +90,7 @@ func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPa
 	}
 	if b == nil || r.LocalEnvironment == nil || r.LocalEnvironment.ID != b.environment || r.AgentStateKey != b.stateKey ||
 		r.DisableExecutionEnvironment || r.WorkDir != "" ||
-		r.ConversationID != "" || r.WorkspaceAuthoring || len(r.Attachments) != 0 || !r.StrictResume || !r.ReleaseOnCompletion {
+		r.ConversationID != "" || r.WorkspaceAuthoring || !r.StrictResume || !r.ReleaseOnCompletion {
 		return r, errors.New("request does not match the dedicated local Environment")
 	}
 	if !r.WorkspaceReadOnly || r.LocalEnvironment.NetworkAccess != "" || len(r.LocalEnvironment.AllowedDomains) > 0 {

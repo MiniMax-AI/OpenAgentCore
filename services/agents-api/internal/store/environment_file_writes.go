@@ -85,6 +85,9 @@ func (s *Store) ReserveEnvironmentFileWrite(ctx context.Context, tenant, environ
 		if uuid.UUID(device.ID.Bytes).String() != key.DeviceID || device.EnvironmentID != lookup.EnvironmentID {
 			return ErrDeviceBindingConflict
 		}
+		if err := checkRuntimeComputeAdmission(ctx, q, session); err != nil {
+			return err
+		}
 		if err := environmentInputMayStart(ctx, q, session); err != nil {
 			return err
 		}

@@ -49,7 +49,7 @@ func TestCancellationWaitsForDrainAndPublishesOutcome(t *testing.T) {
 	if got := provider.CancellationOutcome(); !reflect.DeepEqual(got, proto.DonePayload{}) {
 		t.Fatal("unsettled outcome was exposed", got)
 	}
-	if err := running.(*session).Steer(ctx, proto.PromptSteerPayload{InputID: "later", Text: "later"}); !errors.Is(err, agent.ErrSteeringInactive) {
+	if err := running.(*session).Steer(ctx, proto.PromptSteerPayload{InputID: "later", Input: proto.TextInput("later")}); !errors.Is(err, agent.ErrSteeringInactive) {
 		t.Fatal("cancelled execution accepted steering", err)
 	}
 	if err := os.WriteFile(filepath.Join(config.StateDir, "release"), nil, 0o600); err != nil {
@@ -168,7 +168,7 @@ func cancellationConfig(root, mode string) Config {
 }
 
 func cancellationRequest() proto.PromptRequestPayload {
-	return proto.PromptRequestPayload{RunID: "run", Prompt: "hello", AgentSessionID: "native-session", AgentOptions: map[string]any{"model": "fake-model", "system_prompt": "instructions"}}
+	return proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", AgentOptions: map[string]any{"model": "fake-model", "system_prompt": "instructions"}}
 }
 
 func runCancellationHelper(request startRequest, mode string, emit func(bridgeEvent)) {

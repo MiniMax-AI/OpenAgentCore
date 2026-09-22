@@ -25,6 +25,19 @@ independent blind review using only requirements, acceptance criteria, boundarie
 repository path and comparison baseline. Fix in-scope blockers before delivery.
 Do not use `codex exec` as a substitute reviewer.
 
+For subsequent alignment and milestone closure batches, the main thread coordinates
+design, shared interface agreements, file ownership, integration and merge. First
+reconcile main and the boards, then list remaining mandatory milestone work,
+acceptance, scope ceilings and stop conditions. Use built-in GPT-6 Astra high
+subagents for two or three related tasks with disjoint file ownership, or separate
+implementation from real acceptance. Do not create a design per harness or have
+multiple agents edit one shared interface. Validation workers use independent
+databases, ports and containers. Run targeted tests during development, then the
+stable batch's required checks, real regression, generation and independent review.
+Do not split an already active batch again just to adopt this workflow. Preserve
+confirmed native differences and queue nonblocking findings without expanding the
+milestone; stop after completing it when the user has set that boundary.
+
 Keep runtime state, test artifacts and build output under `~/.parsar/`. Require
 absolute user-supplied working directories. Keep credentials out of source and
 logs. Update this guide when architecture, ownership or generated contracts change.
@@ -38,7 +51,10 @@ Go tests, Core contract/client/service tests, Core Web and TypeScript client
 checks (including fixture-only Playwright acceptance), a real dedicated PostgreSQL test
 database, byte-for-byte sqlc regeneration checks, standalone API builds, Claude SDK
 tests and packaging, MiniMax companion checks, and Rust filesystem-helper
-tests/format/Clippy. It intentionally has no product Web/server/installer gates. The full gate fails when the database variable is missing.
+tests/format/Clippy. It intentionally has no product Web/server/installer gates. The full gate fails when the database variable is missing. The test database role
+needs CREATE DATABASE permission: managed-provider tests create and drop isolated
+`parsar_agents_api_*_tests` databases because provider identity is deployment-wide.
+Tests must not bypass the production provider-switch guard.
 
 Use Go from `go.mod`, Node 22, pnpm 10.30.3, Python 3.9+, Rust 1.95.0 with rustfmt
 and Clippy, and Linux OpenSSL development libraries. `make sqlc-generate` owns only
@@ -80,6 +96,14 @@ databases, credentials and migrations. The product uses Core exclusively; it has
   field presence, nullability, discriminators, defaults, status transitions,
   pagination, errors and streaming behavior. Engine limitations are implementation
   gaps to solve, not grounds for narrowing or redefining the upstream contract.
+- Preserve qualified native capability differences across harnesses. If a material
+  difference from the official API has no clear mapping, pause that part and ask
+  the user before changing its semantics. Explicit unsupported enablement rejects;
+  ordinary requests retain native behavior with any official default discrepancy
+  recorded in the coverage ledger. In particular, native programmatic tool calling
+  is not currently qualified as the official default-on behavior. Do not build
+  a separate executor or model loop to fabricate parity. This does not relax
+  authentication, isolation, credential protection or data consistency.
 - Pin upstream source and SDK versions in `contracts/agents-api/upstream.json`.
   Use official SDKs for clients and reuse upstream types or schemas where suitable.
   SDK deserialization alone is not server validation or proof of compatibility:
@@ -102,6 +126,11 @@ databases, credentials and migrations. The product uses Core exclusively; it has
   merely for new names or directories. Replacements may retire obsolete private
   interfaces and history backfills in bounded PRs; this does not authorize deleting
   product data or changing unrelated product behavior.
+- Every concrete harness interaction goes through the common Runtime contract
+  and its adapter. Extend that contract minimally when a current operation cannot
+  be expressed; never put native capability logic or transport conversion into
+  Core handlers, storage or scheduling. Qualify public workflows through the same
+  shared chain; direct native probes establish feasibility only.
 - Keep engine-specific types, process management and protocol translation inside
   execution adapters. The public API and persistence/application core must not
   interpret Parsar product payloads or depend on one engine's native item types.
@@ -114,10 +143,17 @@ databases, credentials and migrations. The product uses Core exclusively; it has
 - Maintain tasks, priorities and evidence in the Feishu board. Register issues
   discovered during a task without switching work or automatically selecting them
   next. Only a direct acceptance blocker justifies a minimal in-scope fix. After
-  each bounded task passes checks/review and merges, mark it done, reread the full
-  board and choose the next task by value, dependencies, risk and effort. Agent API
-  protocol and atomic execution work takes priority over product integration, UI
-  work and business Team orchestration. Prioritize a sound architecture skeleton
+  each bounded task passes checks/review and merges, mark its child entry done.
+  Treat each selected concise Core TODO item as a delivery milestone. The long-term
+  Goal retains the objective, constraints and standards; detailed-board entries are
+  smaller tasks within that milestone. Batch related small tasks when they share a
+  functional outcome and safety boundary, then validate and independently review
+  the batch once stable. Do not manufacture one PR per internal wiring step.
+  Finish the selected milestone before choosing another. The main agent selects
+  tasks; subagents handle technical design, scoped collaboration and review, not
+  prioritization. Stop after the complete milestone when the user sets that boundary;
+  do not automatically claim the next one or mark the long-term objective complete. Product integration, UI and business Team work remain
+  outside Core delivery. Prioritize a sound architecture skeleton
   and correct principal workflows with real API validation. Record and defer
   low-frequency corner cases when risk and ROI permit; do not let minor details
   delay the main work. Required checks and material correctness guarantees apply.
@@ -158,11 +194,14 @@ The current MVP covers Codex, Claude Code and MiniMax Code through the shared
 single-Agent path: Session
 creation, environment preparation, native execution, files/artifacts, cancellation,
 reconnection/recovery queries, and standalone deployment acceptance. Select each
-bounded task from the complete board; nonblocking local improvements stay queued.
+bounded child from the complete board within the selected concise-TODO task;
+nonblocking local improvements stay queued.
 Authentication, tenant/credential isolation, state consistency and data loss remain
 material acceptance requirements. Optional feature equality is not required. After
 the three profiles pass merged-main validation, publish the results, limitations
-and backlog, then stop development until new user direction. Additional harness implementations remain queued. The separately authorized
+and backlog. The user has since renewed continuous Core delivery: select and
+finish large tasks from the concise TODO, retaining bounded child acceptance.
+Additional harness implementations remain queued. The separately authorized
 Subagent batch targets the six read operations across these three harnesses and
 does not change the complete pinned protocol target.
 
@@ -212,9 +251,27 @@ forwarding. The explicit daemon-executor decision supersedes the previous native
 executor interoperability requirement. The superseded execution route is removed;
 retain reusable filesystem helpers,
 necessary regressions and historical evidence without a compatibility layer.
-The private daemon wire protocol is 0.3.0 after removal of remote execution fields.
+The private daemon wire protocol is 0.5.0. Initial, prepared and active input use
+the same ordered MessageInput contract, replacing scalar prompts and attachments.
+User-message boundaries and text/image order remain intact through Core and the
+Runtime wire; adapters own native conversion and receipt aggregation. Text-only
+transports reject image content rather than dropping it. Codex has a flat native
+input list and uses blank-line separators between messages; this does not preserve
+independent native user-message boundaries. No old wire fallback is maintained.
 Deploy Core and daemon together; the existing major/minor WebSocket check rejects
-0.2 peers before dispatch rather than ignoring their removed configuration.
+older major/minor peers before dispatch rather than ignoring removed fields.
+The independently packaged Claude bridge uses protocol 2 for ordered input;
+readiness rejects packages reporting the old string-input protocol.
+Image-bearing messages require a qualified profile/placement before persistence
+and image support from the selected Runtime before native delivery. These checks
+apply to that operation only; ordinary text retains offline queueing. Initial,
+prepared and active paths use the same content and preserve receipt ownership.
+The qualified public profile is inline PNG/JPEG on Codex/Claude `none` and
+Core-managed Docker `openai_hosted`. Self-hosted/user-managed images, MiniMax
+images and remote URLs remain explicit implementation gaps. Hosted images reuse
+the existing preparation, active-input and workspace authority; they do not add
+a downloader, a mount or a separate execution lifecycle. Core
+does not fetch or transform media. See [message input coverage](contracts/agents-api/message-input.md).
 
 User-managed onboarding creates a `self_hosted` Session first, then passes its
 Environment ID and unchanged `remote_url` to our Runtime with connect-only
@@ -384,14 +441,15 @@ batches. Resource reads need only tenant authorization, not a live Runtime.
 See the [Template coverage and unresolved semantics](contracts/agents-api/environment-templates.md).
 
 SandboxProvider has five operations: Create, GetInfo, Renew, Kill and RunCommand.
-Use maintained provider SDKs and thin adapters. The current hosted offering uses Docker.
+Use maintained provider SDKs and thin adapters. Hosted deployments select Docker or
+the optional single-host microsandbox profile.
 Provider initialization creates the sandbox and starts its daemon/harness;
 RunCommand is for initialization only. Daily execution and Files use Runtime and
 native or bounded local capabilities. Docker's lack of a native renewable lease
 does not remove service-owned hosted expiry and cleanup requirements.
 
 The official `openai_hosted` discriminator means hosting by this independent Core
-service, using Docker V1. Keep the public value unchanged; `parsar_hosted` is not
+service, using its configured hosted Provider. Keep the public value unchanged; `parsar_hosted` is not
 a new API type. Public Environment Templates apply only to this hosted path.
 E2B onboarding follows the application-managed `self_hosted` resource workflow:
 the application owns sandbox provisioning and cleanup, and our daemon connects
@@ -422,6 +480,97 @@ timeouts can leave processes alive and require allocation cleanup before reuse.
 The [managed Runtime build and operator configuration](services/agents-api/deploy/codex/README.md#managed-runtime-image-and-docker-adapter)
 defines the explicit opt-in for basic hosted admission. Building an image alone
 does not qualify its isolation or enable public creation.
+
+### Optional single-host sandbox suspension
+
+Each Core deployment enables exactly one sandbox provider, selected at setup:
+Docker or microsandbox. Keep both adapters but reject multiple provider entries,
+legacy default-provider maps and engine-based placement. Harness selection is
+independent. The configuration has one installation UUID, one provider kind and
+one backend object. No compatibility parser or parallel provider route remains.
+
+The execution database pins the selected installation and backend namespace.
+Under the existing execution lease, startup validates that identity before
+reconciling work. Changing an installation or backend requires a previous startup
+of the old configuration in maintenance, with new configuration still in
+maintenance. Maintenance prevents fresh hosted Sessions and fresh allocations,
+while retaining known receipts, existing Session use and explicit cleanup.
+Unreleased allocation receipts include live/stopped compute, snapshots, uncertain
+operations and pending cleanup; all must be released before a switch. Pending
+hosted Environments that have not yet received an allocation also block a switch.
+A failed check reports why and performs no resource deletion or provider change.
+After a successful switch, restart the same configuration with maintenance off to
+admit new sandboxes. Retain immutable historical allocation ownership; never
+migrate an existing Session to another provider or recreate a released allocation.
+Fresh adoption of a deployment with unverified retained allocations fails closed.
+
+The common
+`services/agents-api/internal/sandbox` contract owns the five base operations
+(Create, GetInfo, Renew, Kill, RunCommand) and the optional CheckpointProvider
+capability. Core orchestration must not import an adapter or SDK. Exact compute
+identity, generation construction, inspection, full snapshot capture, restore,
+thaw, command execution and owned artifact cleanup use that common capability.
+Provider-specific names and snapshot identities are opaque to Core. Self-hosted
+compute and providers without checkpoint support keep their existing behavior.
+
+The [microsandbox deployment profile](services/agents-api/deploy/microsandbox/README.md)
+pins the SDK, runtime, firmware and image. Core remains a pure-Go binary. The
+one-shot native Linux helper contains the SDK/FFI and runs under the same private
+service namespace; it is not another scheduler or network control plane. Ordinary
+pause does not release RAM. Suspension captures and verifies a full snapshot,
+stops the exact source, and removes its writable compute closure only after the
+artifact is durably identified. Explicit network policy applies on create and
+restore. Do not inherit undeclared host resources.
+
+Suspend only after at least one Turn is terminal, no queued/in-progress/waiting
+root or subagent Turn, pending input/file operation or initialization remains,
+and real activity has been idle for the configured interval. Heartbeats do not
+reset activity. The daemon must close admission and drain native cleanup, output
+receipts and file work before acknowledging planned suspension. Never change a
+harness or keep an agent process alive across Turns solely to meet this feature.
+The acceptance boundary is a next Turn in the same Session with history, files
+and configuration intact, without replaying an earlier request.
+
+The existing Worker lease, Session lock and lifecycle gate own both providers.
+New Turn claims, file-write intents and capture admission serialize under the
+Session lock. Turn and file-write admission share the same compute-phase check;
+existing receipts remain readable. New pending work cancels capture and wakes
+the same source. Normal preparation waits for the
+compute phase to be running, after the authenticated resume handshake; a pending
+input remains pending if its promotion conflicts with a lifecycle transition.
+Private compute phases and revision-checked JSON receipts live on the existing
+allocation. Persist quiesce/capture/restore intent before effects; only the fresh
+receipt performs a capture or restore. Recovery observes the exact attempt and
+never retries an unknown creation, capture or restore. A consumed snapshot cannot
+roll a running generation back. Deletion, revocation and retention expiry take
+precedence over wake, including at the final database compare-and-swap. Retain
+unknown cleanup identities until owned resources are confirmed absent.
+
+Fixed guest CPU/memory/disk settings, max_active reservations, max_retained
+allocation count and snapshot retention bound the single host. Unknown operations
+retain capacity reservations. Source teardown must be confirmed before releasing
+active capacity. Delete consumed artifacts and old compute closures; do not grow
+a chain of old writable disks across suspension cycles. No Kubernetes, distributed
+scheduler or snapshot replication belongs in this V1 profile.
+
+Queued work and live Environment file access request wake. History and published
+artifact reads do not. Planned suspension uses private daemon wire 0.5.0 with an
+Environment and suspension token; a PID/start-time fenced local control signal
+wakes the parked daemon, which reauthenticates before admitting new work. A
+transient disconnect before confirmation retries the same armed suspension with
+bounded attempts and backoff; permanent authentication or protocol rejection
+still closes it. Snapshot
+lifetime has no daemon wall-clock timer: Core owns its retention deadline. A lost
+quiesce acknowledgement may thaw the same source using explicit rollback control;
+it does not authorize capturing it. Ordinary disconnect keeps the existing
+conservative shutdown behavior. Authentication rejection cannot create a new
+Runtime or replay a request.
+
+All normal `make check` gates still apply. Linux qualification additionally runs
+the pinned helper module tests/build through `check-microsandbox-provider`, a real
+KVM full-snapshot/reclamation probe, and idle-to-next-Turn integration acceptance.
+Synthetic process-memory probes support the backend claim only; they do not prove
+agent continuity. Independent blind review uses the clarified idle-only scope.
 
 Managed Runtime allocation, dedicated daemon credential hash and exact Session
 binding commit atomically before Provider.Create, using the existing execution
@@ -461,7 +610,8 @@ Allocation state is private compute ownership, separate from public Environment
 connection/native readiness. Adapters qualify bootstrap completion; Core does not
 infer it from an engine or provider name. Connected, observed compute receives
 service keepalives between Turns. Keepalives cannot revive a one-hour lapse or a
-cleanup request. Idle alone never requests shutdown. A stopped/missing container
+cleanup request. The Docker provider keeps its current idle behavior; only an
+explicit checkpoint policy may suspend completed, idle work as described below. A stopped/missing container
 does not authorize discarding retained workspace or history. Session deletion or
 expiry requests cleanup, revokes the scoped device and cancels pending work before
 Provider.Kill; the existing Worker serializes these lifecycle operations and drains
@@ -1509,6 +1659,18 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   both valid fields. This internal contract does not add public configuration or
   engine support. Future native adapters must verify the same semantics before
   advertising the capability.
+- Explicit public `programmatic_tool_calling.enabled=false` uses the common
+  `ExecutionControls.DisableProgrammaticToolCalling` field and the operation-specific
+  `programmatic_tool_calling_disable` capability. Both public qualification and
+  Runtime support are required for that request; omission creates no prerequisite.
+  New and resumed executions retain the frozen setting. Codex disables native
+  code-mode features and checks managed requirements before starting/resuming a
+  thread, rejecting a conflicting requirement. Claude and MiniMax retain their
+  restricted native inventories, which exclude programmatic execution. This does
+  not remove unrelated native utilities or claim enabled programmatic support.
+  Explicit `web_search.mode=disabled` reuses the existing disabled search control.
+  Search remains off when omitted. Optional search settings are resource data and
+  do not cause execution while disabled. Enabled search remains unqualified here.
 - `web_search_control` advertises the Codex adapter's explicit `web_search` option
   (`disabled`, `cached`, or `live`). Agents API requires this capability before Codex dispatch;
   the typed execution controls force search off on new and resumed Turns. Native configuration translation stays in the
@@ -1600,6 +1762,19 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   index, and never emit `item.done`, whose upstream union only allows agent output.
   Project their public output/error from the saved submission, including missing
   versus null fields; native content normalization must not change public history.
+- Codex function application requires a matching live native dynamic-tool completion,
+  including root thread/Turn/call identity, function, success and ordered content.
+  Writing its JSON-RPC response is not application. The adapter owns pending
+  receipts without holding their state lock across IO or waiting; terminal state,
+  cancellation and native loss settle unconfirmed submissions before release.
+  Uncertain receipt timeout ends that native execution without resending the result.
+  The common Runtime interface and router continue to own delivery identity,
+  retry/conflict and terminal ordering; Core never parses native tool events.
+  Record native confirmation before potentially blocking observation publication;
+  output backpressure cannot turn a known application into an unknown outcome.
+  The function submission owns raw write completion and receipt failure together;
+  its writer never applies an independent timeout/close decision. A confirmed
+  receipt releases submission even if writer completion has not yet been scheduled.
 - Internal function execution requires an advertised `function_tools` capability
   before claiming a Turn. Translate resolved definitions in the execution adapter,
   persist declared callbacks before exposing actions, and deliver each saved result
@@ -1918,6 +2093,32 @@ foreign, ambiguous or metadata-only history rejects before model input. The Runt
 volume and shared Environment/Session binding establish ownership; this lookup
 cannot select another Session's home or infer ownership from a model response.
 
+### Deferred function discovery
+
+Public `tool_search` and function `defer_loading` are shared Runtime intent.
+Core preserves complete immutable definitions, sends `PromptRequestPayload.ToolSearch`
+and each `FunctionTool.DeferLoading`, and requires the operation's existing profile
+qualification plus the Runtime `tool_search` capability. It never performs native
+search, selects native names, interprets provider policies or implements another
+model/tool loop. Additional harnesses implement the same intent in their adapters.
+The pinned Session AgentTool response union excludes the tool_search input member;
+project it out of Session/SSE resources while preserving saved and frozen input.
+
+The bounded implementation targets Claude's single-agent `environment:none`
+function profile, including qualified inline message images. The adapter explicitly enables native ToolSearch and sets
+per-function MCP `anthropic/alwaysLoad` from the requested deferral flag. Ordinary
+functions stay eager. Existing function callbacks, application receipts, cancellation
+and cold continuation remain the only execution/result lifecycle. Runtime discovery
+advertises this operation only with an installed bridge supporting `tool_search`.
+
+Known conflicting native provider modes and search/beta settings reject in the
+adapter. The maintained native harness owns dynamic model/provider eligibility;
+its SDK exposes no reliable pre-input receipt proving effective deferral after a
+policy change. Do not represent tool inventory or an operator allowlist as that
+proof. Record exact real model/provider evidence and this detection gap separately.
+Search-only, missing-search, duplicate-search, workspace, MCP and Subagent combinations
+remain unqualified. See [the operation coverage](contracts/agents-api/tool-search.md).
+
 ### Structured output execution
 
 The public `text.format={type:"json_schema",schema:{...}}` is resolved with saved
@@ -1928,12 +2129,20 @@ admission requires the selected profile's structured-output qualification, and
 only requests using this option require the Runtime's `structured_output` and
 message-observation capabilities. A capability advertisement does not qualify a
 new public combination. Claude advertises this operation only when the installed
-SDK bridge reports its `structured_output` feature and the selected Runtime is
-not a workspace profile.
+SDK bridge reports its `structured_output` feature. A workspace Runtime also
+requires the complete local Runtime contract and `workspace_structured_output`;
+preparation checks that bundle before native launch. These remain adapter readiness
+features, not new Core lifecycle or public protocol variants.
 
-The current qualified path is Claude SDK, `environment:none`, medium verbosity,
-single Agent, with optional ordinary function tools and text results. Workspace,
-HTTP MCP, Subagent combinations and non-object root schemas remain unqualified.
+The current qualified path is Claude SDK, `environment:none` or Core-managed
+Docker `openai_hosted`, medium verbosity, single Agent, with optional ordinary
+function tools and text results. The workspace uses its existing preparation and
+native sandbox with only the SDK's configured `StructuredOutput` tool added to
+inventory and permission checks. Frozen schemas reach preparation before the
+input handoff; Start cannot replace them. Skills, Plugins, capability directories,
+HTTP MCP, Subagent/tool-discovery combinations and non-object root schemas remain
+unqualified. Check resolved template contents as well as inline configuration;
+ordinary text requests retain their existing qualifications.
 The SDK uses binary64 JSON numbers: reject execution schemas whose numeric values
 would change during that conversion, without narrowing saved Agent storage.
 Codex and MiniMax structured output remain explicit execution gaps.
@@ -2195,9 +2404,14 @@ Claude uses its restrictive profile without claiming those general capabilities.
 Idle and initial-input Session creation qualify the resolved configuration before
 persistence; saved Agent resources remain independent of engine restrictions.
 Claude additionally requires medium verbosity and explicit object-root function
-schemas. Function-result batches normalize through the existing shared parser and
-reject non-text content before any batch write, preserving pending calls and retry
-identity. These are implementation limits, not changes to the upstream contract.
+schemas. Function-result batches normalize through the existing shared parser. Claude accepts
+text results and, on `none` and Core-managed Docker `openai_hosted`, successful
+ordered inline PNG/JPEG results. Unqualified placements, failed image results and
+invalid/remote references reject before any batch write, preserving pending calls
+and retry identity. Public qualification receives the full neutral result so
+success-dependent limitations remain in the profile. Image-bearing delivery alone
+requires Runtime function-result image support; text results and function
+declarations do not acquire that requirement. These are implementation limits, not changes to the upstream contract.
 Do not bypass them by dropping fields, changing model identity or fabricating usage.
 Operators may configure the daemon provider environment or the existing transient
 `AGENTS_API_EXECUTION_OPTIONS_FILE` with adapter-owned `claude_provider`
@@ -2206,7 +2420,7 @@ persisting them in Session configuration. The adapter exclusively selects the
 provider environment and removes credentials from native tool environments. Product `claude_code` and product execution are unchanged.
 The `none` public profile accepts only
 text, explicit model/system instructions, managed state, exact native resume and
-declared functions with ordered text results, and the HTTP MCP subset
+declared functions with ordered text or successful inline PNG/JPEG results, and the HTTP MCP subset
 described above. It rejects unsupported request
 options and disables built-in tools and undeclared MCP discovery.
 `DisableExecutionEnvironment` and `DisableSubagents` are accepted assertions about
@@ -2250,7 +2464,12 @@ permission checks. It grants no runtime-token business authority.
 
 Function results remain pending after stdin/MCP delivery. A matching live, root
 native user tool_result confirms application only when its Session/call identity,
-error flag and returned text match the submission. Ignore replayed, synthetic and
+error flag and ordered content match the submission. Text matches exactly; each
+submitted image position must remain a valid native base64 image. Native resizing
+or re-encoding may change image bytes. This acknowledges incorporation into native
+history, not byte/pixel fidelity or completed provider consumption. Public Items
+retain the original caller content; real image-dependent model responses separately
+qualify usability. Ignore replayed, synthetic and
 subagent messages. Native error text joins the submitted text parts with newlines;
 neutral observations retain their original order and separate failure status.
 Missing/mismatched receipts fail the execution; do not replay unknown delivery.
@@ -2259,7 +2478,7 @@ execution on timeout. Invalid or unsupported image results fail before consuming
 a pending call. Function state belongs to one live Run and ends with it; the
 existing router owns receipt retry/conflict handling. This does not establish
 crash recovery or exactly-once effects. Public schemas outside MCP's object-root
-contract and image result mapping remain admission/execution gaps.
+contract, failed image results and remote image references remain admission/execution gaps.
 
 Each SDK result supplies one native usage snapshot, including reported failures.
 `Usage.Raw.claude_sdk_result` holds the latest; queries with multiple native results
@@ -2307,7 +2526,7 @@ recovery remain separate work. Daemon registration alone does not establish publ
 
 Public text/function execution, active input, pending-call cancellation and cold
 continuation are accepted for the registered restrictive profile. Environment
-provisioning, broader tools/verbosity, complete public Usage, image results and
+provisioning, broader tools/verbosity, complete public Usage, failed image results and
 process-loss recovery remain gaps. Managed installation and release publication
 remain separate tasks. `make check-cli` also builds
 and tests the SDK package, including native output draining; CI selects that check

@@ -66,7 +66,7 @@ func readyPreparedDispatch(t *testing.T, h *dispatchHarness, request, handle str
 	h.write(request, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "ready", ExpiresAt: time.Now().Add(5 * time.Minute).UnixMilli()})
 	frame := h.read(proto.TypeExecutionStart)
 	var start proto.ExecutionStartPayload
-	if frame.ID != request || frame.DecodePayload(&start) != nil || start.Handle != handle || start.RunID == "" || start.Prompt != "first\n\nsecond" {
+	if frame.ID != request || frame.DecodePayload(&start) != nil || start.Handle != handle || start.RunID == "" || inputTextForTest(t, start.Input) != "first\n\nsecond" {
 		t.Fatal("Start changed preparation or original batch", frame.ID, start)
 	}
 	turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, start.RunID)
@@ -81,7 +81,7 @@ func TestPreparedDispatchPromotesOriginalBatchAndPersistsCompletion(t *testing.T
 	result := runPreparedDispatch(h, t.Context(), pending)
 	frame := h.read(proto.TypeExecutionPrepare)
 	var prepare proto.ExecutionPreparePayload
-	if frame.DecodePayload(&prepare) != nil || prepare.Configuration.Prompt != "" || prepare.Configuration.RunID != "" || prepare.Configuration.ConversationID != "" || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != h.device.EnvironmentID || prepare.Configuration.DisableExecutionEnvironment {
+	if frame.DecodePayload(&prepare) != nil || len(prepare.Configuration.Input) != 0 || prepare.Configuration.RunID != "" || prepare.Configuration.ConversationID != "" || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != h.device.EnvironmentID || prepare.Configuration.DisableExecutionEnvironment {
 		t.Fatal("invalid preparation configuration", prepare)
 	}
 	session, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
@@ -98,7 +98,7 @@ func TestPreparedDispatchPromotesOriginalBatchAndPersistsCompletion(t *testing.T
 	h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "started", RunID: start.RunID})
 	steering := h.read(proto.TypePromptSteer)
 	var steer proto.PromptSteerPayload
-	if steering.ID != start.RunID || steering.DecodePayload(&steer) != nil || steer.Text != "third" || !steer.DurableReceipt {
+	if steering.ID != start.RunID || steering.DecodePayload(&steer) != nil || inputTextForTest(t, steer.Input) != "third" || !steer.DurableReceipt {
 		t.Fatal("later input bypassed ordinary steering", steer)
 	}
 	h.write(start.RunID, proto.TypePromptSteerAck, proto.PromptSteerAckPayload{InputID: steer.InputID, Accepted: true})

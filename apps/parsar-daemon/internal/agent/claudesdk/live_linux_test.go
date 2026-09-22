@@ -137,7 +137,7 @@ func TestLiveClaudeSDKTextResume(t *testing.T) {
 		requestStart := len(requests)
 		mu.Unlock()
 		out := make(chan proto.Envelope, 64)
-		request := proto.PromptRequestPayload{RunID: uuid.NewString(), Prompt: prompt, AgentSessionID: resume, StrictResume: true, ReleaseOnCompletion: true, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, AgentOptions: map[string]any{"model": "MiniMax-M3", "system_prompt": "Answer briefly and preserve the exact verification value in the conversation. Use no tools."}}
+		request := proto.PromptRequestPayload{RunID: uuid.NewString(), Input: proto.TextInput(prompt), AgentSessionID: resume, StrictResume: true, ReleaseOnCompletion: true, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, AgentOptions: map[string]any{"model": "MiniMax-M3", "system_prompt": "Answer briefly and preserve the exact verification value in the conversation. Use no tools."}}
 		if success != nil {
 			request.ObserveToolObservations = true
 			request.AgentOptions["system_prompt"] = "Call lookup exactly once as requested, then report both result parts and any prior verification value. Never retry a failed tool."
@@ -174,7 +174,7 @@ func TestLiveClaudeSDKTextResume(t *testing.T) {
 				timer := time.AfterFunc(10*time.Second, cancel)
 				defer timer.Stop()
 				written := false
-				err := s.SteerWithReceipt(callCtx, proto.PromptSteerPayload{InputID: uuid.NewString(), Text: proof.SteeringText}, func() { written = timer.Stop() })
+				err := s.SteerWithReceipt(callCtx, proto.PromptSteerPayload{InputID: uuid.NewString(), Input: proto.TextInput(proof.SteeringText)}, func() { written = timer.Stop() })
 				steeringReply <- steeringResult{err: err, elapsed: time.Since(steeringAt).Milliseconds(), written: written}
 			}()
 		}
@@ -252,7 +252,7 @@ func TestLiveClaudeSDKTextResume(t *testing.T) {
 				if !*success {
 					first, second = "synthetic-current-failure", "do-not-retry"
 				}
-				value := proto.FunctionResultPayload{CallID: call.CallID, DeliveryID: uuid.NewString(), Success: *success, Content: []proto.FunctionResultContent{{Type: "input_text", Text: &first}, {Type: "input_text", Text: &second}}}
+				value := proto.FunctionResultPayload{CallID: call.CallID, DeliveryID: uuid.NewString(), Success: *success, Content: []proto.InputContent{{Type: "input_text", Text: &first}, {Type: "input_text", Text: &second}}}
 				if err := s.SubmitFunctionResult(ctx, value); err != nil {
 					t.Fatalf("live native result receipt failed: %v; proof root %s", err, root)
 				}

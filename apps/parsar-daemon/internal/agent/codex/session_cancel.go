@@ -37,6 +37,7 @@ func (s *Session) Cancel(ctx context.Context) error {
 
 func (s *Session) cancelNativeWork() {
 	defer close(s.cancelReady)
+	s.stopFunctionCalls()
 	turnID, active := s.stopSteering()
 	s.stopCodexInteractionTimers()
 	// Best effort: a known Turn must use its native identity. An explicit

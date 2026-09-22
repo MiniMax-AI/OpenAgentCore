@@ -30,7 +30,7 @@ func preparationFixture(t *testing.T, mode string) Config {
 
 func preparationRequest() proto.PromptRequestPayload {
 	req := workspaceRequest()
-	req.RunID, req.Prompt = "", ""
+	req.RunID, req.Input = "", nil
 	req.AgentSessionID = "native-session"
 	return req
 }
@@ -44,7 +44,13 @@ func runPreparationHelper() {
 		} else if mode == "old-command-runtime" {
 			features = []string{"workspace_tools", "workspace_prepare"}
 		}
-		_ = json.NewEncoder(os.Stdout).Encode(RuntimeInfo{Type: "runtime_ready", Protocol: 1, Node: "fixture", SDK: "fixture", MCP: "fixture", Native: "fixture", Features: features})
+		if strings.HasPrefix(mode, "structured-") {
+			features = append(features, "local_runtime_v1", "structured_output")
+			if mode == "structured-ready" {
+				features = append(features, "workspace_structured_output")
+			}
+		}
+		_ = json.NewEncoder(os.Stdout).Encode(RuntimeInfo{Type: "runtime_ready", Protocol: 2, Node: "fixture", SDK: "fixture", MCP: "fixture", Native: "fixture", Features: features})
 		return
 	}
 	state := os.Getenv("CLAUDE_CONFIG_DIR")
@@ -57,7 +63,7 @@ func runPreparationHelper() {
 	_ = os.WriteFile(filepath.Join(state, "prepare.json"), raw, 0o600)
 	var fields map[string]json.RawMessage
 	var request startRequest
-	if json.Unmarshal(raw, &fields) != nil || json.Unmarshal(raw, &request) != nil || request.Type != "prepare" || fields["prompt"] != nil || fields["run_id"] != nil || request.Workspace == nil {
+	if json.Unmarshal(raw, &fields) != nil || json.Unmarshal(raw, &request) != nil || request.Type != "prepare" || fields["input"] != nil || fields["run_id"] != nil || request.Workspace == nil {
 		os.Exit(3)
 	}
 	emit := func(event bridgeEvent) { _ = json.NewEncoder(os.Stdout).Encode(event) }
@@ -93,7 +99,7 @@ func runPreparationHelper() {
 	raw = append([]byte{}, scanner.Bytes()...)
 	_ = os.WriteFile(filepath.Join(state, "start.json"), raw, 0o600)
 	fields = nil
-	if json.Unmarshal(raw, &fields) != nil || len(fields) != 2 || string(fields["type"]) != `"start"` || string(fields["prompt"]) != `"hello"` {
+	if json.Unmarshal(raw, &fields) != nil || len(fields) != 2 || string(fields["type"]) != `"start"` || string(fields["input"]) != `[{"content":[{"type":"input_text","text":"hello"}]}]` {
 		os.Exit(4)
 	}
 	if mode == "cancellation" {
@@ -105,7 +111,12 @@ func runPreparationHelper() {
 		return
 	}
 	emit(bridgeEvent{Type: "input_ready", SessionID: request.Resume})
-	emit(bridgeEvent{Type: "delta", Delta: "partial"})
+	if request.ObserveMessages {
+		text := "completed"
+		emit(bridgeEvent{Type: "output_message", Message: &proto.OutputMessagePayload{ID: "native-message", Status: "completed", Text: &text}})
+	} else {
+		emit(bridgeEvent{Type: "delta", Delta: "partial"})
+	}
 	emit(bridgeEvent{Type: "usage", ResultID: "native-result", SessionID: request.Resume, Usage: json.RawMessage(usageFixture)})
 	emit(bridgeEvent{Type: "input_closed", SessionID: request.Resume})
 	emit(bridgeEvent{Type: "result", SessionID: request.Resume, Text: "completed"})

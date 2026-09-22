@@ -73,7 +73,7 @@ func TestDurableCompletionWaitsForSteeringReceiptSend(t *testing.T) {
 				}
 			}
 			handle(proto.TypePromptRequest, proto.PromptRequestPayload{AgentKind: "codex", AgentStateKey: "stable", ReleaseOnCompletion: true})
-			input := proto.PromptSteerPayload{InputID: "input-1", Text: "original"}
+			input := proto.PromptSteerPayload{InputID: "input-1", Input: proto.TextInput("original")}
 			handle(proto.TypePromptSteer, input)
 			<-sender.entered
 			session.out <- mustEnv(t, proto.TypeDone, "ordered", proto.DonePayload{Content: "finished"})
@@ -91,7 +91,7 @@ func TestDurableCompletionWaitsForSteeringReceiptSend(t *testing.T) {
 				if mode == "unknown" && ack.ErrorCode != "outcome_unknown" {
 					t.Fatal("uncertainty lost")
 				}
-				input.Text = "changed"
+				input.Input = proto.TextInput("changed")
 				handle(proto.TypePromptSteer, input)
 				input.InputID = "new"
 				handle(proto.TypePromptSteer, input)
@@ -142,7 +142,7 @@ func TestShutdownReleasesSteeringWorkerAndCompletionBarrier(t *testing.T) {
 			if err = router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "shutdown", proto.PromptRequestPayload{AgentKind: "codex", ReleaseOnCompletion: true})); err != nil {
 				t.Fatal(err)
 			}
-			if err = router.Handle(context.Background(), mustEnv(t, proto.TypePromptSteer, "shutdown", proto.PromptSteerPayload{InputID: "one", Text: "text"})); err != nil {
+			if err = router.Handle(context.Background(), mustEnv(t, proto.TypePromptSteer, "shutdown", proto.PromptSteerPayload{InputID: "one", Input: proto.TextInput("text")})); err != nil {
 				t.Fatal(err)
 			}
 			<-entered

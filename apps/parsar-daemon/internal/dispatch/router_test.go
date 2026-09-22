@@ -237,14 +237,14 @@ func TestHandlePromptRequestInvokesFactoryAndForwardsOutput(t *testing.T) {
 	defer h.router.Shutdown(context.Background())
 
 	env := mustEnv(t, proto.TypePromptRequest, "run_1", proto.PromptRequestPayload{
-		AgentKind: "claude_code", Prompt: "hi", ConversationID: "c1",
+		AgentKind: "claude_code", Input: proto.TextInput("hi"), ConversationID: "c1",
 	})
 	if err := h.router.Handle(context.Background(), env); err != nil {
 		t.Fatalf("Handle prompt_request: %v", err)
 	}
 
 	req := <-h.gotReq
-	if req.RunID != "run_1" || req.AgentKind != "claude_code" || req.Prompt != "hi" {
+	if req.RunID != "run_1" || req.AgentKind != "claude_code" || *req.Input[0].Content[0].Text != "hi" {
 		t.Errorf("factory got %+v, want run_1/claude_code/hi", req)
 	}
 	sess := <-h.gotSess

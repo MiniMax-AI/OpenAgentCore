@@ -195,8 +195,8 @@ func helperConfig() claudecode.SessionConfigForTest {
 // helperReq points the helper at a specific role via env passthrough.
 func helperReq(runID, prompt, role string) proto.PromptRequestPayload {
 	return proto.PromptRequestPayload{
-		RunID:  runID,
-		Prompt: prompt,
+		RunID: runID,
+		Input: proto.TextInput(prompt),
 		AgentOptions: map[string]any{
 			"env": map[string]any{
 				helperEnvKey: role,
@@ -465,7 +465,7 @@ func TestSessionRejectsEmptyPrompt(t *testing.T) {
 	// valid prompt today and must NOT be rejected.
 	out := make(chan proto.Envelope, 4)
 	_, err := claudecode.NewSessionForTest(context.Background(),
-		proto.PromptRequestPayload{RunID: "r0", Prompt: ""},
+		proto.PromptRequestPayload{RunID: "r0", Input: proto.TextInput("")},
 		out, helperConfig())
 	if err == nil {
 		t.Fatal("expected error on empty prompt + no attachments")

@@ -13,11 +13,13 @@ import (
 
 func newInteractionTestSession(rpc *JSONRPCClient) (*Session, <-chan proto.Envelope) {
 	out := make(chan proto.Envelope, 1)
+	ctx, cancel := context.WithCancel(context.Background())
 	s := &Session{
 		runID:        "run-test",
 		out:          out,
 		rpc:          rpc,
-		cancelCtx:    context.Background(),
+		cancelCtx:    ctx,
+		cancelFn:     cancel,
 		interactions: newPendingCodexInteractions(),
 	}
 	s.registerHandlers()

@@ -34,11 +34,11 @@ func functionTools(raw []json.RawMessage) ([]proto.FunctionTool, error) {
 			return nil, err
 		}
 		var schema map[string]json.RawMessage
-		if tool.Type != "function" || tool.DeferLoading || strings.TrimSpace(tool.Name) == "" || len(tool.Name) > 512 || names[tool.Name] || json.Unmarshal(tool.Parameters, &schema) != nil || schema == nil {
-			return nil, errors.New("execution requires unique non-deferred functions with object schemas")
+		if tool.Type != "function" || strings.TrimSpace(tool.Name) == "" || len(tool.Name) > 512 || names[tool.Name] || json.Unmarshal(tool.Parameters, &schema) != nil || schema == nil {
+			return nil, errors.New("execution requires unique functions with object schemas")
 		}
 		names[tool.Name] = true
-		tools = append(tools, proto.FunctionTool{Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters})
+		tools = append(tools, proto.FunctionTool{Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters, DeferLoading: tool.DeferLoading})
 	}
 	return tools, nil
 }
@@ -51,6 +51,7 @@ type functionReply struct {
 type functionExchange struct {
 	store                 *store.Store
 	tenant, session, turn string
+	kind                  string
 	tools                 []proto.FunctionTool
 	callID                string
 	reply                 <-chan functionReply
@@ -88,6 +89,9 @@ func (f *functionExchange) start(ctx context.Context, peer *gateway.Session) err
 		}
 		result, err := functionResult(call)
 		if err != nil {
+			return err
+		}
+		if err := requireFunctionResultImages(peer, f.kind, result); err != nil {
 			return err
 		}
 		env, err := proto.NewEnvelope(proto.TypeFunctionResult, f.turn, result)
@@ -160,7 +164,7 @@ func functionResult(call store.FunctionCall) (proto.FunctionResultPayload, error
 	if value.Success == nil {
 		return proto.FunctionResultPayload{}, errors.New("function result requires success")
 	}
-	result := proto.FunctionResultPayload{DeliveryID: "function:" + call.CallID, CallID: call.ExecutorCallID, Success: *value.Success, Content: []proto.FunctionResultContent{}}
+	result := proto.FunctionResultPayload{DeliveryID: "function:" + call.CallID, CallID: call.ExecutorCallID, Success: *value.Success, Content: []proto.InputContent{}}
 	output := bytes.TrimSpace(value.Output)
 	if len(output) > 0 && !bytes.Equal(output, []byte("null")) {
 		if output[0] == '"' {
@@ -168,13 +172,25 @@ func functionResult(call store.FunctionCall) (proto.FunctionResultPayload, error
 			if err := json.Unmarshal(output, &text); err != nil {
 				return result, err
 			}
-			result.Content = append(result.Content, proto.FunctionResultContent{Type: "input_text", Text: &text})
+			result.Content = append(result.Content, proto.InputContent{Type: "input_text", Text: &text})
 		} else if err := json.Unmarshal(output, &result.Content); err != nil {
 			return result, err
 		}
 	}
 	if value.Error != nil {
-		result.Content = append(result.Content, proto.FunctionResultContent{Type: "input_text", Text: value.Error})
+		result.Content = append(result.Content, proto.InputContent{Type: "input_text", Text: value.Error})
 	}
 	return result, result.ValidateContent()
+}
+
+// Check only this result, not ordinary function declarations or text delivery.
+func requireFunctionResultImages(peer *gateway.Session, kind string, result proto.FunctionResultPayload) error {
+	if !(proto.MessageInput{{Content: result.Content}}).HasImages() {
+		return nil
+	}
+	info, found, known := peer.AgentKindStatus(kind)
+	if !found || !known || !info.Available || !info.Capabilities.FunctionResultImages {
+		return errors.New("Runtime does not support function result images")
+	}
+	return nil
 }

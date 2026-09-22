@@ -1,10 +1,12 @@
+import { parseMessageInput, nativeContent, type MessageInput } from "./message_input.js";
 import type { SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { randomUUID } from "node:crypto";
 
 export type InputEvent =
   | { type: "input_ready" | "input_closed"; session_id: string }
   | { type: "input_applied" | "input_rejected"; input_id: string };
-type Input = { id?: string; applied: boolean; completed: boolean };
+type Batch = { id?: string; unapplied: number };
+type Input = { batch: Batch; applied: boolean; completed: boolean };
 
 // This is an SDK input iterator and receipt ledger, never a model/tool loop.
 export class Inputs implements AsyncIterable<SDKUserMessage> {
@@ -15,11 +17,11 @@ export class Inputs implements AsyncIterable<SDKUserMessage> {
   private ended = false;
   private sessionID = "";
 
-  constructor(prompt?: string) { if (prompt !== undefined) this.release(prompt); }
+  constructor(prompt?: MessageInput) { if (prompt !== undefined) this.release(prompt); }
 
-  release(prompt: string): void {
-    if (this.ended || this.submitted.size || !prompt.trim()) throw new Error("Invalid initial input.");
-    this.enqueue(prompt);
+  release(prompt: MessageInput): void {
+    if (this.ended || this.submitted.size || prompt.length > 64) throw new Error("Invalid initial input.");
+    this.enqueue(parseMessageInput(prompt));
   }
 
   start(sessionID: string): InputEvent[] {
@@ -33,23 +35,28 @@ export class Inputs implements AsyncIterable<SDKUserMessage> {
   submit(value: unknown): InputEvent[] {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid input.");
     const input = value as Record<string, unknown>;
-    if (input.type !== "steer" || Object.keys(input).some(key => !["type", "input_id", "text"].includes(key)) ||
-        typeof input.input_id !== "string" || !input.input_id.trim() || input.input_id.length > 256 ||
-        typeof input.text !== "string" || !input.text.trim()) throw new Error("Invalid input.");
+    if (input.type !== "steer" || Object.keys(input).some(key => !["type", "input_id", "input"].includes(key)) ||
+        typeof input.input_id !== "string" || !input.input_id.trim() || input.input_id.length > 256) throw new Error("Invalid input.");
+    const messages = parseMessageInput(input.input);
     // The native consumed-UUID list has 64 slots, including the opening prompt.
-    if (this.ended || !this.sessionID || this.submitted.size >= 64 || this.ids.has(input.input_id)) {
+    if (this.ended || !this.sessionID || this.submitted.size + messages.length > 64 || this.ids.has(input.input_id)) {
       return [{ type: "input_rejected", input_id: input.input_id }];
     }
     this.ids.add(input.input_id);
-    this.enqueue(input.text, input.input_id);
+    this.enqueue(messages, input.input_id);
     return [];
   }
 
-  private enqueue(text: string, id?: string): void {
-    const uuid = randomUUID();
-    this.submitted.set(uuid, { id, applied: false, completed: false });
-    this.queue.push({ type: "user", uuid, session_id: this.sessionID, parent_tool_use_id: null,
-      message: { role: "user", content: text } });
+  private enqueue(messages: MessageInput, id?: string): void {
+    // Convert the entire batch before admitting any native input.
+    const contents = messages.map(nativeContent);
+    const batch: Batch = { id, unapplied: contents.length };
+    for (const content of contents) {
+      const uuid = randomUUID();
+      this.submitted.set(uuid, { batch, applied: false, completed: false });
+      this.queue.push({ type: "user", uuid, session_id: this.sessionID, parent_tool_use_id: null,
+        message: { role: "user", content } });
+    }
     this.wake?.();
   }
 
@@ -63,7 +70,9 @@ export class Inputs implements AsyncIterable<SDKUserMessage> {
     if (message.type === "result" && !consumed.length) throw new Error("Unattributed native result.");
     const receipts: InputEvent[] = [];
     for (const input of consumed) {
-      if (!input.applied && input.id) receipts.push({ type: "input_applied", input_id: input.id });
+      if (!input.applied && --input.batch.unapplied === 0 && input.batch.id) {
+        receipts.push({ type: "input_applied", input_id: input.batch.id });
+      }
       input.applied = true;
       if (message.type === "result") input.completed = true;
     }

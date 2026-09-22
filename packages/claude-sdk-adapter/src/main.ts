@@ -4,7 +4,7 @@ import { Inputs } from "./inputs.js";
 import { FunctionBridge } from "./function_bridge.js";
 import { createInterface } from "node:readline";
 import { execute, type Event } from "./adapter.js";
-import { immediatePrompt, parseRequest, preparedPrompt } from "./request.js";
+import { immediateInput, parseRequest, preparedInput } from "./request.js";
 
 const abort = new AbortController();
 const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
@@ -29,7 +29,7 @@ try {
   const functions = new FunctionBridge(output);
   const reads = new WorkspaceReads(output, abort);
   const directories = new WorkspaceDirectories(output, abort);
-  const prompts = new Inputs(immediatePrompt(request));
+  const prompts = new Inputs(immediateInput(request));
   const incoming = (async () => {
     try {
       for await (const line of { [Symbol.asyncIterator]: () => input }) {
@@ -41,7 +41,7 @@ try {
           directories.submit(value as Record<string, unknown>);
         } else if (request.type === "prepare" && phase !== "running") {
           if (phase !== "prepared" || abort.signal.aborted) throw new Error("invalid_request");
-          prompts.release(preparedPrompt(value));
+          prompts.release(preparedInput(value));
           phase = "running";
         } else if (value && typeof value === "object" && "type" in value && value.type === "steer") {
           for (const event of prompts.submit(value)) await output(event);

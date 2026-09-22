@@ -7,6 +7,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
@@ -51,12 +52,20 @@ func (p Policy) canAdmitInputs(engine string, configuration json.RawMessage) boo
 	return p.ValidateSessionConfiguration(engine, configuration) == nil
 }
 
-func (p Policy) validateEngineInputs(engine string, inputs []store.Input) error {
+func (p Policy) validateEngineInputs(engine string, configuration json.RawMessage, inputs []store.Input) error {
 	profile, ok := p.Engines.Lookup(engine)
 	if !ok {
 		return store.ErrInvalidInput
 	}
-	return validateProfileInputs(profile, inputs)
+	var snapshot Snapshot
+	if json.Unmarshal(configuration, &snapshot) != nil {
+		return store.ErrInvalidInput
+	}
+	placement := ""
+	if snapshot.Environment != nil {
+		placement = snapshot.Environment.Type
+	}
+	return validateProfileInputs(profile, placement, inputs)
 }
 
 // engineCapabilities is shared by device selection and the final preclaim check.
@@ -98,14 +107,20 @@ func (p Policy) engineCapabilities(peer *gateway.Session, engine string, snapsho
 	if !snapshot.Agent.MultiAgent.Enabled && !caps.SubagentControl {
 		return fail("device must advertise subagent_control")
 	}
-	functions, mcp, err := executionTools(snapshot.Agent.Tools)
+	tools, err := executionTools(snapshot.Agent.Tools)
 	if err != nil {
 		return fail("invalid execution tool configuration")
 	}
-	if len(functions) > 0 && !caps.FunctionTools {
+	if err := (proto.PromptRequestPayload{ToolSearch: tools.Search, FunctionTools: tools.Functions}).ValidateToolSearch(caps.ToolSearch); err != nil {
+		return fail(err.Error())
+	}
+	if tools.DisableProgrammatic && !caps.ProgrammaticToolCallingDisable {
+		return fail("device must support disabling programmatic tool calling")
+	}
+	if len(tools.Functions) > 0 && !caps.FunctionTools {
 		return fail("device must advertise function_tools")
 	}
-	if _, err := p.mcpExecutionCredentials(engine, snapshot, mcp, caps); err != nil {
+	if _, err := p.mcpExecutionCredentials(engine, snapshot, tools.MCP, caps); err != nil {
 		return device.KindCapabilities{}, err
 	}
 	if snapshot.Environment != nil && (snapshot.Environment.Type == "openai_hosted" || snapshot.Environment.Type == "self_hosted") {

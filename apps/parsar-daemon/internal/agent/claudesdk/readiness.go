@@ -25,8 +25,24 @@ type RuntimeInfo struct {
 	Features []string `json:"features"`
 }
 
+func (info RuntimeInfo) SupportsFunctionResultImages() bool {
+	return slices.Contains(info.Features, "function_result_images")
+}
+
+func (info RuntimeInfo) SupportsMessageImages() bool {
+	return slices.Contains(info.Features, "message_images")
+}
+
+func (info RuntimeInfo) SupportsToolSearch() bool {
+	return slices.Contains(info.Features, "tool_search")
+}
+
 func (info RuntimeInfo) SupportsStructuredOutput() bool {
 	return slices.Contains(info.Features, "structured_output")
+}
+
+func (info RuntimeInfo) SupportsWorkspaceStructuredOutput() bool {
+	return info.SupportsStructuredOutput() && info.SupportsLocalRuntime() && slices.Contains(info.Features, "workspace_structured_output")
 }
 
 func (info RuntimeInfo) SupportsSubagents() bool {
@@ -116,7 +132,7 @@ func CheckRuntime(ctx context.Context, config Config) (RuntimeInfo, error) {
 		return RuntimeInfo{}, fmt.Errorf("claudesdk: runtime check failed")
 	}
 	var info RuntimeInfo
-	if json.Unmarshal(raw, &info) != nil || info.Type != "runtime_ready" || info.Protocol != 1 ||
+	if json.Unmarshal(raw, &info) != nil || info.Type != "runtime_ready" || info.Protocol != 2 ||
 		info.Node == "" || info.SDK == "" || info.MCP == "" || info.Native == "" {
 		return RuntimeInfo{}, fmt.Errorf("claudesdk: invalid runtime readiness report")
 	}

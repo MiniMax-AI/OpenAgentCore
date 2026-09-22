@@ -108,6 +108,8 @@ type Session struct {
 	preparations      map[string]*preparationSubscription
 	workspaceWriteMu  sync.Mutex
 	workspaceWrites   map[string]chan proto.Envelope
+	suspendMu         sync.Mutex
+	suspendReplies    map[string]chan proto.Envelope
 	workspaceReadMu   sync.Mutex
 	workspaceReads    map[string]chan proto.Envelope
 	workspaceExportMu sync.Mutex
@@ -262,6 +264,7 @@ func (s *Session) Close(reason string) {
 		s.reg.Deregister(s)
 		s.closePreparations()
 		s.closeWorkspaceReads()
+		s.closeSuspendReplies()
 		s.closeWorkspaceWrites()
 		s.closeWorkspaceExports()
 		s.markOfflineOnClose()
@@ -541,34 +544,38 @@ func deviceKindsFromHeartbeat(p proto.HeartbeatPayload) []device.SupportedAgentK
 			Available: info.Available,
 			Version:   info.Version,
 			Capabilities: device.KindCapabilities{
-				Streaming:                     info.Capabilities.Streaming,
-				Permissions:                   info.Capabilities.Permissions,
-				Usage:                         info.Capabilities.Usage,
-				Resume:                        info.Capabilities.Resume,
-				Steering:                      info.Capabilities.Steering,
-				DurableTurns:                  info.Capabilities.DurableTurns,
-				DurableInputReceipts:          info.Capabilities.DurableInputReceipts,
-				NativeSessionRecovery:         info.Capabilities.NativeSessionRecovery,
-				MessageItems:                  info.Capabilities.MessageItems,
-				ToolItems:                     info.Capabilities.ToolItems,
-				ToolObservations:              info.Capabilities.ToolObservations,
-				EnvironmentNone:               info.Capabilities.EnvironmentNone,
-				LocalEnvironment:              info.Capabilities.LocalEnvironment,
-				LocalEnvironmentNetworkPolicy: info.Capabilities.LocalEnvironmentNetworkPolicy,
-				Preparation:                   info.Capabilities.Preparation,
-				WorkspaceReadPreparation:      info.Capabilities.WorkspaceReadPreparation,
-				WorkspaceOutputExport:         info.Capabilities.WorkspaceOutputExport,
-				WebSearchControl:              info.Capabilities.WebSearchControl,
-				TextVerbosity:                 info.Capabilities.TextVerbosity,
-				StructuredOutput:              info.Capabilities.StructuredOutput,
-				ExecutionControls:             info.Capabilities.ExecutionControls,
-				SubagentControl:               info.Capabilities.SubagentControl,
-				SubagentObservations:          info.Capabilities.SubagentObservations,
-				FunctionTools:                 info.Capabilities.FunctionTools,
-				MCPHTTPTools:                  info.Capabilities.MCPHTTPTools,
-				MCPHTTPRequired:               info.Capabilities.MCPHTTPRequired,
-				MCPHTTPBearerAuth:             info.Capabilities.MCPHTTPBearerAuth,
-				WorkspaceAuthoring:            info.Capabilities.WorkspaceAuthoring,
+				Streaming:                      info.Capabilities.Streaming,
+				Permissions:                    info.Capabilities.Permissions,
+				Usage:                          info.Capabilities.Usage,
+				Resume:                         info.Capabilities.Resume,
+				Steering:                       info.Capabilities.Steering,
+				DurableTurns:                   info.Capabilities.DurableTurns,
+				DurableInputReceipts:           info.Capabilities.DurableInputReceipts,
+				NativeSessionRecovery:          info.Capabilities.NativeSessionRecovery,
+				MessageItems:                   info.Capabilities.MessageItems,
+				ToolItems:                      info.Capabilities.ToolItems,
+				ToolObservations:               info.Capabilities.ToolObservations,
+				EnvironmentNone:                info.Capabilities.EnvironmentNone,
+				LocalEnvironment:               info.Capabilities.LocalEnvironment,
+				LocalEnvironmentNetworkPolicy:  info.Capabilities.LocalEnvironmentNetworkPolicy,
+				Preparation:                    info.Capabilities.Preparation,
+				WorkspaceReadPreparation:       info.Capabilities.WorkspaceReadPreparation,
+				WorkspaceOutputExport:          info.Capabilities.WorkspaceOutputExport,
+				WebSearchControl:               info.Capabilities.WebSearchControl,
+				ProgrammaticToolCallingDisable: info.Capabilities.ProgrammaticToolCallingDisable,
+				TextVerbosity:                  info.Capabilities.TextVerbosity,
+				StructuredOutput:               info.Capabilities.StructuredOutput,
+				ToolSearch:                     info.Capabilities.ToolSearch,
+				MessageImages:                  info.Capabilities.MessageImages,
+				FunctionResultImages:           info.Capabilities.FunctionResultImages,
+				ExecutionControls:              info.Capabilities.ExecutionControls,
+				SubagentControl:                info.Capabilities.SubagentControl,
+				SubagentObservations:           info.Capabilities.SubagentObservations,
+				FunctionTools:                  info.Capabilities.FunctionTools,
+				MCPHTTPTools:                   info.Capabilities.MCPHTTPTools,
+				MCPHTTPRequired:                info.Capabilities.MCPHTTPRequired,
+				MCPHTTPBearerAuth:              info.Capabilities.MCPHTTPBearerAuth,
+				WorkspaceAuthoring:             info.Capabilities.WorkspaceAuthoring,
 			},
 		})
 	}
@@ -585,6 +592,8 @@ func (s *Session) dispatch(env proto.Envelope) {
 	case proto.TypeWorkspaceReadResult:
 		s.dispatchWorkspaceRead(env)
 		return
+	case proto.TypeEnvironmentQuiesced, proto.TypeEnvironmentResumed:
+		s.dispatchSuspendReply(env)
 	case proto.TypePreparationStatus:
 		s.dispatchPreparation(env)
 		return

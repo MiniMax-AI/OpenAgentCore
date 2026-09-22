@@ -148,7 +148,7 @@ func TestPreparedRecoveryCannotStartWithoutExistingHistory(t *testing.T) {
 	defer p.Close()
 	assertPreparationOnly(t, root)
 	out := make(chan proto.Envelope, 16)
-	session, err := p.Start(t.Context(), "recovery-run", "continue", out)
+	session, err := p.Start(t.Context(), "recovery-run", proto.TextInput("continue"), out)
 	if err != nil {
 		t.Fatal(err)
 	}

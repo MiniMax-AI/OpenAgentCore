@@ -352,7 +352,7 @@ func TestSession_SendWritesToWire(t *testing.T) {
 	env, _ := proto.NewEnvelope(proto.TypePromptRequest, "run-1", proto.PromptRequestPayload{
 		AgentKind: "claude_code",
 		RunID:     "run-1",
-		Prompt:    "hello",
+		Input:     proto.TextInput("hello"),
 	})
 	if err := sess.Send(context.Background(), env); err != nil {
 		t.Fatalf("Send: %v", err)

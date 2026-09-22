@@ -101,7 +101,7 @@ func TestNativeMCodeACP(t *testing.T) {
 	req.AgentOptions["skills"] = []any{map[string]any{"name": "qa-mcode-skill", "version": "1", "download_url": skill.URL, "sha256": hex.EncodeToString(digest[:])}}
 	req.AgentOptions["mcp_servers"] = map[string]any{"qa": map[string]any{"type": "http", "url": mcp.URL}}
 	req.AgentOptions["system_prompt"] = "SP-MCODE-672: use the available tools when requested."
-	req.Prompt = "QA-CALL-MCP: call get_fixture, then reply PARSAR-MCODE-OK."
+	req.Input = proto.TextInput("QA-CALL-MCP: call get_fixture, then reply PARSAR-MCODE-OK.")
 	run := func() proto.DonePayload {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		t.Cleanup(cancel)
@@ -156,7 +156,7 @@ func TestNativeMCodeACP(t *testing.T) {
 	models["fixture-new"] = models["fixture"]
 	delete(models, "fixture")
 	req.AgentOptions["model"] = "fixture-new"
-	req.Prompt = "Now reply PARSAR-MCODE-OK."
+	req.Input = proto.TextInput("Now reply PARSAR-MCODE-OK.")
 	run()
 	mu.Lock()
 	resumed := strings.Join(requests, "\n")

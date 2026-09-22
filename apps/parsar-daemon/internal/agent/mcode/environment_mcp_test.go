@@ -110,7 +110,7 @@ func TestEnvironmentMCPCancelSettlesPendingObservationBeforeDone(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	out := make(chan proto.Envelope, 16)
-	session, err := resource.Start(ctx, "run", "invoke and wait", out)
+	session, err := resource.Start(ctx, "run", proto.TextInput("invoke and wait"), out)
 	if err != nil {
 		t.Fatal(err)
 	}

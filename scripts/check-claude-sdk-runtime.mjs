@@ -22,8 +22,8 @@ const probe = spawnSync(process.execPath, [join(root, "dist/runtime_check.js"), 
 assert.equal(probe.status, 0, "Exported runtime is unavailable");
 const report = JSON.parse(probe.stdout);
 assert.equal(report.type, "runtime_ready");
-assert.equal(report.protocol, 1);
-assert.deepEqual(report.features, [...(process.platform === "linux" ? ["workspace_directory", "local_runtime_v1", "workspace_functions"] : []), "structured_output", "subagent_resources", "mcp_http_tools", "mcp_http_bearer_auth", "mcp_http_required", "workspace_tools", "workspace_prepare", "workspace_read", "workspace_command_observations"]);
+assert.equal(report.protocol, 2);
+assert.deepEqual(report.features, [...(process.platform === "linux" ? ["workspace_directory", "local_runtime_v1", "workspace_functions", "workspace_structured_output"] : []), "message_images", "function_result_images", "tool_search", "structured_output", "subagent_resources", "mcp_http_tools", "mcp_http_bearer_auth", "mcp_http_required", "workspace_tools", "workspace_prepare", "workspace_read", "workspace_command_observations"]);
 assert.equal(report.sdk, source.dependencies["@anthropic-ai/claude-agent-sdk"]);
 assert.equal(report.mcp, source.dependencies["@modelcontextprotocol/sdk"]);
 console.log(`Verified exported SDK ${report.sdk}, MCP ${report.mcp}, ${report.native}`);

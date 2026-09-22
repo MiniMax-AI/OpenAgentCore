@@ -93,7 +93,7 @@ test("unmatched text cannot acquire an invented identity", () => {
 });
 
 test("observation opt-in is an optional boolean", () => {
-  const request = { type: "start", prompt: "hello", model: "model", system_prompt: "", cwd: "/tmp" };
+  const request = { type: "start", input: [{ content: [{ type: "input_text", text: "hello" }] }], model: "model", system_prompt: "", cwd: "/tmp" };
   assert.equal(parseStart(JSON.stringify(request)).observe_messages, undefined);
   assert.equal(parseStart(JSON.stringify({ ...request, observe_messages: true })).observe_messages, true);
   assert.throws(() => parseStart(JSON.stringify({ ...request, observe_messages: "true" })), /invalid_request/);

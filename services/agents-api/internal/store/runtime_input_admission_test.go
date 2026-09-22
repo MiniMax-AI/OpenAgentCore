@@ -7,13 +7,12 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
-func TestManagedRuntimeDisabledAdmissionPreservesCancelAndRetry(t *testing.T) {
-	s, _ := store.NewTestStore(t)
+func TestManagedRuntimeMaintenancePreservesCancelAndRetry(t *testing.T) {
+	s, _ := store.NewManagedTestStore(t)
 	tenant, session, _ := managedSession(t, s)
 	inputs := []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"accepted work"}`)}}
 	accepted, err := s.SubmitInputs(t.Context(), tenant, session.ID, "work", inputs)
@@ -21,10 +20,10 @@ func TestManagedRuntimeDisabledAdmissionPreservesCancelAndRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	w, stop := managedWorker(t, s, uuid.NewString(), p)
+	w, stop := managedWorkerMode(t, s, uuid.NewString(), p, true)
 	defer stop()
-	if _, err := w.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: session.Configuration}); !errors.Is(err, execution.ErrExecutionUnavailable) {
-		t.Fatal("disabled admission accepted new hosted Session", err)
+	if _, err := w.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: session.Configuration}); !errors.Is(err, store.ErrEnvironmentUnavailable) {
+		t.Fatal("maintenance accepted new hosted Session", err)
 	}
 	cancel := []store.Input{{Kind: "cancel", Payload: json.RawMessage(`{}`)}}
 	first, err := w.SubmitInputs(t.Context(), tenant, session.ID, "cancel", cancel)
@@ -40,7 +39,7 @@ func TestManagedRuntimeDisabledAdmissionPreservesCancelAndRetry(t *testing.T) {
 		t.Fatal("matching input retry lost its accepted outcome", retry, err)
 	}
 	if _, err := w.SubmitInputs(t.Context(), uuid.NewString(), session.ID, "cancel", cancel); !errors.Is(err, store.ErrNotFound) {
-		t.Fatal("disabled admission weakened tenant isolation", err)
+		t.Fatal("maintenance weakened tenant isolation", err)
 	}
 	if p.creates != 0 {
 		t.Fatal("existing controls provisioned a new Runtime")

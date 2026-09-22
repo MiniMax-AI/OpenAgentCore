@@ -18,7 +18,7 @@ func initialSessionInputs(raw json.RawMessage) ([]store.Input, error) {
 		if err := json.Unmarshal(raw, &text); err != nil {
 			return nil, store.ErrInvalidInput
 		}
-		raw, _ = json.Marshal([]v1.InputMessage{{Role: "user", Content: []v1.InputContent{{Type: "input_text", Text: text}}}})
+		raw, _ = json.Marshal([]v1.InputMessage{{Role: "user", Content: []v1.InputContent{{Type: "input_text", Text: &text}}}})
 	}
 	// Preserve the array's original fields for the shared strict message decoder.
 	event, err := json.Marshal(struct {

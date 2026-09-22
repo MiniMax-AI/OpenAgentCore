@@ -17,13 +17,13 @@ const { Inputs } = await import(${JSON.stringify(new URL("../dist/inputs.js", im
 const { FunctionBridge } = await import(${JSON.stringify(new URL("../dist/function_bridge.js", import.meta.url).href)});
 const mode = process.argv[1];
 const events = [];
-const inputs = new Inputs("opening text");
+const inputs = new Inputs([{ content: [{ type: "input_text", text: "opening text" }] }]);
 const abort = new AbortController();
 let invocation;
 let functions;
 const emit = async event => {
   events.push(event);
-  if (event.type === "input_ready") inputs.submit({type:"steer",input_id:"extra",text:"later text"});
+  if (event.type === "input_ready") inputs.submit({type:"steer",input_id:"extra",input:[{content:[{type:"input_text",text:"later text"}]}]});
   if (mode === "later-function" && event.type === "usage" && !invocation) {
     // The SDK dispatches MCP controls independently while the output consumer is
     // yielding the previous native turn's result. This call belongs to the next turn.
@@ -56,7 +56,7 @@ globalThis.queryFixture = ({prompt,options}) => {
     },
   };
 };
-await execute({type:"start",prompt:"opening text",model:"fixture",system_prompt:"",cwd:process.cwd(),
+await execute({type:"start",input: [{ content: [{ type: "input_text", text: "opening text" }] }],model:"fixture",system_prompt:"",cwd:process.cwd(),
   ...(mode === "later-function" ? {functions:[{name:"lookup",description:"fixture",parameters:{type:"object",properties:{}}}]} : {})},emit,abort,functions,inputs);
 assert.equal(inputs.complete,true);
 assert.equal(events.filter(e=>e.type === "input_applied" && e.input_id === "extra").length,1);

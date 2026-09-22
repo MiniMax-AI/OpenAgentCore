@@ -24,7 +24,7 @@ type prepared struct {
 
 type preparedStart struct {
 	runID  string
-	prompt string
+	prompt proto.MessageInput
 	out    chan<- proto.Envelope
 }
 
@@ -36,7 +36,7 @@ func NewPreparationFactory(config Config) agent.PreparationFactory {
 		if owner == nil {
 			owner = context.Background()
 		}
-		if config.Workspace == nil || req.RunID != "" || req.Prompt != "" || req.ConversationID != "" {
+		if config.Workspace == nil || req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" {
 			return nil, fmt.Errorf("claudesdk: preparation requires workspace configuration without input or conversation")
 		}
 		snapshot := config
@@ -52,6 +52,9 @@ func NewPreparationFactory(config Config) agent.PreparationFactory {
 		info, err := CheckRuntime(owner, snapshot)
 		if err != nil || !info.supportsWorkspacePreparation() {
 			return nil, fmt.Errorf("claudesdk: packaged runtime does not support workspace preparation")
+		}
+		if start.OutputFormat != nil && !info.SupportsWorkspaceStructuredOutput() {
+			return nil, fmt.Errorf("claudesdk: packaged runtime does not support workspace structured output")
 		}
 		if start.Subagents != nil && !info.SupportsSubagents() {
 			return nil, fmt.Errorf("claudesdk: packaged runtime does not support subagent resources")
@@ -84,7 +87,7 @@ func NewPreparationFactory(config Config) agent.PreparationFactory {
 }
 
 // Start transfers ownership once; ctx bounds this operation, not the Session lifetime.
-func (p *prepared) Start(ctx context.Context, runID, prompt string, out chan<- proto.Envelope) (agent.Session, error) {
+func (p *prepared) Start(ctx context.Context, runID string, prompt proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -94,7 +97,7 @@ func (p *prepared) Start(ctx context.Context, runID, prompt string, out chan<- p
 		return nil, fmt.Errorf("claudesdk: preparation is no longer available")
 	}
 	var err error
-	if strings.TrimSpace(runID) == "" || strings.TrimSpace(prompt) == "" || out == nil {
+	if strings.TrimSpace(runID) == "" || prompt.Validate() != nil || out == nil {
 		err = fmt.Errorf("claudesdk: start requires a run identity, prompt and output channel")
 	} else if ctx.Err() != nil {
 		err = ctx.Err()

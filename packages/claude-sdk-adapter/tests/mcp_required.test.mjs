@@ -36,7 +36,7 @@ function create(options){
    },
    async *[Symbol.asyncIterator](){
     const first=await pending;if(first.done)return;
-    assert.ok(readiness||mode==="optional");process.send({kind:"input",text:first.value.message.content});
+    assert.ok(readiness||mode==="optional");process.send({kind:"input",text:first.value.message.content[0].text});
     yield {type:"system",subtype:"init",session_id:mode==="wrong-history"?"foreign":"native",tools:["mcp__fixture__echo"],mcp_servers:[]};
     yield {type:"result",uuid:"result",session_id:"native",user_message_uuids:[first.value.uuid],subtype:"success",is_error:false,result:"done",usage:{input_tokens:1,output_tokens:1},modelUsage:{}};
    }
@@ -61,7 +61,7 @@ for (const mode of ["connected", "pending", "failed", "missing", "duplicate", "m
     const closed = new Promise(resolve => child.once("close", (code, signal) => resolve({ code, signal })));
     const timer = setTimeout(() => child.kill("SIGKILL"), 8000);
     try {
-      child.stdin.write(JSON.stringify({ type: "start", model: "fixed", prompt: "one input", system_prompt: "", cwd,
+      child.stdin.write(JSON.stringify({ type: "start", model: "fixed", input: [{ content: [{ type: "input_text", text: "one input" }] }], system_prompt: "", cwd,
         ...(mode.includes("history") || mode === "resume" ? { resume: "native" } : {}),
         mcp_http_servers: [{ server_label: "fixture", server_url: "https://example.invalid/mcp", allowed_tools: ["echo"], required: mode !== "optional" },
           { server_label: "optional", server_url: "https://optional.invalid/mcp", allowed_tools: [], required: false }] }) + "\n");

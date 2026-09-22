@@ -82,7 +82,7 @@ export class WorkspaceProfile {
   readonly options: Options;
   private readonly skillNames: readonly string[];
 
-  constructor(private readonly cwd: string, private readonly config: Workspace, private readonly functions: readonly string[] = [], private readonly mcp?: MCPProfile, private readonly subagents?: Subagents) {
+  constructor(private readonly cwd: string, private readonly config: Workspace, private readonly functions: readonly string[] = [], private readonly mcp?: MCPProfile, private readonly subagents?: Subagents, private readonly structuredOutput = false) {
     config = parseWorkspace(config, cwd)!;
     // SDK history lookup reads the bridge environment, independently of query.env.
     if (process.env.HOME !== config.home || process.env.CLAUDE_CONFIG_DIR !== config.state ||
@@ -144,7 +144,7 @@ export class WorkspaceProfile {
       this.mcp.verify(tools, servers as Parameters<MCPProfile["verify"]>[1], sessionID, [...nativeTools, ...(this.skillNames.length ? ["Skill"] : []), ...(this.subagents ? ["Task", "SendMessage"] : [])]);
       return;
     }
-    const expected = [...nativeTools, ...this.functions, ...(this.skillNames.length ? ["Skill"] : []), ...(this.subagents ? ["Task", "SendMessage"] : [])];
+    const expected = [...nativeTools, ...(this.structuredOutput ? ["StructuredOutput"] : []), ...this.functions, ...(this.skillNames.length ? ["Skill"] : []), ...(this.subagents ? ["Task", "SendMessage"] : [])];
     if (servers.length !== (this.functions.length ? 1 : 0) ||
         servers.some(server => server.name !== "functions" || server.status !== "connected") ||
         tools.length !== expected.length || new Set(tools).size !== tools.length ||
@@ -186,6 +186,7 @@ export class WorkspaceProfile {
   private permits(name: string, value: unknown): boolean {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
     const input = value as Record<string, unknown>;
+    if (this.structuredOutput && name === "StructuredOutput") return true;
     if (this.functions.includes(name) || this.mcp?.permits(name)) return true;
     if (name === "Skill") return typeof input.skill === "string" && this.skillNames.includes(input.skill);
     if (name === "Bash") return typeof input.command === "string" && !!input.command.trim() &&

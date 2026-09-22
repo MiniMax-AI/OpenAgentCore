@@ -33,7 +33,7 @@ func prepareOptionsWithSkills(ctx context.Context, req proto.PromptRequestPayloa
 			return result, err
 		}
 	}
-	if len(req.Attachments) > 0 {
+	if req.Input.HasImages() {
 		return result, fmt.Errorf("mcode: ACP does not support attachments")
 	}
 	root, err := agent.ManagedSkillsRoot("mcode", req.AgentStateKey, req.ConversationID, req.RunID)

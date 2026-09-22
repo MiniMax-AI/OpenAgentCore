@@ -16,15 +16,12 @@ func resolveFunctions(input []v1.FunctionToolInput) ([]json.RawMessage, error) {
 	}
 	names := make(map[string]bool, len(input))
 	for _, tool := range input {
-		value, deferred, err := resolveFunction(tool)
+		value, _, err := resolveFunction(tool)
 		if err != nil {
 			return nil, err
 		}
 		if strings.TrimSpace(*tool.Name) == "" || len(*tool.Name) > 512 || names[*tool.Name] {
 			return nil, errors.New("Function names must be nonempty, unique and at most 512 bytes.")
-		}
-		if deferred {
-			return nil, errors.New("Deferred function discovery is not supported by this service yet.")
 		}
 
 		names[*tool.Name] = true

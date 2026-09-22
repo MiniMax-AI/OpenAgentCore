@@ -39,7 +39,7 @@ func TestSteeringReceiptsAndRetries(t *testing.T) {
 						if _, ok := ctx.Deadline(); !ok {
 							t.Error("native request has no deadline")
 						}
-						if input.InputID != "input-1" || input.Text != "additional text" {
+						if input.InputID != "input-1" || *input.Input[0].Content[0].Text != "additional text" {
 							t.Errorf("input lost: %+v", input)
 						}
 						if len(h.sender.snapshot()) != 0 {
@@ -53,7 +53,7 @@ func TestSteeringReceiptsAndRetries(t *testing.T) {
 			if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "run-1", proto.PromptRequestPayload{AgentKind: "codex"})); err != nil {
 				t.Fatal(err)
 			}
-			input := proto.PromptSteerPayload{InputID: "input-1", Text: "additional text"}
+			input := proto.PromptSteerPayload{InputID: "input-1", Input: proto.TextInput("additional text")}
 			env := mustEnv(t, proto.TypePromptSteer, "run-1", input)
 			// An ack transport failure must not cause another native invocation.
 			h.sender.failNow = true
@@ -73,7 +73,7 @@ func TestSteeringReceiptsAndRetries(t *testing.T) {
 					t.Fatalf("uncertainty lost: %+v", ack)
 				}
 			}
-			input.Text = "changed text"
+			input.Input = proto.TextInput("changed text")
 			if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run-1", input)); err != nil {
 				t.Fatal(err)
 			}
@@ -107,7 +107,7 @@ func TestSteeringReadinessAndUnsupportedRuns(t *testing.T) {
 	if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "run-1", proto.PromptRequestPayload{AgentKind: "codex"})); err != nil {
 		t.Fatal(err)
 	}
-	input := proto.PromptSteerPayload{InputID: "input-1", Text: "extra"}
+	input := proto.PromptSteerPayload{InputID: "input-1", Input: proto.TextInput("extra")}
 	env := mustEnv(t, proto.TypePromptSteer, "run-1", input)
 	for _, expected := range []string{"not_ready", ""} {
 		if err := handleSteeringAndWait(t, h, env); err != nil {
@@ -117,7 +117,7 @@ func TestSteeringReadinessAndUnsupportedRuns(t *testing.T) {
 			t.Fatalf("expected %q: %+v", expected, ack)
 		}
 		if expected == "not_ready" {
-			changed := proto.PromptSteerPayload{InputID: "input-1", Text: "different during startup"}
+			changed := proto.PromptSteerPayload{InputID: "input-1", Input: proto.TextInput("different during startup")}
 			if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run-1", changed)); err != nil {
 				t.Fatal(err)
 			}
@@ -147,7 +147,7 @@ func TestSteeringReadinessAndUnsupportedRuns(t *testing.T) {
 	if ack := lastSteeringAck(t, h.sender, "run-2", "input-1"); ack.ErrorCode != "unsupported" {
 		t.Fatalf("unsupported: %+v", ack)
 	}
-	input.Text = " \n "
+	input.Input = proto.TextInput(" \n ")
 	if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run-2", input)); err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestSteeringDoesNotBlockOtherRunCancellation(t *testing.T) {
 	other.closeOutOnCancel = true
 	returned := make(chan error, 1)
 	go func() {
-		returned <- h.router.Handle(ctx, mustEnv(t, proto.TypePromptSteer, "run-1", proto.PromptSteerPayload{InputID: "slow", Text: "extra"}))
+		returned <- h.router.Handle(ctx, mustEnv(t, proto.TypePromptSteer, "run-1", proto.PromptSteerPayload{InputID: "slow", Input: proto.TextInput("extra")}))
 	}()
 	select {
 	case err := <-returned:
@@ -238,7 +238,7 @@ func TestSteeringCapacityPreservesExistingReceipts(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := range 257 {
-		input := proto.PromptSteerPayload{InputID: fmt.Sprintf("input-%d", i), Text: "extra"}
+		input := proto.PromptSteerPayload{InputID: fmt.Sprintf("input-%d", i), Input: proto.TextInput("extra")}
 		if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run-1", input)); err != nil {
 			t.Fatal(err)
 		}
@@ -247,7 +247,7 @@ func TestSteeringCapacityPreservesExistingReceipts(t *testing.T) {
 			t.Fatalf("input %d: %+v", i, ack)
 		}
 	}
-	if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run-1", proto.PromptSteerPayload{InputID: "input-0", Text: "extra"})); err != nil {
+	if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run-1", proto.PromptSteerPayload{InputID: "input-0", Input: proto.TextInput("extra")})); err != nil {
 		t.Fatal(err)
 	}
 	if ack := lastSteeringAck(t, h.sender, "run-1", "input-0"); !ack.Accepted || calls != 256 {

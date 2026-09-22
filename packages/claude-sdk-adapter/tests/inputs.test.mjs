@@ -3,10 +3,10 @@ import test from "node:test";
 import { Inputs } from "../dist/inputs.js";
 
 const result = (ids, session_id = "native") => ({ type: "result", session_id, user_message_uuids: ids });
-const steer = (input_id, text = "additional text") => ({ type: "steer", input_id, text });
+const steer = (input_id, text = "additional text") => ({ type: "steer", input_id, input: [{ content: [{ type: "input_text", text }] }] });
 
 test("queued input survives the first result and completes only with its own native result", async () => {
-  const inputs = new Inputs("opening text");
+  const inputs = new Inputs([{ content: [{ type: "input_text", text: "opening text" }] }]);
   const stream = inputs[Symbol.asyncIterator]();
   const first = (await stream.next()).value;
   assert.deepEqual(inputs.start("native"), [{ type: "input_ready", session_id: "native" }]);
@@ -18,7 +18,7 @@ test("queued input survives the first result and completes only with its own nat
   assert.throws(() => inputs.start("different"), /identity/);
   const second = (await stream.next()).value;
   assert.equal(second.session_id, "native");
-  assert.equal(second.message.content, "additional text");
+  assert.equal(second.message.content[0].text, "additional text");
   assert.notEqual(second.uuid, first.uuid);
   assert.deepEqual(inputs.consume({ type: "assistant", parent_tool_use_id: null, session_id: "native", user_message_uuid: second.uuid }), [{ type: "input_applied", input_id: "second" }]);
   assert.equal(inputs.complete, false);
@@ -29,7 +29,7 @@ test("queued input survives the first result and completes only with its own nat
 });
 
 test("native folds confirm all consumed UUIDs, never queue/user echoes or unrelated frames", async () => {
-  const inputs = new Inputs("first");
+  const inputs = new Inputs([{ content: [{ type: "input_text", text: "first" }] }]);
   const stream = inputs[Symbol.asyncIterator]();
   const first = (await stream.next()).value;
   inputs.start("native"); inputs.submit(steer("fold"));
@@ -51,7 +51,7 @@ test("native folds confirm all consumed UUIDs, never queue/user echoes or unrela
 });
 
 test("reject before readiness, repeated identities and native receipt capacity without enqueueing", async () => {
-  const inputs = new Inputs("first");
+  const inputs = new Inputs([{ content: [{ type: "input_text", text: "first" }] }]);
   assert.deepEqual(inputs.submit(steer("early")), [{ type: "input_rejected", input_id: "early" }]);
   inputs.start("native");
   for (let i = 0; i < 63; i++) assert.deepEqual(inputs.submit(steer(String(i))), []);
@@ -62,4 +62,53 @@ test("reject before readiness, repeated identities and native receipt capacity w
   let count = 0; for await (const _ of inputs) count++;
   assert.equal(count, 64);
   assert.equal(inputs.complete, false);
+});
+
+test("ordered image batches keep message boundaries and aggregate native consumption", async () => {
+  const { textInput } = await import("../dist/message_input.js");
+  const inputs = new Inputs(textInput("opening"));
+  const stream = inputs[Symbol.asyncIterator]();
+  const first = (await stream.next()).value;
+  inputs.start("native");
+  const input = [{ content: [
+    { type: "input_text", text: " before " },
+    { type: "input_image", image_url: "data:image/png;base64,aW1hZ2U=" },
+    { type: "input_text", text: " after " },
+  ] }, ...textInput("second message")];
+  assert.deepEqual(inputs.submit({ type: "steer", input_id: "batch", input }), []);
+  const a = (await stream.next()).value, b = (await stream.next()).value;
+  assert.deepEqual(a.message.content, [
+    { type: "text", text: " before " },
+    { type: "image", source: { type: "base64", media_type: "image/png", data: "aW1hZ2U=" } },
+    { type: "text", text: " after " },
+  ]);
+  assert.deepEqual(b.message.content, [{ type: "text", text: "second message" }]);
+  assert.deepEqual(inputs.consume(result([first.uuid, a.uuid])), []);
+  assert.equal(inputs.complete, false);
+  assert.deepEqual(inputs.consume({ type: "assistant", parent_tool_use_id: null, session_id: "native", user_message_uuids: [a.uuid] }), []);
+  assert.deepEqual(inputs.consume(result([b.uuid])), [
+    { type: "input_closed", session_id: "native" }, { type: "input_applied", input_id: "batch" },
+  ]);
+});
+
+test("native UUID capacity rejects a whole batch and partial consumption does not apply it", async () => {
+  const { textInput } = await import("../dist/message_input.js");
+  const inputs = new Inputs(Array.from({ length: 63 }, () => textInput("opening")[0]));
+  inputs.start("native");
+  const pair = [...textInput("a"), ...textInput("b")];
+  assert.deepEqual(inputs.submit({ type: "steer", input_id: "overflow", input: pair }), [{ type: "input_rejected", input_id: "overflow" }]);
+  assert.deepEqual(inputs.submit(steer("last")), []);
+  inputs.close();
+  const queued = []; for await (const message of inputs) queued.push(message);
+  assert.equal(queued.length, 64);
+  assert.throws(() => new Inputs([...pair, ...Array.from({ length: 63 }, () => textInput("x")[0])]), /Invalid/);
+
+  const partial = new Inputs(textInput("opening"));
+  const stream = partial[Symbol.asyncIterator]();
+  await stream.next(); partial.start("native");
+  partial.submit({ type: "steer", input_id: "partial", input: pair });
+  const first = (await stream.next()).value;
+  assert.deepEqual(partial.consume(result([first.uuid])), []);
+  partial.close();
+  assert.equal(partial.complete, false);
 });

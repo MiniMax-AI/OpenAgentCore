@@ -248,11 +248,15 @@ func (s *Session) prepareNative() error {
 }
 
 func (s *Session) executePrompt() error {
+	prompt, err := s.req.Input.TextOnly()
+	if err != nil {
+		return err
+	}
 	s.active = true
 	var result struct {
 		StopReason string `json:"stopReason"`
 	}
-	err := s.call("session/prompt", map[string]any{"sessionId": s.sessionID, "prompt": promptContent(s.req.Prompt, s.req.StrictResume)}, &result, true)
+	err = s.call("session/prompt", map[string]any{"sessionId": s.sessionID, "prompt": promptContent(prompt, s.req.StrictResume)}, &result, true)
 	s.active = false
 	s.mu.Lock()
 	s.steeringReady = false

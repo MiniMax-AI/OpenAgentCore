@@ -16,6 +16,12 @@ import (
 // RuntimeAllocation retains compute ownership, not public readiness. It survives
 // Session deletion until cleanup is confirmed. No bootstrap secret is retained.
 type RuntimeAllocation struct {
+	ComputePhase                                                  string
+	ComputeRevision                                               int64
+	ComputeState                                                  json.RawMessage
+	ComputeActivityAt                                             time.Time
+	ComputeWakeRequested                                          bool
+	ComputeRetainedUntil                                          *time.Time
 	ID, EnvironmentID, SessionID, TenantID, DeviceID, ProviderKey string
 	Initialization                                                string
 	State                                                         string
@@ -63,6 +69,9 @@ func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environmen
 			return nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		if err := checkRuntimeDeploymentAdmission(ctx, q, providerKey); err != nil {
 			return err
 		}
 		current, err := q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: lookup.TenantID, ID: session})
@@ -131,7 +140,14 @@ func (s *Store) ListRuntimeAllocations(ctx context.Context, after string) ([]Run
 }
 
 func runtimeAllocationFromRow(row sqlc.RuntimeAllocation, session, tenant pgtype.UUID, deleted pgtype.Timestamptz, expired bool) RuntimeAllocation {
+	var retainedUntil *time.Time
+	if row.ComputeRetainedUntil.Valid {
+		value := row.ComputeRetainedUntil.Time
+		retainedUntil = &value
+	}
 	return RuntimeAllocation{
+		ComputePhase: row.ComputePhase, ComputeRevision: row.ComputeRevision, ComputeState: row.ComputeState,
+		ComputeActivityAt: row.ComputeActivityAt.Time, ComputeWakeRequested: row.ComputeWakeRequested, ComputeRetainedUntil: retainedUntil,
 		ID: uuid.UUID(row.ID.Bytes).String(), EnvironmentID: uuid.UUID(row.EnvironmentID.Bytes).String(),
 		SessionID: uuid.UUID(session.Bytes).String(), TenantID: uuid.UUID(tenant.Bytes).String(),
 		DeviceID: uuid.UUID(row.DeviceID.Bytes).String(), ProviderKey: uuid.UUID(row.ProviderKey.Bytes).String(),
@@ -143,7 +159,7 @@ func runtimeAllocationFromRow(row sqlc.RuntimeAllocation, session, tenant pgtype
 // UnallocatedHostedEnvironment is a committed resource awaiting service bootstrap.
 // A missing allocation is distinct from an unknown outcome of an existing Create.
 type UnallocatedHostedEnvironment struct {
-	ID, TenantID, Engine string
+	ID, TenantID string
 }
 
 func (s *Store) ListUnallocatedHostedEnvironments(ctx context.Context, after string) ([]UnallocatedHostedEnvironment, error) {
@@ -164,7 +180,7 @@ func (s *Store) ListUnallocatedHostedEnvironments(ctx context.Context, after str
 	}
 	result := make([]UnallocatedHostedEnvironment, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, UnallocatedHostedEnvironment{Engine: row.Engine, ID: uuid.UUID(row.ID.Bytes).String(), TenantID: uuid.UUID(row.TenantID.Bytes).String()})
+		result = append(result, UnallocatedHostedEnvironment{ID: uuid.UUID(row.ID.Bytes).String(), TenantID: uuid.UUID(row.TenantID.Bytes).String()})
 	}
 	return result, nil
 }

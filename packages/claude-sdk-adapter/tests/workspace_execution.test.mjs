@@ -21,7 +21,7 @@ const dirs = Object.fromEntries(["workspace", "home", "state", "scratch", "deps"
 const mode = process.argv[1];
 const workspace = { home: dirs.home, state: dirs.state, scratch: dirs.scratch,
   protected_dirs: [], dependency_path: dirs.deps, env_names: ["ANTHROPIC_API_KEY"] };
-const request = { type: "start", prompt: "fixture", model: "fixture", system_prompt: "", cwd: dirs.workspace,
+const request = { type: "start", input: [{ content: [{ type: "input_text", text: "fixture" }] }], model: "fixture", system_prompt: "", cwd: dirs.workspace,
   workspace, ...(mode.startsWith("resume") ? { resume: "native" } : {}) };
 process.env.HOME = dirs.home;
 process.env.CLAUDE_CONFIG_DIR = dirs.state;

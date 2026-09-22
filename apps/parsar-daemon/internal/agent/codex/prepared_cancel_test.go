@@ -40,7 +40,7 @@ func TestPreparedCancelUnusedWaitsForCleanup(t *testing.T) {
 		t.Fatal("cancellation did not begin cleanup")
 	}
 	out := make(chan proto.Envelope, 8)
-	if s, err := p.Start(t.Context(), "late", "must not execute", out); err == nil || s != nil {
+	if s, err := p.Start(t.Context(), "late", proto.TextInput("must not execute"), out); err == nil || s != nil {
 		t.Fatal("cancellation did not fence Start")
 	}
 	select {
@@ -83,7 +83,7 @@ func TestPreparedCancelTransferredPreservesObservedOutcome(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer p.Cancel(context.Background())
-	started, err := p.Start(t.Context(), "run", "prompt", make(chan proto.Envelope, 16))
+	started, err := p.Start(t.Context(), "run", proto.TextInput("prompt"), make(chan proto.Envelope, 16))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func TestPreparedCancelTransferredWaitsForCleanup(t *testing.T) {
 	p.session.cleanup = sync.OnceFunc(func() { close(entered); <-release; cleanup() })
 	p.plan.Cleanup = p.session.cleanup
 	out := make(chan proto.Envelope, 16)
-	if _, err := p.Start(t.Context(), "run", "prompt", out); err != nil {
+	if _, err := p.Start(t.Context(), "run", proto.TextInput("prompt"), out); err != nil {
 		t.Fatal(err)
 	}
 	waitPreparationMethod(t, root, "turn/start")
@@ -201,7 +201,7 @@ func TestPreparedCancelRacingTransfer(t *testing.T) {
 		var calls sync.WaitGroup
 		calls.Go(func() {
 			<-begin
-			_, _ = p.Start(t.Context(), "run", "prompt", make(chan proto.Envelope, 16))
+			_, _ = p.Start(t.Context(), "run", proto.TextInput("prompt"), make(chan proto.Envelope, 16))
 		})
 		calls.Go(func() { <-begin; _ = p.Cancel(context.Background()) })
 		calls.Go(func() { <-begin; _ = p.Close() })
@@ -221,7 +221,7 @@ func TestPreparedCancelRacingTransfer(t *testing.T) {
 			assertUnstartedCancellation(t, p)
 		}
 		waitPreparedRelease(t, p, root)
-		if s, err := p.Start(t.Context(), "again", "must not execute", make(chan proto.Envelope, 8)); err == nil || s != nil {
+		if s, err := p.Start(t.Context(), "again", proto.TextInput("must not execute"), make(chan proto.Envelope, 8)); err == nil || s != nil {
 			t.Fatal("cancelled preparation started again")
 		}
 	}

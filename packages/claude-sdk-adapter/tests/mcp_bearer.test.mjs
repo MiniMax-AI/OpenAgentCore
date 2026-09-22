@@ -5,7 +5,7 @@ import { MCPProfile } from "../dist/mcp.js";
 
 const reference = "PARSAR_MCP_BEARER_" + "A".repeat(26);
 const server = { server_label: "private", server_url: "https://example.invalid/mcp", allowed_tools: ["echo.v1"], bearer_token_env_var: reference };
-const start = servers => ({ type: "start", prompt: "hello", model: "fixture", system_prompt: "", cwd: "/tmp", mcp_http_servers: servers });
+const start = servers => ({ type: "start", input: [{ content: [{ type: "input_text", text: "hello" }] }], model: "fixture", system_prompt: "", cwd: "/tmp", mcp_http_servers: servers });
 
 test("bearer references remain literal in native configuration and private status is not retained", t => {
   const token = "fixture-private-bearer+/==";

@@ -33,11 +33,11 @@ func NewFactory(config Config) agent.Factory {
 			return nil, fmt.Errorf("claudesdk: output channel is required")
 		}
 		if config.Workspace != nil {
-			runID, prompt := req.RunID, req.Prompt
-			if strings.TrimSpace(runID) == "" || strings.TrimSpace(prompt) == "" {
+			runID, prompt := req.RunID, req.Input
+			if strings.TrimSpace(runID) == "" || prompt.Validate() != nil {
 				return nil, fmt.Errorf("claudesdk: run id and prompt are required")
 			}
-			req.RunID, req.Prompt = "", ""
+			req.RunID, req.Input = "", nil
 			prepared, err := NewPreparationFactory(config)(ctx, req)
 			if err != nil {
 				return nil, err
@@ -148,9 +148,9 @@ func (s *session) run(ctx context.Context, runID string, start startRequest, out
 		runID, out = binding.runID, binding.out
 		s.writeMu.Lock()
 		err = json.NewEncoder(s.process.Stdin).Encode(struct {
-			Type   string `json:"type"`
-			Prompt string `json:"prompt"`
-		}{Type: "start", Prompt: binding.prompt})
+			Type  string             `json:"type"`
+			Input proto.MessageInput `json:"input"`
+		}{Type: "start", Input: binding.prompt})
 		s.writeMu.Unlock()
 		if err != nil {
 			failure = fmt.Errorf("claudesdk: cannot submit SDK input")

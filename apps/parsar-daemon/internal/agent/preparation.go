@@ -14,7 +14,7 @@ type Prepared interface {
 	// Start transfers output ownership only when it returns a non-nil Session.
 	// A nil Session leaves the caller as the sole owner of closing out, and the
 	// implementation must not retain or write to it after Start returns.
-	Start(context.Context, string, string, chan<- proto.Envelope) (Session, error)
+	Start(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (Session, error)
 	// Close retains unused ownership on error; callers may retry settlement.
 	Close() error
 }

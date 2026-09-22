@@ -63,14 +63,14 @@ func normalizeToolObservation(id, stage string, raw json.RawMessage) (*proto.Too
 				out.Status = "failed"
 			}
 			if n.ContentItems != nil {
-				content := make([]proto.FunctionResultContent, 0, len(*n.ContentItems))
+				content := make([]proto.InputContent, 0, len(*n.ContentItems))
 				for _, part := range *n.ContentItems {
-					var value proto.FunctionResultContent
+					var value proto.InputContent
 					switch part.Type {
 					case "inputText":
-						value = proto.FunctionResultContent{Type: "input_text", Text: part.Text}
+						value = proto.InputContent{Type: "input_text", Text: part.Text}
 					case "inputImage":
-						value = proto.FunctionResultContent{Type: "input_image", ImageURL: part.ImageURL}
+						value = proto.InputContent{Type: "input_image", ImageURL: part.ImageURL}
 					default:
 						return nil, errors.New("unsupported function result content")
 					}

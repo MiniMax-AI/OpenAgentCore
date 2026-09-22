@@ -31,6 +31,9 @@ func (s *sender) Send(_ context.Context, e proto.Envelope) error {
 type harness struct{ history map[string]string }
 
 func (h *harness) start(_ context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	if _, err := req.Input.TextOnly(); err != nil {
+		return nil, err
+	}
 	if !req.StrictResume || !req.ReleaseOnCompletion || !req.DisableExecutionEnvironment || !req.DisableSubagents || len(req.FunctionTools) > 0 || req.MCPHTTPServers != nil {
 		return nil, errors.New("unsupported fixture operation")
 	}
@@ -75,14 +78,18 @@ func (s *session) Steer(ctx context.Context, p proto.PromptSteerPayload) error {
 	return s.SteerWithReceipt(ctx, p, func() {})
 }
 func (s *session) SteerWithReceipt(_ context.Context, p proto.PromptSteerPayload, written func()) error {
+	text, err := p.Input.TextOnly()
+	if err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
 		return agent.ErrSteeringInactive
 	}
 	written()
-	s.emit(proto.TypeDelta, proto.DeltaPayload{Delta: p.Text, Sequence: 2})
-	s.emit(proto.TypeDone, proto.DonePayload{Content: "ready" + p.Text, Metadata: map[string]any{proto.DoneMetaAgentSessionID: s.native}})
+	s.emit(proto.TypeDelta, proto.DeltaPayload{Delta: text, Sequence: 2})
+	s.emit(proto.TypeDone, proto.DonePayload{Content: "ready" + text, Metadata: map[string]any{proto.DoneMetaAgentSessionID: s.native}})
 	s.closed = true
 	close(s.out)
 	return nil

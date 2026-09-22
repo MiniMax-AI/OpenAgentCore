@@ -20,8 +20,9 @@ type InputMessage struct {
 }
 
 type InputContent struct {
-	Type string `json:"type" enums:"input_text" binding:"required"`
-	Text string `json:"text" binding:"required"`
+	Type     string  `json:"type" enums:"input_text,input_image" binding:"required"`
+	Text     *string `json:"text,omitempty"`
+	ImageURL *string `json:"image_url,omitempty"`
 }
 
 type CreateEventsRequest struct {

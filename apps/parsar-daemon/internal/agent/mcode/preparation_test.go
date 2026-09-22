@@ -16,7 +16,7 @@ import (
 func workspaceFixture(t *testing.T) (WorkspaceConfig, proto.PromptRequestPayload, string) {
 	t.Helper()
 	r := executionRequest(t)
-	r.RunID, r.Prompt, r.ConversationID = "", "", ""
+	r.RunID, r.Input, r.ConversationID = "", nil, ""
 	r.DisableExecutionEnvironment = false
 	r.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "disabled"}
 	r.WorkDir = t.TempDir()
@@ -56,7 +56,11 @@ func TestPreparedWorkspaceHasOneInputAndOutputOwner(t *testing.T) {
 	winners := make(chan bool, 8)
 	for range 8 {
 		wg.Add(1)
-		go func() { defer wg.Done(); _, err := p.Start(ctx, "run", "input", out); winners <- err == nil }()
+		go func() {
+			defer wg.Done()
+			_, err := p.Start(ctx, "run", proto.TextInput("input"), out)
+			winners <- err == nil
+		}()
 	}
 	wg.Wait()
 	close(winners)
@@ -114,7 +118,7 @@ func TestPreparedWorkspaceCloseBeforeStart(t *testing.T) {
 	if err = resource.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = resource.Start(ctx, "run", "input", make(chan proto.Envelope)); err == nil {
+	if _, err = resource.Start(ctx, "run", proto.TextInput("input"), make(chan proto.Envelope)); err == nil {
 		t.Fatal("released preparation started")
 	}
 	if err = resource.Close(); err != nil {

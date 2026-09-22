@@ -57,7 +57,7 @@ func TestLocalDirectoryPreparationNeedsNoHarnessAndRejectsOtherOwners(t *testing
 	if got := waitWorkspaceRead(t, sender, "foreign"); got.Outcome != "rejected" {
 		t.Fatal("foreign directory accepted", got)
 	}
-	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionStart, "idle", proto.ExecutionStartPayload{Handle: ready.Handle, RunID: "forbidden", Prompt: "work"})); err == nil {
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionStart, "idle", proto.ExecutionStartPayload{Handle: ready.Handle, RunID: "forbidden", Input: proto.TextInput("work")})); err == nil {
 		t.Fatal("read preparation admitted execution")
 	}
 	bad := request

@@ -26,6 +26,7 @@ func discoverMCode(rc *runContext, check func(context.Context, string) (string, 
 		result.Capabilities.DurableTurns = true
 		result.Capabilities.DurableInputReceipts = true
 		result.Capabilities.ExecutionControls = true
+		result.Capabilities.ProgrammaticToolCallingDisable = true
 		result.Capabilities.ToolObservations = true
 		result.Capabilities.SubagentControl = true
 		// Native preparation verifies the applied admission/tool profile before input.

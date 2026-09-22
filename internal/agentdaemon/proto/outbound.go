@@ -50,16 +50,8 @@ type PromptRequestPayload struct {
 	// upstream frame via Envelope.ID.
 	RunID string `json:"run_id"`
 
-	// Prompt is the user-facing message that drives this turn.
-	Prompt string `json:"prompt"`
-
-	// Attachments carries non-text payloads (images from inbound
-	// messages) alongside Prompt. The daemon-side agent decides how
-	// to fold them in: claude_code re-encodes them into Anthropic
-	// image content blocks on the stdin-driven JSON input loop.
-	// Silently ignored when the agent doesn't understand multimodal
-	// input — Prompt alone still drives the run.
-	Attachments []PromptAttachment `json:"attachments,omitempty"`
+	// Input preserves ordered user messages and content.
+	Input MessageInput `json:"input,omitempty"`
 
 	// WorkDir is the cwd for the agent subprocess. Local mode: user's
 	// chosen project root. Sandbox mode: empty — the daemon falls
@@ -98,23 +90,9 @@ type PromptRequestPayload struct {
 	ObserveToolObservations      bool           `json:"observe_tool_observations,omitempty"`
 	ObserveSubagentIdentities    bool           `json:"observe_subagent_identities,omitempty"`
 	FunctionTools                []FunctionTool `json:"function_tools,omitempty"`
+	ToolSearch                   bool           `json:"tool_search,omitempty"`
 	DisableExecutionEnvironment  bool           `json:"disable_execution_environment,omitempty"`
 	DisableSubagents             bool           `json:"disable_subagents,omitempty"`
-}
-
-// PromptAttachment is one piece of non-text user input the daemon-side
-// agent should fold into the turn alongside Prompt. The field set is
-// forward-compatible with file/audio so a wire-schema bump isn't
-// required when those land.
-//
-// DataBase64 is standard-base64 raw bytes; the daemon decodes once
-// before forwarding to its agent adapter (claude_code re-wraps as an
-// Anthropic image content block on stdin). MIME is forwarded verbatim
-// so the agent picks the right block shape (image/png vs image/jpeg).
-type PromptAttachment struct {
-	Kind       string `json:"kind"`
-	MIME       string `json:"mime"`
-	DataBase64 string `json:"data_base64"`
 }
 
 // PromptCancelPayload optionally requests an application receipt; identity is on Envelope.ID.
@@ -171,9 +149,10 @@ type DeviceShutdownPayload struct {
 // ExecutionControls requires both values when supplied; omitting the block preserves agent options.
 // Send only to a peer advertising execution_controls, independently of older option capabilities.
 type ExecutionControls struct {
-	WebSearch     string        `json:"web_search"`
-	TextVerbosity string        `json:"text_verbosity"`
-	OutputFormat  *OutputFormat `json:"output_format,omitempty"`
+	DisableProgrammaticToolCalling bool          `json:"disable_programmatic_tool_calling,omitempty"`
+	WebSearch                      string        `json:"web_search"`
+	TextVerbosity                  string        `json:"text_verbosity"`
+	OutputFormat                   *OutputFormat `json:"output_format,omitempty"`
 }
 
 // OutputFormat passes the public schema unchanged to a qualified native adapter.

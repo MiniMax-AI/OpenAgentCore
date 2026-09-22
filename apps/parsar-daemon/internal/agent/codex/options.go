@@ -213,18 +213,6 @@ func BuildSessionPlan(runID, agentStateKey, workDir string, opts map[string]any)
 	return plan, nil
 }
 
-// FirstUserInput translates the prompt text + attachments into the
-// turn/start payload. Today only text is honoured; image / file
-// attachments arrive as proto.PromptAttachment but aren't surfaced to
-// the codex CLI yet — TODO once the daemon writes them to disk.
-func FirstUserInput(prompt string) []UserInput {
-	prompt = strings.TrimSpace(prompt)
-	if prompt == "" {
-		return nil
-	}
-	return []UserInput{{Type: UserInputText, Text: prompt}}
-}
-
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------

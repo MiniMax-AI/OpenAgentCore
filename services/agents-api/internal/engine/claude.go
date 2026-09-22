@@ -11,15 +11,21 @@ import (
 
 func claudeProfile() Profile {
 	return Profile{
-		StructuredOutput: true,
-		Placements:       []string{"none", "openai_hosted", "self_hosted"}, MCPBearer: true,
+		ProgrammaticToolCallingDisable: true,
+		StructuredOutput:               true,
+		ToolSearch:                     true,
+		MessageImagePlacements:         []string{"none", "openai_hosted"},
+		Placements:                     []string{"none", "openai_hosted", "self_hosted"}, MCPBearer: true,
 		ValidateConfiguration: validateClaudeConfiguration,
 		ValidateTools:         validateClaudeTools,
-		ValidateFunctionResult: func(content []proto.FunctionResultContent) error {
-			for _, part := range content {
-				if part.Type != "input_text" {
+		ValidateFunctionResult: func(placement string, result proto.FunctionResultPayload) error {
+			for _, part := range result.Content {
+				if part.Type == "input_image" && (!result.Success || (placement != "none" && placement != "openai_hosted")) {
 					return ErrInvalidInput
 				}
+			}
+			if (proto.MessageInput{{Content: result.Content}}).ValidateInlineImages() != nil {
+				return ErrInvalidInput
 			}
 			return nil
 		},
@@ -40,19 +46,36 @@ func validateClaudeConfiguration(agent v1.Agent, environment *v1.Environment, ha
 		if err := proto.ValidateBinary64Schema(agent.Text.Format.Schema); err != nil {
 			return err
 		}
-		if environment.Type != "none" || agent.MultiAgent.Enabled {
-			return errors.New("Structured output currently requires a single-agent environment:none profile.")
+		if (environment.Type != "none" && environment.Type != "openai_hosted") || agent.MultiAgent.Enabled {
+			return errors.New("Structured output requires a qualified single-agent placement.")
+		}
+		if len(environment.Skills) != 0 || len(environment.Plugins) != 0 || len(environment.CapabilityDirectories) != 0 {
+			return errors.New("Structured output with environment Skills or Plugins is not qualified.")
 		}
 		for _, raw := range agent.Tools {
 			var tool struct {
 				Type string `json:"type"`
 			}
-			if json.Unmarshal(raw, &tool) != nil || tool.Type != "function" {
+			if json.Unmarshal(raw, &tool) != nil || (tool.Type != "function" && tool.Type != "web_search" && tool.Type != "programmatic_tool_calling") {
 				return ErrInvalidInput
 			}
 		}
 	} else if agent.Text.Format.Type != "" && agent.Text.Format.Type != "text" {
 		return ErrInvalidInput
+	}
+	search, otherTools := false, false
+	for _, raw := range agent.Tools {
+		var tool struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(raw, &tool) != nil {
+			return ErrInvalidInput
+		}
+		search = search || tool.Type == "tool_search"
+		otherTools = otherTools || (tool.Type != "function" && tool.Type != "tool_search" && tool.Type != "web_search" && tool.Type != "programmatic_tool_calling")
+	}
+	if search && (environment.Type != "none" || agent.MultiAgent.Enabled || otherTools || agent.Text.Format.Type == "json_schema") {
+		return errors.New("Tool discovery currently requires a single-agent environment:none function profile.")
 	}
 	return rejectSubagentTools(agent, "function", "mcp")
 }

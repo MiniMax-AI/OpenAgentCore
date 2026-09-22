@@ -6,16 +6,12 @@
 package claudecode
 
 import (
-	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 )
 
 // BuildResult is the output of BuildArgs. Cleanup is always non-nil
@@ -285,62 +281,4 @@ type userContentSource struct {
 	Type      string `json:"type"`
 	MediaType string `json:"media_type"`
 	Data      string `json:"data"`
-}
-
-func buildUserMessage(prompt string) ([]byte, error) {
-	return buildUserMessageWithAttachments(prompt, nil)
-}
-
-// buildUserMessageWithAttachments is the multimodal-aware variant. With
-// no attachments, the output is byte-identical to the bare-string
-// Content path so existing log greps for prompt content keep working.
-// Non-image attachments are dropped — Claude Code SDK only understands
-// the image block shape on stdin.
-func buildUserMessageWithAttachments(prompt string, attachments []proto.PromptAttachment) ([]byte, error) {
-	if prompt == "" && len(attachments) == 0 {
-		return nil, errors.New("claudecode: empty prompt")
-	}
-	var content any
-	if len(attachments) == 0 {
-		content = prompt
-	} else {
-		blocks := make([]userContentBlock, 0, len(attachments)+1)
-		if prompt != "" {
-			blocks = append(blocks, userContentBlock{Type: "text", Text: prompt})
-		}
-		for _, att := range attachments {
-			if att.Kind != "image" || att.DataBase64 == "" {
-				continue
-			}
-			mime := att.MIME
-			if mime == "" {
-				mime = "image/png"
-			}
-			blocks = append(blocks, userContentBlock{
-				Type: "image",
-				Source: &userContentSource{
-					Type:      "base64",
-					MediaType: mime,
-					Data:      att.DataBase64,
-				},
-			})
-		}
-		if len(blocks) == 0 {
-			return nil, errors.New("claudecode: empty prompt after dropping unsupported attachments")
-		}
-		content = blocks
-	}
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(userMessage{
-		Type: "user",
-		Message: userMessageContent{
-			Role:    "user",
-			Content: content,
-		},
-	}); err != nil {
-		return nil, fmt.Errorf("claudecode: marshal user message: %w", err)
-	}
-	return buf.Bytes(), nil
 }

@@ -55,7 +55,7 @@ func TestShutdownCancelsCompletionErrorSend(t *testing.T) {
 	if err = router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "shutdown-terminal", proto.PromptRequestPayload{AgentKind: "codex", ReleaseOnCompletion: true})); err != nil {
 		t.Fatal(err)
 	}
-	if err = router.Handle(context.Background(), mustEnv(t, proto.TypePromptSteer, "shutdown-terminal", proto.PromptSteerPayload{InputID: "one", Text: "text"})); err != nil {
+	if err = router.Handle(context.Background(), mustEnv(t, proto.TypePromptSteer, "shutdown-terminal", proto.PromptSteerPayload{InputID: "one", Input: proto.TextInput("text")})); err != nil {
 		t.Fatal(err)
 	}
 	<-sender.entered

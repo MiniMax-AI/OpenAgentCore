@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"os"
 	"path/filepath"
 	"strings"
@@ -254,18 +255,21 @@ func TestBuildSessionPlan_MissingMCPCommandErrors(t *testing.T) {
 	}
 }
 
-func TestFirstUserInput_TrimsAndWrapsAsText(t *testing.T) {
-	inputs := FirstUserInput("  hello world  ")
+func TestNativeInputPreservesText(t *testing.T) {
+	inputs, err := nativeInput(proto.TextInput("  hello world  "))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(inputs) != 1 {
 		t.Fatalf("len = %d", len(inputs))
 	}
-	if inputs[0].Type != UserInputText || inputs[0].Text != "hello world" {
+	if inputs[0].Type != UserInputText || inputs[0].Text != "  hello world  " {
 		t.Fatalf("input = %+v", inputs[0])
 	}
 }
 
 func TestFirstUserInput_EmptyReturnsNil(t *testing.T) {
-	if got := FirstUserInput("   "); got != nil {
+	if got, err := nativeInput(proto.TextInput("   ")); err == nil {
 		t.Fatalf("empty prompt must return nil, got %+v", got)
 	}
 }

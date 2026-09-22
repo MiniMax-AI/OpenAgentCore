@@ -41,7 +41,7 @@ func TestRequiredMCPWaitsForNativeThreadAndNeverRestartsFailedResume(t *testing.
 			}
 			defer p.Close()
 			out := make(chan proto.Envelope, 16)
-			s, err := p.start(t.Context(), "required-run", "actual prompt", out)
+			s, err := p.start(t.Context(), "required-run", proto.TextInput("actual prompt"), out)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -23,6 +23,19 @@ func decodeInputEvent(raw json.RawMessage) (decodedInputEvent, error) {
 	switch event.Type {
 	case "agent.session.input.message":
 		fields = append(fields, "input")
+		var messages struct {
+			Input []struct {
+				Content json.RawMessage `json:"content"`
+			} `json:"input"`
+		}
+		if json.Unmarshal(raw, &messages) != nil {
+			return event, store.ErrInvalidInput
+		}
+		for _, message := range messages.Input {
+			if err := validateInputContent(message.Content); err != nil {
+				return event, err
+			}
+		}
 	case "agent.session.input.cancel":
 	case "agent.session.input.tool_result":
 		fields = append(fields, "call_id", "turn_id", "success", "error", "output")
@@ -83,6 +96,10 @@ func validateFunctionOutput(raw json.RawMessage) error {
 	if json.Unmarshal(raw, &text) == nil {
 		return nil
 	}
+	return validateInputContent(raw)
+}
+
+func validateInputContent(raw json.RawMessage) error {
 	var parts []json.RawMessage
 	if json.Unmarshal(raw, &parts) != nil {
 		return store.ErrInvalidInput
