@@ -75,6 +75,10 @@ variants work; **missing** means no implementation; **unverified** means behavio
 has not been shown to match upstream. Do not convert the route count into a
 compatibility percentage or treat a Docker result as E2B qualification.
 
+The [execution and tools matrix](execution-tools.md) records message input,
+structured output, tool configuration/results, discovery and required-action
+recovery by operation, with exact qualified profiles and remaining gaps.
+
 Paths below are SDK resource paths beneath `client.beta.agents`, except Skills
 and Versions under `client.skills`. Method names use the Python SDK. Vault HTTP
 paths start at `/vaults`, not `/agents/vaults`.
@@ -396,7 +400,7 @@ and cancellation. This does not close the remaining protocol/transport gaps.
 | Independent deployment | Source-free Core package and separate execution PostgreSQL ownership; Docker-hosted and user-managed Runtime colocate daemon, selected harness and workspace; Core owns Docker only; no Parsar dependency |
 | Saved Agents and Sessions | Saved Agent routes, immutable inline/referenced Session configuration, metadata updates, root-Agent filtering and scoped cursor pagination |
 | Public execution | Initial/later text, active input and cancellation through Codex, Claude Code or MiniMax Code; Codex/Claude additionally support qualified public functions; see profile limits below |
-| Pending function actions | Persisted calls/results/application receipts, `required_actions`, Session `requires_action`, Turn `waiting`, and live state snapshots; other interactions remain incomplete |
+| Required actions | Persisted function calls/results/application receipts and pending Environment connection actions; Session reads and live snapshots expose the two pinned variants. See the [operation matrix](execution-tools.md) for qualification and unresolved timing |
 | Public recovery and SSE | Persisted Turn/Items queries and partial Usage; live lifecycle/Item/text events, creation streaming and the official one-Turn tool-handler helper |
 | Execution ownership | Immutable Session engine/device, durable input receipts and database writer fencing; uncertain claimed work fails on restart, without blind replay |
 | Files and Artifacts | Bounded Environment listing and inline/file_id copies into qualified V1 workspaces; source-file lifecycle and immutable output capture/download/deletion; [Files limits](environment-files.md), [source limits](source-files.md) |
