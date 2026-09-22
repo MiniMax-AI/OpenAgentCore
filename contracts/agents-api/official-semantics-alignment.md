@@ -99,4 +99,28 @@ Sessions (self-hosted without input and none with whitespace). Both were deleted
 successfully; no hosted environment was created. Metadata observations are reused
 from September 22. Evidence: `~/.parsar/remediation/20260923/session-admission-alignment/official/`.
 See [operation evidence](operation-evidence.md) for the wider 58-operation audit.
-Implementation validation is recorded separately when this batch completes.
+Real Core/daemon/native-model acceptance ran on production source `7ccc636`:
+Codex and Claude used Kimi K3; MiniMax Code used MiniMax M2.7. Each completed one
+JSON string-input Turn and one SSE ordered-message Turn, six total with no failed
+attempt or rerun. Same-key JSON recovery retained each Session and exactly one
+Turn. Twenty-one initial invalid creates plus three missing-input retries rejected
+without adding rows to the eight checked execution tables. Empty updates preserved
+metadata; null/empty clearing and foreign-tenant reads/valid updates were checked.
+Hosted JSON no-input admission was retained for all three configured profiles;
+self-hosted idle admission was checked on Codex only. Neither check claims a new
+hosted or self-hosted execution capability.
+
+Evidence is retained under
+`~/.parsar/remediation/20260923/session-admission-alignment/live/`, including raw
+HTTP, fixed-SDK responses, SSE, history, native outputs, exact source/image hashes
+and cleanup. Six assistant results matched the requested markers. Claude emitted
+two assistant Items for its two-message input within one Turn; native Item counts
+were preserved. All 39 evidence hashes and known-secret scans passed. Owned
+Runtime/Core processes, three databases, three derived images and the dedicated
+network forward were removed, and temporary devices were revoked.
+
+The integrated Web gate passed 287 client and 583 Web unit tests, type checks,
+builds and all 76 fixture browser cases. These controlled UI checks include
+empty-input prevention and same-key JSON recovery after a lost creation response;
+they are separate from the real-model evidence. Final server gate and blind-review
+results are recorded at batch closure.
