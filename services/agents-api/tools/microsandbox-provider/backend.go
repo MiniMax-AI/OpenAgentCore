@@ -16,6 +16,11 @@ const bootstrapLabel = "io.parsar.bootstrap"
 
 type backend struct{ q wire.Request }
 
+type liveMetricsSource interface {
+	Metrics(context.Context) (*sdk.Metrics, error)
+	Detach(context.Context) error
+}
+
 func (b backend) run(ctx context.Context) (wire.Response, error) {
 	switch b.q.Operation {
 	case "create":
@@ -75,7 +80,13 @@ func (b backend) metrics(ctx context.Context, c wire.Compute) (*wire.Metrics, er
 	if state.Status != string(sdk.SandboxStatusRunning) && state.Status != "draining" {
 		return nil, sandbox.ErrNotFound
 	}
-	metrics, err := h.Metrics(metricsCtx)
+	// v0.7.2's name-based handle metrics omit cumulative vCPU time. Connect to
+	// the already-running, identity-qualified instance so CPU usage remains a
+	// monotonic counter that Core can safely derive rates from. Connect never
+	// starts stopped compute, and Detach leaves the runtime lifecycle unchanged.
+	metrics, err := observeConnectedMetrics(metricsCtx, func(ctx context.Context) (liveMetricsSource, error) {
+		return h.Connect(ctx)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -84,6 +95,24 @@ func (b backend) metrics(ctx context.Context, c wire.Compute) (*wire.Metrics, er
 		return nil, wire.ErrUnconfirmed
 	}
 	return projected, nil
+}
+
+func observeConnectedMetrics(ctx context.Context, connect func(context.Context) (liveMetricsSource, error)) (*sdk.Metrics, error) {
+	live, err := connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	metrics, metricsErr := live.Metrics(ctx)
+	detachCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	detachErr := live.Detach(detachCtx)
+	cancel()
+	if metricsErr != nil {
+		return nil, metricsErr
+	}
+	if detachErr != nil {
+		return nil, detachErr
+	}
+	return metrics, nil
 }
 
 func projectMetrics(metrics *sdk.Metrics, observedAt time.Time) *wire.Metrics {
