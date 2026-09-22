@@ -139,8 +139,8 @@ export function SystemView({
       value: startupValue(configuration ? harnessLabel(configuration.configured.default_harness) : ""),
       detail: configuration
         ? executionAdaptersEnabled
-          ? "Used by Agents created in this Web UI unless an API request selects another enabled harness."
-          : "Configured default; execution adapters are inactive because this Core process has no daemon gateway."
+          ? "Used by Agents created in this Web UI."
+          : "Configured default; not active for execution in this Core process."
         : startupDetail,
     },
     {
@@ -234,8 +234,8 @@ export function SystemView({
             </header>
             <p className="system-config-explanation">
               {executionAdaptersEnabled
-                ? <>Agents created in this Web UI use {harnessLabel(configuration.configured.default_harness)}. Another enabled adapter can be selected through the API extension; this UI does not expose that control.</>
-                : <>{harnessLabel(configuration.configured.default_harness)} is the configured default, but execution adapters are inactive because this Core process has no daemon gateway.</>}
+                ? <>This UI does not expose adapter selection. API requests can select any enabled adapter.</>
+                : <>This Core process has no daemon gateway, so no execution adapters are active.</>}
             </p>
             <div className="system-harness-grid">
               {configuration.supported.harnesses.map((harness) => {
@@ -247,9 +247,7 @@ export function SystemView({
                       <strong>{harnessLabel(harness)}</strong>
                       <StartupStatus
                         enabled={enabled}
-                        label={enabled
-                          ? harness === configuration.configured.default_harness ? "Enabled · default" : "Enabled"
-                          : "Build only"}
+                        label={enabled ? "Enabled" : "Build only"}
                       />
                     </div>
                     <small>

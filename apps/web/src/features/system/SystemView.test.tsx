@@ -63,8 +63,9 @@ describe("SystemView", () => {
     expect(html).toContain("Claude SDK");
     expect(html).toContain("MiniMax Code");
     expect(html).toContain("Execution adapters");
-    expect(html).toContain("Agents created in this Web UI use Codex");
-    expect(html).toContain("Enabled · default");
+    expect(html).toContain("Used by Agents created in this Web UI");
+    expect(html).toContain("This UI does not expose adapter selection. API requests can select any enabled adapter");
+    expect(html).not.toContain("Enabled · default");
     expect(html).toContain("Operator endpoint override: configured");
     expect(html).toContain("Operator endpoint override: not set; the harness may use its native default");
     expect(html).toContain("Build only");
@@ -109,7 +110,8 @@ describe("SystemView", () => {
     expect(html).toContain("<strong>Not configured</strong>");
     expect(html).not.toContain("0 explicit");
     expect(html).toContain("No execution adapters are enabled for this Core process");
-    expect(html).toContain("Codex is the configured default, but execution adapters are inactive because this Core process has no daemon gateway");
+    expect(html).toContain("Configured default; not active for execution in this Core process");
+    expect(html).toContain("This Core process has no daemon gateway, so no execution adapters are active");
     expect(html.match(/Build only/g)).toHaveLength(3);
     expect(html).not.toContain("Enabled · default");
   });
@@ -129,7 +131,7 @@ describe("SystemView", () => {
 
     expect(html).toContain("<strong>Not configured</strong>");
     expect(html).toContain("No explicit operator overrides; enabled adapters may use native defaults");
-    expect(html).toContain("Enabled · default");
+    expect(html).not.toContain("Enabled · default");
   });
 
   it("handles an older Core without leaving a pending state", () => {

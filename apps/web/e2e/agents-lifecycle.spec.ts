@@ -2379,7 +2379,9 @@ test("presents Dashboard page-chain results and System boundaries without extra 
   await expect(system.getByRole("listitem")).toHaveCount(5);
   await expect(system).toContainText("Configured for this process");
   await expect(system).toContainText("Daemon gateway");
-  await expect(system).toContainText("Agents created in this Web UI use Codex");
+  await expect(system).toContainText("Used by Agents created in this Web UI");
+  await expect(system).toContainText("This UI does not expose adapter selection");
+  await expect(system).not.toContainText("Enabled · default");
   await expect(system).toContainText("Operator endpoint override: configured");
   await expect(system).toContainText("Compiled into this build, but not enabled when this Core process started");
   await expect(system).toContainText("Runtime connection, native binary availability, sandbox health, and model execution belong to the relevant Session or Environment");
