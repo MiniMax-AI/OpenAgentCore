@@ -57,6 +57,9 @@ suspended, metrics-disabled, and no-current-sample states are unavailable, never
 observed zero. The SDK also supplies instantaneous CPU percent, host RSS, disk,
 network, and overlay values; those are intentionally outside this public sample
 until their cross-provider semantics and API fields are designed.
+Legacy suspension-disabled allocations without a persisted exact compute receipt
+are also unavailable. A deterministic sandbox name is not an incarnation identity
+and is never used as a sampling fallback.
 
 ## Duration boundaries
 

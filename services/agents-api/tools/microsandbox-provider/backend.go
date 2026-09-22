@@ -66,15 +66,15 @@ func (b backend) run(ctx context.Context) (wire.Response, error) {
 }
 
 func (b backend) metrics(ctx context.Context, c wire.Compute) (*wire.Metrics, error) {
-	h, state, err := b.inspect(ctx, c)
+	metricsCtx, cancel := context.WithDeadline(ctx, b.q.Deadline)
+	defer cancel()
+	h, state, err := b.inspect(metricsCtx, c)
 	if err != nil {
 		return nil, err
 	}
 	if state.Status != string(sdk.SandboxStatusRunning) && state.Status != "draining" {
 		return nil, sandbox.ErrNotFound
 	}
-	metricsCtx, cancel := context.WithDeadline(ctx, b.q.Deadline)
-	defer cancel()
 	metrics, err := h.Metrics(metricsCtx)
 	if err != nil {
 		return nil, err

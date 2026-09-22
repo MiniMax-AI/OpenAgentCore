@@ -73,32 +73,25 @@ func TestObserveRejectsForeignOrMissingComputeBeforeHelper(t *testing.T) {
 	}
 }
 
-func TestObserveDisabledUsesInitialComputeAndSuspendedDoesNotWake(t *testing.T) {
-	config, reference := testConfig(), testRef()
+func TestObserveWithoutExactReceiptAndSuspendedDoesNotWake(t *testing.T) {
+	config := testConfig()
 	calls := 0
 	provider, _ := NewWithCaller(config, callerFunc(func(_ context.Context, request Request) (Response, error) {
 		calls++
-		if request.Compute != providerInitial(config, reference) {
-			t.Fatalf("disabled allocation did not use initial compute: %+v", request.Compute)
-		}
-		return Response{Version: ProtocolVersion, Metrics: &Metrics{ObservedAt: time.Now().UTC(), MemoryLimitBytes: 1}}, nil
+		return Response{}, nil
 	}))
-	target := observationTarget(t, Compute{Name: Name(config, reference, 0), ID: "unused"})
+	target := observationTarget(t, Compute{Name: Name(config, testRef(), 0), ID: "unused"})
 	target.Instance.ComputePhase, target.Instance.ProviderState = "disabled", nil
-	if _, err := provider.Observe(deadline(t), target); err != nil {
-		t.Fatal(err)
+	if _, err := provider.Observe(deadline(t), target); !errors.Is(err, runtimeobs.ErrUnavailable) {
+		t.Fatalf("receipt-less compute was sampled: %v", err)
 	}
 	target.Instance.ComputePhase = "suspended"
 	if _, err := provider.Observe(deadline(t), target); !errors.Is(err, runtimeobs.ErrNotRunning) {
 		t.Fatalf("suspended compute was not unavailable: %v", err)
 	}
-	if calls != 1 {
-		t.Fatalf("suspended compute reached helper: %d calls", calls)
+	if calls != 0 {
+		t.Fatalf("unfenced compute reached helper: %d calls", calls)
 	}
-}
-
-func providerInitial(config Config, reference sandbox.Reference) Compute {
-	return Compute{Name: Name(config, reference, 0)}
 }
 
 func TestObserveMapsStoppedAndMetricsUnavailable(t *testing.T) {

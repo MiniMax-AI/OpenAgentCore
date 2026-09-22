@@ -31,9 +31,12 @@ func (p *Provider) Observe(ctx context.Context, target runtimeobs.Target) (runti
 	var state struct {
 		Current Compute `json:"current"`
 	}
-	if target.Instance.ComputePhase == "disabled" {
-		state.Current = p.Initial(reference)
-	} else if json.Unmarshal(target.Instance.ProviderState, &state) != nil || state.Current.ID == "" {
+	if json.Unmarshal(target.Instance.ProviderState, &state) != nil || state.Current.ID == "" {
+		// Suspension-disabled allocations predate durable compute receipts. A
+		// deterministic name is not an incarnation fence, so do not sample it.
+		if target.Instance.ComputePhase == "disabled" {
+			return runtimeobs.Sample{}, runtimeobs.ErrUnavailable
+		}
 		return runtimeobs.Sample{}, sandbox.ErrOwnership
 	}
 	if ValidateCompute(p.config, reference, state.Current) != nil {

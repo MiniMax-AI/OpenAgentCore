@@ -157,6 +157,9 @@ compute reports `unavailable` with `runtime_not_running`; metrics that are disab
 or have no current SDK sample report `sample_unavailable`. The SDK's instantaneous
 CPU percentage, host RSS, disk, network and overlay measurements are not yet
 exposed. Token usage continues to come from Session/Turn usage, not this provider.
+An allocation without a persisted exact compute receipt also reports
+`sample_unavailable`; the deterministic sandbox name is not sufficient to identify
+one compute incarnation safely.
 
 Observation is operational evidence only. The idle suspension state machine uses
 its durable activity and compute-phase records and never consults Dashboard samples.
