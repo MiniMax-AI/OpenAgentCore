@@ -363,13 +363,25 @@ func (p *Provider) Kill(ctx context.Context, r sandbox.Reference) error {
 	if err != nil {
 		return err
 	}
+	// Every candidate is verified before the first delete. A candidate the vendor
+	// cannot identify, or whose identity does not match, is ambiguous state and
+	// stops the operation instead of becoming a path-derived delete target.
+	verified := make([]string, 0, len(matches))
 	for _, match := range matches {
-		if _, err := p.inspectID(ctx, match.SandboxID, r); err != nil && !errors.Is(err, sandbox.ErrNotFound) {
+		if match.SandboxID == "" {
+			return sandbox.ErrOwnership
+		}
+		if _, err := p.inspectID(ctx, match.SandboxID, r); err != nil {
+			if errors.Is(err, sandbox.ErrNotFound) {
+				// Already gone: there is nothing left to delete for it.
+				continue
+			}
 			return err
 		}
+		verified = append(verified, match.SandboxID)
 	}
-	for _, match := range matches {
-		if err := p.delete(ctx, match.SandboxID); err != nil && !errors.Is(err, sandbox.ErrNotFound) {
+	for _, id := range verified {
+		if err := p.delete(ctx, id); err != nil && !errors.Is(err, sandbox.ErrNotFound) {
 			return err
 		}
 	}

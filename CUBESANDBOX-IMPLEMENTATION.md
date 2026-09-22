@@ -986,7 +986,7 @@ the assets, gates and records a cluster run needs.
 - [x] §10 documents updated with accurate scope and explicit gaps
 - [ ] `make check` green with the dedicated test database — blocked: the executor environment has no dedicated PostgreSQL and no Node/Rust toolchain, so the affected Go suites were run directly instead
 - [x] Independent blind review requested with only requirements, acceptance criteria, boundaries, repository path and baseline
-- [ ] In-scope blockers from that review fixed
+- [x] In-scope findings from that review fixed: the review found no blocker; it refuted nothing that needed a change, and its six minor/nit findings were fixed in the follow-up commit (ambient proxy cleared on the control plane, the readiness endpoint distinguishes "never provisioned" from "profile lost", `Kill` refuses an unidentified candidate, data-plane redirect and dropped-connection fidelity tests, a Dockerfile comment, and a guarded transport assertion). Its one "major" finding (a `RunCommand` deadline precondition) was refuted by the baseline: `internal/sandbox/docker/command.go` enforces the same precondition.
 
 ### Guardrails for every milestone
 - [x] Never log, echo or persist the Cube API key, executor credential or access token

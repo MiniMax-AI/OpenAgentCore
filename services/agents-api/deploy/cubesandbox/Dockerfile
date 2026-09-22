@@ -48,9 +48,10 @@ COPY --chmod=0444 tool-env.py /etc/codex/tool-env.py
 RUN chmod 0555 /etc/codex && chmod 0444 /etc/codex/requirements.toml
 COPY --chmod=0444 runtime-initialize.py /usr/local/bin/agents-api-runtime-initialize
 
-# Identical to deploy/codex/Dockerfile. PARSAR_RUNTIME_READINESS_PORT documents the
-# fixed probe port; the readiness endpoint reads it only for logs, the port itself
-# is a compile-time constant shared with the adapter.
+# Identical to deploy/codex/Dockerfile, plus the fixed readiness port. The port is
+# a compile-time constant shared by the image's readiness endpoint and the
+# adapter, so the variable is documentation for operators and template commands
+# rather than configuration.
 ENV HOME=/home/runtime PARSAR_HOME=/home/runtime/.parsar \
     ENVD_PORT=49983 \
     PARSAR_RUNTIME_READINESS_PORT=49984 \

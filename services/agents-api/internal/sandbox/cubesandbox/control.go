@@ -35,15 +35,30 @@ func noRedirect(*http.Request, []*http.Request) error {
 	return errors.New("CubeSandbox redirects are not allowed")
 }
 
+// defaultTransport clones the process default transport. The assertion is
+// guarded: New is a total validator, and a panic on a replaced global would be
+// the only unhandled failure in it.
+func defaultTransport() *http.Transport {
+	if base, ok := http.DefaultTransport.(*http.Transport); ok {
+		return base.Clone()
+	}
+	return &http.Transport{}
+}
+
 func newControlClient() *http.Client {
-	return &http.Client{Transport: http.DefaultTransport.(*http.Transport).Clone(), CheckRedirect: noRedirect, Timeout: controlTimeout}
+	transport := defaultTransport()
+	// The control plane is reached at the operator's explicit api_url. An ambient
+	// HTTP proxy must not silently receive the Bearer credential, so it is
+	// cleared here exactly as on the data plane.
+	transport.Proxy = nil
+	return &http.Client{Transport: transport, CheckRedirect: noRedirect, Timeout: controlTimeout}
 }
 
 // newDataClient reaches the sandbox data plane through CubeProxy. Outside a node
 // the sandbox domain does not resolve, so every destination is dialed at the
 // configured proxy address while the virtual Host header stays intact.
 func newDataClient(config Config) *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport := defaultTransport()
 	transport.Proxy = nil
 	transport.ForceAttemptHTTP2 = false
 	if config.ProxyNodeIP != "" {

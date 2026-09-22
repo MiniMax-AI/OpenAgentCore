@@ -84,6 +84,14 @@ func TestEvaluateReadinessStates(t *testing.T) {
 	if state := f.environment.Evaluate(); !state.Ready || state.State != StateUnprovisioned {
 		t.Fatalf("unprovisioned image misreported: %+v", state)
 	}
+	// A provisioned Runtime whose profile file is gone is not unprovisioned: the
+	// profile directory is the provisioned signal.
+	if err := os.MkdirAll(f.profile, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if state := f.environment.Evaluate(); state.Ready || state.State != StateWaitingForDaemon {
+		t.Fatalf("a lost profile was reported as an unprovisioned image: %+v", state)
+	}
 	f.write(t, "auth.json", auth, 0o600)
 	if state := f.environment.Evaluate(); state.Ready || state.State != StateWaitingForDaemon {
 		t.Fatalf("profile without a connection misreported: %+v", state)

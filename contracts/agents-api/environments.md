@@ -88,9 +88,11 @@ differences are the placement and the isolation boundary:
   platform addresses reachable, because the daemon's connection and the harness's
   model calls share that interface.
 
-Readiness evidence differs, and it is provider evidence only: the sandbox is
-reported ready when the Runtime's own readiness endpoint answers 2xx, which
-requires the daemon to have authenticated to Core. Reversible expiry (pause and
+Readiness evidence differs, and it is provider evidence only: before the managed
+bootstrap runs, the Runtime image is simply not provisioned yet (which is what a
+template build sees); once the profile exists, the sandbox is reported ready only
+when the Runtime's own readiness endpoint answers 2xx, and that endpoint requires
+the daemon to have authenticated to Core. Reversible expiry (pause and
 resume) is not part of this profile: an idle sandbox terminates at the platform
 TTL or on explicit cleanup, and a stopped or missing sandbox never authorizes
 destroying retained workspace or history.

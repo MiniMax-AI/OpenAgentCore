@@ -400,6 +400,18 @@ func TestKillVerifiesOwnersAndConfirmsRemoval(t *testing.T) {
 		t.Fatalf("foreign sandbox was deleted: %d", calls)
 	}
 
+	// A candidate the vendor cannot identify is ambiguous state, never a
+	// path-derived delete target.
+	before := deletes(cluster.controlRequests())
+	cluster.listOverride = []map[string]any{{"sandboxID": "", "state": "running", "metadata": cluster.metadata(installation, bootstrap.Reference)}}
+	if err := provider.Kill(testContext(t), bootstrap.Reference); !errors.Is(err, sandbox.ErrOwnership) {
+		t.Fatalf("an unidentified candidate was accepted: %v", err)
+	}
+	if after := deletes(cluster.controlRequests()); after != before {
+		t.Fatalf("a delete was issued for an unidentified candidate: %d", after-before)
+	}
+	cluster.listOverride = nil
+
 	// A detail response that does not match the requested identity is refused.
 	cluster.listOverride = nil
 	cluster.detailOverride = map[string]any{"sandboxID": "sbx-other", "state": "running", "metadata": cluster.metadata(installation, bootstrap.Reference)}
@@ -453,16 +465,18 @@ func TestKillVerifiesOwnersAndConfirmsRemoval(t *testing.T) {
 	}
 }
 
-// A redirect is rejected rather than followed, on both planes.
+// A redirect is rejected rather than followed, on both planes. The data-plane
+// case is separate because a control-plane failure short-circuits GetInfo.
 func TestRedirectsAreRejected(t *testing.T) {
 	cluster := newCluster(t)
-	provider := cluster.provider(uuid.NewString())
-	cluster.redirect = true
+	installation := uuid.NewString()
+	provider := cluster.provider(installation)
+	bootstrap := cluster.bootstrap()
 	ctx := testContext(t)
+	cluster.redirect = true
 	if err := provider.Health(ctx); err == nil {
 		t.Fatal("control-plane redirect was followed")
 	}
-	bootstrap := cluster.bootstrap()
 	if _, err := provider.Create(ctx, bootstrap); err == nil {
 		t.Fatal("redirected create was accepted")
 	}
@@ -471,6 +485,52 @@ func TestRedirectsAreRejected(t *testing.T) {
 	}
 	if _, err := provider.GetInfo(ctx, bootstrap.Reference); err == nil {
 		t.Fatal("redirected read was accepted")
+	}
+
+	// A redirect from the data plane is rejected too, and the readiness probe
+	// never follows it to the redirect target.
+	cluster.redirect = false
+	cluster.dataRedirect = true
+	cluster.addSandbox(cluster.metadata(installation, bootstrap.Reference), "running")
+	info, err := provider.GetInfo(ctx, bootstrap.Reference)
+	if err != nil {
+		t.Fatalf("a redirected readiness probe reported a provider error: %v", err)
+	}
+	if info.State != "running" || info.BootstrapComplete {
+		t.Fatalf("redirected readiness misreported readiness: %+v", info)
+	}
+	probes := 0
+	for _, request := range cluster.dataRequests() {
+		if request.Path == readinessPath {
+			probes++
+		}
+	}
+	if probes != 1 {
+		t.Fatalf("the data-plane redirect was followed %d times", probes-1)
+	}
+}
+
+// The vendor can process a create and still lose the answer at the transport
+// level. The caller keeps the reference and reconciles; nothing is replayed.
+func TestCreateSurvivesADroppedConnectionAfterTheServerCreatedTheSandbox(t *testing.T) {
+	cluster := newCluster(t)
+	installation := uuid.NewString()
+	provider := cluster.provider(installation)
+	bootstrap := cluster.bootstrap()
+	cluster.createDrop = true
+	info, err := provider.Create(testContext(t), bootstrap)
+	if err == nil {
+		t.Fatal("a dropped create response reported as success")
+	}
+	if info.Reference != bootstrap.Reference {
+		t.Fatalf("uncertain owner state was erased: %+v", info)
+	}
+	observed, err := provider.GetInfo(testContext(t), bootstrap.Reference)
+	if err != nil || observed.ProviderID == "" || !observed.BootstrapComplete {
+		t.Fatalf("reconciliation did not resolve the created sandbox: %+v %v", observed, err)
+	}
+	if posts := creates(cluster.controlRequests()); posts != 1 {
+		t.Fatalf("the dropped response caused %d create requests", posts)
 	}
 }
 

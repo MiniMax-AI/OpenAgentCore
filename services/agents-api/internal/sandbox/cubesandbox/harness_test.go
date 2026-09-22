@@ -48,6 +48,8 @@ type cluster struct {
 
 	// Scripted behaviour. The zero value is the happy path.
 	redirect       bool
+	dataRedirect   bool
+	createDrop     bool
 	createBody     string
 	createStatus   int
 	deleteStatus   int
@@ -347,6 +349,16 @@ func (c *cluster) createSandbox(w http.ResponseWriter, body []byte) {
 		}
 	}
 	id := c.addSandbox(metadata, "running")
+	if c.createDrop {
+		// The vendor processed the create and the client never learns the
+		// answer: the connection closes without a response.
+		if hijacker, ok := w.(http.Hijacker); ok {
+			if conn, _, err := hijacker.Hijack(); err == nil {
+				_ = conn.Close()
+			}
+		}
+		return
+	}
 	w.WriteHeader(http.StatusCreated)
 	if c.createBody != "" {
 		_, _ = w.Write([]byte(c.createBody))
@@ -427,8 +439,8 @@ func (c *cluster) serveControl(w http.ResponseWriter, r *http.Request) {
 // endpoint. Every request must carry the virtual sandbox Host header.
 func (c *cluster) serveData(w http.ResponseWriter, r *http.Request) {
 	_ = c.record(&c.dataCalls, r)
-	if c.redirect {
-		http.Redirect(w, r, "/healthz", http.StatusFound)
+	if c.redirect || c.dataRedirect {
+		http.Redirect(w, r, readinessPath, http.StatusFound)
 		return
 	}
 	switch r.URL.Path {

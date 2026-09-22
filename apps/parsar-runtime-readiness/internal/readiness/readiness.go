@@ -115,15 +115,20 @@ func (e Environment) Evaluate() State {
 		}
 	}
 	profile := filepath.Join(e.Home, "parsar-daemon", Profile)
+	if _, err := os.Stat(profile); os.IsNotExist(err) {
+		// The template build has no profile directory at all: nothing has been
+		// provisioned, there is no connection to wait for, and image readiness is
+		// the whole contract. The manifest bootstrap creates this directory
+		// before it writes the file, so its presence is the provisioned signal
+		// and a lost profile can never look unprovisioned again.
+		return State{Ready: true, State: StateUnprovisioned}
+	} else if err != nil {
+		return State{Ready: false, State: StateIncomplete}
+	}
 	auth := filepath.Join(profile, "auth.json")
 	info, err := os.Stat(auth)
-	if os.IsNotExist(err) {
-		// The template build runs with no profile: there is no connection to
-		// wait for, so image readiness is the whole contract.
-		return State{Ready: true, State: StateUnprovisioned}
-	}
 	if err != nil {
-		return State{Ready: false, State: StateIncomplete}
+		return State{Ready: false, State: StateWaitingForDaemon}
 	}
 	// The managed bootstrap writes this file through envd's file API and then
 	// verifies its mode with a trusted command. A wider mode means the profile is
