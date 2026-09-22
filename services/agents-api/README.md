@@ -214,8 +214,8 @@ resources); general Files routes do not. Supported operations include:
 - Project-owned `user_data` source file upload/list, metadata/content retrieval and
   deletion; see [source Files](../../contracts/agents-api/source-files.md).
 - Vault create/retrieve/list/delete, project-scoped pagination and stored status
-  filtering; static-bearer Credential create/retrieve/list/token replacement/delete.
-  Public archive semantics and OAuth remain gaps. Already-delivered credentials
+  filtering; static-bearer and OAuth Credential create/retrieve/list/replacement/delete,
+  plus [dispatch-time OAuth refresh](oauth-credentials.md). Public archive semantics remain gaps. Already-delivered credentials
   are not withdrawn by local deletion. Session attachments support
   [authenticated HTTPS MCP](credentials.md#use-a-credential-in-a-session).
 

@@ -101,6 +101,8 @@ def verify_oauth_credentials(client, other, peer, raw, *, evidence_path=None):
             changed = deepcopy(expected_auth)
             changed["expires_at"] = None
             current = update(vault.id, current, {"access_token": secrets[3]}, changed)
+            expected_auth = deepcopy(expected_auth)
+            expected_auth["expires_at"] = expiry
             current = update(vault.id, current, {"expires_at": expiry}, expected_auth, sdk=False)
             current = update(vault.id, current, {"expires_at": None}, changed)
             current = update(vault.id, current, {"access_token": secrets[0], "expires_at": expiry}, expected_auth)
