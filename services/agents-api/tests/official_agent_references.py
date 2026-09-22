@@ -62,11 +62,9 @@ def verify_agent_references(client, other, expect_error):
         ("reasoning", {"effort": "high"}, None),
         ("reasoning", {"summary": "auto"}, {}),
         ("service_tier", "fast", "auto"),
-        ("multi_agent", {"enabled": True}, {"enabled": False}),
         ("text", {"format": {"type": "json_schema", "schema": {"type": "object"}}}, {"verbosity": "medium"}),
         ("tools", [dict(tool, defer_loading=True)], None),
         ("tools", [{"type": "tool_search"}], []),
-        ("tools", [{"type": "programmatic_tool_calling", "enabled": False}], []),
     ):
         unsupported = agents.create(model="model", **{field: value})
         reference = {"agent_id": unsupported.id, "environment": {"type": "none"}}
@@ -74,6 +72,26 @@ def verify_agent_references(client, other, expect_error):
         recovered.append(sessions.create(**reference, agent={field: replacement}))
         expect_error(BadRequestError, lambda: sessions.create(agent={"model": "model", field: value}, environment={"type": "none"}))
         assert agents.retrieve(unsupported.id) == unsupported
+
+    # These controls are admitted by the current Codex profile. Both reference
+    # and inline requests must preserve them, and overrides replace the field.
+    for field, value, replacement in (
+        ("multi_agent", {"enabled": True}, {"enabled": False}),
+        ("tools", [{"type": "programmatic_tool_calling", "enabled": False}], []),
+    ):
+        supported = agents.create(model="model", **{field: value})
+        reference = {"agent_id": supported.id, "environment": {"type": "none"}}
+        inherited = sessions.create(**reference)
+        inline = sessions.create(agent={"model": "model", field: value}, environment={"type": "none"})
+        expected_field = supported.to_dict(mode="json")[field]
+        assert inherited.agent.to_dict(mode="json")[field] == expected_field
+        assert inline.agent.to_dict(mode="json")[field] == expected_field
+        replaced = sessions.create(**reference, agent={field: replacement})
+        inline_replacement = sessions.create(agent={"model": "model", field: replacement}, environment={"type": "none"})
+        assert replaced.agent.to_dict(mode="json")[field] == inline_replacement.agent.to_dict(mode="json")[field]
+        assert replaced.agent.to_dict(mode="json")[field] != expected_field
+        assert agents.retrieve(supported.id) == supported
+        recovered.extend([inherited, inline, replaced, inline_replacement])
 
     base = str(client.base_url).rstrip("/") + "/agents/sessions"
     auth = {"Authorization": f"Bearer {client.api_key}", "OpenAI-Beta": "agents=v1"}
