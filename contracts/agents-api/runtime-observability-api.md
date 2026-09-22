@@ -1,9 +1,9 @@
-# Runtime observation API proposal
+# Runtime observation API
 
-Status: Phase 2 implemented. The current-snapshot routes, strict
+Status: Phase 2 and initial Core Web consumption implemented. The current-snapshot routes, strict
 `packages/agents-client` projection, and generated `openapi.yaml` contract are
-implemented. Core Web integration, historical queries, and lifecycle controls
-remain outside this phase.
+implemented and consumed by the Dashboard through complete Session/observation
+identity joins. Historical queries and lifecycle controls remain outside this phase.
 
 This is an Agents Core extension, not an upstream OpenAI Agents resource. The
 implementation must record that status in the coverage ledger and generated

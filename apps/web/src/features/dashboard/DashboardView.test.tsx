@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { AgentSession, SavedAgent } from "@agents-core-web/agents-client";
+import type { AgentSession, RuntimeObservation, SavedAgent } from "@agents-core-web/agents-client";
 
 import { DashboardView, type DashboardViewProps } from "./DashboardView";
 
@@ -74,6 +74,10 @@ function render(overrides: Partial<DashboardViewProps> = {}): string {
       sessionCollectionState="ready"
       sessionCollectionError={null}
       sessionCollectionHasSnapshot
+      runtimeSnapshot={{ sessions: [], observations: [], loadedAt: 1_700_000_000_000 }}
+      runtimeCollectionState="ready"
+      runtimeCollectionError={null}
+      runtimeCollectionHasSnapshot
       {...callbacks}
       {...overrides}
     />,
@@ -119,6 +123,21 @@ describe("Dashboard loaded-result presentation", () => {
     expect(html).toContain('aria-label="Agent Core backend is not ready. Open Docker startup guide"');
     expect(html).not.toContain("Agents: Agent core request failed (502)");
     expect(html).not.toContain("Sessions: Agent core request failed (502)");
+  });
+
+  it("keeps a Runtime-only 503 scoped to the optional observation feature", () => {
+    const html = render({
+      runtimeSnapshot: null,
+      runtimeCollectionState: "failed",
+      runtimeCollectionError: "Agent core request failed (503).",
+      runtimeCollectionHasSnapshot: false,
+    });
+
+    expect(html).toContain("Runtime: Agent core request failed (503).");
+    expect(html).toContain("Runtime observations unavailable");
+    expect(html).not.toContain("Agent Core backend is not ready");
+    expect(html).not.toContain("Core backend is offline");
+    expect(html).not.toContain("Open startup guide");
   });
 
   it("renders a compact actionable overview while preserving Environment qualifications", () => {
@@ -172,6 +191,65 @@ describe("Dashboard loaded-result presentation", () => {
     expect(html).not.toContain("action-session");
     expect(html).not.toContain("Connected Environment");
     expect(html).not.toContain("Execution ready");
+  });
+
+  it("renders current Docker resources without inventing a CPU percentage or history", () => {
+    const hosted = session("11111111-1111-4111-8111-111111111111", {
+      metadata: { title: "Managed research" },
+      environment: {
+        type: "openai_hosted",
+        id: "22222222-2222-4222-8222-222222222222",
+        capability_directories: [],
+        network: { access: "enabled", allowed_domains: [] },
+        packages: { npm: [], python: [], system: [] },
+        files: [],
+        plugins: [],
+        skills: [],
+      },
+      usage: {
+        input_tokens: 30,
+        output_tokens: 12,
+        total_tokens: 42,
+        input_tokens_details: { cached_tokens: 7 },
+        output_tokens_details: { reasoning_tokens: 3 },
+      },
+    });
+    const observation: RuntimeObservation = {
+      id: hosted.id,
+      object: "agent.runtime_observation",
+      session_id: hosted.id,
+      environment_id: "22222222-2222-4222-8222-222222222222",
+      mode: "openai_hosted",
+      provider_type: "docker",
+      instance: {
+        kind: "managed_allocation",
+        allocation_id: "33333333-3333-4333-8333-333333333333",
+        device_id: null,
+        connection_generation: null,
+      },
+      status: "observed",
+      reason: null,
+      allocation_created_at: 1_700_000_000,
+      resolved_at: 1_700_000_100,
+      observed_at: 1_700_000_090,
+      started_at: 1_700_000_010,
+      cpu: { usage_seconds_total: 73.5, capacity_cores: 2, usage_cores: null, utilization_ratio: null },
+      memory: { usage_bytes: 536_870_912, limit_bytes: 2_147_483_648 },
+    };
+    const html = render({
+      runtimeSnapshot: { sessions: [hosted], observations: [observation], loadedAt: 1_700_000_100_000 },
+    });
+
+    expect(html).toContain("Runtime monitoring");
+    expect(html).toContain("1/1 managed observed");
+    expect(html).toContain("CPU time / capacity");
+    expect(html).toContain("1m 13s / 2 cores");
+    expect(html).toContain("512 MiB / 2.00 GiB");
+    expect(html).toContain("Current Runtime observations");
+    expect(html).toContain("Managed research");
+    expect(html).toContain("Identity and sample details");
+    expect(html).not.toContain("CPU %");
+    expect(html).not.toContain("historical chart");
   });
 
   it("keeps partial Usage out of the primary overview", () => {

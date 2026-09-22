@@ -11,7 +11,8 @@ credentials or execution into the browser.
 
 ## What you can do
 
-- **Operate from one Dashboard** — see loaded Agents, active Sessions, work that needs
+- **Operate from one Dashboard** — see loaded Agents, active Sessions, current Runtime
+  CPU/memory evidence, compute uptime, reported token coverage, work that needs
   attention, recent activity, and the two common create flows.
 - **Build reusable Agents** — start from a blank Agent or a practical template, then
   configure its model, instructions, text behavior, Functions, and HTTP MCP servers.
@@ -29,8 +30,10 @@ credentials or execution into the browser.
 ### Dashboard
 
 Dashboard is the starting point. It summarizes the current Agent and Session results,
-highlights Sessions that need attention, and links directly to Agent creation or a new
-Session.
+loads a complete tenant-scoped Runtime observation snapshot, shows current Docker
+resource evidence and coverage without inventing missing values, highlights Sessions
+that need attention, and links directly to Agent creation or a new Session. Historical
+charts remain absent until an operator configures a separate history capability.
 
 ### Agents
 
@@ -61,7 +64,7 @@ service is not mistaken for a ready model execution path.
 
 | Area | User experience |
 | --- | --- |
-| Dashboard | Agent and Session overview, attention queue, recent activity, quick actions |
+| Dashboard | Agent and Session overview, current Runtime CPU/memory/uptime and token coverage, attention queue, recent activity, quick actions |
 | Agents | Create, search, inspect, edit, delete, use templates, and start Sessions |
 | Sessions | Durable conversation history, Agent filtering, live events, cancellation, retry and continuation |
 | Trace | Turn history, usage when reported by Core, command output, Function and patch activity |

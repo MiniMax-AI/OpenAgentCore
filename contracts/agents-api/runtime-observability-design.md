@@ -1,8 +1,9 @@
 # Runtime observability and Dashboard design
 
-Status: Phase 1 provider abstraction/Docker sampling and Phase 2 current-snapshot
-API/client contract are implemented. Core Web integration, history backend,
-additional providers, and lifecycle automation described below are not implemented.
+Status: Phase 1 provider abstraction/Docker sampling, Phase 2 current-snapshot
+API/client contract, and the initial Core Web current-snapshot Dashboard are
+implemented. The history backend, additional providers, and lifecycle automation
+described below are not implemented.
 
 ## 1. Problem statement
 
@@ -267,7 +268,7 @@ paths, and raw labels are never displayed.
 
 ### 11.5 Web implementation shape
 
-The Web change belongs in Core Web, not the Core service repository. It uses
+The Web implementation belongs in Core Web, not the Core service layer. It uses
 `packages/agents-client` as the only Runtime-observation transport and keeps four
 seams separate:
 
@@ -284,10 +285,12 @@ seams separate:
    Session detail surface. Trend components are absent unless a later history
    capability and contract are configured.
 
-The initial refresh cadence is an operator-configured value, not an API guarantee.
-Web pauses periodic reads when hidden, refreshes when visibility returns, and adds
-jitter so multiple browsers do not synchronize. Filtering is local to the last
-complete snapshot and never changes tenant authorization or provider selection.
+The initial implementation uses a 30-second Web cadence plus up to five seconds
+of jitter and a 15-second whole-refresh budget. These are Web configuration, not
+API guarantees. Web pauses periodic reads when hidden, refreshes when visibility
+returns, and adds jitter so multiple browsers do not synchronize. Filtering is
+local to the last complete snapshot and never changes tenant authorization or
+provider selection.
 
 ## 12. Token usage boundary
 

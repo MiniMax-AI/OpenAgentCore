@@ -995,6 +995,15 @@ const server = http.createServer(async (request, response) => {
       return sendJson(response, created, 201);
     }
 
+    // The legacy Web fixture uses human-readable Session IDs for interaction
+    // assertions. Runtime observation resources require canonical UUIDs, so this
+    // fixture advertises an empty, valid collection instead of inventing a false
+    // identity join. Positive Runtime rendering is covered by the typed component
+    // and coordinator tests with canonical identities.
+    if (request.method === "GET" && url.pathname === "/v1/agents/runtime-observations") {
+      return sendJson(response, page([]));
+    }
+
     if (request.method === "GET" && url.pathname === "/v1/agents/sessions") {
       trackAbort(response, "sessionListReads");
       const control = consumeControl("sessionList");

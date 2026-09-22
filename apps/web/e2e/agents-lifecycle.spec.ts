@@ -2329,10 +2329,11 @@ test("presents Dashboard page-chain results and System boundaries without extra 
   await expect.poll(async () => {
     const entries = await fixtureRequests(request);
     return [count(entries, "/v1/agents"), count(entries, "/v1/agents/sessions")];
-  }).toEqual([count(before, "/v1/agents") + 1, count(before, "/v1/agents/sessions") + 1]);
+  }).toEqual([count(before, "/v1/agents") + 1, count(before, "/v1/agents/sessions") + 2]);
   const after = await fixtureRequests(request);
   expect(count(after, "/v1/agents")).toBe(count(before, "/v1/agents") + 1);
-  expect(count(after, "/v1/agents/sessions")).toBe(count(before, "/v1/agents/sessions") + 1);
+  expect(count(after, "/v1/agents/sessions")).toBe(count(before, "/v1/agents/sessions") + 2);
+  expect(count(after, "/v1/agents/runtime-observations")).toBe(count(before, "/v1/agents/runtime-observations") + 1);
   for (const path of detailPaths) expect(count(after, path)).toBe(count(before, path));
   await attachScreenshot(page, testInfo, "desktop-dashboard-loaded-snapshot");
 
@@ -2387,11 +2388,12 @@ test("presents Dashboard page-chain results and System boundaries without extra 
     return [count(entries, "/v1/agents"), count(entries, "/v1/agents/sessions")];
   }).toEqual([
     count(beforeSystemRefresh, "/v1/agents") + 1,
-    count(beforeSystemRefresh, "/v1/agents/sessions") + 1,
+    count(beforeSystemRefresh, "/v1/agents/sessions") + 2,
   ]);
   const afterSystemRefresh = await fixtureRequests(request);
   expect(count(afterSystemRefresh, "/v1/agents")).toBe(count(beforeSystemRefresh, "/v1/agents") + 1);
-  expect(count(afterSystemRefresh, "/v1/agents/sessions")).toBe(count(beforeSystemRefresh, "/v1/agents/sessions") + 1);
+  expect(count(afterSystemRefresh, "/v1/agents/sessions")).toBe(count(beforeSystemRefresh, "/v1/agents/sessions") + 2);
+  expect(count(afterSystemRefresh, "/v1/agents/runtime-observations")).toBe(count(beforeSystemRefresh, "/v1/agents/runtime-observations") + 1);
   for (const path of detailPaths) expect(count(afterSystemRefresh, path)).toBe(count(beforeSystemRefresh, path));
   await attachScreenshot(page, testInfo, "desktop-system-contract-boundary");
 
@@ -2480,7 +2482,9 @@ test("publishes Dashboard counts only after every top-level Agent and Session pa
   await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Agents" })).toContainText("3");
   await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Sessions" })).toContainText("2");
   expect(agentAfters).toEqual([null, "agent_b"]);
-  expect(sessionAfters).toEqual([null, "session_snapshot"]);
+  expect(sessionAfters).toHaveLength(4);
+  expect(sessionAfters.filter((after) => after === null)).toHaveLength(2);
+  expect(sessionAfters.filter((after) => after === "session_snapshot")).toHaveLength(2);
 });
 
 test("keeps the previous Dashboard result when pagination exceeds the safety limit", async ({ page, request }) => {
@@ -2523,8 +2527,9 @@ test("keeps the previous Dashboard result when pagination exceeds the safety lim
   await refresh.click();
   await expect.poll(() => reads).toBe(100);
   await expect(refresh).toBeEnabled();
-  await expect(dashboard).toContainText("Using the last successful snapshot");
+  await expect(dashboard).toContainText("Snapshot incomplete");
   await expect(dashboard).toContainText("collection pagination exceeded the Web safety limit");
+  await expect(dashboard).toContainText("Sessions changed while Runtime observations were loading");
   await expect(loadedAgents).toContainText("3");
   await dashboard.getByRole("button", { name: "Connection settings" }).click();
   const connectionDialog = page.getByRole("dialog", { name: "Connect an Agent Core" });
