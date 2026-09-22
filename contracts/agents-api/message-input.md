@@ -122,9 +122,11 @@ Here `openai_hosted` means the Core-managed Docker deployment, with daemon, nati
 harness, tools and workspace in one sandbox. Image admission uses Environment type
 and the common operation-specific Runtime support; it adds no provider-name branch,
 media downloader, file permission or preparation lifecycle. Docker evidence does
-not qualify other providers or user-managed deployment. Claude keeps its native
-image-result receipt; Codex retains its documented transport-only result
-acknowledgement. Neither implies crash-safe exactly-once tool effects.
+not qualify other providers or user-managed deployment. Both adapters now require
+native function-result confirmation as described in the
+[receipt coverage](function-result-images.md). This does not imply crash-safe
+exactly-once tool effects; the original workspace acceptance predates Codex's
+native receipt qualification.
 
 ## Remaining gaps
 
