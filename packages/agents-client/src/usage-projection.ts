@@ -29,4 +29,3 @@ export function projectTokenUsage(value: unknown, invalid: () => never): AgentSe
     output_tokens_details: { reasoning_tokens: outputDetails.reasoning_tokens },
   };
 }
-

@@ -34,4 +34,3 @@ export function sameResourceId(actual: string, expected: string): boolean {
   const canonicalExpected = canonicalUuid(expected);
   return canonicalActual !== null && canonicalExpected !== null && canonicalActual === canonicalExpected;
 }
-
