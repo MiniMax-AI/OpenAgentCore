@@ -12,6 +12,7 @@ import (
 func claudeProfile() Profile {
 	return Profile{
 		StructuredOutput:       true,
+		ToolSearch:             true,
 		MessageImagePlacements: []string{"none"},
 		Placements:             []string{"none", "openai_hosted", "self_hosted"}, MCPBearer: true,
 		ValidateConfiguration: validateClaudeConfiguration,
@@ -54,6 +55,20 @@ func validateClaudeConfiguration(agent v1.Agent, environment *v1.Environment, ha
 		}
 	} else if agent.Text.Format.Type != "" && agent.Text.Format.Type != "text" {
 		return ErrInvalidInput
+	}
+	search, otherTools := false, false
+	for _, raw := range agent.Tools {
+		var tool struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(raw, &tool) != nil {
+			return ErrInvalidInput
+		}
+		search = search || tool.Type == "tool_search"
+		otherTools = otherTools || (tool.Type != "function" && tool.Type != "tool_search")
+	}
+	if search && (environment.Type != "none" || agent.MultiAgent.Enabled || otherTools || agent.Text.Format.Type == "json_schema") {
+		return errors.New("Tool discovery currently requires a single-agent environment:none function profile.")
 	}
 	return rejectSubagentTools(agent, "function", "mcp")
 }

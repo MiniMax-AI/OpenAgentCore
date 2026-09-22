@@ -7,6 +7,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
@@ -106,9 +107,12 @@ func (p Policy) engineCapabilities(peer *gateway.Session, engine string, snapsho
 	if !snapshot.Agent.MultiAgent.Enabled && !caps.SubagentControl {
 		return fail("device must advertise subagent_control")
 	}
-	functions, mcp, err := executionTools(snapshot.Agent.Tools)
+	functions, mcp, search, err := executionTools(snapshot.Agent.Tools)
 	if err != nil {
 		return fail("invalid execution tool configuration")
+	}
+	if err := (proto.PromptRequestPayload{ToolSearch: search, FunctionTools: functions}).ValidateToolSearch(caps.ToolSearch); err != nil {
+		return fail(err.Error())
 	}
 	if len(functions) > 0 && !caps.FunctionTools {
 		return fail("device must advertise function_tools")

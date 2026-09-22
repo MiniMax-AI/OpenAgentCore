@@ -15,7 +15,7 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session store.Session
 	if recoverNativeSession && !caps.NativeSessionRecovery {
 		return proto.PromptRequestPayload{}, errors.New("native session recovery is unavailable")
 	}
-	functions, mcp, err := executionTools(snapshot.Agent.Tools)
+	functions, mcp, search, err := executionTools(snapshot.Agent.Tools)
 	if err != nil {
 		return proto.PromptRequestPayload{}, err
 	}
@@ -45,7 +45,7 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session store.Session
 	if snapshot.Agent.Text.Format.Type == "json_schema" {
 		controls.OutputFormat = &proto.OutputFormat{Type: "json_schema", Schema: snapshot.Agent.Text.Format.Schema}
 	}
-	request := proto.PromptRequestPayload{AgentKind: session.Engine, FunctionTools: functions,
+	request := proto.PromptRequestPayload{AgentKind: session.Engine, FunctionTools: functions, ToolSearch: search,
 		AgentOptions: options, ExecutionControls: controls, AgentStateKey: "agents-api-" + session.ID,
 		AgentSessionID: bound.NativeSessionID, ReleaseOnCompletion: true, StrictResume: true,
 		RequireExistingNativeSession: recoverNativeSession,

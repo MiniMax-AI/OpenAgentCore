@@ -165,7 +165,7 @@ user-managed enrollment remain outside this qualification.
 | Subagents / multi_agent | Six reads and same-child recovery have three-harness Docker evidence; optional native operations, live child progress, full lifecycle/interactions and tool combinations remain explicit gaps |
 | Environment Templates | Unsupported restricted hostname forms, unqualified installation overrides/null network and exact hosted errors remain gaps. CRUD/list, files, env/setup/system/npm/Python, inline/referenced Skills, Plugins, workspace capability directories and Session references have recorded coverage. Environment Plugin MCP transport and placement limits are [listed separately](environment-templates.md#environment-origin-mcp-plugins) |
 | Input and configuration | Non-text initial input, broader content/configuration unions and reasoning/verbosity combinations; [structured output](structured-output.md) has a qualified Claude function profile, with other combinations remaining gaps |
-| Tools and interactions | Deferred functions, other tool types, effective tool-set enforcement and result/cancel publication ordering; MiniMax public functions and service-origin MCP remain unsupported |
+| Tools and interactions | [Deferred discovery qualification](tool-search.md), other tool types, effective tool-set enforcement and result/cancel publication ordering; MiniMax public functions and service-origin MCP remain unsupported |
 | Vault and Credentials | OAuth/refresh, archive semantics, revocation/concurrent mutation and exact hosted selection/error behavior; static bearer CRUD/token replacement is already present |
 | Existing resources | Full Item/SSE/Usage variants, omitted/null/default/error semantics, pagination and overlapping lifecycle behavior beyond recorded cases |
 
@@ -631,12 +631,13 @@ server validation define the supported alternatives.
 
 ### Public function configuration
 
-Inline `agent.tools` accepts non-deferred `function` definitions with the upstream
+Inline `agent.tools` accepts `function` definitions with the upstream
 required name, description and JSON Schema parameter object. Missing
 `defer_loading` resolves to `false`; null and other types are rejected. Omitted,
 null and empty tool lists resolve to an empty list. The resolved tools are part of
 the immutable Session configuration and creation retry identity. Saved-Agent
-inheritance uses the same resolved tools. Deferred discovery, other tool kinds,
+inheritance uses the same resolved tools. The bounded [deferred discovery path](tool-search.md)
+adds type-only `tool_search` for its qualified profile. Other discovery combinations, other tool kinds,
 the native 64-definition cap and unique nonblank names of at most 512 bytes remain
 compatibility gaps. Claude SDK additionally requires object-root schemas and
 text-only results. Codex internal Goal/Skills/user-input/discovery semantics need

@@ -15,7 +15,8 @@ export type Start = {
   require_history?: boolean;
   observe_messages?: boolean;
   subagents?: { max_concurrent: number };
-  functions?: { name: string; description: string; parameters: Tool["inputSchema"] }[];
+  tool_search?: boolean;
+  functions?: { name: string; description: string; parameters: Tool["inputSchema"]; defer_loading?: boolean }[];
   mcp_http_servers?: HTTPServer[];
   workspace?: Workspace;
 };
@@ -30,7 +31,7 @@ export function parseRequest(line: string): Start | Prepare {
   const value: unknown = JSON.parse(line);
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_request");
   const request = value as Record<string, unknown>;
-  const allowed = new Set(["type", "input", "model", "system_prompt", "cwd", "resume", "require_history", "observe_messages", "output_format", "subagents", "functions", "mcp_http_servers", "workspace"]);
+  const allowed = new Set(["type", "input", "model", "system_prompt", "cwd", "resume", "require_history", "observe_messages", "output_format", "subagents", "functions", "tool_search", "mcp_http_servers", "workspace"]);
   if (Object.keys(request).some(key => !allowed.has(key)) ||
       (request.type !== "start" && request.type !== "prepare") ||
       (request.type === "start" ? !Array.isArray(request.input) : "input" in request) ||
@@ -42,7 +43,12 @@ export function parseRequest(line: string): Start | Prepare {
       (request.resume !== undefined && (typeof request.resume !== "string" || !request.resume))) throw new Error("invalid_request");
   if (request.functions !== undefined && (!Array.isArray(request.functions) || request.functions.some(tool =>
       !tool || typeof tool.name !== "string" || !tool.name || typeof tool.description !== "string" ||
+      (tool.defer_loading !== undefined && typeof tool.defer_loading !== "boolean") ||
       !tool.parameters || tool.parameters.type !== "object"))) throw new Error("invalid_request");
+  const deferred = (request.functions as Start["functions"])?.some(tool => tool.defer_loading) ?? false;
+  if ((request.tool_search !== undefined && typeof request.tool_search !== "boolean") ||
+      (!!request.tool_search !== deferred) ||
+      (request.tool_search && (request.subagents || request.workspace || request.mcp_http_servers !== undefined || request.output_format))) throw new Error("invalid_request");
   if (request.subagents !== undefined) {
     const value = request.subagents as Record<string, unknown>;
     if (!value || typeof value !== "object" || Object.keys(value).length !== 1 || !Number.isSafeInteger(value.max_concurrent) || (value.max_concurrent as number) < 1 ||

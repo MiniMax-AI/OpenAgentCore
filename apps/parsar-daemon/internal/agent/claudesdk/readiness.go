@@ -29,6 +29,10 @@ func (info RuntimeInfo) SupportsMessageImages() bool {
 	return slices.Contains(info.Features, "message_images")
 }
 
+func (info RuntimeInfo) SupportsToolSearch() bool {
+	return slices.Contains(info.Features, "tool_search")
+}
+
 func (info RuntimeInfo) SupportsStructuredOutput() bool {
 	return slices.Contains(info.Features, "structured_output")
 }

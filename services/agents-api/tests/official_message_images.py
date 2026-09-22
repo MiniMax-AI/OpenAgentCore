@@ -1,17 +1,15 @@
 """Ordered image input through the pinned client, Core and a real native Runtime."""
-import base64
 import importlib.metadata
 import json
 import secrets
-import struct
 import sys
 import time
 import uuid
-import zlib
 from pathlib import Path
 
 import httpx2
 from openai import OpenAI
+from image_fixture import picture
 
 base, token, foreign, model, stage, evidence = sys.argv[1:]
 pin = json.loads((Path(__file__).resolve().parents[3] / "contracts/agents-api/upstream.json").read_text())
@@ -28,17 +26,6 @@ proof = {} if stage == "initial" else json.loads(Path(evidence).read_text())
 
 def save():
     Path(evidence).write_text(json.dumps(proof, indent=2))
-
-
-def picture(names):
-    colors = {"red": (255, 0, 0), "blue": (0, 0, 255), "green": (0, 170, 0), "yellow": (255, 255, 0)}
-    rows = b"".join(b"\0" + b"".join(bytes(colors[n]) * 100 for n in names) for _ in range(140))
-
-    def chunk(kind, value):
-        return struct.pack(">I", len(value)) + kind + value + struct.pack(">I", zlib.crc32(kind + value) & 0xffffffff)
-
-    image = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 400, 140, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
-    return "data:image/png;base64," + base64.b64encode(image).decode()
 
 
 def text(value):

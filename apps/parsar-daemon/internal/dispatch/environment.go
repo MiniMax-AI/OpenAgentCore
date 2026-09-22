@@ -7,6 +7,9 @@ import (
 )
 
 func validateExecutionEnvironment(req proto.PromptRequestPayload, caps proto.AgentKindCapabilities) error {
+	if err := req.ValidateToolSearch(caps.ToolSearch); err != nil {
+		return err
+	}
 	if req.LocalEnvironment != nil && (req.DisableExecutionEnvironment || !caps.LocalEnvironment) {
 		return errors.New("engine does not support this local Environment configuration")
 	}

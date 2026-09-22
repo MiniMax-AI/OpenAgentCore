@@ -11,9 +11,29 @@ const (
 )
 
 type FunctionTool struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Parameters  json.RawMessage `json:"parameters"`
+	Name         string          `json:"name"`
+	Description  string          `json:"description"`
+	Parameters   json.RawMessage `json:"parameters"`
+	DeferLoading bool            `json:"defer_loading,omitempty"`
+}
+
+// ValidateToolSearch checks only the requested function discovery operation.
+// Native search configuration and discovery stay inside the adapter.
+func (r PromptRequestPayload) ValidateToolSearch(supported bool) error {
+	deferred := false
+	for _, tool := range r.FunctionTools {
+		deferred = deferred || tool.DeferLoading
+	}
+	if !r.ToolSearch && !deferred {
+		return nil
+	}
+	if !supported {
+		return errors.New("engine does not support deferred function discovery")
+	}
+	if !r.ToolSearch || !deferred {
+		return errors.New("qualified discovery requires tool search and deferred functions")
+	}
+	return nil
 }
 
 // FunctionCallPayload belongs to the Run identified by Envelope.ID.

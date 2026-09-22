@@ -99,3 +99,26 @@ func TestStructuredOutputConfigurationReachesNativeUnchanged(t *testing.T) {
 		t.Fatal("unqualified subagent combination accepted")
 	}
 }
+
+func TestToolDiscoveryPreservesFrozenFunctionsAndRejectsOtherProfiles(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("PARSAR_HOME", root)
+	config := Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
+	request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Original input."), DisableSubagents: true, ToolSearch: true, AgentOptions: map[string]any{"model": "model"}, FunctionTools: []proto.FunctionTool{
+		{Name: "lookup", Description: "Lookup", Parameters: json.RawMessage(`{"type":"object","properties":{"ticket":{"const":"original"}}}`), DeferLoading: true},
+		{Name: "clock", Description: "Clock", Parameters: json.RawMessage(`{"type":"object"}`)},
+	}}
+	start, _, err := prepare(config, request)
+	if err != nil || !start.ToolSearch || !reflect.DeepEqual(start.Functions, request.FunctionTools) {
+		t.Fatal("function discovery changed native definitions", err)
+	}
+	request.DisableSubagents = false
+	if _, _, err := prepare(config, request); err == nil {
+		t.Fatal("unqualified combination admitted")
+	}
+	request.DisableSubagents = true
+	request.ToolSearch = false
+	if _, _, err := prepare(config, request); err == nil {
+		t.Fatal("deferred definitions became eager")
+	}
+}

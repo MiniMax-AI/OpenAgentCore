@@ -15,7 +15,7 @@ func TestFunctionDefinitionsRejectUnsupportedConfiguration(t *testing.T) {
 	if err != nil || len(tools) != 1 || tools[0].Name != "lookup" || tools[0].Description != "Find it" {
 		t.Fatal(tools, err)
 	}
-	for _, raw := range []string{`{"type":"mcp"}`, `{"type":"function","name":"lookup","parameters":null}`, `{"type":"function","name":"lookup","parameters":{},"defer_loading":true}`, `{"type":"function","name":"lookup","parameters":{},"unknown":true}`} {
+	for _, raw := range []string{`{"type":"mcp"}`, `{"type":"function","name":"lookup","parameters":null}`, `{"type":"function","name":"lookup","parameters":{},"unknown":true}`} {
 		if _, err := functionTools([]json.RawMessage{json.RawMessage(raw)}); err == nil {
 			t.Fatal("unsupported configuration admitted", raw)
 		}

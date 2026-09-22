@@ -21,6 +21,21 @@ func sessionResponse(session store.Session, executorURL string) (v1.Session, err
 	if cfg.Agent.XAgentsCore != nil && session.Engine != "" {
 		cfg.Agent.XAgentsCore = &v1.AgentsCore{Harness: session.Engine}
 	}
+	// The pinned Session AgentTool resource union excludes the tool_search
+	// input declaration. Retain it in saved Agents and frozen execution input.
+	tools := make([]json.RawMessage, 0, len(cfg.Agent.Tools))
+	for _, raw := range cfg.Agent.Tools {
+		var tool struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(raw, &tool) != nil {
+			return v1.Session{}, errors.New("unsupported stored tool configuration")
+		}
+		if tool.Type != "tool_search" {
+			tools = append(tools, raw)
+		}
+	}
+	cfg.Agent.Tools = tools
 	environment, err := sessionEnvironment(session, cfg.Environment.Type, executorURL)
 	if err != nil {
 		return v1.Session{}, err

@@ -81,7 +81,7 @@ An engine without native tools can guarantee their absence; an engine with tools
 must actually disable them when requested. Configuration acceptance is not proof
 of enforcement.
 
-MCP, public function calls, structured output, image inputs, verbosity controls and other optional
+MCP, public function calls, deferred function discovery, structured output, image inputs, verbosity controls and other optional
 operations do not need to match another engine. Reject unqualified combinations
 explicitly and record the gap. Never advertise a capability to bypass selection.
 

@@ -90,6 +90,7 @@ type PromptRequestPayload struct {
 	ObserveToolObservations      bool           `json:"observe_tool_observations,omitempty"`
 	ObserveSubagentIdentities    bool           `json:"observe_subagent_identities,omitempty"`
 	FunctionTools                []FunctionTool `json:"function_tools,omitempty"`
+	ToolSearch                   bool           `json:"tool_search,omitempty"`
 	DisableExecutionEnvironment  bool           `json:"disable_execution_environment,omitempty"`
 	DisableSubagents             bool           `json:"disable_subagents,omitempty"`
 }

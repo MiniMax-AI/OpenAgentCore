@@ -12,6 +12,7 @@ func resolveSessionTools(input []json.RawMessage) ([]json.RawMessage, error) {
 	functions := make([]v1.FunctionToolInput, 0, len(input))
 	positions := make([]int, 0, len(input))
 	servers := map[string]bool{}
+	search := false
 	for i, raw := range input {
 		var kind struct {
 			Type string `json:"type"`
@@ -20,6 +21,12 @@ func resolveSessionTools(input []json.RawMessage) ([]json.RawMessage, error) {
 			return nil, errors.New("Invalid execution tool configuration.")
 		}
 		switch kind.Type {
+		case "tool_search":
+			if search || decodeInputObject(raw, &kind, "type") != nil {
+				return nil, errors.New("Execution requires one type-only tool_search declaration.")
+			}
+			search = true
+			tools[i], _ = json.Marshal(kind)
 		case "mcp":
 			resolved, err := resolveMCPTool(raw, false)
 			if err != nil {
@@ -39,7 +46,7 @@ func resolveSessionTools(input []json.RawMessage) ([]json.RawMessage, error) {
 			functions = append(functions, function)
 			positions = append(positions, i)
 		default:
-			return nil, errors.New("Execution currently supports non-deferred functions and the service-origin HTTP MCP profile only.")
+			return nil, errors.New("Execution currently supports functions, tool_search and the service-origin HTTP MCP profile only.")
 		}
 	}
 	resolved, err := resolveFunctions(functions)

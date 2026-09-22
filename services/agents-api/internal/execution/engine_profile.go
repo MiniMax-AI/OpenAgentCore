@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/engine"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
@@ -24,10 +26,16 @@ func validateProfileConfiguration(profile engine.Profile, snapshot Snapshot) err
 			return profileError(err)
 		}
 	}
-	functions, mcp, err := executionTools(snapshot.Agent.Tools)
+	functions, mcp, search, err := executionTools(snapshot.Agent.Tools)
 	// Preserve each profile's admission error precedence when tool decoding fails.
 	if profile.ValidateConfiguration != nil && err != nil {
 		return err
+	}
+	if err == nil {
+		request := proto.PromptRequestPayload{ToolSearch: search, FunctionTools: functions}
+		if err := request.ValidateToolSearch(profile.ToolSearch); err != nil {
+			return err
+		}
 	}
 	if profile.ValidateTools != nil {
 		if validationErr := profile.ValidateTools(snapshot.Environment, snapshot.Daemon != nil, functions, mcp); validationErr != nil {

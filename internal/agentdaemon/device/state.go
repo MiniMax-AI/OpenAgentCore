@@ -81,6 +81,7 @@ type KindCapabilities struct {
 	ExecutionControls    bool `json:"execution_controls,omitempty"`
 	TextVerbosity        bool `json:"text_verbosity,omitempty"`
 	StructuredOutput     bool `json:"structured_output,omitempty"`
+	ToolSearch           bool `json:"tool_search,omitempty"`
 	MessageImages        bool `json:"message_images,omitempty"`
 	SubagentControl      bool `json:"subagent_control,omitempty"`
 	FunctionTools        bool `json:"function_tools,omitempty"`

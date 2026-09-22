@@ -120,12 +120,15 @@ databases, credentials and migrations. The product uses Core exclusively; it has
   discovered during a task without switching work or automatically selecting them
   next. Only a direct acceptance blocker justifies a minimal in-scope fix. After
   each bounded task passes checks/review and merges, mark its child entry done.
-  Select large Core tasks in order from the concise TODO, then use the full board
-  to choose bounded children by value, dependencies, risk and effort. Finish the
-  selected large task before switching to the next one. The main agent selects
-  tasks; subagents are for technical design, scoped collaboration and review,
-  not prioritization. Completing a child or milestone does not stop an explicitly
-  active long-term goal. Product integration, UI and business Team work remain
+  Treat each selected concise Core TODO item as a delivery milestone. The long-term
+  Goal retains the objective, constraints and standards; detailed-board entries are
+  smaller tasks within that milestone. Batch related small tasks when they share a
+  functional outcome and safety boundary, then validate and independently review
+  the batch once stable. Do not manufacture one PR per internal wiring step.
+  Finish the selected milestone before choosing another. The main agent selects
+  tasks; subagents handle technical design, scoped collaboration and review, not
+  prioritization. Stop after the complete milestone when the user sets that boundary;
+  do not automatically claim the next one or mark the long-term objective complete. Product integration, UI and business Team work remain
   outside Core delivery. Prioritize a sound architecture skeleton
   and correct principal workflows with real API validation. Record and defer
   low-frequency corner cases when risk and ROI permit; do not let minor details
@@ -1936,6 +1939,32 @@ adapter accepts only one nonempty native history for the exact bound cwd. Missin
 foreign, ambiguous or metadata-only history rejects before model input. The Runtime
 volume and shared Environment/Session binding establish ownership; this lookup
 cannot select another Session's home or infer ownership from a model response.
+
+### Deferred function discovery
+
+Public `tool_search` and function `defer_loading` are shared Runtime intent.
+Core preserves complete immutable definitions, sends `PromptRequestPayload.ToolSearch`
+and each `FunctionTool.DeferLoading`, and requires the operation's existing profile
+qualification plus the Runtime `tool_search` capability. It never performs native
+search, selects native names, interprets provider policies or implements another
+model/tool loop. Additional harnesses implement the same intent in their adapters.
+The pinned Session AgentTool response union excludes the tool_search input member;
+project it out of Session/SSE resources while preserving saved and frozen input.
+
+The bounded implementation targets Claude's single-agent `environment:none`
+function profile, including qualified inline message images. The adapter explicitly enables native ToolSearch and sets
+per-function MCP `anthropic/alwaysLoad` from the requested deferral flag. Ordinary
+functions stay eager. Existing function callbacks, application receipts, cancellation
+and cold continuation remain the only execution/result lifecycle. Runtime discovery
+advertises this operation only with an installed bridge supporting `tool_search`.
+
+Known conflicting native provider modes and search/beta settings reject in the
+adapter. The maintained native harness owns dynamic model/provider eligibility;
+its SDK exposes no reliable pre-input receipt proving effective deferral after a
+policy change. Do not represent tool inventory or an operator allowlist as that
+proof. Record exact real model/provider evidence and this detection gap separately.
+Search-only, missing-search, duplicate-search, workspace, MCP and Subagent combinations
+remain unqualified. See [the operation coverage](contracts/agents-api/tool-search.md).
 
 ### Structured output execution
 

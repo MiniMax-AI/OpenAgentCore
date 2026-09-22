@@ -159,3 +159,20 @@ func functionResultContent(text string) []proto.InputContent {
 	after := "AFTER-IMAGE"
 	return []proto.InputContent{{Type: "input_text", Text: &text}, {Type: "input_image", ImageURL: &imageURL}, {Type: "input_text", Text: &after}}
 }
+
+func TestDiscoveryCannotReachAnEagerOnlyAdapter(t *testing.T) {
+	reg := agent.NewRegistry()
+	called := false
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "eager-only", Available: true, Capabilities: proto.AgentKindCapabilities{FunctionTools: true}}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+		called = true
+		return nil, nil
+	})
+	router, _ := dispatch.New(dispatch.Config{Registry: reg, Sender: &recSender{}})
+	defer router.Shutdown(context.Background())
+	for _, search := range []bool{false, true} {
+		env, _ := proto.NewEnvelope(proto.TypePromptRequest, "discovery", proto.PromptRequestPayload{AgentKind: "eager-only", ToolSearch: search, FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object"}`), DeferLoading: true}}})
+		if err := router.Handle(t.Context(), env); err == nil || called {
+			t.Fatal("deferred definitions reached an eager-only adapter", err)
+		}
+	}
+}

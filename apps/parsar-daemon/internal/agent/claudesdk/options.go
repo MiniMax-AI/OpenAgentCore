@@ -23,6 +23,7 @@ type subagentOptions struct {
 }
 
 type startRequest struct {
+	ToolSearch       bool                 `json:"tool_search,omitempty"`
 	Subagents        *subagentOptions     `json:"subagents,omitempty"`
 	OutputFormat     *proto.OutputFormat  `json:"output_format,omitempty"`
 	Type             string               `json:"type"`
@@ -58,6 +59,15 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	}
 	if req.WorkspaceAuthoring || req.ObserveTools {
 		return fail("requested capability is not available in the private SDK adapter")
+	}
+	if err := req.ValidateToolSearch(true); err != nil {
+		return startRequest{}, nil, err
+	}
+	if req.ToolSearch {
+		if config.Workspace != nil || req.LocalEnvironment != nil || req.MCPHTTPServers != nil || !req.DisableSubagents || (req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil) {
+			return fail("tool discovery requires the single-agent text/function profile")
+		}
+		start.ToolSearch = true
 	}
 	if err := validateMCP(req); err != nil {
 		return startRequest{}, nil, err

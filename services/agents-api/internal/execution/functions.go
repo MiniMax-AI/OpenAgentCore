@@ -34,11 +34,11 @@ func functionTools(raw []json.RawMessage) ([]proto.FunctionTool, error) {
 			return nil, err
 		}
 		var schema map[string]json.RawMessage
-		if tool.Type != "function" || tool.DeferLoading || strings.TrimSpace(tool.Name) == "" || len(tool.Name) > 512 || names[tool.Name] || json.Unmarshal(tool.Parameters, &schema) != nil || schema == nil {
-			return nil, errors.New("execution requires unique non-deferred functions with object schemas")
+		if tool.Type != "function" || strings.TrimSpace(tool.Name) == "" || len(tool.Name) > 512 || names[tool.Name] || json.Unmarshal(tool.Parameters, &schema) != nil || schema == nil {
+			return nil, errors.New("execution requires unique functions with object schemas")
 		}
 		names[tool.Name] = true
-		tools = append(tools, proto.FunctionTool{Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters})
+		tools = append(tools, proto.FunctionTool{Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters, DeferLoading: tool.DeferLoading})
 	}
 	return tools, nil
 }

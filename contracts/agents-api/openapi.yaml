@@ -2720,7 +2720,11 @@ paths:
         Session creation freezes concrete metadata and encrypted content atomically.
         Skill-list omission inherits and a supplied list replaces; null overrides
         and null version selectors remain unqualified and reject. Source deletion/default
-        updates cannot change committed Session Skill contents.
+        updates cannot change committed Session Skill contents. Deferred function
+        discovery uses type-only tool_search and per-function defer_loading in the
+        qualified single-agent Claude environment:none function profile, including
+        qualified inline image messages and text results. Other combinations remain
+        unqualified; see the operation coverage.
       parameters:
       - description: agents=v1
         in: header
