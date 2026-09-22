@@ -205,7 +205,7 @@ func TestSelfHostedCreationRequiresOperatorExecution(t *testing.T) {
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, request)
 			var failure v1.ErrorResponse
-			if response.Code != http.StatusServiceUnavailable || json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error.Code != "execution_unavailable" || fixture.input.Engine != "" {
+			if response.Code != http.StatusServiceUnavailable || json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error.Code == nil || *failure.Error.Code != "execution_unavailable" || fixture.input.Engine != "" {
 				t.Fatal("operator prerequisites did not fail before persistence", response.Code, response.Body.String(), fixture.input)
 			}
 		}
@@ -222,7 +222,7 @@ func TestHostedCreationRequiresOperatorExecution(t *testing.T) {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
 		var failure v1.ErrorResponse
-		if response.Code != http.StatusServiceUnavailable || json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error.Code != "execution_unavailable" || fixture.input.Engine != "" {
+		if response.Code != http.StatusServiceUnavailable || json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error.Code == nil || *failure.Error.Code != "execution_unavailable" || fixture.input.Engine != "" {
 			t.Fatal("hosted configuration bypassed operator prerequisites", response.Code, response.Body.String())
 		}
 	}

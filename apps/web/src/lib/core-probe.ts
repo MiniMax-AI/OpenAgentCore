@@ -204,7 +204,7 @@ export async function probeCore(options: CoreProbeOptions): Promise<CoreProbeRes
       return { kind: "unauthorized", executionReadiness: "unknown", httpStatus: response.status };
     }
     if (
-      (response.status === 400 && errorCode === "invalid_beta_header") ||
+      (response.status === 400 && errorCode === "invalid_beta") ||
       response.status === 404 ||
       response.status === 405
     ) {

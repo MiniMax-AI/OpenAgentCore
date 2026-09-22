@@ -106,7 +106,7 @@ func TestHTTPRejectsUntrustedOrUnsupportedRequests(t *testing.T) {
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, r)
 			var response v1.ErrorResponse
-			if w.Code != test.status || json.Unmarshal(w.Body.Bytes(), &response) != nil || response.Error.Code == "" || s.tenant != "" {
+			if w.Code != test.status || json.Unmarshal(w.Body.Bytes(), &response) != nil || response.Error.Code == nil || *response.Error.Code == "" || s.tenant != "" {
 				t.Fatalf("response = %d %s, stored tenant = %s", w.Code, w.Body, s.tenant)
 			}
 		})

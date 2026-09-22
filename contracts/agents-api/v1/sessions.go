@@ -115,6 +115,6 @@ type ErrorResponse struct {
 type APIError struct {
 	Message string  `json:"message" binding:"required"`
 	Type    string  `json:"type" binding:"required"`
-	Code    string  `json:"code" binding:"required"`
+	Code    *string `json:"code" extensions:"x-nullable"`
 	Param   *string `json:"param" extensions:"x-nullable"`
 }

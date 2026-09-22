@@ -51,7 +51,7 @@ func TestSessionCreateFieldPresence(t *testing.T) {
 					t.Fatal("invalid request reached persistence")
 				}
 				var failure v1.ErrorResponse
-				if json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error.Code != "invalid_request" {
+				if json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error.Code == nil || *failure.Error.Code != "invalid_request" {
 					t.Fatalf("invalid error response: %s", response.Body)
 				}
 				return
