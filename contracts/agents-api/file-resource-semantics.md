@@ -72,5 +72,31 @@ changes.
 against actual Core and isolated PostgreSQL. Existing source snapshot/copy and
 Skill reference tests retain the internal read and frozen-input regressions.
 The resource acceptance does not run daemon or model execution; historical native
-qualification is separate. Required checks and review results are recorded below
-when the batch is stable.
+qualification is separate.
+
+### Batch validation (2026-09-23)
+
+The final service source `be47803` passed targeted API and actual PostgreSQL
+resource/migration/reference regressions (15.977 seconds for the Store package),
+including strict SDK 3.13.0/raw HTTP. The data correction preserved version rows,
+other resource fields and frozen Session configuration/setup bytes; reapplying it
+did not rewrite correct rows. Reconstructed Store/handler reads validate persisted
+data, not a full service process restart.
+
+All required `make check` targets passed: the server ran `make -o check-web check`
+on `zju_a100_2`, paired with a fresh local `make check-web` on `13139f5`. The latter
+adds only a browser-test focus synchronization to the service source. Client
+287, Web unit 583, Core doctor 63 and browser 76 checks passed. sqlc generation
+and byte comparison, OpenAPI generation, Go/build/native adapter/Rust gates passed.
+The optional 512 MiB source streaming and packaged MiniMax scratch/large-output
+profiles were not enabled. No new native model/Provider combination was qualified.
+
+Failures remain evidence: an initial Web type check caught a stale callback after
+removing the download action; it was removed. One Chrome context setup timed out.
+The existing Vault lifecycle browser test twice raced the dialog's scheduled
+initial focus and filled the URL into Name, before any credential was created.
+A bounded isolated run passed, but the full-suite repeat reproduced it. Reusing
+the neighboring test's initial-focus wait corrected that test synchronization;
+the final full Web gate passed without weakening assertions or changing credential
+business behavior. Private logs and original artifacts remain under the evidence
+root above. These results do not close the remaining protocol gaps.
