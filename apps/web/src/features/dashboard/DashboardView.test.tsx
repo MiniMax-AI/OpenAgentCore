@@ -242,18 +242,22 @@ describe("Dashboard loaded-result presentation", () => {
 
     expect(html).toContain("Runtime monitoring");
     expect(html).toContain("1/1 managed observed");
-    expect(html).toContain("CPU time / capacity");
+    expect(html).toContain("Cumulative CPU / capacity");
     expect(html).toContain("1m 13s / 2 cores");
     expect(html).toContain("512 MiB / 2.00 GiB");
+    expect(html).toContain('aria-label="Runtime snapshot visualizations"');
     expect(html).toContain("Runtime health");
-    expect(html).toContain("Observed · 2023-11-14 22:14 UTC");
-    expect(html).not.toContain("Observed · 10s");
-    expect(html).toContain("Usage coverage");
-    expect(html).toContain("CPU 1/1");
-    expect(html).toContain("Memory 1/1");
-    expect(html).toContain("Tokens 1/1");
-    expect(html).toContain("Unsupported 0");
+    expect(html).toContain('aria-label="1 of 1 Runtimes observed"');
+    expect(html).toContain("Resource load");
+    expect(html).toContain("CPU now");
+    expect(html).toContain("Instantaneous CPU is unavailable; cumulative CPU time remains in Explorer");
+    expect(html).toContain('aria-label="CPU now: Unavailable"');
+    expect(html).toContain('aria-label="Memory now: 25%"');
+    expect(html).toContain("Longest-running Runtimes");
+    expect(html).toContain("1m 20s");
+    expect(html).toContain("Token consumption");
     expect(html).toContain("Runtime targets");
+    expect(html).toContain('<details class="dashboard-runtime-explorer">');
     expect(html).toContain("Search Runtime targets");
     expect(html).toContain("All statuses");
     expect(html).toContain("All modes");
@@ -261,9 +265,9 @@ describe("Dashboard loaded-result presentation", () => {
     expect(html).toContain("CPU time");
     expect(html).toContain("Managed research");
     expect(html).toContain("Identity");
-    expect(html).toContain("Unknown remains unknown, never zero");
+    expect(html).toContain("unknown remains unknown, never zero");
     expect(html).not.toContain("CPU %");
-    expect(html).not.toContain("CPU now");
+    expect(html).not.toContain("CPU now: 25%");
     expect(html).not.toContain("historical chart");
   });
 

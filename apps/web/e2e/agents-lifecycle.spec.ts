@@ -2414,6 +2414,118 @@ test("presents Dashboard page-chain results and System boundaries without extra 
   await attachScreenshot(page, testInfo, "narrow-system-contract-boundary");
 });
 
+test("renders Runtime telemetry as visual snapshot panels with details on demand", async ({ page }, testInfo) => {
+  const baseline = 1_789_438_800;
+  const sessionId = "11111111-1111-4111-8111-111111111111";
+  const environmentId = "22222222-2222-4222-8222-222222222222";
+  const allocationId = "33333333-3333-4333-8333-333333333333";
+  const runtimeSession = {
+    id: sessionId,
+    object: "agent.session",
+    agent: {
+      id: "agent_b",
+      model: "fixture/model",
+      name: "Runtime analyst",
+      instructions: null,
+      multi_agent: { enabled: false, max_concurrent_subagents: null },
+      reasoning: {},
+      service_tier: "auto",
+      text: { format: { type: "text" }, verbosity: "medium" },
+      tools: [],
+    },
+    environment: {
+      type: "openai_hosted",
+      id: environmentId,
+      capability_directories: [],
+      network: { access: "enabled", allowed_domains: [] },
+      packages: { npm: [], python: [], system: [] },
+      files: [],
+      plugins: [],
+      skills: [],
+    },
+    status: "in_progress",
+    error: null,
+    metadata: { title: "Repository migration" },
+    required_actions: [],
+    vault_ids: [],
+    usage: {
+      input_tokens: 420_000,
+      output_tokens: 66_000,
+      total_tokens: 486_000,
+      input_tokens_details: { cached_tokens: 180_000 },
+      output_tokens_details: { reasoning_tokens: 22_000 },
+    },
+    created_at: baseline - 9_000,
+    last_active_at: baseline - 20,
+  };
+  const list = (data: unknown[]) => ({
+    object: "list",
+    data,
+    has_more: false,
+    first_id: data.length > 0 ? sessionId : null,
+    last_id: data.length > 0 ? sessionId : null,
+  });
+
+  await page.goto("/");
+  const dashboard = page.locator(".dashboard-page");
+  await expect(dashboard.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+
+  await page.route("**/v1/agents/sessions*", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/v1/agents/sessions") return route.fallback();
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(list([runtimeSession])) });
+  });
+  await page.route("**/v1/agents/runtime-observations*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(list([{
+        id: sessionId,
+        object: "agent.runtime_observation",
+        session_id: sessionId,
+        environment_id: environmentId,
+        mode: "openai_hosted",
+        provider_type: "docker",
+        instance: { kind: "managed_allocation", allocation_id: allocationId, device_id: null, connection_generation: null },
+        status: "observed",
+        reason: null,
+        allocation_created_at: baseline - 8_500,
+        resolved_at: baseline,
+        observed_at: baseline - 1,
+        started_at: baseline - 8_100,
+        cpu: { usage_seconds_total: 7_350, capacity_cores: 2, usage_cores: 0.72, utilization_ratio: 0.36 },
+        memory: { usage_bytes: 1_288_490_188, limit_bytes: 2_147_483_648 },
+      }])),
+    });
+  });
+
+  await dashboard.getByRole("button", { name: "Refresh Dashboard snapshot" }).click();
+  await expect(dashboard.getByRole("heading", { name: "Runtime health" })).toBeVisible();
+  await expect(dashboard.getByRole("heading", { name: "Resource load" })).toBeVisible();
+  await expect(dashboard.getByRole("heading", { name: "Longest-running Runtimes" })).toBeVisible();
+  await expect(dashboard.getByRole("heading", { name: "Token consumption" })).toBeVisible();
+  await expect(dashboard.getByLabel("CPU now: 36%")).toBeVisible();
+  await expect(dashboard.getByLabel("Memory now: 60%")).toBeVisible();
+  await expect(dashboard.getByRole("table", { name: "Runtime targets" })).not.toBeVisible();
+  for (const close of await page.getByRole("button", { name: "Close notification" }).all()) await close.click();
+  await expect(page.getByRole("button", { name: "Close notification" })).toHaveCount(0);
+  await attachElementScreenshot(dashboard.locator(".dashboard-runtime-panel"), testInfo, "runtime-visual-dashboard");
+
+  await dashboard.getByText("Runtime targets", { exact: true }).click();
+  await expect(dashboard.getByRole("table", { name: "Runtime targets" })).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dashboard.getByRole("heading", { name: "Resource load" })).toBeVisible();
+  for (const close of await page.getByRole("button", { name: "Close notification" }).all()) await close.click();
+  const widths = await dashboard.locator(".dashboard-runtime-panel").evaluate((element) => ({
+    viewport: innerWidth,
+    document: document.documentElement.scrollWidth,
+    panel: element.getBoundingClientRect().width,
+  }));
+  expect(widths.document).toBeLessThanOrEqual(widths.viewport);
+  expect(widths.panel).toBeLessThanOrEqual(widths.viewport);
+  await attachElementScreenshot(dashboard.locator(".dashboard-runtime-panel"), testInfo, "runtime-visual-dashboard-narrow");
+});
+
 test("publishes Dashboard counts only after every top-level Agent and Session page loads", async ({ page, request }) => {
   await resetFixture(request);
   const agentAfters: Array<string | null> = [];

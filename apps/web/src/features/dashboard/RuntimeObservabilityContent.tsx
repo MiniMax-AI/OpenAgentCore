@@ -1,9 +1,11 @@
 import {
+  Activity,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
   ChevronUp,
+  Clock3,
   Cpu,
   Gauge,
   MemoryStick,
@@ -66,9 +68,175 @@ function percent(usage: number | null | undefined, limit: number | null | undefi
   return Math.min(100, Math.max(0, usage / limit * 100));
 }
 
-function coverage(known: number, total: number): string {
-  if (total === 0) return "No observed Runtimes";
-  return `${Math.round(known / total * 100)}% coverage`;
+function finiteNonNegative(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function meterPercent(value: number | null): number | null {
+  return value === null ? null : Math.min(100, Math.max(0, value * 100));
+}
+
+function formatRatio(value: number | null): string {
+  return value === null ? "Unavailable" : `${(value * 100).toFixed(value >= 0.1 ? 0 : 1)}%`;
+}
+
+function RuntimeHealthChart({ rows }: { rows: RuntimeDashboardRow[] }) {
+  const counts = {
+    observed: rows.filter((row) => row.observation.status === "observed").length,
+    unavailable: rows.filter((row) => row.observation.status === "unavailable").length,
+    unsupported: rows.filter((row) => row.observation.status === "unsupported").length,
+  };
+  const total = rows.length;
+  const segments = [
+    { key: "observed", label: "Observed", count: counts.observed },
+    { key: "unavailable", label: "Unavailable", count: counts.unavailable },
+    { key: "unsupported", label: "Unsupported", count: counts.unsupported },
+  ];
+  let offset = 0;
+
+  return (
+    <section className="dashboard-runtime-visual-card" aria-labelledby="runtime-health-chart-heading">
+      <header>
+        <div><h3 id="runtime-health-chart-heading">Runtime health</h3><p>Current observation status</p></div>
+        <Activity size={16} aria-hidden="true" />
+      </header>
+      <div className="dashboard-runtime-donut-layout">
+        <div className="dashboard-runtime-donut">
+          <svg viewBox="0 0 96 96" role="img" aria-label={`${counts.observed} of ${total} Runtimes observed`}>
+            <circle className="dashboard-runtime-donut-track" cx="48" cy="48" r="36" pathLength="100" />
+            {segments.map((segment) => {
+              const size = total === 0 ? 0 : segment.count / total * 100;
+              const circle = <circle key={segment.key} className={`dashboard-runtime-donut-segment dashboard-runtime-donut-${segment.key}`} cx="48" cy="48" r="36" pathLength="100" strokeDasharray={`${size} ${100 - size}`} strokeDashoffset={-offset} />;
+              offset += size;
+              return circle;
+            })}
+          </svg>
+          <span><strong>{counts.observed}</strong><small>of {total}</small></span>
+        </div>
+        <div className="dashboard-runtime-chart-legend">
+          {segments.map((segment) => (
+            <div key={segment.key}><i className={`dashboard-runtime-legend-${segment.key}`} /><span>{segment.label}</span><strong>{segment.count}</strong></div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ResourceMeter({
+  label,
+  value,
+  detail,
+  ratio,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  ratio: number | null;
+}) {
+  const width = meterPercent(ratio);
+  return (
+    <div className="dashboard-runtime-resource-meter">
+      <div><span>{label}</span><strong>{value}</strong></div>
+      <div className="dashboard-runtime-resource-track" aria-label={`${label}: ${formatRatio(ratio)}`}>
+        {width === null ? <i className="dashboard-runtime-resource-unknown" /> : <i style={{ width: `${width}%` }} />}
+      </div>
+      <small>{detail}</small>
+    </div>
+  );
+}
+
+function RuntimeResourceChart({ rows }: { rows: RuntimeDashboardRow[] }) {
+  const observed = rows.filter((row) => row.observation.status === "observed");
+  const cpuSamples = observed.flatMap((row) => {
+    const usage = finiteNonNegative(row.observation.cpu?.usage_cores);
+    const capacity = finiteNonNegative(row.observation.cpu?.capacity_cores);
+    return usage !== null && capacity !== null && capacity > 0 ? [{ usage, capacity }] : [];
+  });
+  const memorySamples = observed.flatMap((row) => {
+    const usage = finiteNonNegative(row.observation.memory?.usage_bytes);
+    const limit = finiteNonNegative(row.observation.memory?.limit_bytes);
+    return usage !== null && limit !== null && limit > 0 ? [{ usage, limit }] : [];
+  });
+  const cpuUsage = cpuSamples.reduce((total, sample) => total + sample.usage, 0);
+  const cpuCapacity = cpuSamples.reduce((total, sample) => total + sample.capacity, 0);
+  const memoryUsage = memorySamples.reduce((total, sample) => total + sample.usage, 0);
+  const memoryLimit = memorySamples.reduce((total, sample) => total + sample.limit, 0);
+  const cpuRatio = cpuSamples.length > 0 && cpuCapacity > 0 ? cpuUsage / cpuCapacity : null;
+  const memoryRatio = memorySamples.length > 0 && memoryLimit > 0 ? memoryUsage / memoryLimit : null;
+
+  return (
+    <section className="dashboard-runtime-visual-card dashboard-runtime-resource-card" aria-labelledby="runtime-resource-chart-heading">
+      <header>
+        <div><h3 id="runtime-resource-chart-heading">Resource load</h3><p>Point-in-time provider samples</p></div>
+        <span>{observed.length} observed</span>
+      </header>
+      <div className="dashboard-runtime-resource-meters">
+        <ResourceMeter label="CPU now" value={cpuRatio === null ? "Not reported" : `${cpuUsage.toFixed(2)} / ${cpuCapacity.toLocaleString("en-US")} cores`} ratio={cpuRatio} detail={cpuSamples.length === 0 ? "Instantaneous CPU is unavailable; cumulative CPU time remains in Explorer" : `${cpuSamples.length}/${observed.length} observed Runtimes reporting`} />
+        <ResourceMeter label="Memory now" value={memoryRatio === null ? "Not reported" : `${formatDashboardBytes(memoryUsage)} / ${formatDashboardBytes(memoryLimit)}`} ratio={memoryRatio} detail={`${memorySamples.length}/${observed.length} observed Runtimes reporting usage and limit`} />
+      </div>
+    </section>
+  );
+}
+
+interface RankedBarItem {
+  id: string;
+  label: string;
+  detail: string;
+  value: number;
+  formatted: string;
+}
+
+function RankedBars({ items, empty, tone }: { items: RankedBarItem[]; empty: string; tone: "uptime" | "tokens" }) {
+  const maximum = Math.max(0, ...items.map((item) => item.value));
+  if (items.length === 0) return <p className="dashboard-runtime-chart-empty">{empty}</p>;
+  return (
+    <div className={`dashboard-runtime-ranked-bars dashboard-runtime-ranked-${tone}`}>
+      {items.map((item) => (
+        <div key={item.id} className="dashboard-runtime-ranked-row">
+          <div><span>{item.label}</span><strong>{item.formatted}</strong></div>
+          <div className="dashboard-runtime-ranked-track"><i style={{ width: `${maximum === 0 ? 0 : Math.max(3, item.value / maximum * 100)}%` }} /></div>
+          <small>{item.detail}</small>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RuntimeRankChart({ rows, kind }: { rows: RuntimeDashboardRow[]; kind: "uptime" | "tokens" }) {
+  const uptime = kind === "uptime";
+  const items = rows.flatMap((row): RankedBarItem[] => {
+    const value = uptime ? row.computeUptimeSeconds : row.session.totalTokens;
+    if (value === null || !Number.isFinite(value) || value < 0) return [];
+    return [{
+      id: row.observation.id,
+      label: row.session.title,
+      detail: uptime ? runtimeModeLabel(row) : dashboardStatusLabel(row.session.status),
+      value,
+      formatted: uptime ? formatDashboardDuration(value) : formatDashboardTokens(value),
+    }];
+  }).sort((left, right) => right.value - left.value).slice(0, 5);
+  const title = uptime ? "Longest-running Runtimes" : "Token consumption";
+  return (
+    <section className="dashboard-runtime-visual-card" aria-labelledby={`runtime-${kind}-chart-heading`}>
+      <header>
+        <div><h3 id={`runtime-${kind}-chart-heading`}>{title}</h3><p>{uptime ? "Current incarnation uptime" : "Session-reported total usage"}</p></div>
+        {uptime ? <Clock3 size={16} aria-hidden="true" /> : <Gauge size={16} aria-hidden="true" />}
+      </header>
+      <RankedBars items={items} tone={kind} empty={uptime ? "No running Runtime currently reports a start time." : "No Session currently reports token usage."} />
+    </section>
+  );
+}
+
+function RuntimeVisuals({ rows }: { rows: RuntimeDashboardRow[] }) {
+  return (
+    <div className="dashboard-runtime-visual-grid" aria-label="Runtime snapshot visualizations">
+      <RuntimeHealthChart rows={rows} />
+      <RuntimeResourceChart rows={rows} />
+      <RuntimeRankChart rows={rows} kind="uptime" />
+      <RuntimeRankChart rows={rows} kind="tokens" />
+    </div>
+  );
 }
 
 function runtimeModeLabel(row: RuntimeDashboardRow): string {
@@ -77,20 +245,6 @@ function runtimeModeLabel(row: RuntimeDashboardRow): string {
     return provider ? `Managed ${provider === "docker" ? "Docker" : provider}` : "Managed";
   }
   return dashboardEnvironmentLabel(row.session.environmentProfile);
-}
-
-function observationTimestamp(row: RuntimeDashboardRow, loadedAt: number): number | null {
-  const timestamp = row.observation.status === "observed"
-    ? row.observation.observed_at
-    : row.observation.resolved_at;
-  if (!Number.isSafeInteger(timestamp) || timestamp < 0 || timestamp > Math.floor(loadedAt / 1_000)) return null;
-  return timestamp;
-}
-
-function healthDetail(row: RuntimeDashboardRow, loadedAt: number): string {
-  const status = runtimeObservationStatusLabel(row.observation);
-  const timestamp = observationTimestamp(row, loadedAt);
-  return timestamp === null ? status : `${status} · ${formatDashboardTimestamp(timestamp)}`;
 }
 
 function SortHeader({
@@ -233,14 +387,7 @@ function RuntimeTargets({
   const visibleRows = table.getFilteredRowModel().rows.length;
 
   return (
-    <section className="dashboard-runtime-targets" aria-labelledby="dashboard-runtime-targets-heading">
-      <header>
-        <div>
-          <h3 id="dashboard-runtime-targets-heading">Runtime targets</h3>
-          <p>Read-only Session navigation · missing measurements remain unknown</p>
-        </div>
-        <span>{visibleRows.toLocaleString("en-US")} visible</span>
-      </header>
+    <section className="dashboard-runtime-targets" aria-label="Runtime target explorer">
       <div className="dashboard-runtime-toolbar">
         <label className="dashboard-runtime-search">
           <Search size={14} aria-hidden="true" />
@@ -265,6 +412,7 @@ function RuntimeTargets({
             <option value="none">None</option>
           </select>
         </label>
+        <span className="dashboard-runtime-visible-count">{visibleRows.toLocaleString("en-US")} visible</span>
       </div>
       <div className="dashboard-runtime-table-scroll">
         <table className="dashboard-runtime-table" aria-label="Runtime targets">
@@ -314,36 +462,20 @@ export function RuntimeObservabilityContent({
     <>
       <div className="dashboard-runtime-summary" aria-label="Runtime resource snapshot">
         <RuntimeMetric icon={<Server size={17} />} label="Active Runtimes" value={summary.observedRuntimeCount.toLocaleString("en-US")} detail={`${summary.managedRuntimeCount} managed · ${summary.unavailableRuntimeCount} unavailable`} />
-        <RuntimeMetric icon={<Cpu size={17} />} label="CPU time / capacity" value={summary.cpuUsageSecondsTotal === null && summary.cpuCapacityCores === null ? "No current sample" : `${formatDashboardDuration(summary.cpuUsageSecondsTotal)} / ${summary.cpuCapacityCores?.toLocaleString("en-US") ?? "—"} cores`} detail={`${summary.cpuCoverageCount}/${summary.observedRuntimeCount} observed Runtimes report CPU`} />
-        <RuntimeMetric icon={<MemoryStick size={17} />} label="Memory" value={summary.memoryUsageBytes === null && summary.memoryLimitBytes === null ? "No current sample" : `${formatDashboardBytes(summary.memoryUsageBytes)} / ${formatDashboardBytes(summary.memoryLimitBytes)}`} detail={`${summary.memoryCoverageCount}/${summary.observedRuntimeCount} observed Runtimes report memory`} />
+        <RuntimeMetric icon={<Cpu size={17} />} label="Cumulative CPU / capacity" value={summary.cpuUsageSecondsTotal === null && summary.cpuCapacityCores === null ? "No current sample" : `${formatDashboardDuration(summary.cpuUsageSecondsTotal)} / ${summary.cpuCapacityCores?.toLocaleString("en-US") ?? "—"} cores`} detail={`${summary.cpuCoverageCount}/${summary.observedRuntimeCount} observed Runtimes report CPU time`} />
+        <RuntimeMetric icon={<MemoryStick size={17} />} label="Memory now" value={summary.memoryUsageBytes === null && summary.memoryLimitBytes === null ? "No current sample" : `${formatDashboardBytes(summary.memoryUsageBytes)} / ${formatDashboardBytes(summary.memoryLimitBytes)}`} detail={`${summary.memoryCoverageCount}/${summary.observedRuntimeCount} observed Runtimes report usage`} />
         <RuntimeMetric icon={<Gauge size={17} />} label="Reported tokens" value={formatDashboardTokens(summary.totalTokens)} detail={`${summary.tokenCoverageCount}/${summary.sessionCount} Sessions report usage`} />
       </div>
 
-      <div className="dashboard-runtime-insights">
-        <section className="dashboard-runtime-insight" aria-labelledby="dashboard-runtime-health-heading">
-          <header><div><h3 id="dashboard-runtime-health-heading">Runtime health</h3><p>Status and observation freshness by Session</p></div><span>{summary.sessionCount} contexts</span></header>
-          <div className="dashboard-runtime-health-grid">
-            {model.rows.slice(0, 8).map((row) => (
-              <button className={`dashboard-runtime-health dashboard-runtime-health-${row.observation.status}`} type="button" key={row.observation.id} onClick={() => onOpenSession(row.observation.session_id)}>
-                <strong>{row.session.title}</strong><span>{healthDetail(row, snapshot.loadedAt)}</span>
-              </button>
-            ))}
-            {model.rows.length > 8 ? <span className="dashboard-runtime-health-more">+{model.rows.length - 8} more</span> : null}
-          </div>
-        </section>
-        <section className="dashboard-runtime-insight" aria-labelledby="dashboard-runtime-coverage-heading">
-          <header><div><h3 id="dashboard-runtime-coverage-heading">Usage coverage</h3><p>Unknown remains unknown, never zero</p></div><span>{stale ? "retained snapshot" : "current snapshot"}</span></header>
-          <div className="dashboard-runtime-coverage-grid">
-            <div><strong>CPU {summary.cpuCoverageCount}/{summary.observedRuntimeCount}</strong><span>{coverage(summary.cpuCoverageCount, summary.observedRuntimeCount)}</span></div>
-            <div><strong>Memory {summary.memoryCoverageCount}/{summary.observedRuntimeCount}</strong><span>{coverage(summary.memoryCoverageCount, summary.observedRuntimeCount)}</span></div>
-            <div><strong>Tokens {summary.tokenCoverageCount}/{summary.sessionCount}</strong><span>{coverage(summary.tokenCoverageCount, summary.sessionCount)}</span></div>
-            <div className="dashboard-runtime-coverage-warning"><strong>Unavailable {summary.unavailableRuntimeCount}</strong><span>current observations</span></div>
-            <div className="dashboard-runtime-coverage-unsupported"><strong>Unsupported {summary.unsupportedRuntimeCount}</strong><span>self-hosted or none</span></div>
-          </div>
-        </section>
-      </div>
+      <RuntimeVisuals rows={model.rows} />
 
-      <RuntimeTargets rows={model.rows} onOpenSession={onOpenSession} />
+      <details className="dashboard-runtime-explorer">
+        <summary>
+          <span><strong>Runtime targets</strong><small>Search and inspect exact observations · unknown remains unknown, never zero</small></span>
+          <span>{model.rows.length.toLocaleString("en-US")} targets · {stale ? "retained snapshot" : "current snapshot"}<ChevronDown size={15} aria-hidden="true" /></span>
+        </summary>
+        <RuntimeTargets rows={model.rows} onOpenSession={onOpenSession} />
+      </details>
     </>
   );
 }
