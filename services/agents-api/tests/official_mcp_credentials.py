@@ -34,7 +34,7 @@ def verify_mcp_credentials(client, other, peer, canary, expect_error):
             "transport": {"type": "http", "server_url": url}, "allowed_tools": ["remember"]}
     anonymous = {**tool, "server_label": "anonymous",
                  "transport": {"type": "http", "server_url": anonymous_url}}
-    inline = {"agent": {"model": "requested-model", "tools": [tool, anonymous]},
+    inline = {"input": "Verify mcp credentials fixture admission.", "agent": {"model": "requested-model", "tools": [tool, anonymous]},
               "environment": {"type": "none"}, "vault_ids": ids}
     saved_sessions, saved_agents, retries = [], [], []
 
@@ -44,9 +44,9 @@ def verify_mcp_credentials(client, other, peer, canary, expect_error):
         assert body["agent"]["tools"][0]["credential_id"] == expected_credential
         assert "headers" not in body["agent"]["tools"][0]["transport"]
         assert canary not in json.dumps(body) and "mcp_credentials" not in body
-        assert value.status == "idle"
-        assert list(sessions.turns.list(value.id)) == []
-        assert list(sessions.items.list(value.id)) == []
+        assert value.status == "in_progress"
+        assert len(list(sessions.turns.list(value.id))) == 1
+        assert [item.content[0].text for item in sessions.items.list(value.id)] == [inline["input"]]
         assert sessions.retrieve(value.id) == value
         assert peer.beta.agents.sessions.retrieve(value.id) == value
         expect_error(NotFoundError, lambda: other.beta.agents.sessions.retrieve(value.id))
@@ -65,7 +65,7 @@ def verify_mcp_credentials(client, other, peer, canary, expect_error):
         retries.append((request, key, value))
 
     saved = client.beta.agents.create(model="requested-model", tools=[tool, anonymous])
-    saved_spec = {"agent_id": saved.id, "environment": {"type": "none"}, "vault_ids": ids}
+    saved_spec = {"input": "Verify mcp credentials fixture admission.", "agent_id": saved.id, "environment": {"type": "none"}, "vault_ids": ids}
     saved_key = {"Idempotency-Key": "mcp-vault-saved-" + saved.id}
     value = sessions.create(**saved_spec, extra_headers=saved_key)
     saved_session = value
@@ -87,7 +87,7 @@ def verify_mcp_credentials(client, other, peer, canary, expect_error):
             assert event["type"] == "agent.session.created"
             assert canary not in json.dumps(event) and "mcp_credentials" not in event["session"]
         streamed = sessions.retrieve(event["session"]["id"])
-        assert streamed.to_dict() == event["session"]
+        assert streamed.id == event["session"]["id"] and streamed.agent.to_dict() == event["session"]["agent"]
         verify_session(streamed, ids, None)
         retries.append((inline, stream_key, streamed))
 
@@ -111,7 +111,7 @@ def verify_mcp_credentials(client, other, peer, canary, expect_error):
         verify_session(value, ids, second.id)
         for request, key, original in retries:
             assert sessions.create(**request, extra_headers=key) == original
-            assert list(sessions.turns.list(original.id)) == []
+            assert len(list(sessions.turns.list(original.id))) == 1
         expect_error(BadRequestError, lambda: sessions.create(**inline))
 
         changed = client.beta.agents.update(saved.id, tools=[])
@@ -124,7 +124,7 @@ def verify_mcp_credentials(client, other, peer, canary, expect_error):
         referenced = client.beta.agents.create(model="requested-model", tools=[{**tool, "credential_id": outside.id}])
         saved_agents.append(referenced)
         expect_error(NotFoundError, lambda: sessions.create(agent_id=referenced.id,
-                     environment={"type": "none"}, vault_ids=ids))
+                     input="Verify mcp credentials fixture admission.", environment={"type": "none"}, vault_ids=ids))
 
         before = {item.id for item in sessions.list()}
         foreign_before = {item.id for item in other.beta.agents.sessions.list()}

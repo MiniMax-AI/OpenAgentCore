@@ -35,9 +35,9 @@ def main():
             time.sleep(0.05)
         raise AssertionError([(turn.id, turn.status, turn.error) for turn in turns])
 
-    def create():
+    def create(initial, **options):
         return sessions.create(agent={"model": "gpt-5.5", "instructions": "Keep the conversation."},
-                               environment={"type": "none"})
+                               environment={"type": "none"}, input=initial, **options)
 
     def until_idle(stream):
         events = []
@@ -53,12 +53,12 @@ def main():
         raise AssertionError("stream ended without an idle Session")
 
     try:
-        session = create()
-        assert session.agent.tools == []
         event = message("Search the web for this answer.", "Second message in the same event.")
-        with sessions.events.stream(session.id, timeout=20) as stream:
-            assert sessions.events.create(session.id, events=[event], idempotency_key="first") is None
-            sessions.events.create(session.id, events=[event], idempotency_key="first")
+        creation_key = {"Idempotency-Key": "first"}
+        with create(event["input"], stream=True, extra_headers=creation_key) as stream:
+            session = next(stream).session
+            assert session.agent.tools == []
+            assert create(event["input"], extra_headers=creation_key).id == session.id
             first_events = until_idle(stream)
         first = wait_turn(session.id, "completed")
         assert sessions.retrieve(session.id).status == "idle"
@@ -84,7 +84,7 @@ def main():
         deltas = [value.delta for value in text_events if value.type.endswith(".delta")]
         assert len(deltas) >= 2 and "".join(deltas) == answers[0].content[0].text, deltas
         try:
-            sessions.events.create(session.id, events=[message("changed")], idempotency_key="first")
+            create(message("changed")["input"], extra_headers=creation_key)
             raise AssertionError("changed retry accepted")
         except ConflictError:
             pass
@@ -94,7 +94,9 @@ def main():
         except NotFoundError:
             pass
         with sessions.events.stream(session.id, timeout=20, extra_headers={"Last-Event-ID": first_events[-1].event_id}) as stream:
-            sessions.events.create(session.id, events=[message("Continue the same native conversation.")], idempotency_key="second")
+            continuation = message("Continue the same native conversation.")
+            for _ in range(2):
+                assert sessions.events.create(session.id, events=[continuation], idempotency_key="second") is None
             second_events = until_idle(stream)
         second = wait_turn(session.id, "completed", 2)
         assert all(getattr(value, "turn_id", None) != first.id for value in second_events)
@@ -102,7 +104,13 @@ def main():
         expected_total = {"input_tokens": 20, "input_tokens_details": {"cached_tokens": 8},
                           "output_tokens": 6, "output_tokens_details": {"reasoning_tokens": 4}, "total_tokens": 26}
         assert sessions.retrieve(session.id).usage.model_dump() == expected_total
-        sessions.events.create(session.id, events=[event], idempotency_key="first")
+        assert create(event["input"], extra_headers=creation_key).id == session.id
+        sessions.events.create(session.id, events=[continuation], idempotency_key="second")
+        try:
+            sessions.events.create(session.id, events=[message("changed continuation")], idempotency_key="second")
+            raise AssertionError("changed event retry accepted")
+        except ConflictError:
+            pass
         assert len(sessions.turns.list(session.id).data) == 2
         client.close()
         client = OpenAI(base_url=base + "/v1", api_key=token, max_retries=0,
@@ -112,8 +120,7 @@ def main():
         assert len(sessions.items.list(session.id, limit=100).data) == 5
         assert sessions.retrieve(session.id).usage.model_dump() == expected_total
         assert sessions.turns.retrieve(first.id, session_id=session.id).usage.model_dump() == expected_usage
-        cancelled = create()
-        sessions.events.create(cancelled.id, events=[message("PUBLIC-CANCEL")])
+        cancelled = create("PUBLIC-CANCEL")
         wait_turn(cancelled.id, "in_progress")
         time.sleep(0.5)
         retained = sessions.items.list(cancelled.id, limit=100).data
@@ -128,34 +135,35 @@ def main():
         for verbosity in ("low", "medium", "high"):
             agent = {"model": "gpt-5.5", "text": {"verbosity": verbosity, "format": {"type": "text"}}}
             key = "text-" + verbosity
-            configured = sessions.create(agent=agent, environment={"type": "none"}, extra_headers={"Idempotency-Key": key})
+            configured = sessions.create(agent=agent, environment={"type": "none"}, input="TEXT-VERBOSITY:" + verbosity, extra_headers={"Idempotency-Key": key})
             agent["text"]["format"] = None
-            assert sessions.create(agent=agent, environment={"type": "none"}, extra_headers={"Idempotency-Key": key}).id == configured.id
+            assert sessions.create(agent=agent, environment={"type": "none"}, input="TEXT-VERBOSITY:" + verbosity, extra_headers={"Idempotency-Key": key}).id == configured.id
             assert configured.agent.text.model_dump() == {"format": {"type": "text"}, "verbosity": verbosity}
             for count in (1, 2):
-                sessions.events.create(configured.id, events=[message("TEXT-VERBOSITY:" + verbosity)])
+                if count > 1:
+                    sessions.events.create(configured.id, events=[message("TEXT-VERBOSITY:" + verbosity)])
                 wait_turn(configured.id, "completed", count)
                 assert sessions.retrieve(configured.id).agent.text == configured.agent.text
             agent["text"]["verbosity"] = "high" if verbosity != "high" else "low"
             try:
-                sessions.create(agent=agent, environment={"type": "none"}, extra_headers={"Idempotency-Key": key})
+                sessions.create(agent=agent, environment={"type": "none"}, input="TEXT-VERBOSITY:" + verbosity, extra_headers={"Idempotency-Key": key})
                 raise AssertionError("changed text configuration reused a retry key")
             except ConflictError:
                 pass
         default_agent = {"model": "custom-provider-model"}
         default = sessions.create(agent=default_agent, environment={"type": "none"},
-                                  extra_headers={"Idempotency-Key": "native-default"})
+                                  input="DEFAULT-VERBOSITY", extra_headers={"Idempotency-Key": "native-default"})
         for text in (None, {"verbosity": None}, {"verbosity": "medium"}):
             configured = sessions.create(agent=dict(default_agent, text=text), environment={"type": "none"},
-                                         extra_headers={"Idempotency-Key": "native-default"})
+                                         input="DEFAULT-VERBOSITY", extra_headers={"Idempotency-Key": "native-default"})
             assert configured.id == default.id and configured.agent.text.verbosity == "medium"
         for count in (1, 2):
-            sessions.events.create(default.id, events=[message("DEFAULT-VERBOSITY")])
+            if count > 1:
+                sessions.events.create(default.id, events=[message("DEFAULT-VERBOSITY")])
             wait_turn(default.id, "completed", count)
             assert sessions.retrieve(default.id).agent.text.verbosity == "medium"
         unsupported = sessions.create(agent={"model": "custom-provider-model", "text": {"verbosity": "high"}},
-                                      environment={"type": "none"})
-        sessions.events.create(unsupported.id, events=[message("UNSUPPORTED-VERBOSITY")])
+                                      environment={"type": "none"}, input="UNSUPPORTED-VERBOSITY")
         failed = wait_turn(unsupported.id, "failed")
         assert failed.error is not None and failed.error.code == "internal_error", failed.error
         assert sessions.retrieve(unsupported.id).status == "failed"

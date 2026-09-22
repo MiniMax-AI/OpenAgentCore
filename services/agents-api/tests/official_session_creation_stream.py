@@ -14,10 +14,10 @@ def verify_creation_streams(client, raw, base, headers, foreign, unsupported):
     sessions = client.beta.agents.sessions
     spec = {"agent": {"model": "test-model"}, "environment": {"type": "none"}}
     saved = client.beta.agents.create(model="test-model", instructions="Saved stream configuration.")
-    forms = [None, "First", [{"role": "user", "content": [{"type": "input_text", "text": "First"}]},
+    forms = ["First", [{"role": "user", "content": [{"type": "input_text", "text": "First"}]},
                               {"role": "user", "content": [{"type": "input_text", "text": "Second"}]}]]
     for index, initial in enumerate(forms):
-        config = spec if index != 2 else {"agent_id": saved.id, "environment": {"type": "none"}}
+        config = spec if index != 1 else {"agent_id": saved.id, "environment": {"type": "none"}}
         request = {**config, "input": initial}
         key = {"Idempotency-Key": str(uuid.uuid4())}
         with sessions.create(**request, stream=True, extra_headers=key) as stream:
@@ -26,11 +26,9 @@ def verify_creation_streams(client, raw, base, headers, foreign, unsupported):
             assert set(first.to_dict()) == {"type", "event_id", "session"}
             session = first.session
             assert session.status == "idle" and session.last_active_at == session.created_at
-            if index == 2:
+            if index == 1:
                 assert session.agent.id == saved.id and session.agent.instructions == saved.instructions
-            if initial is None:
-                sessions.events.create(session.id, events=[{"type": "agent.session.input.message", "input": [{"role": "user", "content": [{"type": "input_text", "text": "First"}]}]}])
-            count = 2 if index == 2 else 1
+            count = 2 if index == 1 else 1
             events = [next(stream) for _ in range(2 + count)]
             assert [event.type for event in events] == ["agent.session.turn.created", "agent.session.in_progress"] + ["agent.session.turn.item.added"] * count
             assert len({event.event_id for event in [first, *events]}) == 3 + count
@@ -88,4 +86,4 @@ def verify_creation_streams(client, raw, base, headers, foreign, unsupported):
     response = raw.post(unsupported + "/v1/agents/sessions", headers=headers, json={**request, "stream": True})
     assert response.status_code == 400 and response.headers["content-type"].startswith("application/json")
     assert {session.id for session in sessions.list()} == before
-    print("Creation streams: fixed SDK/raw HTTP, initial and idle creation, snapshots/order, saved Agents, safe retries, later Turns, disconnect recovery and pre-stream errors passed.")
+    print("Creation streams: fixed SDK/raw HTTP, initial admission and later idle continuation, snapshots/order, saved Agents, safe retries, later Turns, disconnect recovery and pre-stream errors passed.")

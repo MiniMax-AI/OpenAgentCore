@@ -50,7 +50,7 @@ def verify_session_creators(client, owner, other, rotated, peer, same_id, spec, 
         request = spec | {"metadata": metadata}
         key = {"Idempotency-Key": str(uuid.uuid4())}
         first = sessions.create(**request, extra_headers=key | forged)
-        assert first.status == "idle" and first.metadata == metadata
+        assert first.status == "in_progress" and first.metadata == metadata
         check_retries(request, key, first)
         foreign = other.beta.agents.sessions.create(**request, extra_headers=key)
         assert foreign.id != first.id
@@ -61,8 +61,8 @@ def verify_session_creators(client, owner, other, rotated, peer, same_id, spec, 
         for caller in (collaborator, typed_peer):
             assert caller.beta.agents.sessions.retrieve(first.id) == first
             assert first.id in {item.id for item in caller.beta.agents.sessions.list()}
-            assert list(caller.beta.agents.sessions.turns.list(first.id)) == []
-            assert list(caller.beta.agents.sessions.items.list(first.id)) == []
+            assert len(list(caller.beta.agents.sessions.turns.list(first.id))) == 1
+            assert [item.content[0].text for item in caller.beta.agents.sessions.items.list(first.id)] == [request["input"]]
         current = collaborator.beta.agents.sessions.update(first.id, metadata={"creator_id": "test-peer"})
         assert without_metadata(current) == without_metadata(first)
         assert_no_creator_fields(current.to_dict())
@@ -84,7 +84,7 @@ def verify_session_creators(client, owner, other, rotated, peer, same_id, spec, 
         # Saved references recover before source resolution, even after a peer
         # changes or deletes the source Agent.
         source = owner.beta.agents.create(model="creator-fixture-model", instructions="Frozen source.")
-        request = {"agent_id": source.id, "environment": {"type": "none"}, "metadata": metadata}
+        request = {"input": "Verify session creators fixture admission.", "agent_id": source.id, "environment": {"type": "none"}, "metadata": metadata}
         key = {"Idempotency-Key": str(uuid.uuid4())}
         saved = sessions.create(**request, extra_headers=key | forged)
         check_retries(request, key, saved)
@@ -110,6 +110,7 @@ def verify_session_creators(client, owner, other, rotated, peer, same_id, spec, 
         assert streamed.id == created["session"]["id"]
         for caller in (owner, collaborator):
             expect_error(ConflictError, lambda: caller.beta.agents.sessions.create(**spec, extra_headers=key))
+        collaborator.beta.agents.sessions.events.create(streamed.id, events=[{"type": "agent.session.input.cancel"}])
         deleted = collaborator.beta.agents.sessions.delete(streamed.id)
         assert deleted.deleted is True and deleted.id == streamed.id
         expect_error(NotFoundError, lambda: typed_peer.beta.agents.sessions.retrieve(streamed.id))

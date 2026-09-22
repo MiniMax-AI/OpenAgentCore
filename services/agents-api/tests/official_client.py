@@ -61,8 +61,8 @@ def main():
             path = "/agents/sessions/{session_id}"
             if suffix and suffix[0] == "turns":
                 path += "/turns" + ("/{turn_id}" if len(suffix) > 1 else "")
-            elif suffix and suffix[0] == "items":
-                path += "/items"
+            elif suffix and suffix[0] in ("items", "events"):
+                path += "/" + suffix[0]
         elif path.startswith("/vaults/"):
             suffix = path.split("/")[3:]
             path = "/vaults/{vault_id}"
@@ -72,6 +72,9 @@ def main():
             path = "/agents/{agent_id}"
         elif path.startswith("/files/"):
             path = "/files/{file_id}/content" if path.endswith("/content") else "/files/{file_id}"
+        if path.endswith("/events") and response.status_code == 202:
+            assert response.content == b""
+            return
         schema = contract["paths"][path][response.request.method.lower()]["responses"][str(response.status_code)]["schema"]
         Draft4Validator({"definitions": contract["definitions"], **schema}).validate(response.json())
     pin = json.loads((root / "contracts/agents-api/upstream.json").read_text())
@@ -108,6 +111,9 @@ def main():
         credential_key.write_text(base64.b64encode(secrets.token_bytes(32)).decode() + "\n")
         env = dict(os.environ, AGENTS_API_DATABASE_URL=dsn, AGENTS_API_KEYS_FILE=str(keys), AGENTS_API_ADDR=f"127.0.0.1:{port}", AGENTS_API_ENGINE="codex")
         env["AGENTS_API_CREDENTIAL_KEY_FILE"] = str(credential_key)
+        # Enable the real Worker/gateway admission path without connecting a daemon.
+        # Synthetic fixture inputs remain queued; this is not live model acceptance.
+        env["AGENTS_API_DAEMON_WS_URL"] = f"ws://127.0.0.1:{port}/api/v1/agent-daemon/ws"
         with (Path(directory) / "server.log").open("w+") as log:
             def start():
                 child = subprocess.Popen([binary], env=env, stdout=log, stderr=log)
@@ -158,13 +164,15 @@ def main():
                     saved_agents = verify_agents(a, b, invalid, expect_error)
                     listed_agents = verify_agent_list(a, b, invalid, saved_agents, expect_error)
                     sessions = a.beta.agents.sessions
-                    spec = {"agent": {"model": "requested-test-model", "instructions": "Keep the configuration."}, "environment": {"type": "none"}}
+                    spec = {"input": "Verify client fixture admission.", "agent": {"model": "requested-test-model", "instructions": "Keep the configuration."}, "environment": {"type": "none"}}
                     headers = {"Idempotency-Key": "same-key"}
                     first = sessions.create(**spec, metadata={"workspace": "untrusted-reference"}, extra_headers=headers)
-                    assert first.object == "agent.session" and first.status == "idle"
+                    assert first.object == "agent.session" and first.status == "in_progress"
                     assert first.agent.model == spec["agent"]["model"] and first.agent.instructions == spec["agent"]["instructions"]
                     assert first.environment.type == "none" and first.required_actions == [] and first.vault_ids == []
                     assert first.agent.tools == [] and first.agent.multi_agent.enabled is False
+                    default_raw = sessions.with_raw_response.retrieve(first.id)
+                    assert default_raw.http_response.json()["agent"]["tools"] == []
                     assert first.created_at == first.last_active_at and isinstance(first.created_at, int)
                     replay = sessions.create(**spec, metadata={"workspace": "untrusted-reference"}, extra_headers=headers)
                     assert replay == first
@@ -187,9 +195,11 @@ def main():
                     expect_error(NotFoundError, lambda: b.beta.agents.sessions.list(after=first.id))
                     expect_error(AuthenticationError, lambda: invalid.beta.agents.sessions.retrieve(first.id))
                     expect_error(BadRequestError, lambda: sessions.retrieve(first.id, extra_headers={"OpenAI-Beta": ""}))
-                    expect_error(BadRequestError, lambda: sessions.create(**spec, input=[{"role": "user", "content": [{"type": "input_image", "image_url": "https://example.com/image.png"}]}]))
-                    unavailable = expect_error(InternalServerError, lambda: sessions.create(agent=spec["agent"], environment={"type": "self_hosted", "workspace_directory": "/workspace"}))
-                    assert unavailable.status_code == 503 and unavailable.body["code"] == "execution_unavailable"
+                    expect_error(BadRequestError, lambda: sessions.create(**{**spec, "input": [{"role": "user", "content": [{"type": "input_image", "image_url": "https://example.com/image.png"}]}]}))
+                    self_hosted = sessions.create(agent=spec["agent"], environment={"type": "self_hosted", "workspace_directory": "/workspace"})
+                    assert self_hosted.environment.type == "self_hosted"
+                    assert list(sessions.turns.list(self_hosted.id)) == []
+                    assert sessions.delete(self_hosted.id).deleted
                     expect_error(BadRequestError, lambda: sessions.create(**spec, extra_body={"tenant_id": bindings[1]["tenant_id"]}))
                     assert list(sessions.list(agent_id="unknown-agent")) == []
                     assert list(sessions.list(agent_id=first.agent.id)) == [first]
@@ -202,6 +212,9 @@ def main():
                     request_sessions = verify_session_create_requests(a, spec)
                     request_sessions.append(verify_session_metadata(a, b, invalid, spec, expect_error))
                     turn_session = sessions.create(**spec)
+                    sessions.events.create(turn_session.id, events=[{"type": "agent.session.input.cancel"}])
+                    initial_turn = list(sessions.turns.list(turn_session.id))[0]
+                    assert initial_turn.status == "cancelled"
                     fixture = Path(directory) / "turns.json"
                     fixture.write_text(json.dumps({"tenant": bindings[0]["tenant_id"], "session": turn_session.id}))
                     subprocess.run(["go", "run", "./services/agents-api/tests/fixtures"], cwd=root,
@@ -209,6 +222,8 @@ def main():
                     turn_ids = json.loads(fixture.read_text())["turns"]
                     turns = sessions.turns
                     recovered = list(turns.list(turn_session.id, limit=1, order="asc"))
+                    assert recovered[0] == initial_turn
+                    recovered = recovered[1:]
                     assert [turn.id for turn in recovered] == turn_ids
                     assert [turn.status for turn in recovered] == ["completed", "failed", "cancelled", "in_progress"]
                     assert all(turn.agent_id == turn_session.agent.id and turn.session_id == turn_session.id for turn in recovered)
@@ -217,9 +232,9 @@ def main():
                     assert recovered[1].error.code == "internal_error" and all(turn.error is None for turn in [recovered[0], *recovered[2:]])
                     assert all(turn.usage is None for turn in recovered)
                     assert "SECRET" not in repr(recovered) and "PRIVATE" not in repr(recovered)
-                    assert [turn.id for turn in turns.list(turn_session.id, limit=2)] == list(reversed(turn_ids))
+                    assert [turn.id for turn in turns.list(turn_session.id, limit=2)] == list(reversed([initial_turn.id, *turn_ids]))
                     assert list(turns.list(turn_session.id, after=turn_ids[-1], order="asc")) == []
-                    assert list(turns.list(first.id)) == []
+                    assert len(list(turns.list(first.id))) == 1
                     assert turns.retrieve(turn_ids[0], session_id=turn_session.id) == recovered[0]
                     expect_error(NotFoundError, lambda: b.beta.agents.sessions.turns.list(turn_session.id))
                     expect_error(NotFoundError, lambda: b.beta.agents.sessions.turns.retrieve(turn_ids[0], session_id=turn_session.id))
@@ -258,11 +273,25 @@ def main():
                         verify_vault_deletion_recovery(a, b, vault_deletion, expect_error)
                     assert [a.beta.agents.retrieve(item.id) for item in saved_agents] == saved_agents
                     assert [item.id for item in a.beta.agents.list(limit=2, order="asc") if item.id in listed_agents] == listed_agents
+                    # The active SQL fixture has no native process. The real Worker
+                    # marks its interrupted Turn failed during restart recovery.
+                    prior_history_session = next(item for item in request_sessions if item.id == turn_session.id)
+                    final_history_session = sessions.retrieve(turn_session.id)
+                    assert final_history_session.status == "failed"
+                    assert final_history_session.error == "The execution could not complete."
+                    lifecycle = {"status", "error", "last_active_at"}
+                    assert {k: v for k, v in final_history_session.to_dict().items() if k not in lifecycle} == {k: v for k, v in prior_history_session.to_dict().items() if k not in lifecycle}
+                    request_sessions = [final_history_session if item.id == turn_session.id else item for item in request_sessions]
+                    interrupted = turns.retrieve(turn_ids[-1], session_id=turn_session.id)
+                    assert interrupted.status == "failed" and interrupted.error.code == "internal_error"
+                    assert interrupted.id == recovered[-1].id and interrupted.completed_at is not None
+                    recovered[-1] = interrupted
                     assert [sessions.retrieve(item.id) for item in request_sessions] == request_sessions
                     reference_spec, reference_headers, reference_result = reference_retry
                     assert sessions.create(**reference_spec, extra_headers=reference_headers) == reference_result
+                    saved_items = [item.model_copy(update={"status": "incomplete"}) if item.turn_id == interrupted.id and item.status == "in_progress" else item for item in saved_items]
                     assert list(sessions.items.list(turn_session.id, order="asc")) == saved_items
-                    assert list(turns.list(turn_session.id, order="asc")) == recovered
+                    assert list(turns.list(turn_session.id, order="asc")) == [initial_turn, *recovered]
                     assert sessions.retrieve(first.id) == first
                     assert sessions.create(**spec, metadata={"workspace": "untrusted-reference"}, extra_headers=headers) == first
                     verify_creator_recovery(client, same_principal, peer_principal, same_subject_id,

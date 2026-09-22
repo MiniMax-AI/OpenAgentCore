@@ -22,7 +22,7 @@ headers = {"Authorization": "Bearer " + token, "OpenAI-Beta": "agents=v1"}
 proof = {} if stage == "initial" else json.loads(Path(evidence).read_text())
 
 
-def run(session, name, cancel=False, images=False):
+def run(session, name, cancel=False, images=False, creation_request=None):
     marker = "RESULT-" + str(uuid.uuid4())
     events, handled = [], False
     prompt = "Call " + name + " exactly once, using the exact required ticket from its schema. Return only the fresh tool result. Discover its definition if needed."
@@ -32,8 +32,18 @@ def run(session, name, cancel=False, images=False):
     if images:
         message["input"][0]["content"].append({"type":"input_image","image_url":picture(colors)})
         message["input"][0]["content"].append({"type":"input_text","text":"Also remember these four band colors in left-to-right order."})
-    with sessions.events.stream(session, timeout=150) as stream:
-        sessions.events.create(session, events=[message], idempotency_key=str(uuid.uuid4()))
+    if creation_request is not None:
+        creation = sessions.create(**creation_request, input=message["input"], stream=True)
+        session = next(creation).session.id
+        proof["cancel_session" if cancel else "session"] = session
+        if not cancel:
+            proof["initial_input"] = message["input"]
+        Path(evidence).write_text(json.dumps(proof, indent=2))
+    else:
+        creation = None
+    with (creation or sessions.events.stream(session, timeout=150)) as stream:
+        if creation is None:
+            sessions.events.create(session, events=[message], idempotency_key=str(uuid.uuid4()))
         for event in stream:
             events.append(event.to_dict())
             if event.type == "agent.session.requires_action":
@@ -102,14 +112,16 @@ try:
             for name, description, deferred in [("lookup_account","Return the account result.",True), ("clock","Return the current clock result.",False), ("unrelated_report","Read an unrelated report.",True)]]
         config = {"model":model,"tools":tools}
         saved = client.beta.agents.create(**config)
-        session = sessions.create(agent_id=saved.id, environment={"type":"none"}, extra_headers={"Idempotency-Key":"discovery-create"})
-        assert sessions.create(agent_id=saved.id, environment={"type":"none"}, extra_headers={"Idempotency-Key":"discovery-create"}).id == session.id
+        request = {"agent_id": saved.id, "environment": {"type": "none"},
+                   "extra_headers": {"Idempotency-Key": "discovery-create"}}
+        proof.update(agent=saved.id, tools=tools)
+        run(None, "lookup_account", images=True, creation_request=request)
+        session = sessions.retrieve(proof["session"])
+        assert sessions.create(**request, input=proof["initial_input"]).id == session.id
         assert [t.to_dict() for t in saved.tools] == tools
         assert [t.to_dict() for t in session.agent.tools] == tools[1:]
-        proof.update(session=session.id, agent=saved.id, tools=tools)
-        run(session.id, "lookup_account", images=True)
         run(session.id, "clock")
-        for action in [lambda:other.beta.agents.sessions.retrieve(session.id), lambda:other.beta.agents.sessions.create(agent_id=saved.id,environment={"type":"none"})]:
+        for action in [lambda:other.beta.agents.sessions.retrieve(session.id), lambda:other.beta.agents.sessions.create(agent_id=saved.id,environment={"type":"none"}, input="Verify tenant rejection.")]:
             try:
                 action()
                 raise AssertionError("foreign tenant accessed discovery configuration")
@@ -117,7 +129,7 @@ try:
                 pass
         for invalid in [[tools[1]], [tools[0]], [tools[0],tools[0],tools[1]], [{"type":"tool_search","execution":"client"},tools[1]]]:
             try:
-                sessions.create(agent={"model":model,"tools":invalid}, environment={"type":"none"})
+                sessions.create(agent={"model":model,"tools":invalid}, environment={"type":"none"}, input="Verify unqualified tool configuration rejection.")
                 raise AssertionError("unqualified discovery configuration admitted")
             except BadRequestError:
                 pass
@@ -128,9 +140,8 @@ try:
         assert len(sessions.turns.list(session.id).data) == 3
         assert len([i for i in sessions.items.list(session.id,limit=100).data if i.type == "function_call"]) == 3
         # Inline configuration exercises a fresh native Session and pending-call cancellation.
-        cancelled = sessions.create(agent={"model":model,"tools":proof["tools"]}, environment={"type":"none"})
-        run(cancelled.id, "lookup_account", cancel=True)
-        proof["cancel_session"] = cancelled.id
+        run(None, "lookup_account", cancel=True, creation_request={
+            "agent": {"model": model, "tools": proof["tools"]}, "environment": {"type": "none"}})
         proof["passed"] = True
 finally:
     Path(evidence).write_text(json.dumps(proof, indent=2))

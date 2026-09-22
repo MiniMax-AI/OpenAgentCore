@@ -20,7 +20,7 @@ def verify_credential_rotation(client, other, invalid, peer, saved_vaults, saved
     replacement = {"auth": {"type": "static_bearer", "token": canary + "replacement"}}
     sessions = []
     for selected in (None, original.id):
-        request = {"agent": {"model": "requested-model", "tools": [{
+        request = {"input": "Verify credential rotation fixture admission.", "agent": {"model": "requested-model", "tools": [{
             "type": "mcp", "server_label": "rotating", "credential_id": selected,
             "connection_origin": "service", "allowed_tools": [],
             "transport": {"type": "http", "server_url": destination}}]},
@@ -120,5 +120,5 @@ def verify_rotation_recovery(client, peer, state):
     for request, key, original in sessions:
         assert client.beta.agents.sessions.retrieve(original.id) == original
         assert client.beta.agents.sessions.create(**request, extra_headers=key) == original
-        assert list(client.beta.agents.sessions.turns.list(original.id)) == []
-        assert list(client.beta.agents.sessions.items.list(original.id)) == []
+        assert len(list(client.beta.agents.sessions.turns.list(original.id))) == 1
+        assert [item.content[0].text for item in client.beta.agents.sessions.items.list(original.id)] == [request["input"]]

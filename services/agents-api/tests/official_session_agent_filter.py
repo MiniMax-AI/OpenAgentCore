@@ -26,14 +26,14 @@ def main():
         selected, all_ids = [], []
         for index in range(7):
             agent = root if index % 2 == 0 else peer
-            session = sessions.create(agent_id=agent.id, environment={"type": "none"})
+            session = sessions.create(agent_id=agent.id, input="Verify session agent filter fixture admission.", environment={"type": "none"})
             all_ids.append(session.id)
             if agent.id == root.id:
                 selected.append(session)
-        inline = sessions.create(agent={"model": "inline-model"}, environment={"type": "none"})
+        inline = sessions.create(agent={"model": "inline-model"}, input="Verify session agent filter fixture admission.", environment={"type": "none"})
         all_ids.append(inline.id)
         foreign_agent = other.beta.agents.create(model="foreign-model")
-        foreign_session = other.beta.agents.sessions.create(agent_id=foreign_agent.id, environment={"type": "none"})
+        foreign_session = other.beta.agents.sessions.create(agent_id=foreign_agent.id, input="Verify session agent filter fixture admission.", environment={"type": "none"})
         assert [s.id for s in sessions.list(agent_id=root.id, limit=2, order="asc")] == [s.id for s in selected]
         assert [s.id for s in sessions.list(agent_id=root.id, limit=2)] == [s.id for s in reversed(selected)]
         assert [s.id for s in sessions.list(agent_id=inline.agent.id)] == [inline.id]

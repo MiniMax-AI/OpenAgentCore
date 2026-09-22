@@ -15,7 +15,7 @@ def verify_vault_deletion(client, other, invalid, peer, canary, expect_error):
     keyless = vaults.credentials.create(values[2].id, name="Keyless child", auth=auth)
     retained = vaults.credentials.create(values[3].id, name="Retained child", auth=auth)
     foreign_child = other.beta.agents.vaults.credentials.create(foreign.id, name="Foreign child", auth=auth)
-    spec = {"agent": {"model": "requested-model"}, "environment": {"type": "none"}, "vault_ids": [values[0].id, values[3].id]}
+    spec = {"input": "Verify vault delete fixture admission.", "agent": {"model": "requested-model"}, "environment": {"type": "none"}, "vault_ids": [values[0].id, values[3].id]}
     headers = {"Idempotency-Key": "vault-delete-" + str(uuid.uuid4())}
     session = client.beta.agents.sessions.create(**spec, extra_headers=headers)
     target = values[0]

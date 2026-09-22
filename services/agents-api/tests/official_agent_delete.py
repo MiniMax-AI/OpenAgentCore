@@ -26,7 +26,7 @@ def main():
         original = agents.create(model="saved-model", instructions="Saved instructions.", metadata={"source": "only"})
         peer = agents.create(model="peer-model", name="Unaffected peer")
         foreign_agent = other.beta.agents.create(model="foreign-model")
-        spec = {"agent_id": original.id, "environment": {"type": "none"}, "metadata": {"original": "session"}}
+        spec = {"input": "Verify agent delete fixture admission.", "agent_id": original.id, "environment": {"type": "none"}, "metadata": {"original": "session"}}
         retry = {"Idempotency-Key": "saved-before-delete"}
         accepted = sessions.create(**spec, extra_headers=retry)
         current = sessions.update(accepted.id, metadata={"current": "session"})
@@ -58,8 +58,9 @@ def main():
         assert sessions.create(**spec, extra_headers=retry) == current
         absent(lambda: sessions.create(**spec))
         assert {s.id for s in sessions.list()} == {current.id}
-        assert list(sessions.items.list(current.id)) == []
-        assert list(sessions.turns.list(current.id)) == []
+        assert [item.content[0].text for item in sessions.items.list(current.id)] == [spec["input"]]
+        turns = list(sessions.turns.list(current.id))
+        assert len(turns) == 1 and turns[0].status == "queued"
         recovered = OpenAI(api_key=token, base_url=restarted + "/v1", http_client=http,
                            max_retries=0, _strict_response_validation=True)
         absent(lambda: recovered.beta.agents.retrieve(original.id))

@@ -20,7 +20,7 @@ def main():
         original = agents.create(model="original-model", name="Original", instructions="Keep original.",
                                  metadata={"old": "value"}, tools=[tool])
         endpoint = base + "/v1/agents/" + original.id
-        spec = {"agent_id": original.id, "environment": {"type": "none"}}
+        spec = {"input": "Verify agent update fixture admission.", "agent_id": original.id, "environment": {"type": "none"}}
         retry = {"Idempotency-Key": "before-agent-update"}
         old = sessions.create(**spec, extra_headers=retry)
         updated = agents.update(original.id, instructions="Use updated instructions.",

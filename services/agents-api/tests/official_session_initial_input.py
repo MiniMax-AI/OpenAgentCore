@@ -18,17 +18,24 @@ def main():
                 _strict_response_validation=True, http_client=httpx2.Client(trust_env=False)) as client, httpx2.Client(trust_env=False) as raw:
         sessions = client.beta.agents.sessions
         saved = client.beta.agents.create(model="test-model", instructions="Saved instructions.")
-        idle_key = {"Idempotency-Key": str(uuid.uuid4())}
-        idle = sessions.create(**spec, extra_headers=idle_key)
-        assert sessions.create(**spec, input=None, extra_headers=idle_key) == idle
-        assert list(sessions.turns.list(idle.id)) == []
+        before = {session.id for session in sessions.list()}
+        for fields in ({}, {"input": None}):
+            rejected = raw.post(base + "/v1/agents/sessions", headers=headers, json={**spec, **fields})
+            assert rejected.status_code == 400 and rejected.json()["error"]["code"] == "invalid_request_error"
+        assert {session.id for session in sessions.list()} == before
+        idle = sessions.create(**spec, input="Verify empty event no-op preserves admitted history.")
+        sessions.events.create(idle.id, events=[{"type": "agent.session.input.cancel"}])
+        idle = sessions.retrieve(idle.id)
+        prior_turns = list(sessions.turns.list(idle.id))
+        prior_items = list(sessions.items.list(idle.id))
+        assert len(prior_turns) == len(prior_items) == 1 and prior_turns[0].status == "cancelled"
         empty_headers = {**headers, "Idempotency-Key": str(uuid.uuid4())}
         empty_endpoint = base + "/v1/agents/sessions/" + idle.id + "/events"
         for _ in range(2):
             response = raw.post(empty_endpoint, headers=empty_headers, json={"events": []})
             assert response.status_code == 202 and response.content == b""
         assert sessions.retrieve(idle.id) == idle
-        assert list(sessions.turns.list(idle.id)) == [] and list(sessions.items.list(idle.id)) == []
+        assert list(sessions.turns.list(idle.id)) == prior_turns and list(sessions.items.list(idle.id)) == prior_items
         foreign_empty = raw.post(empty_endpoint, headers={**empty_headers, "Authorization": "Bearer " + foreign}, json={"events": []})
         assert foreign_empty.status_code == 404
         # Empty requests do not consume a nonempty batch's retry identity.
