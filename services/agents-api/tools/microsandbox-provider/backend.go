@@ -79,10 +79,17 @@ func (b backend) metrics(ctx context.Context, c wire.Compute) (*wire.Metrics, er
 	if err != nil {
 		return nil, err
 	}
-	return projectMetrics(metrics, time.Now().UTC()), nil
+	projected := projectMetrics(metrics, time.Now().UTC())
+	if projected == nil {
+		return nil, wire.ErrUnconfirmed
+	}
+	return projected, nil
 }
 
 func projectMetrics(metrics *sdk.Metrics, observedAt time.Time) *wire.Metrics {
+	if metrics == nil {
+		return nil
+	}
 	return &wire.Metrics{
 		ObservedAt: observedAt, Uptime: metrics.Uptime,
 		VCPUTimeNs: metrics.VCPUTimeNs, MemoryBytes: metrics.MemoryBytes,

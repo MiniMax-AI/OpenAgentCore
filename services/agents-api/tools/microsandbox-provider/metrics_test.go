@@ -21,3 +21,9 @@ func TestProjectMetricsKeepsOnlyCumulativeCommonFields(t *testing.T) {
 		t.Fatalf("bad projection: %+v", projected)
 	}
 }
+
+func TestProjectMetricsRejectsMissingSDKSample(t *testing.T) {
+	if projected := projectMetrics(nil, time.Now()); projected != nil {
+		t.Fatalf("missing SDK sample projected: %+v", projected)
+	}
+}

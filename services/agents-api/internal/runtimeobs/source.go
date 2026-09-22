@@ -1,6 +1,14 @@
 package runtimeobs
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+var (
+	ErrUnavailable = errors.New("Runtime observation unavailable")
+	ErrNotRunning  = errors.New("Runtime is not running")
+)
 
 // Source reads one provider-owned Runtime instance. Implementations must verify
 // ownership before returning data and must not renew, restart, or stop compute.

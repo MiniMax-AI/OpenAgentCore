@@ -1,10 +1,11 @@
-package runtimeobs
+package storeresolver
 
 import (
 	"context"
 	"errors"
 	"testing"
 
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
@@ -37,7 +38,7 @@ func TestResolverBindsManagedSessionEnvironmentAndAllocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if target.TenantID != "tenant" || target.SessionID != "session" || target.EnvironmentID != "environment" || target.Mode != ModeManaged || target.Instance.AllocationID != "allocation" || target.Instance.ProviderKey != "provider" || target.Instance.DeviceID != "device" {
+	if target.TenantID != "tenant" || target.SessionID != "session" || target.EnvironmentID != "environment" || target.Mode != runtimeobs.ModeManaged || target.Instance.AllocationID != "allocation" || target.Instance.ProviderKey != "provider" || target.Instance.DeviceID != "device" {
 		t.Fatalf("incorrect managed identity binding: %+v", target)
 	}
 	if string(target.Instance.ProviderState) != `{"current":{"name":"sandbox"}}` {
@@ -76,7 +77,7 @@ func TestResolverReportsManagedAllocationAsUnavailable(t *testing.T) {
 		t.Fatal(err)
 	}
 	target, err := r.Resolve(t.Context(), "tenant", "session")
-	if !errors.Is(err, ErrUnavailable) || target.EnvironmentID != "environment" || target.Mode != ModeManaged {
+	if !errors.Is(err, runtimeobs.ErrUnavailable) || target.EnvironmentID != "environment" || target.Mode != runtimeobs.ModeManaged {
 		t.Fatalf("allocation absence was not preserved: %+v %v", target, err)
 	}
 }

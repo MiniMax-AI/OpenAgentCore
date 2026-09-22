@@ -29,6 +29,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtime"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeenrollment"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs/storeresolver"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -100,7 +101,7 @@ func run() error {
 			observationSources[managed.InstallationID] = source
 		}
 	}
-	resolver, err := runtimeobs.NewResolver(executionStore)
+	resolver, err := storeresolver.NewResolver(executionStore)
 	if err != nil {
 		return err
 	}
