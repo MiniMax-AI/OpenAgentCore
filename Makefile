@@ -8,7 +8,7 @@ SWAG_VERSION ?= v1.16.4
 help:
 	@printf '%s\n' 'make build-agents-api  Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
 
-check: check-database check-sqlc check-go check-agents-api check-claude-sdk check-web check-mcode-harness check-agents-executor
+check: check-database check-sqlc check-go check-microsandbox-provider check-agents-api check-claude-sdk check-web check-mcode-harness check-agents-executor
 	@printf 'Parsar Core checks passed.\n'
 
 check-database:
@@ -94,3 +94,20 @@ build-mcode-harness:
 
 build-mcode-runtime:
 	./scripts/build-mcode-runtime.sh
+
+.PHONY: build-microsandbox-provider check-microsandbox-provider
+build-microsandbox-provider:
+	@test "$$(go env GOOS)" = linux || { echo 'The microsandbox provider helper requires Linux' >&2; exit 1; }
+	@set -e; output="$${PARSAR_HOME:-$$HOME/.parsar}/build/microsandbox-provider"; \
+	[[ "$$output" == /* ]] || { echo 'Provider output directory must be absolute' >&2; exit 1; }; \
+	mkdir -p "$$output"; \
+	cd services/agents-api/tools/microsandbox-provider; \
+	GOWORK=off CGO_ENABLED=1 go build -mod=readonly -trimpath -o "$$output/agents-api-microsandbox-provider" .
+
+check-microsandbox-provider:
+	go test -mod=readonly ./services/agents-api/internal/sandbox/microsandbox/... -count=1
+	@if [[ "$$(go env GOOS)" == linux ]]; then \
+	    cd services/agents-api/tools/microsandbox-provider && GOWORK=off CGO_ENABLED=1 go test -mod=readonly ./... -count=1; \
+	else \
+	    printf 'Skipping the Linux-only microsandbox SDK helper tests; the full Linux gate is required before release.\n'; \
+	fi

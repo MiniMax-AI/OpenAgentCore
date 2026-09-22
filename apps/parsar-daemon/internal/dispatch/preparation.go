@@ -175,7 +175,7 @@ func (r *Router) handleExecutionRelease(_ context.Context, env proto.Envelope) e
 
 func (r *Router) releasePreparation(p *preparationState, state, code string, publish, retryHandoff bool) {
 	r.mu.Lock()
-	if r.closed {
+	if r.closed || r.suspension != nil {
 		r.mu.Unlock()
 		return
 	}
@@ -252,7 +252,7 @@ func (r *Router) publishPreparation(p *preparationState, status proto.Preparatio
 			return
 		}
 	}
-	if r.closed {
+	if r.closed || r.suspension != nil {
 		r.mu.Unlock()
 		return
 	}

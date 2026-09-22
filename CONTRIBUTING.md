@@ -51,7 +51,10 @@ Go tests, Core contract/client/service tests, Core Web and TypeScript client
 checks (including fixture-only Playwright acceptance), a real dedicated PostgreSQL test
 database, byte-for-byte sqlc regeneration checks, standalone API builds, Claude SDK
 tests and packaging, MiniMax companion checks, and Rust filesystem-helper
-tests/format/Clippy. It intentionally has no product Web/server/installer gates. The full gate fails when the database variable is missing.
+tests/format/Clippy. It intentionally has no product Web/server/installer gates. The full gate fails when the database variable is missing. The test database role
+needs CREATE DATABASE permission: managed-provider tests create and drop isolated
+`parsar_agents_api_*_tests` databases because provider identity is deployment-wide.
+Tests must not bypass the production provider-switch guard.
 
 Use Go from `go.mod`, Node 22, pnpm 10.30.3, Python 3.9+, Rust 1.95.0 with rustfmt
 and Clippy, and Linux OpenSSL development libraries. `make sqlc-generate` owns only
@@ -240,7 +243,7 @@ forwarding. The explicit daemon-executor decision supersedes the previous native
 executor interoperability requirement. The superseded execution route is removed;
 retain reusable filesystem helpers,
 necessary regressions and historical evidence without a compatibility layer.
-The private daemon wire protocol is 0.4.0. Initial, prepared and active input use
+The private daemon wire protocol is 0.5.0. Initial, prepared and active input use
 the same ordered MessageInput contract, replacing scalar prompts and attachments.
 User-message boundaries and text/image order remain intact through Core and the
 Runtime wire; adapters own native conversion and receipt aggregation. Text-only
@@ -430,14 +433,15 @@ batches. Resource reads need only tenant authorization, not a live Runtime.
 See the [Template coverage and unresolved semantics](contracts/agents-api/environment-templates.md).
 
 SandboxProvider has five operations: Create, GetInfo, Renew, Kill and RunCommand.
-Use maintained provider SDKs and thin adapters. The current hosted offering uses Docker.
+Use maintained provider SDKs and thin adapters. Hosted deployments select Docker or
+the optional single-host microsandbox profile.
 Provider initialization creates the sandbox and starts its daemon/harness;
 RunCommand is for initialization only. Daily execution and Files use Runtime and
 native or bounded local capabilities. Docker's lack of a native renewable lease
 does not remove service-owned hosted expiry and cleanup requirements.
 
 The official `openai_hosted` discriminator means hosting by this independent Core
-service, using Docker V1. Keep the public value unchanged; `parsar_hosted` is not
+service, using its configured hosted Provider. Keep the public value unchanged; `parsar_hosted` is not
 a new API type. Public Environment Templates apply only to this hosted path.
 E2B onboarding follows the application-managed `self_hosted` resource workflow:
 the application owns sandbox provisioning and cleanup, and our daemon connects
@@ -468,6 +472,97 @@ timeouts can leave processes alive and require allocation cleanup before reuse.
 The [managed Runtime build and operator configuration](services/agents-api/deploy/codex/README.md#managed-runtime-image-and-docker-adapter)
 defines the explicit opt-in for basic hosted admission. Building an image alone
 does not qualify its isolation or enable public creation.
+
+### Optional single-host sandbox suspension
+
+Each Core deployment enables exactly one sandbox provider, selected at setup:
+Docker or microsandbox. Keep both adapters but reject multiple provider entries,
+legacy default-provider maps and engine-based placement. Harness selection is
+independent. The configuration has one installation UUID, one provider kind and
+one backend object. No compatibility parser or parallel provider route remains.
+
+The execution database pins the selected installation and backend namespace.
+Under the existing execution lease, startup validates that identity before
+reconciling work. Changing an installation or backend requires a previous startup
+of the old configuration in maintenance, with new configuration still in
+maintenance. Maintenance prevents fresh hosted Sessions and fresh allocations,
+while retaining known receipts, existing Session use and explicit cleanup.
+Unreleased allocation receipts include live/stopped compute, snapshots, uncertain
+operations and pending cleanup; all must be released before a switch. Pending
+hosted Environments that have not yet received an allocation also block a switch.
+A failed check reports why and performs no resource deletion or provider change.
+After a successful switch, restart the same configuration with maintenance off to
+admit new sandboxes. Retain immutable historical allocation ownership; never
+migrate an existing Session to another provider or recreate a released allocation.
+Fresh adoption of a deployment with unverified retained allocations fails closed.
+
+The common
+`services/agents-api/internal/sandbox` contract owns the five base operations
+(Create, GetInfo, Renew, Kill, RunCommand) and the optional CheckpointProvider
+capability. Core orchestration must not import an adapter or SDK. Exact compute
+identity, generation construction, inspection, full snapshot capture, restore,
+thaw, command execution and owned artifact cleanup use that common capability.
+Provider-specific names and snapshot identities are opaque to Core. Self-hosted
+compute and providers without checkpoint support keep their existing behavior.
+
+The [microsandbox deployment profile](services/agents-api/deploy/microsandbox/README.md)
+pins the SDK, runtime, firmware and image. Core remains a pure-Go binary. The
+one-shot native Linux helper contains the SDK/FFI and runs under the same private
+service namespace; it is not another scheduler or network control plane. Ordinary
+pause does not release RAM. Suspension captures and verifies a full snapshot,
+stops the exact source, and removes its writable compute closure only after the
+artifact is durably identified. Explicit network policy applies on create and
+restore. Do not inherit undeclared host resources.
+
+Suspend only after at least one Turn is terminal, no queued/in-progress/waiting
+root or subagent Turn, pending input/file operation or initialization remains,
+and real activity has been idle for the configured interval. Heartbeats do not
+reset activity. The daemon must close admission and drain native cleanup, output
+receipts and file work before acknowledging planned suspension. Never change a
+harness or keep an agent process alive across Turns solely to meet this feature.
+The acceptance boundary is a next Turn in the same Session with history, files
+and configuration intact, without replaying an earlier request.
+
+The existing Worker lease, Session lock and lifecycle gate own both providers.
+New Turn claims, file-write intents and capture admission serialize under the
+Session lock. Turn and file-write admission share the same compute-phase check;
+existing receipts remain readable. New pending work cancels capture and wakes
+the same source. Normal preparation waits for the
+compute phase to be running, after the authenticated resume handshake; a pending
+input remains pending if its promotion conflicts with a lifecycle transition.
+Private compute phases and revision-checked JSON receipts live on the existing
+allocation. Persist quiesce/capture/restore intent before effects; only the fresh
+receipt performs a capture or restore. Recovery observes the exact attempt and
+never retries an unknown creation, capture or restore. A consumed snapshot cannot
+roll a running generation back. Deletion, revocation and retention expiry take
+precedence over wake, including at the final database compare-and-swap. Retain
+unknown cleanup identities until owned resources are confirmed absent.
+
+Fixed guest CPU/memory/disk settings, max_active reservations, max_retained
+allocation count and snapshot retention bound the single host. Unknown operations
+retain capacity reservations. Source teardown must be confirmed before releasing
+active capacity. Delete consumed artifacts and old compute closures; do not grow
+a chain of old writable disks across suspension cycles. No Kubernetes, distributed
+scheduler or snapshot replication belongs in this V1 profile.
+
+Queued work and live Environment file access request wake. History and published
+artifact reads do not. Planned suspension uses private daemon wire 0.5.0 with an
+Environment and suspension token; a PID/start-time fenced local control signal
+wakes the parked daemon, which reauthenticates before admitting new work. A
+transient disconnect before confirmation retries the same armed suspension with
+bounded attempts and backoff; permanent authentication or protocol rejection
+still closes it. Snapshot
+lifetime has no daemon wall-clock timer: Core owns its retention deadline. A lost
+quiesce acknowledgement may thaw the same source using explicit rollback control;
+it does not authorize capturing it. Ordinary disconnect keeps the existing
+conservative shutdown behavior. Authentication rejection cannot create a new
+Runtime or replay a request.
+
+All normal `make check` gates still apply. Linux qualification additionally runs
+the pinned helper module tests/build through `check-microsandbox-provider`, a real
+KVM full-snapshot/reclamation probe, and idle-to-next-Turn integration acceptance.
+Synthetic process-memory probes support the backend claim only; they do not prove
+agent continuity. Independent blind review uses the clarified idle-only scope.
 
 Managed Runtime allocation, dedicated daemon credential hash and exact Session
 binding commit atomically before Provider.Create, using the existing execution
@@ -507,7 +602,8 @@ Allocation state is private compute ownership, separate from public Environment
 connection/native readiness. Adapters qualify bootstrap completion; Core does not
 infer it from an engine or provider name. Connected, observed compute receives
 service keepalives between Turns. Keepalives cannot revive a one-hour lapse or a
-cleanup request. Idle alone never requests shutdown. A stopped/missing container
+cleanup request. The Docker provider keeps its current idle behavior; only an
+explicit checkpoint policy may suspend completed, idle work as described below. A stopped/missing container
 does not authorize discarding retained workspace or history. Session deletion or
 expiry requests cleanup, revokes the scoped device and cancels pending work before
 Provider.Kill; the existing Worker serializes these lifecycle operations and drains

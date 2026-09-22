@@ -70,7 +70,12 @@ func (p *lifecycleProvider) RunCommand(context.Context, sandbox.Reference, sandb
 
 func managedWorker(t *testing.T, s *store.Store, key string, p sandbox.Provider) (*execution.Worker, func()) {
 	t.Helper()
-	w, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry(), ManagedRuntimes: &execution.RuntimeProviders{CoreURL: "http://core.invalid/api/v1", Providers: map[string]sandbox.Provider{key: p}}})
+	return managedWorkerMode(t, s, key, p, false)
+}
+
+func managedWorkerMode(t *testing.T, s *store.Store, key string, p sandbox.Provider, maintenance bool) (*execution.Worker, func()) {
+	t.Helper()
+	w, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry(), ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p, Maintenance: maintenance}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +119,7 @@ func reconcileManagedState(t *testing.T, w *execution.Worker, s *store.Store, te
 }
 
 func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
-	s, _ := store.NewTestStore(t)
+	s, _ := store.NewManagedTestStore(t)
 	tenant, session, env := managedSession(t, s)
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}, loseCreate: true}
@@ -153,7 +158,7 @@ func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
 }
 
 func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
-	s, _ := store.NewTestStore(t)
+	s, _ := store.NewManagedTestStore(t)
 	tenant, session, env := managedSession(t, s)
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}, loseCreate: true, absent: true}
@@ -183,7 +188,7 @@ func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
 }
 
 func TestManagedRuntimeExpiryRevokesWhenProviderUnavailable(t *testing.T) {
-	s, pool := store.NewTestStore(t)
+	s, pool := store.NewManagedTestStore(t)
 	tenant, _, env := managedSession(t, s)
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
@@ -210,7 +215,7 @@ func TestManagedRuntimeExpiryRevokesWhenProviderUnavailable(t *testing.T) {
 }
 
 func TestManagedRuntimeStoppedComputeDoesNotRequestCleanup(t *testing.T) {
-	s, _ := store.NewTestStore(t)
+	s, _ := store.NewManagedTestStore(t)
 	tenant, _, env := managedSession(t, s)
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}

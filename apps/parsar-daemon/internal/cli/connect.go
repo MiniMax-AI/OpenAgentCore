@@ -295,6 +295,13 @@ func mainLoopRemote(rc *runContext, profile string, prof auth.Profile, agentCLIs
 	registry := agent.NewRegistry()
 	registerAgentKinds(registry, agentCLIs, prof.ServerURL)
 
+	control, err := newSuspendControl()
+	if err != nil {
+		return err
+	}
+	if control != nil {
+		defer control.Close()
+	}
 	dial := func(ctx context.Context) (*transport.Conn, error) {
 		conn, err := transport.Dial(ctx, transport.DialOptions{
 			WSURL:      wsURL,
@@ -315,6 +322,9 @@ func mainLoopRemote(rc *runContext, profile string, prof auth.Profile, agentCLIs
 		return conn, err
 	}
 
+	if control != nil {
+		return runSuspendLoop(rootCtx, dial, registry, boot, agentCLIs, control)
+	}
 	for {
 		if err := rootCtx.Err(); err != nil {
 			return nil

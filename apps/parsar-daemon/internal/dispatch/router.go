@@ -34,6 +34,8 @@ type Router struct {
 	sender   Sender
 	log      *slog.Logger
 
+	admission           sync.RWMutex
+	suspension          *proto.EnvironmentSuspendPayload
 	mu                  sync.Mutex
 	sessions            map[string]*sessionState // RunID → state
 	idle                map[string]map[*sessionState]struct{}
@@ -41,8 +43,8 @@ type Router struct {
 	askIndex            map[string]string // askID   → RunID
 	applied             map[string]appliedInteractionDecision
 	shutdownAttempt     *shutdownAttempt
-	shutdownCh          chan struct{}  // closed by Shutdown
-	shutdownWG          sync.WaitGroup // waits for all pump goroutines
+	shutdownCh          chan struct{} // closed by Shutdown
+	shutdownWG          dispatchWork  // waits for all pump goroutines
 	idleTimeout         time.Duration
 	closed              bool
 	preparations        map[string]*preparationState
@@ -147,10 +149,16 @@ func New(cfg Config) (*Router, error) {
 // Adopts env.Trace into ctx so every downstream log under it inherits
 // the same trace_id, making a single grep cover both sides.
 func (r *Router) Handle(ctx context.Context, env proto.Envelope) error {
+	r.admission.RLock()
+	defer r.admission.RUnlock()
 	r.mu.Lock()
 	if r.closed {
 		r.mu.Unlock()
 		return ErrRouterClosed
+	}
+	if r.suspension != nil && env.Type != proto.TypeDeviceShutdown {
+		r.mu.Unlock()
+		return ErrRouterQuiesced
 	}
 	r.mu.Unlock()
 
@@ -275,10 +283,12 @@ func (r *Router) scheduleIdleLocked(state *sessionState) {
 func (r *Router) expireIdle(state *sessionState, lease uint64) {
 	r.mu.Lock()
 	states := r.idle[state.stateKey]
-	if _, ok := states[state]; !ok || state.idleLease != lease {
+	if _, ok := states[state]; !ok || state.idleLease != lease || r.suspension != nil {
 		r.mu.Unlock()
 		return
 	}
+	r.shutdownWG.Add(1)
+	defer r.shutdownWG.Done()
 	delete(states, state)
 	if len(states) == 0 {
 		delete(r.idle, state.stateKey)

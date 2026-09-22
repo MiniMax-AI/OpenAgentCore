@@ -34,6 +34,19 @@ func (s *Store) createSessionResources(ctx context.Context, tenant string, param
 			return err
 		}
 		if row.ID == params.ID {
+			var placement struct {
+				Environment struct {
+					Type string `json:"type"`
+				} `json:"environment"`
+			}
+			if err := json.Unmarshal(row.Configuration, &placement); err != nil {
+				return err
+			}
+			if placement.Environment.Type == "openai_hosted" {
+				if err := checkRuntimeDeploymentAdmission(ctx, q, ""); err != nil {
+					return err
+				}
+			}
 			setup, err = s.freezeEnvironmentSkills(ctx, q, tenant, setup)
 			if err != nil {
 				return err

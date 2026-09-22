@@ -88,8 +88,8 @@ func TestVersionCompatible(t *testing.T) {
 		ok     bool
 	}{
 		{Version, true},    // exact match
-		{"0.4.99", true},   // patch drift OK
-		{"0.2.99", false},  // minor drift NOT OK
+		{"0.5.99", true},   // patch drift OK
+		{"0.4.99", false},  // minor drift NOT OK
 		{"1.0.0", false},   // major drift NOT OK
 		{"", false},        // missing
 		{"garbage", false}, // unparseable

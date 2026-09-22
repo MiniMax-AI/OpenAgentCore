@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
@@ -85,7 +86,12 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, tenantID, sessionI
 	if err := d.messageInputSupport(peer, session.Engine, snapshot, messages); err != nil {
 		return run, err
 	}
-	run.Reservation, err = d.Store.PromoteEnvironmentInput(owner, tenantID, sessionID, reservationID)
+	promoted, err := d.Store.PromoteEnvironmentInput(owner, tenantID, sessionID, reservationID)
+	if errors.Is(err, store.ErrTurnConflict) {
+		// A rejected claim leaves the reservation pending for a later attempt.
+		return run, err
+	}
+	run.Reservation = promoted
 	if err != nil || run.Reservation.State != store.EnvironmentInputAdmitted {
 		return run, err
 	}
