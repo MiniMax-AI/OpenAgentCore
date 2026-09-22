@@ -85,7 +85,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	executionStore := store.NewWithCredentialCipher(pool, credentialKey)
+	oauthClient, err := oauthRefreshClient()
+	if err != nil {
+		return err
+	}
+	executionStore := store.NewWithCredentialCipherAndOAuthRefresh(pool, credentialKey, oauthClient)
 	if err := executionStore.EnsureProjectScopes(ready, auth.ProjectScopes()); err != nil {
 		return err
 	}
