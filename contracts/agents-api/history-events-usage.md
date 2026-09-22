@@ -51,6 +51,36 @@ or replay interrupted input. Provider/model reroute attribution, billed costs,
 unknown historical counters and unreported partial usage remain outside this
 milestone. Native differences must not be hidden with guessed zero counters.
 
+## Core acceptance, 2026-09-22
+
+Three independent PostgreSQL/Core deployments used Docker V1 Runtime images with
+the integrated daemon, fixed official SDK 3.13.0, raw HTTP and the final TypeScript
+client. Codex and Claude called Kimi K3; MiniMax Code called MiniMax M2.7. Each
+performed real native child delegation and an ordinary root Turn. All three passed
+history identity/content agreement, both paging directions at limits one and two,
+SSE disconnect/reconnect, wrong-tenant denial and stable history after idle Core
+restart without another Turn. Captured coordination events passed the TS parser.
+Claude's final run did not emit a child Turn SSE snapshot; its child query recovery
+passed. This preserves the native publication boundary above.
+
+Codex additionally exposed measured usage while a tool-separated Turn was still
+in progress, then retained it after cancellation, repeated reads and Core restart.
+Controlled adapter tests cover ordered publication and cancellation under output
+backpressure. PostgreSQL tests cover cumulative replacement, duplicate snapshots
+and known usage retained across worker reconciliation after process loss. The
+idle real restart does not substitute for active native crash qualification.
+
+Validation included the complete standalone gate split between server
+`make -o check-web check` and local `make check-web`, Codex adapter race tests,
+286 client tests, 573 Core Web tests and 74 fixture Playwright tests. SQL generation
+matched byte-for-byte. No handler annotation, schema, DB query or migration changed.
+Real proof and first-failure records are retained privately under
+`~/.parsar/remediation/20260922/history-events-usage/live/`. The first Claude probe
+incorrectly required a live child Turn event; the bounded follow-up checked the
+documented coordination stream and child queries. Invalid historical patch fixtures
+were corrected to separate function calls from their result Items, without widening
+production validation. E2B and unrelated product flows were not rerun.
+
 ## Official-service observation, 2026-09-22
 
 A bounded probe used the fixed Python SDK 3.13.0, raw HTTP, `agents=v1`, and one
