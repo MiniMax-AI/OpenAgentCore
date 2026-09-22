@@ -32,7 +32,7 @@ func TestOAuthMigrationPreservesStaticGrantsAndRefusesLossyRollback(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := provider.UpTo(t.Context(), 51); err != nil {
+	if _, err := provider.UpTo(t.Context(), 53); err != nil {
 		t.Fatal(err)
 	}
 	vault, id := uuid.NewString(), uuid.NewString()
@@ -51,20 +51,20 @@ func TestOAuthMigrationPreservesStaticGrantsAndRefusesLossyRollback(t *testing.T
 		return value
 	}
 	before := snapshot()
-	if _, err := provider.UpTo(t.Context(), 52); err != nil || snapshot() != before {
+	if _, err := provider.UpTo(t.Context(), 54); err != nil || snapshot() != before {
 		t.Fatal("OAuth migration changed static grant", err)
 	}
-	if _, err := provider.DownTo(t.Context(), 51); err != nil || snapshot() != before {
+	if _, err := provider.DownTo(t.Context(), 53); err != nil || snapshot() != before {
 		t.Fatal("static-only rollback failed", err)
 	}
-	if _, err := provider.UpTo(t.Context(), 52); err != nil {
+	if _, err := provider.UpTo(t.Context(), 54); err != nil {
 		t.Fatal(err)
 	}
 	oauthID := uuid.NewString()
 	if _, err := db.ExecContext(t.Context(), "INSERT INTO vault_credentials(id,vault_id,name,auth_type,mcp_server_url,token_ciphertext,oauth_metadata) VALUES ($1,$2,'OAuth','mcp_oauth','https://mcp.example/tools',$3,'{}')", oauthID, vault, []byte{4, 5, 6}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := provider.DownTo(t.Context(), 51); err == nil {
+	if _, err := provider.DownTo(t.Context(), 53); err == nil {
 		t.Fatal("rollback discarded OAuth support with existing grants")
 	}
 	var count int
