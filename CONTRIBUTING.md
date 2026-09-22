@@ -303,8 +303,10 @@ The allocation lifecycle owns pending/running/complete initialization. Authentic
 may connect the daemon during initialization; execution bindings, native preparation,
 live Files and connected publication wait for completion. Keep Provider bootstrap
 settlement distinct. Advance at most one bounded initialization operation per full
-maintenance scan,
-using process-local progress and the existing lifecycle gate. A recovered or uncertain
+maintenance scan. At allocation EOF, begin the next page in the same call rather
+than consume an observation interval on an empty page. Refill at most once, retain
+the 32-allocation per-call bound and the five-second ticker, and never loop on an
+empty store. Use process-local progress and the existing lifecycle gate. A recovered or uncertain
 running installation fails and uses existing cleanup, without replaying writes.
 Completed environments never reinstall initial files on reconnect or native recovery.
 Provider RunCommand carries bounded stdin, not confidential argv. Only fixed trusted
