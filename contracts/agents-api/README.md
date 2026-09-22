@@ -589,8 +589,14 @@ HTTP handler, PostgreSQL, daemon and Codex with a synthetic model provider.
 Token measurements use the pinned SDK's `TokenUsage` fields. The optional daemon
 `usage.tokens` supplies complete per-Turn counters; journal and terminal writes
 replace that Turn's snapshot atomically. Repeated snapshots do not increase totals.
+Codex publishes observed active-Turn snapshots before completion through this same
+contract. Persisted measurements remain available after cancellation or worker
+restart; measurements never received by Core cannot be recovered this way.
 Unknown historical breakdowns are not backfilled, and a Session total includes only
-recorded measurements. Costs and prices are outside this execution contract.
+recorded root-Turn measurements. Child Turns returned in a mixed history page are
+not an additional accounting ledger. Costs and prices are outside this execution
+contract. See [history, events and usage](history-events-usage.md) for client
+recovery rules, native measurement limits and bounded official-service evidence.
 
 ### Live events
 
