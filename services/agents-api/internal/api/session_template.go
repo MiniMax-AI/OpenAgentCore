@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"maps"
+	"slices"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
@@ -32,11 +34,6 @@ func decodeTemplateEnvironment(raw json.RawMessage) (*v1.Environment, string, js
 	}
 	for _, name := range []string{"skills", "plugins", "capability_directories"} {
 		if value, exists := fields[name]; exists && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
-			return nil, "", nil, store.ErrInvalidInput
-		}
-	}
-	for _, name := range []string{"files", "env", "setup_commands", "packages"} {
-		if _, supplied := fields[name]; supplied {
 			return nil, "", nil, store.ErrInvalidInput
 		}
 	}
@@ -80,17 +77,60 @@ func (h *Handler) resolveTemplateEnvironment(ctx context.Context, tenant string,
 	if _, supplied := fields["capability_directories"]; !supplied {
 		directories = template.Initialization.CapabilityDirectories
 	}
-	input.initialization = template.Initialization
-	input.initialization.Skills = skills
-	input.initialization.Plugins = plugins
-	input.initialization.CapabilityDirectories = directories
+	setup := template.Initialization
+	setup.Env = maps.Clone(setup.Env)
+	if len(input.initialization.Env) > 0 {
+		if setup.Env == nil {
+			setup.Env = make(map[string]string)
+		}
+		maps.Copy(setup.Env, input.initialization.Env)
+	}
+	if templateFieldOverride(fields, "setup_commands") {
+		setup.Commands = input.initialization.Commands
+	}
+	setup.Commands = slices.Clone(setup.Commands)
+	if templateFieldOverride(fields, "files") {
+		files = input.initialFiles
+	}
+	files = slices.Clone(files)
+	var managers map[string]json.RawMessage
+	if templateFieldOverride(fields, "packages") {
+		if json.Unmarshal(fields["packages"], &managers) != nil {
+			return store.ErrInvalidInput
+		}
+	}
+	if templateFieldOverride(managers, "npm") {
+		setup.Packages.NPM = input.initialization.Packages.NPM
+	}
+	if templateFieldOverride(managers, "python") {
+		setup.Packages.Python = input.initialization.Packages.Python
+	}
+	if templateFieldOverride(managers, "system") {
+		setup.Packages.System = input.initialization.Packages.System
+	}
+	setup.Packages.NPM = slices.Clone(setup.Packages.NPM)
+	setup.Packages.Python = slices.Clone(setup.Packages.Python)
+	setup.Packages.System = slices.Clone(setup.Packages.System)
+	setup.Skills, setup.Plugins, setup.CapabilityDirectories = skills, plugins, directories
+	if err := setup.Validate(); err != nil {
+		return err
+	}
+	if err := store.ValidateInitialFiles(files); err != nil {
+		return err
+	}
+	input.initialization = setup
 	input.Environment.Plugins = pluginResponse(input.initialization.PluginMetadata())
 	input.Environment.CapabilityDirectories = append([]string{}, directories...)
 	input.Environment.Skills = skillResponse(input.initialization.SkillMetadata())
-	packages := template.Initialization.PackageMetadata()
+	packages := setup.PackageMetadata()
 	input.Environment.Packages = &packages
 	input.initialFiles = files
 	input.Environment.Files = initialFileResponse(files)
 	// Runtime sees only the effective ordinary hosted configuration.
 	return nil
+}
+
+func templateFieldOverride(fields map[string]json.RawMessage, name string) bool {
+	value, supplied := fields[name]
+	return supplied && !bytes.Equal(bytes.TrimSpace(value), []byte("null"))
 }
