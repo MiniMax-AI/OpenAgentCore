@@ -25,9 +25,12 @@ returned 404 despite successful creation; a separate bounded follow-up observed
 that version after approximately 31 seconds. This is a recorded transient
 visibility observation, not a guaranteed consistency interval or a behavior Core
 should imitate. Template omission/null admission and projection, latest and exact
-selectors are separately recorded. A further hosted Session probe uses divergent
-default version 1 and latest version 2 to distinguish resolution from mere request
-acceptance. Private evidence is under
+selectors are separately recorded. A further hosted Session probe made 36 calls: with default version 1 and latest
+version 2, omitted/null resolved to 1, latest to 2, and exact "1" to 1. All four
+retained their versions after the default changed to 2. Two actual gpt-6-astra
+Turns read installed files and returned distinct private markers, proving frozen
+null/default version 1 and latest version 2 content. All four Sessions and the
+Skill were deleted; asynchronous physical sandbox destruction was not observed. Private evidence is under
 `~/.parsar/remediation/20260923/skill-version-alignment/official/`.
 
 ## Source File errors
@@ -45,3 +48,25 @@ were read or deleted. Evidence:
 `~/.parsar/remediation/20260923/files-error-alignment/official-probe.json`.
 Exact error prose, additional parser detail, purpose filtering, bounds and lookup
 order are not changed or claimed as aligned.
+
+## Core acceptance
+
+`TestSkillSelectorsOfficialClientPostgres` and
+`TestSourceFileErrorsOfficialClientPostgres` exercise real HTTP/PostgreSQL with
+fixed SDK and raw requests. They cover exact Template reference projection,
+independent handler reads, missing and foreign resources, safe errors and retained
+owned data. They do not represent native model execution.
+
+The separate Codex/Docker run at `2ccc729d3acfa8d7109f671d480753d74d568279`
+passed on its first attempt with two real Kimi K3 Turns. Null through a Template
+froze version 1; direct latest froze version 2. Changing source default and Template
+selectors left same-key creation retries unchanged and created no Turn. After
+both sources were deleted and Core restarted, each Session still exposed its
+concrete version and returned only its own previously undisclosed Skill marker.
+Foreign Session reads failed. Source/binary/image hashes, request/event/history
+records, secret scans and verified owned-resource cleanup are retained under
+`~/.parsar/remediation/20260923/skill-version-alignment/live/`.
+
+The integrated Files error change does not alter Skill selection, initialization,
+Runtime or adapter code. This live run does not qualify another harness/Provider,
+upstream physical retention, or omitted/null cross-form retry equivalence.
