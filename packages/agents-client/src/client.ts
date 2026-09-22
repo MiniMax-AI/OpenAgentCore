@@ -1,4 +1,5 @@
 import { createSSEDecoder } from "./sse";
+import { projectVaultCredentialAuth, validCredentialURL } from "./vault-credential-auth";
 import type {
   AgentCore,
   AgentDeleted,
@@ -164,7 +165,6 @@ const vaultFields = new Set(["id", "object", "created_at", "name", "metadata"]);
 const vaultListFields = new Set(["object", "data", "has_more", "first_id", "last_id"]);
 const vaultDeletedFields = new Set(["id", "object", "deleted"]);
 const vaultCredentialFields = new Set(["id", "vault_id", "name", "object", "auth", "created_at", "updated_at"]);
-const vaultCredentialAuthFields = new Set(["type", "mcp_server_url"]);
 const vaultCredentialDeletedFields = new Set(["id", "object", "deleted"]);
 const sessionFields = new Set([
   "id", "object", "agent", "environment", "status", "error", "metadata",
@@ -417,25 +417,12 @@ function projectVault(value: unknown, expectedId?: string): Vault {
   };
 }
 
-function validCredentialURL(value: unknown): value is string {
-  if (
-    typeof value !== "string" || value !== value.trim() ||
-    /[\u0000-\u0020\u007f\\]/u.test(value)
-  ) return false;
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password && !url.hash;
-  } catch {
-    return false;
-  }
-}
-
 function projectVaultCredential(
   value: unknown,
   expectedVaultId: string,
   expectedCredentialId?: string,
 ): VaultCredential {
-  if (!isRecord(value) || !exactFields(value, vaultCredentialFields) || !isRecord(value.auth) || !exactFields(value.auth, vaultCredentialAuthFields)) {
+  if (!isRecord(value) || !exactFields(value, vaultCredentialFields) || !isRecord(value.auth)) {
     return invalidVaultResponse("invalid_vault_credential", "Agent Core returned invalid Credential metadata.");
   }
   if (
@@ -443,18 +430,19 @@ function projectVaultCredential(
     (expectedCredentialId !== undefined && !sameUuid(value.id, expectedCredentialId)) ||
     !sameUuid(value.vault_id, expectedVaultId) ||
     value.object !== "vault.credential" || !isTrimmedName(value.name) ||
-    value.auth.type !== "static_bearer" || !validCredentialURL(value.auth.mcp_server_url) ||
     !Number.isSafeInteger(value.created_at) || Number(value.created_at) < 0 ||
     !Number.isSafeInteger(value.updated_at) || Number(value.updated_at) < Number(value.created_at)
   ) {
     return invalidVaultResponse("invalid_vault_credential", "Agent Core returned invalid Credential metadata.");
   }
+  const auth = projectVaultCredentialAuth(value.auth);
+  if (!auth) return invalidVaultResponse("invalid_vault_credential", "Agent Core returned invalid Credential metadata.");
   return {
     id: value.id,
     vault_id: value.vault_id as string,
     name: value.name,
     object: "vault.credential",
-    auth: { type: "static_bearer", mcp_server_url: value.auth.mcp_server_url },
+    auth,
     created_at: Number(value.created_at),
     updated_at: Number(value.updated_at),
   };
@@ -1939,7 +1927,7 @@ export class OpenAIAgentsClient implements AgentCore {
       "Agent Core Credential creation failed.",
     );
     const credential = projectVaultCredential(value, vaultId);
-    if (credential.name !== input.name || credential.auth.mcp_server_url !== input.auth.mcp_server_url) {
+    if (credential.auth.type !== "static_bearer" || credential.name !== input.name || credential.auth.mcp_server_url !== input.auth.mcp_server_url) {
       return invalidVaultResponse("invalid_vault_credential", "Agent Core returned mismatched Credential metadata.");
     }
     return credential;
@@ -1973,6 +1961,9 @@ export class OpenAIAgentsClient implements AgentCore {
       throw new TypeError("Credential replacement accepts one write-only static bearer token.");
     }
     const baseline = await this.retrieveVaultCredential(vaultId, credentialId);
+    if (baseline.auth.type !== "static_bearer") {
+      throw new TypeError("Static bearer token replacement is unavailable for OAuth credentials.");
+    }
     const value = await this.requestCredentialWrite(
       `/vaults/${encodeURIComponent(vaultId)}/credentials/${encodeURIComponent(credentialId)}`,
       JSON.stringify(input),
@@ -1980,7 +1971,7 @@ export class OpenAIAgentsClient implements AgentCore {
     );
     const credential = projectVaultCredential(value, vaultId, credentialId);
     if (
-      credential.name !== baseline.name ||
+      credential.auth.type !== "static_bearer" || credential.name !== baseline.name ||
       credential.auth.mcp_server_url !== baseline.auth.mcp_server_url ||
       credential.created_at !== baseline.created_at ||
       credential.updated_at < baseline.updated_at

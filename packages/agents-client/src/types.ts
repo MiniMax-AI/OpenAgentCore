@@ -124,12 +124,27 @@ export interface StaticBearerCredentialAuth {
   mcp_server_url: string;
 }
 
+export interface McpOAuthRefreshMetadata {
+  client_id: string;
+  token_endpoint: string;
+  token_endpoint_auth: { type: "none" | "client_secret_basic" | "client_secret_post" };
+  resource: string | null;
+  scope: string | null;
+}
+
+export interface McpOAuthCredentialAuth {
+  type: "mcp_oauth";
+  mcp_server_url: string;
+  expires_at: string | null;
+  refresh: McpOAuthRefreshMetadata | null;
+}
+
 export interface VaultCredential {
   id: string;
   vault_id: string;
   name: string;
   object: "vault.credential";
-  auth: StaticBearerCredentialAuth;
+  auth: StaticBearerCredentialAuth | McpOAuthCredentialAuth;
   created_at: number;
   updated_at: number;
 }
