@@ -24,6 +24,7 @@ func TestFunctionCallWaitsAndRepliesOnce(t *testing.T) {
 				t.Fatal(err)
 			}
 			s.setThreadID("thread")
+			s.startSteering("thread", "turn")
 			params := map[string]any{"threadId": "thread", "turnId": "turn", "callId": "call", "tool": "lookup", "arguments": map[string]string{"ticket": "42"}}
 			if err := SendServerRequest(srv, "rpc-call", "item/tool/call", params); err != nil {
 				t.Fatal(err)
@@ -56,6 +57,17 @@ func TestFunctionCallWaitsAndRepliesOnce(t *testing.T) {
 			if reply.ID != "rpc-call" {
 				t.Fatal(reply.ID)
 			}
+			status := "completed"
+			if !success {
+				status = "failed"
+			}
+			var observed map[string]any
+			if err := json.Unmarshal(reply.Result, &observed); err != nil {
+				t.Fatal(err)
+			}
+			observed["type"], observed["id"], observed["tool"], observed["status"] = "dynamicToolCall", "call", "lookup", status
+			native, _ := json.Marshal(map[string]any{"threadId": "thread", "turnId": "turn", "item": observed})
+			s.onItemCompleted(native)
 			if err := <-finished; err != nil {
 				t.Fatal(err)
 			}
@@ -66,7 +78,7 @@ func TestFunctionCallWaitsAndRepliesOnce(t *testing.T) {
 			if err := json.Unmarshal(reply.Result, &result); err != nil || result.Success != success || !reflect.DeepEqual(result.Content, []functionContent{{Type: "inputText", Text: &text}, {Type: "inputImage", ImageURL: &image}, {Type: "inputText", Text: &empty}}) {
 				t.Fatal(string(reply.Result), err)
 			}
-			if err := s.SubmitFunctionResult(t.Context(), proto.FunctionResultPayload{CallID: "call"}); !errors.Is(err, agent.ErrUnknownFunctionCall) {
+			if err := s.SubmitFunctionResult(t.Context(), proto.FunctionResultPayload{CallID: "call", Content: content}); !errors.Is(err, agent.ErrUnknownFunctionCall) {
 				t.Fatal(err)
 			}
 		})
@@ -78,6 +90,7 @@ func TestFunctionCallRejectsUnregisteredAndClosedRuns(t *testing.T) {
 	defer cleanup()
 	s, _ := newInteractionTestSession(tc.JSONRPCClient)
 	s.setThreadID("thread")
+	s.startSteering("thread", "turn")
 	s.functions, _ = prepareFunctionTools([]proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}})
 	for _, params := range []string{
 		`{"threadId":"other","turnId":"turn","callId":"a","tool":"lookup","arguments":{}}`,
@@ -92,7 +105,7 @@ func TestFunctionCallRejectsUnregisteredAndClosedRuns(t *testing.T) {
 	if _, err := s.handleFunctionCall(json.RawMessage(`{"threadId":"thread","turnId":"turn","callId":"a","tool":"lookup","arguments":{}}`), "rpc"); err == nil {
 		t.Fatal("closed run accepted call")
 	}
-	if err := s.SubmitFunctionResult(context.Background(), proto.FunctionResultPayload{CallID: "a"}); !errors.Is(err, agent.ErrUnknownFunctionCall) {
+	if err := s.SubmitFunctionResult(context.Background(), proto.FunctionResultPayload{CallID: "a", Content: []proto.InputContent{}}); !errors.Is(err, agent.ErrUnknownFunctionCall) {
 		t.Fatal(err)
 	}
 }

@@ -25,6 +25,19 @@ independent blind review using only requirements, acceptance criteria, boundarie
 repository path and comparison baseline. Fix in-scope blockers before delivery.
 Do not use `codex exec` as a substitute reviewer.
 
+For subsequent alignment and milestone closure batches, the main thread coordinates
+design, shared interface agreements, file ownership, integration and merge. First
+reconcile main and the boards, then list remaining mandatory milestone work,
+acceptance, scope ceilings and stop conditions. Use built-in GPT-6 Astra high
+subagents for two or three related tasks with disjoint file ownership, or separate
+implementation from real acceptance. Do not create a design per harness or have
+multiple agents edit one shared interface. Validation workers use independent
+databases, ports and containers. Run targeted tests during development, then the
+stable batch's required checks, real regression, generation and independent review.
+Do not split an already active batch again just to adopt this workflow. Preserve
+confirmed native differences and queue nonblocking findings without expanding the
+milestone; stop after completing it when the user has set that boundary.
+
 Keep runtime state, test artifacts and build output under `~/.parsar/`. Require
 absolute user-supplied working directories. Keep credentials out of source and
 logs. Update this guide when architecture, ownership or generated contracts change.
@@ -1645,6 +1658,14 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   index, and never emit `item.done`, whose upstream union only allows agent output.
   Project their public output/error from the saved submission, including missing
   versus null fields; native content normalization must not change public history.
+- Codex function application requires a matching live native dynamic-tool completion,
+  including root thread/Turn/call identity, function, success and ordered content.
+  Writing its JSON-RPC response is not application. The adapter owns pending
+  receipts without holding their state lock across IO or waiting; terminal state,
+  cancellation and native loss settle unconfirmed submissions before release.
+  Uncertain receipt timeout ends that native execution without resending the result.
+  The common Runtime interface and router continue to own delivery identity,
+  retry/conflict and terminal ordering; Core never parses native tool events.
 - Internal function execution requires an advertised `function_tools` capability
   before claiming a Turn. Translate resolved definitions in the execution adapter,
   persist declared callbacks before exposing actions, and deliver each saved result

@@ -25,11 +25,15 @@ Public Items preserve the caller's bytes. Native decode failure, text fallback o
 missing images fails receipt validation. The existing uncertain-delivery timeout
 and cancellation behavior remain unchanged; no replay mechanism is added.
 
-Codex's existing result acknowledgement follows a successful transport write. It
-must not be described as a native consumption receipt. Real model image use and
-native completion provide separate execution evidence. The submitted result remains
-durable; process loss between write and native consumption is still unqualified
-and tracked as `FUNCTION-RECEIPT-NATIVE-001`.
+Codex waits for the live root `item/completed` dynamic-tool observation with
+matching thread, Turn, call, function name, completion status, success flag and
+exact ordered text/image content. A transport write alone does not acknowledge
+application. This confirms the native handler's result, not completed provider
+consumption or crash recovery. The adapter owns one pending receipt; native exit,
+terminal settlement or cancellation releases it without confirming application.
+A missing receipt times out after ten seconds and ends the uncertain execution;
+there is no automatic result replay. The original submission remains durable.
+The existing router retains receipt retry/conflict and terminal publication ownership.
 
 ## Validation
 

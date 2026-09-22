@@ -1,10 +1,8 @@
 package codex
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -24,12 +22,12 @@ type functionCalls struct {
 	mu          sync.Mutex
 	definitions []dynamicFunctionTool
 	names       map[string]bool
-	pending     map[string]any
+	pending     map[string]*pendingFunction
 	closed      bool
 }
 
 func prepareFunctionTools(tools []proto.FunctionTool) (*functionCalls, error) {
-	state := &functionCalls{names: map[string]bool{}, pending: map[string]any{}}
+	state := &functionCalls{names: map[string]bool{}, pending: map[string]*pendingFunction{}}
 	if len(tools) > 64 {
 		return nil, errors.New("at most 64 function tools are supported")
 	}
@@ -56,7 +54,7 @@ func (s *Session) handleFunctionCall(raw json.RawMessage, rpcID any) (any, error
 	if err := json.Unmarshal(raw, &call); err != nil {
 		return nil, err
 	}
-	if s.functions == nil || !s.functions.names[call.Tool] || call.Namespace != nil || call.CallID == "" || call.ThreadID != s.currentThreadID() || call.TurnID == "" || !json.Valid(call.Arguments) {
+	if s.functions == nil || !s.functions.names[call.Tool] || call.Namespace != nil || call.CallID == "" || !s.isRootTurn(call.ThreadID, call.TurnID) || !json.Valid(call.Arguments) {
 		return nil, errors.New("unexpected function call")
 	}
 	s.functions.mu.Lock()
@@ -64,7 +62,7 @@ func (s *Session) handleFunctionCall(raw json.RawMessage, rpcID any) (any, error
 		s.functions.mu.Unlock()
 		return nil, errors.New("function call cannot be admitted")
 	}
-	s.functions.pending[call.CallID] = rpcID
+	s.functions.pending[call.CallID] = &pendingFunction{rpcID: rpcID, turnID: call.TurnID, name: call.Tool, receipt: make(chan error, 1)}
 	s.functions.mu.Unlock()
 	env, err := proto.NewEnvelope(proto.TypeFunctionCall, s.runID, proto.FunctionCallPayload{CallID: call.CallID, Name: call.Tool, Arguments: call.Arguments})
 	if err == nil {
@@ -97,40 +95,6 @@ func (s *Session) sendFunctionCall(env proto.Envelope) error {
 	}
 }
 
-func (s *Session) SubmitFunctionResult(ctx context.Context, result proto.FunctionResultPayload) error {
-	if s.functions == nil {
-		return agent.ErrUnknownFunctionCall
-	}
-	s.functions.mu.Lock()
-	defer s.functions.mu.Unlock()
-	id, exists := s.functions.pending[result.CallID]
-	if !exists || s.functions.closed || s.cancelled.Load() || s.terminal.Load() {
-		return agent.ErrUnknownFunctionCall
-	}
-	if err := result.ValidateContent(); err != nil {
-		return err
-	}
-	content := make([]functionContent, 0, len(result.Content))
-	for _, part := range result.Content {
-		kind := "inputText"
-		if part.Type == "input_image" {
-			kind = "inputImage"
-		}
-		content = append(content, functionContent{Type: kind, Text: part.Text, ImageURL: part.ImageURL})
-	}
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-	reply := struct {
-		Success      bool              `json:"success"`
-		ContentItems []functionContent `json:"contentItems"`
-	}{Success: result.Success, ContentItems: content}
-	if err := s.rpc.writeFrameContext(ctx, JsonRpcResponse{JsonRpc: JsonRpcVersion, ID: id, Result: reply}); err != nil {
-		return fmt.Errorf("write function result: %w", err)
-	}
-	delete(s.functions.pending, result.CallID)
-	return nil
-}
-
 type functionContent struct {
 	Type     string  `json:"type"`
 	Text     *string `json:"text,omitempty"`
@@ -141,6 +105,9 @@ func (s *Session) stopFunctionCalls() {
 	if s.functions != nil {
 		s.functions.mu.Lock()
 		s.functions.closed = true
+		for _, pending := range s.functions.pending {
+			pending.receipt <- agent.ErrUnknownFunctionCall
+		}
 		clear(s.functions.pending)
 		s.functions.mu.Unlock()
 	}

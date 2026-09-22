@@ -59,6 +59,7 @@ func (s *Session) onItemCompleted(raw json.RawMessage) {
 		return
 	}
 	s.sendItemEvents(envs, raw)
+	s.confirmFunctionResult(raw)
 	messageText := p.Item.Text
 	if messageText == "" {
 		messageText = text
