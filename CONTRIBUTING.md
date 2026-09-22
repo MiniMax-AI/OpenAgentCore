@@ -1649,6 +1649,16 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   Cancellation receipts carry the stopped engine's continuity snapshot when no
   Done is emitted. Preserve separately reported usage on failure; do not add the
   same counters again when Done also includes them.
+  Usage frames carry cumulative snapshots for the current execution, not deltas.
+  Adapters publish observed snapshots promptly through the same ordered stream;
+  waiting for Done unnecessarily loses known measurements if the Runtime stops.
+  Core replaces complete valid token breakdowns and preserves the last committed
+  measurement on interruption. Missing measurements remain unknown. Do not infer
+  token consumption from context occupancy or estimated costs, or parse native
+  Raw payloads in Core. Session totals cover recorded root Turns; mixed root/child
+  Turn listings are not a summable accounting ledger. Native measurement coverage
+  and exact provider/model attribution remain explicit qualification boundaries.
+  No separate public usage event or historical SSE replay is introduced.
 - The dispatcher is an internal entry point used by the standalone service worker.
   Legacy internal `daemon` configuration is not a public Environment type.
   Self-hosted enrollment uses exact local binding; further pending interactions

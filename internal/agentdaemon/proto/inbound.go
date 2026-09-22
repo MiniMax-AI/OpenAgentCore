@@ -52,7 +52,8 @@ const (
 	// frame arrives.
 	TypeInteractionDecisionAck = "interaction_decision_ack"
 
-	// TypeUsage reports incremental token / cost usage.
+	// TypeUsage reports a cumulative usage snapshot for the current execution.
+	// Repeated snapshots, including the final Done snapshot, replace rather than add.
 	TypeUsage = "usage"
 
 	// TypeError signals the prompt failed. Daemon MUST emit a Done
@@ -197,10 +198,9 @@ func (p PromptForUserChoicePayload) EffectiveQuestions() []PromptForUserChoiceQu
 	}}
 }
 
-// Usage mirrors server/internal/store.UsageInput on the wire — field
-// names and JSON tags identical so the connector boundary copies with
-// a one-liner translator. Redeclared (not imported) because this
-// package must stay free of server/internal dependencies.
+// TokenUsage is a complete cumulative measurement for the current execution.
+// Adapters publish observed snapshots promptly; historical resume totals belong
+// to the adapter baseline, not this execution. Unknown fields must not become zero.
 type TokenUsage struct {
 	InputTokens           int64 `json:"input_tokens"`
 	CachedInputTokens     int64 `json:"cached_input_tokens"`
@@ -209,6 +209,9 @@ type TokenUsage struct {
 	TotalTokens           int64 `json:"total_tokens"`
 }
 
+// Usage retains native evidence independently of the optional public breakdown.
+// Tokens is absent when a complete, correctly scoped measurement is unavailable.
+// Core does not reconstruct token counts, prices or provider identity from Raw.
 type Usage struct {
 	Tokens       *TokenUsage    `json:"tokens,omitempty"`
 	Provider     string         `json:"provider,omitempty"`
