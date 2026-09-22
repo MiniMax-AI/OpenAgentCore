@@ -33,6 +33,7 @@ func defaultRunContext() *runContext {
 // commands lists subcommands in --help render order: the user's
 // likely flow connect → status → stop / logs → logout.
 var commands = []command{
+	{name: "resume", summary: "Wake one planned hosted suspension", run: runResume},
 	{name: "runtime-capabilities", summary: "Install frozen capabilities in the packaged Runtime", run: runRuntimeCapabilities},
 	{name: "runtime-mcp-exec", summary: "Execute installed MCP inside the packaged Runtime sandbox", run: runRuntimeMCP},
 	{name: "placement", summary: "Enroll or retire an explicitly managed local execution placement", run: runPlacement},

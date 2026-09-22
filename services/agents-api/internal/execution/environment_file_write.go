@@ -30,6 +30,9 @@ func (w *Worker) WriteEnvironmentFile(ctx context.Context, environment store.Env
 	if len(data) > proto.WorkspaceWriteMaxBytes {
 		return 0, store.ErrInvalidInput
 	}
+	if err := w.waitRuntimeAwake(ctx, environment); err != nil {
+		return 0, err
+	}
 	request := fileWriteRequest{ctx: ctx, environment: environment, path: path, data: data, result: make(chan fileWriteResult, 1)}
 	select {
 	case w.fileWrites <- request:

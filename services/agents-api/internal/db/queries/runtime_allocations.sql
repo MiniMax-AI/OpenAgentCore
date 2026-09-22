@@ -3,14 +3,14 @@ INSERT INTO runtime_allocations (id, environment_id, device_id, provider_key, in
 VALUES ($1, $2, $3, $4, CASE WHEN EXISTS (SELECT 1 FROM initial_environment_files f JOIN environments e ON e.session_id = f.session_id WHERE e.id = $2) OR EXISTS (SELECT 1 FROM environment_setups f JOIN environments e ON e.session_id = f.session_id WHERE e.id = $2) THEN 'pending' ELSE 'complete' END) RETURNING *;
 
 -- name: GetRuntimeAllocation :one
-SELECT sqlc.embed(a), e.session_id, s.tenant_id, s.deleted_at, (a.kept_at <= clock_timestamp() - interval '1 hour') AS expired
+SELECT sqlc.embed(a), e.session_id, s.tenant_id, s.deleted_at, (CASE WHEN a.compute_phase NOT IN ('disabled', 'running') THEN a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp() ELSE a.kept_at <= clock_timestamp() - interval '1 hour' END)::boolean AS expired
 FROM runtime_allocations a
 JOIN environments e ON e.id = a.environment_id
 JOIN sessions s ON s.id = e.session_id
 WHERE s.tenant_id = $1 AND a.environment_id = $2;
 
 -- name: ListRuntimeAllocations :many
-SELECT sqlc.embed(a), e.session_id, s.tenant_id, s.deleted_at, (a.kept_at <= clock_timestamp() - interval '1 hour') AS expired
+SELECT sqlc.embed(a), e.session_id, s.tenant_id, s.deleted_at, (CASE WHEN a.compute_phase NOT IN ('disabled', 'running') THEN a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp() ELSE a.kept_at <= clock_timestamp() - interval '1 hour' END)::boolean AS expired
 FROM runtime_allocations a
 JOIN environments e ON e.id = a.environment_id
 JOIN sessions s ON s.id = e.session_id

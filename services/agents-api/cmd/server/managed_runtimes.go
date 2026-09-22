@@ -16,10 +16,11 @@ import (
 )
 
 type managedRuntimeConfig struct {
-	CoreURL         string                         `json:"core_url"`
-	EngineProviders map[string]string              `json:"engine_providers"`
-	DefaultProvider string                         `json:"default_provider"`
-	Docker          map[string]managedDockerConfig `json:"docker"`
+	Microsandbox    map[string]managedMicrosandboxConfig `json:"microsandbox"`
+	CoreURL         string                               `json:"core_url"`
+	EngineProviders map[string]string                    `json:"engine_providers"`
+	DefaultProvider string                               `json:"default_provider"`
+	Docker          map[string]managedDockerConfig       `json:"docker"`
 }
 
 type managedDockerConfig struct {
@@ -49,14 +50,21 @@ func managedRuntimes() (*execution.RuntimeProviders, func(), error) {
 	var config managedRuntimeConfig
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&config) != nil || decoder.Decode(new(any)) != io.EOF || len(config.Docker) == 0 {
+	if decoder.Decode(&config) != nil || decoder.Decode(new(any)) != io.EOF || len(config.Docker)+len(config.Microsandbox) == 0 {
 		return nil, closeAll, errors.New("invalid managed Runtime configuration")
 	}
-	if config.DefaultProvider != "" {
-		_, dockerOK := config.Docker[config.DefaultProvider]
-		if !dockerOK {
-			return nil, closeAll, errors.New("managed default provider is not configured")
+	for key := range config.Microsandbox {
+		if _, exists := config.Docker[key]; exists {
+			return nil, closeAll, errors.New("managed provider key belongs to multiple backends")
 		}
+	}
+	configured := func(key string) bool {
+		_, dockerOK := config.Docker[key]
+		_, microOK := config.Microsandbox[key]
+		return dockerOK || microOK
+	}
+	if config.DefaultProvider != "" && !configured(config.DefaultProvider) {
+		return nil, closeAll, errors.New("managed default provider is not configured")
 	}
 	if config.EngineProviders == nil {
 		config.EngineProviders = map[string]string{}
@@ -70,8 +78,7 @@ func managedRuntimes() (*execution.RuntimeProviders, func(), error) {
 	}
 	for kind, key := range config.EngineProviders {
 		_, qualified := (engine.Catalog{}).Lookup(kind)
-		_, dockerOK := config.Docker[key]
-		if !qualified || key == "" || (!dockerOK) {
+		if !qualified || key == "" || !configured(key) {
 			return nil, closeAll, errors.New("invalid managed engine provider mapping")
 		}
 	}
@@ -106,6 +113,10 @@ func managedRuntimes() (*execution.RuntimeProviders, func(), error) {
 			return nil, func() {}, errors.New("invalid managed Docker provider configuration")
 		}
 		result.Providers[key] = provider
+	}
+	if err := addManagedMicrosandbox(config.Microsandbox, result); err != nil {
+		closeAll()
+		return nil, func() {}, err
 	}
 	return result, closeAll, nil
 }

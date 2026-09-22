@@ -16,6 +16,12 @@ import (
 // RuntimeAllocation retains compute ownership, not public readiness. It survives
 // Session deletion until cleanup is confirmed. No bootstrap secret is retained.
 type RuntimeAllocation struct {
+	ComputePhase                                                  string
+	ComputeRevision                                               int64
+	ComputeState                                                  json.RawMessage
+	ComputeActivityAt                                             time.Time
+	ComputeWakeRequested                                          bool
+	ComputeRetainedUntil                                          *time.Time
 	ID, EnvironmentID, SessionID, TenantID, DeviceID, ProviderKey string
 	Initialization                                                string
 	State                                                         string
@@ -131,7 +137,14 @@ func (s *Store) ListRuntimeAllocations(ctx context.Context, after string) ([]Run
 }
 
 func runtimeAllocationFromRow(row sqlc.RuntimeAllocation, session, tenant pgtype.UUID, deleted pgtype.Timestamptz, expired bool) RuntimeAllocation {
+	var retainedUntil *time.Time
+	if row.ComputeRetainedUntil.Valid {
+		value := row.ComputeRetainedUntil.Time
+		retainedUntil = &value
+	}
 	return RuntimeAllocation{
+		ComputePhase: row.ComputePhase, ComputeRevision: row.ComputeRevision, ComputeState: row.ComputeState,
+		ComputeActivityAt: row.ComputeActivityAt.Time, ComputeWakeRequested: row.ComputeWakeRequested, ComputeRetainedUntil: retainedUntil,
 		ID: uuid.UUID(row.ID.Bytes).String(), EnvironmentID: uuid.UUID(row.EnvironmentID.Bytes).String(),
 		SessionID: uuid.UUID(session.Bytes).String(), TenantID: uuid.UUID(tenant.Bytes).String(),
 		DeviceID: uuid.UUID(row.DeviceID.Bytes).String(), ProviderKey: uuid.UUID(row.ProviderKey.Bytes).String(),

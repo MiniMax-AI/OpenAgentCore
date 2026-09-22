@@ -25,6 +25,7 @@ type RuntimeProviders struct {
 	DefaultProvider string
 	EngineProviders map[string]string
 	Providers       map[string]sandbox.Provider
+	Suspension      map[string]RuntimeSuspensionPolicy
 }
 
 type runtimeLifecycle struct {
@@ -64,6 +65,13 @@ func newRuntimeLifecycle(s *store.Store, registry *gateway.Registry, config *Run
 	}
 	if copied.DefaultProvider != "" && copied.Providers[copied.DefaultProvider] == nil {
 		return nil, sandbox.ErrInvalid
+	}
+	copied.Suspension = make(map[string]RuntimeSuspensionPolicy, len(config.Suspension))
+	for key, policy := range config.Suspension {
+		if _, ok := copied.Providers[key].(sandbox.CheckpointProvider); !ok || policy.IdleTimeout < time.Second || policy.Retention < time.Second || policy.MaxActive < 1 || policy.MaxRetained < policy.MaxActive {
+			return nil, sandbox.ErrInvalid
+		}
+		copied.Suspension[key] = policy
 	}
 	ctx, stop := context.WithCancel(context.Background())
 	return &runtimeLifecycle{store: s, registry: registry, config: copied, gate: make(chan struct{}, 1), ctx: ctx, stop: stop, connections: make(map[string]*runtimeConnection)}, nil
@@ -118,6 +126,22 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	placement, err := parseEnvironmentPlacement(environmentValue.Configuration)
 	if err != nil || placement.Type != "openai_hosted" {
 		return store.RuntimeAllocation{}, sandbox.ErrInvalid
+	}
+	if _, err := r.store.GetRuntimeAllocation(ctx, tenant, environment); errors.Is(err, store.ErrNotFound) {
+		if err := r.computeCapacity(ctx, providerKey); err != nil {
+			return store.RuntimeAllocation{}, err
+		}
+		if policy, enabled := r.config.Suspension[providerKey]; enabled {
+			count, err := r.store.CountRuntimeRetainedAllocations(ctx, providerKey)
+			if err != nil {
+				return store.RuntimeAllocation{}, err
+			}
+			if count >= int64(policy.MaxRetained) {
+				return store.RuntimeAllocation{}, ErrExecutionUnavailable
+			}
+		}
+	} else if err != nil {
+		return store.RuntimeAllocation{}, err
 	}
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
@@ -213,8 +237,13 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAlloc
 			return err
 		}
 		r.clearRuntimeState(owner)
-	} else if err := r.observeConnection(ctx, owner); err != nil {
-		return err
+	} else if owner.ComputePhase == "disabled" || owner.ComputePhase == "running" {
+		if err := r.observeConnection(ctx, owner); err != nil {
+			return err
+		}
+	}
+	if owner.ComputePhase != "disabled" {
+		return r.observeCompute(ctx, owner)
 	}
 	provider := r.config.Providers[owner.ProviderKey]
 	if provider == nil {
@@ -266,6 +295,9 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAlloc
 	}
 	if err := r.observeInitialization(ctx, owner); err != nil {
 		return err
+	}
+	if _, enabled := r.config.Suspension[owner.ProviderKey]; enabled && owner.Initialization == "complete" {
+		return r.enableCompute(ctx, owner)
 	}
 	if peer, err := r.registry.LookupDevice(owner.DeviceID); err != nil || peer.IsClosed() {
 		return nil

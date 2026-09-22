@@ -1,0 +1,165 @@
+# microsandbox provider helper
+
+This Linux-only, one-operation helper links the maintained microsandbox Go SDK
+v0.7.2. Core stays a pure-Go binary and uses the provider-neutral
+`sandbox.CheckpointProvider` interface. There is no helper daemon, local lifecycle
+database, native agent adapter, or additional scheduler.
+
+The supported first deployment profile is native Linux Core plus this local
+helper, under one dedicated service user with KVM access. PostgreSQL may continue
+to run in Docker. The current Core distroless/static image cannot execute this
+glibc helper; copying the binary into that image is not a supported deployment.
+
+## Build and installation
+
+From this directory, using the repository Go version:
+
+```sh
+GOWORK=off CGO_ENABLED=1 go build -mod=readonly -trimpath -o "$HOME/.parsar/bin/agents-api-microsandbox-provider" .
+GOWORK=off go test ./...
+```
+
+The relative replacement for the parent Core module refers to this checkout.
+The SDK is the real published module, pinned in go.mod and go.sum; it has no
+local-source replacement. The normal build embeds its matching FFI library.
+Do not build production with the SDK's development `microsandbox_ffi_path` tag.
+
+Install the matching v0.7.2 msb runtime and firmware from checksum-verified release
+artifacts. Supply absolute helper/runtime/firmware paths and expected SHA256
+values in the trusted provider Config. The helper checks the runtime and firmware
+hashes, the ELF runtime version section, the SDK module version, and the resolved
+local backend. It never auto-installs or upgrades these artifacts. The installed
+paths must remain immutable for the lifetime of the provider key.
+
+Use a dedicated, private (0700), short MSB_HOME on local persistent storage.
+The upstream runtime uses Unix sockets, so a short path such as
+`/var/lib/parsar-msb` avoids pathname limits. Never share that home with another
+installation, cloud profile, or manual lifecycle controller. Its VM disks,
+snapshots, SDK state and credentials are confidential execution-service data.
+All managed sandbox lifecycle mutations must go through the provider.
+
+An immutable OCI image must already be available as `repository@sha256:<64 lowercase hex>`. Bare Docker image IDs and mutable tags are rejected.
+For offline archives, `msb image load --tag repository@sha256:<digest>` must register
+the digest reference explicitly; loading a mutable tag alone does not create it.
+Use the manifest digest from `image inspect`, not the Docker image config ID.
+The qualified image contains our existing daemon, Python 3, native harness and
+shared Runtime helpers. Provider Config explicitly sets VM resources and the
+complete host network policy. This adapter does not install registry credentials.
+
+## Bootstrap and network
+
+VM creation does not implicitly run the OCI ENTRYPOINT. Before admitting native
+work, the helper uses confidential stdin to install the existing private
+`auth.json` format, create Runtime directories, bind the same workspace at
+`/workspace`, and invoke the existing daemon's `connect --profile default -b`
+mode as uid/gid 1000. The final provider-owned bootstrap label confirms only
+completion of these writes and launch, not authentication or native readiness.
+The receipt label uses the supported next-start modification policy to update
+persisted metadata without restarting the guest. v0.7.2 cannot update active labels.
+
+The private daemon control directory is `/run/parsar` (0700, uid/gid 1000).
+`PARSAR_DAEMON_SUSPEND_PID_FILE=/run/parsar/daemon-suspend.json` enables the
+daemon's separately owned idle park/wake control. RunCommandCompute can execute
+the exact daemon resume command authorized by Core; it never uses pkill.
+
+Creation and full restore both receive the same explicit, trusted host policy.
+Upstream restore defaults to Public rather than inheriting source host access.
+Native tool-network policy remains the existing Runtime responsibility. No
+default external mount inheritance, missing-resource allowance, or policy widening
+is used.
+
+## Lifecycle contract
+
+Core persists operation IDs, source/target generations, exact identities and
+snapshot evidence before depending on them. `Initial` and `NewCompute` only
+construct references; they allocate nothing. Names are installation/allocation/
+generation-derived and must never be reused for another incarnation.
+
+Suspend pauses the exact VM, captures a full snapshot under the persisted
+operation's derived group/member, verifies its complete checkpoint closure, then
+force-stops the source. Pausing alone is not suspension or memory reclamation.
+A completed matching artifact is inspected rather than captured again.
+
+After a lost response, Core uses `ObserveOnly`. This never starts capture or
+restore, and a suspended-operation observation never kills its source. Core can
+persist recovered snapshot evidence before KillCompute. If the artifact is absent but the exact source is still running or paused with settled bootstrap, observation returns that intact source with no snapshot, allowing Core to abort suspension and thaw/wake it. Missing state never
+authorizes replay of the original operation.
+
+Restore verifies the exact artifact and creates the precommitted target name.
+Existing targets are adopted only when their immutable ID (if known) and
+persisted `snapshot_parent` agree. Restored labels are not synthesized.
+Unfinished restore intent is not bootstrap completion. There is no ordinary
+Start, replacement, disk-only restore, or cold-boot fallback.
+
+`ResumeCompute` only thaws the same resident source after an aborted suspension.
+The pinned Go handle method is name-based; the allocation flock plus ID checks
+before and after the call fence every managed replacement. External manual
+lifecycle changes in the managed namespace are unsupported.
+
+A helper holds an allocation flock until its lifecycle SDK call actually settles.
+Core's response deadline does not kill that helper or cancel its FFI wait, since
+cancelling the wait does not prove the native mutation stopped. On timeout Core
+retains an unknown operation and observes it; a subsequent helper cannot race
+past the surviving lock holder. A stuck owner needs operator investigation,
+not automatic lock deletion or another create.
+
+KillCompute checks the precise incarnation before stopping and removing its writable
+disks. Core calls it after persisting the verified snapshot, even if Suspend
+already stopped the source. GetCompute, commands, cleanup and the next suspension
+verify restored provenance from persisted VM config after the consumed artifact
+has been deleted.
+DeleteSnapshot accepts only the derived operation selector and matching full
+artifact identity, not an arbitrary path. Core owns retention, consumed snapshot
+generations and cleanup ordering. A checkpoint must never roll back work admitted
+after its first restore.
+
+RunCommand/RunCommandCompute carry stdin on anonymous pipes, fix the guest user
+to 1000, impose a deadline and 1 MiB per-stream output limits, and require both
+successful stdin completion and an explicit guest exit before returning a result.
+Timeouts, output overflow and missing receipts return ErrCommandUnconfirmed.
+Closing an SDK exec handle alone does not prove the guest process exited.
+
+## Acceptance boundary
+
+The feature is idle-only: Core must reserve a terminal Session with no pending
+work before parking its daemon and suspending compute. The next Turn uses the
+same Session history, files and configuration without replaying initialization.
+This adapter does not promise that a native agent process persists across Turns.
+
+SDK feasibility separately qualified exact IDs, full snapshot verification,
+snapshot_parent, source memory release, tmpfs/RAM restoration and stale-handle
+pause rejection. The published Go module's SDK sources and Linux amd64 FFI were
+compared byte-for-byte with that qualification source/runtime. The FFI SHA256 was
+`ed04ca4788c1c400e1b67040e964fbfcb3743d31d969d1b426dfb95afe7271d8`.
+
+Production helper qualification completed two full capture/restore cycles, removing
+each source before restore and deleting each consumed artifact before the next
+cycle. Workspace bind identity, uid 1000, private auth permissions and file content
+survived. The real Core/Codex synthetic-model test separately completed two Turns
+across idle suspension and a Core restart. Synthetic responses establish the
+control flow, not real-model acceptance.
+
+The 2026-09-22 Linux amd64 live acceptance used microsandbox/Go SDK v0.7.2,
+libkrunfw 5.6.1, Codex CLI 0.153.4 and the official Kimi K3 Responses API. The
+unchanged native harness completed two real Turns in one Session across automatic
+idle suspension, source removal and a Core restart. Generation 1 restored the
+exact full snapshot; the consumed artifact was removed. The model's shell tool
+read the original random file marker, retained environment configuration and one
+initialization record, then correctly recalled the first request from history.
+Retrying the second public input with the same idempotency key created no extra
+Turn or tool side effect. A subsequent public file upload/list woke generation 2
+without starting another Turn. Public Session deletion released its allocation;
+all qualification VMs and snapshots and temporary credentials were removed.
+This qualifies that model/profile, not every provider or broader isolation guarantees.
+
+The source VM was observed at 334304 KiB RSS before suspension and with zero RSS
+and no executable after exit. The qualification container's PID 1 left a zombie
+PID; it retained no VM memory. The separate backend RAM probe also checked live
+anonymous memory and tmpfs contents after full restore. A paused resident VM alone
+would not satisfy either memory-release check.
+
+Private qualification evidence is grouped as `ram-03` (backend), `provider-01`
+(production helper), `core-01` (synthetic Core) and `live-core-03` (real model).
+These are bounded single-host checks. They do not establish cold-image download
+latency, tail latency, production capacity, or general native-process persistence
+across Turns.

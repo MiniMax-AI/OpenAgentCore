@@ -108,6 +108,8 @@ type Session struct {
 	preparations      map[string]*preparationSubscription
 	workspaceWriteMu  sync.Mutex
 	workspaceWrites   map[string]chan proto.Envelope
+	suspendMu         sync.Mutex
+	suspendReplies    map[string]chan proto.Envelope
 	workspaceReadMu   sync.Mutex
 	workspaceReads    map[string]chan proto.Envelope
 	workspaceExportMu sync.Mutex
@@ -262,6 +264,7 @@ func (s *Session) Close(reason string) {
 		s.reg.Deregister(s)
 		s.closePreparations()
 		s.closeWorkspaceReads()
+		s.closeSuspendReplies()
 		s.closeWorkspaceWrites()
 		s.closeWorkspaceExports()
 		s.markOfflineOnClose()
@@ -589,6 +592,8 @@ func (s *Session) dispatch(env proto.Envelope) {
 	case proto.TypeWorkspaceReadResult:
 		s.dispatchWorkspaceRead(env)
 		return
+	case proto.TypeEnvironmentQuiesced, proto.TypeEnvironmentResumed:
+		s.dispatchSuspendReply(env)
 	case proto.TypePreparationStatus:
 		s.dispatchPreparation(env)
 		return

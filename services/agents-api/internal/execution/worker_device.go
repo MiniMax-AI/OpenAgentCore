@@ -80,6 +80,18 @@ func (w *Worker) bindSessionDevice(ctx context.Context, session store.Session, r
 		if _, err := parseEnvironmentPlacement(environment.Configuration); err != nil {
 			return false, nil
 		}
+		allocation, err := w.dispatcher.Store.GetRuntimeAllocation(ctx, session.TenantID, environment.ID)
+		if errors.Is(err, store.ErrNotFound) {
+			if snapshot.Environment.Type == "openai_hosted" {
+				return false, nil
+			}
+		} else if err != nil {
+			return false, err
+		} else if allocation.ComputePhase != "disabled" && allocation.ComputePhase != "running" {
+			// A reconnect authenticates transport before the retained Environment
+			// resumes. Its first control frame must remain the lifecycle's Resume.
+			return false, nil
+		}
 		bound, err := w.dispatcher.Store.GetSessionDevice(ctx, session.TenantID, session.ID)
 		if errors.Is(err, store.ErrNotFound) {
 			return false, nil
