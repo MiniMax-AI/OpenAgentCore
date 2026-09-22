@@ -14,11 +14,16 @@ function snapshot(at: number, options: {
   input?: number;
   output?: number;
   cpuRatio?: number | null;
+  cpuUsageCores?: number | null;
+  cpuUsageSecondsTotal?: number;
+  cpuCapacity?: number;
   memory?: number;
   startedAt?: number;
+  allocationId?: string;
+  observedAt?: number;
 } = {}): RuntimeDashboardSnapshot {
   const sessionId = "11111111-1111-4111-8111-111111111111";
-  const observedAt = Math.floor(at / 1_000);
+  const observedAt = options.observedAt ?? Math.floor(at / 1_000);
   const input = options.input ?? 100;
   const output = options.output ?? 20;
   const session = {
@@ -53,12 +58,29 @@ function snapshot(at: number, options: {
   } as AgentSession;
   const observation = {
     id: sessionId,
+    object: "agent.runtime_observation",
     session_id: sessionId,
+    environment_id: "22222222-2222-4222-8222-222222222222",
+    mode: "openai_hosted",
     status: "observed",
+    reason: null,
     provider_type: "docker",
+    instance: {
+      kind: "managed_allocation",
+      allocation_id: options.allocationId ?? "33333333-3333-4333-8333-333333333333",
+      device_id: null,
+      connection_generation: null,
+    },
+    allocation_created_at: observedAt - 180,
+    resolved_at: observedAt,
     observed_at: observedAt,
     started_at: options.startedAt ?? observedAt - 120,
-    cpu: { utilization_ratio: options.cpuRatio ?? .25, usage_cores: .5, capacity_cores: 2, usage_seconds_total: 30 },
+    cpu: {
+      utilization_ratio: Object.hasOwn(options, "cpuRatio") ? options.cpuRatio ?? null : .25,
+      usage_cores: Object.hasOwn(options, "cpuUsageCores") ? options.cpuUsageCores ?? null : .5,
+      capacity_cores: options.cpuCapacity ?? 2,
+      usage_seconds_total: options.cpuUsageSecondsTotal ?? 30,
+    },
     memory: { usage_bytes: options.memory ?? 512, limit_bytes: 1_024 },
   } as RuntimeObservation;
   return { sessions: [session], observations: [observation], loadedAt: at };
@@ -104,6 +126,68 @@ describe("Runtime live-window trends", () => {
     ]);
   });
 
+  it("derives real CPU utilization from cumulative samples within one Runtime incarnation", () => {
+    const cumulative = (at: number, usage: number) => snapshot(at, {
+      cpuRatio: null,
+      cpuUsageCores: null,
+      cpuUsageSecondsTotal: usage,
+      cpuCapacity: 2,
+      startedAt: 0,
+    });
+    let samples = appendRuntimeTrendSample([], cumulative(60_000, 10));
+    samples = appendRuntimeTrendSample(samples, cumulative(120_000, 70));
+    samples = appendRuntimeTrendSample(samples, cumulative(180_000, 130));
+    expect(samples.map((sample) => sample.targets[0]?.cpuRatio ?? null)).toEqual([null, .5, .5]);
+  });
+
+  it("does not derive CPU across restarts, allocation changes, or counter regressions", () => {
+    const base = snapshot(60_000, {
+      cpuRatio: null, cpuUsageCores: null, cpuUsageSecondsTotal: 100, startedAt: 0,
+    });
+    for (const next of [
+      snapshot(120_000, { cpuRatio: null, cpuUsageCores: null, cpuUsageSecondsTotal: 160, startedAt: 1 }),
+      snapshot(120_000, { cpuRatio: null, cpuUsageCores: null, cpuUsageSecondsTotal: 160, startedAt: 0, allocationId: "44444444-4444-4444-8444-444444444444" }),
+      snapshot(120_000, { cpuRatio: null, cpuUsageCores: null, cpuUsageSecondsTotal: 10, startedAt: 0 }),
+    ]) {
+      const samples = appendRuntimeTrendSample(appendRuntimeTrendSample([], base), next);
+      expect(samples.at(-1)?.targets[0]?.cpuRatio ?? null).toBeNull();
+    }
+  });
+
+  it("does not connect directly reported CPU across Runtime incarnation fences", () => {
+    const base = snapshot(60_000, { cpuRatio: .25, startedAt: 0 });
+    for (const next of [
+      snapshot(120_000, { cpuRatio: .5, startedAt: 1 }),
+      snapshot(120_000, { cpuRatio: .5, startedAt: 0, allocationId: "44444444-4444-4444-8444-444444444444" }),
+      snapshot(120_000, { cpuRatio: .5, startedAt: 0, observedAt: 60 }),
+    ]) {
+      const samples = appendRuntimeTrendSample(appendRuntimeTrendSample([], base), next);
+      expect(samples.at(-1)?.targets[0]?.cpuRatio ?? null).toBeNull();
+    }
+  });
+
+  it("rejects non-finite CPU ratios produced by finite provider inputs", () => {
+    const direct = runtimeTrendSample(snapshot(60_000, {
+      cpuRatio: null,
+      cpuUsageCores: Number.MAX_VALUE,
+      cpuCapacity: Number.MIN_VALUE,
+    }));
+    expect(direct.targets[0]?.cpuRatio ?? null).toBeNull();
+
+    const cumulative = (at: number, usage: number) => snapshot(at, {
+      cpuRatio: null,
+      cpuUsageCores: null,
+      cpuUsageSecondsTotal: usage,
+      cpuCapacity: Number.MIN_VALUE,
+      startedAt: 0,
+    });
+    const samples = appendRuntimeTrendSample(
+      appendRuntimeTrendSample([], cumulative(60_000, 0)),
+      cumulative(120_000, Number.MAX_VALUE),
+    );
+    expect(samples.at(-1)?.targets[0]?.cpuRatio ?? null).toBeNull();
+  });
+
   it("matches token counters by Session without creating churn spikes", () => {
     const first = snapshot(60_000, { input: 100, output: 20 });
     const second = snapshot(120_000, { input: 220, output: 50 });
@@ -141,6 +225,8 @@ describe("Runtime live-window trends", () => {
     let samples = appendRuntimeTrendSample([], many);
     samples = appendRuntimeTrendSample(samples, later);
     expect(samples.every((sample) => sample.targets.length <= RUNTIME_TREND_MAX_TARGETS)).toBe(true);
+    expect(samples[0]?.cpuCandidates).toEqual([]);
+    expect(samples[1]?.cpuCandidates).toHaveLength(20);
     expect(samples[0]?.tokenTotals).toEqual([]);
     expect(samples[1]?.tokenTotals).toHaveLength(20);
   });

@@ -14,9 +14,18 @@ export interface RuntimeTrendTarget {
   uptimeSeconds: number | null;
 }
 
+export interface RuntimeTrendCPUCandidate extends RuntimeTrendTarget {
+  observedAt: number | null;
+  incarnationKey: string | null;
+  usageSecondsTotal: number | null;
+  capacityCores: number | null;
+  reportedRatio: number | null;
+}
+
 export interface RuntimeTrendSample {
   sampledAt: number;
   targets: RuntimeTrendTarget[];
+  cpuCandidates: RuntimeTrendCPUCandidate[];
   memoryUsageBytes: number | null;
   memoryLimitBytes: number | null;
   tokenTotals: RuntimeTrendTokenTotal[];
@@ -50,13 +59,21 @@ function sessionTitle(session: AgentSession): string {
   return session.agent.name ?? session.agent.model;
 }
 
-function cpuRatio(observation: RuntimeObservation): number | null {
+function reportedCpuRatio(observation: RuntimeObservation): number | null {
   if (observation.status !== "observed") return null;
   const reported = finiteNonNegative(observation.cpu?.utilization_ratio);
   if (reported !== null) return reported;
   const usage = finiteNonNegative(observation.cpu?.usage_cores);
   const capacity = finiteNonNegative(observation.cpu?.capacity_cores);
-  return usage !== null && capacity !== null && capacity > 0 ? usage / capacity : null;
+  return usage !== null && capacity !== null && capacity > 0
+    ? finiteNonNegative(usage / capacity)
+    : null;
+}
+
+function incarnationKey(observation: RuntimeObservation): string | null {
+  if (observation.status !== "observed") return null;
+  const startedAt = safeInteger(observation.started_at);
+  return startedAt === null ? null : `${observation.instance.kind}:${observation.instance.allocation_id}:${startedAt}`;
 }
 
 function uptimeSeconds(observation: RuntimeObservation): number | null {
@@ -86,7 +103,11 @@ export function runtimeTrendSample(snapshot: RuntimeDashboardSnapshot): RuntimeT
     return [{
       sessionId: observation.session_id,
       label: sessionTitle(session),
-      cpuRatio: cpuRatio(observation),
+      cpuRatio: reportedCpuRatio(observation),
+      observedAt: safeInteger(observation.observed_at),
+      incarnationKey: incarnationKey(observation),
+      usageSecondsTotal: finiteNonNegative(observation.cpu?.usage_seconds_total),
+      capacityCores: finiteNonNegative(observation.cpu?.capacity_cores),
       memoryUsageBytes: finiteNonNegative(observation.memory?.usage_bytes),
       memoryLimitBytes: finiteNonNegative(observation.memory?.limit_bytes),
       uptimeSeconds: uptimeSeconds(observation),
@@ -114,6 +135,24 @@ export function runtimeTrendSample(snapshot: RuntimeDashboardSnapshot): RuntimeT
   return {
     sampledAt: snapshot.loadedAt,
     targets,
+    cpuCandidates: observed.flatMap((target): RuntimeTrendCPUCandidate[] => (
+      target.cpuRatio !== null || (
+        target.observedAt !== null && target.incarnationKey !== null &&
+        target.usageSecondsTotal !== null && target.capacityCores !== null && target.capacityCores > 0
+      )
+        ? [{
+          sessionId: target.sessionId,
+          label: target.label,
+          cpuRatio: target.cpuRatio,
+          uptimeSeconds: target.uptimeSeconds,
+          observedAt: target.observedAt,
+          incarnationKey: target.incarnationKey,
+          usageSecondsTotal: target.usageSecondsTotal,
+          capacityCores: target.capacityCores,
+          reportedRatio: target.cpuRatio,
+        }]
+        : []
+    )),
     memoryUsageBytes: pairedMemory.length === 0
       ? null
       : pairedMemory.reduce((total, target) => total + (target.memoryUsageBytes ?? 0), 0),
@@ -124,6 +163,58 @@ export function runtimeTrendSample(snapshot: RuntimeDashboardSnapshot): RuntimeT
     inputTokensPerMinute: null,
     outputTokensPerMinute: null,
   };
+}
+
+function cpuRatios(previous: RuntimeTrendSample, next: RuntimeTrendSample): Map<string, number> {
+  const previousCandidates = new Map(previous.cpuCandidates.map((candidate) => [candidate.sessionId, candidate]));
+  const ratios = new Map<string, number>();
+  for (const current of next.cpuCandidates) {
+    const prior = previousCandidates.get(current.sessionId);
+    if (current.reportedRatio !== null && !prior) {
+      ratios.set(current.sessionId, current.reportedRatio);
+      continue;
+    }
+    if (
+      !prior || prior.incarnationKey === null || prior.incarnationKey !== current.incarnationKey ||
+      prior.observedAt === null || current.observedAt === null || current.observedAt <= prior.observedAt
+    ) continue;
+    if (current.reportedRatio !== null) {
+      ratios.set(current.sessionId, current.reportedRatio);
+      continue;
+    }
+    if (
+      prior.usageSecondsTotal === null || current.usageSecondsTotal === null ||
+      current.usageSecondsTotal < prior.usageSecondsTotal ||
+      current.capacityCores === null || current.capacityCores <= 0
+    ) continue;
+    const usageCores = (current.usageSecondsTotal - prior.usageSecondsTotal) /
+      (current.observedAt - prior.observedAt);
+    const ratio = finiteNonNegative(usageCores / current.capacityCores);
+    if (ratio !== null) ratios.set(current.sessionId, ratio);
+  }
+  return ratios;
+}
+
+function applyCPURatios(sample: RuntimeTrendSample, ratios: ReadonlyMap<string, number>): void {
+  const uptime = sample.targets.filter((target) => target.uptimeSeconds !== null)
+    .sort((left, right) => (right.uptimeSeconds ?? 0) - (left.uptimeSeconds ?? 0))
+    .slice(0, RUNTIME_TREND_SERIES_LIMIT)
+    .map((target) => ({ ...target, cpuRatio: null }));
+  const cpu = sample.cpuCandidates.flatMap((candidate): RuntimeTrendTarget[] => {
+    const ratio = ratios.get(candidate.sessionId);
+    return ratio === undefined ? [] : [{
+      sessionId: candidate.sessionId,
+      label: candidate.label,
+      cpuRatio: ratio,
+      uptimeSeconds: candidate.uptimeSeconds,
+    }];
+  }).sort((left, right) => (right.cpuRatio ?? 0) - (left.cpuRatio ?? 0))
+    .slice(0, RUNTIME_TREND_SERIES_LIMIT);
+  const selected = new Map<string, RuntimeTrendTarget>(
+    uptime.map((target) => [target.sessionId, target]),
+  );
+  for (const target of cpu) selected.set(target.sessionId, target);
+  sample.targets = [...selected.values()];
 }
 
 function tokenRate(
@@ -164,9 +255,12 @@ export function appendRuntimeTrendSample(
     .sort((left, right) => left.sampledAt - right.sampledAt)
     .slice(-(maximum - 1));
   const previous = retained.at(-1);
-  if (previous) Object.assign(next, tokenRate(previous, next));
+  if (previous) {
+    Object.assign(next, tokenRate(previous, next));
+    applyCPURatios(next, cpuRatios(previous, next));
+  }
   return [
-    ...retained.map((sample) => ({ ...sample, tokenTotals: [] })),
+    ...retained.map((sample) => ({ ...sample, cpuCandidates: [], tokenTotals: [] })),
     next,
   ].slice(-maximum);
 }

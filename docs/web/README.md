@@ -35,7 +35,10 @@ browser-local live window for CPU, memory, compute-uptime, and token-throughput
 charts without inventing missing values. The searchable, filterable, sortable,
 paginated semantic table remains available on demand. This live window starts when
 the Dashboard opens and is not durable history; cross-browser retention still
-requires a separate operator history capability.
+requires a separate operator history capability. When a provider reports only
+cumulative CPU time, Web derives interval utilization only across adjacent samples
+from the same verified Runtime incarnation; restarts and counter regressions create
+gaps instead of false spikes.
 
 ### Agents
 

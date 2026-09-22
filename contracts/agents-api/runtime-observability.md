@@ -85,7 +85,7 @@ duplication, Kubernetes/E2B source, or telemetry-driven lifecycle action. The
 internal source interface admits Docker and microsandbox without changing Session
 attribution or the existing sandbox lifecycle interface.
 
-The review proposal for later API and Web phases is split into the
+The current API and browser-local Web live window are documented in the
 [full design](runtime-observability-design.md) and the
-[proposed public extension](runtime-observability-api.md). Neither document marks
-those later phases as implemented.
+[public extension](runtime-observability-api.md). Durable history, additional
+providers, self-hosted telemetry, and idle-policy authority remain later phases.

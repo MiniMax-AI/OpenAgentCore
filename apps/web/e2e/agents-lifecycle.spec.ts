@@ -2480,7 +2480,11 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
     if (new URL(route.request().url()).pathname !== "/v1/agents/sessions") return route.fallback();
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(list(runtimeSessions)) });
   });
+  let runtimeObservationReads = 0;
   await page.route("**/v1/agents/runtime-observations*", async (route) => {
+    const sampleIndex = runtimeObservationReads;
+    runtimeObservationReads += 1;
+    const observedAt = baseline - 1 + sampleIndex * 30;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -2500,10 +2504,15 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
         status: "observed",
         reason: null,
         allocation_created_at: baseline - 8_500,
-        resolved_at: baseline,
-        observed_at: baseline - 1,
+        resolved_at: observedAt + 1,
+        observed_at: observedAt,
         started_at: baseline - 8_100,
-        cpu: { usage_seconds_total: 7_350 + index, capacity_cores: 2, usage_cores: 0.72 + index / 100, utilization_ratio: 0.36 + index / 200 },
+        cpu: {
+          usage_seconds_total: 7_350 + index + sampleIndex * 30,
+          capacity_cores: 2,
+          usage_cores: null,
+          utilization_ratio: null,
+        },
         memory: { usage_bytes: 1_288_490_188, limit_bytes: 2_147_483_648 },
       })))),
     });
@@ -2523,6 +2532,7 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
   await expect(dashboard.getByLabel("Memory usage: 3 live samples")).toBeVisible();
   await expect(dashboard.getByLabel("Compute uptime: 3 live samples")).toBeVisible();
   await expect(dashboard.getByLabel("Token throughput: 3 live samples")).toBeVisible();
+  await expect(dashboard.getByText("CPU usage live trend available")).toBeAttached();
   await expect(dashboard).not.toContainText("Collecting live samples");
   await expect(dashboard.getByRole("table", { name: "Runtime targets" })).not.toBeVisible();
   for (const close of await page.getByRole("button", { name: "Close notification" }).all()) await close.click();

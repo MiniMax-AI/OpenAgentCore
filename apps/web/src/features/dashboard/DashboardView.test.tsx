@@ -252,8 +252,8 @@ describe("Dashboard loaded-result presentation", () => {
     expect(html).toContain("Token throughput");
     expect(html).toContain("150%");
     expect(html).toContain("Collecting live samples");
-    expect(html).toContain("1/2 minimum · no history is synthesized");
-    expect(html).toContain("CPU usage collecting live samples; 1 of 2 minimum");
+    expect(html).toContain("1/2 valid points · 1 snapshots · no history is synthesized");
+    expect(html).toContain("CPU usage collecting live samples; 1 of 2 valid points from 1 snapshots");
     expect(html).toContain("Latest value");
     expect(html).toContain("Missing samples");
     expect(html).toContain("Runtime targets");

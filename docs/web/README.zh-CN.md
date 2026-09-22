@@ -32,7 +32,9 @@ Dashboard 是默认首页，集中展示当前 Agent 和 Session 结果，加载
 token throughput 趋势，不会把缺失值伪装成 0。支持搜索、状态/模式筛选、排序、分页的
 语义表格按需展开；页面也展示需要关注的 Session，并可直接进入创建 Agent 或启动
 Session 的流程。live window 从打开 Dashboard 后开始采集，不是跨浏览器持久历史；
-持久保留仍需运维方配置独立 history 能力。
+持久保留仍需运维方配置独立 history 能力。若 provider 只报告累计 CPU 时间，Web 仅在
+相邻样本属于同一已验证 Runtime incarnation 时计算区间利用率；重启或计数回退会形成
+数据缺口，不会制造峰值。
 
 ### Agents
 

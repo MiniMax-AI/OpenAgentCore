@@ -73,6 +73,9 @@ function TrendChart({
   const x = (sampledAt: number) => PLOT.left + (sampledAt - start) / range * plotWidth;
   const y = (value: number) => PLOT.top + (1 - Math.min(yMaximum, Math.max(0, value)) / yMaximum) * plotHeight;
   const hasLine = series.some((entry) => segments(entry.points).some((segment) => segment.length >= 2));
+  const validPoints = Math.max(0, ...series.map((entry) => entry.points.filter((point) => (
+    point.value !== null && Number.isFinite(point.value)
+  )).length));
   const ticks = [1, .66, .33, 0];
   const xTicks = [start, start + range / 2, end];
 
@@ -108,10 +111,10 @@ function TrendChart({
               : <polyline key={`${entry.id}:${index}`} className={`dashboard-runtime-trend-line dashboard-runtime-trend-stroke-${entry.tone}`} points={points} />;
           }))}
         </svg>
-        {!hasLine ? <div className="dashboard-runtime-chart-collecting"><strong>Collecting live samples</strong><span>{samples.length}/2 minimum · no history is synthesized</span></div> : null}
+        {!hasLine ? <div className="dashboard-runtime-chart-collecting"><strong>Collecting live samples</strong><span>{validPoints}/2 valid points · {samples.length} snapshots · no history is synthesized</span></div> : null}
       </div>
       <table className="dashboard-runtime-trend-accessible">
-        <caption>{hasLine ? `${title} live trend available` : `${title} collecting live samples; ${samples.length} of 2 minimum`}</caption>
+        <caption>{hasLine ? `${title} live trend available` : `${title} collecting live samples; ${validPoints} of 2 valid points from ${samples.length} snapshots`}</caption>
         <thead><tr><th>Series</th><th>Latest value</th><th>Missing samples</th></tr></thead>
         <tbody>
           {series.map((entry) => {
@@ -185,7 +188,7 @@ export function RuntimeTrendCharts({ samples }: { samples: readonly RuntimeTrend
 
   return (
     <div className="dashboard-runtime-trend-grid" aria-label="Runtime live-window charts">
-      <TrendChart title="CPU usage" subtitle="usage_cores / capacity_cores · live window" samples={samples} series={charts.cpu} maximum={cpuMaximum} formatValue={(value) => `${Math.round(value)}%`} bands={[{ from: 0, to: 30, tone: "safe" }, { from: 30, to: 70, tone: "warning" }, { from: 70, to: 100, tone: "danger" }]} />
+      <TrendChart title="CPU usage" subtitle="reported or cumulative-delta utilization · live window" samples={samples} series={charts.cpu} maximum={cpuMaximum} formatValue={(value) => `${Math.round(value)}%`} bands={[{ from: 0, to: 30, tone: "safe" }, { from: 30, to: 70, tone: "warning" }, { from: 70, to: 100, tone: "danger" }]} />
       <TrendChart title="Memory usage" subtitle="working set / configured limit · live window" samples={samples} series={charts.memory} maximum={memoryMaximum} formatValue={(value) => formatDashboardBytes(Math.round(value))} />
       <TrendChart title="Compute uptime" subtitle="provider started_at → observed_at · current incarnation" samples={samples} series={charts.uptime} maximum={uptimeMaximum} formatValue={(value) => formatDashboardDuration(value)} />
       <TrendChart title="Token throughput" subtitle="Session Usage deltas · missing usage excluded" samples={samples} series={charts.tokens} maximum={tokenMaximum} formatValue={(value) => `${formatDashboardTokens(Math.round(value))}/min`} />

@@ -168,9 +168,11 @@ The API projection may additionally expose `usage_cores` and `utilization_ratio`
 only when the service has two ordered samples for the same Runtime incarnation.
 A future process-local observation cache may keep the previous cumulative value
 for this calculation. Phase 2 intentionally leaves both derived fields null
-because it has only one provider sample per request. Cache loss must make the
-derived fields temporarily null; it must never change the cumulative source
-measurement or lifecycle state.
+because it has only one provider sample per request. The browser-local live window
+therefore derives interval utilization from adjacent cumulative samples only when
+Session, allocation, compute `started_at`, and provider observation order still
+match. Restart, replacement, counter regression, missing capacity, or cache loss
+creates a gap; none changes the cumulative source measurement or lifecycle state.
 
 ## 8. Duration semantics
 
@@ -297,6 +299,11 @@ seams separate:
    complete snapshots collected while this Dashboard instance is mounted; it is
    bounded, ephemeral, and never presented as durable operator history.
 
+The live window retains the latest complete cumulative CPU counters only long
+enough to calculate the next interval. Historical chart points contain the bounded
+derived series, not all Runtime identities. This makes real Docker and microsandbox
+CPU charts work without moving lifecycle authority or durable history into Web.
+
 The initial implementation uses a 30-second Web cadence plus up to five seconds
 of jitter and a 15-second whole-refresh budget. These are Web configuration, not
 API guarantees. Web pauses periodic reads when hidden, refreshes when visibility
@@ -364,6 +371,8 @@ this does not add an upstream OpenAI operation.
 - Regenerate the public OpenAPI contract.
 
 ### Phase 3: Web Dashboard
+
+Implemented for the browser-local current-snapshot live window.
 
 - Add Runtime observations as a third independent Dashboard collection.
 - Publish only complete traversals and retain the previous snapshot on failure.

@@ -13,6 +13,7 @@ function sample(sampledAt: number, cpuRatio: number | null): RuntimeTrendSample 
       cpuRatio,
       uptimeSeconds: 120,
     }],
+    cpuCandidates: [],
     memoryUsageBytes: 512,
     memoryLimitBytes: 1_024,
     tokenTotals: [],
