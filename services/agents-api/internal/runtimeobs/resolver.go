@@ -9,7 +9,10 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
-var ErrUnavailable = errors.New("Runtime observation unavailable")
+var (
+	ErrUnavailable = errors.New("Runtime observation unavailable")
+	ErrNotRunning  = errors.New("Runtime is not running")
+)
 
 type sessionStore interface {
 	GetSession(context.Context, string, string) (store.Session, error)
@@ -49,11 +52,17 @@ func (r *Resolver) Resolve(ctx context.Context, tenantID, sessionID string) (Tar
 		if session.Environment == nil {
 			return Target{}, errors.New("self-hosted Session is missing its Environment")
 		}
+		if session.Environment.TenantID != session.TenantID || session.Environment.SessionID != session.ID {
+			return Target{}, errors.New("self-hosted Environment does not match resolved ownership")
+		}
 		target.EnvironmentID = session.Environment.ID
 		return target, nil
 	case ModeManaged:
 		if session.Environment == nil {
 			return Target{}, errors.New("managed Session is missing its Environment")
+		}
+		if session.Environment.TenantID != session.TenantID || session.Environment.SessionID != session.ID {
+			return Target{}, errors.New("managed Environment does not match resolved ownership")
 		}
 		target.EnvironmentID = session.Environment.ID
 		allocation, err := r.store.GetRuntimeAllocation(ctx, tenantID, target.EnvironmentID)
@@ -63,7 +72,13 @@ func (r *Resolver) Resolve(ctx context.Context, tenantID, sessionID string) (Tar
 		if err != nil {
 			return Target{}, fmt.Errorf("resolve Runtime allocation: %w", err)
 		}
-		target.Instance = Instance{AllocationID: allocation.ID, ProviderKey: allocation.ProviderKey, DeviceID: allocation.DeviceID}
+		if allocation.TenantID != tenantID || allocation.SessionID != session.ID || allocation.EnvironmentID != target.EnvironmentID {
+			return Target{}, errors.New("Runtime allocation does not match resolved ownership")
+		}
+		target.Instance = Instance{
+			AllocationID: allocation.ID, ProviderKey: allocation.ProviderKey, DeviceID: allocation.DeviceID,
+			AllocationState: allocation.State, AllocationCreatedAt: allocation.CreatedAt,
+		}
 		return target, nil
 	default:
 		return Target{}, errors.New("invalid stored Runtime environment type")

@@ -43,6 +43,8 @@ import type {
   StreamError,
   UpdateAgentInput,
   ReplaceVaultCredentialTokenInput,
+  RuntimeObservation,
+  RuntimeObservationList,
   Vault,
   VaultCredential,
   VaultCredentialDeleted,
@@ -234,6 +236,18 @@ const knownItemTypes = new Set([
 ]);
 const itemStatuses = new Set(["in_progress", "completed", "failed", "incomplete"]);
 const turnStatuses = new Set(["queued", "in_progress", "waiting", "completed", "failed", "cancelled"]);
+const runtimeObservationFields = new Set([
+  "id", "object", "session_id", "environment_id", "mode", "provider_type", "instance", "status", "reason",
+  "allocation_created_at", "resolved_at", "observed_at", "started_at", "cpu", "memory",
+]);
+const runtimeInstanceFields = new Set(["kind", "allocation_id", "device_id", "connection_generation"]);
+const runtimeCPUFields = new Set(["usage_seconds_total", "capacity_cores", "usage_cores", "utilization_ratio"]);
+const runtimeMemoryFields = new Set(["usage_bytes", "limit_bytes"]);
+const runtimeObservationReasons = new Set([
+  "runtime_mode_not_observable", "allocation_pending", "runtime_not_running",
+  "source_not_configured", "sample_timeout", "sample_unavailable",
+]);
+const runtimeProviderTypePattern = /^[a-z][a-z0-9_]{0,31}$/;
 
 function exactFields(value: Record<string, unknown>, fields: Set<string>): boolean {
   const keys = Object.keys(value);
@@ -993,6 +1007,164 @@ function projectAgentSession(
     return invalidSessionResource("Agent Core changed immutable Session configuration in the event stream.");
   }
   return session;
+}
+
+function invalidRuntimeObservation(message = "Agent Core returned an invalid Runtime observation."): never {
+  throw new AgentCoreError(message, 502, "invalid_runtime_observation");
+}
+
+function nullableRuntimeNumber(value: unknown): number | null {
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return invalidRuntimeObservation();
+  }
+  return value;
+}
+
+function nullableRuntimeInteger(value: unknown): number | null {
+  const projected = nullableRuntimeNumber(value);
+  if (projected !== null && !Number.isSafeInteger(projected)) return invalidRuntimeObservation();
+  return projected;
+}
+
+function projectRuntimeObservation(value: unknown, expectedSessionId?: string): RuntimeObservation {
+  if (!isRecord(value) || !exactFields(value, runtimeObservationFields)) {
+    return invalidRuntimeObservation();
+  }
+  const id = canonicalUuid(value.id);
+  const sessionId = canonicalUuid(value.session_id);
+  const environmentId = value.environment_id === null ? null : canonicalUuid(value.environment_id);
+  if (
+    id === null || sessionId === null || id !== sessionId ||
+    (expectedSessionId !== undefined && !sameUuid(sessionId, expectedSessionId)) ||
+    value.object !== "agent.runtime_observation" ||
+    (value.mode !== "none" && value.mode !== "self_hosted" && value.mode !== "openai_hosted") ||
+    !(value.provider_type === null || (
+      typeof value.provider_type === "string" && runtimeProviderTypePattern.test(value.provider_type)
+    )) ||
+    !isRecord(value.instance) || !exactFields(value.instance, runtimeInstanceFields) ||
+    (value.status !== "observed" && value.status !== "unsupported" && value.status !== "unavailable") ||
+    !(value.reason === null || (
+      typeof value.reason === "string" && runtimeObservationReasons.has(value.reason)
+    )) ||
+    !isNonnegativeInteger(value.resolved_at)
+  ) return invalidRuntimeObservation();
+
+  const allocationId = value.instance.allocation_id === null ? null : canonicalUuid(value.instance.allocation_id);
+  const deviceId = value.instance.device_id === null ? null : canonicalUuid(value.instance.device_id);
+  const connectionGeneration = value.instance.connection_generation === null
+    ? null
+    : canonicalUuid(value.instance.connection_generation);
+  if (
+    (value.instance.allocation_id !== null && allocationId === null) ||
+    (value.instance.device_id !== null && deviceId === null) ||
+    (value.instance.connection_generation !== null && connectionGeneration === null)
+  ) return invalidRuntimeObservation();
+
+  const allocationCreatedAt = nullableRuntimeInteger(value.allocation_created_at);
+  const observedAt = nullableRuntimeInteger(value.observed_at);
+  const startedAt = nullableRuntimeInteger(value.started_at);
+  const isNone = value.mode === "none";
+  const isSelfHosted = value.mode === "self_hosted";
+  const isManaged = value.mode === "openai_hosted";
+  if (
+    (isNone && (
+      value.instance.kind !== "none" || environmentId !== null || value.provider_type !== null ||
+      allocationId !== null || deviceId !== null || connectionGeneration !== null || allocationCreatedAt !== null
+    )) ||
+    (isSelfHosted && (
+      value.instance.kind !== "self_hosted_connection" || environmentId === null ||
+      allocationId !== null || allocationCreatedAt !== null
+    )) ||
+    (isManaged && (
+      value.instance.kind !== "managed_allocation" || environmentId === null || connectionGeneration !== null ||
+      (allocationId === null && (deviceId !== null || allocationCreatedAt !== null))
+    ))
+  ) return invalidRuntimeObservation();
+
+  const observed = value.status === "observed";
+  if (
+    (observed && (
+      !isManaged || allocationId === null || value.reason !== null || observedAt === null ||
+      observedAt > value.resolved_at
+    )) ||
+    (!observed && (
+      observedAt !== null || startedAt !== null || value.cpu !== null || value.memory !== null
+    )) ||
+    (value.status === "unsupported" && (
+      (!isNone && !isSelfHosted) || value.reason !== "runtime_mode_not_observable"
+    )) ||
+    (value.status === "unavailable" && (
+      !isManaged || value.reason === null || value.reason === "runtime_mode_not_observable"
+    )) ||
+    (startedAt !== null && observedAt !== null && startedAt > observedAt) ||
+    (allocationCreatedAt !== null && allocationCreatedAt > value.resolved_at)
+  ) return invalidRuntimeObservation();
+
+  let cpu: RuntimeObservation["cpu"] = null;
+  if (value.cpu !== null) {
+    if (!observed || !isRecord(value.cpu) || !exactFields(value.cpu, runtimeCPUFields)) {
+      return invalidRuntimeObservation();
+    }
+    cpu = {
+      usage_seconds_total: nullableRuntimeNumber(value.cpu.usage_seconds_total),
+      capacity_cores: nullableRuntimeNumber(value.cpu.capacity_cores),
+      usage_cores: nullableRuntimeNumber(value.cpu.usage_cores),
+      utilization_ratio: nullableRuntimeNumber(value.cpu.utilization_ratio),
+    };
+    if (
+      Object.values(cpu).every((entry) => entry === null) ||
+      (cpu.capacity_cores !== null && cpu.capacity_cores === 0)
+    ) return invalidRuntimeObservation();
+  }
+
+  let memory: RuntimeObservation["memory"] = null;
+  if (value.memory !== null) {
+    if (!observed || !isRecord(value.memory) || !exactFields(value.memory, runtimeMemoryFields)) {
+      return invalidRuntimeObservation();
+    }
+    memory = {
+      usage_bytes: nullableRuntimeInteger(value.memory.usage_bytes),
+      limit_bytes: nullableRuntimeInteger(value.memory.limit_bytes),
+    };
+    if (
+      (memory.usage_bytes === null && memory.limit_bytes === null) ||
+      memory.limit_bytes === 0
+    ) return invalidRuntimeObservation();
+  }
+
+  return {
+    id, object: "agent.runtime_observation", session_id: sessionId, environment_id: environmentId,
+    mode: value.mode, provider_type: value.provider_type, instance: {
+      kind: value.instance.kind as RuntimeObservation["instance"]["kind"],
+      allocation_id: allocationId, device_id: deviceId, connection_generation: connectionGeneration,
+    },
+    status: value.status, reason: value.reason as RuntimeObservation["reason"],
+    allocation_created_at: allocationCreatedAt, resolved_at: value.resolved_at,
+    observed_at: observedAt, started_at: startedAt, cpu, memory,
+  } as RuntimeObservation;
+}
+
+function projectRuntimeObservationList(value: unknown, options?: PageOptions): RuntimeObservationList {
+  if (
+    !isRecord(value) || !exactFields(value, vaultListFields) || value.object !== "list" ||
+    !Array.isArray(value.data) || typeof value.has_more !== "boolean"
+  ) return invalidRuntimeObservation("Agent Core returned an invalid Runtime observation list.");
+  const limit = options?.limit ?? 20;
+  if (
+    !Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
+    (options?.order !== undefined && options.order !== "asc" && options.order !== "desc") ||
+    value.data.length > limit
+  ) return invalidRuntimeObservation("Agent Core returned an invalid Runtime observation list.");
+  const data = value.data.map((entry) => projectRuntimeObservation(entry));
+  const firstId = data[0]?.id ?? null;
+  const lastId = data[data.length - 1]?.id ?? null;
+  if (
+    new Set(data.map((entry) => entry.id)).size !== data.length ||
+    value.first_id !== firstId || value.last_id !== lastId ||
+    (value.has_more && data.length === 0)
+  ) return invalidRuntimeObservation("Agent Core returned an invalid Runtime observation list.");
+  return { object: "list", data, has_more: value.has_more, first_id: firstId, last_id: lastId };
 }
 
 function projectStreamError(value: unknown): StreamError {
@@ -2014,6 +2186,31 @@ export class OpenAIAgentsClient implements AgentCore {
       return invalidVaultResponse("invalid_session_vaults", "Agent Core returned invalid Session Vault attachments.");
     }
     return { ...page, data: page.data.map((session) => projectAgentSession(session)) };
+  }
+
+  async listRuntimeObservations(options?: PageOptions): Promise<RuntimeObservationList> {
+    if (
+      (options?.after !== undefined && canonicalUuid(options.after) === null) ||
+      (options?.limit !== undefined && (
+        !Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 100
+      )) ||
+      (options?.order !== undefined && options.order !== "asc" && options.order !== "desc")
+    ) throw new TypeError("Runtime observation pagination options are invalid.");
+    const params = new URLSearchParams();
+    addPageOptions(params, options);
+    const value = await this.request<unknown>(
+      withQuery("/agents/runtime-observations", params),
+      { signal: options?.signal },
+    );
+    return projectRuntimeObservationList(value, options);
+  }
+
+  async retrieveRuntimeObservation(sessionId: string, options?: ReadOptions): Promise<RuntimeObservation> {
+    const value = await this.request<unknown>(
+      `/agents/sessions/${encodeURIComponent(sessionId)}/runtime-observation`,
+      { signal: options?.signal },
+    );
+    return projectRuntimeObservation(value, sessionId);
   }
 
   async createSession(input: CreateSessionInput, idempotencyKey = createIdempotencyKey()): Promise<AgentSession> {

@@ -1,7 +1,9 @@
 # Runtime observation API proposal
 
-Status: review proposal. These routes are not implemented and are not yet present
-in `openapi.yaml`.
+Status: Phase 2 implemented. The current-snapshot routes, strict
+`packages/agents-client` projection, and generated `openapi.yaml` contract are
+implemented. Core Web integration, historical queries, and lifecycle controls
+remain outside this phase.
 
 This is an Agents Core extension, not an upstream OpenAI Agents resource. The
 implementation must record that status in the coverage ledger and generated
@@ -40,13 +42,13 @@ before publishing a new Dashboard snapshot.
       "id": "6c77d3a2-71d6-4ed5-884f-687aecda02a3",
       "object": "agent.runtime_observation",
       "session_id": "6c77d3a2-71d6-4ed5-884f-687aecda02a3",
-      "environment_id": "env_...",
+      "environment_id": "6c02fb71-5fa8-4298-93e8-57c6625a3fc2",
       "mode": "openai_hosted",
       "provider_type": "docker",
       "instance": {
         "kind": "managed_allocation",
-        "allocation_id": "alloc_...",
-        "device_id": "device_...",
+        "allocation_id": "d23ab94e-e40b-45bd-93a2-444f1f74642b",
+        "device_id": "2e434f4f-76aa-4e54-a707-4757036d90ef",
         "connection_generation": null
       },
       "status": "observed",
@@ -58,8 +60,8 @@ before publishing a new Dashboard snapshot.
       "cpu": {
         "usage_seconds_total": 482.75,
         "capacity_cores": 2.0,
-        "usage_cores": 1.42,
-        "utilization_ratio": 0.71
+        "usage_cores": null,
+        "utilization_ratio": null
       },
       "memory": {
         "usage_bytes": 805306368,
@@ -181,7 +183,6 @@ Use the existing Agents API error envelope.
 | 400 | `invalid_request` | Empty or invalid limits, order, or malformed cursor. |
 | 401 | `authentication_error` | Missing or invalid API authentication. |
 | 404 | `not_found` | Missing or foreign Session/cursor, indistinguishably. |
-| 429 | `rate_limit_exceeded` | Runtime sampling read budget exceeded. |
 | 500 | `internal_error` | Integrity, ownership, or invalid provider evidence. |
 | 503 | `execution_unavailable` | Required Runtime observation service is not configured. |
 
@@ -190,14 +191,15 @@ Errors never include provider raw responses or credentials.
 ## Freshness and caching
 
 - Return `Cache-Control: no-store`.
-- An internal cache may coalesce reads for at most five seconds.
+- The Phase 2 implementation performs bounded direct reads and has no observation
+  cache. A later internal cache may coalesce reads for at most five seconds.
 - `observed_at` is authoritative for freshness; HTTP response time is not.
 - Clients mark samples stale according to their own explicit threshold.
 - `ETag` is not proposed because observations change independently.
 
 ## Client contract
 
-`packages/agents-client` should expose:
+`packages/agents-client` exposes:
 
 ```ts
 type RuntimeObservationStatus = "observed" | "unsupported" | "unavailable";
@@ -209,38 +211,13 @@ type RuntimeObservationReason =
   | "sample_timeout"
   | "sample_unavailable";
 
-interface RuntimeObservation {
-  id: string;
-  object: "agent.runtime_observation";
-  session_id: string;
-  environment_id: string | null;
-  mode: "none" | "self_hosted" | "openai_hosted";
-  provider_type: string | null;
-  instance: {
-    kind: "managed_allocation" | "self_hosted_connection" | "none";
-    allocation_id: string | null;
-    device_id: string | null;
-    connection_generation: string | null;
-  };
-  status: RuntimeObservationStatus;
-  reason: RuntimeObservationReason | null;
-  allocation_created_at: number | null;
-  resolved_at: number;
-  observed_at: number | null;
-  started_at: number | null;
-  cpu: {
-    usage_seconds_total: number | null;
-    capacity_cores: number | null;
-    usage_cores: number | null;
-    utilization_ratio: number | null;
-  } | null;
-  memory: {
-    usage_bytes: number | null;
-    limit_bytes: number | null;
-  } | null;
-}
+type RuntimeObservation =
+  | RuntimeObservedObservation
+  | RuntimeUnavailableObservation
+  | RuntimeNoneObservation
+  | RuntimeSelfHostedObservation;
 
-interface RuntimeObservationPage {
+interface RuntimeObservationList {
   object: "list";
   data: RuntimeObservation[];
   has_more: boolean;
@@ -248,20 +225,33 @@ interface RuntimeObservationPage {
   last_id: string | null;
 }
 
-interface RuntimeObservationClient {
-  list(options?: {
+interface AgentCore {
+  listRuntimeObservations(options?: {
     after?: string;
     limit?: number;
     order?: "asc" | "desc";
-  }): Promise<RuntimeObservationPage>;
+  }): Promise<RuntimeObservationList>;
 
-  retrieveForSession(sessionId: string): Promise<RuntimeObservation>;
+  retrieveRuntimeObservation(sessionId: string): Promise<RuntimeObservation>;
 }
 ```
 
+These exported variants discriminate on `status` and `mode`; their instance,
+reason, timestamps, CPU, and memory fields narrow accordingly. The exact variant
+definitions live in `packages/agents-client/src/types.ts` and mirror the status
+and reason matrix above.
+
 The client validates every required field, enum, nullability rule, timestamp, and
-finite number. Unknown additive fields are ignored. Malformed data rejects the
-whole page; Web does not publish a partial snapshot.
+finite number. The current pinned contract rejects unknown additive fields so an
+unreviewed server expansion cannot silently cross the browser boundary. Malformed
+data rejects the whole page; Web does not publish a partial snapshot.
+
+The generated OpenAPI 2 schema records field-level required/nullability rules,
+UUID formats, reason enums, and numeric minima. OpenAPI 2
+cannot encode the complete cross-field discriminated union. The matrix above is
+normative for wire consumers; the server projection and strict TypeScript
+projector enforce it, and the exported TypeScript type prevents invalid
+status/mode combinations in typed consumers.
 
 Web also applies a configured whole-refresh budget. If `has_more` remains true
 when that budget is exhausted, it retains the prior complete snapshot and marks

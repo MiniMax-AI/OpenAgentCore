@@ -19,8 +19,19 @@ import (
 
 type recordingStore struct {
 	ResourceStore
-	tenant string
-	input  store.CreateSessionInput
+	tenant            string
+	input             store.CreateSessionInput
+	sessions          []store.Session
+	nextSessionCursor string
+	listTenant        string
+	listAfter         string
+	listLimit         int
+	listAscending     bool
+}
+
+func (s *recordingStore) ListSessions(_ context.Context, tenant, after string, limit int, ascending bool, _ *string) (store.SessionPage, error) {
+	s.listTenant, s.listAfter, s.listLimit, s.listAscending = tenant, after, limit, ascending
+	return store.SessionPage{Sessions: append([]store.Session(nil), s.sessions...), NextCursor: s.nextSessionCursor}, nil
 }
 
 func (s *recordingStore) GetSession(ctx context.Context, tenant, id string) (store.Session, error) {

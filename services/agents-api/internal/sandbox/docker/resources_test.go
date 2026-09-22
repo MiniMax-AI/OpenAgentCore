@@ -2,6 +2,7 @@ package docker
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -24,13 +25,14 @@ func TestObserveVerifiesOwnershipThenReadsOneShotStats(t *testing.T) {
 	started := observed.Add(-time.Minute)
 	statsRead := false
 	omitMeasurements := false
+	running := true
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/json"):
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"Id":         "container-id",
-				"State":      map[string]any{"Status": "running", "Running": true, "StartedAt": started.Format(time.RFC3339Nano)},
+				"State":      map[string]any{"Status": "running", "Running": running, "StartedAt": started.Format(time.RFC3339Nano)},
 				"HostConfig": map[string]any{"NanoCpus": 2_000_000_000, "Memory": 2048},
 				"Config": map[string]any{"Labels": map[string]string{
 					labelPrefix + "installation": installationID,
@@ -76,6 +78,12 @@ func TestObserveVerifiesOwnershipThenReadsOneShotStats(t *testing.T) {
 	if err != nil || missing.CPUUsageSecondsTotal != nil || missing.MemoryUsageBytes != nil || missing.CPUCapacityCores == nil || missing.MemoryLimitBytes == nil {
 		t.Fatalf("missing Docker measurements became zero: %+v %v", missing, err)
 	}
+	running = false
+	statsRead = false
+	if _, err := p.Observe(t.Context(), target); !errors.Is(err, runtimeobs.ErrNotRunning) || statsRead {
+		t.Fatalf("stopped Runtime was not classified before stats: %v stats=%v", err, statsRead)
+	}
+	running = true
 	foreign := target
 	foreign.Instance.ProviderKey = uuid.NewString()
 	statsRead = false

@@ -28,6 +28,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtime"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeenrollment"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -89,9 +90,27 @@ func run() error {
 	if err := executionStore.EnsureProjectScopes(ready, auth.ProjectScopes()); err != nil {
 		return err
 	}
+	observationSources := map[string]runtimeobs.Source{}
+	if managed != nil {
+		for key, provider := range managed.Providers {
+			source, ok := provider.(runtimeobs.Source)
+			if !ok {
+				continue
+			}
+			observationSources[key] = source
+		}
+	}
+	resolver, err := runtimeobs.NewResolver(executionStore)
+	if err != nil {
+		return err
+	}
+	observationService, err := runtimeobs.NewService(resolver, observationSources)
+	if err != nil {
+		return err
+	}
 	var workerDone chan error
 	var worker *execution.Worker
-	options := []api.Option{api.WithSubagents(executionStore), api.WithSkills(executionStore), api.WithSourceFiles(executionStore), api.WithSessionArtifacts(executionStore)}
+	options := []api.Option{api.WithSubagents(executionStore), api.WithSkills(executionStore), api.WithSourceFiles(executionStore), api.WithSessionArtifacts(executionStore), api.WithRuntimeObservations(observationService)}
 	var daemonHandler http.Handler
 	var registry *gateway.Registry
 	if wsURL := os.Getenv("AGENTS_API_DAEMON_WS_URL"); wsURL != "" {

@@ -24,8 +24,11 @@ func (s resolverStore) GetRuntimeAllocation(context.Context, string, string) (st
 
 func TestResolverBindsManagedSessionEnvironmentAndAllocation(t *testing.T) {
 	r, err := NewResolver(resolverStore{
-		session:    store.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Environment: &store.Environment{ID: "environment"}},
-		allocation: store.RuntimeAllocation{ID: "allocation", ProviderKey: "provider", DeviceID: "device"},
+		session: store.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Environment: &store.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
+		allocation: store.RuntimeAllocation{
+			ID: "allocation", TenantID: "tenant", SessionID: "session", EnvironmentID: "environment",
+			ProviderKey: "provider", DeviceID: "device",
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +48,7 @@ func TestResolverKeepsUnsupportedModesDistinct(t *testing.T) {
 		environment *store.Environment
 	}{
 		{mode: "none"},
-		{mode: "self_hosted", environment: &store.Environment{ID: "environment"}},
+		{mode: "self_hosted", environment: &store.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
 	} {
 		r, err := NewResolver(resolverStore{session: store.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"` + tc.mode + `"}}`), Environment: tc.environment}})
 		if err != nil {
@@ -60,7 +63,7 @@ func TestResolverKeepsUnsupportedModesDistinct(t *testing.T) {
 
 func TestResolverReportsManagedAllocationAsUnavailable(t *testing.T) {
 	r, err := NewResolver(resolverStore{
-		session:       store.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Environment: &store.Environment{ID: "environment"}},
+		session:       store.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Environment: &store.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
 		allocationErr: store.ErrNotFound,
 	})
 	if err != nil {
@@ -69,5 +72,53 @@ func TestResolverReportsManagedAllocationAsUnavailable(t *testing.T) {
 	target, err := r.Resolve(t.Context(), "tenant", "session")
 	if !errors.Is(err, ErrUnavailable) || target.EnvironmentID != "environment" || target.Mode != ModeManaged {
 		t.Fatalf("allocation absence was not preserved: %+v %v", target, err)
+	}
+}
+
+func TestResolverRejectsMismatchedEnvironmentOwnership(t *testing.T) {
+	for _, mode := range []string{"self_hosted", "openai_hosted"} {
+		for _, environment := range []store.Environment{
+			{ID: "environment", TenantID: "other", SessionID: "session"},
+			{ID: "environment", TenantID: "tenant", SessionID: "other"},
+		} {
+			resolver, err := NewResolver(resolverStore{session: store.Session{
+				ID: "session", TenantID: "tenant",
+				Configuration: []byte(`{"environment":{"type":"` + mode + `"}}`), Environment: &environment,
+			}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := resolver.Resolve(t.Context(), "tenant", "session"); err == nil {
+				t.Fatalf("mismatched %s Environment accepted: %+v", mode, environment)
+			}
+		}
+	}
+}
+
+func TestResolverRejectsMismatchedAllocationOwnership(t *testing.T) {
+	base := store.RuntimeAllocation{
+		ID: "allocation", TenantID: "tenant", SessionID: "session", EnvironmentID: "environment",
+		ProviderKey: "provider", DeviceID: "device",
+	}
+	for _, mutate := range []func(*store.RuntimeAllocation){
+		func(value *store.RuntimeAllocation) { value.TenantID = "other" },
+		func(value *store.RuntimeAllocation) { value.SessionID = "other" },
+		func(value *store.RuntimeAllocation) { value.EnvironmentID = "other" },
+	} {
+		allocation := base
+		mutate(&allocation)
+		resolver, err := NewResolver(resolverStore{
+			session: store.Session{
+				ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`),
+				Environment: &store.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"},
+			},
+			allocation: allocation,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := resolver.Resolve(t.Context(), "tenant", "session"); err == nil {
+			t.Fatalf("mismatched allocation accepted: %+v", allocation)
+		}
 	}
 }

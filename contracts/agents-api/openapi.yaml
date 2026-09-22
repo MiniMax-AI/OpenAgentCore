@@ -868,6 +868,180 @@ definitions:
     required:
     - type
     type: object
+  v1.RuntimeCPUObservation:
+    properties:
+      capacity_cores:
+        minimum: 5e-324
+        type: number
+        x-nullable: true
+      usage_cores:
+        minimum: 0
+        type: number
+        x-nullable: true
+      usage_seconds_total:
+        minimum: 0
+        type: number
+        x-nullable: true
+      utilization_ratio:
+        minimum: 0
+        type: number
+        x-nullable: true
+    required:
+    - capacity_cores
+    - usage_cores
+    - usage_seconds_total
+    - utilization_ratio
+    type: object
+  v1.RuntimeInstance:
+    properties:
+      allocation_id:
+        format: uuid
+        type: string
+        x-nullable: true
+      connection_generation:
+        format: uuid
+        type: string
+        x-nullable: true
+      device_id:
+        format: uuid
+        type: string
+        x-nullable: true
+      kind:
+        enum:
+        - managed_allocation
+        - self_hosted_connection
+        - none
+        type: string
+    required:
+    - allocation_id
+    - connection_generation
+    - device_id
+    - kind
+    type: object
+  v1.RuntimeMemoryObservation:
+    properties:
+      limit_bytes:
+        minimum: 1
+        type: integer
+        x-nullable: true
+      usage_bytes:
+        minimum: 0
+        type: integer
+        x-nullable: true
+    required:
+    - limit_bytes
+    - usage_bytes
+    type: object
+  v1.RuntimeObservation:
+    properties:
+      allocation_created_at:
+        minimum: 0
+        type: integer
+        x-nullable: true
+      cpu:
+        allOf:
+        - $ref: '#/definitions/v1.RuntimeCPUObservation'
+        x-nullable: true
+      environment_id:
+        format: uuid
+        type: string
+        x-nullable: true
+      id:
+        format: uuid
+        type: string
+      instance:
+        $ref: '#/definitions/v1.RuntimeInstance'
+      memory:
+        allOf:
+        - $ref: '#/definitions/v1.RuntimeMemoryObservation'
+        x-nullable: true
+      mode:
+        enum:
+        - none
+        - self_hosted
+        - openai_hosted
+        type: string
+      object:
+        enum:
+        - agent.runtime_observation
+        type: string
+      observed_at:
+        minimum: 0
+        type: integer
+        x-nullable: true
+      provider_type:
+        type: string
+        x-nullable: true
+      reason:
+        enum:
+        - runtime_mode_not_observable
+        - allocation_pending
+        - runtime_not_running
+        - source_not_configured
+        - sample_timeout
+        - sample_unavailable
+        type: string
+        x-nullable: true
+      resolved_at:
+        minimum: 0
+        type: integer
+      session_id:
+        format: uuid
+        type: string
+      started_at:
+        minimum: 0
+        type: integer
+        x-nullable: true
+      status:
+        enum:
+        - observed
+        - unsupported
+        - unavailable
+        type: string
+    required:
+    - allocation_created_at
+    - cpu
+    - environment_id
+    - id
+    - instance
+    - memory
+    - mode
+    - object
+    - observed_at
+    - provider_type
+    - reason
+    - resolved_at
+    - session_id
+    - started_at
+    - status
+    type: object
+  v1.RuntimeObservationList:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/v1.RuntimeObservation'
+        type: array
+      first_id:
+        format: uuid
+        type: string
+        x-nullable: true
+      has_more:
+        type: boolean
+      last_id:
+        format: uuid
+        type: string
+        x-nullable: true
+      object:
+        enum:
+        - list
+        type: string
+    required:
+    - data
+    - first_id
+    - has_more
+    - last_id
+    - object
+    type: object
   v1.SavedAgent:
     properties:
       created_at:
@@ -2581,6 +2755,68 @@ paths:
       summary: Update an Environment Template
       tags:
       - Environment Templates
+  /agents/runtime-observations:
+    get:
+      description: Core extension listing one current Runtime context per tenant-owned
+        Session in Session creation order. Each row has an independent resolved_at
+        and optional provider observed_at; the page is not an atomic telemetry snapshot.
+      parameters:
+      - description: agents=v1
+        in: header
+        name: OpenAI-Beta
+        required: true
+        type: string
+      - description: Last observation ID from the previous page
+        in: query
+        name: after
+        type: string
+      - default: 20
+        description: Page size
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      - default: desc
+        description: Session creation order
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.RuntimeObservationList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List current Runtime observations
+      tags:
+      - Runtime observations
   /agents/sessions:
     get:
       description: Cursor and results are scoped to the authenticated execution tenant.
@@ -3348,6 +3584,53 @@ paths:
       summary: List persisted execution Items
       tags:
       - Items
+  /agents/sessions/{session_id}/runtime-observation:
+    get:
+      description: Core extension returning one tenant-scoped, read-only current Runtime
+        observation. It never provisions, renews, restarts, pauses or stops compute.
+      parameters:
+      - description: agents=v1
+        in: header
+        name: OpenAI-Beta
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: session_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.RuntimeObservation'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Retrieve a Session Runtime observation
+      tags:
+      - Runtime observations
   /agents/sessions/{session_id}/subagents:
     get:
       description: Includes nested and closed Subagents. Cursors belong to the same

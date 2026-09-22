@@ -682,6 +682,119 @@ export interface CreateSessionStreamOptions extends StreamOptions {
   onSession: (session: AgentSession) => void;
 }
 
+export type RuntimeObservationStatus = "observed" | "unsupported" | "unavailable";
+export type RuntimeObservationReason =
+  | "runtime_mode_not_observable"
+  | "allocation_pending"
+  | "runtime_not_running"
+  | "source_not_configured"
+  | "sample_timeout"
+  | "sample_unavailable";
+
+export type RuntimeUnavailableReason = Exclude<RuntimeObservationReason, "runtime_mode_not_observable">;
+
+export interface RuntimeCPUObservation {
+  usage_seconds_total: number | null;
+  capacity_cores: number | null;
+  usage_cores: number | null;
+  utilization_ratio: number | null;
+}
+
+export interface RuntimeMemoryObservation {
+  usage_bytes: number | null;
+  limit_bytes: number | null;
+}
+
+interface RuntimeObservationBase {
+  id: string;
+  object: "agent.runtime_observation";
+  session_id: string;
+  resolved_at: number;
+}
+
+export interface RuntimeObservedObservation extends RuntimeObservationBase {
+  environment_id: string;
+  mode: "openai_hosted";
+  provider_type: string | null;
+  instance: {
+    kind: "managed_allocation";
+    allocation_id: string;
+    device_id: string | null;
+    connection_generation: null;
+  };
+  status: "observed";
+  reason: null;
+  allocation_created_at: number | null;
+  observed_at: number;
+  started_at: number | null;
+  cpu: RuntimeCPUObservation | null;
+  memory: RuntimeMemoryObservation | null;
+}
+
+export interface RuntimeUnavailableObservation extends RuntimeObservationBase {
+  environment_id: string;
+  mode: "openai_hosted";
+  provider_type: string | null;
+  instance: {
+    kind: "managed_allocation";
+    allocation_id: string | null;
+    device_id: string | null;
+    connection_generation: null;
+  };
+  status: "unavailable";
+  reason: RuntimeUnavailableReason;
+  allocation_created_at: number | null;
+  observed_at: null;
+  started_at: null;
+  cpu: null;
+  memory: null;
+}
+
+export interface RuntimeNoneObservation extends RuntimeObservationBase {
+  environment_id: null;
+  mode: "none";
+  provider_type: null;
+  instance: { kind: "none"; allocation_id: null; device_id: null; connection_generation: null };
+  status: "unsupported";
+  reason: "runtime_mode_not_observable";
+  allocation_created_at: null;
+  observed_at: null;
+  started_at: null;
+  cpu: null;
+  memory: null;
+}
+
+export interface RuntimeSelfHostedObservation extends RuntimeObservationBase {
+  environment_id: string;
+  mode: "self_hosted";
+  provider_type: string | null;
+  instance: {
+    kind: "self_hosted_connection";
+    allocation_id: null;
+    device_id: string | null;
+    connection_generation: string | null;
+  };
+  status: "unsupported";
+  reason: "runtime_mode_not_observable";
+  allocation_created_at: null;
+  observed_at: null;
+  started_at: null;
+  cpu: null;
+  memory: null;
+}
+
+export type RuntimeObservation =
+  | RuntimeObservedObservation
+  | RuntimeUnavailableObservation
+  | RuntimeNoneObservation
+  | RuntimeSelfHostedObservation;
+
+export interface RuntimeObservationList extends ListPage<RuntimeObservation> {
+  object: "list";
+  first_id: string | null;
+  last_id: string | null;
+}
+
 export interface AgentCore {
   listAgents(options?: PageOptions): Promise<ListPage<SavedAgent>>;
   createAgent(input: CreateAgentInput): Promise<SavedAgent>;
@@ -698,6 +811,8 @@ export interface AgentCore {
   replaceVaultCredentialToken(vaultId: string, credentialId: string, input: ReplaceVaultCredentialTokenInput): Promise<VaultCredential>;
   deleteVaultCredential(vaultId: string, credentialId: string): Promise<VaultCredentialDeleted>;
   listSessions(options?: PageOptions & { agentId?: string }): Promise<ListPage<AgentSession>>;
+  listRuntimeObservations(options?: PageOptions): Promise<RuntimeObservationList>;
+  retrieveRuntimeObservation(sessionId: string, options?: ReadOptions): Promise<RuntimeObservation>;
   createSession(input: CreateSessionInput, idempotencyKey?: string): Promise<AgentSession>;
   createSessionStream(
     input: Omit<CreateSessionInput, "stream">,

@@ -1,8 +1,8 @@
 # Runtime observability and Dashboard design
 
-Status: review proposal. Phase 1 provider abstraction and Docker sampling are
-implemented; the public API, Web integration, history backend, additional
-providers, and lifecycle automation described below are not implemented.
+Status: Phase 1 provider abstraction/Docker sampling and Phase 2 current-snapshot
+API/client contract are implemented. Core Web integration, history backend,
+additional providers, and lifecycle automation described below are not implemented.
 
 ## 1. Problem statement
 
@@ -156,9 +156,11 @@ observation times. A single sample cannot truthfully supply CPU percentage.
 
 The API projection may additionally expose `usage_cores` and `utilization_ratio`
 only when the service has two ordered samples for the same Runtime incarnation.
-The process-local observation cache keeps the previous cumulative value for this
-calculation. Its loss makes the derived fields temporarily null; it never changes
-the cumulative source measurement or lifecycle state.
+A future process-local observation cache may keep the previous cumulative value
+for this calculation. Phase 2 intentionally leaves both derived fields null
+because it has only one provider sample per request. Cache loss must make the
+derived fields temporarily null; it must never change the cumulative source
+measurement or lifecycle state.
 
 ## 8. Duration semantics
 
@@ -324,12 +326,18 @@ transitions. That migration cannot read a monitoring backend as authority.
 
 ### Phase 1: provider-neutral foundation
 
+Implemented in the Docker observability foundation.
+
 - `runtimeobs` identity, resolver, source, sample, and service.
 - Managed Docker Inspect/Stats source.
 - CPU, memory, and current compute start time.
 - Explicit unsupported and unavailable states.
 
 ### Phase 2: current snapshot API
+
+Implemented by the Runtime Observation extension routes and
+`packages/agents-client`. The generated OpenAPI contract records the extension;
+this does not add an upstream OpenAI operation.
 
 - Add extension types under `contracts/agents-api/v1`.
 - Add collection and Session-scoped handlers.
@@ -376,13 +384,12 @@ transitions. That migration cannot read a monitoring backend as authority.
 - No lifecycle action is reachable from the first Dashboard.
 - No new database table is required for current snapshots or history export.
 
-## 17. Review decisions required
+## 17. Recorded design decisions
 
-1. Accept the proposed API as a documented Core extension rather than an upstream
-   OpenAI resource.
-2. Accept current snapshots without atomic cross-row time semantics; every row
+1. The API is a documented Core extension rather than an upstream OpenAI resource.
+2. Current snapshots have no atomic cross-row time semantics; every row
    exposes its own `observed_at`.
-3. Confirm that history is optional and external, not a PostgreSQL sample table.
-4. Confirm that the first Web release has no lifecycle controls.
-5. Choose whether `self_hosted` remains visibly unsupported until authenticated
+3. History is optional and external, not a PostgreSQL sample table.
+4. The first Web release has no lifecycle controls.
+5. `self_hosted` remains visibly unsupported until authenticated,
    generation-fenced telemetry is qualified.

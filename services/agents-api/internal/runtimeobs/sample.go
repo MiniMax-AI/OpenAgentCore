@@ -4,6 +4,7 @@ package runtimeobs
 
 import (
 	"errors"
+	"math"
 	"time"
 )
 
@@ -36,19 +37,23 @@ type Sample struct {
 }
 
 func (s Sample) validate(now time.Time) error {
-	if s.ObservedAt.IsZero() || s.ObservedAt.After(now) {
+	if s.ObservedAt.IsZero() || s.ObservedAt.Unix() < 0 || s.ObservedAt.After(now) {
 		return errors.New("invalid Runtime observation time")
 	}
-	if s.StartedAt != nil && (s.StartedAt.IsZero() || s.StartedAt.After(s.ObservedAt)) {
+	if s.StartedAt != nil && (s.StartedAt.IsZero() || s.StartedAt.Unix() < 0 || s.StartedAt.After(s.ObservedAt)) {
 		return errors.New("invalid Runtime start time")
 	}
-	if s.CPUUsageSecondsTotal != nil && *s.CPUUsageSecondsTotal < 0 {
+	if s.CPUUsageSecondsTotal != nil && (*s.CPUUsageSecondsTotal < 0 || math.IsNaN(*s.CPUUsageSecondsTotal) || math.IsInf(*s.CPUUsageSecondsTotal, 0)) {
 		return errors.New("invalid Runtime CPU usage")
 	}
-	if s.CPUCapacityCores != nil && *s.CPUCapacityCores <= 0 {
+	if s.CPUCapacityCores != nil && (*s.CPUCapacityCores <= 0 || math.IsNaN(*s.CPUCapacityCores) || math.IsInf(*s.CPUCapacityCores, 0)) {
 		return errors.New("invalid Runtime CPU capacity")
 	}
-	if s.MemoryLimitBytes != nil && *s.MemoryLimitBytes == 0 {
+	const maxSafeJSONInteger = uint64(1<<53 - 1)
+	if s.MemoryUsageBytes != nil && *s.MemoryUsageBytes > maxSafeJSONInteger {
+		return errors.New("Runtime memory usage exceeds the public JSON integer range")
+	}
+	if s.MemoryLimitBytes != nil && (*s.MemoryLimitBytes == 0 || *s.MemoryLimitBytes > maxSafeJSONInteger) {
 		return errors.New("invalid Runtime memory limit")
 	}
 	return nil

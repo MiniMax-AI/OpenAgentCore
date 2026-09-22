@@ -15,6 +15,8 @@ import (
 
 var _ runtimeobs.Source = (*Provider)(nil)
 
+func (*Provider) ObservationProviderType() string { return "docker" }
+
 // Observe is read-only. Inspect verifies allocation ownership before Docker
 // statistics are requested; it never renews or changes the container.
 func (p *Provider) Observe(ctx context.Context, target runtimeobs.Target) (runtimeobs.Sample, error) {
@@ -27,13 +29,13 @@ func (p *Provider) Observe(ctx context.Context, target runtimeobs.Target) (runti
 	reference := sandbox.Reference{TenantID: target.TenantID, EnvironmentID: target.EnvironmentID, AllocationID: target.Instance.AllocationID}
 	inspected, err := p.inspect(ctx, reference)
 	if errors.Is(err, sandbox.ErrNotFound) {
-		return runtimeobs.Sample{}, runtimeobs.ErrUnavailable
+		return runtimeobs.Sample{}, runtimeobs.ErrNotRunning
 	}
 	if err != nil {
 		return runtimeobs.Sample{}, err
 	}
 	if inspected.Container.State == nil || !inspected.Container.State.Running {
-		return runtimeobs.Sample{}, runtimeobs.ErrUnavailable
+		return runtimeobs.Sample{}, runtimeobs.ErrNotRunning
 	}
 	result, err := p.client.ContainerStats(ctx, inspected.Container.ID, client.ContainerStatsOptions{Stream: false, IncludePreviousSample: false})
 	if err != nil {
