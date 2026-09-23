@@ -1776,7 +1776,7 @@ test("streams initial Session creation, captures early events, then hands off to
 
 for (const failure of [
   { label: "response loss", control: { sessionCreateResponseLoss: 1 }, message: "Agent core request failed (502)." },
-  { label: "creation-stream EOF before identity", control: { sessionCreateStreamMissingIdentity: 1 }, message: "Agent core returned an empty event stream." },
+  { label: "creation-stream EOF before identity", control: { sessionCreateStreamMissingIdentity: 1 }, message: "Agent Core already recorded this Session creation, so its stream sends no events." },
 ]) {
   test(`keeps one Session create attempt across ${failure.label} and an unchanged manual retry`, async ({ page, request }) => {
     await openAgents(page, request);
