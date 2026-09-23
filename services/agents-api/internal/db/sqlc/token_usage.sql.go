@@ -27,7 +27,8 @@ func (q *Queries) PutTurnUsage(ctx context.Context, arg PutTurnUsageParams) erro
 }
 
 const sessionTokenUsage = `-- name: SessionTokenUsage :one
-SELECT CASE WHEN count(token_usage) = 0 THEN NULL ELSE jsonb_build_object(
+SELECT CASE WHEN count(*) = 0
+  OR bool_or(token_usage IS NULL OR status NOT IN ('completed', 'failed', 'cancelled')) THEN NULL ELSE jsonb_build_object(
  'input_tokens', sum((token_usage->>'input_tokens')::numeric),
  'input_tokens_details', jsonb_build_object('cached_tokens', sum((token_usage->'input_tokens_details'->>'cached_tokens')::numeric)),
  'output_tokens', sum((token_usage->>'output_tokens')::numeric),
@@ -37,6 +38,11 @@ SELECT CASE WHEN count(token_usage) = 0 THEN NULL ELSE jsonb_build_object(
 FROM turns WHERE session_id = $1
 `
 
+// Session usage is the sum of its root Turns only when every one has ended
+// with recorded usage. Officially it stayed null while a root Turn was in
+// progress or waiting (ST-03), even after earlier Turns were measured, and after
+// a Turn ended with unknown usage (EVT-13). Queued Turns count as not ended, and
+// a snapshot recorded by an active Turn does not count yet.
 func (q *Queries) SessionTokenUsage(ctx context.Context, sessionID pgtype.UUID) ([]byte, error) {
 	row := q.db.QueryRow(ctx, sessionTokenUsage, sessionID)
 	var usage []byte

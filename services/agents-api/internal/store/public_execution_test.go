@@ -123,7 +123,7 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	if err := h.s.AppendTurnEvents(ctx, h.tenant, h.session.ID, first.TurnID, 1, []store.ExecutionEvent{{Kind: proto.TypeUsage, Payload: usage}}); err != nil {
 		t.Fatal(err)
 	}
-	checkMeasurement := func() {
+	checkMeasurement := func(ended bool) {
 		t.Helper()
 		turn, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, first.TurnID)
 		if err != nil {
@@ -135,12 +135,17 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 		if json.Unmarshal(turn.Usage, &got) != nil || got.TotalTokens != 13 {
 			t.Fatalf("lost observed usage: %s", turn.Usage)
 		}
+		// Session usage stays unknown until every root Turn has ended (ST-03).
+		want := turn.Usage
+		if !ended {
+			want = nil
+		}
 		session, err := h.s.GetSession(ctx, h.tenant, h.session.ID)
-		if err != nil || string(session.Usage) != string(turn.Usage) {
+		if err != nil || string(session.Usage) != string(want) {
 			t.Fatalf("Session and Turn measurement differ: %+v %v", session, err)
 		}
 	}
-	checkMeasurement()
+	checkMeasurement(false)
 	queued := publicSession(t, h, "queued")
 	if _, err := h.s.SubmitMessage(ctx, h.tenant, queued.ID, "first", json.RawMessage(`{"text":"Not sent"}`)); err != nil {
 		t.Fatal(err)
@@ -176,5 +181,5 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	if err := restarted.Run(stopped); err != context.Canceled {
 		t.Fatal(err)
 	}
-	checkMeasurement()
+	checkMeasurement(true)
 }

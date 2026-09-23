@@ -132,3 +132,111 @@ func TestCancellationReceiptUsageSurvivesRecovery(t *testing.T) {
 		t.Fatalf("recovery lost receipt usage: %s", recovered.Usage)
 	}
 }
+
+// Official Session usage is the sum only when every root Turn has ended with
+// known usage: it stays null while a Turn is queued, active or waiting (ST-03)
+// and after a Turn ends with unknown usage (EVT-13).
+func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
+	ctx := context.Background()
+	s, _ := store.NewTestStore(t)
+	tenant := uuid.NewString()
+	session, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "unknown-usage"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	usage := func(input int) []store.ExecutionEvent {
+		return []store.ExecutionEvent{{Kind: "usage", Payload: json.RawMessage(fmt.Sprintf(`{"tokens":{"input_tokens":%d,"cached_input_tokens":4,"output_tokens":3,"reasoning_output_tokens":2,"total_tokens":%d}}`, input, input+3))}}
+	}
+	total := func(want int64) {
+		t.Helper()
+		got, err := s.GetSession(ctx, tenant, session.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		page, err := s.ListSessions(ctx, tenant, "", 100, true, nil)
+		if err != nil || len(page.Sessions) != 1 || string(page.Sessions[0].Usage) != string(got.Usage) {
+			t.Fatalf("list usage: %+v %v", page, err)
+		}
+		if want < 0 {
+			if got.Usage != nil {
+				t.Fatalf("usage = %s, want null", got.Usage)
+			}
+			return
+		}
+		var value v1.TokenUsage
+		if json.Unmarshal(got.Usage, &value) != nil || value.TotalTokens != want {
+			t.Fatalf("usage = %s, want total %d", got.Usage, want)
+		}
+	}
+	submit := func(key string) store.InputReceipt {
+		t.Helper()
+		admission, err := s.SubmitMessage(ctx, tenant, session.ID, key, json.RawMessage(`{"text":"measure"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return admission
+	}
+	move := func(turn, from, to string) {
+		t.Helper()
+		if _, err := s.TransitionTurn(ctx, tenant, session.ID, turn, store.TurnTransition{ExpectedStatus: from, Status: to}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	finish := func(admission store.InputReceipt, status string) {
+		t.Helper()
+		if _, err := s.CompleteExecution(ctx, tenant, session.ID, admission.TurnID, status, json.RawMessage(`{"done":{}}`), "", admission.Sequence); err != nil {
+			t.Fatal(err)
+		}
+	}
+	lastIdleUsage := func() json.RawMessage {
+		t.Helper()
+		changes, err := s.ListSessionEvents(ctx, tenant, session.ID, 0)
+		if err != nil || len(changes) == 0 || changes[len(changes)-1].Event.Type != "agent.session.idle" {
+			t.Fatal(changes, err)
+		}
+		return changes[len(changes)-1].SessionUsage
+	}
+	total(-1)
+	first := submit("first")
+	total(-1)
+	move(first.TurnID, store.TurnQueued, store.TurnInProgress)
+	if err = s.AppendTurnEvents(ctx, tenant, session.ID, first.TurnID, 1, usage(10)); err != nil {
+		t.Fatal(err)
+	}
+	// An active Turn's recorded snapshot does not count yet.
+	total(-1)
+	finish(first, store.TurnCompleted)
+	total(13)
+	if idle := lastIdleUsage(); idle == nil {
+		t.Fatal("settled Session snapshot lost the known total")
+	}
+	// A queued, active or waiting Turn hides the known terminal totals.
+	second := submit("second")
+	total(-1)
+	move(second.TurnID, store.TurnQueued, store.TurnInProgress)
+	total(-1)
+	if err = s.AppendTurnEvents(ctx, tenant, session.ID, second.TurnID, 1, usage(20)); err != nil {
+		t.Fatal(err)
+	}
+	total(-1)
+	move(second.TurnID, store.TurnInProgress, store.TurnWaiting)
+	total(-1)
+	move(second.TurnID, store.TurnWaiting, store.TurnInProgress)
+	finish(second, store.TurnCancelled)
+	total(36)
+	// A Turn that ends without usage makes the total unknown for good.
+	third := submit("third")
+	move(third.TurnID, store.TurnQueued, store.TurnInProgress)
+	finish(third, store.TurnCancelled)
+	total(-1)
+	if idle := lastIdleUsage(); idle != nil && string(idle) != "null" {
+		t.Fatalf("settled Session snapshot usage: %s", idle)
+	}
+	fourth := submit("fourth")
+	move(fourth.TurnID, store.TurnQueued, store.TurnInProgress)
+	if err = s.AppendTurnEvents(ctx, tenant, session.ID, fourth.TurnID, 1, usage(30)); err != nil {
+		t.Fatal(err)
+	}
+	finish(fourth, store.TurnCompleted)
+	total(-1)
+}
