@@ -91,9 +91,22 @@ func childTurn(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, child,
 	return row, err
 }
 
-func publicChildTurn(row sqlc.SubagentTurn) v1.Turn {
+// sessionAgentID returns the Session's Agent ID, which is the agent_id of every
+// Turn in the Session, including child Turns. The official service projects a
+// direct child's Turn this way; nested children follow the same rule unobserved.
+func sessionAgentID(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) (string, error) {
+	agent, err := q.SubagentRootAgent(ctx, session)
+	if err == nil && agent == "" {
+		err = errors.New("missing stored agent identity")
+	}
+	return agent, err
+}
+
+// publicChildTurn identifies the child through subagent_id; agent_id is the
+// Session's Agent ID.
+func publicChildTurn(row sqlc.SubagentTurn, agent string) v1.Turn {
 	child := uuid.UUID(row.SubagentID.Bytes).String()
-	value := v1.Turn{ID: uuid.UUID(row.ID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(), AgentID: child, SubagentID: &child, Object: "agent.session.turn", Status: row.Status, CreatedAt: row.CreatedAt.Time.Unix()}
+	value := v1.Turn{ID: uuid.UUID(row.ID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(), AgentID: agent, SubagentID: &child, Object: "agent.session.turn", Status: row.Status, CreatedAt: row.CreatedAt.Time.Unix()}
 	if row.StartedAt.Valid {
 		seconds := row.StartedAt.Time.Unix()
 		value.StartedAt = &seconds
@@ -116,8 +129,12 @@ func (s *Store) GetSubagentTurn(ctx context.Context, tenant, session, child, id 
 			return err
 		}
 		row, err := childTurn(ctx, q, sid, child, id)
+		if err != nil {
+			return err
+		}
+		agent, err := sessionAgentID(ctx, q, sid)
 		if err == nil {
-			result = publicChildTurn(row)
+			result = publicChildTurn(row, agent)
 		}
 		return err
 	})
@@ -150,12 +167,16 @@ func (s *Store) ListSubagentTurns(ctx context.Context, tenant, session, child, a
 		if err != nil {
 			return err
 		}
+		agent, err := sessionAgentID(ctx, q, sid)
+		if err != nil {
+			return err
+		}
 		result.HasMore = len(rows) > limit
 		if result.HasMore {
 			rows = rows[:limit]
 		}
 		for _, row := range rows {
-			result.Data = append(result.Data, publicChildTurn(row))
+			result.Data = append(result.Data, publicChildTurn(row, agent))
 		}
 		return nil
 	})

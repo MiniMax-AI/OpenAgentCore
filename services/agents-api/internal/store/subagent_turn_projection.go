@@ -22,9 +22,6 @@ func nativeMillis(value *int64) pgtype.Timestamptz {
 	}
 	return pgtype.Timestamptz{Time: time.UnixMilli(*value), Valid: true}
 }
-func childStoreTurn(row sqlc.SubagentTurn) Turn {
-	return Turn{ID: uuid.UUID(row.ID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(), SubagentID: uuid.UUID(row.SubagentID.Bytes).String(), Status: row.Status, CreatedAt: row.CreatedAt.Time, StartedAt: row.StartedAt.Time, CompletedAt: row.CompletedAt.Time, Usage: row.TokenUsage}
-}
 func projectSubagentTurn(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, raw json.RawMessage) error {
 	var p proto.SubagentTurnPayload
 	if json.Unmarshal(raw, &p) != nil || !validNativeIdentity(p.NativeID) || !validNativeIdentity(p.TurnID) || p.CreatedAtMS <= 0 {
@@ -85,22 +82,10 @@ func projectSubagentTurn(ctx context.Context, q *sqlc.Queries, session pgtype.UU
 		return err
 	}
 	// Terminal replays returned above; they must not restart the managed idle timer.
+	// Child Turns publish no Session events: the Session stream carries root work,
+	// and child state is read through the Subagent routes.
 	if terminalStatus(row.Status) {
-		if err := q.RecordRuntimeTerminalActivity(ctx, session); err != nil {
-			return err
-		}
-	}
-	value := publicChildTurn(row)
-	emit := func(kind string) error {
-		return recordSessionChange(ctx, q, session, SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn." + kind, TurnID: value.ID, Turn: &value}})
-	}
-	if fresh {
-		if err := emit("created"); err != nil {
-			return err
-		}
-	}
-	if (fresh || old.Status != row.Status) && row.Status != TurnWaiting {
-		return emit(row.Status)
+		return q.RecordRuntimeTerminalActivity(ctx, session)
 	}
 	return nil
 }
