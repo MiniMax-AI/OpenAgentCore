@@ -28,7 +28,7 @@ func WithEnvironmentFileWriter(writer EnvironmentFileWriter) Option {
 }
 
 // @Summary Create an Environment file from inline bytes or a source file
-// @Description Uploads standard Base64 bytes to a file beneath /workspace in a qualified local Environment and returns 201. Accepts inline bytes or a project-owned source file_id through the same write path. Unknown body fields are rejected with their name as param. Basic public hosted creation requires explicit managed Runtime configuration. A private 50 MiB decoded-content limit applies. The parent directory must exist. Replacement installs a new mode-0600 inode; upstream overwrite metadata semantics remain unverified. Idle writes exclude execution. Missing receipts return unavailable and retain a durable mutation gate without automatic replay. Error/timing parity with upstream remains unverified.
+// @Description Uploads standard Base64 bytes to a file beneath /workspace in a qualified local Environment and returns 201. Accepts inline bytes or a project-owned source file_id through the same write path. Unknown body fields are rejected with their name as param. Basic public hosted creation requires explicit managed Runtime configuration; an openai_hosted Environment that has not connected yet returns 400. A private 50 MiB decoded-content limit applies. The parent directory must exist. Replacement installs a new mode-0600 inode; upstream overwrite metadata semantics remain unverified. Idle writes exclude execution. Missing receipts return unavailable and retain a durable mutation gate without automatic replay. Error/timing parity with upstream remains unverified.
 // @Tags Environments
 // @Accept json
 // @Produce json
@@ -96,6 +96,9 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 			writeStoreError(w, r, store.ErrSourceFileTooLarge)
 			return
 		}
+	}
+	if !environmentFilesAccessible(w, environment) {
+		return
 	}
 	if request.Type == "file_id" {
 		if !h.sourceFilesAvailable(w) {

@@ -2517,9 +2517,10 @@ paths:
         supported key is rejected. Sorts by case-sensitive path components, descending
         by default. Keep the same path, order and limit when using page. Each page
         rereads the complete bounded directory; changed file paths/sizes invalidate
-        continuation locally with 400. There is no snapshot guarantee. Truncated or
-        uncertain native results fail with 503 without returning a partial page. This
-        read never starts a Turn or admits model input. Actual transport disconnect/reconnect
+        continuation locally with 400. There is no snapshot guarantee. An openai_hosted
+        Environment that has not connected yet returns 400. Truncated or uncertain
+        native results fail with 503 without returning a partial page. This read never
+        starts a Turn or admits model input. Actual transport disconnect/reconnect
         events remain observable.
       parameters:
       - description: agents=v1
@@ -2594,8 +2595,9 @@ paths:
         qualified local Environment and returns 201. Accepts inline bytes or a project-owned
         source file_id through the same write path. Unknown body fields are rejected
         with their name as param. Basic public hosted creation requires explicit managed
-        Runtime configuration. A private 50 MiB decoded-content limit applies. The
-        parent directory must exist. Replacement installs a new mode-0600 inode; upstream
+        Runtime configuration; an openai_hosted Environment that has not connected
+        yet returns 400. A private 50 MiB decoded-content limit applies. The parent
+        directory must exist. Replacement installs a new mode-0600 inode; upstream
         overwrite metadata semantics remain unverified. Idle writes exclude execution.
         Missing receipts return unavailable and retain a durable mutation gate without
         automatic replay. Error/timing parity with upstream remains unverified.

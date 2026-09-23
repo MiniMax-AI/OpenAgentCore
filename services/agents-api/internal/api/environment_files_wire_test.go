@@ -1,6 +1,8 @@
 package api
 
 import (
+	"encoding/json"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -175,5 +177,58 @@ func TestEnvironmentFileCreateFieldErrors(t *testing.T) {
 	missing := requestCreateEnvironmentFile(h, uuid.NewString(), body, "files-key")
 	if foreign.Code != 404 || foreign.Body.String() != missing.Body.String() || f.writes != 0 {
 		t.Fatal("foreign create inspected", foreign.Code, foreign.Body)
+	}
+}
+
+func TestEnvironmentFilesHostedProvisioning(t *testing.T) {
+	const message = "the hosted environment is still provisioning; wait until it is connected before accessing files"
+	const hosted = `{"type":"openai_hosted","network":{"access":"disabled"}}`
+	const createBody = `{"type":"inline","data":"YWJj","path":"/workspace/a"}`
+	sources := &sourceFilesFixture{}
+	h, f := environmentFileCreateHandler(t, WithSourceFiles(sources))
+	f.environment.Configuration, f.environment.Status = json.RawMessage(hosted), "pending"
+
+	w := requestEnvironmentFiles(h, f.environment.ID, "?path=/workspace/a", "files-key")
+	assertListQueryError(t, w, "invalid_request_error", nil, message)
+	w = requestCreateEnvironmentFile(h, f.environment.ID, createBody, "files-key")
+	assertListQueryError(t, w, "invalid_request_error", nil, message)
+	// The check precedes the source lookup: a missing file_id is not reported.
+	w = requestCreateEnvironmentFile(h, f.environment.ID, `{"type":"file_id","file_id":"file-missing","path":"/workspace/a"}`, "files-key")
+	assertListQueryError(t, w, "invalid_request_error", nil, message)
+	if f.reads != 0 || f.writes != 0 || sources.reads != 0 {
+		t.Fatal("provisioning Environment reached execution", f.reads, f.writes, sources.reads)
+	}
+
+	// Request validation still reports its own error first.
+	assertListQueryError(t, requestEnvironmentFiles(h, f.environment.ID, "?path=/workspace/a/", "files-key"),
+		"invalid_request_error", nil, "path must identify a non-reserved directory inside /workspace")
+	assertListQueryError(t, requestCreateEnvironmentFile(h, f.environment.ID, `{"type":"inline","data":"","path":"rel"}`, "files-key"),
+		"invalid_request_error", nil, "environment.files[0].path must be an absolute POSIX path inside /workspace")
+
+	// Foreign and missing Environments stay identical 404s.
+	for _, method := range []string{"GET", "POST"} {
+		var foreign, missing *httptest.ResponseRecorder
+		if method == "GET" {
+			foreign, missing = requestEnvironmentFiles(h, f.environment.ID, "", "other-key"), requestEnvironmentFiles(h, uuid.NewString(), "", "files-key")
+		} else {
+			foreign, missing = requestCreateEnvironmentFile(h, f.environment.ID, createBody, "other-key"), requestCreateEnvironmentFile(h, uuid.NewString(), createBody, "files-key")
+		}
+		if foreign.Code != 404 || foreign.Body.String() != missing.Body.String() {
+			t.Fatal("foreign provisioning Environment disclosed", method, foreign.Code, foreign.Body)
+		}
+	}
+
+	// Other states and placements keep the existing execution path.
+	for _, state := range []struct{ configuration, status string }{
+		{hosted, "connected"}, {hosted, "disconnected"}, {`{"type":"self_hosted","workspace_directory":"/workspace"}`, "pending"},
+	} {
+		f.environment.Configuration, f.environment.Status = json.RawMessage(state.configuration), state.status
+		reads, writes := f.reads, f.writes
+		if w := requestEnvironmentFiles(h, f.environment.ID, "", "files-key"); w.Code != 200 || f.reads != reads+1 {
+			t.Fatal("list rejected", state, w.Code, w.Body)
+		}
+		if w := requestCreateEnvironmentFile(h, f.environment.ID, createBody, "files-key"); w.Code != 201 || f.writes != writes+1 {
+			t.Fatal("create rejected", state, w.Code, w.Body)
+		}
 	}
 }
