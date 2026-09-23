@@ -22,7 +22,7 @@ func preparedEnvironmentConfiguration(configuration json.RawMessage) bool {
 		(snapshot.Environment.Type == "self_hosted" || snapshot.Environment.Type == "openai_hosted")
 }
 
-func (w *Worker) validateEnvironmentAdmission(engine string, configuration json.RawMessage) error {
+func (w *Worker) validateEnvironmentAdmission(ctx context.Context, engine string, configuration json.RawMessage) error {
 	var snapshot Snapshot
 	if json.Unmarshal(configuration, &snapshot) != nil || snapshot.Environment == nil {
 		return store.ErrInvalidInput
@@ -36,6 +36,13 @@ func (w *Worker) validateEnvironmentAdmission(engine string, configuration json.
 		if w.runtimes == nil {
 			return ErrExecutionUnavailable
 		}
+		ready, err := w.runtimes.ensureDeployment(ctx)
+		if err != nil {
+			return err
+		}
+		if !ready {
+			return ErrExecutionUnavailable
+		}
 	default:
 		return store.ErrInvalidInput
 	}
@@ -47,7 +54,7 @@ func (w *Worker) validateCreation(ctx context.Context, input store.CreateSession
 		return err
 	}
 	if preparedEnvironmentConfiguration(input.Configuration) {
-		if err := w.validateEnvironmentAdmission(input.Engine, input.Configuration); err != nil {
+		if err := w.validateEnvironmentAdmission(ctx, input.Engine, input.Configuration); err != nil {
 			return err
 		}
 		var snapshot Snapshot
@@ -66,7 +73,7 @@ func (w *Worker) validateCreation(ctx context.Context, input store.CreateSession
 }
 
 func (w *Worker) submitEnvironmentInputs(ctx context.Context, session store.Session, key string, inputs []store.Input) ([]store.InputReceipt, error) {
-	if err := w.validateEnvironmentAdmission(session.Engine, session.Configuration); err != nil {
+	if err := w.validateEnvironmentAdmission(ctx, session.Engine, session.Configuration); err != nil {
 		return nil, err
 	}
 	if err := w.checkAdmissionOwnership(ctx); err != nil {

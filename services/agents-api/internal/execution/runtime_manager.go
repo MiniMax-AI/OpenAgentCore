@@ -12,17 +12,20 @@ import (
 // runtimeManager owns node membership, not provider operations. Each registered
 // node has one serial lifecycle; slow provider work cannot occupy another node.
 type runtimeManager struct {
-	store           *store.Store
-	registry        *gateway.Registry
-	config          RuntimeProvider
-	ctx             context.Context
-	cancel          context.CancelFunc
-	mu              sync.Mutex
-	nodes           map[string]*runtimeNode
-	running, closed bool
-	active          sync.WaitGroup
-	failed          chan error
-	inventory       chan struct{}
+	store               *store.Store
+	registry            *gateway.Registry
+	config              RuntimeProvider
+	setupInstallationID string
+	loadDeployment      func(context.Context) (*RuntimeProvider, error)
+	setupGate           chan struct{}
+	ctx                 context.Context
+	cancel              context.CancelFunc
+	mu                  sync.Mutex
+	nodes               map[string]*runtimeNode
+	running, closed     bool
+	active              sync.WaitGroup
+	failed              chan error
+	inventory           chan struct{}
 }
 
 type runtimeNode struct {
@@ -51,7 +54,7 @@ func (m *runtimeManager) enter(parent context.Context) (context.Context, func(),
 
 func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 	m.mu.Lock()
-	if m.closed || (id == "") != (m.config.ProviderKind == "") {
+	if m.closed || (m.loadDeployment != nil && m.config.Provider == nil) || (id == "") != (m.config.ProviderKind == "") {
 		m.mu.Unlock()
 		return nil, ErrExecutionUnavailable
 	}
@@ -94,6 +97,10 @@ func (m *runtimeManager) hints(id string) chan<- struct{} {
 }
 
 func (m *runtimeManager) syncNodes(ctx context.Context) ([]*runtimeNode, error) {
+	ready, err := m.ensureDeployment(ctx)
+	if err != nil || !ready {
+		return nil, err
+	}
 	select {
 	case m.inventory <- struct{}{}:
 	case <-ctx.Done():

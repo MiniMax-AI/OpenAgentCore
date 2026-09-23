@@ -20,6 +20,7 @@ import (
 // RuntimeProvider binds one deployment to one sandbox installation.
 // BackendFingerprint identifies its namespace independently of mutable sizing.
 type RuntimeProvider struct {
+	loadDeployment                   func(context.Context) (*RuntimeProvider, error)
 	VerifyLegacyOwnership            store.RuntimeOwnershipVerifier
 	ProviderKind                     string
 	LocalNodeID                      string
@@ -52,25 +53,42 @@ func newRuntimeManager(s *store.Store, registry *gateway.Registry, config *Runti
 	if config == nil {
 		return nil, nil
 	}
+	var copied RuntimeProvider
+	if config.loadDeployment != nil {
+		id, err := uuid.Parse(config.InstallationID)
+		if err != nil || id == uuid.Nil || id.String() != config.InstallationID || registry == nil {
+			return nil, sandbox.ErrInvalid
+		}
+	} else {
+		var err error
+		copied, err = validatedRuntimeProvider(config, registry)
+		if err != nil {
+			return nil, err
+		}
+	}
+	ctx, stop := context.WithCancel(context.Background())
+	return &runtimeManager{store: s, registry: registry, config: copied, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, setupGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
+}
+
+func validatedRuntimeProvider(config *RuntimeProvider, registry *gateway.Registry) (RuntimeProvider, error) {
 	u, err := url.Parse(config.CoreURL)
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || config.Provider == nil || registry == nil {
-		return nil, sandbox.ErrInvalid
+		return RuntimeProvider{}, sandbox.ErrInvalid
 	}
 	id, err := uuid.Parse(config.InstallationID)
 	fingerprint, fingerprintErr := hex.DecodeString(config.BackendFingerprint)
 	if err != nil || id == uuid.Nil || id.String() != config.InstallationID || fingerprintErr != nil || len(fingerprint) != 32 || hex.EncodeToString(fingerprint) != config.BackendFingerprint {
-		return nil, sandbox.ErrInvalid
+		return RuntimeProvider{}, sandbox.ErrInvalid
 	}
 	copied := *config
 	if config.Suspension != nil {
 		policy := *config.Suspension
 		if _, ok := config.Provider.(sandbox.CheckpointProvider); !ok || policy.IdleTimeout < time.Second || policy.Retention < time.Second || policy.MaxActive < 1 || policy.MaxRetained < policy.MaxActive {
-			return nil, sandbox.ErrInvalid
+			return RuntimeProvider{}, sandbox.ErrInvalid
 		}
 		copied.Suspension = &policy
 	}
-	ctx, stop := context.WithCancel(context.Background())
-	return &runtimeManager{store: s, registry: registry, config: copied, ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
+	return copied, nil
 }
 
 func (r *runtimeLifecycle) lock(ctx context.Context) error {
@@ -105,6 +123,13 @@ func (w *Worker) ProvisionEnvironment(ctx context.Context, tenant, environment, 
 		return store.RuntimeAllocation{}, err
 	}
 	defer finish()
+	ready, err := w.runtimes.ensureDeployment(ctx)
+	if err != nil {
+		return store.RuntimeAllocation{}, err
+	}
+	if !ready {
+		return store.RuntimeAllocation{}, ErrExecutionUnavailable
+	}
 	nodeID, err := w.runtimes.store.ResolveRuntimeLifecycleNode(ctx, tenant, environment)
 	if err != nil {
 		return store.RuntimeAllocation{}, err

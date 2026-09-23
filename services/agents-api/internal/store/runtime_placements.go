@@ -17,7 +17,7 @@ func reserveRuntimePlacement(ctx context.Context, q *sqlc.Queries, session pgtyp
 		return err
 	}
 	if d.ProviderKind == "" {
-		if selected != "" {
+		if d.WebManaged || selected != "" {
 			return ErrRuntimeNodeUnavailable
 		}
 		return nil

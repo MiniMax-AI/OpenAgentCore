@@ -40,6 +40,7 @@ func (h *Handler) registerSandboxManagerRoutes(r chi.Router) {
 	r.Route("/core/v1/sandbox", func(r chi.Router) {
 		r.Use(h.deploymentAuth.authenticate)
 		r.Get("/deployment", h.sandboxDeployment)
+		r.Post("/deployment", h.initializeSandboxDeployment)
 		r.Get("/nodes", h.sandboxNodes)
 		r.Patch("/nodes/{node_id}", h.updateSandboxNode)
 		r.Delete("/nodes/{node_id}", h.removeSandboxNode)

@@ -48,7 +48,7 @@ func (s *Store) GetRuntimeDeployment(ctx context.Context) (RuntimeDeploymentView
 	if err != nil {
 		return RuntimeDeploymentView{}, err
 	}
-	return RuntimeDeploymentView{InstallationID: runtimeUUID(d.InstallationID), Provider: d.ProviderKind, Maintenance: d.Maintenance, OwnerEpoch: uint64(d.OwnerEpoch)}, nil
+	return runtimeDeploymentView(d), nil
 }
 func (s *Store) RuntimeOwnerEpoch(ctx context.Context) (uint64, error) {
 	d, err := s.queries.GetRuntimeDeployment(ctx)

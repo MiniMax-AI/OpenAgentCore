@@ -66,6 +66,8 @@ func writeFieldError(w http.ResponseWriter, err error) bool {
 
 func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFoundParam ...string) {
 	switch {
+	case errors.Is(err, store.ErrSandboxDeploymentConflict):
+		writeError(w, http.StatusConflict, "sandbox_deployment_conflict", "The sandbox deployment is already configured or is managed by a deployment file.")
 	case errors.Is(err, store.ErrRuntimeNodeCredential):
 		writeError(w, http.StatusUnauthorized, "invalid_node_credential", "A valid sandbox node enrollment or node credential is required.")
 	case errors.Is(err, store.ErrRuntimeNodeInUse):

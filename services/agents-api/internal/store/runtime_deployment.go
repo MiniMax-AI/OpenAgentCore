@@ -58,6 +58,9 @@ func (s *Store) ConfigureRuntimeDeployment(ctx context.Context, selected *Runtim
 		if err != nil {
 			return err
 		}
+		if previous.WebManaged {
+			return ErrSandboxDeploymentConflict
+		}
 		if selected != nil && previous.InstallationID == update.InstallationID && previous.BackendFingerprint == update.BackendFingerprint && (previous.ProviderKind == "" || selected.ProviderKind == previous.ProviderKind) {
 			if err := q.SetRuntimeDeployment(ctx, update); err != nil {
 				return err

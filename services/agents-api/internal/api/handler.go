@@ -38,6 +38,7 @@ type ResourceStore interface {
 type Handler struct {
 	sandboxStore        *store.Store
 	deploymentAuth      *DeploymentAuthenticator
+	sandboxSetup        func(context.Context, store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error)
 	policy              execution.Policy
 	store               ResourceStore
 	auth                *Authenticator

@@ -1,0 +1,88 @@
+package store_test
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
+	"github.com/google/uuid"
+)
+
+func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
+	s, _ := store.NewManagedTestStore(t)
+	id := uuid.NewString()
+	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
+	configuration := execution.NewDeferredRuntimeProvider(id, func(ctx context.Context) (*execution.RuntimeProvider, error) {
+		setup, err := s.GetSandboxSetup(ctx)
+		if err != nil || setup.Provider == "" {
+			return nil, err
+		}
+		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, BackendFingerprint: setup.BackendFingerprint, CoreURL: setup.CoreURL + "/api/v1", Provider: p}, nil
+	})
+	start := func() (*execution.Worker, func()) {
+		t.Helper()
+		w, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry(), ManagedRuntimes: configuration})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var once sync.Once
+		stop := func() {
+			once.Do(func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = w.Run(ctx) })
+		}
+		t.Cleanup(stop)
+		return w, stop
+	}
+	w, stop := start()
+	input := store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`)}
+	if _, err := w.CreateSession(t.Context(), uuid.NewString(), input); !errors.Is(err, execution.ErrExecutionUnavailable) {
+		t.Fatal("uninitialized worker admitted hosted Session", err)
+	}
+	if _, err := w.InitializeSandboxDeployment(t.Context(), store.SandboxDeploymentSetupRequest{Provider: "docker", CoreURL: "https://core.example"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), input); !errors.Is(err, store.ErrRuntimeNodeUnavailable) {
+		t.Fatal("zero-node deployment admitted Session", err)
+	}
+	token, _, err := s.CreateRuntimeEnrollment(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodeID := uuid.NewString()
+	if _, err := s.EnrollRuntimeNode(t.Context(), token, store.RuntimeNodeEnrollment{NodeID: nodeID, Name: "Remote", Provider: "docker", Credential: strings.Repeat("x", 64), BackendFingerprint: strings.Repeat("b", 64), MaxActive: 4, MaxRetained: 16}); err != nil {
+		t.Fatal(err)
+	}
+	connect := func() {
+		t.Helper()
+		epoch, err := s.RuntimeOwnerEpoch(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		connection := uuid.NewString()
+		if err := s.ConnectRuntimeNode(t.Context(), nodeID, connection, epoch); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.HeartbeatRuntimeNode(t.Context(), nodeID, connection, epoch, store.RuntimeNodeHealth{ProviderReady: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	connect()
+	tenant, _, environment := managedSession(t, s)
+	allocation, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, id)
+	if err != nil || allocation.NodeID != nodeID || p.creates != 1 {
+		t.Fatal("activation failed", allocation, err)
+	}
+	stop()
+	w, _ = start()
+	connect()
+	replayed, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, id)
+	if err != nil || replayed.ID != allocation.ID || !replayed.Replayed || p.creates != 1 {
+		t.Fatal("restart changed allocation ownership", replayed, err)
+	}
+}

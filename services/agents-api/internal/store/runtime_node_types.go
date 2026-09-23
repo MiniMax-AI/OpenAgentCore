@@ -67,6 +67,7 @@ type RuntimePlacement struct {
 	ComputePhase string `json:"compute_phase"`
 }
 type RuntimeDeploymentView struct {
+	CoreURL        string `json:"core_url"`
 	InstallationID string `json:"installation_id"`
 	Provider       string `json:"provider"`
 	Maintenance    bool   `json:"maintenance"`

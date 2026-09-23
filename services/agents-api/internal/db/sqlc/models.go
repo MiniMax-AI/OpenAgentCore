@@ -172,6 +172,10 @@ type RuntimeDeployment struct {
 	ProviderKind       string             `json:"provider_kind"`
 	LocalNodeID        pgtype.UUID        `json:"local_node_id"`
 	OwnerEpoch         int64              `json:"owner_epoch"`
+	WebManaged         bool               `json:"web_managed"`
+	CoreUrl            string             `json:"core_url"`
+	IdleSeconds        int64              `json:"idle_seconds"`
+	RetentionSeconds   int64              `json:"retention_seconds"`
 }
 
 type RuntimeDeviceAuthority struct {
