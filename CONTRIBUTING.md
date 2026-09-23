@@ -1560,6 +1560,11 @@ execution-only payloads. Python zipapps bundle the shared resolver with each
 remote bootstrap; the console publishes only fixed non-secret files and declared
 artifact names. Release automation builds artifacts and may create an unpublished
 draft, but cannot claim real execution qualification or public availability.
+Qualify the exact downloaded production artifacts before publishing the draft;
+keep the tested asset bytes and source identity unchanged. Never use an acceptance
+image containing a private test CA or model credential as a release input.
+Repository visibility is independent of publication. Do not add repository
+credentials to installed node/Runtime configuration to bypass download access.
 
 Project-authenticated executor-credential extensions remain outside the upstream
 API namespace and reuse the existing restricted issuer. They require the exact
@@ -1569,6 +1574,13 @@ explicit caller credentials on these routes and never substitutes its administra
 key. Self-hosted installation reuses Docker Runtime isolation, owns no sandbox
 node or Core allocation, and retains user-owned native history after uncertain
 launches. Report started, connected and real execution success separately.
+Self-hosted installation confirms connection through the private daemon transport
+using only its restricted executor credential. The read checks the exact live
+Environment/key binding and current authenticated connection; it never enrolls,
+allocates, wakes a sandbox or grants project resource access. Console forwarding
+preserves this credential without replacing it with an administrator or project
+key. Bounded polling and reruns retain the original container and history;
+timeout is a diagnostic failure, not permission to relaunch.
 
 The distribution build sets umask 022 for non-root-readable payloads; installation
 credentials and state retain their explicit private permissions.

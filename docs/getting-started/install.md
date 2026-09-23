@@ -23,11 +23,14 @@ in the [add-node steps](#add-nodes-after-a-default-installation).
 
 ## Verify, extract and install
 
-Obtain the archive and checksum from a trusted distributor. Until a release is
-published, obtain a verified bundle from your deployment administrator or build
-an archive using [Build a distribution](#build-a-distribution);
-a source checkout alone is not an installable binary bundle. Do not substitute an
-unpublished download URL.
+Download the matching Linux amd64 archive and its `.sha256` file from
+[GitHub Releases](https://github.com/MiniMax-AI/parsar-core/releases). Use one
+release for the entire installation. If GitHub requires sign-in, use an authenticated
+browser or `gh release download RELEASE --repo MiniMax-AI/parsar-core`.
+Choose the ordinary `.tar.gz` for a zero-node installation, or `-offline.tar.gz`
+when you also need all execution assets locally. A source checkout alone is not
+an installable binary bundle; [build a distribution](#build-a-distribution) for
+unreleased changes.
 
 For the recommended node workflow, choose an HTTPS address that both node hosts
 and their sandbox guests can reach, such as `https://core.example`. Configure
@@ -175,8 +178,13 @@ The installer prepares the matched daemon, native harnesses and local workspace
 inside the same isolated Runtime used for hosted execution. No shared node,
 model credential or source build is needed. Model access remains execution input.
 
-A started Runtime is not proof of a connected Environment or a successful model
-request. Read the Session to confirm its connection, then submit your task.
+The command waits for Core to confirm that this Environment and its restricted
+credential are connected. It distinguishes a running container from a connected
+Environment. Connection failure or timeout exits with diagnostic and retry
+instructions, preserving the same container, credentials and native history.
+Rerun the command after correcting the reported problem; it does not create
+replacement history. A connected Environment does not prove model availability.
+Submit your task through the Session API to test execution.
 Installation state stays under `~/.parsar/self-hosted/ENVIRONMENT_UUID`; retain its
 credentials, volumes and native history. An uncertain launch gives inspection
 instructions instead of creating replacement history. Session deletion does not
@@ -313,3 +321,35 @@ An explicit manual option can create an unpublished draft release. Neither a
 successful build nor a draft makes a private repository anonymously downloadable;
 publish qualified assets through your chosen distribution channel before sharing
 installation instructions with external users.
+
+## Produce and qualify a release
+
+The `core-release` GitHub Actions workflow builds production assets from a full
+committed source SHA. It uses the existing pinned Runtime builders; acceptance
+credentials and private test certificate authorities must never enter its inputs.
+Run the workflow from the repository's Actions page, or use:
+
+```sh
+revision=$(git rev-parse HEAD)
+gh workflow run core-release --repo MiniMax-AI/parsar-core --ref main \
+  -f ref="$revision" -f offline=true -f draft_release=true
+```
+
+The workflow uploads the matched files as an Actions artifact and creates a draft
+Release whose tag is that full SHA. The manifest records the same tag in every
+asset URL. Do not mix files across releases or resolve individual components
+through `latest`. The node command comes from its connected Core, which selects
+the matching release automatically.
+
+Download the draft assets using repository access, verify their checksums, and
+qualify a fresh installation plus the node/self-hosted connection paths before
+publishing the draft. A workflow build alone is not live acceptance. Retain the
+exact tested assets when publishing; do not rebuild or replace files under the
+same release identity. Publishing a Release does not change repository visibility.
+
+For an offline installation, provide the extracted matching archive through the
+existing `--offline-root` option where supported. Remote node commands use the
+manifest's release URL; use the explicitly configured console-hosted offline
+build described above when node hosts cannot access that URL. Download access
+errors should be fixed at the distribution source, without passing repository
+credentials into Runtime or changing its executor authorization.
