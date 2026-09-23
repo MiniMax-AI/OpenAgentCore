@@ -38,7 +38,7 @@ nav a:hover, .footer-links a:hover { color: var(--accent); }
 .hero { display: grid; grid-template-columns: 1fr 1fr; gap: 76px; align-items: center; padding-block: 86px 76px; }
 .eyebrow { text-transform: uppercase; letter-spacing: .11em; font-size: 10px; font-weight: 600; color: var(--accent); margin-bottom: 25px; display: flex; align-items: center; gap: 9px; }
 .small-square { width: 7px; height: 7px; border-radius: 2px; background: var(--accent); box-shadow: 0 0 0 4px #ede9fb; }
-h1 { font-size: clamp(54px, 5.8vw, 82px); line-height: 1.045; margin-bottom: 26px; font-weight: 600; letter-spacing: -.065em; }
+h1 { font-size: clamp(54px, 5.2vw, 72px); line-height: 1.045; margin-bottom: 26px; font-weight: 600; letter-spacing: -.065em; }
 h1 > span { color: var(--accent); }
 .hero-description { font-size: 18px; max-width: 445px; margin-bottom: 32px; line-height: 1.65; }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; }
