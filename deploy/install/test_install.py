@@ -316,6 +316,24 @@ class InstallerTests(unittest.TestCase):
                 self.args("--web-only", "--core-url", url, "--core-token-file", str(source))
             self.assertNotIn("synthetic-secret", output.getvalue())
 
+    def test_status_rejects_failed_database_even_while_http_processes_are_alive(self):
+        services = [{"Service": name, "State": "running", "Health": ""}
+                    for name in ("database", "core", "web")]
+        for database in ({"State": "running", "Health": "unhealthy"}, {"State": "exited"}, None):
+            rows = services[1:] + ([{**services[0], **database}] if database else [])
+            with self.subTest(database=database), \
+                    mock.patch.object(install, "compose", return_value=SimpleNamespace(stdout=json.dumps(rows))), \
+                    mock.patch.object(install, "wait_http", return_value=True), \
+                    contextlib.redirect_stdout(io.StringIO()), self.assertRaises(install.InstallError):
+                install.status(self.root, {"mode": "all", "core_port": 8091, "web_port": 8080})
+
+    def test_status_accepts_web_only_without_database_or_core_services(self):
+        rows = [{"Service": "web", "State": "running", "Health": ""}]
+        with mock.patch.object(install, "compose", return_value=SimpleNamespace(stdout=json.dumps(rows))), \
+                mock.patch.object(install, "wait_http", return_value=True), \
+                contextlib.redirect_stdout(io.StringIO()):
+            install.status(self.root, {"mode": "web-only", "web_port": 8080})
+
 
 if __name__ == "__main__":
     unittest.main()

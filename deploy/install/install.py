@@ -140,7 +140,12 @@ def status(root, state):
     output = compose(root, "ps", "--all", "--format", "json", capture_output=True, text=True).stdout
     # Compose versions may return one array or one object per line.
     rows = json.loads(output) if output.lstrip().startswith("[") else [json.loads(line) for line in output.splitlines() if line]
-    healthy = True
+    required = {"web"} if state["mode"] == "web-only" else {"database", "core"}
+    if state["mode"] == "all":
+        required.add("web")
+    observed = {row["Service"]: row for row in rows}
+    healthy = all(name in observed and observed[name]["State"] == "running"
+                  and observed[name].get("Health", "") in ("", "healthy") for name in required)
     for row in rows:
         print(f'{row["Service"]}: {row["State"]} {row.get("Health", "")}')
     if state["mode"] != "web-only":
