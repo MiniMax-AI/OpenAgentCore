@@ -8,8 +8,9 @@ let nodes = [];
 let calls = [];
 let provider = "docker";
 let diagnostic = "";
+let coreUrl = "";
 export function resetSandboxFixture() {
-  nodes = [node("node-local", "Core server"), node("node-offline", "Offline host", false)]; calls = []; provider = "docker"; diagnostic = "";
+  nodes = [node("node-local", "Core server"), node("node-offline", "Offline host", false)]; calls = []; provider = "docker"; diagnostic = ""; coreUrl = "";
 }
 resetSandboxFixture();
 export function handleSandboxFixture(request, response, url, sendJson, sendError) {
@@ -21,8 +22,10 @@ export function handleSandboxFixture(request, response, url, sendJson, sendError
     nodes = nodes.map((entry) => entry.id === "node-local" ? { ...entry, online: value !== "node_unavailable", provider_ready: value !== "provider_unavailable", diagnostic: value === "provider_unavailable" ? value : "" } : entry);
     sendJson(response, {}); return true;
   }
-  if (path === "/__fixture/sandbox") { sendJson(response, { nodes, calls }); return true; }
+  if (path === "/__fixture/sandbox") { sendJson(response, { nodes, calls, provider, core_url: coreUrl }); return true; }
   if (path === "/__fixture/sandbox-microsandbox") { provider = "microsandbox"; sendJson(response, {}); return true; }
+  if (path === "/__fixture/sandbox-uninitialized") { provider = ""; coreUrl = ""; nodes = []; sendJson(response, {}); return true; }
+  if (path === "/__fixture/sandbox-add-node") { nodes.push({ ...node("node-enrolled", "Enrolled host"), provider }); sendJson(response, {}); return true; }
   const projectRoute = path === "/v1/sandbox/nodes" || /^\/v1\/agents\/sessions\/[^/]+\/sandbox-placement$/.test(path);
   if (projectRoute && request.headers["openai-beta"] !== "agents=v1") {
     sendError(response, 400, "OpenAI-Beta: agents=v1 is required.", "invalid_beta"); return true;
@@ -34,7 +37,22 @@ export function handleSandboxFixture(request, response, url, sendJson, sendError
   if (!path.startsWith("/core/v1/sandbox/")) return false;
   calls.push({ path, method: request.method, authorized: request.headers.authorization === "Bearer fixture-admin-key" });
   if (request.headers.authorization !== "Bearer fixture-admin-key") { sendError(response, 401, "A deployment admin key is required.", "invalid_admin_key"); return true; }
-  if (path.endsWith("/deployment")) sendJson(response, { installation_id: "fixture-installation", provider, maintenance: false, owner_epoch: 1 });
+  const deployment = () => ({ installation_id: "fixture-installation", provider, core_url: coreUrl, maintenance: false, owner_epoch: 1 });
+  if (path.endsWith("/deployment") && request.method === "POST") {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      try {
+        const input = JSON.parse(body);
+        if (provider && (provider !== input.provider || coreUrl !== input.core_url)) {
+          sendError(response, 409, "Sandbox deployment is already configured.", "sandbox_deployment_conflict"); return;
+        }
+        provider = input.provider; coreUrl = input.core_url;
+        sendJson(response, deployment());
+      } catch { sendError(response, 400, "Invalid setup request."); }
+    });
+  }
+  else if (path.endsWith("/deployment")) sendJson(response, deployment());
   else if (path.endsWith("/enrollment-tokens")) sendJson(response, { token: "fixture-once-token", expires_at: "2026-09-23T09:00:00Z" });
   else if (path.endsWith("/allocations")) sendJson(response, { data: path.includes("node-local") ? [{ id: "allocation-1", node_id: "node-local", session_id: "session_snapshot", tenant_id: "fixture-project", environment_id: "environment-1", state: "active", compute_phase: "running", initialization: "ready", diagnostic, created_at: now }] : [] });
   else if (request.method === "DELETE") {

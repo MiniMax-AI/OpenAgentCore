@@ -3,9 +3,13 @@ import type { ReadOptions } from "./types";
 
 export type SandboxDiagnostic = "" | "node_unavailable" | "resource_missing" | "compute_unconfirmed" | "ownership_mismatch" | "provider_unavailable";
 
+export type SandboxProvider = "docker" | "microsandbox";
+export interface InitializeSandboxDeployment { provider: SandboxProvider; core_url: string }
+
 export interface SandboxDeployment {
   installation_id: string;
-  provider: "docker" | "microsandbox";
+  provider: SandboxProvider | "";
+  core_url: string;
   maintenance: boolean;
   owner_epoch: number;
 }
@@ -64,6 +68,9 @@ export class SandboxProjectClient extends OpenAIAgentsClient {
 export class SandboxAdminClient extends OpenAIAgentsClient {
   retrieveDeployment(options?: ReadOptions): Promise<SandboxDeployment> {
     return this.request("/deployment", { signal: options?.signal }, undefined, false);
+  }
+  initializeDeployment(input: InitializeSandboxDeployment, options?: ReadOptions): Promise<SandboxDeployment> {
+    return this.request("/deployment", { method: "POST", body: JSON.stringify(input), signal: options?.signal }, undefined, false);
   }
   listNodes(options?: ReadOptions): Promise<{ data: SandboxNode[] }> {
     return this.request("/nodes", { signal: options?.signal }, undefined, false);

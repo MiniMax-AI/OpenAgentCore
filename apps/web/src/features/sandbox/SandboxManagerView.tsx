@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { SandboxAdminClient, type SandboxAllocation, type SandboxDeployment, type SandboxNode } from "@agents-core-web/agents-client";
-import { isValidDirectCoreBaseUrl } from "../../lib/connection";
+import { SandboxAdminClient, type InitializeSandboxDeployment, type SandboxAllocation, type SandboxDeployment, type SandboxNode } from "@agents-core-web/agents-client";
 import { sandboxAdminBaseUrl } from "./SandboxContext";
 import { SandboxDiagnostic } from "./SandboxDiagnostic";
 import { NodeHealth } from "./NodeHealth";
-import { enrollmentCommand } from "./enrollment-command";
+import { SandboxSetup } from "./SandboxSetup";
+import { NodeEnrollment } from "./NodeEnrollment";
 import "./SandboxManagerView.css";
 
 function message(error: unknown): string {
@@ -12,6 +12,10 @@ function message(error: unknown): string {
 }
 
 export function SandboxManagerView({ coreBaseUrl }: { coreBaseUrl: string }) {
+  return <SandboxAccess key={coreBaseUrl} coreBaseUrl={coreBaseUrl} />;
+}
+
+function SandboxAccess({ coreBaseUrl }: { coreBaseUrl: string }) {
   const [draft, setDraft] = useState("");
   const [credential, setCredential] = useState("");
   function connect(event: FormEvent) {
@@ -40,7 +44,8 @@ function SandboxManager({ coreBaseUrl, credential }: { coreBaseUrl: string; cred
   const [revision, setRevision] = useState(0);
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [enrollment, setEnrollment] = useState<{ token: string; expires_at: string } | null>(null);
-  const [coreUrl, setCoreUrl] = useState(() => coreBaseUrl.startsWith("http") ? coreBaseUrl.replace(/\/v1\/?$/, "") : "");
+  const initialCoreUrl = coreBaseUrl.startsWith("http") ? coreBaseUrl.replace(/\/v1\/?$/, "") : "";
+  const [setupNeedsRefresh, setSetupNeedsRefresh] = useState(false);
   const lifetime = useRef<AbortController | null>(null);
   useEffect(() => {
     const controller = new AbortController(); lifetime.current = controller;
@@ -52,11 +57,28 @@ function SandboxManager({ coreBaseUrl, credential }: { coreBaseUrl: string; cred
     void (async () => {
       const [deployment, nodes] = await Promise.all([client.retrieveDeployment({ signal: controller.signal }), client.listNodes({ signal: controller.signal })]);
       const allocations = await Promise.all(nodes.data.map((node) => client.listAllocations(node.id, { signal: controller.signal })));
-      if (!controller.signal.aborted) setSnapshot({ deployment, nodes: nodes.data, allocations: allocations.flatMap((page) => page.data) });
+      if (!controller.signal.aborted) {
+        setSnapshot({ deployment, nodes: nodes.data, allocations: allocations.flatMap((page) => page.data) });
+        setSetupNeedsRefresh(false);
+      }
     })().catch((error) => { if (!controller.signal.aborted) setError(message(error)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [client, revision]);
+  async function initialize(input: InitializeSandboxDeployment) {
+    const controller = lifetime.current;
+    if (!controller || busy || loading || setupNeedsRefresh) return;
+    setBusy(true); setError(null);
+    try {
+      const deployment = await client.initializeDeployment(input, { signal: controller.signal });
+      if (!controller.signal.aborted) setSnapshot({ deployment, nodes: [], allocations: [] });
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setSetupNeedsRefresh(true);
+        setError(`${message(error)} Refresh sandbox state to confirm whether setup was saved before submitting again.`);
+      }
+    } finally { if (!controller.signal.aborted) setBusy(false); }
+  }
   async function enroll() {
     const controller = lifetime.current;
     if (!controller || busy) return;
@@ -79,9 +101,10 @@ function SandboxManager({ coreBaseUrl, credential }: { coreBaseUrl: string; cred
     finally { if (!controller.signal.aborted) setBusy(false); }
   }
   return <div className="form-stack">
-    <div className="sandbox-toolbar"><button type="button" className="button" disabled={loading || busy} onClick={() => setRevision((v) => v + 1)}>Refresh sandbox state</button>{loading ? <span role="status">Loading sandbox state…</span> : null}</div>
+    <div className="sandbox-toolbar"><button type="button" className="button" disabled={loading || busy} onClick={() => setRevision((v) => v + 1)}>Refresh sandbox state</button>{loading ? <span role="status">Loading sandbox state…</span> : busy ? <span role="status">Saving sandbox change…</span> : null}</div>
     {error ? <p role="alert" className="sandbox-error">{error}{snapshot ? " Previously loaded state is shown below." : ""}</p> : null}
-    {snapshot ? <>
+    {snapshot && !snapshot.deployment.provider ? <SandboxSetup key={revision} initialCoreUrl={initialCoreUrl} disabled={busy || loading || setupNeedsRefresh || Boolean(error)} onInitialize={initialize} /> : null}
+    {snapshot?.deployment.provider ? <>
       <dl className="sandbox-summary">
         <div><dt>Provider</dt><dd>{snapshot.deployment.provider === "docker" ? "Docker" : "microsandbox"}</dd></div>
         <div><dt>Maintenance</dt><dd>{snapshot.deployment.maintenance ? "Enabled" : "Off"}</dd></div>
@@ -98,15 +121,7 @@ function SandboxManager({ coreBaseUrl, credential }: { coreBaseUrl: string; cred
           {snapshot.allocations.map((allocation) => <tr key={allocation.id}><td><code>{allocation.session_id}</code></td><td>{snapshot.nodes.find((node) => node.id === allocation.node_id)?.name ?? allocation.node_id}</td><td>{allocation.state}</td><td>{allocation.compute_phase}</td><td><SandboxDiagnostic diagnostic={allocation.diagnostic} />{!allocation.diagnostic ? "No reported issue" : null}</td></tr>)}
         </tbody></table></div> : <p>No sandbox allocations.</p>}
       </section>
-      <section className="form-stack sandbox-enrollment" aria-labelledby="sandbox-enrollment-heading"><h2 id="sandbox-enrollment-heading">Add node</h2>
-        <p>Install parsar-sandbox-node and prepare its {snapshot.deployment.provider} provider configuration on the target host. Adjust the absolute paths, node name and capacity in the command before running it.</p>
-        <label className="field"><span>Core URL reachable from the node</span><input type="url" placeholder="https://core.example" value={coreUrl} onChange={(event) => setCoreUrl(event.target.value)} disabled={busy || Boolean(enrollment)} /></label>
-        {!enrollment ? <button type="button" className="button primary" disabled={busy || !isValidDirectCoreBaseUrl(coreUrl)} onClick={() => void enroll()}>Generate enrollment command</button> : <>
-          <p>One-time enrollment token expires {new Date(enrollment.expires_at).toLocaleString()}. Save the command now; it is cleared when you leave this page.</p>
-          <label className="field"><span>One-time enrollment command</span><textarea readOnly rows={12} value={enrollmentCommand(enrollment.token, coreUrl.trim())} onFocus={(event) => event.target.select()} spellCheck={false} /></label>
-          <button type="button" className="button" onClick={() => setEnrollment(null)}>Clear enrollment command</button>
-        </>}
-      </section>
+      <NodeEnrollment deployment={snapshot.deployment} initialCoreUrl={initialCoreUrl} busy={busy || loading || Boolean(error)} enrollment={enrollment} onEnroll={enroll} onClear={() => setEnrollment(null)} />
     </> : null}
   </div>;
 }

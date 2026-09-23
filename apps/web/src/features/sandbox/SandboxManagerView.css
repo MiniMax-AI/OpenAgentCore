@@ -21,3 +21,6 @@
 
 .sandbox-diagnostic { max-width: 360px; white-space: normal; line-height: 1.5; margin: 6px 0; }
 .sandbox-diagnostic small { display: block; color: var(--fg-muted); margin-top: 4px; }
+
+.sandbox-steps { margin: 0; padding-left: 22px; color: var(--fg-muted); line-height: 1.6; overflow-wrap: anywhere; }
+.sandbox-steps li + li { margin-top: 10px; }

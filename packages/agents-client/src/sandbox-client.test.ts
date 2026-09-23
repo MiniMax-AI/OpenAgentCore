@@ -4,6 +4,32 @@ import { SandboxAdminClient, SandboxProjectClient } from "./sandbox-client";
 function response(value: unknown, status = 200) { return new Response(JSON.stringify(value), { status }); }
 
 describe("Core sandbox credential boundaries", () => {
+  it("initializes using only the explicit provider and origin with cancellation and admin credentials", async () => {
+    const deployment = { installation_id: "installation", provider: "docker", core_url: "https://core.example", maintenance: false, owner_epoch: 1 };
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response(deployment));
+    const admin = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", token: "admin-only", fetch });
+    const controller = new AbortController();
+    expect(await admin.initializeDeployment({ provider: "docker", core_url: "https://core.example" }, { signal: controller.signal })).toEqual(deployment);
+    const [url, init] = fetch.mock.calls[0]!;
+    expect(url).toBe("/core/v1/sandbox/deployment");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toEqual({ provider: "docker", core_url: "https://core.example" });
+    expect(init?.signal).toBe(controller.signal);
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer admin-only");
+    expect(new Headers(init?.headers).has("OpenAI-Beta")).toBe(false);
+  });
+  it.each([409, 503])("does not retry initialization after HTTP %s", async (status) => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: { message: "Setup failed", code: "sandbox_deployment_conflict" } }, status));
+    const admin = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", token: "admin", fetch });
+    await expect(admin.initializeDeployment({ provider: "microsandbox", core_url: "https://core.example" })).rejects.toThrow("Setup failed");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it("does not retry an uncertain initialization transport failure", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError("Connection lost"));
+    const admin = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", token: "admin", fetch });
+    await expect(admin.initializeDeployment({ provider: "docker", core_url: "https://core.example" })).rejects.toThrow("Connection lost");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
   it("uses the explicit admin credential and admin routes without a project beta header", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => response({ data: [] }));
     const admin = new SandboxAdminClient({ baseUrl: "https://core.example/core/v1/sandbox", token: "admin-only", fetch });
