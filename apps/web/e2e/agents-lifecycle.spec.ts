@@ -2661,8 +2661,9 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
   await cpuSeriesToggle.click();
   await expect(cpuSeriesToggle).toHaveAttribute("aria-pressed", "true");
 
-  const chartTimeline = dashboard.getByRole("region", { name: "Runtime chart timeline" });
-  const timelineStart = chartTimeline.getByRole("slider", { name: "Timeline start" });
+  await expect(dashboard.locator(".dashboard-runtime-timeline")).toHaveCount(4);
+  const chartTimeline = cpuCard.getByRole("region", { name: "CPU usage timeline" });
+  const timelineStart = chartTimeline.getByRole("slider", { name: "CPU usage timeline start" });
   const initialTimelineStart = Number(await timelineStart.getAttribute("aria-valuenow"));
   await timelineStart.scrollIntoViewIfNeeded();
   const startHandleBox = await timelineStart.boundingBox();
@@ -2675,12 +2676,11 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
   await page.mouse.up();
   await expect.poll(async () => Number(await timelineStart.getAttribute("aria-valuenow"))).toBeGreaterThan(initialTimelineStart);
   const resizedTimelineStart = Number(await timelineStart.getAttribute("aria-valuenow"));
-  const trendCharts = dashboard.locator(".dashboard-runtime-chart-frame svg");
-  await expect(trendCharts).toHaveCount(4);
-  for (const chart of await trendCharts.all()) {
-    await expect(chart).toHaveAttribute("data-view-start", String(resizedTimelineStart));
+  await expect(cpuChart).toHaveAttribute("data-view-start", String(resizedTimelineStart));
+  for (const chartName of ["Memory usage", "Compute uptime", "Token throughput"]) {
+    await expect(dashboard.getByLabel(`${chartName}: 3 live samples`)).toHaveAttribute("data-view-start", String(initialTimelineStart));
   }
-  const timelineWindow = chartTimeline.getByRole("button", { name: "Pan selected timeline window" });
+  const timelineWindow = chartTimeline.getByRole("button", { name: "Pan CPU usage timeline window" });
   const timelineWindowBox = await timelineWindow.boundingBox();
   expect(timelineWindowBox).not.toBeNull();
   expect(timelineWindowBox!.height).toBeGreaterThanOrEqual(24);
@@ -2834,15 +2834,13 @@ test("restores ClickHouse Runtime history after a Dashboard reload", async ({ pa
   await durableCpuChart.press("ArrowLeft");
   const durableCpuCard = durableCpuChart.locator("xpath=ancestor::section[contains(@class, 'dashboard-runtime-trend-card')]");
   await expect(durableCpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Unavailable");
-  const durableTimelineStart = dashboard.getByRole("slider", { name: "Timeline start" });
+  const durableTimelineStart = durableCpuCard.getByRole("slider", { name: "CPU usage timeline start" });
   const durableInitialStart = Number(await durableTimelineStart.getAttribute("aria-valuenow"));
   await durableTimelineStart.focus();
   await durableTimelineStart.press("ArrowRight");
   await expect.poll(async () => Number(await durableTimelineStart.getAttribute("aria-valuenow"))).toBeGreaterThan(durableInitialStart);
   const durableViewStart = await durableTimelineStart.getAttribute("aria-valuenow");
-  for (const chart of await dashboard.locator(".dashboard-runtime-chart-frame svg").all()) {
-    await expect(chart).toHaveAttribute("data-view-start", durableViewStart!);
-  }
+  await expect(durableCpuChart).toHaveAttribute("data-view-start", durableViewStart!);
 
   await page.reload();
   await expect(dashboard.getByRole("group", { name: "Runtime trend source" })).toHaveCount(0);

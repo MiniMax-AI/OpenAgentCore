@@ -1466,11 +1466,11 @@
 
 .dashboard-runtime-timeline {
   min-width: 0;
-  padding: 12px 15px 10px;
-  grid-column: 1 / -1;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 9px;
+  padding: 10px 15px 9px;
+  margin: 2px -15px -10px;
+  background: color-mix(in srgb, var(--surface-subtle) 54%, var(--surface));
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 8px 8px;
 }
 
 .dashboard-runtime-timeline > header,
@@ -1490,7 +1490,7 @@
 }
 
 .dashboard-runtime-timeline > header strong {
-  font-size: 11px;
+  font-size: 9px;
 }
 
 .dashboard-runtime-timeline > header span,
@@ -1526,7 +1526,7 @@
 
 .dashboard-runtime-timeline-track {
   height: 36px;
-  margin: 8px 7px 0;
+  margin: 6px 7px 0;
   position: relative;
   cursor: pointer;
   touch-action: none;

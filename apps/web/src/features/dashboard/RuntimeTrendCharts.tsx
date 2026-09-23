@@ -123,11 +123,13 @@ function TimeRangeNavigator({
   value,
   onChange,
   source,
+  title,
 }: {
   domain: TimeWindow;
   value: TimeWindow;
   onChange: (next: TimeWindow) => void;
   source: RuntimeTrendSource;
+  title: string;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<TimelineDrag | null>(null);
@@ -207,11 +209,11 @@ function TimeRangeNavigator({
   const fullRange = value.start <= domain.start && value.end >= domain.end;
 
   return (
-    <section className="dashboard-runtime-timeline" aria-label="Runtime chart timeline">
+    <section className="dashboard-runtime-timeline" aria-label={`${title} timeline`}>
       <header>
         <div>
-          <strong>Timeline</strong>
-          <span>Drag either handle to zoom · drag the selected window to pan</span>
+          <strong>Time range</strong>
+          <span>Drag handles to zoom · window to pan</span>
         </div>
         <div>
           <time dateTime={new Date(value.start).toISOString()}>{timeLabel(value.start)}</time>
@@ -237,7 +239,7 @@ function TimeRangeNavigator({
           type="button"
           className="dashboard-runtime-timeline-selection"
           style={{ left: `${startPercent}%`, width: `${Math.max(0, endPercent - startPercent)}%` }}
-          aria-label="Pan selected timeline window"
+          aria-label={`Pan ${title} timeline window`}
           title="Drag to pan; use arrow keys for precise movement"
           disabled={fullRange}
           onKeyDown={panWindow}
@@ -248,7 +250,7 @@ function TimeRangeNavigator({
           className="dashboard-runtime-timeline-handle dashboard-runtime-timeline-handle-start"
           style={{ left: `${startPercent}%` }}
           role="slider"
-          aria-label="Timeline start"
+          aria-label={`${title} timeline start`}
           aria-valuemin={domain.start}
           aria-valuemax={value.end - minimumWindow}
           aria-valuenow={Math.round(value.start)}
@@ -261,7 +263,7 @@ function TimeRangeNavigator({
           className="dashboard-runtime-timeline-handle dashboard-runtime-timeline-handle-end"
           style={{ left: `${endPercent}%` }}
           role="slider"
-          aria-label="Timeline end"
+          aria-label={`${title} timeline end`}
           aria-valuemin={value.start + minimumWindow}
           aria-valuemax={domain.end}
           aria-valuenow={Math.round(value.end)}
@@ -287,7 +289,6 @@ function TrendChart({
   rangeStart,
   rangeEnd,
   source,
-  viewRange,
   bands = [],
   ticks = [1, .66, .33, 0],
   emptyMessage = "Collecting live samples",
@@ -302,7 +303,6 @@ function TrendChart({
   rangeStart: number;
   rangeEnd: number;
   source: RuntimeTrendSource;
-  viewRange: TimeWindow;
   bands?: TrendBand[];
   ticks?: number[];
   emptyMessage?: string;
@@ -315,6 +315,9 @@ function TrendChart({
   const [hoveredAt, setHoveredAt] = useState<number | null>(null);
   const [pinnedAt, setPinnedAt] = useState<number | null>(null);
   const [svgSize, setSvgSize] = useState({ width: WIDTH, height: HEIGHT });
+  const domain = useMemo(() => ({ start: rangeStart, end: Math.max(rangeStart + 1, rangeEnd) }), [rangeEnd, rangeStart]);
+  const [viewRange, setViewRange] = useState<TimeWindow>(domain);
+  const previousDomain = useRef(domain);
   const start = Math.max(rangeStart, viewRange.start);
   const end = Math.min(Math.max(rangeStart + 1, rangeEnd), viewRange.end);
   const range = Math.max(1, end - start);
@@ -358,6 +361,20 @@ function TrendChart({
     observer.observe(svg);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    const previous = previousDomain.current;
+    setViewRange((current) => {
+      const tolerance = Math.max(1_000, (previous.end - previous.start) / 100);
+      const wasFullRange = current.start <= previous.start + tolerance && current.end >= previous.end - tolerance;
+      if (wasFullRange) return domain;
+      const width = Math.min(current.end - current.start, domain.end - domain.start);
+      const wasFollowing = current.end >= previous.end - tolerance;
+      const nextEnd = wasFollowing ? domain.end : clamp(current.end, domain.start + width, domain.end);
+      return { start: clamp(nextEnd - width, domain.start, domain.end - width), end: nextEnd };
+    });
+    previousDomain.current = domain;
+  }, [domain]);
 
   useEffect(() => {
     if (hoveredAt !== null && (hoveredAt < start || hoveredAt > end)) setHoveredAt(null);
@@ -507,6 +524,7 @@ function TrendChart({
         )}
         {!hasLine ? <div className="dashboard-runtime-chart-collecting"><strong>{visibleSeries.length === 0 ? "All series hidden" : emptyMessage}</strong><span>{visibleSeries.length === 0 ? "Use the legend to show a series" : emptyDetail ?? `${validPoints}/2 valid points · ${visibleSamples.length} snapshots · no history is synthesized`}</span></div> : null}
       </div>
+      <TimeRangeNavigator domain={domain} value={viewRange} onChange={setViewRange} source={source} title={title} />
       <table className="dashboard-runtime-trend-accessible">
         <caption>{hasLine
           ? `${title} ${source} trend available`
@@ -595,32 +613,14 @@ export function RuntimeTrendCharts({
   const tokenMaximum = Math.max(1, ...finite(charts.tokens.flatMap((series) => series.points.map((point) => point.value))));
   const newest = rangeEnd ?? samples.at(-1)?.sampledAt ?? Date.now();
   const oldest = rangeStart ?? samples[0]?.sampledAt ?? newest - 60 * 60 * 1_000;
-  const domain = useMemo(() => ({ start: oldest, end: Math.max(oldest + 1, newest) }), [oldest, newest]);
-  const [viewRange, setViewRange] = useState<TimeWindow>(domain);
-  const previousDomain = useRef(domain);
   const durable = source === "durable";
-
-  useEffect(() => {
-    const previous = previousDomain.current;
-    setViewRange((current) => {
-      const tolerance = Math.max(1_000, (previous.end - previous.start) / 100);
-      const wasFullRange = current.start <= previous.start + tolerance && current.end >= previous.end - tolerance;
-      if (wasFullRange) return domain;
-      const width = Math.min(current.end - current.start, domain.end - domain.start);
-      const wasFollowing = current.end >= previous.end - tolerance;
-      const end = wasFollowing ? domain.end : clamp(current.end, domain.start + width, domain.end);
-      return { start: clamp(end - width, domain.start, domain.end - width), end };
-    });
-    previousDomain.current = domain;
-  }, [domain]);
 
   return (
     <div className="dashboard-runtime-trend-grid" aria-label={durable ? "Runtime durable-history charts" : "Runtime live-window charts"}>
-      <TrendChart title="CPU usage" subtitle={durable ? "bucketed cumulative-delta utilization · durable history" : "reported or cumulative-delta utilization · live window"} samples={samples} series={charts.cpu} maximum={cpuMaximum} formatValue={(value) => `${Math.round(value)}%`} rangeStart={oldest} rangeEnd={newest} viewRange={viewRange} source={source} bands={[{ from: 0, to: 30, tone: "safe" }, { from: 30, to: 70, tone: "warning" }, { from: 70, to: 100, tone: "danger" }]} ticks={[1, .7, .3, 0]} emptyMessage={durable ? "No retained CPU samples" : undefined} />
-      <TrendChart title="Memory usage" subtitle={durable ? "complete target aggregate / configured limit · durable history" : "working set / configured limit · live window"} samples={samples} series={charts.memory} maximum={memoryMaximum} formatValue={(value) => formatDashboardBytes(Math.round(value))} rangeStart={oldest} rangeEnd={newest} viewRange={viewRange} source={source} emptyMessage={durable ? "No complete retained memory samples" : undefined} />
-      <TrendChart title="Compute uptime" subtitle={durable ? "provider started_at → bucket observation · incarnation-fenced" : "provider started_at → observed_at · current incarnation"} samples={samples} series={charts.uptime} maximum={uptimeMaximum} formatValue={(value) => formatDashboardDuration(value)} rangeStart={oldest} rangeEnd={newest} viewRange={viewRange} source={source} emptyMessage={durable ? "No retained uptime samples" : undefined} />
-      <TrendChart title="Token throughput" subtitle={durable ? "canonical Session Usage · not retained in Runtime history" : "Session Usage deltas · missing usage excluded"} samples={samples} series={charts.tokens} maximum={tokenMaximum} formatValue={(value) => `${formatDashboardTokens(Math.round(value))}/min`} rangeStart={oldest} rangeEnd={newest} viewRange={viewRange} source={source} emptyMessage={durable ? "Live-only metric" : undefined} emptyDetail={durable ? "Runtime history does not duplicate canonical token usage" : undefined} />
-      <TimeRangeNavigator domain={domain} value={viewRange} onChange={setViewRange} source={source} />
+      <TrendChart title="CPU usage" subtitle={durable ? "bucketed cumulative-delta utilization · durable history" : "reported or cumulative-delta utilization · live window"} samples={samples} series={charts.cpu} maximum={cpuMaximum} formatValue={(value) => `${Math.round(value)}%`} rangeStart={oldest} rangeEnd={newest} source={source} bands={[{ from: 0, to: 30, tone: "safe" }, { from: 30, to: 70, tone: "warning" }, { from: 70, to: 100, tone: "danger" }]} ticks={[1, .7, .3, 0]} emptyMessage={durable ? "No retained CPU samples" : undefined} />
+      <TrendChart title="Memory usage" subtitle={durable ? "complete target aggregate / configured limit · durable history" : "working set / configured limit · live window"} samples={samples} series={charts.memory} maximum={memoryMaximum} formatValue={(value) => formatDashboardBytes(Math.round(value))} rangeStart={oldest} rangeEnd={newest} source={source} emptyMessage={durable ? "No complete retained memory samples" : undefined} />
+      <TrendChart title="Compute uptime" subtitle={durable ? "provider started_at → bucket observation · incarnation-fenced" : "provider started_at → observed_at · current incarnation"} samples={samples} series={charts.uptime} maximum={uptimeMaximum} formatValue={(value) => formatDashboardDuration(value)} rangeStart={oldest} rangeEnd={newest} source={source} emptyMessage={durable ? "No retained uptime samples" : undefined} />
+      <TrendChart title="Token throughput" subtitle={durable ? "canonical Session Usage · not retained in Runtime history" : "Session Usage deltas · missing usage excluded"} samples={samples} series={charts.tokens} maximum={tokenMaximum} formatValue={(value) => `${formatDashboardTokens(Math.round(value))}/min`} rangeStart={oldest} rangeEnd={newest} source={source} emptyMessage={durable ? "Live-only metric" : undefined} emptyDetail={durable ? "Runtime history does not duplicate canonical token usage" : undefined} />
     </div>
   );
 }

@@ -44,7 +44,7 @@ describe("Runtime live-window chart accessibility", () => {
     expect(html).not.toContain("Collecting live samples");
   });
 
-  it("exposes interactive series, point selection, and a draggable shared timeline", () => {
+  it("exposes interactive series, point selection, and a draggable timeline below every chart", () => {
     const html = renderToStaticMarkup(
       <RuntimeTrendCharts samples={[sample(60_000, .25), sample(120_000, .5)]} />,
     );
@@ -52,10 +52,14 @@ describe("Runtime live-window chart accessibility", () => {
     expect(html).toContain('role="application"');
     expect(html).toContain("Move the pointer over the plot for exact values. Click to pin a time.");
     expect(html).toContain('aria-label="Hide Runtime worker series"');
-    expect(html).toContain('aria-label="Timeline start"');
-    expect(html).toContain('aria-label="Timeline end"');
-    expect(html).toContain("Drag either handle to zoom · drag the selected window to pan");
-    expect(html).toContain('aria-label="Pan selected timeline window"');
+    expect(html.match(/class="dashboard-runtime-timeline"/g)).toHaveLength(4);
+    for (const title of ["CPU usage", "Memory usage", "Compute uptime", "Token throughput"]) {
+      expect(html).toContain(`aria-label="${title} timeline"`);
+      expect(html).toContain(`aria-label="${title} timeline start"`);
+      expect(html).toContain(`aria-label="${title} timeline end"`);
+      expect(html).toContain(`aria-label="Pan ${title} timeline window"`);
+    }
+    expect(html).toContain("Drag handles to zoom · window to pan");
   });
 
   it("maps pointer positions through horizontal SVG letterboxing", () => {
