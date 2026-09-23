@@ -915,21 +915,25 @@ Decisions:
   body, not copies: objects with more than 16 keys use an open-addressing set of
   8-byte slots, a position and 32 hash bits that skip comparing unequal keys. A
   body of many short keys allocates about twice its size in the gate. Bodies are
-  read into a doubling buffer, about twice their size in total.
+  read into a doubling buffer, which allocates two to four times the body in
+  total (four near the route limit), against 4.4 to 6.1 times for `io.ReadAll`.
 - Member names match exactly on every gated route. encoding/json would match a
   case variant such as `Metadata`, `Input` or a nested `Role` to the field and
   let the last copy win; such a key is now an unknown member at any depth,
-  rejected with the route's existing unknown-member error before any write. A
-  walk over the body bytes checks the member names before the route's decoder
-  runs and stops at the first unknown or case-variant key, and the Session
-  metadata check reads only the `metadata` member. A whole Session create of
-  16 MiB of unknown keys now allocates about 96 MiB in total and events about
-  six times a 1 MiB body, instead of 482 MiB and 9 MiB before this batch, when
-  the decoder formatted an error for every unknown key.
+  rejected with the route's existing unknown-member error before any write.
   Agent configuration already did this. On Agent create, a body with `Metadata`
   and no `model` still reports the unknown member first, while the official
   service reported the missing `model`; the official order between several
   errors in one body remains unaligned.
+- A walk over the body bytes checks member names before a decoder runs and stops
+  at the first unknown or case-variant key, and the Session metadata check reads
+  only the `metadata` member. For unknown top-level keys this makes rejection
+  cheap: a whole 16 MiB Session create allocates about 96 MiB and events about
+  six times a 1 MiB body, instead of 482 MiB and 9 MiB before this batch, when
+  the decoder formatted an error for every unknown key. Unknown keys nested under
+  `agent` or `environment` still pass the existing object decoding of
+  `decodeInputObject` and stay linear, at or below main: about 779 and 871 MiB
+  for 16 MiB bodies, against 850 and 889 MiB on main.
 - Invalid UTF-8 is checked before JSON syntax; the official order for a body with
   both faults was not observed.
 - Not gated: DELETE routes, which keep their empty-body rule, the multipart Files
