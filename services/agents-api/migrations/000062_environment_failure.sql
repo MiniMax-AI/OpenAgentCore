@@ -12,6 +12,15 @@ ALTER TABLE environments
     );
 
 -- +goose Down
+LOCK TABLE environments IN ACCESS EXCLUSIVE MODE;
+-- +goose StatementBegin
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM environments WHERE failure_reason IS NOT NULL) THEN
+        RAISE EXCEPTION 'Cannot remove recorded hosted provisioning failures';
+    END IF;
+END $$;
+-- +goose StatementEnd
 ALTER TABLE environments
     DROP CONSTRAINT environment_failure_recorded,
     DROP COLUMN failed_at,
