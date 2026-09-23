@@ -2631,10 +2631,6 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
       metrics: [],
     }),
   }));
-  await page.goto("/");
-  const dashboard = page.locator(".dashboard-page");
-  await expect(dashboard.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
-
   await page.route("**/v1/agents/sessions*", async (route) => {
     if (new URL(route.request().url()).pathname !== "/v1/agents/sessions") return route.fallback();
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(list(runtimeSessions)) });
@@ -2677,8 +2673,11 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
     });
   });
 
+  await page.goto("/");
+  const dashboard = page.locator(".dashboard-page");
+  await expect(dashboard.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
   const refresh = dashboard.getByRole("button", { name: "Refresh Dashboard snapshot" });
-  await refresh.click();
+  await expect(dashboard.locator(".dashboard-runtime-sample-count")).toContainText("1 sample ·");
   await expect(dashboard.getByRole("heading", { name: "CPU usage" })).toBeVisible();
   await expect(dashboard.getByRole("heading", { name: "Memory usage" })).toBeVisible();
   await expect(dashboard.getByRole("heading", { name: "Compute uptime" })).toBeVisible();
@@ -2688,9 +2687,8 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
   await expect(liveRange.getByRole("button", { name: "1h" })).toHaveAttribute("aria-pressed", "true");
   await liveRange.getByRole("button", { name: "15m" }).click();
   await expect(liveRange.getByRole("button", { name: "15m" })).toHaveAttribute("aria-pressed", "true");
-  await page.waitForTimeout(20);
   await refresh.click();
-  await page.waitForTimeout(20);
+  await expect(dashboard.getByLabel("CPU usage: 2 live samples")).toBeVisible();
   await refresh.click();
   await expect(dashboard.getByLabel("CPU usage: 3 live samples")).toBeVisible();
   await expect(dashboard.getByLabel("Memory usage: 3 live samples")).toBeVisible();
