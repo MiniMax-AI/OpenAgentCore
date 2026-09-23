@@ -48,6 +48,13 @@ jobs:
           revision="$(git rev-parse HEAD)"
           if [[ -n "$REQUESTED_REF" && "$REQUESTED_REF" != "$revision" ]]; then exit 1; fi
           echo "revision=$revision" >> "$GITHUB_OUTPUT"
+      - name: Reserve disk space for distribution archives
+        run: |
+          # The hosted runner needs room for Docker images, tar exports and the
+          # microsandbox import. This job does not use these preinstalled SDKs.
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /usr/local/.ghcup
+          df -h /
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
