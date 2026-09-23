@@ -57,13 +57,15 @@ to recover a lost creation response. Session metadata updates require a supplied
 metadata field, with null/empty clearing it. Validate an empty update before any
 resource lookup, after authentication.
 
-List order parsing distinguishes omission from an explicit empty value. Reuse the
-shared parser and error serializer, preserving the observed Beta, Files and Skills
-error fields rather than applying one error code to every resource. Qualification
-of one query error does not authorize changing page bounds, cursor ownership or
-parent lookup order. Record uncertain range/lookup behavior separately; do not
-reproduce observed upstream server failures as compatibility behavior. See
-`contracts/agents-api/list-query-semantics.md` for the bounded evidence.
+List order parsing distinguishes omission from an explicit empty value. Shared-parser
+lists and single-resource routes ignore unknown query keys; a repeated supported
+list key still rejects. Reuse the shared parser and error serializer, preserving the observed
+Beta, Files and Skills error fields and per-family limit bounds rather than applying
+one policy to every resource. Change page bounds, cursor ownership or parent lookup
+order only with owned evidence for that family. Record uncertain range/lookup
+behavior separately; do not reproduce observed upstream server failures as
+compatibility behavior. See `contracts/agents-api/list-query-semantics.md` for the
+bounded evidence.
 
 Keep runtime state, test artifacts and build output under `~/.parsar/`. Require
 absolute user-supplied working directories. Keep credentials out of source and

@@ -2031,9 +2031,9 @@ paths:
   /agents:
     get:
       description: Lists only the authenticated tenant's saved Agents, independently
-        of Sessions. Positive int64 limits are accepted; each page returns at most
-        100 resources with continuation. The local default is 20; exact upstream default/cap,
-        empty cursor fields and error conformance remain unverified.
+        of Sessions. Limit 0 is treated as 1 and larger limits as 100, as observed
+        on the hosted service. The local default is 20; exact upstream default/cap
+        and empty cursor fields remain unverified.
       parameters:
       - description: agents=v1
         in: header
@@ -2044,9 +2044,10 @@ paths:
         in: query
         name: after
         type: string
-      - description: Maximum requested resources; pages contain at most 100
+      - default: 20
+        description: Page size; 0 is treated as 1 and values above 100 as 100
         in: query
-        minimum: 1
+        minimum: 0
         name: limit
         type: integer
       - default: desc
@@ -2490,9 +2491,9 @@ paths:
   /agents/environments/templates:
     get:
       description: Lists tenant-owned safe template metadata in creation order with
-        ID tie-breaking. Defaults to limit 20 and descending order; limit must be
-        1–100. Foreign and missing cursors reject identically. Concurrent-page and
-        exact hosted error behavior remain unverified.
+        ID tie-breaking. Defaults to limit 20 and descending order; limit 0 is treated
+        as 1 and larger limits as 100. Foreign and missing cursors reject identically.
+        Concurrent-page and exact hosted error behavior remain unverified.
       parameters:
       - description: agents=v1
         in: header
@@ -2504,10 +2505,9 @@ paths:
         name: after
         type: string
       - default: 20
-        description: Page size
+        description: Page size; 0 is treated as 1 and values above 100 as 100
         in: query
-        maximum: 100
-        minimum: 1
+        minimum: 0
         name: limit
         type: integer
       - default: desc
@@ -2768,10 +2768,9 @@ paths:
         name: after
         type: string
       - default: 20
-        description: Page size
+        description: Page size; 0 is treated as 1 and values above 100 as 100
         in: query
-        maximum: 100
-        minimum: 1
+        minimum: 0
         name: limit
         type: integer
       - default: desc
@@ -3499,10 +3498,9 @@ paths:
         name: after
         type: string
       - default: 20
-        description: Page size
+        description: Page size; 0 is treated as 1 and values above 100 as 100
         in: query
-        maximum: 100
-        minimum: 1
+        minimum: 0
         name: limit
         type: integer
       - default: desc
@@ -4056,9 +4054,9 @@ paths:
       description: Lists project-owned Files without reading their bodies. The limit
         defaults to 10000 and must be 1–10000. Equal creation times use ID ordering.
         Purpose validation precedes cursor lookup; current storage contains only user_data.
-        An explicit empty purpose retains the local exact-filter behavior. Hosted
-        positive filtering, default order and concurrent-page behavior remain unverified.
-        No Beta header is required.
+        An explicit empty purpose is treated as omitted. Repeated purpose values remain
+        rejected. Hosted positive filtering, default order and concurrent-page behavior
+        remain unverified. No Beta header is required.
       parameters:
       - description: Last File ID from the previous page
         in: query
@@ -4299,14 +4297,18 @@ paths:
   /skills:
     get:
       description: Lists tenant-owned metadata in timestamp order. Default page size
-        20, maximum 100; exact hosted defaults and limit-zero semantics remain unverified.
+        20, maximum 100. Limit 0 returns an empty page whose has_more reports whether
+        any Skill follows the cursor; exact hosted defaults remain unverified.
       parameters:
       - description: Skill resource cursor
         in: query
         name: after
         type: string
-      - description: Page size
+      - default: 20
+        description: Page size; 0 returns an empty page
         in: query
+        maximum: 100
+        minimum: 0
         name: limit
         type: integer
       - description: Creation order; omit for descending, explicit empty values are
@@ -4451,7 +4453,8 @@ paths:
   /skills/{skill_id}/versions:
     get:
       description: Orders by version number; after identifies a version resource,
-        not a version number. No contents are decrypted.
+        not a version number. No contents are decrypted. Limit 0 returns an empty
+        page whose has_more reports whether any version follows the cursor.
       parameters:
       - description: Skill ID
         in: path
@@ -4462,8 +4465,11 @@ paths:
         in: query
         name: after
         type: string
-      - description: Page size
+      - default: 20
+        description: Page size; 0 returns an empty page
         in: query
+        maximum: 100
+        minimum: 0
         name: limit
         type: integer
       - description: Version order; omit for descending, explicit empty values are
@@ -4595,8 +4601,8 @@ paths:
   /vaults:
     get:
       description: Lists project-owned Vaults independently of execution. Includes
-        active and archived records by default. Status accepts a scalar or the SDK's
-        status[] array; mixed encodings and repeated scalars are rejected locally.
+        active and archived records by default. Status accepts a scalar, the SDK's
+        status[] array or both, filtering by their union; a repeated scalar is rejected.
         Limits default to 20 and clamp to 1–100. Equal creation times use ID ordering;
         exact hosted errors and concurrent-page behavior remain unverified. Archive/delete
         lifecycle is not implemented.
@@ -4632,7 +4638,7 @@ paths:
         name: status
         type: string
       - collectionFormat: multi
-        description: Array status filter; cannot be combined with status
+        description: Array status filter; combined with status as a union
         in: query
         items:
           enum:
@@ -4817,8 +4823,8 @@ paths:
     get:
       description: Lists only metadata from the authenticated project's requested
         Vault, without decryption or execution. Includes active and archived Credentials
-        by default, independently of Vault status. Status accepts a scalar or SDK
-        status[] array; mixed encodings and repeated scalars are rejected locally.
+        by default, independently of Vault status. Status accepts a scalar, the SDK
+        status[] array or both, filtering by their union; a repeated scalar is rejected.
         Limits default to 20 and clamp to 1–100. Equal creation times use ID ordering.
         Hosted errors, concurrent-page behavior and archive/delete lifecycle remain
         unverified or unimplemented.
@@ -4859,7 +4865,7 @@ paths:
         name: status
         type: string
       - collectionFormat: multi
-        description: Array status filter; cannot be combined with status
+        description: Array status filter; combined with status as a union
         in: query
         items:
           enum:

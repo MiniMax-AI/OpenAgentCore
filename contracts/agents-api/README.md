@@ -251,8 +251,9 @@ upgrade the protocol.
   classification is stored, never returned; existing/new Vaults default active.
   Synthetic archived fixtures prove read/filter behavior only. No public archive
   writer or delete-to-archive mapping is implemented. Equal creation times use ID
-  order locally; repeated scalars and mixed status encodings are rejected. Exact
-  hosted query errors and pagination over changing data remain unverified.
+  order locally. A repeated scalar status is rejected; a scalar combined with
+  `status[]` filters by their union. Other hosted query errors and pagination over
+  changing data remain unverified.
 - `DELETE /vaults/{vault_id}` returns `id`, `deleted: true` and `object: vault.deleted`
   after project-scoped parent removal and atomic cascade of all stored Credentials.
   It needs no encryption key or execution connection. Local parent/child reads,
