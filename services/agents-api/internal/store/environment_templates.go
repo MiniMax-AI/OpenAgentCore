@@ -130,10 +130,8 @@ func (s *Store) UpdateEnvironmentTemplate(ctx context.Context, tenantID, templat
 	if err != nil {
 		return EnvironmentTemplate{}, err
 	}
-	id, err := parseID(templateID)
-	if err != nil {
-		return EnvironmentTemplate{}, ErrNotFound
-	}
+	// Sealing runs before the update lookup, so a malformed ID must take the same path.
+	id := parsePathID(templateID)
 	var name pgtype.Text
 	if in.Name != nil {
 		name = pgtype.Text{String: *in.Name, Valid: true}

@@ -48,7 +48,7 @@ type TurnTransition struct {
 }
 
 func (s *Store) GetTurn(ctx context.Context, tenantID, sessionID, turnID string) (Turn, error) {
-	params, err := turnLookup(tenantID, sessionID, turnID)
+	params, err := publicTurnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return Turn{}, err
 	}
@@ -165,6 +165,13 @@ func turnLookup(tenantID, sessionID, turnID string) (sqlc.GetTurnParams, error) 
 	}
 	p.ID, err = parseID(turnID)
 	return p, err
+}
+
+// publicTurnLookup resolves caller-supplied path identifiers for a Turn or a
+// Turn-scoped resource. Unparsable values are indistinguishable from missing ones.
+func publicTurnLookup(tenantID, sessionID, turnID string) (sqlc.GetTurnParams, error) {
+	tenant, err := parseID(tenantID)
+	return sqlc.GetTurnParams{TenantID: tenant, SessionID: parsePathID(sessionID), ID: parsePathID(turnID)}, err
 }
 
 func turnFromRow(row sqlc.Turn) Turn {

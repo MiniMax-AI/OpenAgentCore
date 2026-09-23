@@ -22,10 +22,7 @@ import (
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /vaults/{vault_id}/credentials [get]
 func (h *Handler) listCredentials(w http.ResponseWriter, r *http.Request) {
-	vaultID, ok := credentialResourceID(w, r, "vault_id")
-	if !ok {
-		return
-	}
+	vaultID := credentialPathID(r, "vault_id")
 	options, statuses, ok := readVaultPage(w, r)
 	if !ok {
 		return

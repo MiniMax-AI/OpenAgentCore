@@ -15,10 +15,7 @@ func (s *Store) UpdateSessionMetadata(ctx context.Context, tenantID, sessionID s
 	if err != nil {
 		return Session{}, err
 	}
-	id, err := parseID(sessionID)
-	if err != nil {
-		return Session{}, err
-	}
+	id := parsePathID(sessionID)
 	encoded, err := encodeMetadata(metadata)
 	if err != nil {
 		return Session{}, err

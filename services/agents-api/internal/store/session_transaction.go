@@ -25,9 +25,12 @@ func (s *Store) withSessionState(ctx context.Context, tenantID, sessionID string
 	if err != nil {
 		return err
 	}
-	id, err := parseID(sessionID)
-	if err != nil {
-		return err
+	// Public paths resolve malformed IDs as missing; internal callers keep parseID.
+	id := parsePathID(sessionID)
+	if !public {
+		if id, err = parseID(sessionID); err != nil {
+			return err
+		}
 	}
 	begin := func(ctx context.Context, apply func(pgx.Tx) error) error {
 		return pgx.BeginFunc(ctx, s.pool, apply)

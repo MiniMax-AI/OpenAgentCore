@@ -34,8 +34,8 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	id := chi.URLParam(r, "agent_id")
 	if !validAgentID(id) {
-		writeStoreError(w, r, store.ErrNotFound)
-		return
+		// Storage validation precedes the lookup; follow the missing-Agent path.
+		id = store.UnknownResourceID
 	}
 	updated, err := h.store.UpdateAgent(r.Context(), tenantID(r), id, input)
 	if err != nil {

@@ -82,8 +82,11 @@ def main():
                 pass
             else:
                 raise AssertionError("absent Environment was exposed through the SDK")
-        for malformed in ("invalid", str(uuid.UUID(int=0))):
-            rejected(base + "/v1/agents/environments/" + malformed, 400, "invalid_request")
+        # Malformed identifiers cannot be distinguished from missing Environments.
+        missing = http.get(base + "/v1/agents/environments/" + str(uuid.uuid4()), headers=headers)
+        for malformed in ("invalid", str(uuid.UUID(int=0)), "env_" + uuid.uuid4().hex):
+            rejected(base + "/v1/agents/environments/" + malformed, 404, "not_found_error")
+            assert http.get(base + "/v1/agents/environments/" + malformed, headers=headers).content == missing.content
         rejected(endpoint, 404, "not_found_error", headers | {"Authorization": "Bearer " + settings["foreign_token"]})
         for authorization in (None, "Bearer invalid", "Bearer " + settings["executor_token"]):
             request_headers = {"OpenAI-Beta": "agents=v1"}

@@ -82,10 +82,7 @@ func (s *Store) SessionEventCursor(ctx context.Context, tenantID, sessionID stri
 	if err != nil {
 		return 0, err
 	}
-	id, err := parseID(sessionID)
-	if err != nil {
-		return 0, err
-	}
+	id := parsePathID(sessionID)
 	cursor, err := s.queries.SessionEventCursor(ctx, sqlc.SessionEventCursorParams{TenantID: tenant, ID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, ErrNotFound

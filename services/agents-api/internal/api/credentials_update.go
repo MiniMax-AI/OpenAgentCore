@@ -22,14 +22,7 @@ import (
 // @Failure 400,401,404,413,500,503 {object} v1.ErrorResponse
 // @Router /vaults/{vault_id}/credentials/{credential_id} [post]
 func (h *Handler) updateCredential(w http.ResponseWriter, r *http.Request) {
-	vaultID, ok := credentialResourceID(w, r, "vault_id")
-	if !ok {
-		return
-	}
-	id, ok := credentialResourceID(w, r, "credential_id")
-	if !ok {
-		return
-	}
+	vaultID, id := credentialPathID(r, "vault_id"), credentialPathID(r, "credential_id")
 	raw, ok := readJSONBody(w, r)
 	if !ok {
 		return

@@ -34,10 +34,7 @@ type CredentialStore interface {
 // @Failure 400,401,404,413,500,503 {object} v1.ErrorResponse
 // @Router /vaults/{vault_id}/credentials [post]
 func (h *Handler) createCredential(w http.ResponseWriter, r *http.Request) {
-	vaultID, ok := credentialResourceID(w, r, "vault_id")
-	if !ok {
-		return
-	}
+	vaultID := credentialPathID(r, "vault_id")
 	raw, ok := readJSONBody(w, r)
 	if !ok {
 		return
@@ -110,6 +107,8 @@ func (h *Handler) getCredential(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, credentialResponse(credential))
 }
 
+// credentialResourceID rejects a malformed Vault or Credential identifier with
+// the not-found response. Use it only where the lookup is the next check.
 func credentialResourceID(w http.ResponseWriter, r *http.Request, param string) (string, bool) {
 	id, err := uuid.Parse(chi.URLParam(r, param))
 	if err != nil || id == uuid.Nil {
@@ -117,6 +116,16 @@ func credentialResourceID(w http.ResponseWriter, r *http.Request, param string) 
 		return "", false
 	}
 	return id.String(), true
+}
+
+// credentialPathID resolves a malformed identifier to one that never exists,
+// so body, query and storage checks run exactly as for a missing identifier.
+func credentialPathID(r *http.Request, param string) string {
+	id, err := uuid.Parse(chi.URLParam(r, param))
+	if err != nil || id == uuid.Nil {
+		return store.UnknownResourceID
+	}
+	return id.String()
 }
 
 func credentialResponse(c store.Credential) v1.Credential {

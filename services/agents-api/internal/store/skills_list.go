@@ -53,7 +53,7 @@ func (s *Store) ListSkills(ctx context.Context, tenantID, after string, limit in
 }
 
 func (s *Store) ListSkillVersions(ctx context.Context, tenantID, skillID, after string, limit int, ascending bool) (SkillVersionPage, error) {
-	tenant, id, err := skillIDs(tenantID, skillID)
+	tenant, id, err := skillPathIDs(tenantID, skillID)
 	if err != nil {
 		return SkillVersionPage{}, err
 	}

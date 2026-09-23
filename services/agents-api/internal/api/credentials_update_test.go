@@ -69,6 +69,12 @@ func TestCredentialUpdateUsesExistingBoundariesAndSafeErrors(t *testing.T) {
 		h, f, _ := credentialHandler(t)
 		path := "/v1/vaults/" + f.credential.VaultID + "/credentials/" + f.credential.ID
 		method, status := "POST", http.StatusBadRequest
+		// Malformed identifiers reach storage only as the never-assigned ID,
+		// after body validation, exactly like a well-formed missing identifier.
+		malformed := strings.Contains(mode, "invalid") || strings.Contains(mode, "zero")
+		if malformed {
+			f.err = store.ErrNotFound
+		}
 		switch mode {
 		case "method":
 			method, status = "PATCH", http.StatusMethodNotAllowed
@@ -92,8 +98,8 @@ func TestCredentialUpdateUsesExistingBoundariesAndSafeErrors(t *testing.T) {
 		}
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
-		if w.Code != status || f.calls != 0 {
-			t.Fatal("update boundary changed", mode, w.Code)
+		if w.Code != status || !malformed && f.calls != 0 || malformed && (f.calls != 1 || f.vault != store.UnknownResourceID && f.id != store.UnknownResourceID) {
+			t.Fatal("update boundary changed", mode, w.Code, f.vault, f.id)
 		}
 	}
 	for _, tc := range []struct {

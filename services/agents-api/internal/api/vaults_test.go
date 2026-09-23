@@ -38,6 +38,12 @@ func (f *vaultResourceFixture) GetVault(_ context.Context, tenant, id string) (s
 	return f.vault, f.err
 }
 
+// Vaults are not Agents: /v1/agents/vaults updates an unknown Agent ID, which
+// resolves as a missing Agent after body validation.
+func (f *vaultResourceFixture) UpdateAgent(context.Context, string, string, store.UpdateAgentInput) (store.SavedAgent, error) {
+	return store.SavedAgent{}, store.ErrNotFound
+}
+
 func vaultResourceHandler(t *testing.T) (http.Handler, *vaultResourceFixture) {
 	t.Helper()
 	f := &vaultResourceFixture{vault: store.Vault{ID: uuid.NewString(), TenantID: uuid.NewString(), Metadata: map[string]string{}, CreatedAt: time.Unix(1700000000, 0)}}
