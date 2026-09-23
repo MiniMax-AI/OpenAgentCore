@@ -95,6 +95,7 @@ func TestCredentialUpdateUsesExistingBoundariesAndSafeErrors(t *testing.T) {
 		}
 		if mode != "missing beta" {
 			r.Header.Set("OpenAI-Beta", "agents=v1")
+			r.Header.Set("Content-Type", "application/json")
 		}
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)

@@ -18,6 +18,7 @@ func TestPublicFunctionConfiguration(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"model"`+suffix+`},"environment":{"type":"none"},"input":"Use the configured function when needed."}`))
 		req.Header.Set("Authorization", "Bearer test-api-key")
 		req.Header.Set("OpenAI-Beta", "agents=v1")
+		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, req)
 		if w.Code != 201 {
@@ -57,6 +58,7 @@ func TestPublicFunctionConfigurationRejectsInvalidOrUnsupported(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"model","tools":`+raw+`},"environment":{"type":"none"},"input":"Use the configured function when needed."}`))
 		req.Header.Set("Authorization", "Bearer test-api-key")
 		req.Header.Set("OpenAI-Beta", "agents=v1")
+		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, req)
 		if w.Code != 400 || s.tenant != "" {

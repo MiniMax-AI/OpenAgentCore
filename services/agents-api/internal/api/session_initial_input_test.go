@@ -16,6 +16,7 @@ func TestInitialInputUsesExecutionAdmissionAndSharedMessageValidation(t *testing
 		r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"test-model"},"environment":{"type":"none"},"input":`+value+`}`))
 		r.Header.Set("Authorization", "Bearer test-api-key")
 		r.Header.Set("OpenAI-Beta", "agents=v1")
+		r.Header.Set("Content-Type", "application/json")
 		r.Header.Set("Idempotency-Key", "create-key")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
@@ -76,6 +77,7 @@ func createWithInput(h http.Handler, input string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"test-model"},"environment":{"type":"none"},"input":`+input+`}`))
 	r.Header.Set("Authorization", "Bearer test-api-key")
 	r.Header.Set("OpenAI-Beta", "agents=v1")
+	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	return w

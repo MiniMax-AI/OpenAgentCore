@@ -73,6 +73,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("OpenAI-Beta", "agents=v1")
+		req.Header.Set("Content-Type", "application/json")
 		res := httptest.NewRecorder()
 		handler.ServeHTTP(res, req)
 		if res.Code != status {

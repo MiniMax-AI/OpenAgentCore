@@ -74,6 +74,7 @@ func TestHTTPConfigurationAndTenantIdentity(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions?tenant_id=untrusted-tenant", strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer test-api-key")
 	request.Header.Set("OpenAI-Beta", "agents=v1")
+	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "retry-key")
 	request.Header.Set("X-Tenant-ID", "untrusted-tenant")
 	w := httptest.NewRecorder()
@@ -98,6 +99,7 @@ func TestSessionResponseReasoningKeysAreExplicit(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"requested-model"},"environment":{"type":"none"},"input":"hello"}`))
 	request.Header.Set("Authorization", "Bearer test-api-key")
 	request.Header.Set("OpenAI-Beta", "agents=v1")
+	request.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, request)
 	var body struct {
@@ -135,7 +137,7 @@ func TestHTTPRejectsUntrustedOrUnsupportedRequests(t *testing.T) {
 		{"unknown saved agent", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"agent_id":"saved","agent":`, 1), 404},
 		{"unknown agent option", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"model":`, `"tools":[{}],"model":`, 1), 400},
 		{"multiple objects", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", valid + `{}`, 400},
-		{"no object", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", `null`, 400},
+		{"null body as empty object", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", `null`, 400},
 		{"large body", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", `{"agent":{"model":"` + strings.Repeat("x", 16*1024*1024) + `"}}`, 413},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -143,6 +145,7 @@ func TestHTTPRejectsUntrustedOrUnsupportedRequests(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(test.body))
 			r.Header.Set("Authorization", test.auth)
 			r.Header.Set("OpenAI-Beta", test.beta)
+			r.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, r)
 			var response v1.ErrorResponse

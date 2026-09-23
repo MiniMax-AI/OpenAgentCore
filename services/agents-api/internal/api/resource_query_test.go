@@ -108,6 +108,7 @@ func TestSingleResourceRoutesIgnoreUnknownQueryKeys(t *testing.T) {
 				r := httptest.NewRequest(route.method, route.path+query, strings.NewReader(route.body))
 				r.Header.Set("Authorization", "Bearer test-api-key")
 				r.Header.Set("OpenAI-Beta", "agents=v1")
+				r.Header.Set("Content-Type", "application/json")
 				w := httptest.NewRecorder()
 				h.ServeHTTP(w, r)
 				if w.Code != http.StatusNotFound {
@@ -215,6 +216,7 @@ func TestEnvironmentFileCreateIgnoresUnknownQueryKeys(t *testing.T) {
 		r := httptest.NewRequest(http.MethodPost, "/v1/agents/environments/"+id+"/files"+query, strings.NewReader(body))
 		r.Header.Set("Authorization", "Bearer "+key)
 		r.Header.Set("OpenAI-Beta", "agents=v1")
+		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(environmentFilesRecorder{w}, r)
 		return w

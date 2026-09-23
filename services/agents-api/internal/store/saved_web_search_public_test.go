@@ -156,6 +156,7 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 		}
 		request.Header.Set("Authorization", "Bearer "+owner)
 		request.Header.Set("OpenAI-Beta", "agents=v1")
+		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Idempotency-Key", key)
 		response, err := http.DefaultClient.Do(request)
 		if err != nil {

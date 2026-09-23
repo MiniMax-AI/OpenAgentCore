@@ -39,6 +39,7 @@ func TestSessionHarnessAdmission(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"fixture"`+tc.extension+tc.extra+`},"environment":`+tc.environment+`,"input":"Run on the selected harness."}`))
 			r.Header.Set("Authorization", "Bearer test-api-key")
 			r.Header.Set("OpenAI-Beta", "agents=v1")
+			r.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, r)
 			if w.Code != tc.status || s.input.Engine != tc.engine {

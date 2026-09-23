@@ -230,15 +230,14 @@ func checkValue(path string, raw json.RawMessage, s shape) error {
 	return nil
 }
 
-// checkMembers rejects unknown and repeated members in document order, then
-// validates the values in document order and the required members in the pinned
-// order. Names match exactly, so a name that differs from a member only by case
-// is unknown. encoding/json matches names case-insensitively and merges repeated
-// objects into pointer structs, so only an object whose members each appear once
-// with their exact names decodes to the checked values.
+// checkMembers rejects unknown members in document order, then validates the
+// values in document order and the required members in the pinned order. Names
+// match exactly, so a name that differs from a member only by case is unknown,
+// although encoding/json would match it case-insensitively. Repeated members,
+// which encoding/json would merge, never reach it: the shared body gate
+// (readJSONObject) rejects them first.
 func checkMembers(path string, raw json.RawMessage, members []member) error {
 	keys, fields := orderedMembers(raw)
-	seen := make(map[string]bool, len(keys))
 	for _, key := range keys {
 		if _, known := findMember(members, key); !known {
 			if !echoableField(key) {
@@ -246,11 +245,6 @@ func checkMembers(path string, raw json.RawMessage, members []member) error {
 			}
 			return &fieldError{param: joinPath(path, key), message: fmt.Sprintf("Unknown parameter: '%s'.", joinPath(path, key))}
 		}
-		if seen[key] {
-			// A local message: the official response to a repeated member is unobserved.
-			return &fieldError{param: joinPath(path, key), message: fmt.Sprintf("Duplicate parameter: '%s'.", joinPath(path, key))}
-		}
-		seen[key] = true
 	}
 	for _, key := range keys {
 		spec, _ := findMember(members, key)

@@ -137,8 +137,9 @@ func routingHeaders(pairs ...string) http.Header {
 
 // project and beta are the pinned SDK's headers.
 var (
-	project = []string{"Authorization", "Bearer " + routingKey}
-	beta    = []string{"OpenAI-Beta", "agents=v1"}
+	project  = []string{"Authorization", "Bearer " + routingKey}
+	beta     = []string{"OpenAI-Beta", "agents=v1"}
+	jsonBody = []string{"Content-Type", "application/json"}
 )
 
 func withHeaders(parts ...[]string) http.Header {
@@ -231,12 +232,13 @@ func TestNonCanonicalPathsServeTheCleanRoute(t *testing.T) {
 	if got := serve(handler, http.MethodGet, "/v1//agents", "", authenticated); list.Code != http.StatusOK || !sameResponse(got, list) {
 		t.Fatalf("list through // = %d %s", got.Code, got.Body)
 	}
-	updated := serve(handler, http.MethodPost, "/v1//agents/"+id, `{"metadata":{"route":"double-slash"}}`, authenticated)
+	posted := withHeaders(project, beta, jsonBody)
+	updated := serve(handler, http.MethodPost, "/v1//agents/"+id, `{"metadata":{"route":"double-slash"}}`, posted)
 	if updated.Code != http.StatusOK || s.agent.Metadata["route"] != "double-slash" || len(s.updates) != 1 || s.updates[0] != id {
 		t.Fatalf("update through // = %d %s, updates %v", updated.Code, updated.Body, s.updates)
 	}
-	created := serve(handler, http.MethodPost, "/v1//agents", `{}`, authenticated)
-	if want := serve(handler, http.MethodPost, "/v1/agents", `{}`, authenticated); created.Code != http.StatusBadRequest || !sameResponse(created, want) {
+	created := serve(handler, http.MethodPost, "/v1//agents", `{}`, posted)
+	if want := serve(handler, http.MethodPost, "/v1/agents", `{}`, posted); created.Code != http.StatusBadRequest || !sameResponse(created, want) {
 		t.Fatalf("create through // = %d %s", created.Code, created.Body)
 	}
 	missing := serve(handler, http.MethodGet, "/v1/agents/"+uuid.NewString(), "", authenticated)
@@ -256,7 +258,7 @@ func TestNonCanonicalPathsServeTheCleanRoute(t *testing.T) {
 			t.Errorf("%s = %d %s", target, got.Code, got.Body)
 		}
 	}
-	if got := serve(handler, http.MethodPost, "/v1/agents/", `{"model":"fixture"}`, authenticated); got.Code != http.StatusNotFound {
+	if got := serve(handler, http.MethodPost, "/v1/agents/", `{"model":"fixture"}`, withHeaders(project, beta, jsonBody)); got.Code != http.StatusNotFound {
 		t.Fatalf("trailing-slash create = %d %s", got.Code, got.Body)
 	}
 }

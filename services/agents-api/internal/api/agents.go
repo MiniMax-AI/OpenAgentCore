@@ -31,7 +31,7 @@ type AgentStore interface {
 // @Failure 400,401,413,500 {object} v1.ErrorResponse
 // @Router /agents [post]
 func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
-	raw, ok := readJSONBody(w, r)
+	raw, ok := readJSONObject(w, r)
 	if !ok {
 		return
 	}

@@ -1,10 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"io"
 	"net/http"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
@@ -36,22 +35,17 @@ func WithExecution(s InputSubmitter) Option { return func(h *Handler) { h.inputs
 // @Failure 400,401,404,409,413,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/events [post]
 func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
+	raw, ok := readJSONObject(w, r)
+	if !ok {
+		return
+	}
 	var request struct {
 		Events []json.RawMessage `json:"events"`
 	}
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024*1024))
+	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
-		var large *http.MaxBytesError
-		if errors.As(err, &large) {
-			writeError(w, http.StatusRequestEntityTooLarge, "request_too_large", "Request exceeds 1 MiB.")
-		} else {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid Session input event request.")
-		}
-		return
-	}
-	if decoder.Decode(new(any)) != io.EOF {
-		writeError(w, http.StatusBadRequest, "invalid_request", "Request must contain exactly one JSON object.")
+		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid Session input event request.")
 		return
 	}
 	key := r.Header.Get("Idempotency-Key")

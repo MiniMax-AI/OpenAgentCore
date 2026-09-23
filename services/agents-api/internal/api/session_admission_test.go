@@ -29,6 +29,7 @@ func TestSessionAdmissionRejectsBeforeResourceOrExecutionAccess(t *testing.T) {
 						request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 						request.Header.Set("Authorization", "Bearer "+token)
 						request.Header.Set("OpenAI-Beta", "agents=v1")
+						request.Header.Set("Content-Type", "application/json")
 						request.Header.Set("Idempotency-Key", "retained-creation-key")
 						response := httptest.NewRecorder()
 						handler.ServeHTTP(response, request)
@@ -55,6 +56,7 @@ func TestSessionEmptyUpdateRejectsBeforeResourceAccess(t *testing.T) {
 		request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/unknown", strings.NewReader(`{}`))
 		request.Header.Set("Authorization", "Bearer "+token)
 		request.Header.Set("OpenAI-Beta", "agents=v1")
+		request.Header.Set("Content-Type", "application/json")
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
 		if token == "invalid" {

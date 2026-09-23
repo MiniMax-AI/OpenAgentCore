@@ -32,7 +32,7 @@ type VaultStore interface {
 // @Failure 400,401,413,500 {object} v1.ErrorResponse
 // @Router /vaults [post]
 func (h *Handler) createVault(w http.ResponseWriter, r *http.Request) {
-	raw, ok := readJSONBody(w, r)
+	raw, ok := readJSONObject(w, r)
 	if !ok {
 		return
 	}

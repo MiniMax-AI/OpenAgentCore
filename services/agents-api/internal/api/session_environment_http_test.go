@@ -75,6 +75,7 @@ func TestSelfHostedSessionHTTPReadListMetadataAndLiveStream(t *testing.T) {
 		r.Host = "untrusted-host.example"
 		r.Header.Set("Authorization", "Bearer key")
 		r.Header.Set("OpenAI-Beta", "agents=v1")
+		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
 		if w.Code != http.StatusOK {

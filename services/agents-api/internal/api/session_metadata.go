@@ -26,7 +26,7 @@ import (
 // @Failure 400,401,404,413,500 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id} [post]
 func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
-	raw, ok := readJSONBody(w, r)
+	raw, ok := readJSONObject(w, r)
 	if !ok {
 		return
 	}
@@ -70,6 +70,7 @@ func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 // metadataTypeError reports the first non-string value of a request body's
 // top-level metadata object in document order, before generic body decoding
 // can reject it. Other body and metadata shapes keep their existing errors.
+// The shared body gate has already rejected repeated keys.
 func metadataTypeError(body []byte) error {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(body, &fields) != nil {
@@ -79,11 +80,6 @@ func metadataTypeError(body []byte) error {
 	if token, err := decoder.Token(); err != nil || token != json.Delim('{') {
 		return nil
 	}
-	// A duplicate key keeps its first position and is checked with its last value
-	// only. Typed decoding rejects a non-string at any occurrence, so a body whose
-	// earlier duplicate is not a string falls back to the generic decoding error.
-	var keys []string
-	values := map[string]json.RawMessage{}
 	for decoder.More() {
 		token, err := decoder.Token()
 		key, isKey := token.(string)
@@ -91,13 +87,7 @@ func metadataTypeError(body []byte) error {
 		if err != nil || !isKey || decoder.Decode(&value) != nil {
 			return nil
 		}
-		if _, seen := values[key]; !seen {
-			keys = append(keys, key)
-		}
-		values[key] = value
-	}
-	for _, key := range keys {
-		if kind := jsonValueKind(values[key]); kind != "a string" {
+		if kind := jsonValueKind(value); kind != "a string" {
 			return &fieldError{param: "metadata." + key, message: fmt.Sprintf("Invalid type for 'metadata.%s': expected a string, but got %s instead.", key, kind)}
 		}
 	}

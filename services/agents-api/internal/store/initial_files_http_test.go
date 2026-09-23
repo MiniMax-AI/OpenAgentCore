@@ -47,6 +47,7 @@ func TestInitialFilesHTTPInlineLimitsAndRetry(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", bytes.NewReader(body))
 			r.Header.Set("Authorization", "Bearer "+token)
 			r.Header.Set("OpenAI-Beta", "agents=v1")
+			r.Header.Set("Content-Type", "application/json")
 			r.Header.Set("Idempotency-Key", key)
 			w := httptest.NewRecorder()
 			handler.ServeHTTP(w, r)

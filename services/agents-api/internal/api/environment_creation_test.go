@@ -86,6 +86,7 @@ func TestSelfHostedEmptyCreationAndStream(t *testing.T) {
 					request.Header.Set("X-Forwarded-Host", "forged.example")
 					request.Header.Set("Authorization", "Bearer key")
 					request.Header.Set("OpenAI-Beta", "agents=v1")
+					request.Header.Set("Content-Type", "application/json")
 					request.Header.Set("Idempotency-Key", "empty-environment")
 					response, err := server.Client().Do(request)
 					if err != nil {
@@ -184,6 +185,7 @@ func TestSelfHostedCreationRejectsBeforePersistence(t *testing.T) {
 				request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 				request.Header.Set("Authorization", "Bearer key")
 				request.Header.Set("OpenAI-Beta", "agents=v1")
+				request.Header.Set("Content-Type", "application/json")
 				response := httptest.NewRecorder()
 				handler.ServeHTTP(response, request)
 				if response.Code != http.StatusBadRequest || fixture.input.Engine != "" || fixture.session.ID != "" {
@@ -202,6 +204,7 @@ func TestSelfHostedCreationRequiresOperatorExecution(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 			request.Header.Set("Authorization", "Bearer key")
 			request.Header.Set("OpenAI-Beta", "agents=v1")
+			request.Header.Set("Content-Type", "application/json")
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, request)
 			var failure v1.ErrorResponse
@@ -219,6 +222,7 @@ func TestHostedCreationRequiresOperatorExecution(t *testing.T) {
 		request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer key")
 		request.Header.Set("OpenAI-Beta", "agents=v1")
+		request.Header.Set("Content-Type", "application/json")
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
 		var failure v1.ErrorResponse

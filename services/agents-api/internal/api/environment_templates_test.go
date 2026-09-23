@@ -26,6 +26,7 @@ func TestTemplateConfigurationRejectsUnqualifiedInputs(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/agents/environments/templates", strings.NewReader(`{"env":{"PATH":"confidential-canary"}}`))
 	req.Header.Set("Authorization", "Bearer test-api-key")
 	req.Header.Set("OpenAI-Beta", "agents=v1")
+	req.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	h.ServeHTTP(response, req)
 	if response.Code != http.StatusBadRequest || strings.Contains(response.Body.String(), "confidential-canary") {

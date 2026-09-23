@@ -42,14 +42,14 @@ func WithEnvironmentFileWriter(writer EnvironmentFileWriter) Option {
 // @Failure 400,401,404,409,413,500,503 {object} v1.ErrorResponse
 // @Router /agents/environments/{environment_id}/files [post]
 func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) {
+	const maxJSON = int64(((proto.WorkspaceWriteMaxBytes+2)/3)*4 + (16 << 10))
+	raw, ok := readJSONObjectLimit(w, r, maxJSON, "Inline upload exceeds this service's bounded file limit.")
+	if !ok {
+		return
+	}
 	environment, err := h.store.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
-		return
-	}
-	const maxJSON = int64(((proto.WorkspaceWriteMaxBytes+2)/3)*4 + (16 << 10))
-	raw, ok := readJSONBodyLimit(w, r, maxJSON, "Inline upload exceeds this service's bounded file limit.")
-	if !ok {
 		return
 	}
 	var request v1.EnvironmentFileCreateRequest

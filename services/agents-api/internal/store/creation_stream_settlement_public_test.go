@@ -36,6 +36,7 @@ func openStream(t *testing.T, server *httptest.Server, token, method, path, body
 	}
 	request.Header.Set("Authorization", "Bearer "+token)
 	request.Header.Set("OpenAI-Beta", "agents=v1")
+	request.Header.Set("Content-Type", "application/json")
 	if key != "" {
 		request.Header.Set("Idempotency-Key", key)
 	}

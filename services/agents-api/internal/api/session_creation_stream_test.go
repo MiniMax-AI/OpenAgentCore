@@ -209,6 +209,7 @@ func (h *creationStreamHarness) open(method, path, body string) (<-chan sseFrame
 	}
 	request.Header.Set("Authorization", "Bearer key")
 	request.Header.Set("OpenAI-Beta", "agents=v1")
+	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "creation")
 	response, err := h.server.Client().Do(request)
 	if err != nil {
@@ -618,6 +619,7 @@ func TestCreationRetryStreamEndsImmediately(t *testing.T) {
 			}
 			request.Header.Set("Authorization", "Bearer key")
 			request.Header.Set("OpenAI-Beta", "agents=v1")
+			request.Header.Set("Content-Type", "application/json")
 			request.Header.Set("Idempotency-Key", "creation")
 			response, err := h.server.Client().Do(request)
 			if err != nil {
@@ -718,6 +720,7 @@ func TestCreationStreamCapabilityIsCheckedBeforeCreation(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(creationBody))
 	request.Header.Set("Authorization", "Bearer key")
 	request.Header.Set("OpenAI-Beta", "agents=v1")
+	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusServiceUnavailable || admission.calls.Load() != 0 {

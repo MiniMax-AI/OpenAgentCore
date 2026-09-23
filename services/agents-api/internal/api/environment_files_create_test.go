@@ -59,6 +59,7 @@ func requestCreateEnvironmentFile(h http.Handler, id, body, key string) *httptes
 	r := httptest.NewRequest(http.MethodPost, "/v1/agents/environments/"+id+"/files", strings.NewReader(body))
 	r.Header.Set("Authorization", "Bearer "+key)
 	r.Header.Set("OpenAI-Beta", "agents=v1")
+	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(environmentFilesRecorder{w}, r)
 	return w

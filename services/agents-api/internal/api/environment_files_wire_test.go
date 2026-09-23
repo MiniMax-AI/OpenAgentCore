@@ -161,9 +161,23 @@ func TestEnvironmentFileCreateFieldErrors(t *testing.T) {
 			t.Fatal("rejected body was written", body)
 		}
 	}
-	// Validation without an official sample keeps the local code, including a
-	// malformed body whose first key is unknown.
-	for _, body := range []string{`{"foo":1,`, `{"type":"inline",`, `{"foo":1} {}`, `{"type":"inline","path":"/workspace/a"}`, `{"type":"inline","path":"/workspace/a","data":"?"}`, `{"type":"inline","path":"/workspace/a","data":"","file_id":"x"}`, `[]`} {
+	// The shared body gate rejects malformed bodies, including one whose first
+	// key is unknown, and non-object roots (HP-09, HP-12).
+	for body, message := range map[string]string{
+		`{"foo":1,`:         "Invalid body: failed to parse JSON value. Please check the value to ensure it is valid JSON. (Common errors include trailing commas, missing closing brackets, missing quotation marks, etc.)",
+		`{"type":"inline",`: "Invalid body: failed to parse JSON value. Please check the value to ensure it is valid JSON. (Common errors include trailing commas, missing closing brackets, missing quotation marks, etc.)",
+		`{"foo":1} {}`:      "Invalid body: failed to parse JSON value. Please check the value to ensure it is valid JSON. (Common errors include trailing commas, missing closing brackets, missing quotation marks, etc.)",
+		`[]`:                "Invalid type: expected an object, but got an array instead.",
+	} {
+		h, f := environmentFileCreateHandler(t)
+		w := requestCreateEnvironmentFile(h, f.environment.ID, body, "files-key")
+		assertListQueryError(t, w, "invalid_request_error", nil, message)
+		if f.writes != 0 {
+			t.Fatal("rejected body was written", body)
+		}
+	}
+	// Validation without an official sample keeps the local code.
+	for _, body := range []string{`{"type":"inline","path":"/workspace/a"}`, `{"type":"inline","path":"/workspace/a","data":"?"}`, `{"type":"inline","path":"/workspace/a","data":"","file_id":"x"}`} {
 		h, f := environmentFileCreateHandler(t)
 		w := requestCreateEnvironmentFile(h, f.environment.ID, body, "files-key")
 		assertListQueryError(t, w, "invalid_request", nil, "Invalid resource identifier or request limits.")
@@ -180,7 +194,6 @@ func TestEnvironmentFileCreateFieldErrors(t *testing.T) {
 		`line\u2028separator`:      false,
 		`bell\u0007`:               false,
 		`caf\u00e9 \u5b57`:         true,
-		"\xff\xfe":                 false,
 		`\ud800`:                   false,
 		`\ufffd`:                   false,
 	} {
@@ -198,8 +211,12 @@ func TestEnvironmentFileCreateFieldErrors(t *testing.T) {
 			assertListQueryError(t, w, "invalid_request_error", nil, "Unknown parameter.")
 		}
 	}
-	// Foreign Environments stay missing before any body inspection.
+	// Invalid UTF-8 is rejected by the shared body gate (HP-10).
 	h, f := environmentFileCreateHandler(t)
+	w := requestCreateEnvironmentFile(h, f.environment.ID, "{\"type\":\"inline\",\"path\":\"/workspace/a\",\"data\":\"\",\"\xff\xfe\":1}", "files-key")
+	assertListQueryError(t, w, "invalid_request_error", nil, "Invalid body: encountered a unicode decode error when parsing this JSON value. Please check the value to ensure it is valid unicode.")
+	// Foreign Environments stay missing before route-specific body validation.
+	h, f = environmentFileCreateHandler(t)
 	body := `{"type":"inline","path":"/workspace/a","data":"","extra_field":1}`
 	foreign := requestCreateEnvironmentFile(h, f.environment.ID, body, "other-key")
 	missing := requestCreateEnvironmentFile(h, uuid.NewString(), body, "files-key")

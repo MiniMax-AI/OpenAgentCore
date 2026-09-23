@@ -82,6 +82,7 @@ func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T
 			r, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/agents/environments/"+id+"/files", strings.NewReader(body))
 			r.Header.Set("Authorization", "Bearer "+key)
 			r.Header.Set("OpenAI-Beta", "agents=v1")
+			r.Header.Set("Content-Type", "application/json")
 			resp, err := server.Client().Do(r)
 			if err != nil {
 				done <- fileCreateResponse{}

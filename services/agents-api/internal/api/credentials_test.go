@@ -53,6 +53,7 @@ func credentialRequest(h http.Handler, method, path, body string) *httptest.Resp
 	r := httptest.NewRequest(method, path, strings.NewReader(body))
 	r.Header.Set("Authorization", "Bearer test-api-key")
 	r.Header.Set("OpenAI-Beta", "agents=v1")
+	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("X-Tenant-ID", "untrusted")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)

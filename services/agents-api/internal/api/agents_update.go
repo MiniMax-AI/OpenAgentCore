@@ -23,7 +23,7 @@ import (
 // @Failure 400,401,404,413,500 {object} v1.ErrorResponse
 // @Router /agents/{agent_id} [post]
 func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
-	raw, ok := readJSONBody(w, r)
+	raw, ok := readJSONObject(w, r)
 	if !ok {
 		return
 	}

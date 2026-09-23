@@ -41,6 +41,7 @@ func TestSandboxSelectorUsesOnlyCoreSessionExtension(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(tc.body))
 			request.Header.Set("Authorization", "Bearer key")
 			request.Header.Set("OpenAI-Beta", "agents=v1")
+			request.Header.Set("Content-Type", "application/json")
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, request)
 			if tc.accepted {

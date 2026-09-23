@@ -31,6 +31,7 @@ func TestPublicInputAdmission(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/session-id/events", strings.NewReader(body))
 	r.Header.Set("Authorization", "Bearer test-api-key")
 	r.Header.Set("OpenAI-Beta", "agents=v1")
+	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("Idempotency-Key", "batch-key")
 	r.Header.Set("X-Tenant-ID", "forged")
 	w := httptest.NewRecorder()
@@ -65,6 +66,7 @@ func TestPublicInputRejectsUnsupportedOrMalformedBatch(t *testing.T) {
 		r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/id/events", strings.NewReader(body))
 		r.Header.Set("Authorization", "Bearer test-api-key")
 		r.Header.Set("OpenAI-Beta", "agents=v1")
+		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 		if w.Code != 400 || recorder.inputs != nil {
@@ -90,6 +92,7 @@ func TestPublicInputWhitespaceTextAdmission(t *testing.T) {
 		r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/session-id/events", strings.NewReader(body))
 		r.Header.Set("Authorization", "Bearer test-api-key")
 		r.Header.Set("OpenAI-Beta", "agents=v1")
+		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 		if w.Code != 202 || w.Body.Len() != 0 || len(recorder.inputs) != 1 || recorder.inputs[0].Kind != "message" {
@@ -114,6 +117,7 @@ func TestPublicInputWhitespaceTextAdmission(t *testing.T) {
 		r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/session-id/events", strings.NewReader(body))
 		r.Header.Set("Authorization", "Bearer test-api-key")
 		r.Header.Set("OpenAI-Beta", "agents=v1")
+		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 		if w.Code != 400 || recorder.inputs != nil || w.Body.String() != emptyInputError {

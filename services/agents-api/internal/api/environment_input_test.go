@@ -32,6 +32,7 @@ func TestPublicEnvironmentInputFailureMappings(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/session/events", strings.NewReader(`{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"Start"}]}]}]}`))
 			request.Header.Set("Authorization", "Bearer test-api-key")
 			request.Header.Set("OpenAI-Beta", "agents=v1")
+			request.Header.Set("Content-Type", "application/json")
 			request.Header.Set("Idempotency-Key", "retained-request")
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, request)
@@ -73,6 +74,7 @@ func TestPreparedEnvironmentInputWaitExtendsOnlyItsResponseDeadline(t *testing.T
 			create := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"MiniMax-M3"},"environment":`+environmentJSON+`,"input":"Prepare the response deadline fixture."}`))
 			create.Header.Set("Authorization", "Bearer key")
 			create.Header.Set("OpenAI-Beta", "agents=v1")
+			create.Header.Set("Content-Type", "application/json")
 			created := httptest.NewRecorder()
 			handler.ServeHTTP(created, create)
 			if created.Code != http.StatusCreated {
@@ -94,6 +96,7 @@ func TestPreparedEnvironmentInputWaitExtendsOnlyItsResponseDeadline(t *testing.T
 			}
 			request.Header.Set("Authorization", "Bearer key")
 			request.Header.Set("OpenAI-Beta", "agents=v1")
+			request.Header.Set("Content-Type", "application/json")
 			type result struct {
 				response *http.Response
 				err      error

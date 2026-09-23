@@ -35,7 +35,7 @@ type CredentialStore interface {
 // @Router /vaults/{vault_id}/credentials [post]
 func (h *Handler) createCredential(w http.ResponseWriter, r *http.Request) {
 	vaultID := credentialPathID(r, "vault_id")
-	raw, ok := readJSONBody(w, r)
+	raw, ok := readJSONObject(w, r)
 	if !ok {
 		return
 	}

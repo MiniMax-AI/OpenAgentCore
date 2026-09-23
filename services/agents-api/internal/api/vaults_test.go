@@ -62,6 +62,7 @@ func vaultRequest(h http.Handler, method, path, body string) *httptest.ResponseR
 	r := httptest.NewRequest(method, path, strings.NewReader(body))
 	r.Header.Set("Authorization", "Bearer vault-key")
 	r.Header.Set("OpenAI-Beta", "agents=v1")
+	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("X-Tenant-ID", "untrusted-tenant")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
@@ -75,6 +76,9 @@ func TestVaultResourceProjectionWithoutExecution(t *testing.T) {
 		metadata map[string]any
 	}{
 		{`{}`, nil, map[string]any{}},
+		// A zero-length body or null is {} (HP-13).
+		{``, nil, map[string]any{}},
+		{`null`, nil, map[string]any{}},
 		{`{"metadata":null}`, nil, map[string]any{}},
 		{`{"name":"  凭据库 \n","metadata":{"team":"engineering"}}`, "凭据库", map[string]any{"team": "engineering"}},
 		{`{"name":" ` + strings.Repeat("界", 85) + `x "}`, strings.Repeat("界", 85) + "x", map[string]any{}},
@@ -98,7 +102,7 @@ func TestVaultResourceProjectionWithoutExecution(t *testing.T) {
 
 func TestVaultResourceInvalidRequestsDoNotReachStore(t *testing.T) {
 	for _, body := range []string{
-		`null`, `[]`, `{} {}`, `{"name":null}`, `{"name":1}`, `{"name":""}`, `{"name":" \n\t "}`,
+		`[]`, `{} {}`, `{"name":null}`, `{"name":1}`, `{"name":""}`, `{"name":" \n\t "}`,
 		`{"name":"` + strings.Repeat("界", 85) + `xx"}`, `{"metadata":[]}`, `{"metadata":{"key":null}}`, `{"metadata":{"key":1}}`,
 		`{"tenant_id":"untrusted"}`, `{"credentials":[]}`,
 	} {

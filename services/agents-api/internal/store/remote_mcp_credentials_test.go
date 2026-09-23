@@ -46,6 +46,7 @@ func TestSelfHostedServiceMCPRejectionDoesNotRequireCredentialDecryption(t *test
 				request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(string(raw)))
 				request.Header.Set("Authorization", "Bearer test-token")
 				request.Header.Set("OpenAI-Beta", "agents=v1")
+				request.Header.Set("Content-Type", "application/json")
 				response := httptest.NewRecorder()
 				handler.ServeHTTP(response, request)
 				if response.Code != http.StatusBadRequest || strings.Contains(response.Body.String(), "synthetic-token") || strings.Contains(response.Body.String(), "ciphertext") || strings.Contains(response.Body.String(), "mcp_credentials") {

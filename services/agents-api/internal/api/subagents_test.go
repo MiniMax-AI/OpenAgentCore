@@ -268,6 +268,7 @@ func TestSubagentRoutesExposeOnlyOfficialReads(t *testing.T) {
 			r := httptest.NewRequest(method, "/v1/agents/sessions/session/subagents"+route.path, nil)
 			r.Header.Set("Authorization", "Bearer test-api-key")
 			r.Header.Set("OpenAI-Beta", "agents=v1")
+			r.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, r)
 			if w.Code != http.StatusMethodNotAllowed || s.calls != 0 {

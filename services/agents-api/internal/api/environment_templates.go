@@ -70,7 +70,7 @@ func templateResponse(t store.EnvironmentTemplate) v1.EnvironmentTemplate {
 }
 
 func readTemplateInput(w http.ResponseWriter, r *http.Request) (store.EnvironmentTemplateInput, bool) {
-	raw, ok := readJSONBodyLimit(w, r, 16*1024*1024, "Request exceeds 16 MiB.")
+	raw, ok := readJSONObjectLimit(w, r, 16*1024*1024, "Request exceeds 16 MiB.")
 	if !ok {
 		return store.EnvironmentTemplateInput{}, false
 	}

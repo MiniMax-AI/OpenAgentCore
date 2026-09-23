@@ -24,6 +24,7 @@ func TestTextConfigurationHTTP(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"example"`+tc.text+`},"environment":{"type":"none"},"input":"Describe the configured response format."}`))
 			req.Header.Set("Authorization", "Bearer test-api-key")
 			req.Header.Set("OpenAI-Beta", "agents=v1")
+			req.Header.Set("Content-Type", "application/json")
 			response := httptest.NewRecorder()
 			h.ServeHTTP(response, req)
 			if response.Code != 201 {
@@ -48,6 +49,7 @@ func TestTextConfigurationHTTP(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"example","text":`+invalid+`},"environment":{"type":"none"},"input":"Describe the configured response format."}`))
 		req.Header.Set("Authorization", "Bearer test-api-key")
 		req.Header.Set("OpenAI-Beta", "agents=v1")
+		req.Header.Set("Content-Type", "application/json")
 		response := httptest.NewRecorder()
 		h.ServeHTTP(response, req)
 		if response.Code != 400 || s.tenant != "" {

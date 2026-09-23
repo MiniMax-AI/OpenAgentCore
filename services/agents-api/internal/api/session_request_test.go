@@ -44,6 +44,7 @@ func TestSessionCreateFieldPresence(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 			request.Header.Set("Authorization", "Bearer test-api-key")
 			request.Header.Set("OpenAI-Beta", "agents=v1")
+			request.Header.Set("Content-Type", "application/json")
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, request)
 			if response.Code != tc.status {
