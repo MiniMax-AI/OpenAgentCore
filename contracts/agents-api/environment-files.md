@@ -193,7 +193,9 @@ Decisions:
   So before reporting `not_directory` or an empty listing, the helper reopens the
   root path without following links and compares device and inode with the held
   root; a removed or replaced root keeps 404. Link counts are not used, because
-  overlayfs can keep a nonzero count for a removed lower-layer directory.
+  overlayfs can keep a nonzero count for a removed lower-layer directory. The
+  check relies on local filesystem inode pinning; network filesystems such as NFS
+  are not qualified.
   Permission denial, observation errors, transport loss and uncertain output keep
   503, and tenant and Environment authorization run first. The shared workspace
   path code and the write installer are unchanged.

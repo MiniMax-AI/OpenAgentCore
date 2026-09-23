@@ -175,8 +175,10 @@ var errUnknownEnvironmentFileField = &fieldError{message: "Unknown parameter."}
 
 // echoableField bounds the caller-supplied name that an unknown-field error
 // repeats in both message and param; JSON escaping can grow each byte sixfold.
+// encoding/json has already replaced invalid bytes and lone surrogates with
+// U+FFFD, so a name containing it is not repeated either.
 func echoableField(field string) bool {
-	if len(field) > 256 || !utf8.ValidString(field) {
+	if len(field) > 256 || !utf8.ValidString(field) || strings.ContainsRune(field, utf8.RuneError) {
 		return false
 	}
 	for _, r := range field {
@@ -188,8 +190,12 @@ func echoableField(field string) bool {
 }
 
 // unknownBodyField returns the first top-level member outside allowed, in
-// document order. Non-object bodies are left to the caller's decoder.
+// document order. Malformed and non-object bodies are left to the caller's
+// decoder, which reports them with the existing malformed-body error.
 func unknownBodyField(raw []byte, allowed ...string) (string, bool) {
+	if !json.Valid(raw) {
+		return "", false
+	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	if token, err := decoder.Token(); err != nil || token != json.Delim('{') {
 		return "", false
