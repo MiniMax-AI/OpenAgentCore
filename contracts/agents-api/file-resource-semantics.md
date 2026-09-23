@@ -44,7 +44,8 @@ The Skill probe observed an acknowledged version deletion followed about two
 seconds later by a list and exact GET that still exposed that version, while the
 parent latest pointer had already changed. It stopped and cleaned up. Core does
 not emulate this inconsistent visibility. Fresh/reduced sole-version deletion was
-not reached; the guide's default-versus-last-version precedence remains unresolved.
+not reached in this probe; the later [sole-version deletion](#sole-version-deletion--september-23-2026)
+batch records that observation.
 Upload `default:true` was not separately probed: updating descriptive metadata
 there is the same pointer-consistency rule, covered by Core tests rather than a
 new official wire claim. No newer schema or integer selector form was adopted.
@@ -100,3 +101,47 @@ the neighboring test's initial-focus wait corrected that test synchronization;
 the final full Web gate passed without weakening assertions or changing credential
 business behavior. Private logs and original artifacts remain under the evidence
 root above. These results do not close the remaining protocol gaps.
+
+## Sole-version deletion — September 23, 2026
+
+Evidence: campaign scan 1, `~/.parsar/remediation/20260923/campaign-scan-1/skills-files-templates/findings.json`
+SFT-01 to SFT-04, with raw records in the adjacent `official-ledger.jsonl` (labels
+`s1-*`, `s2-*`, `s3-*`). The scan owned three Skills and created no Sessions or
+model calls.
+
+| # | Case | Official observation | Core rule |
+| --- | --- | --- | --- |
+| V1 | Delete the only remaining version, which is also the default | 200 `{"id": "skillver_…", "object": "skill.version.deleted", "deleted": true, "version": "1"}`; retrieve and versions.list then return 404 (SFT-01) | Same body; the Skill is deleted in the same transaction. The reduced case (delete v2, then v1 is the only version) applies the same rule; official evidence covers only a fresh single-version Skill |
+| V2 | Delete the default while another version is visible | 400 invalid_request_error, invalid_value, param version (SFT-04) | Unchanged |
+| V3 | Delete a nondefault or latest version | 200; latest falls back | Unchanged |
+| V4 | Foreign or missing Skill or version | 404 | Unchanged, indistinguishable |
+
+`DeleteSkillVersion` keeps the owning Skill row lock. When the target is the
+default, it deletes the Skill only if no other version row exists, through the
+same cascade as `skills.delete`, so every encrypted version row is removed in the
+same commit; otherwise the 400 remains. Uploads take the same lock: an upload
+committed first makes the default undeletable, and a deletion committed first
+makes the later upload return 404. Frozen Session installations keep their own
+snapshot, and Templates keep their stored reference intent, exactly as after
+`skills.delete`. No schema, query or numbering change is involved.
+
+Recorded decisions:
+
+- **SFT-02, number reuse: intentional difference.** After the latest nondefault
+  version 2 was deleted, the next official upload was numbered "2" again (one
+  sample, so max+1 and latest+1 are indistinguishable). Core keeps immutable,
+  monotonically increasing numbers because exact Template and Session selectors
+  reference numbers; reusing one could re-point a stored exact selector to other
+  bytes and make a frozen Session's concrete version ambiguous. A sole-version
+  deletion removes the Skill, so numbering never restarts within a Skill.
+- **SFT-03, upstream anomaly: never emulated.** Deleting default version 1 about
+  four seconds after an acknowledged version 2 upload returned 200 and removed the
+  whole Skill, including version 2. The same request with version 2 visible
+  returned 400 (SFT-04). Core serializes both operations on the Skill row, so a
+  version deletion never removes an acknowledged upload.
+
+Core acceptance: real-PostgreSQL store tests prove atomic Skill removal without
+orphaned version rows, unchanged frozen Session contents, creation retry and
+Template intent, and both lock orders of a concurrent upload; a real HTTP test
+covers V1 to V4 across two tenants, and `official_skills.py` checks V1 with the
+pinned SDK and raw HTTP. None of these run a model.

@@ -91,6 +91,25 @@ def main():
             assert [item.id for item in client.skills.list()] == before
             deleted = client.skills.versions.delete(version="1", skill_id=skill.id)
             assert deleted.id == first.id and deleted.version == "1" and deleted.object == "skill.version.deleted" and deleted.deleted
+            # Deleting the only remaining version also deletes the Skill.
+            sole = client.skills.create(files=[("proof/SKILL.md", manifest, "text/markdown")])
+            owned.append(sole.id)
+            sole_path = base + "/skills/" + sole.id
+            assert http.delete(sole_path + "/versions/1", headers=foreign).status_code == 404
+            sole_version = client.skills.versions.retrieve(version="1", skill_id=sole.id)
+            removed = client.skills.versions.with_raw_response.delete(version="1", skill_id=sole.id)
+            assert removed.http_response.json() == {"id": sole_version.id, "object": "skill.version.deleted", "deleted": True, "version": "1"}
+            assert removed.parse().deleted
+            owned.remove(sole.id)
+            for suffix in ("", "/content", "/versions", "/versions/1"):
+                assert http.get(sole_path + suffix, headers=headers).status_code == 404
+            try:
+                client.skills.retrieve(sole.id)
+            except openai.NotFoundError:
+                pass
+            else:
+                raise AssertionError("Skill survived deletion of its only version")
+            assert sole.id not in [item.id for item in client.skills.list()]
             assert client.skills.delete(directory.id).deleted
             owned.remove(directory.id)
             assert http.get(base + "/skills/" + directory.id + "/versions/1/content", headers=headers).status_code == 404

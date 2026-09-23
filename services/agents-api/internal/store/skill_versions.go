@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// ErrDefaultSkillVersion rejects deleting the default while other versions remain.
 var ErrDefaultSkillVersion = errors.New("cannot delete the default skill version")
 
 func (s *Store) CreateSkillVersion(ctx context.Context, tenantID, skillID string, archive []byte, makeDefault bool) (SkillVersion, error) {
@@ -100,7 +101,19 @@ func (s *Store) DeleteSkillVersion(ctx context.Context, tenantID, skillID, versi
 			return err
 		}
 		if owner.DefaultVersion == number {
-			return ErrDefaultSkillVersion
+			// The default is deletable only as the sole remaining version. As on the
+			// hosted service, that deletes the Skill itself under this lock, through
+			// the DeleteSkill cascade; frozen Session installations are independent.
+			rows, err := q.ListSkillVersions(ctx, sqlc.ListSkillVersionsParams{TenantID: tenant, SkillID: id, PageLimit: 2})
+			if err != nil {
+				return err
+			}
+			if len(rows) != 1 {
+				return ErrDefaultSkillVersion
+			}
+			result = skillVersionFromRow(sqlc.GetSkillVersionRow(rows[0]))
+			_, err = q.DeleteSkill(ctx, sqlc.DeleteSkillParams{TenantID: tenant, ID: id})
+			return err
 		}
 		row, err := q.DeleteSkillVersion(ctx, sqlc.DeleteSkillVersionParams{TenantID: tenant, SkillID: id, Version: number})
 		if err != nil {

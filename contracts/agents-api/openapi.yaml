@@ -5569,8 +5569,9 @@ paths:
       - Skills
   /skills/{skill_id}/versions/{version}:
     delete:
-      description: Rejects deletion of the current default version. Exact hosted last-version/default
-        deletion precedence is not verified.
+      description: Deleting the only remaining version also deletes the Skill; existing
+        Session installation snapshots remain independent. The default version cannot
+        be deleted while other versions remain. Version numbers are never reused.
       parameters:
       - description: Skill ID
         in: path

@@ -144,6 +144,14 @@ mod tests {
     use crate::workspace_path::{anchor, directory};
     use std::{fs, io, os::unix::fs::symlink};
 
+    // These tests open descriptors, so they share the lock that keeps the
+    // descriptor-count assertions in the directory tests deterministic.
+    fn serialized() -> std::sync::MutexGuard<'static, ()> {
+        crate::directory::TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     fn code(result: io::Result<serde_json::Value>) -> String {
         match result {
             Ok(value) => value["error"].as_str().unwrap_or("listed").to_string(),
@@ -153,6 +161,7 @@ mod tests {
 
     #[test]
     fn only_the_requested_path_resolution_is_not_a_directory() {
+        let _guard = serialized();
         let workspace = tempfile::tempdir().unwrap();
         let outside = tempfile::tempdir().unwrap();
         let root = workspace.path().join("workspace");
@@ -204,6 +213,7 @@ mod tests {
 
     #[test]
     fn a_root_removed_after_opening_is_a_missing_workspace() {
+        let _guard = serialized();
         let workspace = tempfile::tempdir().unwrap();
         let root = workspace.path().join("workspace");
         fs::create_dir_all(root.join("d")).unwrap();
@@ -224,6 +234,7 @@ mod tests {
 
     #[test]
     fn a_root_replaced_after_opening_is_a_missing_workspace() {
+        let _guard = serialized();
         let workspace = tempfile::tempdir().unwrap();
         let root = workspace.path().join("workspace");
         let moved = workspace.path().join("moved");
