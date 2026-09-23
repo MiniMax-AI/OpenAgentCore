@@ -57,6 +57,7 @@ def verify_mcp_configuration(client, other, expect_error):
         assert replaced.agent.tools == inline.agent.tools
         recovered.extend([inline, replaced])
         saved.append(updated)
+    assert agents.delete(explicit["id"]).deleted
 
     before = {item.id for item in sessions.list()}
     saved_before = {item.id for item in agents.list()}
@@ -68,8 +69,9 @@ def verify_mcp_configuration(client, other, expect_error):
                     {"authorization": "synthetic-private"},
                     {"server_url": "https://mcp.example.invalid/mcp?token=synthetic-private"}):
         invalid.append({**tool, "transport": {**transport, **changes}})
-    # Transports other than HTTP keep the explicit-origin requirement.
-    invalid.append({**minimal, "transport": {"type": "stdio", "command": "synthetic-private"}})
+    # Transports other than HTTP stay unsupported with or without an origin.
+    stdio = {"type": "stdio", "command": "synthetic-private"}
+    invalid += [{**minimal, "transport": stdio}, {**tool, "transport": stdio}]
     for declaration in invalid:
         for operation in (
             lambda: agents.create(model="requested-model", tools=[declaration]),
@@ -78,6 +80,8 @@ def verify_mcp_configuration(client, other, expect_error):
         ):
             error = expect_error(BadRequestError, operation)
             assert "synthetic-private" not in str(error.body)
+            if declaration["transport"] is stdio:
+                assert error.body["message"] == "MCP currently supports HTTP transport only."
     assert {item.id for item in sessions.list()} == before
     assert {item.id for item in agents.list()} == saved_before
     print("HTTP MCP: pinned saved/Session projections, omitted/null origins, null/empty allowlists, immutable snapshots and rejected writes passed; no native execution claimed.")

@@ -68,8 +68,12 @@ func TestMCPOmittedOriginIsService(t *testing.T) {
 			}
 		}
 	}
-	if _, err := resolveMCPTool(json.RawMessage(`{"type":"mcp","server_label":"records","transport":{"type":"stdio","command":"run"}}`), true); err == nil || err.Error() != "MCP currently requires explicit connection_origin=service." {
-		t.Fatal("stdio transport lost its explicit origin rule", err)
+	// Other transports report the transport restriction with any origin.
+	for _, origin := range []string{"", `,"connection_origin":null`, `,"connection_origin":"service"`} {
+		input := `{"type":"mcp","server_label":"records"` + origin + `,"transport":{"type":"stdio","command":"run"}}`
+		if _, err := resolveMCPTool(json.RawMessage(input), true); err == nil || err.Error() != "MCP currently supports HTTP transport only." {
+			t.Fatalf("stdio origin %q: %v", origin, err)
+		}
 	}
 }
 
