@@ -230,19 +230,30 @@ func checkValue(path string, raw json.RawMessage, s shape) error {
 	return nil
 }
 
-// checkMembers validates members in document order, then required members in
-// the pinned order. A repeated key keeps its first position and last value,
-// which is the value the parsers decode.
+// checkMembers rejects unknown and repeated members in document order, then
+// validates the values in document order and the required members in the pinned
+// order. Names match exactly, so a name that differs from a member only by case
+// is unknown. encoding/json matches names case-insensitively and merges repeated
+// objects into pointer structs, so only an object whose members each appear once
+// with their exact names decodes to the checked values.
 func checkMembers(path string, raw json.RawMessage, members []member) error {
 	keys, fields := orderedMembers(raw)
+	seen := make(map[string]bool, len(keys))
 	for _, key := range keys {
-		spec, known := findMember(members, key)
-		if !known {
+		if _, known := findMember(members, key); !known {
 			if !echoableField(key) {
 				return errUnknownParameter
 			}
 			return &fieldError{param: joinPath(path, key), message: fmt.Sprintf("Unknown parameter: '%s'.", joinPath(path, key))}
 		}
+		if seen[key] {
+			// A local message: the official response to a repeated member is unobserved.
+			return &fieldError{param: joinPath(path, key), message: fmt.Sprintf("Duplicate parameter: '%s'.", joinPath(path, key))}
+		}
+		seen[key] = true
+	}
+	for _, key := range keys {
+		spec, _ := findMember(members, key)
 		if err := checkValue(joinPath(path, key), fields[key], spec.shape); err != nil {
 			return err
 		}
@@ -393,8 +404,8 @@ func containsString(values []string, value string) bool {
 	return false
 }
 
-// orderedMembers returns an object's keys in first-occurrence order with each
-// key's last value, matching encoding/json decoding. The input is valid JSON.
+// orderedMembers returns every key of an object in document order, including
+// repeated keys, and each key's last value. The input is valid JSON.
 func orderedMembers(raw json.RawMessage) ([]string, map[string]json.RawMessage) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	fields := map[string]json.RawMessage{}
@@ -409,9 +420,7 @@ func orderedMembers(raw json.RawMessage) ([]string, map[string]json.RawMessage) 
 		if err != nil || !isKey || decoder.Decode(&value) != nil {
 			return keys, fields
 		}
-		if _, seen := fields[key]; !seen {
-			keys = append(keys, key)
-		}
+		keys = append(keys, key)
 		fields[key] = value
 	}
 	return keys, fields

@@ -2796,8 +2796,8 @@ paths:
         128 characters and metadata outside 16 string pairs with 64-character keys
         and 512-character values return invalid_request_error with the official param;
         U+0000 in stored strings is rejected as a local storage limit. Missing, unknown,
-        wrongly typed or unsupported enum members of the pinned configuration shapes
-        (tools, text, reasoning, service_tier, multi_agent) return invalid_request_error
+        repeated, wrongly typed or unsupported enum members of the pinned configuration
+        shapes (tools, text, reasoning, service_tier, multi_agent) return invalid_request_error
         with the JSON path as param; duplicate function names, repeated web_search
         or tool_search and non-object schema root types return it with a null param.
         Supports model/name/instructions/metadata, explicit reasoning and service

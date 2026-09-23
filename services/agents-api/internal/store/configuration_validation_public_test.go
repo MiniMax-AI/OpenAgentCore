@@ -15,8 +15,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// Agent configuration protocol errors (TV-01..04) reject before any write on
-// every configuration path, with responses independent of resource ownership.
+// Agent configuration protocol errors (TV-01..04) and repeated members reject
+// before any write on every configuration path, with responses independent of
+// resource ownership.
 func TestAgentConfigurationValidationRejectsWithoutWritesPostgres(t *testing.T) {
 	// An isolated database keeps the no-write digest independent of other tests.
 	_, pool := store.NewManagedTestStore(t)
@@ -80,6 +81,11 @@ func TestAgentConfigurationValidationRejectsWithoutWritesPostgres(t *testing.T) 
 		{"X01", `"tool_choice":"auto"`, "{p}tool_choice", "Unknown parameter: '{p}tool_choice'."},
 		{"M01", `"multi_agent":{}`, "{p}multi_agent.enabled", "Missing required parameter: '{p}multi_agent.enabled'."},
 		{"M02", `"multi_agent":{"enabled":true,"max_concurrent_subagents":0}`, "{p}multi_agent.max_concurrent_subagents", "Invalid '{p}multi_agent.max_concurrent_subagents': integer below minimum value. Expected a value >= 1, but got 0 instead."},
+		// Repeated members would merge when decoded, and names match case-insensitively (local message).
+		{"merged text", `"text":{"format":{"type":"json_schema","schema":{"type":"array"}}},"text":{"verbosity":"low"}`, "{p}text", "Duplicate parameter: '{p}text'."},
+		{"merged reasoning", `"reasoning":{"Effort":"high"},"reasoning":{}`, "{p}reasoning", "Duplicate parameter: '{p}reasoning'."},
+		{"merged location", `"tools":[{"type":"web_search","mode":"disabled","location":{"city":"Paris"},"location":{"country":null}}]`, "{p}tools[0].location", "Duplicate parameter: '{p}tools[0].location'."},
+		{"case variant", `"reasoning":{"effort":"high","EFFORT":"max"}`, "{p}reasoning.EFFORT", "Unknown parameter: '{p}reasoning.EFFORT'."},
 	}
 	expect := func(tc struct{ name, fields, param, message string }, prefix string) string {
 		param := "null"

@@ -108,11 +108,25 @@ func TestAgentConfigurationProtocolErrorsUseOfficialFields(t *testing.T) {
 		{"schema array", `"text":{"format":{"type":"json_schema","schema":[]}}`, "{p}text.format.schema", "Invalid type for '{p}text.format.schema': expected an object with string keys and unknown value values, but got an array instead."},
 		{"reasoning array", `"reasoning":[]`, "{p}reasoning", "Invalid type for '{p}reasoning': expected an object, but got an array instead."},
 		{"case variant", `"reasoning":{"Effort":"high"}`, "{p}reasoning.Effort", "Unknown parameter: '{p}reasoning.Effort'."},
-		{"last value", `"reasoning":{"effort":"high","effort":"bogus"}`, "{p}reasoning.effort", "Invalid value: 'bogus'. Supported values are: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', and 'max'."},
+		// encoding/json merges repeated objects and matches names case-insensitively,
+		// so repeated members and case variants reject anywhere in the tree (local message).
+		{"merged text", `"text":{"format":{"type":"json_schema","schema":{"type":"array"}}},"text":{"verbosity":"low"}`, "{p}text", "Duplicate parameter: '{p}text'."},
+		{"merged reasoning", `"reasoning":{"Effort":"high"},"reasoning":{}`, "{p}reasoning", "Duplicate parameter: '{p}reasoning'."},
+		{"merged location", `"tools":[{"type":"web_search","mode":"disabled","location":{"city":"Paris"},"location":{"country":null}}]`, "{p}tools[0].location", "Duplicate parameter: '{p}tools[0].location'."},
+		{"case variant member", `"reasoning":{"effort":"high","EFFORT":"max"}`, "{p}reasoning.EFFORT", "Unknown parameter: '{p}reasoning.EFFORT'."},
+		{"repeated scalar", `"reasoning":{"effort":"high","effort":"bogus"}`, "{p}reasoning.effort", "Duplicate parameter: '{p}reasoning.effort'."},
+		{"repeated root", `"service_tier":"auto","service_tier":"flex"`, "{p}service_tier", "Duplicate parameter: '{p}service_tier'."},
+		{"repeated tool type", `"tools":[{"type":"function","type":"function","name":"f","description":"","parameters":{}}]`, "{p}tools[0].type", "Duplicate parameter: '{p}tools[0].type'."},
+		{"repeated nested", `"multi_agent":{"enabled":true,"enabled":false}`, "{p}multi_agent.enabled", "Duplicate parameter: '{p}multi_agent.enabled'."},
+		{"case variant root", `"Text":{}`, "{p}Text", "Unknown parameter: '{p}Text'."},
+		{"case variant nested", `"text":{"Verbosity":"low"}`, "{p}text.Verbosity", "Unknown parameter: '{p}text.Verbosity'."},
+		{"case variant tool", `"tools":[{"type":"web_search","mode":"disabled","Location":{}}]`, "{p}tools[0].Location", "Unknown parameter: '{p}tools[0].Location'."},
+		{"unknown first", `"tool_choice":"auto","text":{},"text":{}`, "{p}tool_choice", "Unknown parameter: '{p}tool_choice'."},
+		{"repeat first", `"text":{},"text":{},"tool_choice":"auto"`, "{p}text", "Duplicate parameter: '{p}text'."},
+		{"repeat before values", `"reasoning":{"effort":"bogus"},"text":{},"text":{}`, "{p}text", "Duplicate parameter: '{p}text'."},
 		{"enabled null", `"multi_agent":{"enabled":null}`, "{p}multi_agent.enabled", "Invalid type for '{p}multi_agent.enabled': expected a boolean, but got null instead."},
 		{"maximum number", `"multi_agent":{"enabled":true,"max_concurrent_subagents":1.5}`, "{p}multi_agent.max_concurrent_subagents", "Invalid type for '{p}multi_agent.max_concurrent_subagents': expected an integer, but got a number instead."},
 		{"maximum negative", `"multi_agent":{"enabled":true,"max_concurrent_subagents":-99999999999999999999}`, "{p}multi_agent.max_concurrent_subagents", "Invalid '{p}multi_agent.max_concurrent_subagents': integer below minimum value. Expected a value >= 1."},
-		{"model type", `"model":4`, "{p}model", "Invalid type for '{p}model': expected a string, but got an integer instead."},
 		{"instructions type", `"instructions":false`, "{p}instructions", "Invalid type for '{p}instructions': expected a string, but got a boolean instead."},
 		// C2 (TV-02) and C3 (TV-03): param null.
 		{"F08", `"tools":[` + lookupTool("lookup", "") + `,{"type":"function","name":"lookup","description":"Second.","parameters":{"type":"object"}}]`, "", "duplicate function tool name: lookup"},
@@ -156,8 +170,15 @@ func TestSessionAgentProtocolErrors(t *testing.T) {
 		{`{"agent":{"model":"m","name":"x"},"environment":{"type":"none"}}`, "agent.name", "Unknown parameter: 'agent.name'."},
 		{`{"agent":{"model":"m","metadata":{}},"environment":{"type":"none"}}`, "agent.metadata", "Unknown parameter: 'agent.metadata'."},
 		{`{"agent":{"model":null},"environment":{"type":"none"}}`, "agent.model", "Invalid type for 'agent.model': expected a string, but got null instead."},
+		{`{"agent":{"model":4},"environment":{"type":"none"}}`, "agent.model", "Invalid type for 'agent.model': expected a string, but got an integer instead."},
+		// The Session body keeps its decoder, which replaces a repeated agent whole.
+		{`{"agent":{"model":"m"},"agent":{"model":"m","model":"n"},"environment":{"type":"none"}}`, "agent.model", "Duplicate parameter: 'agent.model'."},
 	} {
 		assertConfigurationError(t, credentialRequest(h, http.MethodPost, "/v1/agents/sessions", tc.body), "invalid_request_error", param(tc.param), tc.message)
+	}
+	for _, path := range []string{"/v1/agents", "/v1/agents/" + uuid.NewString()} {
+		assertConfigurationError(t, credentialRequest(h, http.MethodPost, path, `{"model":4}`), "invalid_request_error", param("model"), "Invalid type for 'model': expected a string, but got an integer instead.")
+		assertConfigurationError(t, credentialRequest(h, http.MethodPost, path, `{"model":"m","model":"n"}`), "invalid_request_error", param("model"), "Duplicate parameter: 'model'.")
 	}
 	// Saved Agent creation requires a model; updates and Session overrides do not.
 	assertConfigurationError(t, credentialRequest(h, http.MethodPost, "/v1/agents", `{"name":"x"}`), "invalid_request_error", param("model"), "Missing required parameter: 'model'.")
@@ -179,7 +200,7 @@ func TestAgentConfigurationAcceptedValuesUnchanged(t *testing.T) {
 		`"tools":[{"type":"function","name":"x","description":"","parameters":{"type":"object","Type":"string"}}]`,
 		`"tools":[{"type":"web_search","mode":"disabled","context_size":null,"allowed_domains":[],"location":{"city":null}},{"type":"programmatic_tool_calling","enabled":false}]`,
 		`"tools":null`, `"text":{"format":null,"verbosity":null}`, `"reasoning":null`, `"multi_agent":{"enabled":false,"max_concurrent_subagents":4}`,
-		`"reasoning":{"effort":"bogus","effort":null}`, `"service_tier":"auto"`, `"instructions":null`,
+		`"service_tier":"auto"`, `"instructions":null`,
 	}
 	saved := append([]string{
 		`"tools":[{"type":"programmatic_tool_calling","enabled":true}]`,
