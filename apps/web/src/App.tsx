@@ -1007,12 +1007,16 @@ export function App() {
     const schedule = () => {
       const jitter = Math.floor(Math.random() * 5_000);
       timer = window.setTimeout(() => {
-        if (!document.hidden) void refreshRuntimeSnapshot();
+        if (!document.hidden && !dashboardRefreshInFlightRef.current) {
+          void refreshRuntimeSnapshot();
+        }
         schedule();
       }, RUNTIME_SNAPSHOT_REFRESH_MS + jitter);
     };
     const onVisibilityChange = () => {
-      if (!document.hidden) void refreshRuntimeSnapshot();
+      if (!document.hidden && !dashboardRefreshInFlightRef.current) {
+        void refreshRuntimeSnapshot();
+      }
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     schedule();

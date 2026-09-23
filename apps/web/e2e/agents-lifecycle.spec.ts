@@ -2392,8 +2392,28 @@ test("presents Dashboard page-chain results and System boundaries without extra 
     "/v1/agents/sessions/session_snapshot/items",
     "/v1/agents/sessions/session_snapshot/turns",
   ];
+  let delayNextSessionList = true;
+  let releaseSessionList: (() => void) | null = null;
+  let markSessionListStarted: (() => void) | null = null;
+  const sessionListStarted = new Promise<void>((resolve) => {
+    markSessionListStarted = resolve;
+  });
+  await page.route("**/v1/agents/sessions*", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/v1/agents/sessions" || !delayNextSessionList) {
+      return route.continue();
+    }
+    delayNextSessionList = false;
+    markSessionListStarted?.();
+    await new Promise<void>((resolve) => {
+      releaseSessionList = resolve;
+    });
+    await route.continue();
+  });
   const refresh = dashboard.getByRole("button", { name: "Refresh Dashboard snapshot" });
   await refresh.click();
+  await sessionListStarted;
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  releaseSessionList?.();
   await expect.poll(async () => {
     const entries = await fixtureRequests(request);
     return [count(entries, "/v1/agents"), count(entries, "/v1/agents/sessions")];
