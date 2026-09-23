@@ -353,9 +353,9 @@ Evidence: campaign scan 6 HI-01..04 (private
 - **Payloads.** `environment.error` is `{type: environment_error, code:
   environment_connection_failed, message: "The environment failed to connect."}`.
   The `error` event carries the pinned `SessionError`: `{type: environment_error,
-  code: sandbox_error, message: <safe reason>, param: null}`. Every `error` event
-  now includes `param` (null when unset), including Core's own
-  `stream_interrupted`. The `agent.session.failed` snapshot has `status: failed`,
+  code: sandbox_error, message: <safe reason>, param: null}`. Core's own
+  `stream_interrupted` frame keeps its three-field error without `param`, which
+  released clients validate exactly. The `agent.session.failed` snapshot has `status: failed`,
   the reason as `error`, `required_actions: []` and the failure time as
   `last_active_at`, identical to later retrieve and list reads. Pending input
   settled by the failure is captured in the same snapshot.

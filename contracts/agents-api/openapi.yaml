@@ -2483,8 +2483,9 @@ definitions:
         type: string
       param:
         description: |-
-          Param is the pinned SessionError field. A top-level error event always
-          carries it, null when unset; Environment state errors omit it.
+          Param is the pinned SessionError field. An error SessionEvent always
+          carries it, null when unset; Environment state errors and Core's own
+          stream_interrupted frame omit it.
         type: string
         x-nullable: true
       type:

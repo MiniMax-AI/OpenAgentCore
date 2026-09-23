@@ -241,9 +241,16 @@ func withTurnUsage(event v1.SessionEvent) v1.SessionEvent {
 	return event
 }
 
+// writeStreamFailure sends Core's own interruption frame. Unlike official error
+// events it omits param: released clients validate exactly code, type and message.
 func writeStreamFailure(write func([]byte) error, session string) {
-	event := v1.SessionEvent{Type: "error", EventID: uuid.NewString(), SessionID: session,
-		Error: &v1.StreamError{Code: "stream_interrupted", Type: "server_error", Message: "The live stream was interrupted. Reconnect and retrieve the Session and its saved Items to recover."}}
+	event := struct {
+		Type      string         `json:"type"`
+		EventID   string         `json:"event_id"`
+		SessionID string         `json:"session_id"`
+		Error     v1.StreamError `json:"error"`
+	}{"error", uuid.NewString(), session,
+		v1.StreamError{Code: "stream_interrupted", Type: "server_error", Message: "The live stream was interrupted. Reconnect and retrieve the Session and its saved Items to recover."}}
 	payload, _ := json.Marshal(event)
 	_ = write([]byte(fmt.Sprintf("event: error\ndata: %s\n\n", payload)))
 }

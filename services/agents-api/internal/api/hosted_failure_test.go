@@ -192,3 +192,20 @@ func TestHostedProvisioningFailureInputConflict(t *testing.T) {
 		t.Fatal("internal callers no longer see an unavailable Environment")
 	}
 }
+
+// Core's own interruption frame keeps the three-field error that released
+// clients validate exactly; official error events carry param null.
+func TestStreamInterruptionFrameOmitsParam(t *testing.T) {
+	var frame []byte
+	writeStreamFailure(func(data []byte) error { frame = data; return nil }, "session")
+	name, data, ok := strings.Cut(strings.TrimSuffix(string(frame), "\n\n"), "\n")
+	var event map[string]any
+	if !ok || name != "event: error" || json.Unmarshal([]byte(strings.TrimPrefix(data, "data: ")), &event) != nil {
+		t.Fatalf("frame %q", frame)
+	}
+	want := map[string]any{"type": "error", "event_id": event["event_id"], "session_id": "session", "error": map[string]any{
+		"code": "stream_interrupted", "type": "server_error", "message": "The live stream was interrupted. Reconnect and retrieve the Session and its saved Items to recover."}}
+	if id, _ := event["event_id"].(string); id == "" || !reflect.DeepEqual(event, want) {
+		t.Fatalf("interruption frame %s", data)
+	}
+}

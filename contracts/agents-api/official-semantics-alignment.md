@@ -773,7 +773,9 @@ Decisions:
 - **Scope of the terminal state.** Only a recorded hosted provisioning failure
   makes the Session terminal. A Turn failure still leaves GET streams open, and
   a GET stream opened after the failure stays open; that case was not observed.
-- **Clients.** Every `error` event now carries `param`. The TypeScript client
+- **Clients.** Official-shaped `error` events carry `param: null`; Core's own
+  `stream_interrupted` frame keeps its three-field error without `param`, so
+  released clients still report it as an interruption. The TypeScript client
   delivers error events other than Core's `stream_interrupted` to `onEvent`
   before the failed snapshot, instead of raising them. Core Web already renders
   the failed Session, its error and the blocked input.

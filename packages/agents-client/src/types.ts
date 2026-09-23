@@ -629,7 +629,7 @@ export interface StreamError {
   code: string;
   type: string;
   message: string;
-  /** Present on error events (null when unset); Environment state errors omit it. */
+  /** Present on Session error events (null when unset); Environment state errors and older or interruption frames omit it. */
   param?: string | null;
 }
 

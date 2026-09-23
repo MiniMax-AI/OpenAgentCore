@@ -29,8 +29,9 @@ type StreamError struct {
 	Code    string `json:"code"`
 	Type    string `json:"type"`
 	Message string `json:"message"`
-	// Param is the pinned SessionError field. A top-level error event always
-	// carries it, null when unset; Environment state errors omit it.
+	// Param is the pinned SessionError field. An error SessionEvent always
+	// carries it, null when unset; Environment state errors and Core's own
+	// stream_interrupted frame omit it.
 	Param *string `json:"param,omitempty" extensions:"x-nullable"`
 }
 
