@@ -32,7 +32,7 @@ func sessionResponse(session store.Session, executorURL string) (v1.Session, err
 			return v1.Session{}, errors.New("unsupported stored tool configuration")
 		}
 		if tool.Type != "tool_search" {
-			tools = append(tools, raw)
+			tools = append(tools, projectedMCPCredential(raw, cfg))
 		}
 	}
 	cfg.Agent.Tools = tools

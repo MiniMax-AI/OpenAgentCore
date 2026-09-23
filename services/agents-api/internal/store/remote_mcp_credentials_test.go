@@ -14,7 +14,6 @@ func TestSelfHostedServiceMCPRejectionDoesNotRequireCredentialDecryption(t *test
 	for _, mode := range []string{"missing key", "deleted", "tampered"} {
 		t.Run(mode, func(t *testing.T) {
 			s, pool, tenant, vault, credential := selfHostedMCPAdmissionFixture(t)
-			expected := http.StatusBadRequest
 			switch mode {
 			case "missing key":
 				s = store.New(pool)
@@ -22,7 +21,6 @@ func TestSelfHostedServiceMCPRejectionDoesNotRequireCredentialDecryption(t *test
 				if _, err := s.DeleteCredential(t.Context(), tenant, vault.ID, credential.ID); err != nil {
 					t.Fatal(err)
 				}
-				expected = http.StatusNotFound
 			case "tampered":
 				if _, err := pool.Exec(t.Context(), "UPDATE vault_credentials SET token_ciphertext=set_byte(token_ciphertext,15,get_byte(token_ciphertext,15) # 1) WHERE id=$1", credential.ID); err != nil {
 					t.Fatal(err)
@@ -50,10 +48,14 @@ func TestSelfHostedServiceMCPRejectionDoesNotRequireCredentialDecryption(t *test
 				request.Header.Set("OpenAI-Beta", "agents=v1")
 				response := httptest.NewRecorder()
 				handler.ServeHTTP(response, request)
-				if response.Code != expected || strings.Contains(response.Body.String(), "synthetic-token") || strings.Contains(response.Body.String(), "ciphertext") || strings.Contains(response.Body.String(), "mcp_credentials") {
+				if response.Code != http.StatusBadRequest || strings.Contains(response.Body.String(), "synthetic-token") || strings.Contains(response.Body.String(), "ciphertext") || strings.Contains(response.Body.String(), "mcp_credentials") {
 					t.Fatal("rejected MCP credential combination admitted or disclosed", response.Code, response.Body)
 				}
-				if expected == http.StatusBadRequest && !strings.Contains(response.Body.String(), "environment:none") {
+				message := "environment:none"
+				if mode == "deleted" {
+					message = "MCP credential_id " + credential.ID + " was not found in an attached vault"
+				}
+				if !strings.Contains(response.Body.String(), message) {
 					t.Fatal("unsupported placement attempted credential decryption", response.Body)
 				}
 				assertSelfHostedMCPRejectionHasNoWrites(t, pool, tenant)

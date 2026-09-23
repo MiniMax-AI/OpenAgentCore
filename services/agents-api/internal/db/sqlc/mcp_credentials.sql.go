@@ -18,8 +18,8 @@ JOIN vaults v ON v.id = c.vault_id
 WHERE v.tenant_id = $1
   AND v.id = ANY($2::uuid[])
   AND c.auth_type IN ('static_bearer', 'mcp_oauth')
-  AND c.mcp_server_url = $3
-  AND ($4::uuid IS NULL OR c.id = $4::uuid)
+  AND CASE WHEN $3::uuid IS NULL THEN c.mcp_server_url = $4
+           ELSE c.id = $3::uuid END
 ORDER BY c.id
 LIMIT 2
 `
@@ -27,8 +27,8 @@ LIMIT 2
 type FindMCPCredentialsParams struct {
 	TenantID     pgtype.UUID   `json:"tenant_id"`
 	VaultIds     []pgtype.UUID `json:"vault_ids"`
-	McpServerUrl string        `json:"mcp_server_url"`
 	CredentialID pgtype.UUID   `json:"credential_id"`
+	McpServerUrl string        `json:"mcp_server_url"`
 }
 
 type FindMCPCredentialsRow struct {
@@ -41,12 +41,14 @@ type FindMCPCredentialsRow struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
+// An explicit credential ID is found in the attached Vaults by ID alone, so the
+// caller can compare its destination; otherwise the exact destination selects.
 func (q *Queries) FindMCPCredentials(ctx context.Context, arg FindMCPCredentialsParams) ([]FindMCPCredentialsRow, error) {
 	rows, err := q.db.Query(ctx, findMCPCredentials,
 		arg.TenantID,
 		arg.VaultIds,
-		arg.McpServerUrl,
 		arg.CredentialID,
+		arg.McpServerUrl,
 	)
 	if err != nil {
 		return nil, err

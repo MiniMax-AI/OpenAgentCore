@@ -41,7 +41,10 @@ def verify_mcp_credentials(client, other, peer, canary, expect_error):
     def verify_session(value, expected_ids, expected_credential):
         body = value.to_dict()
         assert body["vault_ids"] == expected_ids
+        # The first tool projects its explicit or implicitly selected credential
+        # (MV-02); the anonymous tool stays null.
         assert body["agent"]["tools"][0]["credential_id"] == expected_credential
+        assert all(item["credential_id"] is None for item in body["agent"]["tools"][1:])
         assert "headers" not in body["agent"]["tools"][0]["transport"]
         assert canary not in json.dumps(body) and "mcp_credentials" not in body
         assert value.status == "in_progress"
@@ -52,16 +55,17 @@ def verify_mcp_credentials(client, other, peer, canary, expect_error):
         expect_error(NotFoundError, lambda: other.beta.agents.sessions.retrieve(value.id))
         saved_sessions.append(value)
 
-    # Omission and null retain the declared public field while resolving the same
-    # unique private selection; explicit selection is preserved publicly.
-    for declaration in (tool, {**tool, "credential_id": None}, {**tool, "credential_id": chosen.id}):
+    # Omission and null project the unique selection; explicit selection is
+    # echoed. The minimal tool omits connection_origin (MV-01).
+    minimal = {key: item for key, item in tool.items() if key != "connection_origin"}
+    for declaration in (tool, {**tool, "credential_id": None}, {**tool, "credential_id": chosen.id}, minimal):
         request = deepcopy(inline)
         request["agent"]["tools"][0] = declaration
         key = {"Idempotency-Key": "mcp-vault-" + str(uuid.uuid4())}
         response = sessions.with_raw_response.create(**request, extra_headers=key)
         value = response.parse()
         assert response.http_response.json() == value.to_dict()
-        verify_session(value, ids, declaration.get("credential_id"))
+        verify_session(value, ids, chosen.id)
         retries.append((request, key, value))
 
     saved = client.beta.agents.create(model="requested-model", tools=[tool, anonymous])
@@ -69,7 +73,7 @@ def verify_mcp_credentials(client, other, peer, canary, expect_error):
     saved_key = {"Idempotency-Key": "mcp-vault-saved-" + saved.id}
     value = sessions.create(**saved_spec, extra_headers=saved_key)
     saved_session = value
-    verify_session(value, ids, None)
+    verify_session(value, ids, chosen.id)
     retries.append((saved_spec, saved_key, value))
     assert value.agent.id == saved.id
 
@@ -86,9 +90,10 @@ def verify_mcp_credentials(client, other, peer, canary, expect_error):
             event = event_data(response.iter_lines())
             assert event["type"] == "agent.session.created"
             assert canary not in json.dumps(event) and "mcp_credentials" not in event["session"]
+            assert event["session"]["agent"]["tools"][0]["credential_id"] == chosen.id
         streamed = sessions.retrieve(event["session"]["id"])
         assert streamed.id == event["session"]["id"] and streamed.agent.to_dict() == event["session"]["agent"]
-        verify_session(streamed, ids, None)
+        verify_session(streamed, ids, chosen.id)
         retries.append((inline, stream_key, streamed))
 
         # Vault defaults retain anonymous MCP and never implicitly search other
@@ -102,7 +107,7 @@ def verify_mcp_credentials(client, other, peer, canary, expect_error):
         # Same-project users can attach the same Vaults; role names do not add a
         # product-specific approval or permission boundary to the independent API.
         value = peer.beta.agents.sessions.create(**inline)
-        verify_session(value, ids, None)
+        verify_session(value, ids, chosen.id)
 
         second = credential(client, attached[1], url, "Second matching credential")
         explicit = deepcopy(inline)
@@ -112,7 +117,9 @@ def verify_mcp_credentials(client, other, peer, canary, expect_error):
         for request, key, original in retries:
             assert sessions.create(**request, extra_headers=key) == original
             assert len(list(sessions.turns.list(original.id))) == 1
-        expect_error(BadRequestError, lambda: sessions.create(**inline))
+        error = expect_error(ConflictError, lambda: sessions.create(**inline))
+        assert error.body == {"type": "conflict_error", "code": "conflict_error", "param": None,
+                              "message": "multiple attached vault credentials match MCP server_url " + url + "; specify credential_id"}
 
         changed = client.beta.agents.update(saved.id, tools=[])
         saved_agents.append(changed)
@@ -123,29 +130,57 @@ def verify_mcp_credentials(client, other, peer, canary, expect_error):
         # Saved schemas can retain references without obtaining execution access.
         referenced = client.beta.agents.create(model="requested-model", tools=[{**tool, "credential_id": outside.id}])
         saved_agents.append(referenced)
-        expect_error(NotFoundError, lambda: sessions.create(agent_id=referenced.id,
+        expect_error(BadRequestError, lambda: sessions.create(agent_id=referenced.id,
                      input="Verify mcp credentials fixture admission.", environment={"type": "none"}, vault_ids=ids))
 
         before = {item.id for item in sessions.list()}
         foreign_before = {item.id for item in other.beta.agents.sessions.list()}
+        # Selection errors (MV-03) use the official fields; missing, foreign and
+        # unattached references share one message.
+        def selection(message):
+            return {"type": "invalid_request_error", "code": "invalid_request_error", "param": None, "message": message}
+
+        def not_attached(reference):
+            return selection("MCP credential_id " + reference + " was not found in an attached vault")
+
         rejected = []
-        for reference in (chosen.id, outside.id, foreign_credential.id, alternate.id, str(uuid.uuid4())):
+        missing = str(uuid.uuid4())
+        for reference, expected in ((chosen.id, not_attached(chosen.id)), (outside.id, not_attached(outside.id)),
+                                    (foreign_credential.id, not_attached(foreign_credential.id)),
+                                    (missing, not_attached(missing)), ("not-a-credential", not_attached("not-a-credential")),
+                                    (alternate.id, selection("MCP credential_id " + alternate.id + " does not match server_url " + url))):
             request = deepcopy(inline)
             request["agent"]["tools"][0]["credential_id"] = reference
             if reference == chosen.id:
                 request["vault_ids"] = [attached[1].id]
-            rejected.append((request, 404))
-        rejected.extend([({**explicit, "vault_ids": [foreign.id]}, 404),
-                         ({**explicit, "vault_ids": [str(uuid.uuid4())]}, 404),
-                         (inline, 400)])
+            rejected.append((request, 400, expected))
+        request = deepcopy(inline)
+        request["agent"]["tools"][0]["credential_id"] = chosen.id
+        for vault_ids in ({}, {"vault_ids": None}, {"vault_ids": []}):
+            unattached_request = {key: item for key, item in request.items() if key != "vault_ids"}
+            rejected.append(({**unattached_request, **vault_ids}, 400, selection("MCP credential_id requires an attached vault")))
+        rejected.extend([({**explicit, "vault_ids": [foreign.id]}, 404, None),
+                         ({**explicit, "vault_ids": [str(uuid.uuid4())]}, 404, None),
+                         (inline, 409, {"type": "conflict_error", "code": "conflict_error", "param": None,
+                                        "message": "multiple attached vault credentials match MCP server_url " + url + "; specify credential_id"})])
         for invalid in ("invalid", 3, [None], [3], {}):
-            rejected.append(({**explicit, "vault_ids": invalid}, 400))
-        for request, status in rejected:
+            rejected.append(({**explicit, "vault_ids": invalid}, 400, None))
+        for request, status, expected in rejected:
             for initial in ({}, {"input": "Must not be admitted", "stream": True}):
                 response = raw.post(base + "/agents/sessions", headers=headers, json={**request, **initial})
                 assert response.status_code == status
                 assert response.headers["content-type"].startswith("application/json")
                 assert canary not in response.text and foreign.id not in response.text
+                assert expected is None or response.json()["error"] == expected
+        # The same reference from another tenant is byte-identical to the unattached case.
+        foreign_request = deepcopy(inline)
+        foreign_request["agent"]["tools"][0]["credential_id"] = chosen.id
+        foreign_request["vault_ids"] = [foreign.id]
+        other_headers = {"Authorization": "Bearer " + other.api_key, "OpenAI-Beta": "agents=v1"}
+        unattached_response = raw.post(base + "/agents/sessions", headers=headers, json=rejected[0][0])
+        foreign_response = raw.post(base + "/agents/sessions", headers=other_headers, json=foreign_request)
+        assert foreign_response.status_code == unattached_response.status_code == 400
+        assert foreign_response.content == unattached_response.content
         assert {item.id for item in sessions.list()} == before
         assert {item.id for item in other.beta.agents.sessions.list()} == foreign_before
         for field in ({"vault_ids": [attached[0].id]},
@@ -155,7 +190,7 @@ def verify_mcp_credentials(client, other, peer, canary, expect_error):
         public = raw.get(base + "/agents/sessions", headers=headers).json()
         assert canary not in json.dumps(public) and "mcp_credentials" not in json.dumps(public)
 
-    print("Public MCP Vault admission: explicit/unique selection, owner/destination isolation, safe snapshots, creation streams and stable retries passed; native execution is checked separately.")
+    print("Public MCP Vault admission: explicit/unique selection and its projection, official selection errors, owner/destination isolation, safe snapshots, creation streams and stable retries passed; native execution is checked separately.")
     return saved_sessions, saved_agents, retries
 
 

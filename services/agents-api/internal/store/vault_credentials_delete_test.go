@@ -107,8 +107,8 @@ func TestCredentialDeletionScopeBindingAndRestart(t *testing.T) {
 	if _, err := s.MCPBearerToken(t.Context(), tenant, attached, selected[0]); !errors.Is(err, ErrNotFound) {
 		t.Fatal("frozen selection fell back to another token")
 	}
-	if _, err := s.ResolveMCPCredentials(t.Context(), tenant, attached, []MCPCredentialRequest{{ServerLabel: "tools", ServerURL: original.MCPServerURL, CredentialID: &original.ID}}); !errors.Is(err, ErrNotFound) {
-		t.Fatal("deleted explicit selection was admitted")
+	if _, err := s.ResolveMCPCredentials(t.Context(), tenant, attached, []MCPCredentialRequest{{ServerLabel: "tools", ServerURL: original.MCPServerURL, CredentialID: &original.ID}}); !isSelectionError(err, false, "MCP credential_id "+original.ID+" was not found in an attached vault") {
+		t.Fatal("deleted explicit selection was admitted", err)
 	}
 	page, err := public.ListCredentials(t.Context(), tenant, vault.ID, "", 100, true, []string{"active", "archived"})
 	if err != nil || len(page.Credentials) != 1 || !reflect.DeepEqual(page.Credentials[0], sibling) {

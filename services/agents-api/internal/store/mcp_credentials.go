@@ -6,6 +6,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/credentialcrypto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/echotext"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -24,6 +25,44 @@ type MCPCredentialBinding struct {
 	VaultID      string `json:"vault_id,omitempty"`
 	CredentialID string `json:"credential_id,omitempty"`
 	AuthType     string `json:"auth_type,omitempty"`
+}
+
+// MCPCredentialSelectionError rejects a Session MCP credential selection with
+// the observed official message (MV-03); the API reports a Conflict as 409
+// conflict_error and any other as 400 invalid_request_error. Selection searches
+// only the attached Vaults, which the caller owns, so a missing, foreign-tenant,
+// unattached or malformed reference produces the same error, and only a
+// credential of an attached Vault can report a server_url mismatch.
+type MCPCredentialSelectionError struct {
+	Conflict bool
+	Message  string
+}
+
+func (e *MCPCredentialSelectionError) Error() string { return e.Message }
+
+// echoed repeats a caller-supplied value in a selection message only within
+// the shared bound; otherwise the message leaves it out.
+func echoed(value string) string {
+	if !echotext.Allowed(value) {
+		return ""
+	}
+	return " " + value
+}
+
+func mcpCredentialRequiresVault() error {
+	return &MCPCredentialSelectionError{Message: "MCP credential_id requires an attached vault"}
+}
+
+func mcpCredentialNotAttached(id string) error {
+	return &MCPCredentialSelectionError{Message: "MCP credential_id" + echoed(id) + " was not found in an attached vault"}
+}
+
+func mcpCredentialURLMismatch(id, url string) error {
+	return &MCPCredentialSelectionError{Message: "MCP credential_id" + echoed(id) + " does not match server_url" + echoed(url)}
+}
+
+func mcpCredentialAmbiguous(url string) error {
+	return &MCPCredentialSelectionError{Conflict: true, Message: "multiple attached vault credentials match MCP server_url" + echoed(url) + "; specify credential_id"}
 }
 
 func attachedVaultIDs(ids []string) ([]pgtype.UUID, error) {
@@ -67,9 +106,12 @@ func (s *Store) ResolveMCPCredentials(ctx context.Context, tenantID string, vaul
 		}
 		var id pgtype.UUID
 		if request.CredentialID != nil {
+			if len(vaults) == 0 {
+				return nil, mcpCredentialRequiresVault()
+			}
 			id, err = parseID(*request.CredentialID)
 			if err != nil {
-				return nil, ErrNotFound
+				return nil, mcpCredentialNotAttached(*request.CredentialID)
 			}
 		}
 		rows, err := s.queries.FindMCPCredentials(ctx, sqlc.FindMCPCredentialsParams{
@@ -78,11 +120,16 @@ func (s *Store) ResolveMCPCredentials(ctx context.Context, tenantID string, vaul
 		if err != nil {
 			return nil, errors.New("cannot resolve MCP credential")
 		}
-		if len(rows) == 0 && request.CredentialID != nil {
-			return nil, ErrNotFound
+		if request.CredentialID != nil {
+			if len(rows) == 0 {
+				return nil, mcpCredentialNotAttached(*request.CredentialID)
+			}
+			if rows[0].McpServerUrl != request.ServerURL {
+				return nil, mcpCredentialURLMismatch(*request.CredentialID, request.ServerURL)
+			}
 		}
 		if len(rows) > 1 {
-			return nil, ErrInvalidInput
+			return nil, mcpCredentialAmbiguous(request.ServerURL)
 		}
 		binding := MCPCredentialBinding{ServerLabel: request.ServerLabel, ServerURL: request.ServerURL}
 		if len(rows) == 1 {

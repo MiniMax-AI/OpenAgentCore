@@ -54,27 +54,36 @@ func TestMCPCredentialSelectionAndScopedDecryption(t *testing.T) {
 		t.Fatal("private binding contains secret material")
 	}
 	second := create(vaults[1])
-	if _, err := public.ResolveMCPCredentials(t.Context(), tenant, attached, requests); !errors.Is(err, ErrInvalidInput) {
-		t.Fatal("ambiguous selection was admitted")
+	if _, err := public.ResolveMCPCredentials(t.Context(), tenant, attached, requests); !isSelectionError(err, true, "multiple attached vault credentials match MCP server_url "+destination+"; specify credential_id") {
+		t.Fatal("ambiguous selection was admitted", err)
 	}
 	requests[0].CredentialID = &second.ID
 	explicit, err := public.ResolveMCPCredentials(t.Context(), tenant, attached, requests)
 	if err != nil || explicit[0].CredentialID != second.ID || requests[1].CredentialID != nil {
 		t.Fatal("explicit selection did not disambiguate", err)
 	}
+	notAttached := func(id string) string { return "MCP credential_id " + id + " was not found in an attached vault" }
 	for _, tc := range []struct {
 		owner   string
 		vaults  []string
 		id, url string
+		message string // Empty for the unchanged Vault 404.
 	}{
-		{tenant, attached, foreignCredential.ID, destination}, {foreign, attached, first.ID, destination},
-		{tenant, []string{vaults[1].ID}, first.ID, destination}, {tenant, attached, first.ID, destination + "/other"},
-		{tenant, []string{vaults[0].ID, vaults[2].ID}, first.ID, destination}, {tenant, []string{uuid.NewString()}, first.ID, destination},
+		{tenant, attached, foreignCredential.ID, destination, notAttached(foreignCredential.ID)},
+		{tenant, []string{vaults[1].ID}, first.ID, destination, notAttached(first.ID)},
+		{tenant, attached, "not-a-credential", destination, notAttached("not-a-credential")},
+		{tenant, attached, first.ID, destination + "/other", "MCP credential_id " + first.ID + " does not match server_url " + destination + "/other"},
+		{foreign, attached, first.ID, destination, ""},
+		{tenant, []string{vaults[0].ID, vaults[2].ID}, first.ID, destination, ""},
+		{tenant, []string{uuid.NewString()}, first.ID, destination, ""},
 	} {
 		_, err := public.ResolveMCPCredentials(t.Context(), tc.owner, tc.vaults, []MCPCredentialRequest{{ServerLabel: "tools", ServerURL: tc.url, CredentialID: &tc.id}})
-		if !errors.Is(err, ErrNotFound) {
-			t.Fatal("unowned, unattached or wrong-destination selection was admitted")
+		if tc.message == "" && !errors.Is(err, ErrNotFound) || tc.message != "" && !isSelectionError(err, false, tc.message) {
+			t.Fatal("unowned, unattached or wrong-destination selection was admitted", err)
 		}
+	}
+	if _, err := public.ResolveMCPCredentials(t.Context(), tenant, nil, []MCPCredentialRequest{{ServerLabel: "tools", ServerURL: destination, CredentialID: &first.ID}}); !isSelectionError(err, false, "MCP credential_id requires an attached vault") {
+		t.Fatal("a reference without attachments was admitted", err)
 	}
 	pool.Close()
 	public, pool = testStore(t)
@@ -121,4 +130,9 @@ func TestMCPCredentialSelectionAndScopedDecryption(t *testing.T) {
 	if _, err := public.GetCredential(t.Context(), tenant, first.VaultID, first.ID); err != nil {
 		t.Fatal("safe metadata lookup depended on ciphertext", err)
 	}
+}
+
+func isSelectionError(err error, conflict bool, message string) bool {
+	var selection *MCPCredentialSelectionError
+	return errors.As(err, &selection) && selection.Conflict == conflict && selection.Message == message
 }

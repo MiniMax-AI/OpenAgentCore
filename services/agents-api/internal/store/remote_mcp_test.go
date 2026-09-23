@@ -47,15 +47,20 @@ func TestSelfHostedServiceMCPRejectedWithoutWrites(t *testing.T) {
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, request)
 
-			expected := http.StatusNotFound
-			if mode == "anonymous" || mode == "implicit" || mode == "explicit" || strings.HasPrefix(mode, "required") {
-				expected = http.StatusBadRequest
+			// Credential selection errors (MV-03) precede the placement rejection.
+			expected, message := http.StatusBadRequest, "environment:none"
+			switch mode {
+			case "unattached":
+				message = "MCP credential_id requires an attached vault"
+			case "missing":
+				message = "MCP credential_id " + tool["credential_id"].(string) + " was not found in an attached vault"
+			case "wrong URL":
+				message = "MCP credential_id " + credential.ID + " does not match server_url https://other.example/mcp"
+			case "foreign Vault":
+				expected, message = http.StatusNotFound, "Resource not found."
 			}
-			if response.Code != expected {
+			if response.Code != expected || !strings.Contains(response.Body.String(), message) {
 				t.Fatal("self-hosted service MCP admitted or wrong error", mode, response.Code, response.Body)
-			}
-			if expected == http.StatusBadRequest && !strings.Contains(response.Body.String(), "environment:none") {
-				t.Fatal("request rejected outside the service MCP placement boundary", response.Body)
 			}
 			if strings.Contains(response.Body.String(), "synthetic-token") || strings.Contains(response.Body.String(), "ciphertext") || strings.Contains(response.Body.String(), "mcp_credentials") {
 				t.Fatal("rejected request exposed private authentication")

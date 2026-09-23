@@ -84,6 +84,7 @@ func writeFieldError(w http.ResponseWriter, err error) bool {
 
 func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFoundParam ...string) {
 	var cursor *store.InvalidCursorError
+	var selection *store.MCPCredentialSelectionError
 	switch {
 	case errors.Is(err, store.ErrProjectAPIKeyExists):
 		writeError(w, http.StatusConflict, "project_api_key_exists", "This API key ID already exists. List its metadata and revoke it explicitly if the secret was not saved.")
@@ -123,6 +124,14 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 			writeError(w, http.StatusBadRequest, "invalid_value", cursor.Message, "after")
 		} else {
 			writeError(w, http.StatusBadRequest, "invalid_request_error", cursor.Message)
+		}
+	case errors.As(err, &selection):
+		// Observed official fields for Session MCP credential selection (MV-03),
+		// all with a null param.
+		if selection.Conflict {
+			writeError(w, http.StatusConflict, "conflict_error", selection.Message)
+		} else {
+			writeError(w, http.StatusBadRequest, "invalid_request_error", selection.Message)
 		}
 	case errors.Is(err, store.ErrNotFound):
 		code := "not_found_error"

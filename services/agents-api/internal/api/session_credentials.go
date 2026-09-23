@@ -6,6 +6,7 @@ import (
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
+	"github.com/google/uuid"
 )
 
 type mcpCredentialResolver interface {
@@ -42,6 +43,52 @@ func (h *Handler) bindSessionCredentials(ctx context.Context, tenant string, raw
 	}
 	cfg.MCPCredentials = bindings
 	return json.Marshal(cfg)
+}
+
+// projectedMCPCredential shows the credential that creation selected for an MCP
+// tool without an explicit credential_id, as the official Session projection
+// does (MV-02). A frozen binding names only a credential of a Vault the caller
+// attached and owned at creation, and the ID stays shown after that credential
+// is deleted. Anonymous selections stay null and explicit references are echoed
+// unchanged. Only the response changes: the stored caller intent, creation
+// retries and dispatch keep reading the configuration as stored.
+func projectedMCPCredential(raw json.RawMessage, cfg configuration) json.RawMessage {
+	var tool v1.MCPTool
+	if len(cfg.MCPCredentials) == 0 || json.Unmarshal(raw, &tool) != nil || tool.Type != "mcp" || tool.CredentialID != nil {
+		return raw
+	}
+	for _, binding := range cfg.MCPCredentials {
+		if binding.ServerLabel != tool.ServerLabel || binding.ServerURL != tool.Transport.ServerURL || binding.CredentialID == "" {
+			continue
+		}
+		if !attachedVault(cfg.VaultIDs, binding.VaultID) {
+			return raw
+		}
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(raw, &fields) != nil {
+			return raw
+		}
+		fields["credential_id"], _ = json.Marshal(binding.CredentialID)
+		projected, err := json.Marshal(fields)
+		if err != nil {
+			return raw
+		}
+		return projected
+	}
+	return raw
+}
+
+func attachedVault(attached []string, vault string) bool {
+	selected, err := uuid.Parse(vault)
+	if err != nil {
+		return false
+	}
+	for _, raw := range attached {
+		if id, err := uuid.Parse(raw); err == nil && id == selected {
+			return true
+		}
+	}
+	return false
 }
 
 // Attached inline requests need recorded caller intent before reading mutable

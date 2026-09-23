@@ -8,6 +8,7 @@ import (
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
+	"github.com/google/uuid"
 )
 
 func TestMCPCredentialReferenceIsSchemaNotAuthorization(t *testing.T) {
@@ -60,21 +61,72 @@ func TestSessionVaultTypesAndCreationIntent(t *testing.T) {
 	}
 }
 
-func TestSessionProjectionExcludesResolvedMCPSelection(t *testing.T) {
-	var tool v1.MCPTool
-	if json.Unmarshal([]byte(publicMCP), &tool) != nil {
-		t.Fatal("invalid fixture")
+// MV-02: a tool without an explicit credential_id projects the credential that
+// creation selected; the stored configuration is unchanged.
+func TestSessionProjectionShowsSelectedMCPCredential(t *testing.T) {
+	vault, credential := uuid.NewString(), uuid.NewString()
+	tool := func(label, credentialID string) json.RawMessage {
+		value := v1.MCPTool{Type: "mcp", ServerLabel: label, Transport: v1.MCPHTTPTransport{Type: "http", ServerURL: "https://mcp.example.test/" + label},
+			ConnectionOrigin: "service", RequestMetadata: map[string]json.RawMessage{}}
+		if credentialID != "" {
+			value.CredentialID = &credentialID
+		}
+		encoded, _ := json.Marshal(value)
+		return encoded
 	}
-	encodedTool, _ := json.Marshal(tool)
-	cfg := configuration{Agent: v1.Agent{ID: "agent", Model: "model", Tools: []json.RawMessage{encodedTool}}, Environment: v1.Environment{Type: "none"}, VaultIDs: []string{"attached"},
-		MCPCredentials: []store.MCPCredentialBinding{{ServerLabel: "records", ServerURL: tool.Transport.ServerURL, VaultID: "attached", CredentialID: "private-selection", AuthType: "static_bearer"}}}
+	binding := func(label, credentialID string) store.MCPCredentialBinding {
+		b := store.MCPCredentialBinding{ServerLabel: label, ServerURL: "https://mcp.example.test/" + label}
+		if credentialID != "" {
+			b.VaultID, b.CredentialID, b.AuthType = vault, credentialID, "static_bearer"
+		}
+		return b
+	}
+	function := json.RawMessage(`{"type":"function","name":"lookup","description":"","parameters":{"type":"object"},"defer_loading":false}`)
+	explicit := uuid.NewString()
+	cfg := configuration{Agent: v1.Agent{ID: "agent", Model: "model", Tools: []json.RawMessage{tool("implicit", ""), tool("anonymous", ""), tool("explicit", strings.ToUpper(explicit)), function}},
+		Environment: v1.Environment{Type: "none"}, VaultIDs: []string{strings.ToUpper(vault)},
+		MCPCredentials: []store.MCPCredentialBinding{binding("implicit", credential), binding("anonymous", ""), binding("explicit", explicit)}}
 	raw, _ := json.Marshal(cfg)
+	stored := string(raw)
 	response, err := sessionResponse(store.Session{Configuration: raw}, "")
-	if err != nil || !reflect.DeepEqual(response.VaultIDs, cfg.VaultIDs) {
-		t.Fatal("public attachments lost", err)
+	if err != nil || !reflect.DeepEqual(response.VaultIDs, cfg.VaultIDs) || string(raw) != stored {
+		t.Fatal("public attachments lost or stored configuration changed", err)
+	}
+	want := []any{credential, nil, strings.ToUpper(explicit)}
+	for index, expected := range want {
+		var projected map[string]any
+		if json.Unmarshal(response.Agent.Tools[index], &projected) != nil || !reflect.DeepEqual(projected["credential_id"], expected) {
+			t.Fatalf("tool %d projected %s; want credential_id %v", index, response.Agent.Tools[index], expected)
+		}
+		var original map[string]any
+		_ = json.Unmarshal(cfg.Agent.Tools[index], &original)
+		original["credential_id"] = expected
+		if !reflect.DeepEqual(projected, original) {
+			t.Fatalf("tool %d changed beyond credential_id: %s", index, response.Agent.Tools[index])
+		}
+	}
+	if string(response.Agent.Tools[3]) != string(function) {
+		t.Fatal("non-MCP tool changed")
 	}
 	public, _ := json.Marshal(response)
-	if strings.Contains(string(public), "private-selection") || strings.Contains(string(public), "mcp_credentials") || !strings.Contains(string(public), `"credential_id":null`) {
-		t.Fatal("public projection exposed implicit selection or changed caller reference")
+	if strings.Contains(string(public), "mcp_credentials") || strings.Contains(string(public), "static_bearer") || strings.Contains(string(public), vault) {
+		t.Fatal("public projection exposed private binding fields", string(public))
+	}
+
+	// A binding outside the attachments or for another server is never shown.
+	for _, change := range []func(*configuration){
+		func(c *configuration) { c.VaultIDs = []string{uuid.NewString()} },
+		func(c *configuration) { c.VaultIDs = nil },
+		func(c *configuration) { c.MCPCredentials[0].ServerURL += "/other" },
+		func(c *configuration) { c.MCPCredentials[0].ServerLabel = "other" },
+	} {
+		changed := cfg
+		changed.MCPCredentials = append([]store.MCPCredentialBinding(nil), cfg.MCPCredentials...)
+		change(&changed)
+		raw, _ := json.Marshal(changed)
+		response, err := sessionResponse(store.Session{Configuration: raw}, "")
+		if err != nil || string(response.Agent.Tools[0]) != string(changed.Agent.Tools[0]) {
+			t.Fatalf("unattached or unmatched binding was projected: %s, %v", response.Agent.Tools[0], err)
+		}
 	}
 }

@@ -237,8 +237,8 @@ func TestOAuthCredentialSelectionIncludesBothAuthTypes(t *testing.T) {
 	if _, err := s.CreateStaticCredential(t.Context(), tenant, vault.ID, CreateStaticCredentialInput{Name: "Static", MCPServerURL: input.MCPServerURL, Token: "static"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.ResolveMCPCredentials(t.Context(), tenant, []string{vault.ID}, requests); !errors.Is(err, ErrInvalidInput) {
-		t.Fatal("ambiguous mixed credentials selected")
+	if _, err := s.ResolveMCPCredentials(t.Context(), tenant, []string{vault.ID}, requests); !isSelectionError(err, true, "multiple attached vault credentials match MCP server_url "+input.MCPServerURL+"; specify credential_id") {
+		t.Fatal("ambiguous mixed credentials selected", err)
 	}
 	requests[0].CredentialID = &credential.ID
 	if selected, err := s.ResolveMCPCredentials(t.Context(), tenant, []string{vault.ID}, requests); err != nil || selected[0] != bindings[0] {
