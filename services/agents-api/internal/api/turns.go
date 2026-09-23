@@ -12,6 +12,7 @@ import (
 )
 
 // @Summary Retrieve an execution Turn
+// @Description Returns a root Turn of this Session. A Subagent Turn ID returns the same not found error as a missing Turn; read it through the Subagent Turn routes.
 // @Tags Turns
 // @Produce json
 // @Security BearerAuth
@@ -42,7 +43,7 @@ func (h *Handler) getTurn(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary List execution Turns
-// @Description Returns persisted state in creation order. The cursor belongs to the same Session and tenant. Usage contains the latest recorded complete token breakdown; missing measurements remain null.
+// @Description Returns the Session's root Turns in creation order; Subagent Turns are listed through the Subagent Turn routes. The cursor belongs to the same Session and tenant. Usage contains the latest recorded complete token breakdown; missing measurements remain null.
 // @Tags Turns
 // @Produce json
 // @Security BearerAuth
@@ -87,11 +88,8 @@ func turnResponse(session store.Session, turn store.Turn) (v1.Turn, error) {
 	if err := json.Unmarshal(session.Configuration, &cfg); err != nil || cfg.Agent.ID == "" {
 		return v1.Turn{}, errors.New("missing stored agent identity")
 	}
+	// Session Turns are root Turns, so subagent_id is always null here.
 	response := v1.Turn{Usage: tokenUsage(turn.Usage), ID: turn.ID, SessionID: turn.SessionID, AgentID: cfg.Agent.ID, Object: "agent.session.turn", Status: turn.Status, CreatedAt: turn.CreatedAt.Unix(), StartedAt: unixTime(turn.StartedAt), CompletedAt: unixTime(turn.CompletedAt)}
-	if turn.SubagentID != "" {
-		response.AgentID = turn.SubagentID
-		response.SubagentID = &turn.SubagentID
-	}
 	if turn.Status == store.TurnFailed {
 		// Native errors can contain secrets; publish a stable category without raw diagnostics.
 		response.Error = &v1.TurnError{Code: "internal_error", Message: "The execution could not complete."}

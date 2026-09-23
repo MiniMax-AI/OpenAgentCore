@@ -25,12 +25,13 @@ const (
 	TurnCancelled  = "cancelled"
 )
 
-// Turn uses its Session's immutable execution configuration. Zero timestamps
-// mean the corresponding event has not occurred. Outcome is adapter-owned data,
-// not an upstream response; the API must project supported wire types explicitly.
+// Turn is a root Turn from the Core work queue and uses its Session's immutable
+// execution configuration; Subagent Turns have a native writer and their own
+// table. Zero timestamps mean the corresponding event has not occurred. Outcome
+// is adapter-owned data, not an upstream response; the API must project
+// supported wire types explicitly.
 type Turn struct {
 	ID, SessionID, Status string
-	SubagentID            string
 	CreatedAt             time.Time
 	StartedAt             time.Time
 	CompletedAt           time.Time
@@ -47,6 +48,8 @@ type TurnTransition struct {
 	Outcome        json.RawMessage
 }
 
+// GetTurn reads a root Turn. A Subagent Turn ID is not found here, exactly like
+// a missing one; GetSubagentTurn reads child Turns.
 func (s *Store) GetTurn(ctx context.Context, tenantID, sessionID, turnID string) (Turn, error) {
 	params, err := publicTurnLookup(tenantID, sessionID, turnID)
 	if err != nil {
@@ -54,18 +57,7 @@ func (s *Store) GetTurn(ctx context.Context, tenantID, sessionID, turnID string)
 	}
 	row, err := s.queries.GetTurn(ctx, params)
 	if errors.Is(err, pgx.ErrNoRows) {
-		// Native child work has a separate writer and never enters the Core queue.
-		if _, err := s.GetSession(ctx, tenantID, sessionID); err != nil {
-			return Turn{}, err
-		}
-		child, err := s.queries.GetChildTurn(ctx, sqlc.GetChildTurnParams{SessionID: params.SessionID, ID: params.ID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return Turn{}, ErrNotFound
-		}
-		if err != nil {
-			return Turn{}, err
-		}
-		return childStoreTurn(child), nil
+		return Turn{}, ErrNotFound
 	}
 	if err != nil {
 		return Turn{}, fmt.Errorf("get turn: %w", err)

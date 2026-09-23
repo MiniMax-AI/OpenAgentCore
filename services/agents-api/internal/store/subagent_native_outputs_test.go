@@ -12,7 +12,7 @@ import (
 )
 
 func TestSubagentNativeFunctionResultDoesNotConsumeOutputIndex(t *testing.T) {
-	s, _ := testStore(t)
+	s, pool := testStore(t)
 	owner := executionLease(t, s).Store()
 	tenant, session := newSubagentSession(t, s)
 	host, err := s.CreateDevice(t.Context(), tenant, "child outputs", device.HashCredential(uuid.NewString()))
@@ -49,33 +49,38 @@ func TestSubagentNativeFunctionResultDoesNotConsumeOutputIndex(t *testing.T) {
 	if err != nil || len(items.Data) != 3 {
 		t.Fatal(items, err)
 	}
+	// Child Items publish no Session events; only root work reaches the stream.
 	events, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	found := map[string]bool{}
 	for _, change := range events {
 		e := change.Event
-		if e.Item == nil || e.Item.TurnID == input.TurnID {
-			continue
-		}
-		found[e.Item.Type] = true
-		switch e.Item.Type {
-		case "function_call_output":
-			if e.OutputIndex != nil {
-				t.Fatal("native tool result consumed output index", e)
-			}
-		case "function_call":
-			if e.OutputIndex == nil || *e.OutputIndex != 0 {
-				t.Fatal(e)
-			}
-		case "message":
-			if e.OutputIndex == nil || *e.OutputIndex != 1 {
-				t.Fatal(e)
-			}
+		if (e.TurnID != "" && e.TurnID != input.TurnID) || (e.Item != nil && e.Item.TurnID != input.TurnID) {
+			t.Fatal("child work on the Session stream", e.Type)
 		}
 	}
-	if len(found) != 3 {
+	rows, err := pool.Query(t.Context(), `SELECT payload->>'type', output_index FROM subagent_items WHERE session_id = $1`, session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	found := map[string]*int32{}
+	for rows.Next() {
+		var kind string
+		var index *int32
+		if err := rows.Scan(&kind, &index); err != nil {
+			t.Fatal(err)
+		}
+		found[kind] = index
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(found) != 3 || found["function_call_output"] != nil {
+		t.Fatal("native tool result consumed output index", found)
+	}
+	if call, message := found["function_call"], found["message"]; call == nil || *call != 0 || message == nil || *message != 1 {
 		t.Fatal(found)
 	}
 }

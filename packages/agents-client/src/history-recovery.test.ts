@@ -65,8 +65,9 @@ const items: Record<string, unknown>[] = [
 ];
 
 describe("history and live event projections", () => {
+  // Official child Turns keep the Session's Agent ID and name the child in subagent_id.
   it.each([null, "child"])("preserves %s subagent identity in reads and SSE", async (subagentId) => {
-    const value = turn({ agent_id: subagentId ?? "root", subagent_id: subagentId, usage });
+    const value = turn({ agent_id: "root", subagent_id: subagentId, usage });
     const client = new OpenAIAgentsClient({ fetch: vi.fn()
       .mockResolvedValueOnce(json(value))
       .mockResolvedValueOnce(json({ data: [value], has_more: false }))
@@ -84,8 +85,19 @@ describe("history and live event projections", () => {
     expect(await client.retrieveTurn("session", "turn")).toEqual(value);
   });
 
-  it("retains completed child snapshots first observed in a creation stream", async () => {
-    const value = turn({ agent_id: "child", subagent_id: "child" });
+  it("accepts the official child Turn shape and the earlier child-owned agent_id", async () => {
+    for (const value of [turn({ agent_id: "root", subagent_id: "child" }), turn({ agent_id: "child", subagent_id: "child" })]) {
+      const client = new OpenAIAgentsClient({ fetch: vi.fn()
+        .mockResolvedValueOnce(json(value))
+        .mockResolvedValueOnce(json({ object: "list", data: [value], first_id: "turn", last_id: "turn", has_more: false })) });
+      expect(await client.retrieveTurn("session", "turn")).toEqual(value);
+      expect((await client.listTurns("session")).data).toEqual([value]);
+    }
+  });
+
+  // Earlier Core releases streamed child Turns; current Core streams root work only.
+  it("retains completed child snapshots first observed in an earlier creation stream", async () => {
+    const value = turn({ agent_id: "root", subagent_id: "child" });
     const created = { type: "agent.session.created", event_id: "created", session: session() };
     const client = new OpenAIAgentsClient({ fetch: async () => sse([
       created, turnEvent(value, "agent.session.turn.created"), turnEvent(value),
@@ -142,7 +154,7 @@ describe("history and live event projections", () => {
 
   it.each([
     turn({ session_id: "foreign" }), turn({ id: "other" }),
-    turn({ agent_id: "root", subagent_id: "child" }), turn({ subagent_id: "" }),
+    turn({ agent_id: "", subagent_id: "child" }), turn({ subagent_id: "" }), turn({ subagent_id: 1 }),
     turn({ usage: { input_tokens: 1 } }), turn({ native_session_id: "private" }),
   ])("rejects malformed or mismatched Turn retrieval", async (value) => {
     const client = new OpenAIAgentsClient({ fetch: async () => json(value) });

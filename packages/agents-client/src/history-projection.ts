@@ -190,7 +190,8 @@ export function projectAgentTurn(value: unknown, expectedSessionId: string, inva
     typeof value.id !== "string" || value.id === "" ||
     (expectedTurnId !== undefined && !sameResourceId(value.id, expectedTurnId)) ||
     typeof value.agent_id !== "string" || value.agent_id === "" ||
-    !(value.subagent_id === undefined || value.subagent_id === null || (nonemptyString(value.subagent_id) && sameResourceId(value.subagent_id, value.agent_id))) ||
+    // A child Turn carries the Session's Agent ID; subagent_id names the child.
+    !(value.subagent_id === undefined || value.subagent_id === null || nonemptyString(value.subagent_id)) ||
     typeof value.session_id !== "string" || !sameResourceId(value.session_id, expectedSessionId) ||
     value.object !== "agent.session.turn" || typeof value.status !== "string" || !turnStatuses.has(value.status) ||
     !isNonnegativeInteger(value.created_at) ||

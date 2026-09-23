@@ -63,7 +63,7 @@ func (h *Handler) getSubagent(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary List Session Subagents
-// @Description Includes nested and closed Subagents. Cursors belong to the same tenant and Session.
+// @Description Includes nested and closed Subagents. Cursors belong to the same tenant and Session. A limit outside 1–100 is rejected.
 // @Tags Subagents
 // @Produce json
 // @Security BearerAuth
@@ -85,10 +85,7 @@ func (h *Handler) listSubagents(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	if page.Data == nil {
-		page.Data = []v1.Subagent{}
-	}
-	writeJSON(w, http.StatusOK, page)
+	writeJSON(w, http.StatusOK, subagentListResponse(page.Data, page.HasMore))
 }
 
 // @Summary List a Subagent's Items
@@ -100,13 +97,13 @@ func (h *Handler) listSubagents(w http.ResponseWriter, r *http.Request) {
 // @Param session_id path string true "Session ID"
 // @Param subagent_id path string true "Subagent ID"
 // @Param after query string false "Last Item ID from the previous page"
-// @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
+// @Param limit query int false "Page size; 0 is treated as 1 and values above 100 as 100" minimum(0) default(20)
 // @Param order query string false "Resource order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.ItemList
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/subagents/{subagent_id}/items [get]
 func (h *Handler) listSubagentItems(w http.ResponseWriter, r *http.Request) {
-	options, ok := readPage(w, r)
+	options, ok := readClampedPage(w, r)
 	if !ok || !h.subagentsReady(w) {
 		return
 	}

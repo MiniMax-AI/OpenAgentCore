@@ -16,24 +16,29 @@ Do not permanently cache `usage: null` as zero or as a final accounting result.
 The TypeScript client shares Turn and Item projections between reads and SSE.
 It preserves root/child identity and supports the currently implemented reasoning
 and coordination Items. `agent_message` has no status; reasoning status can be
-absent or null. Child discovery can publish an already terminal native Turn in a
-`turn.created` snapshot; clients must not reinterpret it as newly queued work.
+absent or null. A child Turn's `agent_id` is the Session's Agent ID and its
+`subagent_id` names the child. The Session stream carries root work only: child
+Turns and child Items publish no Session events, while `agent.session.subagent.*`
+events and root coordination Items remain. Earlier Core releases streamed child
+Turns, which could first appear as an already terminal `turn.created` snapshot;
+the client still accepts that and must not reinterpret it as newly queued work.
 This does not widen the server's Item or interim reasoning-event coverage.
-Claude and MiniMax retain their settlement-based child-history boundary; accepting
-coordination events does not guarantee continuous child progress or a child Turn
-event on every execution. Recover child state through the Subagent queries.
+Claude and MiniMax retain their settlement-based child-history boundary. Recover
+child state through the Subagent queries.
 
 Use response cursors to page history in the requested direction. Session Turn
-lists can include root and child Turns. Root Items and child Items have separate
-query resources; use the Subagent resources for child history. Tenant ownership
-is enforced by Core for both queries and streams.
+lists contain root Turns only; a child Turn ID on the Session Turn routes is not
+found. Root Items and child Items have separate query resources; use the Subagent
+resources for child Turns and history. See
+[Subagent visibility](subagents.md#subagent-visibility--september-23-2026).
+Tenant ownership is enforced by Core for both queries and streams.
 
 ## Measurement boundary
 
 Adapters publish cumulative measurements for the current execution through the
 existing neutral Usage contract. Core replaces a Turn's snapshot atomically;
 repeated snapshots, including terminal repeats, do not add consumption. The
-Session total sums recorded root-Turn measurements, not mixed root/child lists.
+Session total sums recorded root-Turn measurements, not Subagent Turn lists.
 It is best-effort accounting, not an invoice or an estimate of missing work.
 
 - Codex publishes observed snapshots while the Turn is active. Exact native
@@ -169,8 +174,11 @@ stream differences EVT-01..04; the plan is
 - **Terminal usage (EVT-03).** Official `agent.session.turn.completed` and
   `.cancelled` (8/8) carried a top-level `usage`, null at emission even when later
   reads were measured. Core terminal Turn events (`completed`, `failed`,
-  `cancelled`), root and child, now carry `usage` copied from the rendered Turn
-  snapshot, with explicit null when unknown. Other events omit it. Codex can
+  `cancelled`) now carry `usage` copied from the rendered Turn snapshot, with
+  explicit null when unknown; other events omit it. This batch applied it to
+  root and child Turn events; the
+  [Subagent visibility batch](subagents.md#subagent-visibility--september-23-2026)
+  later stopped publishing child Turn events on the Session stream. Codex can
   therefore publish measured counters at settlement, while Claude and MiniMax
   stay null; no counter is derived or summed. The TypeScript client accepts the
   field on terminal Turn events only and still accepts older events without it.

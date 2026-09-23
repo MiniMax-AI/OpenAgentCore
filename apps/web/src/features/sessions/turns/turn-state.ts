@@ -2,6 +2,7 @@ import type {
   AgentCore,
   AgentTurn,
   SessionEvent,
+  SessionItem,
 } from "@agents-core-web/agents-client";
 
 const turnStatuses = new Set<AgentTurn["status"]>([
@@ -48,11 +49,24 @@ function isTurnForSession(value: unknown, sessionId: string): value is AgentTurn
     typeof turn.status === "string" && turnStatuses.has(turn.status as AgentTurn["status"]);
 }
 
-/** Reads the complete durable Turn collection in server creation order. */
+/**
+ * Session timelines show root work. Subagent Turns belong to the Subagent routes;
+ * Core no longer returns or streams them, or their Items, for a Session, but
+ * earlier releases did.
+ */
+function isRootTurn(turn: AgentTurn): boolean {
+  return turn.subagent_id === undefined || turn.subagent_id === null;
+}
+
+/**
+ * Reads the complete durable root Turn collection in server creation order.
+ * Subagent Turn IDs listed by an earlier Core are added to childTurnIds.
+ */
 export async function listAllTurns(
   core: AgentCore,
   sessionId: string,
   signal?: AbortSignal,
+  childTurnIds?: Set<string>,
 ): Promise<AgentTurn[]> {
   const turns: AgentTurn[] = [];
   const indexes = new Map<string, number>();
@@ -67,6 +81,10 @@ export async function listAllTurns(
     for (const value of page.data) {
       if (!isTurnForSession(value, sessionId)) {
         throw new Error("The Agent core returned a Turn outside the selected Session.");
+      }
+      if (!isRootTurn(value)) {
+        childTurnIds?.add(value.id);
+        continue;
       }
       const index = indexes.get(value.id);
       if (index === undefined) {
@@ -109,12 +127,49 @@ export function mergeDurableAndLiveTurns(durable: AgentTurn[], live: AgentTurn[]
   return live.reduce(upsertTurn, durable);
 }
 
-/** Accepts only a scoped, known Turn snapshot carried by a Turn event. */
+/** Accepts only a scoped, known root Turn snapshot carried by a Turn event. */
 export function matchingTurnSnapshot(event: SessionEvent, sessionId: string): AgentTurn | null {
   const type = typeof event.type === "string" ? event.type : "";
   const expectedStatus = lifecycleEventStatus.get(type);
   if (!expectedStatus || !isTurnForSession(event.turn, sessionId) || event.turn.status !== expectedStatus) return null;
+  if (!isRootTurn(event.turn)) return null;
   if (event.session_id && event.session_id !== sessionId) return null;
   if (event.turn_id && event.turn_id !== event.turn.id) return null;
   return event.turn;
+}
+
+/**
+ * Returns the Turn ID of a scoped Subagent Turn lifecycle event from an earlier
+ * Core. Its first snapshot can already be terminal, so the status is not checked.
+ */
+export function childTurnSnapshotId(event: SessionEvent, sessionId: string): string | null {
+  const type = typeof event.type === "string" ? event.type : "";
+  if (!lifecycleEventStatus.has(type) || !isTurnForSession(event.turn, sessionId) || isRootTurn(event.turn)) return null;
+  if (event.session_id && event.session_id !== sessionId) return null;
+  if (event.turn_id && event.turn_id !== event.turn.id) return null;
+  return event.turn.id;
+}
+
+/** Records Subagent Turn IDs per Session, keeping the same map when nothing is new. */
+export function addChildTurnIds(
+  current: ReadonlyMap<string, ReadonlySet<string>>,
+  sessionId: string,
+  ids: Iterable<string>,
+): ReadonlyMap<string, ReadonlySet<string>> {
+  const known = current.get(sessionId);
+  const added = [...ids].filter((id) => !known?.has(id));
+  if (!added.length) return current;
+  const next = new Map(current);
+  next.set(sessionId, new Set([...(known ?? []), ...added]));
+  return next;
+}
+
+/**
+ * Hides Items of known Subagent Turns, including live Item and text events an
+ * earlier Core streamed for them, so the Session timeline stays root-only.
+ */
+export function rootSessionItems(items: SessionItem[], childTurnIds: ReadonlySet<string> | undefined): SessionItem[] {
+  if (!childTurnIds?.size) return items;
+  const visible = items.filter((item) => !childTurnIds.has(item.turn_id));
+  return visible.length === items.length ? items : visible;
 }

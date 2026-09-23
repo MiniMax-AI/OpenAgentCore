@@ -144,8 +144,11 @@ func TestManagedIdleClockIgnoresChildHostSkewAndReplay(t *testing.T) {
 			if err != nil || len(page.Data) != 1 {
 				t.Fatal(page, err)
 			}
-			read, err := s.GetTurn(t.Context(), owner.TenantID, owner.SessionID, page.Data[0].ID)
-			if err != nil || read.CompletedAt.UnixMilli() != source {
+			// Public child Turns have second precision; read the stored native time.
+			sessionID, _ := parseID(owner.SessionID)
+			turnID, _ := parseID(page.Data[0].ID)
+			read, err := s.queries.GetChildTurn(t.Context(), sqlc.GetChildTurnParams{SessionID: sessionID, ID: turnID})
+			if err != nil || read.CompletedAt.Time.UnixMilli() != source {
 				t.Fatal("child native timestamp rewritten", read, err)
 			}
 		})

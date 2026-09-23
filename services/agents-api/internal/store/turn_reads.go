@@ -14,6 +14,8 @@ type TurnPage struct {
 	NextCursor string
 }
 
+// ListTurns pages a Session's root Turns. Subagent Turns are not Session Turns;
+// ListSubagentTurns reads them.
 func (s *Store) ListTurns(ctx context.Context, tenantID, sessionID, cursor string, limit int, ascending bool) (TurnPage, error) {
 	if limit < 1 || limit > 100 {
 		return TurnPage{}, fmt.Errorf("%w: page size must be 1..100", ErrInvalidInput)
@@ -23,12 +25,13 @@ func (s *Store) ListTurns(ctx context.Context, tenantID, sessionID, cursor strin
 	}
 	tenant, _ := parseID(tenantID)
 	session, _ := parseID(sessionID)
-	params := sqlc.ListTurnsParams{TenantID: tenant, SessionID: session, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending}
+	params := sqlc.ListRootTurnsParams{TenantID: tenant, SessionID: session, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending}
 	if cursor != "" {
 		// A malformed cursor remains an invalid request, unlike a path identifier.
 		if _, err := parseID(cursor); err != nil {
 			return TurnPage{}, err
 		}
+		// A child Turn is not a Session Turn, so its ID is a missing cursor here.
 		after, err := s.GetTurn(ctx, tenantID, sessionID, cursor)
 		if err != nil {
 			return TurnPage{}, err
@@ -36,7 +39,7 @@ func (s *Store) ListTurns(ctx context.Context, tenantID, sessionID, cursor strin
 		params.AfterCreated = pgtype.Timestamptz{Time: after.CreatedAt, Valid: true}
 		params.AfterID, _ = parseID(after.ID)
 	}
-	rows, err := s.queries.ListTurns(ctx, params)
+	rows, err := s.queries.ListRootTurns(ctx, params)
 	if err != nil {
 		return TurnPage{}, fmt.Errorf("list turns: %w", err)
 	}
@@ -46,13 +49,7 @@ func (s *Store) ListTurns(ctx context.Context, tenantID, sessionID, cursor strin
 		rows = rows[:limit]
 	}
 	for _, row := range rows {
-		value := Turn{ID: uuid.UUID(row.ID.Bytes).String(), SessionID: sessionID, Status: row.Status,
-			CreatedAt: row.CreatedAt.Time, StartedAt: row.StartedAt.Time, CompletedAt: row.CompletedAt.Time,
-			CancelRequestedAt: row.CancelRequestedAt.Time, Outcome: row.Outcome, Usage: row.TokenUsage, ArtifactCaptureStarted: row.ArtifactCaptureStarted}
-		if row.SubagentID.Valid {
-			value.SubagentID = uuid.UUID(row.SubagentID.Bytes).String()
-		}
-		page.Turns = append(page.Turns, value)
+		page.Turns = append(page.Turns, turnFromRow(row))
 	}
 	return page, nil
 }

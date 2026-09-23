@@ -20,6 +20,9 @@ type Subagent struct {
 }
 
 type SubagentList struct {
+	Object  string     `json:"object" enums:"list" binding:"required"`
+	FirstID *string    `json:"first_id" extensions:"x-nullable"`
+	LastID  *string    `json:"last_id" extensions:"x-nullable"`
 	Data    []Subagent `json:"data" binding:"required"`
 	HasMore bool       `json:"has_more" binding:"required"`
 }

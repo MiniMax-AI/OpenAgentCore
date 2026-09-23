@@ -100,8 +100,8 @@ paths start at `/vaults`, not `/agents/vaults`.
 | sessions.items | list | Partial Item variants |
 | sessions.artifacts | retrieve, list, delete, content | Shared output capture and immutable stored reads/deletion on accepted Docker profiles and [qualified user-managed workflows](user-managed-runtime-v1.md) (prior Core-managed E2B evidence remains historical), including retained downloads after Runtime loss. [Aligned](official-semantics-alignment.md#artifact-capture-and-listing--september-23) output symlink skipping, unchanged-path non-republication, the list envelope and malformed filters; exact upstream defaults/errors, hard-link/special-file capture and cancellation-edge parity remain unverified |
 | sessions.subagents | retrieve, list | [Three-harness Docker reads, native lifecycle limits and real evidence](subagents.md); full multi-agent semantics remain partial |
-| sessions.subagents.items | list | Qualified own-child history reads; full Item variants and live child streaming remain partial |
-| sessions.subagents.turns | retrieve, list | Implemented; shared Session/child IDs |
+| sessions.subagents.items | list | Qualified own-child history reads; [limit clamping and the list envelope](subagents.md#subagent-visibility--september-23-2026) aligned; full Item variants remain partial. Child work is not streamed on the Session, as observed officially |
+| sessions.subagents.turns | retrieve, list | Implemented; child Turns carry the Session's Agent ID and are not Session Turns |
 | sessions.subagents.turns.items | list | Implemented; scoped persisted reads |
 | environments | retrieve | Three-harness colocated self-hosted implementation and qualified Docker hosted profiles: durable status and safe initial-file metadata; other installation inventory and full lifecycle parity remain gaps |
 | environments.files | create, list | [Bounded live listing and inline/source-file creation](environment-files.md) on qualified Docker workspaces; [user-managed enrollment](user-managed-runtime-v1.md) reuses the local implementation with separate real public acceptance. [Aligned](environment-files.md#wire-alignment--september-23-2026) the 201 status, page envelope, query keys, empty pages for non-directory paths on local workspace readers, sampled path/token errors and pending hosted rejection; recursion, parent creation, overwrite and other errors remain partial |
@@ -632,9 +632,9 @@ Codex publishes observed active-Turn snapshots before completion through this sa
 contract. Persisted measurements remain available after cancellation or worker
 restart; measurements never received by Core cannot be recovered this way.
 Unknown historical breakdowns are not backfilled, and a Session total includes only
-recorded root-Turn measurements. Child Turns returned in a mixed history page are
-not an additional accounting ledger. Costs and prices are outside this execution
-contract. See [history, events and usage](history-events-usage.md) for client
+recorded root-Turn measurements. Session Turn pages hold root Turns only; Subagent
+Turn pages are not an additional accounting ledger. Costs and prices are outside
+this execution contract. See [history, events and usage](history-events-usage.md) for client
 recovery rules, native measurement limits and bounded official-service evidence.
 
 ### Live events

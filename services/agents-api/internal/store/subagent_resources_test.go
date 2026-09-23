@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
@@ -78,15 +80,38 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 		t.Fatal(turns, err)
 	}
 	tid := turns.Data[0].ID
-	if turns.Data[0].AgentID != child.ID || turns.Data[0].SubagentID == nil || *turns.Data[0].SubagentID != child.ID || turns.Data[0].Usage != nil {
+	// agent_id is the Session's Agent ID; subagent_id identifies the child.
+	if turns.Data[0].AgentID != "agent_root" || turns.Data[0].SubagentID == nil || *turns.Data[0].SubagentID != child.ID || turns.Data[0].Usage != nil {
 		t.Fatal(turns)
 	}
-	same, err := s.GetTurn(ctx, tenant, session.ID, tid)
-	if err != nil || same.SubagentID != child.ID {
+	if same, err := s.GetSubagentTurn(ctx, tenant, session.ID, child.ID, tid); err != nil || !reflect.DeepEqual(same, turns.Data[0]) {
 		t.Fatal(same, err)
 	}
+	// Session Turn reads carry root work only: a child Turn ID is missing there.
+	if _, err = s.GetTurn(ctx, tenant, session.ID, tid); !errors.Is(err, ErrNotFound) {
+		t.Fatal("child Turn in Session Turn retrieval", err)
+	}
+	if _, err = s.ListTurns(ctx, tenant, session.ID, tid, 100, true); !errors.Is(err, ErrNotFound) {
+		t.Fatal("child Turn as a Session Turn cursor", err)
+	}
 	allTurns, err := s.ListTurns(ctx, tenant, session.ID, "", 100, true)
-	if err != nil || len(allTurns.Turns) != 2 {
+	if err != nil || len(allTurns.Turns) != 1 || allTurns.Turns[0].ID != root.TurnID {
+		t.Fatal(allTurns, err)
+	}
+	// Nested children follow the same agent_id rule (unobserved officially).
+	nestedTurn := proto.SubagentTurnPayload{NativeID: "nested", TurnID: "native-nested-turn", Status: TurnInProgress, CreatedAtMS: opened, StartedAtMS: &opened}
+	appendFacts(subagentFact(proto.TypeSubagentTurn, nestedTurn))
+	nestedTurns, err := s.ListSubagentTurns(ctx, tenant, session.ID, nested.ID, "", 20, true)
+	if err != nil || len(nestedTurns.Data) != 1 || nestedTurns.Data[0].AgentID != "agent_root" || *nestedTurns.Data[0].SubagentID != nested.ID {
+		t.Fatal(nestedTurns, err)
+	}
+	if _, err = s.GetSubagentTurn(ctx, uuid.NewString(), session.ID, child.ID, tid); !errors.Is(err, ErrNotFound) {
+		t.Fatal("foreign tenant child Turn", err)
+	}
+	if _, err = s.ListSubagentTurns(ctx, uuid.NewString(), session.ID, child.ID, "", 20, true); !errors.Is(err, ErrNotFound) {
+		t.Fatal("foreign tenant child Turns", err)
+	}
+	if allTurns, err = s.ListTurns(ctx, tenant, session.ID, "", 100, true); err != nil || len(allTurns.Turns) != 1 {
 		t.Fatal(allTurns, err)
 	}
 	own, err := s.ListSubagentTurnItems(ctx, tenant, session.ID, child.ID, tid, "", 20, true)
@@ -132,6 +157,16 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 	for _, change := range changes {
 		if change.Event.Subagent != nil && change.Event.Subagent.ID == child.ID {
 			counts[change.Event.Type]++
+		}
+		// Child Turns and their Items publish no Session events.
+		if strings.HasPrefix(change.Event.Type, "agent.session.turn.") && change.Event.Turn != nil && change.Event.Turn.SubagentID != nil {
+			t.Fatal("child Turn on the Session stream", change.Event.Type)
+		}
+		if (change.Event.TurnID != "" && change.Event.TurnID != root.TurnID) || (change.Event.Item != nil && change.Event.Item.TurnID != root.TurnID) {
+			t.Fatal("child work on the Session stream", change.Event.Type)
+		}
+		if change.Turn != nil && change.Turn.ID != root.TurnID {
+			t.Fatal("child Turn snapshot on the Session stream", change.Event.Type)
 		}
 	}
 	for _, kind := range []string{"created", "closed", "active"} {
