@@ -1508,6 +1508,13 @@ definitions:
         type: string
       type:
         type: string
+      usage:
+        allOf:
+        - $ref: '#/definitions/v1.TokenUsage'
+        description: |-
+          Usage is present only on terminal Turn events, where it mirrors the Turn
+          snapshot and is null when unknown. Other events omit it.
+        x-nullable: true
     required:
     - event_id
     - type
@@ -3028,54 +3035,60 @@ paths:
         initial timeout. Initial input is required for none and for streamed creation
         outside self_hosted. Omitted/null input remains valid for non-streaming hosted
         and self_hosted creation. With stream=true, returns live Session events starting
-        at creation; disconnect does not cancel execution. New Sessions retain their
-        authenticated creator; all creation retries require the same typed subject,
-        including across key rotation. Saved-Agent retries and inline requests using
-        Vault attachments or credential references retain caller intent independently
-        of later resource changes; unrelated inline retries preserve resolved/default
-        equivalences. Unknown historical creators reject retries; known creators without
-        recorded intent retain resolved-snapshot retry rules. These conflict policies
-        are local and not verified hosted parity. Creation retries observe future
-        events without replay; retry with stream=false to retrieve the Session. Claude
-        SDK on none and Core-managed Docker openai_hosted supports qualified object-root
-        json_schema output with medium verbosity, single-Agent execution and ordinary
-        functions. Hosted execution reuses native workspace tools and Files/Artifacts;
-        Skills, Plugins, capability directories, HTTP MCP, Subagent and tool_search
-        combinations remain unqualified, including inherited template contents. Other
-        non-text initial input remains unsupported. Basic Codex and Claude SDK openai_hosted
-        creation requires an explicitly configured managed provider. The Claude workspace
-        profile supports non-deferred function tools with text or successful inline
-        PNG/JPEG results alongside native workspace tools; HTTP MCP remains unsupported.
-        Idle Sessions provision automatically; initial provisioning has no caller
-        connection action. Network defaults to enabled; disabled and restricted exact
-        ASCII hostnames are supported. Restricted policy requires 1–100 allowed domains.
-        Unsupported hostname forms and startup installations are rejected. Confidential
-        env, system/npm/Python packages and ordered setup commands use the shared
-        initialization lifecycle; requested network applies after setup. Initial inline
-        and tenant-owned file_id files freeze encrypted bytes before provisioning,
-        then install through the common Core lifecycle before native execution or
-        live Files access. With a template reference, omitted/null files, env, packages
-        and setup_commands inherit. Non-null files and command lists replace; env
-        overlays by key; each package manager inherits on omission/null and otherwise
-        replaces its list. Empty lists clear their selected field. Tenant-owned environment_template_id
-        references inherit omitted/null network and allow only narrowing overrides.
-        Inline hosted network:null retains the enabled default; updating a Template
-        with network:null resets its saved policy to enabled. Core freezes effective
-        configuration; template updates/deletion do not alter Session snapshots or
-        same-intent creation retries. Inline or tenant-owned skill_reference Skills
-        share initialization. Templates preserve default/latest/explicit selectors;
-        Session creation freezes concrete metadata and encrypted content atomically.
-        Skill, Plugin and capability-directory list omission/null inherit; a non-null
-        list replaces, including empty-list clearing. Omitted/null Skill version selectors
-        resolve the default version. Source deletion/default updates cannot change
-        committed Session Skill contents. Deferred function discovery uses type-only
-        tool_search and per-function defer_loading in the qualified single-agent Claude
-        environment:none function profile, including qualified inline image messages
-        and text results. Explicit web_search mode disabled and programmatic_tool_calling
-        enabled false use frozen common Runtime controls. Enabled forms remain unqualified.
-        Omitted programmatic configuration preserves native behavior, a documented
-        difference from the official default-on behavior. Other combinations remain
-        unqualified; see the operation coverage.
+        with the committed creation snapshot and closes right after the first agent.session.idle
+        recorded when a Turn ends or an input reservation stops being pending, or
+        any agent.session.failed, without sending later events. A creation that admitted
+        nothing closes after the snapshot; a settlement that records no event closes
+        after events up to the cursor read with a settled Session projection. Required
+        actions keep it open; disconnect does not cancel execution. The GET events
+        stream remains live-only. New Sessions retain their authenticated creator;
+        all creation retries require the same typed subject, including across key
+        rotation. Saved-Agent retries and inline requests using Vault attachments
+        or credential references retain caller intent independently of later resource
+        changes; unrelated inline retries preserve resolved/default equivalences.
+        Unknown historical creators reject retries; known creators without recorded
+        intent retain resolved-snapshot retry rules. These conflict policies are local
+        and not verified hosted parity. A same-key stream=true retry of an existing
+        creation returns 201 with no events and closes at once; retry with stream=false
+        or use the GET events stream to recover. Claude SDK on none and Core-managed
+        Docker openai_hosted supports qualified object-root json_schema output with
+        medium verbosity, single-Agent execution and ordinary functions. Hosted execution
+        reuses native workspace tools and Files/Artifacts; Skills, Plugins, capability
+        directories, HTTP MCP, Subagent and tool_search combinations remain unqualified,
+        including inherited template contents. Other non-text initial input remains
+        unsupported. Basic Codex and Claude SDK openai_hosted creation requires an
+        explicitly configured managed provider. The Claude workspace profile supports
+        non-deferred function tools with text or successful inline PNG/JPEG results
+        alongside native workspace tools; HTTP MCP remains unsupported. Idle Sessions
+        provision automatically; initial provisioning has no caller connection action.
+        Network defaults to enabled; disabled and restricted exact ASCII hostnames
+        are supported. Restricted policy requires 1–100 allowed domains. Unsupported
+        hostname forms and startup installations are rejected. Confidential env, system/npm/Python
+        packages and ordered setup commands use the shared initialization lifecycle;
+        requested network applies after setup. Initial inline and tenant-owned file_id
+        files freeze encrypted bytes before provisioning, then install through the
+        common Core lifecycle before native execution or live Files access. With a
+        template reference, omitted/null files, env, packages and setup_commands inherit.
+        Non-null files and command lists replace; env overlays by key; each package
+        manager inherits on omission/null and otherwise replaces its list. Empty lists
+        clear their selected field. Tenant-owned environment_template_id references
+        inherit omitted/null network and allow only narrowing overrides. Inline hosted
+        network:null retains the enabled default; updating a Template with network:null
+        resets its saved policy to enabled. Core freezes effective configuration;
+        template updates/deletion do not alter Session snapshots or same-intent creation
+        retries. Inline or tenant-owned skill_reference Skills share initialization.
+        Templates preserve default/latest/explicit selectors; Session creation freezes
+        concrete metadata and encrypted content atomically. Skill, Plugin and capability-directory
+        list omission/null inherit; a non-null list replaces, including empty-list
+        clearing. Omitted/null Skill version selectors resolve the default version.
+        Source deletion/default updates cannot change committed Session Skill contents.
+        Deferred function discovery uses type-only tool_search and per-function defer_loading
+        in the qualified single-agent Claude environment:none function profile, including
+        qualified inline image messages and text results. Explicit web_search mode
+        disabled and programmatic_tool_calling enabled false use frozen common Runtime
+        controls. Enabled forms remain unqualified. Omitted programmatic configuration
+        preserves native behavior, a documented difference from the official default-on
+        behavior. Other combinations remain unqualified; see the operation coverage.
       parameters:
       - description: agents=v1
         in: header

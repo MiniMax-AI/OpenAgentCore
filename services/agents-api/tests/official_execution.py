@@ -77,6 +77,9 @@ def main():
             assert "agent.session.turn." + kind in types, types
         terminal = next(value for value in first_events if value.type == "agent.session.turn.completed")
         assert terminal.turn.usage.model_dump() == expected_usage
+        # Top-level terminal usage mirrors the Turn snapshot; other events omit it.
+        assert terminal.usage.model_dump() == expected_usage
+        assert all("usage" not in value.to_dict() for value in first_events if value is not terminal)
         assert first_events[-1].session.usage.model_dump() == expected_usage
         text_events = [value for value in first_events if value.type.startswith("agent.session.turn.output_text.")]
         assert all(value.item_id == answers[0].id and value.output_index == 0 and value.content_index == 0 for value in text_events)

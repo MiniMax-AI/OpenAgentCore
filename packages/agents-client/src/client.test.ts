@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AgentCoreError, createIdempotencyKey, OpenAIAgentsClient } from "./client";
+import { AgentCoreError, CreationStreamRetryError, createIdempotencyKey, OpenAIAgentsClient } from "./client";
 import hostedDadf64 from "./fixtures/parsar-dadf64a7/openai-hosted.json";
 import eventBatchDadf64 from "./fixtures/parsar-dadf64a7/session-event-batch.json";
 import type {
@@ -328,6 +328,36 @@ describe("OpenAIAgentsClient", () => {
       "event:agent.session.created",
       "event:agent.session.future_event",
     ]);
+  });
+
+  it("completes a creation stream that ends right after its initial Turn settles", async () => {
+    const admitted = { ...sessionResource(), status: "in_progress", last_active_at: 2 };
+    const cancelled = turnResource({ status: "cancelled", completed_at: 3 });
+    const frames = [
+      { type: "agent.session.created", event_id: "created", session: admitted },
+      { type: "agent.session.turn.created", event_id: "turn", session_id: "session", turn_id: "turn_1", turn: turnResource() },
+      {
+        type: "agent.session.turn.item.added", event_id: "input", session_id: "session", turn_id: "turn_1",
+        item: messageItem({ status: "completed", role: "user", content: [{ type: "input_text", text: "First" }] }),
+      },
+      { type: "agent.session.in_progress", event_id: "progress", session: admitted },
+      { type: "agent.session.turn.cancelled", event_id: "done", session_id: "session", turn_id: "turn_1", turn: cancelled, usage: null },
+      { type: "agent.session.idle", event_id: "idle", session: { ...sessionResource(), last_active_at: 3 } },
+    ];
+    const onSession = vi.fn();
+    const onEvent = vi.fn();
+    const client = new OpenAIAgentsClient({
+      fetch: recordingFetch(streamResponse([
+        ": connected\n\n",
+        ...frames.map((frame) => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`),
+      ], 201), []),
+    });
+
+    await client.createSessionStream({ environment: { type: "none" }, input: "First" }, "create-key", { onSession, onEvent });
+
+    expect(onSession).toHaveBeenCalledWith(expect.objectContaining({ id: "session", status: "in_progress" }));
+    expect(onEvent.mock.calls.map((call) => call[0]?.type)).toEqual(frames.map((frame) => frame.type));
+    expect(onEvent.mock.calls[4]?.[0]).toMatchObject({ usage: null, turn: { status: "cancelled", usage: null } });
   });
 
   it.each([
@@ -774,20 +804,45 @@ describe("OpenAIAgentsClient", () => {
     expect(cancelled).toBe(true);
   });
 
-  it.each([
-    ["null body", () => new Response(null), 0],
-    ["comments only", () => streamResponse([": connected\n\n: keepalive\n\n"]), 1],
-    ["DONE only", () => streamResponse(["data: [DONE]\n\n"]), 1],
-  ])("turns a creation stream with %s into empty_stream", async (_label, response, openCalls) => {
+  it("turns a creation response without a stream body into empty_stream", async () => {
     const onOpen = vi.fn();
-    const client = new OpenAIAgentsClient({ fetch: recordingFetch(response(), []) });
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 201 }), []) });
 
     await expect(client.createSessionStream(
       { environment: { type: "none" } },
       "create-key",
       { onOpen, onSession: vi.fn(), onEvent: vi.fn() },
     )).rejects.toMatchObject({ status: 502, code: "empty_stream" });
-    expect(onOpen).toHaveBeenCalledTimes(openCalls);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["the connection comment only", [": connected\n\n"]],
+    ["comments only", [": connected\n\n: keepalive\n\n"]],
+    ["DONE only", ["data: [DONE]\n\n"]],
+  ])("reports a creation stream with %s as a same-key retry to recover with stream=false", async (_label, chunks) => {
+    const onOpen = vi.fn();
+    const onSession = vi.fn();
+    const onEvent = vi.fn();
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(streamResponse(chunks, 201), []) });
+
+    const failure = client.createSessionStream(
+      { environment: { type: "none" }, input: "First" },
+      "create-key",
+      { onOpen, onSession, onEvent },
+    );
+    await expect(failure).rejects.toBeInstanceOf(CreationStreamRetryError);
+    await expect(failure).rejects.toMatchObject({ status: 409, code: "creation_stream_retry", message: expect.stringContaining("stream=false") });
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onSession).not.toHaveBeenCalled();
+    expect(onEvent).not.toHaveBeenCalled();
+  });
+
+  it("keeps empty_stream for a live events stream that ends without events", async () => {
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(streamResponse([": connected\n\n"]), []) });
+
+    await expect(client.streamEvents("session", { onEvent: vi.fn() }))
+      .rejects.toMatchObject({ status: 502, code: "empty_stream" });
   });
 
   it.each([
@@ -930,6 +985,80 @@ describe("OpenAIAgentsClient", () => {
     expect(onEvent).toHaveBeenCalledTimes(events.length);
     expect(onEvent.mock.calls.map((call) => call[0]?.type)).toEqual(events.map((event) => event.type));
     expect(onEvent.mock.calls[2]?.[0]).toMatchObject({ item_id: "item_1", item: { id: "item_1", turn_id: "turn_1" } });
+  });
+
+  const measuredUsage = {
+    input_tokens: 7,
+    input_tokens_details: { cached_tokens: 2 },
+    output_tokens: 3,
+    output_tokens_details: { reasoning_tokens: 1 },
+    total_tokens: 10,
+  };
+
+  function terminalTurnEvent(status: string, fields: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      type: `agent.session.turn.${status}`,
+      event_id: `turn-${status}`,
+      session_id: "session",
+      turn_id: "turn_1",
+      turn: turnResource({
+        status,
+        started_at: 1,
+        completed_at: 2,
+        error: status === "failed" ? { code: "internal_error", message: "The execution could not complete." } : null,
+      }),
+      ...fields,
+    };
+  }
+
+  it.each([
+    ["measured", "completed", measuredUsage],
+    ["unknown", "cancelled", null],
+    ["unknown failed", "failed", null],
+  ])("preserves %s top-level usage on a terminal Turn event", async (_label, status, usage) => {
+    const event = terminalTurnEvent(status, { turn: { ...terminalTurnEvent(status).turn as object, usage }, usage });
+    const onEvent = vi.fn();
+    const client = new OpenAIAgentsClient({
+      fetch: recordingFetch(streamResponse([`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`]), []),
+    });
+
+    await client.streamEvents("session", { onEvent });
+
+    expect(onEvent).toHaveBeenCalledTimes(1);
+    const projected = onEvent.mock.calls[0]?.[0] as SessionEvent;
+    expect(projected).toMatchObject({ type: event.type, turn_id: "turn_1", turn: { status, usage } });
+    expect(Object.prototype.hasOwnProperty.call(projected, "usage")).toBe(true);
+    expect(projected.usage).toEqual(usage);
+  });
+
+  it("accepts a terminal Turn event without top-level usage", async () => {
+    const onEvent = vi.fn();
+    const client = new OpenAIAgentsClient({
+      fetch: recordingFetch(streamResponse([`data: ${JSON.stringify(terminalTurnEvent("completed"))}\n\n`]), []),
+    });
+
+    await client.streamEvents("session", { onEvent });
+
+    expect(onEvent).toHaveBeenCalledTimes(1);
+    expect(Object.prototype.hasOwnProperty.call(onEvent.mock.calls[0]?.[0], "usage")).toBe(false);
+  });
+
+  it.each([
+    ["a non-terminal Turn event", {
+      type: "agent.session.turn.in_progress", event_id: "event", session_id: "session", turn_id: "turn_1",
+      turn: turnResource({ status: "in_progress", started_at: 1 }), usage: null,
+    }],
+    ["a malformed terminal value", terminalTurnEvent("completed", { usage: { input_tokens: 1 } })],
+    ["an estimated terminal value", terminalTurnEvent("completed", { usage: 0 })],
+  ])("rejects top-level usage on %s", async (_label, event) => {
+    const onEvent = vi.fn();
+    const client = new OpenAIAgentsClient({
+      fetch: recordingFetch(streamResponse([`data: ${JSON.stringify(event)}\n\n`]), []),
+    });
+
+    await expect(client.streamEvents("session", { onEvent }))
+      .rejects.toMatchObject({ status: 502, code: "invalid_stream_event" });
+    expect(onEvent).not.toHaveBeenCalled();
   });
 
   it.each([

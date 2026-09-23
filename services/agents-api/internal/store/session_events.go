@@ -24,6 +24,12 @@ type SessionChange struct {
 	SessionUsage             json.RawMessage           `json:"session_usage,omitempty"`
 	RequiredActions          []v1.FunctionCallAction   `json:"required_actions,omitempty"`
 	EnvironmentInputActivity *EnvironmentInputActivity `json:"environment_input_activity,omitempty"`
+	// Settled marks an idle or failed snapshot recorded when a Turn ends, or when
+	// the latest input reservation stops being pending (expired, cancelled or
+	// failed). A reservation made while the ending Turn captured Artifacts can
+	// still be pending and start a later Turn. It is internal, never a wire
+	// field; snapshots recorded without it read as unsettled.
+	Settled bool `json:"settled,omitempty"`
 }
 
 func recordSessionChange(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, change SessionChange) error {
@@ -71,7 +77,8 @@ func recordTurnChange(ctx context.Context, q *sqlc.Queries, row sqlc.Turn, creat
 	if err := recordSessionChange(ctx, q, row.SessionID, change); err != nil {
 		return err
 	}
-	if !created && !terminalStatus(row.Status) {
+	// The admitting input records a new Turn's Session activity after its Items.
+	if created || !terminalStatus(row.Status) {
 		return nil
 	}
 	return recordSessionActivity(ctx, q, row, nil)

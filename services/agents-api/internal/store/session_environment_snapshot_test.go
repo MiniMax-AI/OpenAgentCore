@@ -44,8 +44,12 @@ func TestSelfHostedCreationSnapshotRetainsEnvironmentAndCursor(t *testing.T) {
 		if value.Created || value.Cursor != events[0].Sequence || snapshot.Environment == nil || snapshot.Environment.ID != environment.ID || string(snapshot.Environment.Configuration) != string(environment.Configuration) {
 			t.Fatal("retry changed Environment or cursor", value)
 		}
+	}
+	// Recorded-intent lookup and upsert retries return only the row; they read
+	// no projection because a stream retry sends no events.
+	for _, snapshot := range []Session{recovered.Session, retry.Session} {
 		if snapshot.LastTurn != nil || snapshot.EnvironmentInputActivity != nil || snapshot.Usage != nil {
-			t.Fatal("creation snapshot borrowed later activity", snapshot)
+			t.Fatal("creation retry borrowed later activity", snapshot)
 		}
 	}
 	changedCreator := input.Creator

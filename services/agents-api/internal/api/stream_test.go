@@ -38,6 +38,15 @@ func (f *streamFixture) SessionEventCursor(context.Context, string, string) (int
 	return 10, nil
 }
 
+func (f *streamFixture) SessionStreamSnapshot(_ context.Context, tenant, id string) (store.Session, int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if tenant != f.session.TenantID || id != f.session.ID {
+		return store.Session{}, 0, store.ErrNotFound
+	}
+	return f.session, 10, nil
+}
+
 func (f *streamFixture) ListSessionEvents(_ context.Context, _, _ string, cursor int64) ([]store.SessionChange, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -134,4 +143,44 @@ func TestLiveStreamAuthDisconnectRecoveryAndServerDeadline(t *testing.T) {
 		t.Error("slow reader retained the handler")
 	}
 	_ = response.Body.Close()
+}
+
+func TestTerminalTurnEventsMirrorTurnUsage(t *testing.T) {
+	session := store.Session{ID: "session", Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"none"}}`)}
+	measured := json.RawMessage(`{"input_tokens":7,"input_tokens_details":{"cached_tokens":2},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":1},"total_tokens":10}`)
+	child := &v1.Turn{ID: "child", Status: "cancelled"}
+	for _, test := range []struct {
+		change store.SessionChange
+		want   string
+	}{
+		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.completed"}, Turn: &store.Turn{ID: "turn", Status: store.TurnCompleted, Usage: measured}}, string(measured)},
+		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.failed"}, Turn: &store.Turn{ID: "turn", Status: store.TurnFailed}}, "null"},
+		// Child Turn snapshots are rendered when recorded.
+		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.cancelled", Turn: child}}, "null"},
+		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.in_progress"}, Turn: &store.Turn{ID: "turn", Status: store.TurnInProgress, Usage: measured}}, ""},
+		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.idle"}, Turn: &store.Turn{ID: "turn", Status: store.TurnCompleted, Usage: measured}, SessionUsage: measured}, ""},
+	} {
+		event, err := streamResponse(session, test.change, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := json.Marshal(event)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			t.Fatal(err)
+		}
+		usage, present := fields["usage"]
+		if present != (test.want != "") || (present && string(usage) != test.want) {
+			t.Fatal("terminal usage does not mirror the Turn snapshot", test.change.Event.Type, string(raw))
+		}
+		if present {
+			var turn map[string]json.RawMessage
+			if json.Unmarshal(fields["turn"], &turn) != nil || string(turn["usage"]) != string(usage) {
+				t.Fatal("top-level usage differs from the rendered Turn", string(raw))
+			}
+		}
+	}
 }

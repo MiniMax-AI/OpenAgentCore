@@ -1,9 +1,7 @@
 """Saved-reference retry identity using real PostgreSQL and controlled source mutations."""
 
 import concurrent.futures
-import json
 import sys
-import time
 
 import httpx2
 from openai import OpenAI, ConflictError, NotFoundError, BadRequestError
@@ -65,27 +63,14 @@ def main():
             assert transport.post(endpoint, headers=auth, json=spec | bad).status_code == 400
         equivalent = spec | {"input":[{"role":"user","content":[{"type":"input_text","text":"initial"}]}], "metadata":{}, "stream":False}
         assert transport.post(endpoint, headers=auth, json=equivalent).json()["id"] == first.id
+        # A same-key stream retry sends no events, replays nothing and ends at once.
         with transport.stream("POST", endpoint, headers=auth, json=spec | {"stream":True}) as stream:
-            assert stream.status_code == 201
-            sessions.events.create(first.id, events=[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"future-after-retry"}]}]}])
-            found = False
-            deadline = time.monotonic() + 15
-            for line in stream.iter_lines():
-                assert time.monotonic() < deadline, "future event was not observed"
-                if not line.startswith("data:"):
-                    continue
-                event = json.loads(line[5:])
-                assert event["type"] != "agent.session.created"
-                if event["type"] == "agent.session.turn.item.added":
-                    text = json.dumps(event)
-                    assert "initial" not in text, "retry replayed initial work"
-                    if "future-after-retry" in text:
-                        found = True
-                        break
-            assert found
+            assert stream.status_code == 201 and stream.headers["content-type"] == "text/event-stream"
+            assert [line for line in stream.iter_lines() if line] == [": connected"]
+        sessions.events.create(first.id, events=[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"future-after-retry"}]}]}])
         assert len(list(sessions.turns.list(first.id))) == 1
         assert len(list(sessions.items.list(first.id))) == 2
-    print("Saved-reference retries: SDK/raw HTTP mutation/deletion, concurrent recovery, initial-input-once, current metadata, restart and future-only SSE passed.")
+    print("Saved-reference retries: SDK/raw HTTP mutation/deletion, concurrent recovery, initial-input-once, current metadata, restart and eventless stream retries passed.")
 
 
 if __name__ == "__main__":

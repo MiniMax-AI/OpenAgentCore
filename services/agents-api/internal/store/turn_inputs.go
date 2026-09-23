@@ -153,11 +153,13 @@ func admitInput(ctx context.Context, q *sqlc.Queries, tenantID string, session p
 	if input.Kind == "tool_result" {
 		return admitFunctionResult(ctx, q, tenantID, session, key, position, input)
 	}
+	created := false
 	turn, err := q.GetActiveTurn(ctx, session)
 	if errors.Is(err, pgx.ErrNoRows) {
 		if input.Kind == "message" {
 			turn, err = q.CreateTurn(ctx, sqlc.CreateTurnParams{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, SessionID: session})
 			if err == nil {
+				created = true
 				err = recordTurnChange(ctx, q, turn, true)
 			}
 		} else {
@@ -180,6 +182,13 @@ func admitInput(ctx context.Context, q *sqlc.Queries, tenantID string, session p
 	}
 	if err := indexInput(ctx, q, session, sequence); err != nil {
 		return InputReceipt{}, err
+	}
+	if created {
+		// A new Turn publishes turn.created, then its user input Items, then the
+		// Session activity, within this transaction.
+		if err := recordSessionActivity(ctx, q, turn, nil); err != nil {
+			return InputReceipt{}, err
+		}
 	}
 	return inputReceipt(sequence, turn.ID, false), nil
 }

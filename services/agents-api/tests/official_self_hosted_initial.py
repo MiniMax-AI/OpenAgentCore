@@ -94,17 +94,19 @@ def main():
                         assert created["type"] == "agent.session.created" and waiting["type"] == "agent.session.requires_action"
                         assert set(created) == set(waiting) == {"type", "event_id", "session"}
                         assert created["event_id"] != waiting["event_id"]
-                        check(created["session"], "idle")
+                        # The created snapshot is the committed JSON 201 projection; the
+                        # committed connection action still follows from the cursor.
+                        check(created["session"], "requires_action")
                         value = waiting["session"]
-                        assert created["session"]["id"] == value["id"] and created["session"]["environment"] == value["environment"]
-                        assert created["session"]["created_at"] == created["session"]["last_active_at"]
+                        assert created["session"] == value
                 elif mode == "raw_disconnect":
                     with raw.stream("POST", endpoint, json={**request, "stream": True}, headers={"Idempotency-Key": key}) as response:
                         assert response.status_code == 201 and response.headers["content-type"] == "text/event-stream"
                         created = next(json.loads(line[6:]) for line in response.iter_lines() if line.startswith("data: "))
                         assert created["type"] == "agent.session.created"
-                        check(created["session"], "idle")
+                        check(created["session"], "requires_action")
                     value = sessions.retrieve(created["session"]["id"]).to_dict()
+                    assert created["session"] == value
                 else:
                     value = sessions.create(**request, extra_headers={"Idempotency-Key": key}).to_dict()
                 assert time.monotonic() - began < 8, "creation waited for offline execution"
@@ -136,7 +138,11 @@ def main():
             elif phase == "expire":
                 case = cases[0]
                 observations, failures = {}, []
-                ready = {name: threading.Event() for name in ("sdk", "raw", "creation_retry")}
+                # A same-key stream retry of the pending creation ends at once without events.
+                with client() as observer:
+                    with observer.beta.agents.sessions.create(**case["request"], stream=True, extra_headers={"Idempotency-Key": case["key"]}) as stream:
+                        assert list(stream) == []
+                ready = {name: threading.Event() for name in ("sdk", "raw")}
 
                 def observe(name):
                     try:
@@ -148,10 +154,7 @@ def main():
                                     event = next(json.loads(line[6:]) for line in response.iter_lines() if line.startswith("data: "))
                         else:
                             with client() as observer:
-                                events = observer.beta.agents.sessions
-                                stream = (events.create(**case["request"], stream=True, extra_headers={"Idempotency-Key": case["key"]})
-                                          if name == "creation_retry" else events.events.stream(case["id"]))
-                                with stream:
+                                with observer.beta.agents.sessions.events.stream(case["id"]) as stream:
                                     ready[name].set()
                                     event = next(iter(stream)).to_dict()
                         assert event["type"] == "agent.session.failed" and set(event) == {"type", "event_id", "session"}
@@ -171,7 +174,7 @@ def main():
                     assert not worker.is_alive(), "public initial failure observer timed out"
                 if failures:
                     raise AssertionError("public initial failure observer failed") from failures[0]
-                assert observations["sdk"] == observations["raw"] == observations["creation_retry"]
+                assert observations["sdk"] == observations["raw"]
                 assert retry(case, "failed") == observations["sdk"]["session"]
                 assert api.beta.agents.environments.retrieve(case["environment_id"]).status == "pending"
                 for retained in cases[1:]:

@@ -82,9 +82,15 @@ the exact local profile are validated
 before persistence. Supported optional functions remain engine-specific.
 
 Initial text commits a reservation and connection action, then returns the Session
-and Environment connection target while offline. Streamed creation sends its
-original `created` snapshot before the connection action. The existing Worker
-prepares and admits the input; closing the stream leaves committed work intact.
+and Environment connection target while offline. Streamed creation sends the same
+committed projection as its `created` snapshot, already showing `requires_action`
+and the connection action, then the committed `requires_action` event. Like
+every fresh creation stream it ends right after the idle recorded when the
+admitted Turn ends or the reservation stops being pending, or after a failure;
+the connection alone clearing the action does not end it. A creation without
+input ends right after its created snapshot, and a same-key stream retry ends at
+once without events. The existing Worker prepares and admits the input; closing the stream
+leaves committed work intact.
 Initial expiry leaves a failed Session, safe error and empty actions without a
 Turn or an Environment failure. Creation retries preserve the original identity,
 deadline and input. Later live observers do not replay creation events.

@@ -96,6 +96,22 @@ export class AgentCoreError extends Error {
   }
 }
 
+/**
+ * A creation stream ended without events. Core sends no events on a same-key
+ * retry of an existing creation; repeat the same request and Idempotency-Key
+ * with `stream=false` to retrieve the Session.
+ */
+export class CreationStreamRetryError extends AgentCoreError {
+  constructor() {
+    super(
+      "Agent Core already recorded this Session creation, so its stream sends no events. Repeat the same request and Idempotency-Key with stream=false to retrieve the Session.",
+      409,
+      "creation_stream_retry",
+    );
+    this.name = "CreationStreamRetryError";
+  }
+}
+
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
@@ -282,6 +298,11 @@ const streamErrorFields = new Set(["code", "type", "message"]);
 const environmentStateFields = new Set(["id", "type", "status", "error"]);
 const snapshotEventFields = new Set(["type", "event_id", "session_id", "session"]);
 const turnEventFields = new Set(["type", "event_id", "session_id", "turn_id", "turn"]);
+// Terminal Turn events also carry top-level usage mirroring the Turn snapshot.
+const terminalTurnEventFields = new Set([...turnEventFields, "usage"]);
+const terminalTurnEventTypes = new Set([
+  "agent.session.turn.completed", "agent.session.turn.failed", "agent.session.turn.cancelled",
+]);
 const itemEventFields = new Set(["type", "event_id", "session_id", "turn_id", "item_id", "output_index", "item"]);
 const contentPartEventFields = new Set([
   "type", "event_id", "session_id", "turn_id", "item_id", "output_index", "content_index", "part",
@@ -1127,17 +1148,22 @@ function projectStreamEventSession(
     "agent.session.turn.cancelled": "cancelled",
   };
   if (hasOwn(turnStatusByEvent, event.type)) {
-    if (!exactFields(value, turnEventFields) || event.turn === undefined) return invalidStreamEvent();
+    // Older Core releases omit terminal usage; no other Turn event may carry it.
+    const withUsage = terminalTurnEventTypes.has(event.type) && hasOwn(value, "usage");
+    if (!exactFields(value, withUsage ? terminalTurnEventFields : turnEventFields) || event.turn === undefined) {
+      return invalidStreamEvent();
+    }
     const sessionId = eventSessionId(value, expectedSessionId, true)!;
     const turnId = requiredEventString(value, "turn_id");
     const turn = projectAgentTurn(event.turn, expectedSessionId, invalidStreamEvent);
+    const usage = withUsage ? { usage: projectTokenUsage(value.usage, invalidStreamEvent) } : {};
     if (
       !sameResourceId(turn.id, turnId) ||
       // Native child history can first appear as a completed created snapshot.
       (!(event.type === "agent.session.turn.created" && turn.subagent_id != null) && turn.status !== turnStatusByEvent[event.type]) ||
       (immutable !== undefined && turn.subagent_id == null && !sameResourceId(turn.agent_id, immutable.agent.id))
     ) return invalidStreamEvent();
-    return { ...base, session_id: sessionId, turn_id: turnId, turn } as SessionEvent;
+    return { ...base, session_id: sessionId, turn_id: turnId, turn, ...usage } as SessionEvent;
   }
 
   if (event.type === "agent.session.turn.item.added" || event.type === "agent.session.turn.item.done") {
@@ -1249,6 +1275,8 @@ function projectUnknownStreamEvent(
 interface EventStreamConsumerOptions extends StreamOptions {
   onParsedEvent: (event: SessionEvent) => void;
   expectedSessionId?: () => string | undefined;
+  /** Replaces the generic error when a present stream body ends without events. */
+  emptyStreamError?: () => AgentCoreError;
 }
 
 async function consumeEventStream(
@@ -1303,7 +1331,7 @@ async function consumeEventStream(
     decoder.finish();
     options.signal?.throwIfAborted();
     if (!sawEvent) {
-      throw new AgentCoreError("Agent core returned an empty event stream.", 502, "empty_stream");
+      throw options.emptyStreamError?.() ?? new AgentCoreError("Agent core returned an empty event stream.", 502, "empty_stream");
     }
   } catch (error) {
     await reader.cancel(error).catch(() => undefined);
@@ -1932,6 +1960,7 @@ export class OpenAIAgentsClient implements AgentCore {
     let immutableSession: ImmutableSessionProjection | undefined;
     await consumeEventStream(response.body, {
       ...options,
+      emptyStreamError: () => new CreationStreamRetryError(),
       expectedSessionId: () => createdSessionId,
       onParsedEvent: (event) => {
         if (createdSessionId === undefined) {

@@ -617,6 +617,11 @@ export interface SessionEventBase {
   delta?: string;
   text?: string;
   error?: StreamError;
+  /**
+   * Present on terminal Turn events only. It mirrors that Turn snapshot's usage
+   * and is null when unknown; a later Turn read can still report measured usage.
+   */
+  usage?: TokenUsage | null;
 }
 
 export type AgentSessionEnvironmentEvent = {

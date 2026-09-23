@@ -51,11 +51,110 @@ func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	h.serveSessionEvents(w, r, events, session, cursor, nil, http.StatusOK)
+	h.serveSessionEvents(w, r, events, session, cursor, nil, http.StatusOK, nil)
 }
 
-func (h *Handler) serveSessionEvents(w http.ResponseWriter, r *http.Request, events eventStore, session store.Session, cursor int64, initial *v1.SessionEvent, status int) {
+// streamSettlement reads a creation stream's committed Session projection and
+// the Session event cursor from one snapshot, reporting whether it is settled.
+type streamSettlement func(context.Context) (settled bool, cursor int64, err error)
+
+// serveSessionEvents streams committed changes after cursor. GET streams pass a
+// nil settlement and stay live-only until disconnect, deletion or failure.
+//
+// A fresh creation response ends right after it sends a settling Session event
+// and never sends later events: an agent.session.idle recorded when a Turn ends
+// or an input reservation stops being pending, or any agent.session.failed.
+// Settlements that record no event, such as a reservation cancelled while its
+// Session is already idle, use the projection: after an empty drain the stream
+// reads the projection and the event cursor from one snapshot and, if settled,
+// sends only events up to that cursor before ending. Later work drained before
+// that read can still be sent. The projection is re-read after a sent Session
+// status event and otherwise at most once a second.
+func (h *Handler) serveSessionEvents(w http.ResponseWriter, r *http.Request, events eventStore, session store.Session, cursor int64, initial *v1.SessionEvent, status int, settlement streamSettlement) {
 	id, tenant := session.ID, tenantID(r)
+	write := openEventStream(w, status)
+	if write == nil {
+		return
+	}
+	emit := func(event v1.SessionEvent) error { return emitSessionEvent(write, id, event) }
+	if initial != nil {
+		if err := emit(*initial); err != nil {
+			return
+		}
+	}
+	poll := time.NewTicker(100 * time.Millisecond)
+	defer poll.Stop()
+	heartbeat := time.NewTicker(15 * time.Second)
+	defer heartbeat.Stop()
+	// limit is the snapshot cursor of a settled projection; nothing after it is sent.
+	recheck, limit := true, int64(-1)
+	var checked time.Time
+	for {
+		changes, err := events.ListSessionEvents(r.Context(), tenant, id, cursor)
+		if errors.Is(err, store.ErrNotFound) {
+			return
+		}
+		if err != nil {
+			writeStreamFailure(write, id)
+			return
+		}
+		for _, change := range changes {
+			if limit >= 0 && change.Sequence > limit {
+				return
+			}
+			event, err := streamResponse(session, change, h.executorURL)
+			if err != nil {
+				writeStreamFailure(write, id)
+				return
+			}
+			if err := emit(event); err != nil {
+				return
+			}
+			cursor = change.Sequence
+			if settlement != nil && settlingEvent(change) {
+				return
+			}
+			recheck = recheck || sessionStatusEvent(change.Event.Type)
+		}
+		if limit >= 0 && (cursor >= limit || len(changes) == 0) {
+			return
+		}
+		if len(changes) > 0 {
+			continue
+		}
+		if settlement != nil && (recheck || time.Since(checked) >= time.Second) {
+			recheck, checked = false, time.Now()
+			settled, snapshot, err := settlement(r.Context())
+			if errors.Is(err, store.ErrNotFound) || r.Context().Err() != nil {
+				return
+			}
+			if err != nil {
+				writeStreamFailure(write, id)
+				return
+			}
+			if settled {
+				if cursor >= snapshot {
+					return
+				}
+				limit = snapshot
+				continue
+			}
+		}
+		select {
+		case <-r.Context().Done():
+			return
+		case <-poll.C:
+		case <-heartbeat.C:
+			if err := write([]byte(": keepalive\n\n")); err != nil {
+				return
+			}
+		}
+	}
+}
+
+// openEventStream writes the event-stream headers and the connection comment. It
+// returns nil when that write fails.
+func openEventStream(w http.ResponseWriter, status int) func([]byte) error {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
@@ -70,70 +169,51 @@ func (h *Handler) serveSessionEvents(w http.ResponseWriter, r *http.Request, eve
 		}
 		return controller.Flush()
 	}
-	if err := write([]byte(": connected\n\n")); err != nil {
-		return
+	if write([]byte(": connected\n\n")) != nil {
+		return nil
 	}
-	emit := func(event v1.SessionEvent) error {
-		payload, err := json.Marshal(event)
-		if err != nil {
-			writeStreamFailure(write, id)
-			return err
-		}
-		return write([]byte(fmt.Sprintf("event: %s\ndata: %s\n\n", event.Type, payload)))
+	return write
+}
+
+func emitSessionEvent(write func([]byte) error, session string, event v1.SessionEvent) error {
+	payload, err := json.Marshal(event)
+	if err != nil {
+		writeStreamFailure(write, session)
+		return err
 	}
-	if initial != nil {
-		if err := emit(*initial); err != nil {
-			return
-		}
+	return write([]byte(fmt.Sprintf("event: %s\ndata: %s\n\n", event.Type, payload)))
+}
+
+// settlingEvent reports a recorded event after which a creation stream ends: an
+// idle marked settled when recorded, or any failure. A self-hosted connection
+// that clears a pending input's action to idle is not marked.
+func settlingEvent(change store.SessionChange) bool {
+	switch change.Event.Type {
+	case "agent.session.failed":
+		return true
+	case "agent.session.idle":
+		return change.Settled
 	}
-	poll := time.NewTicker(100 * time.Millisecond)
-	defer poll.Stop()
-	heartbeat := time.NewTicker(15 * time.Second)
-	defer heartbeat.Stop()
-	for {
-		changes, err := events.ListSessionEvents(r.Context(), tenant, id, cursor)
-		if errors.Is(err, store.ErrNotFound) {
-			return
-		}
-		if err != nil {
-			writeStreamFailure(write, id)
-			return
-		}
-		for _, change := range changes {
-			event, err := streamResponse(session, change, h.executorURL)
-			if err != nil {
-				writeStreamFailure(write, id)
-				return
-			}
-			if err := emit(event); err != nil {
-				return
-			}
-			cursor = change.Sequence
-		}
-		if len(changes) > 0 {
-			continue
-		}
-		select {
-		case <-r.Context().Done():
-			return
-		case <-poll.C:
-		case <-heartbeat.C:
-			if err := write([]byte(": keepalive\n\n")); err != nil {
-				return
-			}
-		}
+	return false
+}
+
+func sessionStatusEvent(eventType string) bool {
+	switch eventType {
+	case "agent.session.in_progress", "agent.session.requires_action", "agent.session.idle", "agent.session.failed":
+		return true
 	}
+	return false
 }
 
 func streamResponse(session store.Session, change store.SessionChange, executorURL string) (v1.SessionEvent, error) {
 	event := change.Event
 	if change.Turn == nil && change.EnvironmentInputActivity == nil {
-		return event, nil
+		return withTurnUsage(event), nil
 	}
 	if change.Turn != nil && strings.HasPrefix(event.Type, "agent.session.turn.") {
 		turn, err := turnResponse(session, *change.Turn)
 		event.Turn = &turn
-		return event, err
+		return withTurnUsage(event), err
 	}
 	event.SessionID = ""
 	session.RequiredActions = change.RequiredActions
@@ -142,6 +222,16 @@ func streamResponse(session store.Session, change store.SessionChange, executorU
 	value, err := sessionResponse(session, executorURL)
 	event.Session = &value
 	return event, err
+}
+
+// withTurnUsage mirrors a terminal Turn snapshot's usage at the event's top
+// level, including null when unknown. It never derives or sums counters.
+func withTurnUsage(event v1.SessionEvent) v1.SessionEvent {
+	event.Usage = nil
+	if v1.TerminalTurnEvent(event.Type) && event.Turn != nil {
+		event.Usage = event.Turn.Usage
+	}
+	return event
 }
 
 func writeStreamFailure(write func([]byte) error, session string) {

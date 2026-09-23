@@ -87,10 +87,21 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 			input := environmentInput("initial", kind, "/workspace")
 			input.InitialInputs = []Input{messageInput("first"), messageInput("second")}
 			creation, err := s.CreateSessionStream(t.Context(), tenant, input)
-			if err != nil || !creation.Created || creation.Cursor != 0 || creation.Session.LastTurn != nil || creation.Session.EnvironmentInputActivity != nil {
-				t.Fatal("creation snapshot borrowed initial work", creation, err)
+			if err != nil || !creation.Created || creation.Cursor != 0 || creation.Session.LastTurn != nil {
+				t.Fatal("creation started initial work before native readiness", creation, err)
 			}
 			session := creation.Session
+			// The snapshot is the committed JSON projection: self-hosted input requests
+			// its connection, while hosted initial provisioning has no caller action.
+			activityStatus := func(value Session) string {
+				if value.EnvironmentInputActivity == nil {
+					return ""
+				}
+				return value.EnvironmentInputActivity.Status
+			}
+			if want := map[string]string{"self_hosted": "requires_action", "openai_hosted": ""}[kind]; activityStatus(session) != want || !session.PendingInput {
+				t.Fatal("creation snapshot differs from the committed projection", session.EnvironmentInputActivity, session.PendingInput)
+			}
 			reservation := initialEnvironmentReservation(t, s, pool, tenant, session.ID)
 			storedBatch, marshalErr := json.Marshal(reservation.Inputs)
 			originalBatch, _ := json.Marshal(input.InitialInputs)
@@ -113,7 +124,7 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 			}
 			other, _ := testStore(t)
 			retry, err := other.CreateSessionStream(t.Context(), tenant, input)
-			if err != nil || retry.Created || retry.Cursor != int64(expectedEvents) || retry.Session.ID != session.ID || retry.Session.EnvironmentInputActivity != nil {
+			if err != nil || retry.Created || retry.Cursor != int64(expectedEvents) || retry.Session.ID != session.ID || retry.Session.EnvironmentInputActivity != nil || retry.Session.LastTurn != nil {
 				t.Fatal("retry changed creation cursor/snapshot", retry, err)
 			}
 			if got := initialEnvironmentReservation(t, other, pool, tenant, session.ID); !reflect.DeepEqual(got, reservation) {
@@ -148,7 +159,7 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 				t.Fatal("initial batch did not promote", promoted, err)
 			}
 			active := requireEnvironmentInputActivity(t, s, tenant, session.ID, "", "")
-			if active.LastTurn == nil || active.LastTurn.Status != TurnInProgress {
+			if active.LastTurn == nil || active.LastTurn.Status != TurnInProgress || active.PendingInput {
 				t.Fatal("promotion did not claim its Turn", active.LastTurn)
 			}
 			replay, err := writer.PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
@@ -162,6 +173,20 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 			after, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)
 			if err != nil || !reflect.DeepEqual(events, after[:len(events)]) {
 				t.Fatal("initial snapshot changed after promotion", err)
+			}
+			// Promotion starts the Turn in the official order: turn.created, the
+			// user input Item, Session activity, then turn.in_progress.
+			first := map[string]int{}
+			for index, change := range after[len(events):] {
+				if _, seen := first[change.Event.Type]; !seen {
+					first[change.Event.Type] = index + 1
+				}
+			}
+			order := []string{"agent.session.turn.created", "agent.session.turn.item.added", "agent.session.in_progress", "agent.session.turn.in_progress"}
+			for index := range order {
+				if first[order[index]] == 0 || (index > 0 && first[order[index]] < first[order[index-1]]) {
+					t.Fatal("promoted Turn events are out of order", order[index], first)
+				}
 			}
 		})
 	}
@@ -192,7 +217,7 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 				reservation = initialEnvironmentReservation(t, s, pool, tenant, session.ID)
 			}
 			failed := requireEnvironmentInputActivity(t, s, tenant, session.ID, "failed", "")
-			if failed.Environment.Status != "pending" || failed.LastTurn != nil || !failed.EnvironmentInputActivity.LastActiveAt.Equal(*reservation.SettledAt) {
+			if failed.Environment.Status != "pending" || failed.LastTurn != nil || failed.PendingInput || !failed.EnvironmentInputActivity.LastActiveAt.Equal(*reservation.SettledAt) {
 				t.Fatal("input expiry changed Environment/Turn", failed)
 			}
 			events, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)

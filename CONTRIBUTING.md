@@ -973,10 +973,11 @@ lock, and return terminal storage outcomes without rolling their transaction bac
 
 Initial messages for a newly created Environment-bearing Session use that same
 reservation in the creation transaction, including its connection-action event.
-The creation winner alone inserts it; the original pre-work snapshot and stream
-cursor remain unchanged. A durable initial/later flag defaults historical rows to
-later input without inferring origin. Initial expiry projects a failed Session and
-safe error before any Turn exists; later expiry retains idle semantics. Failure
+The creation winner alone inserts it; the stream cursor still precedes that
+event, and creation retries never re-insert it. A durable initial/later flag
+defaults historical rows to later input without inferring origin. Initial expiry
+projects a failed Session and safe error before any Turn exists; later expiry
+retains idle semantics. Failure
 events capture the settled activity and Usage atomically. Late connections and
 creation retries cannot reset or replay expired input, and newer work supersedes
 old activity without changing its event snapshots. The Environment itself is not
@@ -987,8 +988,9 @@ immediate Turn admission. Cancellation/deletion keep their existing semantics.
 Ordinary and streamed public self-hosted creation accept initial text through this
 transaction after configuration and new-work lease checks. They return the owned
 Environment ID and executor URL while offline, without waiting for admission.
-The creation stream sends its original pre-work `created` snapshot before the
-committed connection action. A disconnected observer leaves committed input intact;
+The creation stream's `created` snapshot is the committed JSON 201 projection,
+including the connection action; the committed action event then follows from the
+creation cursor. A disconnected observer leaves committed input intact;
 only the existing Worker prepares, promotes and starts it. Saved-Agent retries with recorded intent
 recover before fresh execution admission or source resolution; inline retries keep
 their existing resolved-snapshot validation.
@@ -2073,19 +2075,45 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   Missing sequence positions produce a safe stream error and close; recover via
   Session/Turn/Items queries. Socket writes have a five-second deadline and hold
   no database connection. Client disconnect releases the handler; comments keep
-  idle connections alive. SSE does not close merely because one Turn finishes.
+  idle connections alive. GET SSE does not close merely because one Turn finishes;
+  only creation responses end on settlement (below).
 
 - Session creation with `stream=true` reuses atomic input admission and the live
   event loop. The upsert returns its cursor under the Session lock, before initial
   inputs; never replace it with a post-commit cursor lookup. A new response emits
-  one request-local `agent.session.created` with the pre-input resource snapshot,
-  then committed changes from that cursor. The local creation retry key excludes
-  response mode: retries observe only later events and admit no work again. Retry
-  the same request/key with `stream=false` to recover a lost Session ID. GET event
-  streams retain their current live-only start. Disconnect never cancels admitted
-  work. Exact upstream created-snapshot timing, POST stream lifetime and creation
-  retry response semantics remain unverified; the separate SDK one-Turn helper
-  does not define this endpoint. Do not present local retry behavior as replay.
+  one request-local `agent.session.created` with the committed Session projection
+  that the JSON 201 response returns (read after the commit), then committed
+  changes from that cursor exactly once. A fresh creation stream ends right
+  after the first `agent.session.idle` recorded when a Turn ends or an input
+  reservation stops being pending (expired, cancelled or failed), or any
+  `agent.session.failed`, and never sends the events after it. A self-hosted
+  connection clearing pending input to idle, `requires_action`, function results
+  and resumed work keep it open. A creation that admitted nothing (no Turn or
+  reservation) ends right after `created`. Settlements that record no event use
+  a fallback: after an empty drain the stream reads the JSON-path projection and
+  the event cursor in one database snapshot and, if the Session is idle or failed
+  with no queued, running or waiting Turn and no pending reservation, sends only
+  events up to that cursor, then ends. Accepted follow-ups: another client's work
+  drained before that read can still be sent, and idles recorded by an older
+  binary during a rolling deploy carry no settled marker and rely on the
+  fallback. An input reservation made while the ending Turn captured Artifacts
+  can start a later Turn that the stream does not follow. The settled marker and
+  pending-input flag are Store-internal, never wire fields, and add no events.
+  Re-read the projection after a sent Session status event and otherwise at most
+  once a second. The local creation retry key excludes response mode; a same-key
+  `stream=true` retry of an existing creation returns 201 with only the
+  connection comment and ends at once, admitting nothing and following no work,
+  because official same-key requests create distinct Sessions. Retry the same
+  request/key with `stream=false`, or use the GET events stream, to recover. GET
+  event streams keep their live-only start and never end on settlement.
+  Disconnect never cancels admitted work. Official observations cover `none`
+  creation; self-hosted, hosted and no-input stream lifetimes and the retry
+  behavior are local choices, and the separate SDK one-Turn helper does not
+  define this endpoint. Do
+  not present local retry behavior as replay. A new Turn records `turn.created`,
+  its user input Items, then Session activity in one transaction. Terminal Turn
+  events carry top-level `usage` copied from their Turn snapshot, null when
+  unknown; never derive or sum it.
 
 - Public Turn retrieve/list project persisted execution state and the immutable
   Session Agent identity. Scope both resources and pagination cursors to the

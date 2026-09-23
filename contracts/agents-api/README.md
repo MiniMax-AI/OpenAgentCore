@@ -776,27 +776,50 @@ express the string/array union, so input is unconstrained with a type descriptio
 ### Session creation streaming
 
 `POST /v1/agents/sessions` also accepts `stream=true` for the supported creation
-inputs. Fresh creation sends `agent.session.created` with the pre-input Session,
-then its committed activity/Turn/Item/output events. Self-hosted initial creation
-first requests the Environment connection, before native readiness and a Turn.
-The cursor comes
-from the atomic creation upsert, so rapid initial execution cannot move the start
-past its own events. The ordinary bounded-buffer/gap policy still applies.
+inputs. Fresh creation sends `agent.session.created` with the committed Session,
+the same projection as the JSON 201 body (`in_progress` after `none` initial
+input), then its committed activity/Turn/Item/output events. A new Turn publishes
+`turn.created`, its user input `item.added`, `agent.session.in_progress`, then
+`turn.in_progress`. Self-hosted initial creation shows and then emits the
+Environment connection request, before native readiness and a Turn. The cursor
+comes from the atomic creation upsert, so rapid initial execution cannot move the
+start past its own events. The ordinary bounded-buffer/gap policy still applies.
+
+A fresh creation stream ends right after the first `agent.session.idle` recorded
+when a Turn ends or an input reservation stops being pending (expired, cancelled
+or failed), or any `agent.session.failed`, and never sends the events after it. A
+pinned-SDK loop over `sessions.create(..., stream=True)` therefore ends right
+after the initial Turn's idle. `requires_action`, function results, resumed work
+and a self-hosted connection clearing pending input keep it open, and a
+provisioning or offline reservation keeps it open until a Turn settles or the
+reservation expires or fails. A creation that admitted nothing ends right after
+`created`. A settlement that records no event ends the stream after the events
+up to the cursor read with a settled projection in one snapshot; another client's
+work drained before that read can still be sent. Observe later Turns with the GET
+event stream, which never ends on its own. Terminal Turn events carry the Turn
+snapshot's `usage` at the top level, null when unknown.
 
 The local `Idempotency-Key` creation extension shares identity across response
-modes. Retrying creation streams only future changes and never resubmits input or
-replays old events. Recover a lost Session ID by repeating the same request/key
-with `stream=false`, then use Session/Turn/Items reads. Disconnect only stops the
-HTTP observer; committed reservations and admitted execution continue. Idle streams remain open for later
-Turns. Pinned SDK3.13.0 proves the creation stream and created-event schema; exact
-upstream initial snapshot/order, POST stream lifetime and retry behavior have not
-been compared with the hosted service. These choices are not full conformance.
+modes. A same-key `stream=true` retry of an existing creation returns 201 with
+only the connection comment and ends at once: it replays nothing, resubmits no
+input and follows no work, since official same-key requests create distinct
+Sessions. Recover a lost
+Session ID by repeating the same request/key with `stream=false`, then use
+Session/Turn/Items reads. Disconnect only stops the HTTP observer; committed
+reservations and admitted execution continue. September 23 official `none`
+observations match the created snapshot, the end at idle, the start order and the
+terminal usage field ([evidence](history-events-usage.md#creation-stream-settlement-2026-09-23)).
+Self-hosted, hosted and no-input creation stream lifetimes and the stream retry
+behavior are local choices.
+These choices are not full conformance.
 
 `official_session_creation_stream.py` covers the pinned client and raw HTTP on
-real PostgreSQL: idle/initial text and saved Agents, first snapshots and ordered
-Items, retries across response modes, later Turns, disconnect recovery, isolation
+real PostgreSQL: initial text and saved Agents, created snapshots equal to the JSON
+201 body, Turn start order, terminal usage, the end at idle, GET continuation,
+immediately ending stream retries and JSON retries, disconnect recovery, isolation
 and errors before stream headers. Store tests cover concurrent upsert ownership,
-pre-admission cursors and observers draining after execution has completed.
+pre-admission cursors, post-admission projections and observers draining after
+execution has completed; API tests cover the stream lifetimes.
 
 ## Acceptance evidence and remaining scope
 
