@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { AgentCore, AgentTurn, SessionEvent } from "@agents-core-web/agents-client";
+import type { AgentCore, AgentTurn, SessionEvent, SessionItem } from "@agents-core-web/agents-client";
 
 import {
+  addChildTurnIds,
+  childTurnSnapshotId,
   listAllTurns,
   matchingTurnSnapshot,
   mergeDurableAndLiveTurns,
+  rootSessionItems,
   turnReadIsCurrent,
   upsertTurn,
 } from "./turn-state";
@@ -67,8 +70,10 @@ describe("durable Turn loading", () => {
       ? { data: [turn("turn-2")], has_more: false }
       : { data: [root, child], has_more: true, last_id: "child-turn" });
 
-    await expect(listAllTurns({ listTurns } as unknown as AgentCore, "session-1")).resolves.toEqual([root, turn("turn-2")]);
+    const childTurnIds = new Set<string>();
+    await expect(listAllTurns({ listTurns } as unknown as AgentCore, "session-1", undefined, childTurnIds)).resolves.toEqual([root, turn("turn-2")]);
     expect(listTurns).toHaveBeenNthCalledWith(2, "session-1", { after: "child-turn", limit: 100, order: "asc", signal: undefined });
+    expect([...childTurnIds]).toEqual(["child-turn"]);
   });
 
   it("deduplicates overlapping pages without regressing a terminal Turn", async () => {
@@ -160,5 +165,40 @@ describe("Turn live reconciliation", () => {
     expect(turnReadIsCurrent(read, { ...read, request: 5, selectedSessionId: "session-1" })).toBe(false);
     expect(turnReadIsCurrent(read, { ...read, coreGeneration: 3, selectedSessionId: "session-1" })).toBe(false);
     expect(turnReadIsCurrent(read, { ...read, selectedSessionId: "session-2" })).toBe(false);
+  });
+});
+
+describe("Subagent work from an earlier Core", () => {
+  function item(id: string, turnId: string): SessionItem {
+    return { id, turn_id: turnId, type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: id }] } as SessionItem;
+  }
+
+  it("recognizes streamed Subagent Turns, including a terminal first snapshot", () => {
+    const child = { ...turn("child-turn", "completed"), subagent_id: "subagent-1" };
+    const event = (type: string, value: AgentTurn, sessionId = "session-1") => ({
+      type, event_id: `${type}-${value.id}`, session_id: sessionId, turn_id: value.id, turn: value,
+    } as SessionEvent);
+    expect(childTurnSnapshotId(event("agent.session.turn.created", child), "session-1")).toBe("child-turn");
+    expect(childTurnSnapshotId(event("agent.session.turn.completed", child), "session-1")).toBe("child-turn");
+    expect(childTurnSnapshotId(event("agent.session.turn.completed", turn("root", "completed")), "session-1")).toBeNull();
+    expect(childTurnSnapshotId(event("agent.session.turn.completed", child), "session-2")).toBeNull();
+    expect(childTurnSnapshotId({ ...event("agent.session.turn.completed", child), turn_id: "other" }, "session-1")).toBeNull();
+    expect(childTurnSnapshotId({ ...event("agent.session.turn.item.added", child) }, "session-1")).toBeNull();
+  });
+
+  it("keeps live Items of known Subagent Turns out of the Session timeline", () => {
+    const empty: ReadonlyMap<string, ReadonlySet<string>> = new Map();
+    const known = addChildTurnIds(empty, "session-1", ["child-turn"]);
+    expect(addChildTurnIds(known, "session-1", ["child-turn"])).toBe(known);
+    expect(known.get("session-2")).toBeUndefined();
+
+    const rootItem = item("root-answer", "root-turn");
+    // An earlier Core streamed a child Item and its text; neither may surface as
+    // an unassociated Item beside the root Turns.
+    const items = [rootItem, item("child-answer", "child-turn"), item("stream:child-turn:0:0", "child-turn")];
+    expect(rootSessionItems(items, known.get("session-1"))).toEqual([rootItem]);
+    expect(rootSessionItems(items, known.get("session-2"))).toBe(items);
+    const rootOnly = [rootItem];
+    expect(rootSessionItems(rootOnly, known.get("session-1"))).toBe(rootOnly);
   });
 });

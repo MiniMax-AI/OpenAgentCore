@@ -87,9 +87,12 @@ import {
   type EnvironmentTemplateCatalog,
 } from "./features/sessions/environment/environment-templates";
 import {
+  addChildTurnIds,
+  childTurnSnapshotId,
   listAllTurns,
   matchingTurnSnapshot,
   mergeDurableAndLiveTurns,
+  rootSessionItems,
   turnReadIsCurrent,
   upsertTurn,
 } from "./features/sessions/turns/turn-state";
@@ -276,6 +279,12 @@ export function App() {
   const [itemsSessionId, setItemsSessionId] = useState<string | null>(null);
   const [turns, setTurns] = useState<AgentTurn[]>([]);
   const [turnsSessionId, setTurnsSessionId] = useState<string | null>(null);
+  // Subagent Turn IDs an earlier Core listed or streamed; their Items stay hidden.
+  const [childTurnIds, setChildTurnIds] = useState<ReadonlyMap<string, ReadonlySet<string>>>(() => new Map());
+  const rootItems = useMemo(
+    () => rootSessionItems(items, selectedId ? childTurnIds.get(selectedId) : undefined),
+    [childTurnIds, items, selectedId],
+  );
   const [turnCollectionLoad, setTurnCollectionLoad] = useState<SelectedSessionLoad>({
     sessionId: null,
     state: "idle",
@@ -774,7 +783,11 @@ export function App() {
       const environmentRevision = environmentEventRevisionRef.current.get(sessionId) ?? 0;
       sessionRequestRef.current.set(sessionId, request);
       const turnRead = { coreGeneration, request, sessionId };
-      void listAllTurns(core, sessionId, signal).then((sessionTurns) => {
+      const sessionChildTurnIds = new Set<string>();
+      void listAllTurns(core, sessionId, signal, sessionChildTurnIds).then((sessionTurns) => {
+        if (coreGeneration === connectionGenerationRef.current) {
+          setChildTurnIds((current) => addChildTurnIds(current, sessionId, sessionChildTurnIds));
+        }
         const currentTurnRead = {
           coreGeneration: connectionGenerationRef.current,
           request: sessionRequestRef.current.get(sessionId) ?? 0,
@@ -1038,6 +1051,7 @@ export function App() {
     setRuntimeCollectionHasSnapshot(false);
     setItems([]);
     setTurns([]);
+    setChildTurnIds(new Map());
     setEnvironmentObservations(new Map());
     itemsSessionIdRef.current = null;
     setItemsSessionId(null);
@@ -1233,6 +1247,8 @@ export function App() {
         return next;
       });
     }
+    const childTurnId = childTurnSnapshotId(event, sessionId);
+    if (childTurnId) setChildTurnIds((current) => addChildTurnIds(current, sessionId, [childTurnId]));
     const eventTurn = matchingTurnSnapshot(event, sessionId);
     if (eventTurn) {
       turnEventRevisionRef.current.set(
@@ -2352,7 +2368,7 @@ export function App() {
               agentFilter={sessionAgentFilter}
               sessions={sessionBrowserSessions}
               selected={selected}
-              items={itemsSessionId === selectedId ? items : []}
+              items={itemsSessionId === selectedId ? rootItems : []}
               turns={turnsSessionId === selectedId ? turns : []}
               busy={busy}
               coreError={sessionBrowserError}
