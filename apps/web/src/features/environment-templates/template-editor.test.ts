@@ -20,6 +20,12 @@ describe("Template updates", () => {
     expect(() => templatePatch(restricted, { name: "Original", access: "disabled" })).toThrow("allowed domains must be preserved");
   });
 
+  it.each(["  Existing name  ", "   "])("preserves the untouched name %j", (name) => {
+    const original = { ...template, name };
+    expect(templatePatch(original, { name, access: "enabled" })).toEqual({});
+    expect(templatePatch(original, { name, access: "disabled" })).toEqual({ network: { access: "disabled" } });
+  });
+
   it("counts Unicode characters rather than UTF-16 code units", () => {
     expect(templatePatch(template, { name: "😀".repeat(256), access: "enabled" }).name).toHaveLength(512);
     expect(() => templatePatch(template, { name: "😀".repeat(257), access: "enabled" })).toThrow("256");

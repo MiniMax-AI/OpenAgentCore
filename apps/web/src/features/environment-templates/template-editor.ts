@@ -6,7 +6,7 @@ export function templatePatch(template: EnvironmentTemplate, draft: TemplateDraf
   const name = draft.name.trim() || null;
   if ([...(name ?? "")].length > 256) throw new Error("A name accepts at most 256 characters.");
   const patch: UpdateEnvironmentTemplateInput = {};
-  if (name !== template.name) patch.name = name;
+  if (draft.name !== (template.name ?? "")) patch.name = name;
   if (draft.access !== template.network.access) {
     if (template.network.allowed_domains.length !== 0) {
       throw new Error("This network policy cannot be edited by this Web. Its allowed domains must be preserved.");
