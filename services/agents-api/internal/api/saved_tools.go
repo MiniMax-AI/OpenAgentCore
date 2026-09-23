@@ -46,7 +46,7 @@ func resolveSavedTools(input []json.RawMessage) ([]json.RawMessage, error) {
 			}
 			value = resolved
 		case "web_search":
-			resolved, err := resolveDisabledWebSearch(raw)
+			resolved, err := resolveSavedWebSearch(raw)
 			if err != nil {
 				return nil, err
 			}

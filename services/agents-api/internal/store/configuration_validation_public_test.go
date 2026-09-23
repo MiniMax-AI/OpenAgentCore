@@ -126,10 +126,11 @@ func TestAgentConfigurationValidationRejectsWithoutWritesPostgres(t *testing.T) 
 	if status, body := client.do(foreign, http.MethodPost, "/v1/agents/sessions", "application/json", []byte(`{"agent_id":"`+legacy.ID+`","environment":{"type":"none"},"input":"hi"}`)); status != http.StatusNotFound {
 		t.Errorf("foreign legacy saved Agent: %d %s", status, body)
 	}
-	// K2 and K3 keep the local configuration code.
+	// K2 keeps the local configuration code; saved enabled web_search (TV-05) is
+	// covered by TestSavedWebSearchPostgres.
 	for _, request := range []struct{ path, body, message string }{
-		{"/v1/agents", `{"model":"m","tools":[{"type":"web_search","mode":"live"}]}`, "Only disabled web_search is qualified for execution."},
-		{"/v1/agents/" + agent, `{"tools":[{"type":"web_search"}]}`, "Only disabled web_search is qualified for execution."},
+		{"/v1/agents/sessions", `{"agent":{"model":"m","tools":[{"type":"web_search","mode":"live"}]},"environment":{"type":"none"},"input":"hi"}`, "Only disabled web_search is qualified for execution."},
+		{"/v1/agents/sessions", `{"agent":{"model":"m","tools":[{"type":"web_search"}]},"environment":{"type":"none"},"input":"hi"}`, "Only disabled web_search is qualified for execution."},
 		{"/v1/agents/sessions", `{"agent":{"model":"m","tools":[{"type":"programmatic_tool_calling","enabled":true}]},"environment":{"type":"none"},"input":"hi"}`, "Programmatic tool calling is not qualified for execution."},
 		{"/v1/agents/sessions", `{"agent":{"model":"m","text":{"format":{"type":"json_schema","schema":{"type":"object"}}}},"environment":{"type":"none"},"input":"hi"}`, "Harness codex does not support the requested Agent/environment configuration: Structured output is not qualified for this engine."},
 	} {

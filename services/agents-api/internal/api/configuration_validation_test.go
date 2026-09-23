@@ -204,6 +204,10 @@ func TestAgentConfigurationAcceptedValuesUnchanged(t *testing.T) {
 	}
 	saved := append([]string{
 		`"tools":[{"type":"programmatic_tool_calling","enabled":true}]`,
+		// TV-05: every pinned web_search mode is saved; admission still qualifies only disabled.
+		`"tools":[{"type":"web_search"}]`, `"tools":[{"type":"web_search","mode":null}]`,
+		`"tools":[{"type":"web_search","mode":"live","allowed_domains":[]}]`,
+		`"tools":[{"type":"web_search","mode":"cached","context_size":"high","allowed_domains":["example.com"],"location":{"country":"FR","city":"Paris"}}]`,
 		`"reasoning":{"effort":"max","summary":"auto"}`, `"service_tier":"flex"`,
 		`"text":{"format":{"type":"json_schema","schema":{"type":"object"}}}`,
 		`"text":{"format":{"type":"json_schema","schema":{"properties":{}}}}`,
@@ -226,12 +230,15 @@ func TestAgentConfigurationAcceptedValuesUnchanged(t *testing.T) {
 	}
 }
 
-// K2 and K3: execution admission and saved web_search limits keep their codes.
+// K2: execution admission limits keep their codes. Enabled or omitted-mode
+// web_search is saved (TV-05) but still rejected at Session admission.
 func TestAgentConfigurationLocalLimitsKeepCodes(t *testing.T) {
 	h, s := configurationHandler(t, nil)
 	session := configurationOperations()[2]
 	for _, tc := range []struct{ fields, message string }{
 		{`"tools":[{"type":"web_search","mode":"live"}]`, "Only disabled web_search is qualified for execution."},
+		{`"tools":[{"type":"web_search","mode":"cached"}]`, "Only disabled web_search is qualified for execution."},
+		{`"tools":[{"type":"web_search","mode":null}]`, "Only disabled web_search is qualified for execution."},
 		{`"tools":[{"type":"web_search"}]`, "Only disabled web_search is qualified for execution."},
 		{`"tools":[{"type":"programmatic_tool_calling","enabled":true}]`, "Programmatic tool calling is not qualified for execution."},
 		{`"tools":[{"type":"programmatic_tool_calling","enabled":false},{"type":"programmatic_tool_calling","enabled":false}]`, "Execution requires distinct tool controls."},
@@ -243,9 +250,6 @@ func TestAgentConfigurationLocalLimitsKeepCodes(t *testing.T) {
 		assertConfigurationError(t, credentialRequest(h, http.MethodPost, session.path, session.body(tc.fields)), "unsupported_or_invalid_configuration", nil, tc.message)
 	}
 	for _, op := range configurationOperations()[:2] {
-		for _, fields := range []string{`"tools":[{"type":"web_search","mode":"live"}]`, `"tools":[{"type":"web_search"}]`, `"tools":[{"type":"web_search","mode":"cached"}]`, `"tools":[{"type":"web_search","mode":null}]`} {
-			assertConfigurationError(t, credentialRequest(h, http.MethodPost, op.path, op.body(fields)), "unsupported_or_invalid_configuration", nil, "Only disabled web_search is qualified for execution.")
-		}
 		assertConfigurationError(t, credentialRequest(h, http.MethodPost, op.path, op.body(`"multi_agent":{"enabled":true,"max_concurrent_subagents":4294967296}`)), "unsupported_or_invalid_configuration", nil, "max_concurrent_subagents must be an integer from 1 to 4294967295.")
 	}
 	if s.writes != 0 {

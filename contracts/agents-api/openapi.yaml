@@ -2927,16 +2927,18 @@ paths:
         with the JSON path as param; duplicate function names, repeated web_search
         or tool_search and non-object schema root types return it with a null param.
         Supports model/name/instructions/metadata, explicit reasoning and service
-        tiers, multi_agent, text/json_schema, function/tool_search/programmatic_tool_calling
+        tiers, multi_agent, text/json_schema, function/tool_search/programmatic_tool_calling/web_search
         and HTTP MCP with nullable credential_id and explicit service origin and boolean
         required defaulting to false. Saving credential_id grants no access: Session
         admission checks attached Vault ownership and destination. MCP allowed_tools
         preserves null versus empty; saved HTTP transport includes empty headers.
-        Model-derived reasoning defaults, other MCP variants, enabled web_search and
-        public retry conformance remain incomplete. Explicit disabled web_search can
-        be saved; Session execution also accepts explicit disabled programmatic_tool_calling
-        through qualified Runtime controls. Session execution admits only its supported
-        configuration subset.'
+        Model-derived reasoning defaults, other MCP variants and public retry conformance
+        remain incomplete. web_search saves every pinned mode: omitted or null mode
+        is saved as live and omitted or null context_size as medium; allowed_domains
+        preserves null versus empty and a present location includes all four keys.
+        Session execution accepts only explicit disabled web_search and disabled programmatic_tool_calling
+        through qualified Runtime controls; saved enabled forms reject at Session
+        admission. Session execution admits only its supported configuration subset.'
       parameters:
       - description: agents=v1
         in: header
@@ -3892,10 +3894,11 @@ paths:
         tool_search and per-function defer_loading in the qualified single-agent Claude
         environment:none function profile, including qualified inline image messages
         and text results. Explicit web_search mode disabled and programmatic_tool_calling
-        enabled false use frozen common Runtime controls. Enabled forms remain unqualified.
-        Omitted programmatic configuration preserves native behavior, a documented
-        difference from the official default-on behavior. Other combinations remain
-        unqualified; see the operation coverage.
+        enabled false use frozen common Runtime controls. Enabled forms, including
+        those saved on an Agent, remain unqualified and reject before any write unless
+        the Session replaces tools. Omitted programmatic configuration preserves native
+        behavior, a documented difference from the official default-on behavior. Other
+        combinations remain unqualified; see the operation coverage.
       parameters:
       - description: agents=v1
         in: header
