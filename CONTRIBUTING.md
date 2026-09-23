@@ -1849,13 +1849,13 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   timestamps and metadata, separately from saved configuration and Session state.
   Resolve known defaults and validate supported schema before writing. Preserve
   model/name/instructions verbatim, nullable fields and structured JSON numbers.
-  Stored reasoning/service tiers, enabled multi-agent settings, JSON Schema output
-  and deferred/tool-search/programmatic tools do not imply execution support.
+  Stored reasoning/service tiers, enabled multi-agent settings, JSON Schema output,
+  enabled web-search modes and deferred/tool-search/programmatic tools do not imply
+  execution support.
   Reuse function wire validation, keeping Session execution restrictions separate.
   Model-derived reasoning effort is unresolved when omitted; do not infer it from
   the selected harness. Omitted/null service tier currently uses `auto`; complete
-  upstream default/error/retry conformance and remaining MCP/web-search variants
-  remain gaps. Unknown/unsupported variants fail explicitly. No product lookup is permitted.
+  upstream default/error/retry conformance and remaining MCP variants remain gaps. Unknown/unsupported variants fail explicitly. No product lookup is permitted.
 - Service-origin public HTTP MCP uses the native harness client and tool loop on
   trusted service-owned `environment:none` compute, with Codex or Claude SDK.
   The V1 colocated `self_hosted` profile rejects it: user-owned compute cannot be
@@ -2211,7 +2211,8 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   not remove unrelated native utilities or claim enabled programmatic support.
   Explicit `web_search.mode=disabled` reuses the existing disabled search control.
   Search remains off when omitted. Optional search settings are resource data and
-  do not cause execution while disabled. Enabled search remains unqualified here.
+  do not cause execution while disabled. Saved Agents keep every pinned search mode;
+  enabled search remains unqualified and rejects at Session admission.
 - `web_search_control` advertises the Codex adapter's explicit `web_search` option
   (`disabled`, `cached`, or `live`). Agents API requires this capability before Codex dispatch;
   the typed execution controls force search off on new and resumed Turns. Native configuration translation stays in the

@@ -378,7 +378,7 @@ deleted and a read confirmed 404.
 | C4 | Session create on `none` without input and with an invalid inline agent (TV-04) | The configuration error first. Valid configurations, including enabled `web_search` or programmatic tool calling, still receive the input requirement. |
 | K1 | Function names with any characters or over 64 characters, programmatic tool calling enabled on a saved Agent, reasoning effort `max`, service tier `flex` (TV-07) | Unchanged: saved and echoed. |
 | K2 | Harness and execution admission limits: enabled `web_search` or programmatic tool calling, structured output on an unqualified harness, explicit reasoning or a non-`auto` service tier on Session create (TV-06) | Unchanged: `unsupported_or_invalid_configuration` with the existing messages, after protocol validation. |
-| K3 | Saved `web_search` with mode `live`, `cached`, null or omitted (TV-05) | Unchanged: `unsupported_or_invalid_configuration`, "Only disabled web_search is qualified for execution." |
+| K3 | Saved `web_search` with mode `live`, `cached`, null or omitted (TV-05) | Resolved by [Saved web_search modes](#saved-web_search-modes--september-23): saved with the official projection; Session admission keeps the K2 rejection. |
 
 Decisions:
 
@@ -434,9 +434,9 @@ Decisions:
   checks run after recovery. Core is pre-release, so the order is not changed for
   such retries.
 
-Deferred and unchanged: TV-05, saving `web_search` with mode `live`, `cached` or
-omitted (officially saved, omitted stored as `live`), needs a separate decision
-about saved-but-unqualified settings. Duplicate `programmatic_tool_calling`
+TV-05, saving `web_search` with mode `live`, `cached` or omitted, was deferred
+here and is resolved by [Saved web_search modes](#saved-web_search-modes--september-23).
+Deferred and unchanged: duplicate `programmatic_tool_calling`
 declarations and MCP server labels were not sampled: saved Agents accept them and
 Session admission keeps "Execution requires distinct tool controls." and
 "Execution requires distinct MCP server labels.". A missing model without
@@ -597,3 +597,61 @@ rollback. The pinned-SDK scripts `official_function_inputs.py`,
 `official_pending_actions_native.py` and `official_session_creators.py` assert the
 new fields, and TypeScript client and Core Web unit tests cover them. Real Core,
 daemon and model acceptance is recorded separately by the coordinator.
+
+## Saved web_search modes — September 23
+
+Saved Agents now keep every pinned `web_search` mode, as the official service
+does, from Core main `1eb60c27`. Evidence is TV-05 (official W01/W02) in the
+campaign scan recorded privately in
+`~/.parsar/remediation/20260923/campaign-scan-3/subagents-tools/findings.json`,
+and owned probes under `~/.parsar/remediation/20260923/saved-web-search/official/`
+(`results.json`, `ledger.jsonl`): four owned Agents with the create records
+`type-only`, `mode-null`, `mode-cached` and `mode-cached-full`, the update records
+`update-disabled`, `update-omitted-low` and `update-live-domains-empty`, and a
+`retrieve`, without a Session or model. All four Agents were deleted.
+
+| Row | Case | Core behavior |
+| --- | --- | --- |
+| W1 | Agent create with `web_search` mode `live`, `cached`, null or omitted | 201. Omitted or null mode is saved as `live`, and omitted or null `context_size` as `medium`. `allowed_domains` keeps null versus `[]`. `location` stays null, or else includes `city`, `country`, `region` and `timezone`, with null for omitted keys. |
+| W2 | Agent update replacing tools with these forms, including a return to `disabled` | 200 with the same projection. Retrieve and list return the saved form. |
+| W3 | Protocol errors in a `web_search` declaration | Unchanged: the C1 and C2 fields. |
+| W4 | Session creation from a saved Agent with enabled search, without a Session `tools` replacement | Unchanged K2 rejection: 400 `unsupported_or_invalid_configuration`, "Only disabled web_search is qualified for execution.", writing no Session, Turn, Environment or reservation, for plain, streamed, self-hosted and hosted creation. Protocol errors and the C4 input requirement still come first. |
+| W5 | The same creation with a per-Session `tools` replacement | Admitted as before; the saved search is not used. |
+| W6 | Inline Session agent with enabled or omitted-mode search | Unchanged K2 rejection. |
+| W7 | Explicit `disabled` search, saved or inline, including records saved before this batch | Unchanged, including the frozen Runtime control on all three harnesses. |
+| W8 | Another tenant's `agent_id` | Unchanged: the same 404 as a missing Agent. |
+
+Decisions:
+
+- Saved Agents use a separate saved-form parser. Session admission re-resolves the
+  effective tools with the unchanged execution parser, which admits only disabled
+  search. This is the path saved enabled `programmatic_tool_calling` already takes
+  (K1, K2). All creation modes share that admission, and Worker device selection
+  and the final preclaim still refuse a non-disabled search control, so enabled
+  search cannot reach dispatch.
+- Same-key creation retries keep their rules. A retry of a Session created before
+  its Agent enabled search recovers that Session with its frozen disabled control;
+  a new key is rejected.
+- An inline agent passes the saved-form parser before execution admission, so its
+  enabled search is now reported by the execution check, with the same message.
+  When one configuration hits several execution limits, another limit, such as
+  explicit reasoning, can be reported first, as for saved Agents.
+- Saved tools keep the stored key order of other saved configuration; Session
+  snapshots keep their own. Clients compare decoded values.
+- The TypeScript client types the saved `web_search` declaration with its mode
+  union; inline execution types are unchanged. Core Web shows saved search as a
+  read-only, saved-only tool and keeps blocking Sessions from such Agents, as for
+  `tool_search` and programmatic tool calling.
+
+Unchanged: execution qualification, Runtime controls, the schema and the
+configuration validation errors. Enabling search execution needs its own
+qualification.
+
+Go handler tests cover the projection table and W4–W7 on every creation mode. A
+real-PostgreSQL HTTP test creates, updates, retrieves and lists Agents with exact
+tool bytes, rejects W4 on plain, streamed, self-hosted and hosted creation under a
+whole-database digest, checks a same-key retry, admits W5 and checks tenant B.
+The pinned-SDK scripts `official_agents.py` and `official_agent_update.py` assert
+the saved projections and the admission rejection, and `official_tool_policy.py`
+adds saved enabled search to its live rejection cases. Real Core acceptance is
+recorded separately by the coordinator.

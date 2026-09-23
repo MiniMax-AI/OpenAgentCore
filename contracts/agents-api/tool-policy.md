@@ -14,18 +14,23 @@ Saved Agents and inline Session configuration accept these declarations:
 ]
 ```
 
-Saved references use the same parser and immutable Session snapshot. Disabled
-search retains optional settings as resource data: omitted/null context size
+Saved Agents also keep every other pinned `web_search` mode, as the official
+service does: omitted/null mode is saved as `live`, and `cached` and `live` are
+saved as sent ([TV-05](official-semantics-alignment.md#saved-web_search-modes--september-23)).
+Search settings are resource data in every mode: omitted/null context size
 resolves to `medium`; domain and location omission resolves to null; an empty
-domain list remains empty. These settings cannot enable execution while disabled.
-Web-search mode omission/null and enabled search remain unqualified. Protocol
-errors in these declarations, such as an unsupported `mode` or `context_size`, a
-non-boolean `enabled` or a repeated `web_search`, use the official fields
-([validation](official-semantics-alignment.md#agent-configuration-validation--september-23));
-saved modes other than `disabled`, including omission, keep the local
-`unsupported_or_invalid_configuration` rejection, which the official service does
-not apply (TV-05, deferred). Explicit enabled programmatic execution rejects at Session admission;
-saving that intent remains separate from execution qualification.
+domain list remains empty; a supplied location includes `city`, `country`,
+`region` and `timezone`, with null for omitted keys. These settings cannot
+enable execution. Session admission resolves saved references and inline
+declarations with the execution parser into the immutable Session snapshot.
+Only explicit `disabled` search is qualified: enabled or omitted-mode search,
+inline or saved, rejects with `unsupported_or_invalid_configuration` before any
+write unless the Session replaces the saved tools. Protocol errors in these
+declarations, such as an unsupported `mode` or `context_size`, a non-boolean
+`enabled` or a repeated `web_search`, use the official fields
+([validation](official-semantics-alignment.md#agent-configuration-validation--september-23)).
+Explicit enabled programmatic execution likewise saves and rejects at Session
+admission; saving intent remains separate from execution qualification.
 
 Omitting programmatic configuration preserves each harness's native behavior.
 The user approved this difference from the official default-on behavior. Native

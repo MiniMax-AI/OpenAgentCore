@@ -284,10 +284,11 @@ upgrade the protocol.
 - [Explicit disabled tools](tool-policy.md) can be saved, used inline or resolved from saved Agents:
   `web_search.mode=disabled` and `programmatic_tool_calling.enabled=false`. Search
   responses include `context_size=medium` for omitted/null size, nullable domains
-  and location; an empty domain list stays empty. Only explicit disabled mode is
-  qualified; omitted/null mode and enabled search remain gaps. Sessions reject
-  enabled programmatic execution, including the default true on a supplied PTC
-  declaration. An omitted PTC declaration preserves native behavior: this is an
+  and location; an empty domain list stays empty. Saved Agents keep every pinned
+  search mode, saving omitted/null mode as `live`; only explicit disabled mode is
+  qualified, so Session admission rejects enabled search unless the Session
+  replaces the saved tools. Sessions reject enabled programmatic execution,
+  including the default true on a supplied PTC declaration. An omitted PTC declaration preserves native behavior: this is an
   approved difference from the official default-on behavior, not full compatibility.
   Core carries the frozen disabled intent through the common Runtime contract;
   native translation and inventory restrictions stay in adapters. Codex checks
@@ -355,7 +356,7 @@ upgrade the protocol.
   rechecked before dispatch-only decryption; authenticated execution requires the
   separate bearer capability and never downgrades on failure. Exact URL/selection
   timing, implicit response population and hosted errors remain local or unverified.
-  Other MCP variants and enabled web-search remain gaps, not changes to the pinned target
+  Other MCP variants and enabled web-search execution remain gaps, not changes to the pinned target
   or claims of complete resource coverage.
 
 - Use `/agents/sessions` beneath the configured API base URL, bearer authentication
