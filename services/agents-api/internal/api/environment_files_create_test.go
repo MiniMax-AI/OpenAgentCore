@@ -70,7 +70,7 @@ func TestEnvironmentFileCreateInlineAndLocalListing(t *testing.T) {
 		body, _ := json.Marshal(map[string]any{"type": "inline", "data": base64.StdEncoding.EncodeToString(data), "path": "/workspace/input.bin"})
 		w := requestCreateEnvironmentFile(h, f.environment.ID, string(body), "files-key")
 		var file v1.EnvironmentFile
-		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &file) != nil {
+		if w.Code != 201 || json.Unmarshal(w.Body.Bytes(), &file) != nil {
 			t.Fatalf("create: %d %s", w.Code, w.Body)
 		}
 		if f.writes != 1 || f.path != "input.bin" || !bytes.Equal(f.data, data) || f.readEnvironment.ID != f.environment.ID || file.EnvironmentID != f.environment.ID || file.Path != "/workspace/input.bin" || file.Object != "agent.environment.file" || file.SizeBytes != int64(len(data)) {
@@ -129,7 +129,7 @@ func TestEnvironmentFileCreateAuthorityAndUncertainResults(t *testing.T) {
 	}
 	f.environment.Configuration = json.RawMessage(`{"type":"self_hosted","workspace_directory":"/workspace"}`)
 	f.writes, f.wrongSize = 0, false
-	if w := requestCreateEnvironmentFile(h, f.environment.ID, body, "files-key"); w.Code != 200 || f.writes != 1 {
+	if w := requestCreateEnvironmentFile(h, f.environment.ID, body, "files-key"); w.Code != 201 || f.writes != 1 {
 		t.Fatal("enrolled local workspace write rejected", w.Code)
 	}
 }

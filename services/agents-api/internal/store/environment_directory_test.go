@@ -163,6 +163,60 @@ func TestEnvironmentDirectoryWorkerRejectsIncompleteOrUnreleasedResults(t *testi
 	}
 }
 
+func rejectDirectoryRead(t *testing.T, h *dispatchHarness, request, read, code string, cleanupFailed bool) {
+	t.Helper()
+	h.write(read, proto.TypeWorkspaceReadResult, proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: code})
+	release := h.read(proto.TypeExecutionRelease)
+	var input proto.ExecutionReleasePayload
+	if release.ID != request || release.DecodePayload(&input) != nil || input.Handle == "" {
+		t.Fatal("reader did not release its preparation")
+	}
+	status := proto.PreparationStatusPayload{Handle: input.Handle, Revision: 3, State: "released"}
+	if cleanupFailed {
+		status.State, status.ErrorCode = "failed", "cleanup_unconfirmed"
+	}
+	h.write(request, proto.TypePreparationStatus, status)
+}
+
+// A path that names no directory lists nothing only after confirmed release;
+// every other native rejection keeps its existing error.
+func TestEnvironmentDirectoryNotDirectoryIsAnEmptyListing(t *testing.T) {
+	for _, test := range []struct {
+		code          string
+		cleanupFailed bool
+		err           error
+	}{
+		{proto.WorkspaceReadNotDirectory, false, nil},
+		{proto.WorkspaceReadNotDirectory, true, execution.ErrExecutionUnavailable},
+		{"not_found", false, store.ErrNotFound},
+		{"invalid_request", false, execution.ErrExecutionUnavailable},
+		{"permission_denied", false, execution.ErrExecutionUnavailable},
+		{"resource_unavailable", false, execution.ErrExecutionUnavailable},
+	} {
+		t.Run(test.code, func(t *testing.T) {
+			h, w, environment := directoryWorker(t)
+			foreign := environment
+			foreign.TenantID = uuid.NewString()
+			if _, err := w.ReadEnvironmentDirectory(t.Context(), foreign, "reports"); !errors.Is(err, store.ErrNotFound) {
+				t.Fatal("foreign reader admitted", err)
+			}
+			result := startDirectoryRead(t.Context(), w, environment)
+			request, read := prepareDirectoryRead(t, h, environment)
+			rejectDirectoryRead(t, h, request, read, test.code, test.cleanupFailed)
+			got := awaitDirectoryResult(t, result)
+			if test.err == nil {
+				if got.err != nil || got.value.Entries == nil || len(got.value.Entries) != 0 || got.value.Truncated {
+					t.Fatal("not-directory result was not an empty listing", got.err, got.value)
+				}
+				return
+			}
+			if !errors.Is(got.err, test.err) || len(got.value.Entries) != 0 {
+				t.Fatal("native rejection changed its error", got.err)
+			}
+		})
+	}
+}
+
 func TestEnvironmentDirectorySequentialReadsReleaseSchedulingOwnership(t *testing.T) {
 	h, w, environment := directoryWorker(t)
 	const pages = 32

@@ -15,7 +15,8 @@ sys.dont_write_bytecode = True
 
 import httpx2
 from openai import OpenAI
-from official_environment_files import verify_environment_files, verify_file_tenant_isolation
+from official_environment_files import (verify_environment_files, verify_file_create_rows, verify_file_list_rows,
+                                        verify_file_tenant_isolation)
 from official_environment_files_native import caller_token
 from official_source_files import verify_source_files
 
@@ -49,7 +50,7 @@ def main():
             body = {"type": "inline", "data": base64.b64encode(content).decode(), "path": path}
             if index % 2:
                 response = http.post(endpoint, headers=headers, json=body)
-                assert response.status_code == 200, "Raw inline upload failed"
+                assert response.status_code == 201, "Raw inline upload failed"
                 receipt = response.json()
             else:
                 receipt = client.beta.agents.environments.files.create(environment, **body).to_dict()
@@ -62,6 +63,12 @@ def main():
         pages, continuation = verify_environment_files(client, http, environment, directory, expected)
         verify_file_tenant_isolation(client, foreign, http, environment, directory, continuation, list(expected))
         target = directory + "/model-input.txt"
+        # The fixture's staging link must list as empty without exposing staging entries.
+        wire_rows = verify_file_list_rows(client, http, environment, {
+            "directory": directory, "missing": directory + "/missing-directory", "file": target,
+            "symlink": "/workspace/stage-link"})
+        created = verify_file_create_rows(client, http, environment, directory)
+        receipts.append({"path": created, "size": 3, "sha256": hashlib.sha256(b"201").hexdigest()})
         for body in (
             {"type": "inline", "data": "?", "path": target},
             {"type": "inline", "data": "", "path": "/workspace/../escape"},
@@ -77,6 +84,7 @@ def main():
         assert response.status_code == 404, "Foreign tenant upload accepted"
         assert token not in response.text and foreign_token not in response.text, "Credential leaked in error"
     print(json.dumps({"sdk": pin["sdk_version"], "commit": pin["commit"], "uploads": receipts, "listing": pages, "sources": source_proof,
+                      "wire_rows": wire_rows + ["create_201_and_field_errors"],
                       "limits": ["Private Environment setup", "Other source purposes/expiration/listing unimplemented", "Overwrite metadata/error parity unverified", "Real-model consumption verified by invoking fixture"]}))
 
 

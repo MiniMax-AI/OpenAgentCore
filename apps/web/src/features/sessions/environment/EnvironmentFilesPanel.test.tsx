@@ -6,6 +6,7 @@ import { AgentCoreError } from "@agents-core-web/agents-client";
 import {
   EnvironmentFilesPanel,
   environmentFilesFailureMessage,
+  environmentFilesRequestDirectory,
   formatFileSize,
   validEnvironmentFilesDirectory,
 } from "./EnvironmentFilesPanel";
@@ -25,6 +26,12 @@ describe("EnvironmentFilesPanel", () => {
     expect(validEnvironmentFilesDirectory("/test/project", "/test")).toBe(true);
     expect(validEnvironmentFilesDirectory("/workspace", "/test")).toBe(false);
     expect(validEnvironmentFilesDirectory("/test/../secret", "/test")).toBe(false);
+  });
+
+  it("sends the cleaned directory form that Core requires", () => {
+    expect(environmentFilesRequestDirectory("/workspace/project/src/")).toBe("/workspace/project/src");
+    expect(environmentFilesRequestDirectory("/workspace//")).toBe("/workspace");
+    expect(environmentFilesRequestDirectory("/workspace/project")).toBe("/workspace/project");
   });
 
   it("reports an unsupported Core instead of a generic directory failure", () => {
@@ -50,7 +57,7 @@ describe("EnvironmentFilesPanel", () => {
       <EnvironmentFilesPanel
         environmentId="environment_01"
         workspaceDirectory="/test"
-        onListFiles={async () => ({ data: [], next: null })}
+        onListFiles={async () => ({ object: "page", data: [], next: null, has_more: false })}
       />,
     );
 
