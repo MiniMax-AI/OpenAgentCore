@@ -1356,6 +1356,9 @@ microsandbox runtime/firmware hashes and executable native payloads. Release gen
 qualification. A release must be tested from fresh extraction with real models;
 no synthetic result may substitute for native execution acceptance.
 
+The distribution build sets umask 022 for non-root-readable payloads; installation
+credentials and state retain their explicit private permissions.
+
 The first installer targets a trusted Linux amd64 Docker host. It installs a
 private dedicated PostgreSQL service and separate Core and console services in
 Compose by default, with zero execution nodes. The default requires neither KVM
