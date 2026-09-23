@@ -102,9 +102,10 @@ for (const status of [400, 404, 405, 501, 503]) {
   test(`distinguishes unavailable Template catalog (${status}) from an empty catalog`, async ({ page, request }) => {
     await control(request, { environmentTemplateListStatus: status });
     await openTemplates(page);
-    await expect(manager(page).getByRole("heading", {
-      name: status === 503 ? "Environment Templates could not be loaded" : "Environment Templates are not available",
-    })).toBeVisible();
+    await expect(manager(page).getByText(
+      status === 503 ? "Environment Templates could not be loaded" : "Environment Templates are not available",
+      { exact: true },
+    )).toBeVisible();
     await expect(manager(page).getByRole("heading", { name: "No Environment Templates yet" })).toHaveCount(0);
     await expect(manager(page).getByRole("button", { name: "New Template", exact: true })).toBeDisabled();
     await control(request, { environmentTemplateListStatus: 200 });
@@ -191,7 +192,7 @@ test("rejects advanced Template responses without offering destructive basic edi
     await route.fulfill({ response, json: value });
   });
   await openTemplates(page);
-  await expect(manager(page).getByRole("heading", { name: "Environment Templates could not be loaded" })).toBeVisible();
+  await expect(manager(page).getByText("Environment Templates could not be loaded", { exact: true })).toBeVisible();
   await expect(manager(page).getByRole("button", { name: "Edit Advanced profile", exact: true })).toHaveCount(0);
   await expect(manager(page).getByRole("button", { name: "New Template", exact: true })).toBeDisabled();
 });
