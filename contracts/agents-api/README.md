@@ -541,13 +541,14 @@ support `after`, `limit` (1..100, default 20), and `order` (default `desc`).
 The cursor is a Turn ID in the same tenant and Session. Failed turns expose a
 generic `internal_error`, never raw engine diagnostics. `usage` exposes the latest persisted complete token breakdown, including cached input
 and reasoning output. Missing measurements remain null; Session usage sums recorded
-Turn measurements as best-effort usage, without estimating missing history. Session runtime state derives from the latest Turn.
+Turn measurements as best-effort usage, without estimating missing history; it is
+null while any root Turn has not ended or once one ends with unknown usage. Session runtime state derives from the latest Turn.
 
 ### Item recovery reads
 
 `GET /v1/agents/sessions/{session_id}/items` supports the same list controls,
 with a stable Item ID cursor and first-observation ordering. Messages preserve
-text, phase and completion snapshots. Commands preserve reported output, exit
+text, phase (null when none) and completion snapshots. Commands preserve reported output, exit
 code, duration and working directory. MCP calls preserve server/tool identity,
 arguments and structured results/errors. Dynamic functions have linked call and
 result Items. Native file changes appear as `apply_patch` function calls with

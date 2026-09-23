@@ -116,7 +116,10 @@ Numeric zero is retained as an observed value.
 last cumulative canonical Session Usage snapshot sampled in that bucket and
 contains `input_tokens`, `output_tokens`, and `sampled_at`. Web derives throughput
 only from adjacent nondecreasing cumulative points. A missing measurement or a
-counter regression produces a gap; it is never filled with zero. These counters
+counter regression produces a gap; it is never filled with zero. Session Usage is
+null while a root Turn has not ended and after one ends unmeasured
+([item serialization](history-events-usage.md#item-serialization-2026-09-23)), so
+those samples are gaps too. These counters
 are measured model usage, not price, cost, or billing records.
 
 Core Web queries each current managed Session through this boundary with bounded

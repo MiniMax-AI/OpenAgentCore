@@ -2177,8 +2177,10 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   Core replaces complete valid token breakdowns and preserves the last committed
   measurement on interruption. Missing measurements remain unknown. Do not infer
   token consumption from context occupancy or estimated costs, or parse native
-  Raw payloads in Core. Session totals cover recorded root Turns; Subagent Turn
-  listings are not a summable accounting ledger. Native measurement coverage
+  Raw payloads in Core. Session totals cover recorded root Turns and are null
+  while any root Turn has not ended or once one ends with unknown usage; Subagent
+  Turn listings are not a summable accounting ledger. A cumulative native total that has not advanced
+  past the Turn's baseline is not a measurement of that Turn. Native measurement coverage
   and exact provider/model attribution remain explicit qualification boundaries.
   No separate public usage event or historical SSE replay is introduced.
 - The dispatcher is an internal entry point used by the standalone service worker.
@@ -2304,17 +2306,18 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   missing or foreign Sessions keep one 404. Identical saved results remain retryable after termination
   without applying them again. The execution input cursor skips function results;
   their separate native receipts still determine application. Public result events
-  validate variant-specific fields and required values before admission; retain
+  validate variant-specific fields and required values before admission; store
   omitted versus null error/output and ordered text/image parts. Inline function
   tools resolve into the immutable configuration with explicit
   `defer_loading=false`. Validate required strings and parameter objects before
   persistence; reject unsupported deferred discovery. Omitted/null/empty tool
   lists resolve to no tools. The public worker selects or waits for a same-tenant
   device advertising `function_tools` when the Session has functions.
-  Function results are Session input Items: emit `item.added` without an output
+  Function results are Session input Items: emit `item.added` with a null output
   index, and never emit `item.done`, whose upstream union only allows agent output.
-  Project their public output/error from the saved submission, including missing
-  versus null fields; native content normalization must not change public history.
+  Project their public output/error from the saved submission; the wire always
+  carries both, null when not submitted, while stored payloads keep the submitted
+  presence. Native content normalization must not change public history.
 - Codex function application requires a matching live native dynamic-tool completion,
   including root thread/Turn/call identity, function, success and ordered content.
   Writing its JSON-RPC response is not application. The adapter owns pending
@@ -2473,7 +2476,16 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   Completion text replaces accumulated deltas. Item merging must not mutate the
   incoming observation or the previous snapshot: public text delta events read the
   original fragment after merging, while Items retain the accumulated text.
-  Copy the content slice before replacing its text pointer. Keep partial output on termination;
+  Copy the content slice before replacing its text pointer. Assistant text
+  Items follow the official event sequence: `item.added` in progress with empty
+  content, an empty `content_part.added`, deltas, then the done events. A first
+  observation without its own fragment (a non-streamed native final) carries its
+  unchanged text in one delta; this frames the text and never alters it. Wire-only
+  explicit nulls (`phase`, function result `output`/`error`, Item event
+  `output_index`, Agent `reasoning` keys) come from response marshalling. Stored
+  Item payloads keep their original encoding through `Item.MarshalStored`, so
+  replayed child Items still compare equal, and stored configuration keeps
+  omitting unset reasoning keys. Keep partial output on termination;
   do not turn an unfinished call into a successful result. Thinking fragments are
   internal observations, not a claim of upstream reasoning-item support.
 
