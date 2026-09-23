@@ -154,7 +154,28 @@ def verify_resource_queries(raw, base, token, foreign, client, owned, session_id
         deleted = call("DELETE", path, token, probe)
         assert deleted.status_code == 200 and deleted.json() == {"id": path.rsplit("/", 1)[1], "object": kind, "deleted": True}, path
         assert call("GET", path, token).status_code == 404, path
-    return checks + 3
+
+    # Uploads: query keys are not form fields and never select a tenant.
+    upload = client.files.create(file=("query-probe.txt", b"probe"), purpose="user_data",
+                                 extra_query={"purpose": "assistants", "tenant_id": "foreign"})
+    assert upload.purpose == "user_data" and call("GET", "/files/" + upload.id, foreign, probe, headers={}).status_code == 404
+    rejected = raw.post(base + "/v1/files?purpose=user_data", headers={"Authorization": "Bearer " + token},
+                        files={"file": ("query-probe.txt", b"probe")}, data={"purpose": "assistants"})
+    assert rejected.status_code == 400
+    client.files.delete(upload.id)
+    manifest = b"---\nname: query-probe\ndescription: Query probe.\n---\nProbe.\n"
+    bundle = [("query-probe/SKILL.md", manifest, "text/markdown")]
+    skill = client.skills.create(files=bundle, extra_query={"tenant_id": "foreign", "default": "true"})
+    target = "/skills/" + skill.id + "/versions"
+    multipart = {"files": [("files[]", ("query-probe/SKILL.md", manifest, "text/markdown"))]}
+    denied = call("POST", target, foreign, probe, headers={}, **multipart)
+    absent = skill.id[:-1] + ("1" if skill.id.endswith("0") else "0")
+    missing = call("POST", "/skills/" + absent + "/versions", token, probe, headers={}, **multipart)
+    assert denied.status_code == missing.status_code == 404 and denied.json() == missing.json()
+    version = client.skills.versions.create(skill.id, files=bundle, extra_query={"default": "true", "tenant_id": "foreign"})
+    assert version.version == "2" and client.skills.retrieve(skill.id).default_version == "1"
+    client.skills.delete(skill.id)
+    return checks + 5
 
 def main():
     base, token, foreign = sys.argv[1:]
