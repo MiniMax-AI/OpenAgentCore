@@ -22,14 +22,14 @@ func TestRuntimeHistoryOpenAPICollectionLimits(t *testing.T) {
 	}
 
 	definitions := openAPIMap(t, document, "definitions")
-	assertOpenAPIArrayLimit(t, definitions, "v1.RuntimeHistoryCapabilities", "metrics", 2)
+	assertOpenAPIArrayLimit(t, definitions, "v1.RuntimeHistoryCapabilities", "metrics", 3)
 	assertOpenAPIArrayLimit(t, definitions, "v1.RuntimeHistory", "series", 1000)
 	assertOpenAPIArrayLimit(t, definitions, "v1.RuntimeHistoryCoverage", "buckets", 10000)
 	assertOpenAPIArrayLimit(t, definitions, "v1.RuntimeHistorySeries", "points", 10000)
 	capabilities := openAPIMap(t, definitions, "v1.RuntimeHistoryCapabilities")
 	metrics := openAPIMap(t, openAPIMap(t, capabilities, "properties"), "metrics")
 	metricItems := openAPIMap(t, metrics, "items")
-	assertOpenAPIStrings(t, metricItems, "enum", []string{"cpu", "memory"})
+	assertOpenAPIStrings(t, metricItems, "enum", []string{"cpu", "memory", "tokens"})
 	series := openAPIMap(t, definitions, "v1.RuntimeHistorySeries")
 	providerType := openAPIMap(t, openAPIMap(t, series, "properties"), "provider_type")
 	if actual, ok := providerType["pattern"].(string); !ok || actual != "^[a-z][a-z0-9_]{0,31}$" {
