@@ -352,3 +352,86 @@ a Worker test cancels a waiting Turn through the daemon protocol before deleting
 Handler, pinned-SDK, TypeScript client and Web unit tests cover the error fields
 and the cancel-then-delete flow. Real Core, daemon and model acceptance is
 recorded separately by the coordinator.
+
+## Agent configuration validation — September 23
+
+This batch moves protocol validation of Agent configuration into Core with the
+official error fields: saved Agent create and update bodies and the inline
+`agent` on Session create. Evidence comes from the campaign scan at main
+`beb18fd`, recorded privately in
+`~/.parsar/remediation/20260923/campaign-scan-3/subagents-tools/findings.json`
+(TV-01..07) with raw official records in `official/validation-{B1,B2A,B2B,B3}.json`
+and the Core replay under `core/`. The official probe used one owned Agent and 44
+requests without a model: Agent updates, two Agent creates and nine Session
+creates without input on `none`, so no Session or Turn could start. The Agent was
+deleted and a read confirmed 404.
+
+| Row | Case | Core behavior |
+| --- | --- | --- |
+| C1 | A missing required member, an unknown member, a wrong JSON type or an unsupported enum value in `tools[]`, `text`, `reasoning`, `service_tier`, `multi_agent`, `model`, `name` or `instructions`, including the unpinned `tool_choice` (TV-01) | 400 with type and code `invalid_request_error`, param set to the JSON path (`tools[0].parameters`; `agent.tools[0].parameters` on Session create) and the observed messages: `Missing required parameter: '<path>'.`, `Unknown parameter: '<path>'.`, `Invalid type for '<path>': expected <kind>, but got <kind> instead.`, `Invalid value: '<v>'. Supported values are: ...` with the pinned literals, and `Invalid '<path>': integer below minimum value. Expected a value >= 1, but got <n> instead.` |
+| C2 | Repeated function name, more than one `web_search` or more than one `tool_search` (TV-02) | 400 `invalid_request_error`, param null: `duplicate function tool name: <name>`, `duplicate web_search tool`, `duplicate tool_search tool`. |
+| C3 | Function `parameters` or `text.format` json_schema with an explicit string root `type` other than `object` (TV-03) | 400 `invalid_request_error`, param null: `Invalid schema for function '<name>': schema must be a JSON Schema of 'type: "object"', got 'type: "<t>"'.` and `agent.text.format.schema must have top-level type "object"; got "<t>"`, for every harness and before harness admission. |
+| C4 | Session create on `none` without input and with an invalid inline agent (TV-04) | The configuration error first. Valid configurations, including enabled `web_search` or programmatic tool calling, still receive the input requirement. |
+| K1 | Function names with any characters or over 64 characters, programmatic tool calling enabled on a saved Agent, reasoning effort `max`, service tier `flex` (TV-07) | Unchanged: saved and echoed. |
+| K2 | Harness and execution admission limits: enabled `web_search` or programmatic tool calling, structured output on an unqualified harness, explicit reasoning or a non-`auto` service tier on Session create (TV-06) | Unchanged: `unsupported_or_invalid_configuration` with the existing messages, after protocol validation. |
+| K3 | Saved `web_search` with mode `live`, `cached`, null or omitted (TV-05) | Unchanged: `unsupported_or_invalid_configuration`, "Only disabled web_search is qualified for execution." |
+
+Decisions:
+
+- A compact validator walks the raw JSON along the pinned shapes
+  (`PersistedAgentToolParam`/`AgentToolParam`, `AgentTextParam`,
+  `AgentReasoningParam`, `MultiAgentConfigParam` and the `service_tier` literal)
+  and reports the first violation through the typed field error from the
+  validation error batch. It runs before the existing parsers, which keep Core's
+  local limits and codes, and before harness admission. It is not a JSON Schema
+  engine: function and output schemas, `request_metadata` values, MCP `transport`
+  members, `metadata` and `x_agents_core` stay with their existing parsers.
+- Members are checked in document order; a repeated key keeps its first position
+  and is checked with its last value, which is the value the parsers decode. A
+  union's `type` is checked first, and missing required members are reported after
+  the supplied ones, in the pinned order. The whole object is checked before the
+  C2/C3 conflicts, and tools before `text`. The official order between several
+  errors in one body was not observed.
+- Member names match exactly. Nested members that encoding/json previously matched
+  case-insensitively, such as `reasoning.Effort`, are now unknown parameters.
+- Observed expected-kind phrases are `an object`, `a boolean` and
+  `an object with string keys and unknown value values`. At unsampled positions
+  Core uses `a string` (also for enum members), `an integer` and `an array`, and
+  reports a missing Agent create `model` and a non-object Session `agent` in the
+  same forms.
+- Caller-supplied member names, enum values, function names and schema root types
+  are repeated only when they are at most 256 bytes of printable UTF-8, the
+  Environment Files rule. Otherwise the error keeps its code and path param, or
+  a null param for an unknown member, and drops the value: `Unknown parameter.`,
+  `Invalid value. Supported values are: ...`, `duplicate function tool name`, or
+  the schema message without the name or `got` clause.
+- C3 rejects only an explicit string root type. Schemas without a root type, or
+  with a non-string `type` such as an array, are unchanged; neither was sampled.
+  The output schema message names `agent.text.format.schema` on Agent requests as
+  well, as observed on Agent update; Agent create was not sampled.
+- Session admission also applies C2 and C3 to the resolved saved configuration, so
+  Agents saved before this batch cannot execute with such tools or schemas;
+  replacing the field in the Session override admits them. An invalid inline
+  override is reported before the saved-Agent lookup, so owned, foreign and missing
+  Agents give the same response. Otherwise the lookup order (SES-33) is unchanged.
+- Validation of the update body precedes the Agent lookup, so owned, foreign,
+  missing and malformed Agent IDs give the same response.
+
+Deferred and unchanged: TV-05, saving `web_search` with mode `live`, `cached` or
+omitted (officially saved, omitted stored as `live`), needs a separate decision
+about saved-but-unqualified settings. Duplicate `programmatic_tool_calling`
+declarations and MCP server labels were not sampled: saved Agents accept them and
+Session admission keeps "Execution requires distinct tool controls." and
+"Execution requires distinct MCP server labels.". A missing model without
+`agent_id`, unknown top-level Session members, `max_concurrent_subagents` above
+4294967295, nonblank and 512-byte function names and the 64-function Session bound
+keep their local codes.
+
+Go handler tests cover every C and K row on Agent create and update and on Session
+create with and without input, the echo bounds and saved records from before this
+batch. A real-PostgreSQL test replays the TV-01..03 rows on Agent create by two
+tenants, on updates of owned, foreign, missing and malformed Agents, and on inline
+and saved-override Session creates, with a database digest proving no writes; it
+then saves and reads back the K1 values and checks tenant isolation. The
+pinned-SDK acceptance scripts assert the new codes, params and messages. Real
+Core, daemon and model acceptance is recorded separately by the coordinator.

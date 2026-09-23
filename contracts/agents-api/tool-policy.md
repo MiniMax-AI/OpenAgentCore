@@ -18,8 +18,13 @@ Saved references use the same parser and immutable Session snapshot. Disabled
 search retains optional settings as resource data: omitted/null context size
 resolves to `medium`; domain and location omission resolves to null; an empty
 domain list remains empty. These settings cannot enable execution while disabled.
-Web-search mode omission/null, enabled search and exact hosted errors remain
-unqualified. Explicit enabled programmatic execution rejects at Session admission;
+Web-search mode omission/null and enabled search remain unqualified. Protocol
+errors in these declarations, such as an unsupported `mode` or `context_size`, a
+non-boolean `enabled` or a repeated `web_search`, use the official fields
+([validation](official-semantics-alignment.md#agent-configuration-validation--september-23));
+saved modes other than `disabled`, including omission, keep the local
+`unsupported_or_invalid_configuration` rejection, which the official service does
+not apply (TV-05, deferred). Explicit enabled programmatic execution rejects at Session admission;
 saving that intent remains separate from execution qualification.
 
 Omitting programmatic configuration preserves each harness's native behavior.

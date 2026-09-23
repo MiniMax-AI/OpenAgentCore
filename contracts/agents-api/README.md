@@ -496,7 +496,10 @@ validate and resolve the upstream schema before persistence, and report only
 supported options. For example, upstream metadata is limited to 16 pairs with
 64-character keys and 512-character values; a storage byte limit is not a
 replacement for that public validation. Violations return `invalid_request_error`
-with the official `metadata` or `metadata.<key>` param. U+0000 in stored strings
+with the official `metadata` or `metadata.<key>` param, and Agent configuration
+protocol errors report their JSON path; see the
+[configuration validation batch](official-semantics-alignment.md#agent-configuration-validation--september-23).
+U+0000 in stored strings
 is a local PostgreSQL limit and returns 400 without writing; see the
 [validation error batch](official-semantics-alignment.md#validation-error-fields--september-23).
 
@@ -702,8 +705,9 @@ null and empty tool lists resolve to an empty list. The resolved tools are part 
 the immutable Session configuration and creation retry identity. Saved-Agent
 inheritance uses the same resolved tools. The bounded [deferred discovery path](tool-search.md)
 adds type-only `tool_search` for its qualified profile. Other discovery combinations, other tool kinds,
-the native 64-definition cap and unique nonblank names of at most 512 bytes remain
-compatibility gaps. Claude SDK additionally requires object-root schemas. It accepts text and
+the native 64-definition cap and nonblank names of at most 512 bytes remain
+compatibility gaps; repeated names and explicit non-object root types reject as
+officially. Claude SDK additionally requires an explicit object root. It accepts text and
 successful inline PNG/JPEG function results on `none` and Docker `openai_hosted`;
 failed images, unqualified placements and remote references
 remain gaps. See [function image coverage](function-result-images.md). Codex internal Goal/Skills/user-input/discovery semantics need

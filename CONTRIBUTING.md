@@ -64,7 +64,8 @@ record unresolved low-ROI cases with evidence and impact. Never defer a safety o
 data-consistency blocker while claiming the affected workflow passed.
 
 Session creation requires initial input for `none`, and for streaming creation
-outside `self_hosted`. Check these conditions before creation retry lookup or
+outside `self_hosted`. Report inline agent protocol errors first, then check these
+conditions before creation retry lookup or
 resource resolution. The parser remains shared with subsequent message admission;
 non-streaming hosted and self-hosted requests may omit input. Do not retain an
 idle-none creation compatibility exception. Valid requests retain their documented
@@ -87,7 +88,10 @@ observed upstream server failures as compatibility behavior. See
 
 Report validation failures with official evidence through the typed field error,
 which emits `invalid_request_error` with the observed param and message; keep
-other local codes until their official fields are sampled. A malformed path
+other local codes until their official fields are sampled. Agent configuration
+(saved create/update and the inline Session agent) uses one path-tracking
+validator of the pinned shapes before its parsers and harness admission, which
+keep their local codes; do not grow it into a JSON Schema engine. A malformed path
 identifier must produce exactly the response of a well-formed missing one on that
 route, including invalid bodies, queries and storage availability: resolve it to
 the never-assigned maximum UUID and let the missing path run, or reject it
@@ -2594,8 +2598,8 @@ adapter. The maintained native harness owns dynamic model/provider eligibility;
 its SDK exposes no reliable pre-input receipt proving effective deferral after a
 policy change. Do not represent tool inventory or an operator allowlist as that
 proof. Record exact real model/provider evidence and this detection gap separately.
-Search-only, missing-search, duplicate-search, workspace, MCP and Subagent combinations
-remain unqualified. See [the operation coverage](contracts/agents-api/tool-search.md).
+Search-only, missing-search, workspace, MCP and Subagent combinations remain
+unqualified; a repeated `tool_search` is a protocol error. See [the operation coverage](contracts/agents-api/tool-search.md).
 
 ### Structured output execution
 
@@ -2618,8 +2622,9 @@ function tools and text results. The workspace uses its existing preparation and
 native sandbox with only the SDK's configured `StructuredOutput` tool added to
 inventory and permission checks. Frozen schemas reach preparation before the
 input handoff; Start cannot replace them. Skills, Plugins, capability directories,
-HTTP MCP, Subagent/tool-discovery combinations and non-object root schemas remain
-unqualified. Check resolved template contents as well as inline configuration;
+HTTP MCP, Subagent/tool-discovery combinations and schemas without an explicit
+object root remain unqualified; an explicit non-object root type is a protocol
+error for every harness. Check resolved template contents as well as inline configuration;
 ordinary text requests retain their existing qualifications.
 The SDK uses binary64 JSON numbers: reject execution schemas whose numeric values
 would change during that conversion, without narrowing saved Agent storage.
