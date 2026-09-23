@@ -12,6 +12,7 @@ import (
 
 type config struct {
 	addr, origin, dist, token, password string
+	adminToken, nodePayloadDir          string
 	upstream                            *url.URL
 }
 
@@ -42,6 +43,19 @@ func loadConfig() (config, error) {
 	}
 	if c.password == c.token {
 		return config{}, errors.New("console password and Core bearer token must differ")
+	}
+	if file := os.Getenv("CORE_CONSOLE_SANDBOX_ADMIN_TOKEN_FILE"); file != "" {
+		c.adminToken, err = readSecret(file)
+		if err != nil {
+			return config{}, errors.New("CORE_CONSOLE_SANDBOX_ADMIN_TOKEN_FILE must name a private regular token file")
+		}
+		if c.adminToken == c.token || c.adminToken == c.password {
+			return config{}, errors.New("sandbox administrator credential must be separate")
+		}
+	}
+	c.nodePayloadDir = os.Getenv("CORE_CONSOLE_NODE_PAYLOAD_DIR")
+	if c.nodePayloadDir != "" && (!filepath.IsAbs(c.nodePayloadDir) || c.adminToken == "") {
+		return config{}, errors.New("node payload requires an absolute directory and paired administrator access")
 	}
 	return c, nil
 }

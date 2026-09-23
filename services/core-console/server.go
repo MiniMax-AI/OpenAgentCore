@@ -16,11 +16,13 @@ import (
 
 type console struct {
 	config
-	root      *os.Root
-	proxy     *httputil.ReverseProxy
-	transport *http.Transport
-	host      string
-	password  [sha256.Size]byte
+	root                *os.Root
+	nodePayload         *os.Root
+	nodeInstallerDigest string
+	proxy               *httputil.ReverseProxy
+	transport           *http.Transport
+	host                string
+	password            [sha256.Size]byte
 }
 
 func newConsole(c config) (*console, error) {
@@ -35,6 +37,19 @@ func newConsole(c config) (*console, error) {
 	}
 	origin, _ := url.Parse(c.origin)
 	h := &console{config: c, root: root, host: origin.Host, password: sha256.Sum256([]byte(c.password))}
+	if c.nodePayloadDir != "" {
+		h.nodePayload, err = os.OpenRoot(c.nodePayloadDir)
+		if err != nil {
+			root.Close()
+			return nil, errors.New("cannot open node installation payload")
+		}
+		h.nodeInstallerDigest, err = nodeInstallerDigest(h.nodePayload)
+		if err != nil {
+			h.nodePayload.Close()
+			root.Close()
+			return nil, err
+		}
+	}
 	h.transport = http.DefaultTransport.(*http.Transport).Clone()
 	// Credentials go only to the configured Core, never an ambient HTTP proxy.
 	h.transport.Proxy = nil
@@ -49,8 +64,10 @@ func newConsole(c config) (*console, error) {
 			r.Out.Header.Del("Cookie")
 			r.Out.Header.Del("Origin")
 			r.Out.Header.Del("Referer")
-			if sandboxAdminRequest(r.In) {
+			if nodeTransportRequest(r.In) || (sandboxAdminRequest(r.In) && c.adminToken == "") {
 				r.Out.Header.Set("Authorization", r.In.Header.Get("Authorization"))
+			} else if sandboxAdminRequest(r.In) {
+				r.Out.Header.Set("Authorization", "Bearer "+c.adminToken)
 			} else {
 				r.Out.Header.Set("Authorization", "Bearer "+c.token)
 			}
@@ -81,6 +98,9 @@ func newConsole(c config) (*console, error) {
 func (h *console) Close() {
 	h.transport.CloseIdleConnections()
 	_ = h.root.Close()
+	if h.nodePayload != nil {
+		_ = h.nodePayload.Close()
+	}
 }
 
 func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -93,6 +113,22 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "ok\n")
 		return
 	}
+	if h.adminToken != "" && nodeTransportRequest(r) {
+		if r.Host != h.host || !safePath(r.URL.Path) || r.URL.IsAbs() || !explicitBearer(r) || (r.Header.Get("Origin") != "" && r.Header.Get("Origin") != h.origin) {
+			http.Error(w, "Invalid node transport request", http.StatusForbidden)
+			return
+		}
+		h.proxy.ServeHTTP(w, r)
+		return
+	}
+	if h.nodePayload != nil && strings.HasPrefix(r.URL.Path, "/node-install/") {
+		if r.Host != h.host || !safePath(r.URL.Path) || r.URL.IsAbs() {
+			http.NotFound(w, r)
+			return
+		}
+		h.serveNodePayload(w, r)
+		return
+	}
 	if !h.sameOrigin(r) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
@@ -101,7 +137,7 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
-	if r.URL.Path == "/core" || strings.HasPrefix(r.URL.Path, "/core/") {
+	if (r.URL.Path == "/core" || strings.HasPrefix(r.URL.Path, "/core/")) && h.adminToken == "" {
 		if !sandboxAdminRequest(r) {
 			http.NotFound(w, r)
 			return
@@ -120,6 +156,18 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		subtle.ConstantTimeCompare(digest[:], h.password[:])&subtle.ConstantTimeCompare(userDigest[:], adminDigest[:]) != 1 {
 		w.Header().Set("WWW-Authenticate", `Basic realm="Core console", charset="UTF-8"`)
 		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+	if r.URL.Path == "/console/config" && r.Method == http.MethodGet {
+		h.serveConsoleConfiguration(w, r)
+		return
+	}
+	if r.URL.Path == "/core" || strings.HasPrefix(r.URL.Path, "/core/") {
+		if !sandboxAdminRequest(r) {
+			http.NotFound(w, r)
+			return
+		}
+		h.proxy.ServeHTTP(w, r)
 		return
 	}
 	if r.URL.Path == "/v1" || strings.HasPrefix(r.URL.Path, "/v1/") {

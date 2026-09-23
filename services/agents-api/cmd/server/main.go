@@ -123,7 +123,9 @@ func run() error {
 		managed = managedNodes.runtime
 	}
 	observationSources := map[string]runtimeobs.Source{}
-	if managed != nil {
+	if managedNodes != nil && managedNodes.setup != nil {
+		observationSources[managed.InstallationID] = managedNodes.setup
+	} else if managed != nil {
 		if source, ok := managed.Provider.(runtimeobs.Source); ok {
 			observationSources[managed.InstallationID] = source
 		}
@@ -178,7 +180,11 @@ func run() error {
 	var daemonHandler http.Handler
 	var registry *gateway.Registry
 	if wsURL := os.Getenv("AGENTS_API_DAEMON_WS_URL"); wsURL != "" {
-		daemonHandler, registry, err = runtime.NewGateway(executionStore, wsURL)
+		if managedNodes != nil && managedNodes.setup != nil {
+			daemonHandler, registry, err = runtime.NewGatewayWithURLResolver(executionStore, wsURL, managedNodes.setup.webSocketURL(wsURL))
+		} else {
+			daemonHandler, registry, err = runtime.NewGateway(executionStore, wsURL)
+		}
 		if err != nil {
 			return err
 		}
@@ -192,6 +198,9 @@ func run() error {
 		worker, err = execution.StartWorker(ctx, dispatcher)
 		if err != nil {
 			return err
+		}
+		if managedNodes != nil && managedNodes.setup != nil {
+			options = append(options, api.WithSandboxDeploymentSetup(worker.InitializeSandboxDeployment))
 		}
 		workerDone = make(chan error, 1)
 		go func() { workerDone <- worker.Run(ctx) }()
@@ -233,7 +242,11 @@ func run() error {
 			<-samplerDone
 		}()
 	}
-	options = append(options, api.WithStartupConfiguration(coreStartupConfiguration(engine, kinds, registry != nil, modelProviderEndpoints, managedRuntimeProviderKind(managed), managed)))
+	startupManaged := managed
+	if managedNodes != nil && managedNodes.setup != nil {
+		startupManaged = managedNodes.setup.selected.Load()
+	}
+	options = append(options, api.WithStartupConfiguration(coreStartupConfiguration(engine, kinds, registry != nil, modelProviderEndpoints, managedRuntimeProviderKind(startupManaged), startupManaged)))
 	handler, err := api.NewHandler(executionStore, auth, engine, options...)
 	if err != nil {
 		return err

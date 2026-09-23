@@ -15,7 +15,9 @@ func sandboxAdminRequest(r *http.Request) bool {
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, base), "/")
 	if len(parts) == 1 {
 		switch parts[0] {
-		case "deployment", "nodes":
+		case "deployment":
+			return r.Method == http.MethodGet || r.Method == http.MethodPost
+		case "nodes":
 			return r.Method == http.MethodGet
 		case "enrollment-tokens":
 			return r.Method == http.MethodPost

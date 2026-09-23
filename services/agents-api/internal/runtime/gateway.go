@@ -2,6 +2,7 @@
 package runtime
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/url"
@@ -19,6 +20,12 @@ type DeviceStore interface {
 // NewGateway serves the V1 daemon executor transport for both managed and
 // user-managed Runtime. Its credentials never grant public Session API access.
 func NewGateway(s DeviceStore, publicWSURL string) (http.Handler, *gateway.Registry, error) {
+	return NewGatewayWithURLResolver(s, publicWSURL, nil)
+}
+
+// NewGatewayWithURLResolver allows a zero-node deployment to publish its chosen
+// public address after setup without replacing its gateway or live connections.
+func NewGatewayWithURLResolver(s DeviceStore, publicWSURL string, resolve func(context.Context) (string, error)) (http.Handler, *gateway.Registry, error) {
 	u, err := url.Parse(publicWSURL)
 	if err != nil || s == nil || (u.Scheme != "ws" && u.Scheme != "wss") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "/api/v1/agent-daemon/ws" {
 		return nil, nil, errors.New("daemon URL must be an absolute ws(s) URL ending in /api/v1/agent-daemon/ws")
@@ -26,7 +33,7 @@ func NewGateway(s DeviceStore, publicWSURL string) (http.Handler, *gateway.Regis
 	registry := gateway.NewRegistry()
 	h := gateway.NewHandler(gateway.HandlerConfig{
 		Authenticator: gateway.NewAuthenticator(s), Registry: registry,
-		Heartbeat: s, PublicWSURL: publicWSURL,
+		Heartbeat: s, PublicWSURL: publicWSURL, ResolvePublicWSURL: resolve,
 	})
 	r := chi.NewRouter()
 	r.Route("/api/v1", func(r chi.Router) { gateway.RegisterRoutes(r, h) })

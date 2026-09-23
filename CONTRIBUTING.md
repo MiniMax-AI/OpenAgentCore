@@ -596,6 +596,33 @@ does not qualify its isolation or enable public creation.
 
 ### Hosted sandbox nodes and optional suspension
 
+Default installation includes Core, Web and PostgreSQL but no execution node.
+It always creates a separate deployment administrator credential. Core receives
+only its digest; the paired console server receives the private token and injects
+it only on approved management routes after console login and same-origin checks.
+The browser never receives that token. Node/daemon transport routes instead
+forward their own credentials unchanged to Core. Zero-node Core receives neither the Docker socket nor KVM.
+The Web's first setup selects one provider and public Core origin through the
+admin-only deployment endpoint. The paired console serves only an explicit list
+of non-secret matched distribution artifacts for its node installation command;
+never serve private installation files or arbitrary paths. Node installation
+reuses the existing node process and Provider configuration, verifies downloaded
+files, retains private identity and uses a user service. It performs no SSH
+installation, Session creation or model call. PostgreSQL owns this immutable selection under
+the existing execution lease and deployment lock. Exact retries are idempotent;
+a changed selection conflicts. No provider migration or hot reload is implied.
+
+Web-managed startup claims the stable installation identity and a new owner epoch
+even before provider selection. The existing runtime manager stays present and
+loads one immutable configuration when selection becomes available, before any
+node lifecycle is created. Admission refuses uninitialized hosted work without
+creating Session state. File-managed and Web-managed configuration are mutually
+exclusive. Node registration, observation and daemon bootstrap reuse existing
+contracts. Derive Runtime bootstrap and daemon WebSocket addresses from the saved
+validated origin; never infer them from inbound Host headers. Keep the startup
+configuration API a startup snapshot; use the live deployment endpoint in setup.
+
+
 A Core deployment may run without a sandbox provider. When enabled, exactly one
 sandbox provider is selected at setup: Docker or microsandbox. Keep both adapters but reject multiple provider entries,
 legacy default-provider maps and engine-based placement. Harness selection is
@@ -618,8 +645,8 @@ migrate an existing Session to another provider or recreate a released allocatio
 Fresh adoption of a deployment with unverified retained allocations fails closed.
 
 The [Hosted Sandbox Manager](services/agents-api/HOSTED-SANDBOX-MANAGER.md) is a
-deployment-level admin surface, separate from project credentials. Its Web token
-stays in memory. Node enrollment credentials authorize only registration; durable
+deployment-level admin surface, separate from project credentials. A direct-Core
+Web token stays in memory; the paired console token stays on its server. Node enrollment credentials authorize only registration; durable
 node credentials authorize only node transport. Project keys can read a narrow
 node directory and their own Session placement, never global allocations.
 

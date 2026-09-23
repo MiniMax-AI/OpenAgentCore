@@ -34,6 +34,8 @@ definitions:
     type: object
   store.RuntimeDeploymentView:
     properties:
+      core_url:
+        type: string
       installation_id:
         type: string
       maintenance:
@@ -142,6 +144,13 @@ definitions:
       name:
         type: string
     type: object
+  store.SandboxDeploymentSetupRequest:
+    properties:
+      core_url:
+        type: string
+      provider:
+        type: string
+    type: object
   v1.APIError:
     properties:
       code:
@@ -211,6 +220,49 @@ paths:
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve sandbox deployment
+      tags:
+        - Sandbox Manager
+    post:
+      consumes:
+        - application/json
+      description: Selects one immutable provider and public Core origin. Exact retries return the existing selection; differing selections and file-managed deployments reject. This does not create a node or execute work.
+      parameters:
+        - description: Deployment selection
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/store.SandboxDeploymentSetupRequest'
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.RuntimeDeploymentView'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Initialize the deployment sandbox provider once
       tags:
         - Sandbox Manager
   /core/v1/sandbox/enroll:

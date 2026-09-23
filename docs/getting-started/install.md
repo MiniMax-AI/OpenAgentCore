@@ -55,12 +55,13 @@ and Core service image; packaging it does not start or register a node.
 
 Installation creates private configuration under `~/.parsar/core`, a dedicated
 PostgreSQL volume, an API caller key and a credential encryption key. It also
-creates a separate console password. Secret values are not printed. On success:
+creates a separate console password and deployment administrator key. Secret values are not printed. On success:
 
 - API: `http://127.0.0.1:8091/v1`
 - Web console: `http://127.0.0.1:8080`, username `admin`
 - Console password file: `~/.parsar/core/config/console.password`
 - API caller key file: `~/.parsar/core/config/caller.key`
+- Sandbox administrator key file: `~/.parsar/core/admin/sandbox-admin.key`
 
 Use exactly the displayed console address; the production proxy validates its
 configured browser origin. The console password authenticates to the Web server;
@@ -91,17 +92,44 @@ writable in addition to its selected socket; `config` remains read-only.
 Native Core uses the same persistent directory directly. The default zero-node
 installation creates neither this state directory nor its mount.
 
-Opting in also creates a separate private deployment administrator key at
+Every Core installation creates a separate private deployment administrator key at
 `admin/sandbox-admin.key`. Core loads its SHA-256 digest from
 `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE`. Only the Core container mounts the
-digest file read-only; the raw administrator key remains on the host. The console
-and migration service receive neither file. Use this administrator key only for
-the Hosted Sandbox Manager's separate administration surface, never as the
-project caller key. Values are not printed. Default zero-node installation
-configures neither a sandbox provider nor sandbox administrator access; it remains
-a read-capable Core installation. Remote node enrollment requires an explicit
-managed deployment configuration and administrator setup, as described in the
-[Hosted Sandbox Manager guide](https://github.com/MiniMax-AI/parsar-core/blob/main/services/agents-api/HOSTED-SANDBOX-MANAGER.md).
+digest file read-only. The bundled Web server reads the separate administrator
+key to proxy authenticated console operations; it never sends this key to the
+browser. The migration service receives neither. A Web-only connection to an
+external Core still requires its separate administrator key.
+
+### Add nodes after a default installation
+
+1. Log in to the bundled Web console and open **Hosted Sandbox Manager**.
+   The paired installation needs no second key or Core connection setup.
+2. Choose Docker or microsandbox and enter the HTTPS Core origin reachable from
+   both node hosts and their sandbox guests. The address must expose Core's API
+   and WebSocket routes, not just the Web console. HTTP loopback is available for
+   local development only; loopback inside a sandbox is not the Core host.
+3. Save the selection. It takes effect without restarting Core and remains in
+   PostgreSQL across restarts. All nodes in this deployment use the chosen type;
+   this page does not switch providers. Microsandbox uses a five-minute idle
+   timeout and one-day snapshot retention.
+4. Generate and copy the node command, then run it as a non-root user on the
+   target Linux amd64 host. It downloads the matched files from your console,
+   verifies checksums, imports the Runtime image, writes the provider configuration,
+   registers the node and starts a systemd user service. Web refreshes node health
+   automatically. A registered but unavailable node cannot accept work.
+
+The target host needs Python 3.9+, a systemd user session with lingering enabled,
+and either Docker socket access or microsandbox's KVM/native-library prerequisites.
+The command reports unmet prerequisites before downloading the Runtime.
+The console serves only fixed, non-secret distribution files at `/node-install/`;
+private installation configuration is never part of this payload. Retain the
+installed `node-payload/` directory.
+
+See the [Hosted Sandbox Manager guide](https://github.com/MiniMax-AI/parsar-core/blob/main/services/agents-api/HOSTED-SANDBOX-MANAGER.md)
+for host prerequisites and the registration command. The browser does not install
+software on another machine or receive SSH credentials. Adding a remote node does
+not add a Docker socket or KVM permissions to Core. Node installation and Runtime
+storage remain on the selected host.
 
 When a Session needs a sandbox, Core asks the
 enabled Provider to create one from the prepared Runtime image and initializes
@@ -131,15 +159,26 @@ revision changes on an existing installation. This includes enabling a sandbox
 provider on an installation originally created without one; rerunning with new
 flags does not migrate it.
 
-For remote browser or SDK access, put the intended endpoint behind your existing
-TLS and access-control boundary. Update the console's trusted origin explicitly;
-do not simply publish its port on every network interface.
+For remote nodes, install with the intended shared HTTPS endpoint:
+
+```sh
+./install.sh --public-url https://core.example
+```
+
+Configure your TLS reverse proxy to forward that origin to the loopback Web port,
+preserve Host, and support WebSocket upgrades. The bundled Web forwards the fixed
+node and daemon transport routes to Core using their own credentials. Both the
+node host and its sandbox guests must reach this address. Installation does not
+create DNS records or certificates, nor expose a host port publicly. Without this
+option, the console uses its loopback address for local access. Do not copy a
+localhost download command to a different machine.
 
 ## After installation
 
 Start with an optional [API request](quickstart.md). The read-only example works
 with the default installation. The execution example requires an installation
-created with a sandbox provider enabled. Session creation supplies the model,
+with a connected, ready sandbox node, either installed locally or added through
+Web. Session creation supplies the model,
 harness and write-only model credentials. Core owns sandbox preparation and
 Runtime startup. Configuration is never injected into a public Agent instruction
 or baked into a Runtime image.

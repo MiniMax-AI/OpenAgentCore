@@ -83,7 +83,7 @@ class InstallerTests(unittest.TestCase):
         (bundle / "runtime").mkdir()
         (bundle / "manifest.json").write_text(json.dumps(self.manifest))
         (bundle / "runtime/seccomp.json").write_text('{"defaultAction":"SCMP_ACT_ERRNO"}')
-        for name in ("install.py", "configuration.py", "native_service.py", "install.sh"):
+        for name in ("install.py", "configuration.py", "native_service.py", "node_install.py", "install.sh"):
             shutil.copyfile(Path(__file__).with_name(name), bundle / name)
         for name in self.manifest["images"]:
             (bundle / "images" / (name + ".tar")).write_bytes(("synthetic " + name).encode())
@@ -101,6 +101,22 @@ class InstallerTests(unittest.TestCase):
         (bundle / "SHA256SUMS").write_text("".join(
             hashlib.sha256(path.read_bytes()).hexdigest() + "  " + str(path.relative_to(bundle)) + "\n"
             for path in files))
+
+    def test_node_payload_exports_only_matched_distribution_files(self):
+        state = self.initialize()
+        bundle = self.bundle()
+        install.prepare_node_payload(self.root, state, bundle)
+        payload = self.root / "node-payload"
+        exported = {str(path.relative_to(payload)) for path in payload.rglob("*") if path.is_file()}
+        self.assertEqual(len(exported), 9)
+        self.assertNotIn("config/caller.key", exported)
+        self.assertNotIn("admin/sandbox-admin.key", exported)
+        for name in exported:
+            self.assertEqual((payload / name).read_bytes(), (bundle / name).read_bytes())
+        install.prepare_node_payload(self.root, state, bundle)
+        (payload / "node_install.py").write_text("changed")
+        with self.assertRaises(install.InstallError):
+            install.prepare_node_payload(self.root, state, bundle)
 
     def test_repeat_installation_preserves_execution_identity_and_all_secrets(self):
         first = self.initialize()
@@ -209,10 +225,11 @@ class InstallerTests(unittest.TestCase):
                             self.assertTrue(mount["read_only"])
 
     def test_sandbox_admin_credential_is_separate_and_belongs_only_to_core(self):
-        for provider in ("docker", "microsandbox"):
+        for provider in (None, "docker", "microsandbox"):
             with self.subTest(provider=provider):
-                self.root = self.work / ("admin-" + provider)
-                state = self.initialize("--sandbox-provider", "true", "--provider", provider)
+                self.root = self.work / ("admin-" + str(provider))
+                flags = ("--sandbox-provider", "true", "--provider", provider) if provider else ()
+                state = self.initialize(*flags)
                 admin = self.root / "admin"
                 token = (admin / "sandbox-admin.key").read_text()
                 self.assertEqual(self.document("admin/digests.json"), [hashlib.sha256(token.encode()).hexdigest()])
@@ -222,20 +239,21 @@ class InstallerTests(unittest.TestCase):
                 for path in admin.iterdir():
                     self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
                 before = self.snapshot()
-                self.initialize("--sandbox-provider", "true", "--provider", provider)
+                self.initialize(*flags)
                 self.assertEqual(self.snapshot(), before)
                 environment = install.core_environment(self.root, state, "synthetic database password")
                 expected = str(admin / "digests.json") if provider == "microsandbox" else "/admin/digests.json"
                 self.assertEqual(environment["AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE"], expected)
                 for name, service in self.document("compose.json")["services"].items():
                     mounts = [m for m in service.get("volumes", []) if isinstance(m, dict) and m["target"].startswith("/admin")]
-                    self.assertEqual(len(mounts), 1 if name == "core" else 0)
+                    self.assertEqual(len(mounts), 1 if name in ("core", "web") else 0)
                     if mounts:
-                        self.assertEqual(mounts[0]["source"], str(admin / "digests.json"))
-                        self.assertEqual(mounts[0]["target"], "/admin/digests.json")
+                        filename = "digests.json" if name == "core" else "sandbox-admin.key"
+                        self.assertEqual(mounts[0]["source"], str(admin / filename))
+                        self.assertEqual(mounts[0]["target"], "/admin/" + filename)
                         self.assertTrue(mounts[0]["read_only"])
                     for mount in service.get("volumes", []):
-                        if isinstance(mount, dict):
+                        if isinstance(mount, dict) and name != "web":
                             source = Path(mount["source"])
                             self.assertFalse((admin / "sandbox-admin.key").is_relative_to(source))
                     if name != "core":
@@ -341,17 +359,27 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.device_probes, [])
         self.assertNotIn("device_gid", state)
         self.assertFalse((self.root / "state").exists())
-        self.assertFalse((self.root / "admin").exists())
+        self.assertTrue((self.root / "admin/digests.json").is_file())
         self.assertFalse((self.root / "config/managed-runtimes.json").exists())
         compose = self.document("compose.json")
         self.assertEqual(set(compose["services"]), {"database", "migrate", "core", "web"})
         self.assertNotIn("networks", compose)
+        self.assertEqual(compose["services"]["core"]["environment"]["AGENTS_API_SANDBOX_INSTALLATION_ID"], state["installation_id"])
         for service in compose["services"].values():
             self.assertNotIn("devices", service)
             self.assertNotIn("group_add", service)
             self.assertNotIn("docker.sock", json.dumps(service.get("volumes", [])))
             self.assertNotIn("AGENTS_API_MANAGED_RUNTIMES_FILE", service.get("environment", {}))
             self.assertNotIn("AGENTS_API_SANDBOX_NODE_STATE_DIR", service.get("environment", {}))
+
+    def test_public_origin_is_explicit_and_preserved(self):
+        state = self.initialize("--public-url", "https://core.example")
+        web = self.document("compose.json")["services"]["web"]
+        self.assertEqual(web["environment"]["CORE_CONSOLE_ORIGIN"], "https://core.example")
+        self.assertEqual(web["ports"], ["127.0.0.1:8080:8080"])
+        self.assertEqual(state["public_url"], "https://core.example")
+        with self.assertRaises(install.InstallError):
+            self.initialize("--public-url", "https://other.example")
 
     def test_provider_requires_explicit_enablement_and_cannot_belong_to_web_only(self):
         self.assertIsNone(self.args("--sandbox-provider", "false").provider)
@@ -380,7 +408,7 @@ class InstallerTests(unittest.TestCase):
                          [str(bundle / ("images/" + name + ".tar")) for name in ("core", "database", "web")])
         self.assertFalse((self.root / "native").exists())
         self.assertFalse((self.root / "config/seccomp.json").exists())
-        self.assertIn("No execution node was installed", output.getvalue())
+        self.assertIn("No execution node installed", output.getvalue())
 
     def test_main_web_only_never_imports_runtime_or_leaks_caller_password(self):
         source = self.caller_file()

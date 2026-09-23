@@ -15,9 +15,11 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/node"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
+	"github.com/google/uuid"
 )
 
 type managedNodes struct {
+	setup         *managedSetup
 	runtime       *execution.RuntimeProvider
 	hub           *node.Hub
 	admin         *api.DeploymentAuthenticator
@@ -30,8 +32,21 @@ func configureManagedNodes(s *store.Store, owner func(context.Context) error) (*
 	if err != nil {
 		return nil, err
 	}
-	if built == nil {
+	setupID := os.Getenv("AGENTS_API_SANDBOX_INSTALLATION_ID")
+	if built == nil && setupID == "" {
 		return nil, nil
+	}
+	if built != nil && setupID != "" {
+		return nil, errors.New("Web sandbox setup cannot be combined with managed Runtime configuration")
+	}
+	if setupID != "" {
+		id, err := uuid.Parse(setupID)
+		if err != nil || id == uuid.Nil || id.String() != setupID {
+			return nil, errors.New("sandbox installation ID must be a canonical UUID")
+		}
+		if os.Getenv("AGENTS_API_DAEMON_WS_URL") == "" {
+			return nil, errors.New("Web sandbox setup requires daemon transport")
+		}
 	}
 	result := &managedNodes{closeProvider: closeProvider}
 	success := false
@@ -43,6 +58,9 @@ func configureManagedNodes(s *store.Store, owner func(context.Context) error) (*
 	result.admin, err = deploymentAdminAuthenticator()
 	if err != nil {
 		return nil, err
+	}
+	if setupID != "" && result.admin == nil {
+		return nil, errors.New("Web sandbox setup requires deployment administrator credentials")
 	}
 	result.hub = node.NewHub(node.HubOptions{
 		Authenticate: func(ctx context.Context, id, credential string) (node.Identity, error) {
@@ -74,6 +92,12 @@ func configureManagedNodes(s *store.Store, owner func(context.Context) error) (*
 			return s.HeartbeatRuntimeNode(ctx, n.NodeID, connection, epoch, store.RuntimeNodeHealth{ProviderReady: health.ProviderReady, Diagnostic: health.Diagnostic, CPUCount: health.CPUCount, AvailableMemoryBytes: health.AvailableMemoryBytes, AvailableDiskBytes: health.AvailableDiskBytes})
 		},
 	})
+	if setupID != "" {
+		result.setup = &managedSetup{store: s, hub: result.hub, installationID: setupID}
+		result.runtime = execution.NewDeferredRuntimeProvider(setupID, result.setup.load)
+		success = true
+		return result, nil
+	}
 	result.runtime = runtimeFromConfig(config, built)
 	result.runtime.Provider = result.hub.Provider(config.Provider, func(ctx context.Context, r sandbox.Reference) (string, error) {
 		return s.ResolveRuntimeNode(ctx, r.TenantID, r.EnvironmentID)

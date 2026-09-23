@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import platform
 import secrets
+import shutil
 import socket
 import stat
 import subprocess
@@ -15,6 +16,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 import uuid
 
 from configuration import compose_config, core_environment, managed_config
@@ -60,7 +62,7 @@ def verify_bundle(bundle):
             raise InstallError("Invalid distribution path")
         if digest(path) != expected:
             raise InstallError("Distribution checksum mismatch: " + name)
-    required = {"manifest.json", "install.sh", "install.py", "configuration.py", "native_service.py", "runtime/seccomp.json"}
+    required = {"manifest.json", "install.sh", "install.py", "configuration.py", "native_service.py", "node_install.py", "runtime/seccomp.json"}
     required.update(f"images/{name}.tar" for name in ("core", "web", "runtime", "database"))
     required.update("native/bin/" + name for name in ("agents-api", "agents-api-migrate", "agents-api-microsandbox-provider", "parsar-sandbox-node"))
     required.update("native/microsandbox/" + name for name in ("msb", "libkrunfw.so.5.6.1"))
@@ -111,6 +113,7 @@ def arguments(argv=None):
     parser.add_argument("--core-port", type=int, default=8091)
     parser.add_argument("--web-port", type=int, default=8080)
     parser.add_argument("--core-url", type=core_target)
+    parser.add_argument("--public-url", type=core_target, help="Public HTTPS Core/Web origin behind your TLS reverse proxy")
     parser.add_argument("--core-token-file", type=Path)
     parser.add_argument("--status", action="store_true", help="Read installation health; never invoke a model")
     parser.add_argument("--stop", action="store_true", help="Stop installed services; retain all data")
@@ -186,8 +189,8 @@ def initialize(root, args, manifest):
     mode = "core-only" if args.core_only else "web-only" if args.web_only else "all"
     if (root / "installation.json").exists():
         state = json.loads((root / "installation.json").read_text())
-        wanted = (mode, args.provider, args.core_port, args.web_port, args.core_url)
-        actual = (state["mode"], state["provider"], state["core_port"], state["web_port"], state.get("core_url"))
+        wanted = (mode, args.provider, args.core_port, args.web_port, args.core_url, args.public_url)
+        actual = (state["mode"], state["provider"], state["core_port"], state["web_port"], state.get("core_url"), state.get("public_url"))
         if wanted != actual or state["source_commit"] != manifest["source_commit"]:
             raise InstallError("Existing installation differs; preserve it and follow the upgrade/provider-change guide")
         return state
@@ -213,8 +216,10 @@ def initialize(root, args, manifest):
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(root, 0o700)
     directories = ["config"]
+    if mode != "web-only":
+        directories.append("admin")
     if args.provider:
-        directories.extend(("state", "state/sandbox-node", "admin"))
+        directories.extend(("state", "state/sandbox-node"))
     if args.provider == "microsandbox":
         directories.append("state/msb")
     for name in directories:
@@ -222,7 +227,7 @@ def initialize(root, args, manifest):
     state = {"version": 1, "source_commit": manifest["source_commit"], "mode": mode,
              "provider": args.provider, "installation_id": str(uuid.uuid4()),
              "project": "parsar-" + secrets.token_hex(5), "uid": os.getuid(), "gid": os.getgid(),
-             "core_port": args.core_port, "web_port": args.web_port, "core_url": args.core_url}
+             "core_port": args.core_port, "web_port": args.web_port, "core_url": args.core_url, "public_url": args.public_url}
     if native_service.is_native(state):
         state["database_port"] = database_port()
     config = root / "config"
@@ -234,10 +239,10 @@ def initialize(root, args, manifest):
             "token_sha256": hashlib.sha256(token.encode()).hexdigest()}])
         private_write(config / "credential.key", base64.b64encode(secrets.token_bytes(32)).decode())
         private_write(config / "database.password", secrets.token_hex(32))
+        admin_token = secrets.token_hex(32)
+        private_write(root / "admin/sandbox-admin.key", admin_token)
+        write_json(root / "admin/digests.json", [hashlib.sha256(admin_token.encode()).hexdigest()])
         if args.provider:
-            admin_token = secrets.token_hex(32)
-            private_write(root / "admin/sandbox-admin.key", admin_token)
-            write_json(root / "admin/digests.json", [hashlib.sha256(admin_token.encode()).hexdigest()])
             write_json(config / "managed-runtimes.json", managed_config(root, state, manifest))
     private_write(config / "caller.key", token)
     if mode != "core-only":
@@ -246,6 +251,26 @@ def initialize(root, args, manifest):
     write_json(root / "compose.json", compose_config(root, state, manifest, password))
     write_json(root / "installation.json", state)
     return state
+
+
+def prepare_node_payload(root, state, bundle):
+    if state["mode"] != "all":
+        return
+    destination = root / "node-payload"
+    # Public distribution files only. Never copy the private installation config.
+    names = ("node_install.py", "manifest.json", "SHA256SUMS", "images/runtime.tar",
+             "runtime/seccomp.json", "native/bin/parsar-sandbox-node",
+             "native/bin/agents-api-microsandbox-provider", "native/microsandbox/msb",
+             "native/microsandbox/libkrunfw.so.5.6.1")
+    for name in names:
+        source, target = bundle / name, destination / name
+        target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if target.exists():
+            if target.is_symlink() or not target.is_file() or digest(target) != digest(source):
+                raise InstallError("Installed node payload differs; preserve it and inspect the distribution")
+        else:
+            shutil.copyfile(source, target)
+            target.chmod(0o600)
 
 
 def import_runtime(root, state, manifest, bundle):
@@ -284,6 +309,7 @@ def main(argv=None):
     if args.provider == "microsandbox" and not args.web_only:
         native_service.preflight(bundle)
     state = initialize(root, args, manifest)
+    prepare_node_payload(root, state, bundle)
     if state["provider"] == "docker":
         seccomp = bundle / "runtime/seccomp.json"
         if not (root / "config/seccomp.json").exists():
@@ -313,18 +339,19 @@ def main(argv=None):
     if state["mode"] != "core-only":
         url = f'http://127.0.0.1:{state["web_port"]}'
         auth = base64.b64encode(("admin:" + (root / "config/console.password").read_text()).encode()).decode()
-        if not wait_http(url + "/v1/agents", {"Authorization": "Basic " + auth, "OpenAI-Beta": "agents=v1"}):
+        if not wait_http(url + "/v1/agents", {"Authorization": "Basic " + auth, "OpenAI-Beta": "agents=v1",
+                "Host": urlsplit(state.get("public_url") or url).netloc}):
             raise InstallError("Web could not authenticate to Core. Inspect private configuration; no model was called")
-        print("Console: " + url + " (user: admin)")
+        print("Console: " + (state.get("public_url") or url) + " (user: admin)")
         print("Console password file: " + str(root / "config/console.password"))
     if state["mode"] != "web-only":
         print(f'API: http://127.0.0.1:{state["core_port"]}/v1')
         print("Caller key file: " + str(root / "config/caller.key"))
         if state["provider"]:
             print("Provider: " + state["provider"] + ". Runtime image prepared; Core provisions Sessions on demand.")
-            print("Sandbox administrator key file: " + str(root / "admin/sandbox-admin.key"))
         else:
-            print("No local sandbox provider configured. No execution node was installed.")
+            print("No execution node installed. Open Hosted Sandbox Manager to choose a provider and add nodes.")
+        print("Sandbox administrator key file: " + str(root / "admin/sandbox-admin.key"))
     print("Services installed. No model request was made. See docs/getting-started/quickstart.md.")
 
 

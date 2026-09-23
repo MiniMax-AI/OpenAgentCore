@@ -50,12 +50,14 @@ def core_environment(root, state, database_password):
         "AGENTS_API_ENGINE": "codex", "AGENTS_API_HARNESSES": "codex,claude_sdk,mcode",
         "AGENTS_API_DAEMON_WS_URL": f"ws://{daemon_host}/api/v1/agent-daemon/ws",
     }
+    result["AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE"] = (
+        str(Path(root) / "admin/digests.json") if native else "/admin/digests.json")
+    if not state["provider"]:
+        result["AGENTS_API_SANDBOX_INSTALLATION_ID"] = state["installation_id"]
     if state["provider"]:
         result["AGENTS_API_MANAGED_RUNTIMES_FILE"] = config + "/managed-runtimes.json"
         result["AGENTS_API_SANDBOX_NODE_STATE_DIR"] = (
             str(Path(root) / "state/sandbox-node") if native else "/state/sandbox-node")
-        result["AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE"] = (
-            str(Path(root) / "admin/digests.json") if native else "/admin/digests.json")
     return result
 
 
@@ -91,10 +93,10 @@ def compose_config(root, state, manifest, database_password):
             services["database"]["ports"] = [f'127.0.0.1:{state["database_port"]}:5432']
             services.pop("migrate")
         else:
+            core["volumes"].append(bind(root / "admin/digests.json", "/admin/digests.json"))
             if state["provider"] == "docker":
                 core["volumes"].append(bind("/var/run/docker.sock", "/var/run/docker.sock", False))
                 core["volumes"].append(bind(root / "state/sandbox-node", "/state/sandbox-node", False))
-                core["volumes"].append(bind(root / "admin/digests.json", "/admin/digests.json"))
                 core["group_add"] = [str(state["device_gid"])]
                 core["networks"] = ["default", "runtime"]
                 doc["networks"] = {"runtime": {"name": state["project"] + "-runtime"}}
@@ -107,12 +109,21 @@ def compose_config(root, state, manifest, database_password):
             "security_opt": ["no-new-privileges:true"],
             "volumes": [bind(config / "caller.key", "/config/caller.key"),
                         bind(config / "console.password", "/config/console.password")],
-            "environment": {"CORE_CONSOLE_ORIGIN": f'http://127.0.0.1:{state["web_port"]}',
+            "environment": {"CORE_CONSOLE_ORIGIN": state.get("public_url") or f'http://127.0.0.1:{state["web_port"]}',
                 "CORE_CONSOLE_UPSTREAM": (f'http://127.0.0.1:{state["core_port"]}' if native
                                           else state.get("core_url") or "http://core:8091"),
                 "CORE_CONSOLE_TOKEN_FILE": "/config/caller.key",
                 "CORE_CONSOLE_PASSWORD_FILE": "/config/console.password"},
         }
+        if state["mode"] == "all":
+            services["web"]["volumes"].extend([
+                bind(root / "admin/sandbox-admin.key", "/admin/sandbox-admin.key"),
+                bind(root / "node-payload", "/node-payload"),
+            ])
+            services["web"]["environment"].update(
+                CORE_CONSOLE_SANDBOX_ADMIN_TOKEN_FILE="/admin/sandbox-admin.key",
+                CORE_CONSOLE_NODE_PAYLOAD_DIR="/node-payload",
+            )
         if state["mode"] == "web-only" or native:
             services["web"].pop("ports")
             services["web"]["network_mode"] = "host"

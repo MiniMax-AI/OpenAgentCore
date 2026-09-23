@@ -74,7 +74,7 @@ if [[ "$(go env GOVERSION)" != "$required_go" ]]; then
   printf 'Distribution build requires %s\n' "$required_go" >&2
   exit 1
 fi
-for file in install.sh install.py configuration.py native_service.py; do
+for file in install.sh install.py configuration.py native_service.py node_install.py; do
   cp "deploy/install/$file" "$bundle/$file"
 done
 mkdir -p "$bundle/docs"

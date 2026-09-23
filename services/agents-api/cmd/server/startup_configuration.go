@@ -16,7 +16,7 @@ func coreStartupConfiguration(defaultHarness string, enabledHarnesses []string, 
 		modelProviders = append(modelProviders, v1.CoreHarnessModelProviderConfiguration{Harness: kind, EndpointConfigured: endpoints[kind]})
 	}
 	managedConfiguration := v1.CoreManagedSandboxConfiguration{}
-	if managed != nil {
+	if managed != nil && managedProviderKind != "" {
 		provider := managedProviderKind
 		managedConfiguration = v1.CoreManagedSandboxConfiguration{Enabled: true, Provider: &provider, Maintenance: managed.Maintenance}
 	}

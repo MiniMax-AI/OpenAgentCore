@@ -6,22 +6,53 @@ Linux hosts. The deployment selects exactly one provider: `docker` or
 are distinct from user-managed `self_hosted` Environments, whose provisioning
 remains the user's responsibility.
 
-The Web console's **Hosted Sandbox Manager** page uses a separate deployment
-administrator credential. A project API key cannot register, edit or remove
-nodes, or list another project's allocations. The administrator credential is
-kept only in the page's memory. Re-enter it after a reload. Do not put it in the
-normal project connection settings or a URL.
+The Web console's **Hosted Sandbox Manager** page uses deployment administrator
+authority, separate from project credentials. In a paired distribution, the
+console server reads its own administrator key and forwards it only on sandbox
+management routes after console login. No administrator key reaches the browser.
+Direct Core and Web-only connections still require an explicit administrator
+credential, retained only in page memory.
 
-The distribution installer creates a separate administrator key under the private
-installation `admin/` directory when a local provider is enabled. It gives Core
-only the digest configuration; the console does not receive that key. Enter the
-key on this page after the ordinary console login. The production console forwards
-only sandbox administration requests with this explicit credential. Remote nodes
-must use the Core API origin for enrollment and connection, not the console URL.
-Default zero-node installation leaves sandbox administration unconfigured; use the
-explicit Core configuration below for an advanced remote-only deployment.
+The installer creates the separate key under the private `admin/` directory,
+including zero-node installs. Core receives its digest; the bundled Web server
+receives the original private key. Neither is included in static assets or the
+node installation payload. Project keys cannot register, edit or remove nodes.
 
-## Configure Core
+## Start with zero nodes
+
+Default installation starts Core, Web and PostgreSQL without local compute.
+Hosted Sandbox Manager first asks for Docker or microsandbox and the public HTTPS
+Core origin reachable from node hosts and sandbox guests. Use Core's origin, not
+the Web console URL; the proxy must forward API routes and WebSocket upgrades.
+HTTP loopback is accepted only for local development. A guest's loopback address
+cannot reach its Core host.
+
+Saving initializes the deployment once. An identical request may be retried;
+a different provider or origin returns a conflict. Refresh after an uncertain
+response before trying again. Selection persists in PostgreSQL, activates without
+a restart and applies to every node. Removing all nodes does not reset it.
+Microsandbox suspends eligible idle Sessions after 300 seconds and retains their
+snapshots for 86400 seconds. Docker has no memory snapshot policy.
+
+Generate and copy the node installation command and run it on the target Linux
+amd64 host. The installer checks prerequisites, downloads the matched payload,
+checks its hashes, prepares provider configuration and starts the existing node
+program as a systemd user service. Web polls readiness and capacity while waiting.
+It does not install software through SSH. Registration itself
+does not create a Session, sandbox or model request. Hosted Session admission
+fails until setup is complete and a ready node has capacity.
+
+For manual zero-node deployments, set `AGENTS_API_SANDBOX_INSTALLATION_ID` to a
+stable UUID, configure `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE`, and enable the daemon
+gateway using `AGENTS_API_DAEMON_WS_URL`. Do not also set
+`AGENTS_API_MANAGED_RUNTIMES_FILE`. The Web-selected origin supplies hosted Runtime
+bootstrap and its public daemon WebSocket address; it never uses request Host or
+forwarded headers. Preserve the installation UUID and database together.
+
+The startup configuration API remains a startup snapshot. Use the live sandbox
+deployment response for a selection made after startup.
+
+## Configure a local or file-managed deployment
 
 Keep the existing `AGENTS_API_MANAGED_RUNTIMES_FILE` JSON. Existing Docker and
 microsandbox configurations participate through an embedded local node, using
@@ -95,6 +126,21 @@ the idle interval from Core's database clock; subsequent restarts preserve it an
 do not extend snapshot retention.
 
 ## Register a host
+
+The paired console provides a complete installation command. It downloads only
+fixed public distribution artifacts from `/node-install/`; the enrollment token
+is transient and never a console/project credential. Python 3.9+, a systemd user
+session with lingering, and Docker access or KVM/native-library prerequisites
+must already exist on the target host. Rerunning the same command preserves the
+node's private identity; changes to its Core, installation, provider or release
+are refused. Use a newly generated token if an unconsumed one expires.
+
+For a public paired endpoint, use `install.sh --public-url https://core.example`
+and an operator-managed TLS reverse proxy preserving Host and WebSocket Upgrade.
+The console passes node and daemon credentials unchanged on a fixed route list;
+Core authenticates them. No administrator credential is used on these routes.
+Manual registration remains available for operator-managed payloads:
+
 
 Build/install `parsar-sandbox-node` from the same Core release. On the host,
 provide a private node provider JSON using the existing Docker or microsandbox
