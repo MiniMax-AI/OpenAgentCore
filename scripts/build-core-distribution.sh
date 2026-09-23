@@ -60,7 +60,8 @@ for file in install.sh install.py configuration.py; do
   cp "deploy/install/$file" "$bundle/$file"
 done
 mkdir -p "$bundle/docs"
-cp docs/getting-started.md "$bundle/docs/"
+cp -R docs/getting-started "$bundle/docs/"
+cp README.md "$bundle/"
 mkdir -p "$bundle/runtime"
 cp services/agents-api/deploy/codex/seccomp.json "$bundle/runtime/"
 cp LICENSE "$bundle/"

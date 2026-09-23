@@ -8,7 +8,7 @@ SWAG_VERSION ?= v1.16.4
 help:
 	@printf '%s\n' 'make build-agents-api  Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
 
-check: check-database check-sqlc check-go check-microsandbox-provider check-agents-api check-claude-sdk check-web check-mcode-harness check-agents-executor
+check: check-distribution check-database check-sqlc check-go check-microsandbox-provider check-agents-api check-claude-sdk check-web check-mcode-harness check-agents-executor
 	@printf 'Parsar Core checks passed.\n'
 
 check-database:
@@ -111,3 +111,14 @@ check-microsandbox-provider:
 	else \
 	    printf 'Skipping the Linux-only microsandbox SDK helper tests; the full Linux gate is required before release.\n'; \
 	fi
+
+.PHONY: check-distribution build-core-distribution
+check-distribution:
+	go test ./services/core-console -count=1
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/install -p 'test_*.py'
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/core-distribution-manifest.test.py
+	bash -n deploy/install/install.sh scripts/build-core-console.sh scripts/build-core-distribution.sh
+	./scripts/build-core-console.sh
+
+build-core-distribution:
+	./scripts/build-core-distribution.sh

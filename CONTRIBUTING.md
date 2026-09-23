@@ -1306,6 +1306,63 @@ package with a fresh database, extracted binaries, loaded image and real public
 workflow. Keep model/operator credentials external and Provider ownership stable
 across upgrades. This is the same managed Runtime, not user-managed enrollment.
 
+#### Matched Core and console distribution
+
+The installer milestone packages Core and the unchanged Web console together,
+with independent `--core-only` and `--web-only` modes. `site/` is the public static
+landing, separate from `apps/web`; it must not create an onboarding prerequisite,
+call a model, or claim complete protocol compatibility. Operator installation,
+optional API examples and service diagnostics live in `docs/getting-started/`.
+
+`make build-core-distribution` builds from clean committed source and reuses the
+existing API, Runtime, SDK, helper and Web builders. Artifacts record source and
+immutable image identities, the actual Runtime manifest digest, checksums and
+microsandbox runtime/firmware hashes. Release generation is not publication or
+qualification. A release must be tested from fresh extraction with real models;
+no synthetic result may substitute for native execution acceptance.
+
+The first installer targets a trusted Linux amd64 Docker host. It installs a
+private dedicated PostgreSQL service and separate Core and console services.
+Default sandbox placement is microsandbox; `--provider docker` selects the
+existing Docker provider. Missing KVM fails without changing that choice.
+The distribution Core image contains the native glibc helper and pinned msb
+runtime/firmware, with only KVM device access for microsandbox or the canonical
+Docker socket for Docker. This does not put a harness or model loop in Core.
+The basic distroless API image and binary builds remain independent artifacts.
+
+One Runtime image contains the existing daemon, shared helpers and three native
+harness packages. Their differences remain in the adapters. Core keeps exclusive
+ownership of Session allocation, initialization, cancellation, snapshots and
+cleanup. The installer imports images and prepares running conditions; it never
+creates an execution Session or supplies a model credential. Applications use the
+existing write-only model execution extension, with the installation's persistent
+credential encryption key. Provider identity/backend namespace and native history
+must not change on a repeated install.
+
+`services/core-console` serves the existing production Web build and forwards only
+public `/v1` requests to one configured Core. It uses the standard Go reverse
+proxy with streaming/cancellation, a separate operator password, fixed origin and
+cross-site checks. Only the server reads the Core bearer. It does not implement
+product identity, resource semantics, Runtime discovery or an execution loop.
+The console has neither KVM nor Docker authority; its static root contains no
+secrets. Installation exposes only loopback API/console ports. Remote exposure
+requires an operator-configured HTTPS/access boundary. Web-only mode can connect
+to a loopback existing Core on the same Linux host or a remote HTTPS Core.
+
+Installation state and secrets live in a private directory under `~/.parsar/` by
+default. No credential enters build arguments, image layers, browser bundles or
+diagnostic output. Compose configuration is confidential. The generated database,
+caller/tenant/provider identities and encryption key survive reruns; automatic
+revision replacement and provider migration are outside this initial installer.
+Do not delete data or issue broad container/volume pruning as recovery.
+
+`make check-distribution` covers the production proxy, installation rules and
+release metadata. Real bundle validation covers default/provider selection,
+component modes, existing Web connection, public native execution and restart
+retention. Diagnostics report observed service health, not fabricated model or
+complete environment readiness. Runtime observations are Core-owned; do not add
+a duplicate monitoring/lifecycle framework to installation or the public landing.
+
 #### Current implementation
 
 The constraints below describe existing code, not requirements to preserve legacy
