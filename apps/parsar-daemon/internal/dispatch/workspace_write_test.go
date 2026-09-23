@@ -165,3 +165,29 @@ func TestLocalUploadUnknownRetainsOwner(t *testing.T) {
 		t.Fatal("shutdown declared uncertain mutation settled")
 	}
 }
+
+func TestLocalUploadReportsDestinationConflictsAndReleasesOwner(t *testing.T) {
+	for helperError, reason := range map[string]string{
+		"destination_directory": proto.WorkspaceWriteReasonDirectory,
+		"unsafe_destination":    proto.WorkspaceWriteReasonUnsafe,
+		"write_failed":          "",
+	} {
+		t.Run(helperError, func(t *testing.T) {
+			r, sender, request, _ := localWriterRouter(t, `{"version":1,"outcome":"failed","error":"`+helperError+`"}`)
+			id := uuid.NewString()
+			for _, p := range []proto.WorkspaceWritePayload{request, {Step: "chunk", Data: []byte("abc")}, {Step: "commit"}} {
+				if err := r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceWrite, id, p)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := waitWorkspaceWrite(t, sender, id, "rejected"); got.ErrorCode != "write_rejected" || got.Reason != reason {
+				t.Fatal(got)
+			}
+			next := uuid.NewString()
+			if err := r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceWrite, next, request)); err != nil {
+				t.Fatal(err)
+			}
+			waitWorkspaceWrite(t, sender, next, "ready")
+		})
+	}
+}

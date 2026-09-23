@@ -137,6 +137,17 @@ func workspaceWriteResult(write agent.WorkspaceWriteResult, err error, size int)
 	if err == nil && write.SizeBytes == int64(size) {
 		return proto.WorkspaceWriteResultPayload{Outcome: "completed", SizeBytes: size}
 	}
+	for _, conflict := range []struct {
+		err    error
+		reason string
+	}{
+		{agent.ErrWorkspaceWriteDirectory, proto.WorkspaceWriteReasonDirectory},
+		{agent.ErrWorkspaceWriteUnsafe, proto.WorkspaceWriteReasonUnsafe},
+	} {
+		if errors.Is(err, conflict.err) {
+			return proto.WorkspaceWriteResultPayload{Outcome: "rejected", ErrorCode: "write_rejected", Reason: conflict.reason}
+		}
+	}
 	for _, failure := range []struct {
 		err  error
 		code string

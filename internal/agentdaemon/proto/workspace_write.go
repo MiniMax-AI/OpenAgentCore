@@ -34,7 +34,16 @@ type WorkspaceWriteResultPayload struct {
 	Offset    int    `json:"offset,omitempty"`
 	SizeBytes int    `json:"size_bytes,omitempty"`
 	ErrorCode string `json:"error_code,omitempty"`
+	// Reason optionally refines a write_rejected result. Older peers omit or
+	// ignore it and keep the generic rejection.
+	Reason string `json:"reason,omitempty"`
 }
+
+// Files.create destination refusals carried in Reason.
+const (
+	WorkspaceWriteReasonDirectory = "destination_directory"
+	WorkspaceWriteReasonUnsafe    = "unsafe_destination"
+)
 
 func ValidWorkspaceWriteRequest(p WorkspaceWritePayload) bool {
 	if p.Step == "begin" {

@@ -79,6 +79,9 @@ func (s *Session) WriteWorkspaceFile(ctx context.Context, id string, request pro
 }
 
 func validWorkspaceWriteResult(r proto.WorkspaceWriteResultPayload, expected string, offset, size int) bool {
+	if r.Reason != "" && (r.Outcome != "rejected" || r.ErrorCode != "write_rejected") {
+		return false
+	}
 	if r.Outcome == "rejected" {
 		if r.Offset != 0 || r.SizeBytes != 0 {
 			return false

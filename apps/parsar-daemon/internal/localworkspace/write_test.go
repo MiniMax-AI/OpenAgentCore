@@ -60,7 +60,8 @@ func TestWriteRejectsUnsafeBindings(t *testing.T) {
 
 func TestWriteReceiptAndCredentialBoundary(t *testing.T) {
 	t.Setenv("PARSAR_PRIVATE_CREDENTIAL", "synthetic-secret")
-	b := writableBinding(t, "[ -z \"$PARSAR_PRIVATE_CREDENTIAL\" ] || exit 13\ncat >/dev/null\nprintf '%s' '{\"version\":1,\"outcome\":\"completed\",\"size_bytes\":3}'\n")
+	// Files.create always selects the helper's explicit create mode.
+	b := writableBinding(t, "[ -z \"$PARSAR_PRIVATE_CREDENTIAL\" ] || exit 13\n[ \"$#\" = 5 ] && [ \"$5\" = create ] || exit 14\ncat >/dev/null\nprintf '%s' '{\"version\":1,\"outcome\":\"completed\",\"size_bytes\":3}'\n")
 	result, err := b.WriteWorkspaceFile(t.Context(), "file", []byte{0, 1, 2})
 	if err != nil || result.SizeBytes != 3 {
 		t.Fatalf("write: %+v %v", result, err)
@@ -144,14 +145,22 @@ func TestWriteReceiptValidation(t *testing.T) {
 		`{"version":1,"outcome":"failed","error":"other"}`,
 		`{"version":1,"outcome":"completed","size_bytes":0} {}`,
 		`{"version":1,"outcome":"completed","size_bytes":0,"extra":true}`,
+		`{"version":1,"outcome":"unknown","error":"unsafe_destination"}`,
+		`{"version":1,"outcome":"failed","size_bytes":0,"error":"destination_directory"}`,
 	} {
 		if _, err := decodeWrite([]byte(response), 0); !errors.Is(err, agent.ErrWorkspaceWriteUncertain) {
 			t.Fatalf("unsafe receipt %s: %v", response, err)
 		}
 	}
-	for _, code := range []string{"invalid_input", "write_failed"} {
-		if _, err := decodeWrite([]byte(fmt.Sprintf(`{"version":1,"outcome":"failed","error":%q}`, code)), 0); !errors.Is(err, agent.ErrWorkspaceWriteRejected) {
-			t.Fatal(err)
+	for code, want := range map[string]error{
+		"invalid_input":         agent.ErrWorkspaceWriteRejected,
+		"write_failed":          agent.ErrWorkspaceWriteRejected,
+		"destination_directory": agent.ErrWorkspaceWriteDirectory,
+		"unsafe_destination":    agent.ErrWorkspaceWriteUnsafe,
+	} {
+		_, err := decodeWrite([]byte(fmt.Sprintf(`{"version":1,"outcome":"failed","error":%q}`, code)), 0)
+		if err != want || !errors.Is(err, agent.ErrWorkspaceWriteRejected) {
+			t.Fatal(code, err)
 		}
 	}
 }
@@ -165,39 +174,46 @@ func TestLocalWriteNativeInstaller(t *testing.T) {
 	if err := b.bindWriter(helper, b.writer.staging); err != nil {
 		t.Fatal(err)
 	}
-	for _, size := range []int{0, 3, (1 << 20) + 17, WriteMaxBytes} {
-		data := bytes.Repeat([]byte{0, 255, 17}, (size+2)/3)[:size]
-		got, err := b.WriteWorkspaceFile(t.Context(), "file", data)
-		if err != nil || got.SizeBytes != int64(size) {
-			t.Fatalf("size %d: %+v %v", size, got, err)
-		}
-		actual, err := os.ReadFile(filepath.Join(b.workspace, "file"))
-		if err != nil || !bytes.Equal(actual, data) {
-			t.Fatalf("size %d bytes differ: %v", size, err)
-		}
-	}
-	old := filepath.Join(b.workspace, "file")
-	if err := os.WriteFile(old, []byte("original"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	alias := filepath.Join(b.workspace, "alias")
-	if err := os.Link(old, alias); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := b.WriteWorkspaceFile(t.Context(), "file", []byte("replacement")); err != nil {
-		t.Fatal(err)
-	}
-	if data, err := os.ReadFile(alias); err != nil || string(data) != "original" {
-		t.Fatal("hard-link contents changed", err)
-	}
 	escape := filepath.Join(b.workspace, "escape")
 	if err := os.Symlink(b.writer.staging, escape); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"escape/new", "escape", "missing/file"} {
-		if _, err := b.WriteWorkspaceFile(t.Context(), path, []byte("denied")); !errors.Is(err, agent.ErrWorkspaceWriteRejected) {
+	if err := os.WriteFile(filepath.Join(b.workspace, "setup.txt"), []byte("setup"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Missing parents are created; an existing destination is never replaced.
+	for _, size := range []int{0, 3, (1 << 20) + 17, WriteMaxBytes} {
+		path := fmt.Sprintf("n1/n2/file-%d", size)
+		data := bytes.Repeat([]byte{0, 255, 17}, (size+2)/3)[:size]
+		got, err := b.WriteWorkspaceFile(t.Context(), path, data)
+		if err != nil || got.SizeBytes != int64(size) {
+			t.Fatalf("size %d: %+v %v", size, got, err)
+		}
+		actual, err := os.ReadFile(filepath.Join(b.workspace, path))
+		if err != nil || !bytes.Equal(actual, data) {
+			t.Fatalf("size %d bytes differ: %v", size, err)
+		}
+	}
+	if info, err := os.Lstat(filepath.Join(b.workspace, "n1")); err != nil || !info.IsDir() || info.Mode().Perm() != 0700 {
+		t.Fatal("parent directory", info, err)
+	}
+	for path, want := range map[string]error{
+		"n1/n2/file-3": agent.ErrWorkspaceWriteUnsafe,
+		"setup.txt":    agent.ErrWorkspaceWriteUnsafe,
+		"escape":       agent.ErrWorkspaceWriteUnsafe,
+		"escape/new":   agent.ErrWorkspaceWriteUnsafe,
+		"n1/n2":        agent.ErrWorkspaceWriteDirectory,
+		"n1":           agent.ErrWorkspaceWriteDirectory,
+	} {
+		if _, err := b.WriteWorkspaceFile(t.Context(), path, []byte("denied")); err != want {
 			t.Fatalf("%s: %v", path, err)
 		}
+	}
+	if data, err := os.ReadFile(filepath.Join(b.workspace, "n1/n2/file-3")); err != nil || !bytes.Equal(data, []byte{0, 255, 17}) {
+		t.Fatal("existing file changed", err)
+	}
+	if data, err := os.ReadFile(filepath.Join(b.workspace, "setup.txt")); err != nil || string(data) != "setup" {
+		t.Fatal("untracked file changed", err)
 	}
 	if _, err := b.WriteWorkspaceFile(t.Context(), "after-rejection", nil); err != nil {
 		t.Fatal("known rejection blocked next write", err)

@@ -94,9 +94,22 @@ func TestWorkspaceWriteRejectsPrematureOrContradictoryReceipts(t *testing.T) {
 		{Outcome: "ready", Offset: 1},
 		{Outcome: "rejected", ErrorCode: "private-detail"},
 		{Outcome: "unknown", ErrorCode: "write_unconfirmed", SizeBytes: 4},
+		// A destination reason refines only a known installer rejection.
+		{Outcome: "ready", Reason: proto.WorkspaceWriteReasonUnsafe},
+		{Outcome: "rejected", ErrorCode: "invalid_request", Reason: proto.WorkspaceWriteReasonUnsafe},
+		{Outcome: "unknown", ErrorCode: "write_unconfirmed", Reason: proto.WorkspaceWriteReasonDirectory},
 	} {
 		if validWorkspaceWriteResult(result, "ready", 0, 4) {
 			t.Fatal("unsafe result", result)
+		}
+	}
+	if validWorkspaceWriteResult(proto.WorkspaceWriteResultPayload{Outcome: "completed", SizeBytes: 4, Reason: proto.WorkspaceWriteReasonUnsafe}, "completed", 0, 4) {
+		t.Fatal("reason accepted on a commit")
+	}
+	// Unrecognized reasons from newer daemons remain generic known rejections.
+	for _, reason := range []string{"", proto.WorkspaceWriteReasonDirectory, proto.WorkspaceWriteReasonUnsafe, "future_reason"} {
+		if !validWorkspaceWriteResult(proto.WorkspaceWriteResultPayload{Outcome: "rejected", ErrorCode: "write_rejected", Reason: reason}, "completed", 0, 4) {
+			t.Fatal("known rejection refused", reason)
 		}
 	}
 	if validWorkspaceWriteResult(proto.WorkspaceWriteResultPayload{Outcome: "received", Offset: 1}, "received", 2, 4) {

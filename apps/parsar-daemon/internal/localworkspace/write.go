@@ -52,7 +52,9 @@ func (b *Binding) WriteWorkspaceFile(ctx context.Context, path string, data []by
 	operation, cancel := context.WithTimeout(context.WithoutCancel(ctx), 65*time.Second)
 	defer cancel()
 	digest := sha256.Sum256(data)
-	cmd := exec.CommandContext(operation, w.helper, b.workspace, path, strconv.Itoa(len(data)), w.staging)
+	// This writer serves only public Files.create, so it always selects the
+	// helper's create mode: create missing parents and never replace.
+	cmd := exec.CommandContext(operation, w.helper, b.workspace, path, strconv.Itoa(len(data)), w.staging, "create")
 	cmd.Dir = "/"
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "LANG=C.UTF-8"}
 	cmd.Stdin = io.MultiReader(bytes.NewReader(data), bytes.NewReader(digest[:]))
@@ -96,8 +98,15 @@ func decodeWrite(data []byte, expected int) (agent.WorkspaceWriteResult, error) 
 	if wire.Outcome == "completed" && wire.Error == nil && wire.SizeBytes != nil && *wire.SizeBytes == int64(expected) {
 		return agent.WorkspaceWriteResult{SizeBytes: *wire.SizeBytes}, nil
 	}
-	if wire.Outcome == "failed" && wire.SizeBytes == nil && wire.Error != nil && (*wire.Error == "invalid_input" || *wire.Error == "write_failed") {
-		return agent.WorkspaceWriteResult{}, agent.ErrWorkspaceWriteRejected
+	if wire.Outcome == "failed" && wire.SizeBytes == nil && wire.Error != nil {
+		switch *wire.Error {
+		case "invalid_input", "write_failed":
+			return agent.WorkspaceWriteResult{}, agent.ErrWorkspaceWriteRejected
+		case "destination_directory":
+			return agent.WorkspaceWriteResult{}, agent.ErrWorkspaceWriteDirectory
+		case "unsafe_destination":
+			return agent.WorkspaceWriteResult{}, agent.ErrWorkspaceWriteUnsafe
+		}
 	}
 	return agent.WorkspaceWriteResult{}, invalid
 }
