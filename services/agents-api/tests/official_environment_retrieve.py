@@ -95,7 +95,12 @@ def main():
             if beta is not None:
                 request_headers["OpenAI-Beta"] = beta
             rejected(endpoint, 400, "invalid_beta", request_headers)
-        rejected(endpoint + "?include=files", 400, "unsupported_parameter")
+        # include is not a pinned retrieval parameter; unknown keys are ignored.
+        for query in ("?include=files", "?tenant_id=" + result["foreign_environment_id"]):
+            response = http.get(endpoint + query, headers=headers)
+            assert response.status_code == 200 and response.json() == expected
+            rejected(base + "/v1/agents/environments/" + result["foreign_environment_id"] + query, 404, "not_found_error")
+        assert api.beta.agents.environments.retrieve(environment_id, extra_query={"include": "files"}).to_dict() == expected
         for method in ("POST", "PATCH", "DELETE"):
             rejected(endpoint, 405, "unsupported_operation", method=method)
         assert api.beta.agents.environments.retrieve(environment_id).to_dict() == expected

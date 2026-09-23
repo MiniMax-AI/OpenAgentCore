@@ -100,7 +100,9 @@ def verify_credential_rotation(client, other, invalid, peer, saved_vaults, saved
         for scope in ({"OpenAI-Project": "other-project"}, {"OpenAI-Organization": "other-organization"}):
             expect_error(AuthenticationError, lambda: credentials.update(
                 original.id, vault_id=vault.id, **replacement, extra_headers=scope))
-        safe(raw.post(endpoint, headers=headers, params={"include": "token"}, json=replacement), 400)
+        safe(raw.post(endpoint, headers=headers, params={"include": "token"},
+                      json={"auth": {"type": "static_bearer", "token": ""}}), 400)
+        assert safe(raw.get(endpoint, headers=headers, params={"include": "token"}), 200) == current.to_dict()
         assert safe(raw.get(endpoint, headers=headers), 200) == current.to_dict()
 
     assert credentials.retrieve(original.id, vault_id=vault.id) == current

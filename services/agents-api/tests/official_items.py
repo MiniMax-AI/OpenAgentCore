@@ -15,7 +15,8 @@ def verify_items(a, b, invalid, session, peer_session, turns, expect_error):
     expect_error(NotFoundError, lambda: b.beta.agents.sessions.items.list(session))
     expect_error(NotFoundError, lambda: items.list(peer_session, after=recovered[0].id))
     expect_error(AuthenticationError, lambda: invalid.beta.agents.sessions.items.list(session))
-    expect_error(BadRequestError, lambda: items.list(session, limit=101))
+    assert items.list(session, limit=101).data == items.list(session, limit=100).data
+    assert items.list(session, limit=0, order="asc").data == [recovered[0]]
     assert "PRIVATE" not in repr(recovered) and "SECRET" not in repr(recovered)
     for i, turn in enumerate(turns):
         group = [item for item in recovered if item.turn_id == turn]

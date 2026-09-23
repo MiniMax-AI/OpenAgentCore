@@ -69,8 +69,11 @@ def verify_session_metadata(client, other, invalid, spec, expect_error):
         response = raw.post(url, headers=headers, content=oversized)
         assert response.status_code == 413 and response.json()["error"]["code"] == "request_too_large"
         assert raw.patch(url, headers=headers, json={"metadata": {}}).status_code == 405
+        empty = raw.post(url, headers=headers, json={})
+        assert empty.status_code == 400
         for path in [url + "?tenant_id=other", url + "?unsupported=1"]:
-            assert raw.post(path, headers=headers, json={}).status_code == 400
+            response = raw.post(path, headers=headers, json={})
+            assert response.status_code == 400 and response.json() == empty.json()
         for target in [other, invalid]:
             expected_error = AuthenticationError if target is invalid else NotFoundError
             for fields in [{"metadata": None}, {"metadata": {"tenant_id": "untrusted"}}]:

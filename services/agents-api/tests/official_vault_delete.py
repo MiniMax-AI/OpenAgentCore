@@ -29,7 +29,8 @@ def verify_vault_deletion(client, other, invalid, peer, canary, expect_error):
         assert raw.delete(endpoint + target.id).status_code == 401
         response = raw.delete(endpoint + target.id, headers={"Authorization": auth_headers["Authorization"]})
         assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_beta"
-        for kwargs in [{"params": {"include": "credentials"}}, {"content": b"{}"}]:
+        # The body rejects; the unknown include key is ignored.
+        for kwargs in [{"content": b"{}"}, {"params": {"include": "credentials"}, "content": b"{}"}]:
             assert raw.request("DELETE", endpoint + target.id, headers=auth_headers, **kwargs).status_code == 400
         assert vaults.retrieve(target.id) == target
         assert list(vaults.credentials.list(target.id, order="asc")) == children
@@ -38,7 +39,7 @@ def verify_vault_deletion(client, other, invalid, peer, canary, expect_error):
         assert response.status_code == 200 and response.parse().to_dict() == expected
         assert response.http_response.json() == expected and canary not in response.http_response.text
         assert response.headers["cache-control"] == "no-store"
-        response = raw.delete(endpoint + values[1].id, headers=auth_headers)
+        response = raw.delete(endpoint + values[1].id, headers=auth_headers, params={"include": "credentials"})
         assert response.status_code == 200 and response.json() == {**expected, "id": values[1].id}
         for value in values[:2]:
             for method in ["GET", "DELETE"]:

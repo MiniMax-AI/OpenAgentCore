@@ -103,8 +103,11 @@ def verify_agents(client, other, invalid, expect_error):
         for content in ("{}", "null", "[]", '{"model":"x"} {}'):
             assert raw.post(base, headers=headers, content=content).status_code == 400
         assert raw.post(base, headers=headers, content='{"model":"' + "x" * (1024 * 1024) + '"}').status_code == 413
-        assert raw.post(base, headers=headers, params={"tenant_id": "other"}, json={"model": "x"}).status_code == 400
-        assert raw.get(base + "/" + saved[0].id, headers=headers, params={"tenant_id": "other"}).status_code == 400
+        # tenant_id is an ignored query key; it never selects another tenant.
+        assert raw.post(base, headers=headers, params={"tenant_id": "other"}, content="{}").status_code == 400
+        plain = raw.get(base + "/" + saved[0].id, headers=headers)
+        scoped = raw.get(base + "/" + saved[0].id, headers=headers, params={"tenant_id": "other"})
+        assert plain.status_code == scoped.status_code == 200 and scoped.json() == plain.json()
         for resource_id in (str(uuid.uuid4()), "unrecognized-agent", str(uuid.UUID(int=0))):
             expect_error(NotFoundError, lambda: agents.retrieve(resource_id))
         expect_error(NotFoundError, lambda: other.beta.agents.retrieve(saved[0].id))

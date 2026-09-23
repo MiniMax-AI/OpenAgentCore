@@ -204,7 +204,7 @@ def main():
                     assert list(sessions.list(agent_id="unknown-agent")) == []
                     assert list(sessions.list(agent_id=first.agent.id)) == [first]
                     assert list(b.beta.agents.sessions.list(agent_id=first.agent.id)) == []
-                    expect_error(BadRequestError, lambda: sessions.list(limit=0))
+                    assert sessions.list(limit=0).data == sessions.list(limit=1).data
                     assert {item.id for item in sessions.list()} == expected
                     metadata = {str(i): "🧪" * 512 for i in range(16)}
                     large = sessions.create(**spec, metadata=metadata)

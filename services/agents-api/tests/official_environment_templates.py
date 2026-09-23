@@ -63,8 +63,13 @@ def verify_environment_templates(client, foreign, http):
             assert [v.id for v in other.list()] == [foreign_template.id]
         finally:
             other.delete(foreign_template.id)
-        for query in ['limit=0', 'limit=101', 'limit=bad', 'order=wrong', 'limit=1&limit=2', 'unknown=1']:
-            assert http.get(base + '?' + query, headers=headers).status_code == 400
+        for query in ['limit=bad', 'limit=-1', 'order=wrong', 'limit=1&limit=2']:
+            response = http.get(base + '?' + query, headers=headers)
+            assert response.status_code == 400 and response.json()['error']['code'] == 'invalid_request_error'
+        everything = http.get(base + '?limit=100', headers=headers).json()
+        assert http.get(base + '?limit=101&unknown=1', headers=headers).json() == everything
+        first = http.get(base + '?limit=0', headers=headers).json()
+        assert [value['id'] for value in first['data']] == [everything['data'][0]['id']] and first['has_more'] == (len(everything['data']) > 1)
         canary = 'template-private-' + uuid.uuid4().hex
         for body in [{'env': {'PATH': canary}}, {'setup_commands': [{'command': canary, 'cwd': 'relative'}]},
                      {'files': [{'type': 'inline', 'path': '/workspace/a', 'data': canary}]},

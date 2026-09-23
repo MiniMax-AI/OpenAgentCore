@@ -96,8 +96,11 @@ def verify_vaults(client, other, invalid, peer, binding, expect_error):
                 response = raw.request(method, base + suffix, headers=request_headers,
                                        json={} if method == "POST" else None)
                 assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_beta"
-        assert raw.post(base, headers=headers, params={"tenant_id": "other"}, json={}).status_code == 400
-        assert raw.get(base + "/" + saved[0].id, headers=headers, params={"include": "credentials"}).status_code == 400
+        # Unknown query keys are ignored; they never select a tenant or expand a Vault.
+        assert raw.post(base, headers=headers, params={"tenant_id": "other"}, json={"name": 1}).status_code == 400
+        plain = raw.get(base + "/" + saved[0].id, headers=headers)
+        expanded = raw.get(base + "/" + saved[0].id, headers=headers, params={"include": "credentials"})
+        assert plain.status_code == expanded.status_code == 200 and expanded.json() == plain.json()
         alias = str(client.base_url).rstrip("/") + "/agents/vaults/" + saved[0].id
         assert raw.get(alias, headers=headers).status_code == 404
 

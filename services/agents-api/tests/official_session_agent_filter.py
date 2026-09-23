@@ -62,13 +62,18 @@ def main():
         for value in ("", "unknown", root.id + " ", "' OR true --"):
             reply = http.get(endpoint, headers=headers, params={"agent_id": value})
             assert reply.status_code == 200 and reply.json() == {"object": "list", "data": [], "has_more": False, "first_id": None, "last_id": None}
-        for query in ([("agent_id", root.id), ("agent_id", peer.id)], {"agent_id": root.id, "tenant_id": "other"}):
-            assert http.get(endpoint, headers=headers, params=query).status_code == 400
+        repeated = http.get(endpoint, headers=headers, params=[("agent_id", root.id), ("agent_id", peer.id)])
+        assert repeated.status_code == 400 and repeated.json()["error"]["message"] == "Failed to deserialize query string: duplicate field `agent_id`"
+        filtered = http.get(endpoint, headers=headers, params={"agent_id": root.id})
+        assert http.get(endpoint, headers=headers, params={"agent_id": root.id, "tenant_id": "other"}).json() == filtered.json()
         assert http.get(endpoint, headers=headers, params={"agent_id": root.id, "after": foreign_session.id}).status_code == 404
         assert http.get(endpoint, headers={"Authorization": "Bearer " + token}, params={"agent_id": root.id}).status_code == 400
         assert http.get(endpoint, headers={"OpenAI-Beta": "agents=v1"}, params={"agent_id": root.id}).status_code == 401
+        # agent_id is unknown to the other lists and ignored there.
         for path in ("/v1/agents", "/v1/agents/sessions/" + inline.id + "/items", "/v1/agents/sessions/" + inline.id + "/turns"):
-            assert http.get(base + path, headers=headers, params={"agent_id": root.id}).status_code == 400
+            unfiltered = http.get(base + path, headers=headers)
+            response = http.get(base + path, headers=headers, params={"agent_id": root.id})
+            assert unfiltered.status_code == response.status_code == 200 and response.json() == unfiltered.json()
     print("Session Agent filter: SDK/raw HTTP, saved/inline IDs, both pagination orders, tenant isolation, source update/deletion, reconnect and unfiltered behavior passed.")
 
 
