@@ -524,7 +524,7 @@ separately by the coordinator.
 ## Session input conflicts and result targets — September 23
 
 This batch gives every 409 the official conflict type and aligns the conflict and
-tool result target errors of `events.create`, from Core main `c5cb6b5`. Evidence
+tool result target errors of `events.create`, from Core main `0035435a`. Evidence
 comes from the campaign scans recorded privately in
 `~/.parsar/remediation/20260923/campaign-scan-4/errors/findings.json` (ERR-22 and
 ERR-27, raw records in `official/results.json`: `sessB-message-while-running`,
@@ -565,7 +565,9 @@ Decisions:
   agent turn"). Core's messages are fixed and repeat neither caller input nor
   internal identifiers.
 - Checks keep their order: request validation, the Session lookup, the retry
-  lookup (CF4), the pending input gate (CF2), then each event in batch order. A
+  lookup (CF4), for batches with a message the Environment file-write gate (a
+  Turn conflict, also CF2 with the Turn message), the pending input gate (CF2),
+  then each event in batch order. A
   batch sent while input is pending therefore returns the CF2 409 even when its
   result target is unknown; the official order between these errors is
   unobserved. An empty `turn_id` or a
@@ -579,7 +581,8 @@ Decisions:
   failure, since input conflicts now share its code. Cores before this batch
   returned 409 `turn_conflict` or `idempotency_conflict` with type
   `invalid_request_error`, and 404 for unknown result targets; clients that span
-  both should branch on the HTTP status.
+  both should treat any 409 as a conflict, and a 400 on new Cores or a 404 on
+  older Cores as an unknown result target.
 
 Unchanged: the ERR-22 asynchronous admission window (an architectural difference),
 Idempotency-Key semantics, Session-level 404 isolation, admission timing and the

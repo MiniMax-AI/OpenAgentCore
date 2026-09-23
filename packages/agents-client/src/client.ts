@@ -2578,7 +2578,8 @@ export class OpenAIAgentsClient implements AgentCore {
    * with HTTP 409 `conflict_error`. A call that is unknown or belongs to another
    * Turn of the Session is HTTP 400 `invalid_request_error`; nothing changes.
    * Cores before these codes used 409 `turn_conflict`/`idempotency_conflict`
-   * and 404, so branch on the HTTP status.
+   * and 404 for unknown targets: treat any 409 as a conflict, and 400 (new) or
+   * 404 (older, within an owned Session) as an unknown target.
    */
   submitFunctionResult(sessionId: string, input: FunctionResultInput, idempotencyKey: string): Promise<void> {
     const event: SessionToolResultInputEvent = {
