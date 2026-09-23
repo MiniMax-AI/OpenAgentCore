@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -771,20 +772,101 @@ func FuzzCanonicalPathsRouteLikeTheirCanonicalForm(f *testing.F) {
 		if strings.ContainsAny(path, " ?#") || len(path) > 512 {
 			t.Skip()
 		}
+		segments, trailing, ok := oraclePath("/" + path)
+		if !ok {
+			t.Skip()
+		}
 		handler, _, _ := routingFixture(t)
-		for _, header := range []http.Header{{}, withHeaders(beta), withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta),
+		for i, header := range []http.Header{{}, withHeaders(beta), withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta),
 			withHeaders([]string{"Authorization", "Bearer " + routingDerivedKey}, beta)} {
 			request, err := parseRaw(http.MethodGet, "/"+path, header)
 			if err != nil {
 				t.Skip()
 			}
-			canonical, err := parseRaw(http.MethodGet, canonicalTarget(t, request), header)
+			target := canonicalTarget(t, request)
+			if got, gotTrailing := routedSegments(target); !slices.Equal(got, segments) || gotTrailing != trailing {
+				t.Fatalf("%q routes on %q %v; the oracle gives %q %v", path, got, gotTrailing, segments, trailing)
+			}
+			canonical, err := parseRaw(http.MethodGet, target, header)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got, want := outcome(handler, request), outcome(handler, canonical); got != want {
+			got := outcome(handler, request)
+			if want := outcome(handler, canonical); got != want {
 				t.Fatalf("%q = %s; canonical %q gives %s", path, got, canonical.RequestURI, want)
+			}
+			// Requests that never reach a Beta handler must also match the
+			// oracle's own spelling, independently of CanonicalPaths.
+			if i < 3 {
+				oracle, err := parseRaw(http.MethodGet, oracleTarget(segments, trailing), header)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if want := outcome(handler, oracle); got != want {
+					t.Fatalf("%q = %s; oracle %q gives %s", path, got, oracle.RequestURI, want)
+				}
 			}
 		}
 	})
+}
+
+// oraclePath derives the canonical segments of a raw request path without the
+// implementation: split only on a literal '/', decode each segment once, treat
+// a segment as a dot segment only if it decodes to "." or "..", and drop empty
+// segments. Encoded separators such as %2F and %5C therefore stay inside their
+// segment. It reports whether a trailing slash remains and whether every
+// segment is validly escaped.
+func oraclePath(raw string) (segments []string, trailing, ok bool) {
+	for _, part := range strings.Split(raw, "/") {
+		decoded, err := url.PathUnescape(part)
+		if err != nil {
+			return nil, false, false
+		}
+		switch decoded {
+		case "", ".":
+		case "..":
+			if len(segments) > 0 {
+				segments = segments[:len(segments)-1]
+			}
+		default:
+			segments = append(segments, decoded)
+		}
+	}
+	return segments, strings.HasSuffix(raw, "/") && len(segments) > 0, true
+}
+
+// routedSegments splits a routed escaped path on literal '/' and decodes each
+// segment once, so hex case does not affect the comparison.
+func routedSegments(escaped string) (segments []string, trailing bool) {
+	trimmed := strings.TrimPrefix(escaped, "/")
+	trailing = strings.HasSuffix(trimmed, "/")
+	if trimmed = strings.TrimSuffix(trimmed, "/"); trimmed == "" {
+		return nil, false
+	}
+	for _, part := range strings.Split(trimmed, "/") {
+		decoded, _ := url.PathUnescape(part)
+		segments = append(segments, decoded)
+	}
+	return segments, trailing
+}
+
+// oracleTarget spells oracle segments as a request path, escaping '%', '/'
+// and every byte outside RFC 3986 pchar.
+func oracleTarget(segments []string, trailing bool) string {
+	var target strings.Builder
+	for _, segment := range segments {
+		target.WriteByte('/')
+		for i := 0; i < len(segment); i++ {
+			c := segment[i]
+			if 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9' || strings.IndexByte("-._~!$&'()*+,;=:@", c) >= 0 {
+				target.WriteByte(c)
+			} else {
+				fmt.Fprintf(&target, "%%%02X", c)
+			}
+		}
+	}
+	if trailing || len(segments) == 0 {
+		target.WriteByte('/')
+	}
+	return target.String()
 }

@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -171,12 +173,28 @@ func FuzzServerHandlerRoutesLikeCanonicalForm(f *testing.F) {
 		f.Add(seed)
 	}
 	handler := daemonComposition(f)
+	// Every route of the sentinel composition reports the path it was served on,
+	// as chi reads it: RawPath when set, otherwise the decoded Path.
+	sentinel := func(route string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			routed := r.URL.RawPath
+			if routed == "" {
+				routed = r.URL.EscapedPath()
+			}
+			w.Header().Set("X-Route", route)
+			w.Header().Set("X-Routed-Path", routed)
+			w.WriteHeader(http.StatusNoContent)
+		})
+	}
+	observed := serverHandler(sentinel("api"), &daemonRoutes{gateway: sentinel("gateway"), enrollment: sentinel("enrollment"),
+		connection: sentinel("connection"), nodeConnect: sentinel("node")})
 	f.Fuzz(func(t *testing.T, path string) {
 		if strings.ContainsAny(path, " ?#") || len(path) > 512 {
 			t.Skip()
 		}
+		segments, trailing, ok := oraclePath("/" + path)
 		request, err := parseRaw("/" + path)
-		if err != nil {
+		if err != nil || !ok {
 			t.Skip()
 		}
 		again, err := parseRaw(canonical(request))
@@ -186,5 +204,84 @@ func FuzzServerHandlerRoutesLikeCanonicalForm(f *testing.F) {
 		if got, want := outcome(handler, request), outcome(handler, again); got != want {
 			t.Fatalf("%q = %s; canonical %q gives %s", path, got, again.RequestURI, want)
 		}
+		// Independently of CanonicalPaths: the ServeMux dispatches to the same
+		// route as the oracle's spelling, and the handler sees the oracle's segments.
+		oracle, err := parseRaw(oracleTarget(segments, trailing))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request, _ = parseRaw("/" + path)
+		served, expected := httptest.NewRecorder(), httptest.NewRecorder()
+		observed.ServeHTTP(served, request)
+		observed.ServeHTTP(expected, oracle)
+		if served.Code != expected.Code || served.Header().Get("X-Route") != expected.Header().Get("X-Route") {
+			t.Fatalf("%q = %d %s; oracle %q gives %d %s", path, served.Code, served.Header().Get("X-Route"), oracle.RequestURI, expected.Code, expected.Header().Get("X-Route"))
+		}
+		if served.Code == http.StatusNoContent {
+			if got, gotTrailing := routedSegments(served.Header().Get("X-Routed-Path")); !slices.Equal(got, segments) || gotTrailing != trailing {
+				t.Fatalf("%q is served on %q %v; the oracle gives %q %v", path, got, gotTrailing, segments, trailing)
+			}
+		}
 	})
+}
+
+// oraclePath derives the canonical segments of a raw request path without the
+// implementation: split only on a literal '/', decode each segment once, treat
+// a segment as a dot segment only if it decodes to "." or "..", and drop empty
+// segments. Encoded separators such as %2F and %5C therefore stay inside their
+// segment. It reports whether a trailing slash remains and whether every
+// segment is validly escaped.
+func oraclePath(raw string) (segments []string, trailing, ok bool) {
+	for _, part := range strings.Split(raw, "/") {
+		decoded, err := url.PathUnescape(part)
+		if err != nil {
+			return nil, false, false
+		}
+		switch decoded {
+		case "", ".":
+		case "..":
+			if len(segments) > 0 {
+				segments = segments[:len(segments)-1]
+			}
+		default:
+			segments = append(segments, decoded)
+		}
+	}
+	return segments, strings.HasSuffix(raw, "/") && len(segments) > 0, true
+}
+
+// routedSegments splits a routed escaped path on literal '/' and decodes each
+// segment once, so hex case does not affect the comparison.
+func routedSegments(escaped string) (segments []string, trailing bool) {
+	trimmed := strings.TrimPrefix(escaped, "/")
+	trailing = strings.HasSuffix(trimmed, "/")
+	if trimmed = strings.TrimSuffix(trimmed, "/"); trimmed == "" {
+		return nil, false
+	}
+	for _, part := range strings.Split(trimmed, "/") {
+		decoded, _ := url.PathUnescape(part)
+		segments = append(segments, decoded)
+	}
+	return segments, trailing
+}
+
+// oracleTarget spells oracle segments as a request path, escaping '%', '/'
+// and every byte outside RFC 3986 pchar.
+func oracleTarget(segments []string, trailing bool) string {
+	var target strings.Builder
+	for _, segment := range segments {
+		target.WriteByte('/')
+		for i := 0; i < len(segment); i++ {
+			c := segment[i]
+			if 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9' || strings.IndexByte("-._~!$&'()*+,;=:@", c) >= 0 {
+				target.WriteByte(c)
+			} else {
+				fmt.Fprintf(&target, "%%%02X", c)
+			}
+		}
+	}
+	if trailing || len(segments) == 0 {
+		target.WriteByte('/')
+	}
+	return target.String()
 }
