@@ -191,7 +191,7 @@ func TestEnvironmentFileCreateFieldErrors(t *testing.T) {
 			_ = json.Unmarshal([]byte(`"`+key+`"`), &decoded)
 			assertListQueryError(t, w, "invalid_request_error", decoded, "Unknown parameter: '"+decoded+"'.")
 		} else {
-			assertListQueryError(t, w, "invalid_request", nil, "Invalid resource identifier or request limits.")
+			assertListQueryError(t, w, "invalid_request_error", nil, "Unknown parameter.")
 		}
 	}
 	// Foreign Environments stay missing before any body inspection.

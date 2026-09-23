@@ -85,7 +85,8 @@ absolute destination `path` under `/workspace`, or `type: file_id`, `file_id` an
 that path. Source IDs resolve only within the authenticated execution project;
 filenames, URLs and filesystem paths cannot substitute for an ID. Both members
 use the same destination writer. Required null/omitted fields, extra fields and
-invalid Base64 are rejected; an unknown top-level field names itself as `param`.
+invalid Base64 are rejected; an unknown top-level field names itself as `param`
+when its name is short and printable.
 Unknown query keys are ignored. Empty bytes are valid. Inline
 paths must be canonical and cannot name the workspace root; the parent must exist.
 The current destination limit is 50 MiB for either source, with bounded JSON and 64 KiB daemon
@@ -204,8 +205,11 @@ Decisions:
   which comes from the official service's shared file validation. Backslash, CR,
   LF, invalid UTF-8 and overlong paths are unsampled and use the absolute-path
   message. The accepted path set is unchanged.
-- The first unknown create field in document order is reported. A field of the
-  other union member (such as `file_id` on `inline`), missing or null fields, an
+- The first unknown create field in document order is reported. Its name is
+  repeated in the message and param only when it is at most 256 bytes of
+  printable UTF-8; otherwise the error keeps code `invalid_request_error` with
+  param null and the message `Unknown parameter.`, so the response stays bounded.
+  A field of the other union member (such as `file_id` on `inline`), missing or null fields, an
   unknown `type` and invalid Base64 keep the local `invalid_request` code; none was
   sampled.
 - Every rejected page token uses the sampled token message, including a valid token

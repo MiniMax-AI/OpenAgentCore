@@ -55,7 +55,7 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 	fields := []string{"type", "path", "data", "file_id"}
 	if field, found := unknownBodyField(raw, fields...); found {
 		if !echoableField(field) {
-			writeStoreError(w, r, store.ErrInvalidInput)
+			writeFieldError(w, errUnknownEnvironmentFileField)
 			return
 		}
 		writeFieldError(w, &fieldError{param: field, message: "Unknown parameter: '" + field + "'."})
@@ -168,6 +168,10 @@ func environmentFileCreatePathError(value string) error {
 	}
 	return nil
 }
+
+// errUnknownEnvironmentFileField keeps the official code for an unknown field
+// whose name is not echoed.
+var errUnknownEnvironmentFileField = &fieldError{message: "Unknown parameter."}
 
 // echoableField bounds the caller-supplied name that an unknown-field error
 // repeats in both message and param; JSON escaping can grow each byte sixfold.
