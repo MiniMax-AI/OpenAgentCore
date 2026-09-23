@@ -316,6 +316,50 @@ describe("OpenAIAgentsClient", () => {
     expect(cancelled).toBe(true);
   });
 
+  it("delivers a hosted provisioning failure's error event before the failed snapshot", async () => {
+    const reason = 'Failed to provision environment: script "setup_commands[0]" failed with exit code 3';
+    const environment = { ...hostedDadf64.session_environment, id: "environment" };
+    const failed = { ...sessionResource(), environment, status: "failed", error: reason, last_active_at: 25 };
+    const frames = [
+      {
+        type: "agent.session.environment.failed", event_id: "evt_environment", session_id: "session",
+        environment: {
+          id: "environment", type: "openai_hosted", status: "failed",
+          error: { type: "environment_error", code: "environment_connection_failed", message: "The environment failed to connect." },
+        },
+      },
+      {
+        type: "error", event_id: "evt_error", session_id: "session",
+        error: { type: "environment_error", code: "sandbox_error", message: reason, param: null },
+      },
+      { type: "agent.session.failed", event_id: "evt_failed", session: failed },
+    ];
+    const onEvent = vi.fn();
+    const client = new OpenAIAgentsClient({
+      fetch: recordingFetch(streamResponse(frames.map((frame) => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`)), []),
+    });
+
+    await expect(client.streamEvents("session", { onEvent })).resolves.toBeUndefined();
+    expect(onEvent.mock.calls.map(([event]) => event.type)).toEqual(["agent.session.environment.failed", "error", "agent.session.failed"]);
+    expect(onEvent.mock.calls[1]?.[0]).toEqual(frames[1]);
+    expect(onEvent.mock.calls[2]?.[0]).toMatchObject({ session: { status: "failed", error: reason, last_active_at: 25 } });
+  });
+
+  it.each([
+    ["null param", { code: "stream_interrupted", type: "server_error", message: "safe", param: null }, 503],
+    ["invalid param", { code: "sandbox_error", type: "environment_error", message: "safe", param: 1 }, 502],
+    ["extra error field", { code: "sandbox_error", type: "environment_error", message: "safe", param: null, output: "private" }, 502],
+  ])("keeps in-band error validation with %s", async (_label, error, status) => {
+    const onEvent = vi.fn();
+    const event = { type: "error", event_id: "evt_error", session_id: "session", error };
+    const client = new OpenAIAgentsClient({
+      fetch: recordingFetch(streamResponse([`event: error\ndata: ${JSON.stringify(event)}\n\n`]), []),
+    });
+
+    await expect(client.streamEvents("session", { onEvent })).rejects.toMatchObject({ status });
+    expect(onEvent).not.toHaveBeenCalled();
+  });
+
   it("creates a Session through chunked SSE and publishes its validated leading snapshot exactly once", async () => {
     const calls: FetchCall[] = [];
     const controller = new AbortController();

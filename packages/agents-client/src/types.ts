@@ -629,6 +629,8 @@ export interface StreamError {
   code: string;
   type: string;
   message: string;
+  /** Present on error events (null when unset); Environment state errors omit it. */
+  param?: string | null;
 }
 
 export type SessionEnvironmentStatus = "pending" | "ready" | "connected" | "disconnected" | "failed";
@@ -700,7 +702,19 @@ export interface UnknownSessionEvent extends SessionEventBase {
   [key: string]: unknown;
 }
 
-export type SessionEvent = AgentSessionEnvironmentEvent | KnownSessionEvent | UnknownSessionEvent;
+/**
+ * A Session failure reported in the event stream, such as a hosted Environment
+ * that failed to provision (type environment_error, code sandbox_error). The
+ * agent.session.failed snapshot follows it. Core's own stream interruption is
+ * raised as an AgentCoreError instead.
+ */
+export interface AgentSessionErrorEvent extends SessionEventBase {
+  type: "error";
+  session_id: string;
+  error: StreamError;
+}
+
+export type SessionEvent = AgentSessionEnvironmentEvent | AgentSessionErrorEvent | KnownSessionEvent | UnknownSessionEvent;
 
 export interface AgentDeleted {
   id: string;

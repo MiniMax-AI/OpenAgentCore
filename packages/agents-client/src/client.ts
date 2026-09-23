@@ -316,6 +316,8 @@ const maxSessionInputEvents = 64;
 const maxSessionInputRequestBytes = 1024 * 1024;
 const goWhitespaceOnlyPattern = /^[\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*$/u;
 const streamErrorFields = new Set(["code", "type", "message"]);
+// Error events carry the pinned SessionError, whose param is null when unset.
+const sessionErrorFields = new Set([...streamErrorFields, "param"]);
 const environmentStateFields = new Set(["id", "type", "status", "error"]);
 const snapshotEventFields = new Set(["type", "event_id", "session_id", "session"]);
 const turnEventFields = new Set(["type", "event_id", "session_id", "turn_id", "turn"]);
@@ -1221,12 +1223,18 @@ function projectRuntimeObservationList(value: unknown, options?: PageOptions): R
 
 function projectStreamError(value: unknown): StreamError {
   if (
-    !isRecord(value) || !exactFields(value, streamErrorFields) ||
+    !isRecord(value) || !onlyFields(value, sessionErrorFields) ||
     typeof value.code !== "string" || value.code === "" ||
     typeof value.type !== "string" || value.type === "" ||
-    typeof value.message !== "string"
+    typeof value.message !== "string" ||
+    !(value.param === undefined || value.param === null || typeof value.param === "string")
   ) return invalidStreamEvent();
-  return { code: value.code, type: value.type, message: value.message };
+  return {
+    code: value.code,
+    type: value.type,
+    message: value.message,
+    ...(value.param === undefined ? {} : { param: value.param as string | null }),
+  };
 }
 
 function requiredEventString(event: Record<string, unknown>, field: string, allowEmpty = false): string {
@@ -1431,6 +1439,14 @@ function projectStreamEventSession(
     } as SessionEvent;
   }
 
+  // A Session failure, such as a hosted Environment that failed to provision.
+  // Core's stream_interrupted error never reaches this projection.
+  if (event.type === "error") {
+    if (!exactFields(value, errorEventFields)) return invalidStreamEvent();
+    const sessionId = eventSessionId(value, expectedSessionId, true)!;
+    return { ...base, session_id: sessionId, error: projectStreamError(value.error) } as SessionEvent;
+  }
+
   if (event.type.startsWith("agent.session.environment.")) {
     const status = event.type.slice("agent.session.environment.".length);
     if (!new Set(["pending", "ready", "connected", "disconnected", "failed"]).has(status)) {
@@ -1505,13 +1521,17 @@ async function consumeEventStream(
         return invalidStreamEvent("Agent Core returned an event for a different Session.");
       }
       const streamError = projectStreamError(event.error);
-      throw new AgentCoreError(
-        "Agent Core interrupted the live event stream. Reconnect and retrieve durable state.",
-        503,
-        streamError.code,
-        null,
-        streamError.type,
-      );
+      // Only Core's own interruption ends delivery. Other error events report a
+      // Session failure, delivered in order before agent.session.failed.
+      if (streamError.code === "stream_interrupted") {
+        throw new AgentCoreError(
+          "Agent Core interrupted the live event stream. Reconnect and retrieve durable state.",
+          503,
+          streamError.code,
+          null,
+          streamError.type,
+        );
+      }
     }
     options.onParsedEvent(event);
   });
