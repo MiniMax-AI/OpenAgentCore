@@ -55,7 +55,9 @@ Adding a node downloads only its selected provider's assets. Runtime images use
 compressed archives; verified local files and already imported images are reused.
 Downloads use temporary files and bounded retries, so a truncated response is
 never promoted into the cache. An optional `-offline.tar.gz` bundle contains the
-same assets locally; its console can serve them without a public release host.
+same assets locally. For console-based distribution without a release host, build
+that offline bundle with no release URL. A bundle that records a release URL
+retains that URL for remote node downloads; it does not silently change mirrors.
 
 ## Sign in to Web
 
@@ -303,7 +305,9 @@ exact bundle before distribution. See the [contributor guide](https://github.com
 
 The release base must host the generated flat asset filenames over HTTPS. Use
 `CORE_DISTRIBUTION_OFFLINE=1` to also emit a full offline archive; a build without
-any release URL must select offline mode. The release workflow prepares pinned
+any release URL must select offline mode. A fully disconnected console deployment
+uses that empty-URL offline build; remote node installers then obtain assets from
+the console. The release workflow prepares pinned
 harness dependencies, builds versioned assets, and uploads an Actions artifact.
 An explicit manual option can create an unpublished draft release. Neither a
 successful build nor a draft makes a private repository anonymously downloadable;
