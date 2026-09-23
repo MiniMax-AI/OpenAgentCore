@@ -3811,11 +3811,13 @@ paths:
       - Sessions
   /agents/sessions/{session_id}:
     delete:
-      description: Removes the Session and its history from the public API. Active
-        work receives a cancellation request; confirmation does not guarantee native
-        execution has stopped. Internal records and native history are retained pending
-        separate physical cleanup. Missing/repeated deletion locally returns 404;
-        exact hosted errors and overlapping stream timing remain unverified.
+      description: Removes a durably idle or failed Session and its history from the
+        public API. A Session with a queued, in-progress or waiting Turn, required
+        actions or pending input returns 409 conflict_error and is left unchanged;
+        cancel it and wait until it is idle before deleting. Repeating the deletion
+        of the caller's own deleted Session returns the same confirmation; missing
+        and foreign Sessions return 404. Internal records and native history are retained
+        pending separate physical cleanup; overlapping stream timing remains unverified.
       parameters:
       - description: agents=v1
         in: header
@@ -3844,6 +3846,10 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
         "413":

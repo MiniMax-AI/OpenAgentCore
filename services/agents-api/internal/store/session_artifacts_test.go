@@ -253,7 +253,11 @@ func TestSessionArtifactTransferDoesNotBlockDeletionOrCancellation(t *testing.T)
 			defer cancel()
 			want := ErrNotFound
 			if operation == "delete" {
-				if err := s.DeleteSession(ctx, tenant, session); err != nil {
+				// The idle-only decision itself is not blocked by the transfer.
+				if err := s.DeleteSession(ctx, tenant, session); !errors.Is(err, ErrSessionNotIdle) {
+					t.Fatalf("transfer blocked or bypassed the deletion rule: %v", err)
+				}
+				if err := s.commitLegacyDeletion(ctx, tenant, session); err != nil {
 					t.Fatalf("transfer blocked deletion: %v", err)
 				}
 			} else {

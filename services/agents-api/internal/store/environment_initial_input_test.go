@@ -262,6 +262,13 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 			if err != nil || len(after) < len(events) || !reflect.DeepEqual(events, after[:len(events)]) {
 				t.Fatal("later work changed historical failure", err)
 			}
+			// The later input is still pending, so deletion waits for it to settle.
+			if err := reopened.DeleteSession(t.Context(), tenant, session.ID); !errors.Is(err, ErrSessionNotIdle) {
+				t.Fatal("pending later input deleted", err)
+			}
+			if _, err := reopened.CancelEnvironmentInput(t.Context(), tenant, session.ID, later.ID); err != nil {
+				t.Fatal(err)
+			}
 			if err := reopened.DeleteSession(t.Context(), tenant, session.ID); err != nil {
 				t.Fatal(err)
 			}

@@ -25,7 +25,7 @@ func writeError(w http.ResponseWriter, status int, code, message string, param .
 		kind = "server_error"
 	} else if status == http.StatusUnauthorized {
 		kind = "authentication_error"
-	} else if code == "not_found_error" || code == "invalid_beta" {
+	} else if code == "not_found_error" || code == "invalid_beta" || code == "conflict_error" {
 		kind = code
 	}
 	var errorCode *string
@@ -98,6 +98,9 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 			code = ""
 		}
 		writeError(w, http.StatusNotFound, code, "Resource not found.", notFoundParam...)
+	case errors.Is(err, store.ErrSessionNotIdle):
+		// Observed official status, type, code, null param and message.
+		writeError(w, http.StatusConflict, "conflict_error", "session must be durably idle or failed without required actions before deletion")
 	case errors.Is(err, store.ErrTurnConflict):
 		writeError(w, http.StatusConflict, "turn_conflict", "The Turn cannot accept this input in its current state.")
 	case errors.Is(err, store.ErrIdempotencyConflict):

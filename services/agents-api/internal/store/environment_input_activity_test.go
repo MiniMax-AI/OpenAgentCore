@@ -238,7 +238,10 @@ func TestEnvironmentInputActivityRecoversWaitingActionAndHidesDeletion(t *testin
 		t.Fatal("retired generation changed activity", after, cursor, err)
 	}
 	environmentInputHistory(t, pool, session.ID, 0, 0)
-	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
+	if err := s.DeleteSession(t.Context(), tenant, session.ID); !errors.Is(err, ErrSessionNotIdle) {
+		t.Fatal("waiting input deleted", err)
+	}
+	if err := s.commitLegacyDeletion(t.Context(), tenant, session.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.GetSession(t.Context(), tenant, session.ID); !errors.Is(err, ErrNotFound) {
