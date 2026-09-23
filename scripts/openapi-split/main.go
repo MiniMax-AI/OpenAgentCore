@@ -36,8 +36,8 @@ func run(input, projectOutput, managerOutput string) error {
 	filterPaths(field(p, "paths"), false)
 	filterPaths(field(m, "paths"), true)
 	field(m, "basePath").Value = "/"
-	field(field(m, "info"), "title").Value = "Core Sandbox Manager"
-	field(field(m, "info"), "description").Value = "Deployment administration and node enrollment. Uses separate administrator and node credentials; project API keys do not authorize these operations."
+	field(field(m, "info"), "title").Value = "Core Extensions"
+	field(field(m, "info"), "description").Value = "Core extensions outside the upstream Agents API. Environment executor credential operations use project caller authentication. Sandbox administration and node enrollment use separate administrator and node credentials. See each operation's security requirements."
 	// Retain exactly the definitions referenced by each surface, including shared
 	// error DTOs. Follow nested references instead of duplicating the project schema.
 	pruneDefinitions(p)

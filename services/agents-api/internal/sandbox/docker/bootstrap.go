@@ -28,7 +28,7 @@ func (p *Provider) bootstrap(ctx context.Context, id string, b sandbox.Bootstrap
 	if e != nil {
 		return e
 	}
-	if e = p.copy(ctx, id, "/home", []entry{
+	if e = copyRuntimeFiles(ctx, p.client, id, "/home", []entry{
 		{name: "runtime", directory: true}, {name: "runtime/.parsar", directory: true},
 		{name: "runtime/.parsar/parsar-daemon", directory: true},
 		{name: "runtime/.parsar/parsar-daemon/default", directory: true},
@@ -36,9 +36,9 @@ func (p *Provider) bootstrap(ctx context.Context, id string, b sandbox.Bootstrap
 	}); e != nil {
 		return e
 	}
-	return p.copy(ctx, id, "/environment", []entry{{name: "workspace", directory: true}, {name: "staging", directory: true}, {name: "initialization", directory: true}, {name: "packages", directory: true}})
+	return copyRuntimeFiles(ctx, p.client, id, "/environment", []entry{{name: "workspace", directory: true}, {name: "staging", directory: true}, {name: "initialization", directory: true}, {name: "packages", directory: true}})
 }
-func (p *Provider) copy(ctx context.Context, id, path string, entries []entry) error {
+func copyRuntimeFiles(ctx context.Context, c *client.Client, id, path string, entries []entry) error {
 	var content bytes.Buffer
 	writer := tar.NewWriter(&content)
 	for _, file := range entries {
@@ -57,6 +57,6 @@ func (p *Provider) copy(ctx context.Context, id, path string, entries []entry) e
 	if e := writer.Close(); e != nil {
 		return e
 	}
-	_, e := p.client.CopyToContainer(ctx, id, client.CopyToContainerOptions{DestinationPath: path, Content: io.Reader(&content), CopyUIDGID: true})
+	_, e := c.CopyToContainer(ctx, id, client.CopyToContainerOptions{DestinationPath: path, Content: io.Reader(&content), CopyUIDGID: true})
 	return e
 }

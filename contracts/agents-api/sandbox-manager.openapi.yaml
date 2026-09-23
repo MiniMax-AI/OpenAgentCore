@@ -1,5 +1,12 @@
 basePath: /
 definitions:
+  api.EnvironmentExecutorCredentialRequest:
+    properties:
+      key_id:
+        type: string
+      rotate:
+        type: boolean
+    type: object
   api.SandboxAllocationList:
     properties:
       data:
@@ -31,6 +38,15 @@ definitions:
         items:
           $ref: '#/definitions/store.RuntimeNode'
         type: array
+    type: object
+  store.IssuedExecutorCredential:
+    properties:
+      environment_id:
+        type: string
+      executor_token:
+        type: string
+      key_id:
+        type: string
     type: object
   store.RuntimeDeploymentView:
     properties:
@@ -176,13 +192,100 @@ definitions:
     type: object
 info:
   contact: {}
-  description: Deployment administration and node enrollment. Uses separate administrator and node credentials; project API keys do not authorize these operations.
+  description: Core extensions outside the upstream Agents API. Environment executor credential operations use project caller authentication. Sandbox administration and node enrollment use separate administrator and node credentials. See each operation's security requirements.
   license:
     name: Apache 2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
-  title: Core Sandbox Manager
+  title: Core Extensions
   version: "1"
 paths:
+  /core/v1/environments/{environment_id}/executor-credentials:
+    post:
+      consumes:
+        - application/json
+      description: Core extension, not an upstream Agents API operation. Uses the project caller key and exact live self_hosted Session creator. Returns a connect-only secret once, restricted to this Environment. Repeating an issuance key_id returns 409; after an uncertain response explicitly rotate that same key_id. Rotation retains immutable ownership and invalidates the old secret. No Session API authority is granted.
+      parameters:
+        - description: Environment UUID
+          in: path
+          name: environment_id
+          required: true
+          type: string
+        - description: Request
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/api.EnvironmentExecutorCredentialRequest'
+      produces:
+        - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/store.IssuedExecutorCredential'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - BearerAuth: []
+      summary: Issue or explicitly rotate an Environment executor credential
+      tags:
+        - Environment Executor
+  /core/v1/environments/{environment_id}/executor-credentials/{key_id}:
+    delete:
+      description: Core extension authenticated by the project caller key. Revokes only the caller's exact Environment-restricted credential. Repeated revocation is safe. Revocation denies future enrollment and dispatch but does not stop caller-owned compute or prove process quiescence.
+      parameters:
+        - description: Environment UUID
+          in: path
+          name: environment_id
+          required: true
+          type: string
+        - description: Executor key UUID
+          in: path
+          name: key_id
+          required: true
+          type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - BearerAuth: []
+      summary: Revoke an Environment executor credential
+      tags:
+        - Environment Executor
   /core/v1/sandbox/deployment:
     get:
       description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.

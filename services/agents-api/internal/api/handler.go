@@ -88,6 +88,7 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 		r.Delete("/v1/files/{file_id}", h.deleteSourceFile)
 	})
 	h.registerSandboxManagerRoutes(router)
+	h.registerEnvironmentExecutorRoutes(router)
 	router.Route("/v1", func(r chi.Router) {
 		r.Use(h.authenticate)
 		h.registerSandboxProjectRoutes(r)

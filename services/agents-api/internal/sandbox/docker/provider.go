@@ -15,8 +15,6 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/containerd/errdefs"
 	"github.com/google/uuid"
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 )
 
@@ -142,32 +140,7 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 			return info, sandbox.ErrOwnership
 		}
 	}
-	limit := int64(128)
-	// A nested native sandbox must mount its own procfs. Keep sysfs secrets
-	// masked; only this qualified image profile opts out of Docker's proc masks.
-	var masked, readonly []string
-	var init *bool
-	if p.config.NestedSandbox {
-		masked = []string{"/sys/firmware", "/sys/devices/virtual/powercap"}
-		readonly = []string{}
-		enabled := true
-		init = &enabled
-	}
-	v, e := p.client.ContainerCreate(ctx, client.ContainerCreateOptions{Name: name, Image: p.config.Image,
-		Config: &container.Config{User: "1000:1000", WorkingDir: "/environment/workspace", Labels: p.labels(b.Reference), Env: []string{"PARSAR_RUNTIME_ENVIRONMENT_ID=" + b.EnvironmentID, "PARSAR_RUNTIME_SESSION_ID=" + b.SessionID, "PARSAR_RUNTIME_NETWORK_ACCESS=" + policy.Access, "PARSAR_RUNTIME_ALLOWED_DOMAINS=" + string(domains)}},
-		HostConfig: &container.HostConfig{ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges", "seccomp=" + p.config.Seccomp, "apparmor=unconfined"}, NetworkMode: container.NetworkMode(p.config.Network), ExtraHosts: p.config.ExtraHosts,
-			MaskedPaths: masked, ReadonlyPaths: readonly, Init: init,
-			Resources: container.Resources{PidsLimit: &limit, Memory: 2 * 1024 * 1024 * 1024, NanoCPUs: 2 * 1000000000}, Tmpfs: map[string]string{"/tmp": "rw,nosuid,nodev,size=128m"},
-			Mounts: []mount.Mount{
-				{Type: mount.TypeVolume, Source: name + "-home", Target: "/home"},
-				{Type: mount.TypeVolume, Source: name + "-environment", Target: "/environment"},
-				// The native sandbox mounts canonical roots, omitting symlink aliases.
-				// Expose the same workspace at its public path; trusted atomic staging
-				// remains entirely on the original /environment mount.
-				{Type: mount.TypeVolume, Source: name + "-environment", Target: "/workspace", VolumeOptions: &mount.VolumeOptions{Subpath: "workspace", NoCopy: true}},
-			},
-		},
-	})
+	v, e := p.client.ContainerCreate(ctx, runtimeContainerOptions(p.config, name, p.labels(b.Reference), []string{"PARSAR_RUNTIME_ENVIRONMENT_ID=" + b.EnvironmentID, "PARSAR_RUNTIME_SESSION_ID=" + b.SessionID, "PARSAR_RUNTIME_NETWORK_ACCESS=" + policy.Access, "PARSAR_RUNTIME_ALLOWED_DOMAINS=" + string(domains)}))
 	if errdefs.IsConflict(e) {
 		return info, sandbox.ErrExists
 	}

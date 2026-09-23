@@ -1,0 +1,88 @@
+import argparse
+import contextlib
+import io
+import json
+import os
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+import uuid
+
+import self_hosted_install as installer
+
+
+class SelfHostedInstallTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+        self.environment = str(uuid.uuid4())
+        self.remote = 'wss://core.example/api/v1/agent-daemon/ws'
+        self.key = {'key_id': str(uuid.uuid4()), 'environment_id': self.environment,
+                    'executor_token': 'synthetic-private-token'}
+        self.source_key = self.root / 'source-key.json'
+        installer.write_private(self.source_key, self.key)
+        self.args = argparse.Namespace(source_url='https://core.example', offline_root=None,
+            environment_id=self.environment, remote=self.remote, credential_file=str(self.source_key))
+        self.manifest = {'source_commit': 'a' * 40, 'platform': 'linux/amd64',
+                         'images': {'runtime': 'sha256:' + 'b' * 64}}
+
+    def test_exact_restricted_credential_and_tls_identity(self):
+        self.assertEqual(installer.credential(json.dumps(self.key), self.environment), self.key)
+        for change in ({'environment_id': ''}, {'executor_token': ''}, {'key_id': 'bad'}, {'extra': True}):
+            with self.assertRaises(installer.InstallError):
+                installer.credential(json.dumps(dict(self.key, **change)), self.environment)
+        for remote in ('ws://localhost/api/v1/agent-daemon/ws', self.remote+'?token=secret',
+                       'wss://user:secret@core.example/api/v1/agent-daemon/ws', self.remote+'#fragment'):
+            with self.assertRaises(installer.InstallError):
+                installer.identity(self.environment, remote)
+
+    def test_private_file_rejects_symlink_permissions_and_hardlinks(self):
+        self.assertEqual(json.loads(installer.private_read(self.source_key)), self.key)
+        self.source_key.chmod(0o644)
+        with self.assertRaises(installer.InstallError): installer.private_read(self.source_key)
+        self.source_key.chmod(0o600)
+        alias = self.root / 'alias'
+        alias.symlink_to(self.source_key)
+        with self.assertRaises(installer.InstallError): installer.private_read(alias)
+        alias.unlink()
+        os.link(self.source_key, alias)
+        with self.assertRaises(installer.InstallError): installer.private_read(self.source_key)
+
+    def test_one_command_keeps_secrets_out_of_arguments_and_retains_attempt(self):
+        commands = []
+        def checked(command, message, timeout=30):
+            commands.append(command)
+            self.assertNotIn(self.key['executor_token'], json.dumps(command))
+            if 'inspect' in command: return self.manifest['images']['runtime'] + ' linux/amd64'
+            if command[0].endswith('parsar-runtime'):
+                self.assertTrue((self.root / 'launch.json').exists())
+                return json.dumps({'container': 'parsar-selfhost-'+'c'*32, 'status': 'started'})
+            return ''
+        with patch.object(installer, 'load_manifest', return_value=self.manifest), \
+                patch.object(installer, 'obtain_artifact', side_effect=lambda m, n, dest, o: dest), \
+                patch.object(installer, 'runtime_archive', return_value=self.root/'runtime.tar'), \
+                patch.object(installer, 'checked', side_effect=checked), contextlib.redirect_stdout(io.StringIO()):
+            installer.install(self.args, self.root)
+            self.assertEqual(len(commands), 3)
+            self.assertEqual(json.loads(installer.private_read(self.root/'executor-key.json')), self.key)
+            with self.assertRaises(installer.InstallError): installer.install(self.args, self.root)
+            self.assertEqual(len(commands), 3)
+
+    def test_failed_launch_is_not_replayed(self):
+        def checked(command, message, timeout=30):
+            if 'inspect' in command: return self.manifest['images']['runtime'] + ' linux/amd64'
+            if command[0].endswith('parsar-runtime'): raise installer.InstallError('uncertain launch')
+            return ''
+        with patch.object(installer, 'load_manifest', return_value=self.manifest), \
+                patch.object(installer, 'obtain_artifact', side_effect=lambda m, n, dest, o: dest), \
+                patch.object(installer, 'runtime_archive', return_value=self.root/'runtime.tar'), \
+                patch.object(installer, 'checked', side_effect=checked):
+            with self.assertRaises(installer.InstallError): installer.install(self.args, self.root)
+            self.assertTrue((self.root/'launch.json').exists())
+            with self.assertRaisesRegex(installer.InstallError, 'already attempted'): installer.install(self.args, self.root)
+
+
+if __name__ == '__main__':
+    unittest.main()

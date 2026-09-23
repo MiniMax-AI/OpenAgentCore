@@ -66,6 +66,8 @@ func writeFieldError(w http.ResponseWriter, err error) bool {
 
 func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFoundParam ...string) {
 	switch {
+	case errors.Is(err, store.ErrExecutorCredentialExists):
+		writeError(w, http.StatusConflict, "executor_credential_exists", "This executor key ID already exists. Explicitly rotate it to replace the secret.")
 	case errors.Is(err, store.ErrSandboxDeploymentConflict):
 		writeError(w, http.StatusConflict, "sandbox_deployment_conflict", "The sandbox deployment is already configured or is managed by a deployment file.")
 	case errors.Is(err, store.ErrRuntimeNodeCredential):
