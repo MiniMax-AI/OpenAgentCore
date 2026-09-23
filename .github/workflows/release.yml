@@ -79,8 +79,9 @@ jobs:
           CORE_DISTRIBUTION_OFFLINE: ${{ inputs.offline && '1' || '0' }}
         run: |
           inputs="$HOME/.parsar/build/release-inputs/inputs.json"
-          export AGENTS_RUNTIME_CODEX_PACKAGE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
-          export MCODE_HARNESS_BUILD_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["mcode"])' "$inputs")"
+          AGENTS_RUNTIME_CODEX_PACKAGE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
+          MCODE_HARNESS_BUILD_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["mcode"])' "$inputs")"
+          export AGENTS_RUNTIME_CODEX_PACKAGE MCODE_HARNESS_BUILD_DIR
           export CORE_DISTRIBUTION_RELEASE_BASE_URL="https://github.com/$RELEASE_REPOSITORY/releases/download/$RELEASE_REVISION"
           bash scripts/build-core-distribution.sh
           mkdir -p "$HOME/.parsar/build/release-upload"
