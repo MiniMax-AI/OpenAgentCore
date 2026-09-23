@@ -877,8 +877,11 @@ Caller keys now resolve an explicitly configured organization/project and typed
 user/service-account identity. An immutable project-to-tenant mapping is verified
 against PostgreSQL before startup. Optional official organization/project headers
 must match the key's authorized scope; ambiguous or conflicting headers use the
-existing `401 invalid_api_key` response. This error policy is an implementation
-choice, not verified hosted error parity. Project resource access remains shared
+existing 401 response. Every 401 has type `invalid_request_error`, as observed
+officially; Beta routes report a null code, while Files, Skills and Core project
+extensions report `invalid_api_key` for a rejected Bearer credential and a null
+code without one. This scope-header policy is an implementation choice, not
+verified hosted error parity. Project resource access remains shared
 within the authorized project. New Sessions persist immutable creator kind/ID from
 the authenticated principal; ordinary and streaming creation retries require the
 same typed subject, including when recovering before saved-Agent lookup. Rotated

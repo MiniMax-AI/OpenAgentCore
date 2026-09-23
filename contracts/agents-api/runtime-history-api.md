@@ -134,7 +134,7 @@ separate sources and are never silently merged.
 | HTTP | Code | Meaning |
 | --- | --- | --- |
 | 400 | `unsupported_parameter` or `invalid_request` | Invalid query shape or range. |
-| 401 | `authentication_error` | Missing or invalid authentication. |
+| 401 | null (type `invalid_request_error`) | Missing or invalid authentication. |
 | 404 | `not_found` | Missing or foreign Session. |
 | 409 | `runtime_history_unsupported` | The Session has no supported managed Runtime history scope. |
 | 503 | `runtime_history_unavailable` | Durable history is unconfigured, timed out, unavailable, or returned malformed data. |

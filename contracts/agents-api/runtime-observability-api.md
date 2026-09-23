@@ -183,7 +183,7 @@ Use the existing Agents API error envelope.
 | --- | --- | --- |
 | 400 | `invalid_request_error` / `invalid_request_error` | List: a repeated supported query key, or an empty or invalid limit or order, with the shared Beta list messages. Unknown list query keys are ignored. |
 | 400 | `invalid_request_error` / `unsupported_parameter` | Single-Session retrieval with any query parameter. |
-| 401 | `authentication_error` / `invalid_api_key` | Missing or invalid API authentication. |
+| 401 | `invalid_request_error` / null code | Missing or invalid API authentication. |
 | 404 | `not_found_error` / `not_found_error` | Missing, malformed or foreign Session/cursor, indistinguishably, as for the [Session list cursor](list-query-semantics.md#list-cursor-errors--september-23-2026). |
 | 500 | `server_error` / `internal_error` | Integrity, ownership, or invalid provider evidence. |
 | 503 | `server_error` / `execution_unavailable` | Required Runtime observation service is not configured, or list collection exceeded its request budget. |

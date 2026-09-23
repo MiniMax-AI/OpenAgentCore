@@ -20,7 +20,7 @@ replacement baseline. A successful SDK parse alone is not conformance evidence.
 | OAuth grant create/replacement | Reject an explicitly empty access token and a replacement without mutable grant fields. Preserve previously qualified refresh/expiry/null handling. |
 | Input message discriminator | Omission remains valid; a supplied `type` must be `message`. Explicit null or empty strings reject through the shared initial/event decoder, matching the pinned literal type. |
 | Missing beta resource | HTTP 404 with `type` and `code` equal to `not_found_error`. Missing and foreign resources remain indistinguishable. |
-| Missing required Beta header | HTTP 400 with `type` and `code` equal to `invalid_beta`, after authentication. |
+| Missing required Beta header | HTTP 400 with `type` and `code` equal to `invalid_beta`, before authentication (see [HTTP routing and response headers](#http-routing-and-response-headers--september-23)). |
 | Missing non-beta File or Skill | HTTP 404 with `type: invalid_request_error`, `code: null`. Exact message, File `param` and additional detail payload remain outside this batch. |
 
 The resource comparison made 40 raw requests over six newly owned resources
@@ -793,3 +793,67 @@ checks retrieve, list, the live GET stream and its end, the exact 409, tenant B
 projection, stream lifetime, wire shapes and error mapping; Python tests pin the
 initializer receipt, and the TypeScript client and Web unit tests pass. Live
 Docker acceptance is recorded separately by the coordinator.
+
+## HTTP routing and response headers — September 23
+
+This batch aligns path handling, the Beta check, 401 envelopes and response
+headers with campaign scan 6 at Core main `1eb60c27`, recorded privately in
+`~/.parsar/remediation/20260923/campaign-scan-6/http-protocol/` (`findings.json`
+HP-02..24, raw `official-ledger.jsonl` and `REPORT.txt`): 90 official requests on
+one owned Agent, deleted afterwards, without a Session or model. Labels below are
+ledger records.
+
+| Row | Case | Core behavior |
+| --- | --- | --- |
+| RH1 | `//`, `.` or `..` path segments (HP-17: `R10`, `R11`, `R17`, `R18`) | Served on the canonical path, never redirected. Empty and dot segments resolve with ServeMux semantics and a trailing slash is kept, so `/v1/agents/x/../` still reaches the trailing-slash 404. The former 301 made the pinned SDK resend an update as a GET and drop it. |
+| RH2 | A percent-encoded unreserved character in the path (HP-18: `R12`) | Decoded before routing, including `%2E` dot segments. Other escapes, such as `%2F`, stay encoded and never separate segments. Malformed, missing and foreign IDs keep the single 404. |
+| RH3 | HEAD on a GET route (HP-19: `R13`, `R16`) | The GET route runs after the same Beta and authentication checks; 200 with its headers and `Content-Length`, no body. The events stream and the File, Skill, Skill version and Artifact content downloads answer HEAD with Core's 405 instead, so HEAD never holds a stream open or reads content. That exclusion is a documented Core difference; official HEAD on those routes is unobserved. |
+| RH4 | Unsupported method (HP-20: `R04`–`R06`) | Unchanged 405 JSON `unsupported_operation`, now with `Allow` listing the route's methods in the observed order, such as `GET,HEAD,POST,DELETE`. |
+| RH5 | `X-Request-Id` (HP-23) | Every response of the Agents API handler, including 400, 401, 404, 405 and SSE streams, carries a fresh random `req_` plus 32 lowercase hex characters. The ID is attached to the request log context as `request_id` next to the trace carrier. |
+| RH6 | No or invalid credentials without OpenAI-Beta on a Beta route (HP-05: `A06`, `A11`) | 400 `invalid_beta`: the constant Beta check now precedes authentication. Files, Skills and Core project extensions still ignore the header. |
+| RH7 | Repeated OpenAI-Beta header lines (HP-03: `B08`) | 400 `invalid_beta` unless there is exactly one field value, equal to `agents=v1`. |
+| RH8 | 401 (HP-07: `A01`–`A04`, `A07`–`A10`) | Type `invalid_request_error`. Beta routes report a null code for every failure. Files, Skills and Core project extensions report a null code without a Bearer credential (missing, other scheme, empty or repeated header) and `invalid_api_key` for a rejected one, including mismatched scope headers. Core's message and `WWW-Authenticate: Bearer` are kept. |
+| RH9 | `invalid_beta` message (HP-02: `B01`) | "To access the Agents API, set the 'OpenAI-Beta' header to 'agents=v1'." |
+| RH10 | Optional headers (HP-24) | `OpenAI-Version: 2020-10-01`, `OpenAI-Processing-Ms` and `X-Content-Type-Options: nosniff`. Organization and project headers are not reported: Core's project scope is configured, not account-derived. |
+| RH11 | Trailing slashes and unknown sub-routes (HP-21), OPTIONS and CORS (HP-22), `Cache-Control` and `traceparent` (HP-26), `agents=v0` (HP-04) | Unchanged: 404 JSON, no CORS handling, Core's extension headers kept, `agents=v0` still rejected (an upstream anomaly, not copied). |
+
+Decisions:
+
+- One canonicalizing handler wraps the complete server handler in both server
+  configurations: around the ServeMux that also serves daemon, enrollment and node
+  transport, and around the API router when it is served alone. The ServeMux, the
+  router, every middleware, authentication check and handler see only the
+  rewritten path. A dirty or encoded path therefore reaches exactly the route
+  group and authentication of its canonical path written literally; internal
+  daemon, node and sandbox routes keep their own authentication. Decoding only
+  unreserved characters is RFC 3986 normalization, so a proxy that normalizes
+  URIs the same way sees the same route.
+- The Beta check reads only a constant header and returns no tenant or resource
+  data. Moving it first changes only responses that were rejected either way:
+  every request that passes it is authenticated before the router reaches any
+  Beta handler, 404 or 405.
+- Wrong methods and unknown sub-routes below `/v1/files` and `/v1/skills` still
+  reach the Beta group's 404 and 405 after its checks, as before; without the Beta
+  header they now report `invalid_beta` instead of 401. Official behavior there is
+  unobserved.
+- Every Core 401 has type `invalid_request_error`, including the deployment
+  administrator (`invalid_admin_key`) and sandbox node (`invalid_node_credential`)
+  extensions, whose codes are unchanged.
+- The response headers belong to the Agents API handler. Daemon, enrollment and
+  node transport routes do not carry them, and the shared log middleware is
+  unchanged. A caller-supplied request ID is not echoed; that header is not pinned.
+- Core Web recognizes both the current 401 envelope and the older
+  `invalid_api_key` code in its connection probe. The TypeScript client already
+  exposes status, type and code without branching on them. The Parsar product
+  repository has no code branching on these 401 fields, and its Go client refuses
+  redirects.
+
+Go handler tests cover RH1–RH11, including a walk over every registered route:
+unauthenticated requests, with and without the Beta header and with foreign
+credentials, are rejected before any handler, and ten dirty and encoded spellings
+of each path, including traversal from the daemon and sandbox prefixes, give the
+clean path's exact response. A server test replays the daemon-enabled composition
+and checks that no request is redirected. The pinned-SDK script
+`official_http_routing.py` updates an Agent through base URL `/v1//`, checks
+`_request_id` and the error `request_id`, and the raw checks in the other official
+scripts now expect the Beta check first.
