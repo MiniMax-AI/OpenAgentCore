@@ -47,6 +47,71 @@ def verify_image(image):
     return details
 
 
+def image_identities(archive, build_id):
+    """Bind both Docker store identities to one exported Linux amd64 image."""
+    if not DIGEST.fullmatch(build_id):
+        raise ValueError("Missing immutable distribution image identity")
+    with tarfile.open(archive, "r:") as contents:
+        members = contents.getmembers()
+
+        def member(name):
+            matches = [entry for entry in members if entry.name == name]
+            if len(matches) != 1 or not matches[0].isfile():
+                raise ValueError("Image archive must contain one regular " + name)
+            return matches[0]
+
+        def blob(descriptor, parse=False):
+            digest = descriptor.get("digest", "")
+            size = descriptor.get("size")
+            if (not isinstance(digest, str) or not DIGEST.fullmatch(digest)
+                    or type(size) is not int or size <= 0):
+                raise ValueError("Invalid image archive descriptor")
+            entry = member("blobs/sha256/" + digest.removeprefix("sha256:"))
+            if entry.size != size or parse and size > 1024 * 1024:
+                raise ValueError("Image archive descriptor size mismatch")
+            checksum, chunks = hashlib.sha256(), []
+            with contents.extractfile(entry) as stream:
+                for block in iter(lambda: stream.read(1024 * 1024), b""):
+                    checksum.update(block)
+                    if parse:
+                        chunks.append(block)
+            if "sha256:" + checksum.hexdigest() != digest:
+                raise ValueError("Image archive blob checksum mismatch")
+            return json.loads(b"".join(chunks)) if parse else None
+
+        index = member("index.json")
+        if index.size > 1024 * 1024:
+            raise ValueError("Image archive index exceeds size limit")
+        with contents.extractfile(index) as stream:
+            descriptors = json.load(stream).get("manifests", [])
+        if len(descriptors) != 1:
+            raise ValueError("Image archive must select exactly one image")
+        descriptor = descriptors[0]
+        manifest_digest = descriptor.get("digest", "")
+        image = blob(descriptor, parse=True)
+        # A containerd export may wrap its single platform in an image index.
+        if descriptor.get("mediaType") in ("application/vnd.oci.image.index.v1+json",
+                                            "application/vnd.docker.distribution.manifest.list.v2+json"):
+            descriptors = image.get("manifests", [])
+            if len(descriptors) != 1:
+                raise ValueError("Image archive must select exactly one platform")
+            descriptor = descriptors[0]
+            image = blob(descriptor, parse=True)
+        if descriptor.get("mediaType") not in ("application/vnd.oci.image.manifest.v1+json",
+                                                "application/vnd.docker.distribution.manifest.v2+json"):
+            raise ValueError("Image archive must select an image manifest")
+        config_descriptor = image.get("config", {})
+        config = blob(config_descriptor, parse=True)
+        config_digest = config_descriptor["digest"]
+        if config.get("os") != "linux" or config.get("architecture") != "amd64":
+            raise ValueError("Image archive contains an unexpected platform")
+        for layer in image.get("layers", []):
+            blob(layer)
+        if build_id not in (config_digest, manifest_digest):
+            raise ValueError("Image archive does not match the selected build image")
+        return config_digest, manifest_digest
+
+
 def verify_runtime(image, daemon, helpers, source):
     details = verify_image(image)
     helpers, source = pathlib.Path(helpers), pathlib.Path(source)
@@ -152,16 +217,17 @@ def manifest(bundle, stage, revision, source_tree, artifact_base_url="", offline
         raise ValueError("msb did not return an immutable OCI manifest digest")
     if inspected.get("architecture") != "amd64" or inspected.get("os") != "linux":
         raise ValueError("msb imported an unexpected Runtime platform")
-    images = {name: (stage / (name + ".id")).read_text().strip() for name in ("core", "web", "runtime", "database")}
-    if any(not DIGEST.fullmatch(image) for image in images.values()):
-        raise ValueError("Missing immutable distribution image identity")
+    identities = {name: image_identities(bundle / "images" / (name + ".tar"),
+                                        (stage / (name + ".id")).read_text().strip())
+                  for name in ("core", "web", "runtime", "database")}
     metadata = {
         "source_commit": revision,
         "source_tree": source_tree,
         "platform": "linux/amd64",
         "artifact_base_url": artifact_base_url,
         "artifacts": package_artifacts(bundle, stage, revision),
-        "images": images,
+        "images": {name: identity[0] for name, identity in identities.items()},
+        "image_manifest_digests": {name: identity[1] for name, identity in identities.items()},
         "runtime_ref": "parsar-core-runtime@" + digest,
         "microsandbox": {
             "version": "0.7.2",

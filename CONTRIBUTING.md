@@ -1558,6 +1558,17 @@ microsandbox runtime/firmware hashes and executable native payloads. Release gen
 qualification. A release must be tested from fresh extraction with real models;
 no synthetic result may substitute for native execution acceptance.
 
+Distribution `images` records each exported image's config digest;
+`image_manifest_digests` records its OCI manifest/index digest. Derive and verify
+both from the same archive, including its referenced config and layer bytes, and
+require the build host's selected image ID to match one of them. Docker's classic
+store identifies images by config, while its containerd store uses the OCI
+descriptor. Core, node and self-hosted installers share one resolver for these
+required identities: confirm Linux amd64 and the returned immutable local ID,
+then use that ID in service/provider configuration and Runtime launches. Tags do
+not replace identity verification. The microsandbox-qualified `runtime_ref`
+remains independent of Docker's local store identity.
+
 The manifest is the shared download contract for Core, node and self-hosted
 installers: flat versioned filenames, compressed Runtime size/hash and unpacked
 size/hash, with HTTPS release URLs or the explicit offline payload. Download into

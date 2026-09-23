@@ -3,6 +3,7 @@
 import gzip
 import hashlib
 import importlib.util
+import io
 import json
 import pathlib
 import tarfile
@@ -21,6 +22,32 @@ TREE = "b" * 40
 RELEASE_BASE = "https://example.com/releases/" + REVISION
 
 
+def image_archive(path, name, *, nested=False, architecture="amd64", corrupt=None, multiple=False):
+    blobs = {}
+
+    def descriptor(data, media_type, label):
+        raw = json.dumps(data).encode() if isinstance(data, dict) else data
+        digest = hashlib.sha256(raw).hexdigest()
+        blobs["blobs/sha256/" + digest] = raw if corrupt != label else b"!" + raw[1:]
+        return {"digest": "sha256:" + digest, "size": len(raw), "mediaType": media_type}
+
+    config = descriptor({"os": "linux", "architecture": architecture, "image": name},
+                        "application/vnd.oci.image.config.v1+json", "config")
+    layer = descriptor(b"layer:" + name.encode(), "application/vnd.oci.image.layer.v1.tar", "layer")
+    image = descriptor({"schemaVersion": 2, "config": config, "layers": [layer]},
+                       "application/vnd.oci.image.manifest.v1+json", "manifest")
+    if nested:
+        image = descriptor({"schemaVersion": 2, "manifests": [image]},
+                           "application/vnd.oci.image.index.v1+json", "index")
+    blobs["index.json"] = json.dumps({"schemaVersion": 2, "manifests": [image] * (2 if multiple else 1)}).encode()
+    with tarfile.open(path, "w") as archive:
+        for filename, raw in blobs.items():
+            entry = tarfile.TarInfo(filename)
+            entry.size = len(raw)
+            archive.addfile(entry, io.BytesIO(raw))
+    return config["digest"], image["digest"]
+
+
 class DistributionTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -34,8 +61,6 @@ class DistributionTests(unittest.TestCase):
         runtime.mkdir(parents=True)
         (runtime / "msb").write_bytes(b"runtime")
         (runtime / "libkrunfw.so.5.6.1").write_bytes(b"firmware")
-        for number, name in enumerate(("core", "web", "runtime", "database"), 1):
-            (self.stage / (name + ".id")).write_text("sha256:" + str(number) * 64 + "\n")
         self.inspection = {"digest": "sha256:" + "a" * 64, "architecture": "amd64", "os": "linux"}
         self.write_inspection()
         for logical in distribution.ARTIFACTS:
@@ -44,6 +69,11 @@ class DistributionTests(unittest.TestCase):
             path.write_bytes(b"payload:" + logical.encode())
             if logical.startswith("native/"):
                 path.chmod(0o555)
+        self.identities = {}
+        for name in ("core", "web", "runtime", "database"):
+            self.identities[name] = image_archive(self.bundle / "images" / (name + ".tar"), name)
+            (self.stage / (name + ".id")).write_text(self.identities[name][0] + "\n")
+        self.runtime_bytes = (self.bundle / "images/runtime.tar").read_bytes()
 
     def manifest(self, base=RELEASE_BASE, offline="0"):
         distribution.manifest(self.bundle, self.stage, REVISION, TREE, base, offline)
@@ -55,11 +85,43 @@ class DistributionTests(unittest.TestCase):
         self.manifest()
         metadata = json.loads((self.bundle / "manifest.json").read_text())
         self.assertEqual(metadata["runtime_ref"], "parsar-core-runtime@sha256:" + "a" * 64)
-        self.assertEqual(metadata["images"]["runtime"], "sha256:" + "3" * 64)
+        self.assertEqual(metadata["images"]["runtime"], self.identities["runtime"][0])
+        self.assertEqual(metadata["image_manifest_digests"]["runtime"], self.identities["runtime"][1])
         self.assertEqual(metadata["microsandbox"]["runtime_sha256"], hashlib.sha256(b"runtime").hexdigest())
         for line in (self.bundle / "SHA256SUMS").read_text().splitlines():
             digest, name = line.split("  ", 1)
             self.assertEqual(digest, distribution.sha256(self.bundle / name))
+
+    def test_containerd_build_ids_still_publish_archive_config_ids(self):
+        for name, identity in self.identities.items():
+            (self.stage / (name + ".id")).write_text(identity[1])
+        self.manifest()
+        metadata = json.loads((self.bundle / "manifest.json").read_text())
+        self.assertEqual(metadata["images"], {name: identity[0] for name, identity in self.identities.items()})
+        self.assertEqual(metadata["image_manifest_digests"], {name: identity[1] for name, identity in self.identities.items()})
+
+    def test_nested_single_platform_index_retains_its_containerd_identity(self):
+        path = self.stage / "nested.tar"
+        config, index = image_archive(path, "nested", nested=True)
+        self.assertEqual(distribution.image_identities(path, index), (config, index))
+        self.assertEqual(distribution.image_identities(path, config), (config, index))
+
+    def test_archive_identity_rejects_unrelated_build_or_ambiguous_platform(self):
+        path = self.stage / "bad-image.tar"
+        for options, expected in (({}, "selected build"), ({"multiple": True}, "exactly one image"),
+                                  ({"architecture": "arm64"}, "unexpected platform")):
+            with self.subTest(options=options):
+                image_archive(path, "bad", **options)
+                with self.assertRaisesRegex(ValueError, expected):
+                    distribution.image_identities(path, "sha256:" + "f" * 64)
+
+    def test_archive_identity_verifies_manifest_config_and_layer_bytes(self):
+        path = self.stage / "corrupt.tar"
+        for corrupt in ("manifest", "config", "layer", "index"):
+            with self.subTest(corrupt=corrupt):
+                config, _ = image_archive(path, "corrupt", nested=True, corrupt=corrupt)
+                with self.assertRaisesRegex(ValueError, "checksum mismatch"):
+                    distribution.image_identities(path, config)
 
     def test_missing_manifest_digest_does_not_fall_back_to_config_id(self):
         self.inspection.pop("digest")
@@ -112,10 +174,10 @@ class DistributionTests(unittest.TestCase):
             self.assertEqual(artifact["size"], path.stat().st_size)
             self.assertEqual(artifact["sha256"], distribution.sha256(path))
         runtime = self.stage / "artifacts" / metadata["artifacts"]["images/runtime.tar.gz"]["filename"]
-        self.assertEqual(gzip.decompress(runtime.read_bytes()), b"payload:images/runtime.tar.gz")
+        self.assertEqual(gzip.decompress(runtime.read_bytes()), self.runtime_bytes)
         runtime_entry = metadata["artifacts"]["images/runtime.tar.gz"]
-        self.assertEqual(runtime_entry["unpacked_size"], len(b"payload:images/runtime.tar.gz"))
-        self.assertEqual(runtime_entry["unpacked_sha256"], hashlib.sha256(b"payload:images/runtime.tar.gz").hexdigest())
+        self.assertEqual(runtime_entry["unpacked_size"], len(self.runtime_bytes))
+        self.assertEqual(runtime_entry["unpacked_sha256"], hashlib.sha256(self.runtime_bytes).hexdigest())
         self.assertFalse((self.bundle / "images/runtime.tar").exists())
         distribution.archive(self.bundle, "1700000000")
         thin = self.bundle.with_name(self.bundle.name + ".tar.gz")
