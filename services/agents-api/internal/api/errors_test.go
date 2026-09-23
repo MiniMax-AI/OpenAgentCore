@@ -65,27 +65,47 @@ func TestInvalidCursorErrorFields(t *testing.T) {
 	}
 }
 
-func TestMissingBetaErrorAfterAuthentication(t *testing.T) {
-	for _, authenticated := range []bool{false, true} {
-		handler, _, _ := testHandler(t)
-		request := httptest.NewRequest(http.MethodGet, "/v1/agents/sessions", nil)
-		if authenticated {
-			request.Header.Set("Authorization", "Bearer test-api-key")
-		}
-		response := httptest.NewRecorder()
-		handler.ServeHTTP(response, request)
-		var body v1.ErrorResponse
-		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
-			t.Fatal(err)
-		}
-		status, kind, code := http.StatusUnauthorized, "authentication_error", "invalid_api_key"
-		if authenticated {
-			status, kind, code = http.StatusBadRequest, "invalid_beta", "invalid_beta"
-		}
-		if response.Code != status || body.Error.Type != kind || body.Error.Code == nil || *body.Error.Code != code {
-			t.Fatalf("authenticated=%v: %d %s", authenticated, response.Code, response.Body)
-		}
+// The constant Beta check runs before authentication on the Beta group
+// (HP-05): a missing Beta header is 400 invalid_beta with or without valid
+// credentials, and only a request carrying it reaches the 401.
+func TestMissingBetaErrorBeforeAuthentication(t *testing.T) {
+	for _, test := range []struct {
+		name, authorization, beta string
+		status                    int
+		kind                      string
+		code                      *string
+	}{
+		{"no credentials", "", "", http.StatusBadRequest, "invalid_beta", ptr("invalid_beta")},
+		{"invalid credentials", "Bearer wrong", "", http.StatusBadRequest, "invalid_beta", ptr("invalid_beta")},
+		{"valid credentials", "Bearer test-api-key", "", http.StatusBadRequest, "invalid_beta", ptr("invalid_beta")},
+		{"beta without credentials", "", "agents=v1", http.StatusUnauthorized, "invalid_request_error", nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			handler, _, _ := testHandler(t)
+			request := httptest.NewRequest(http.MethodGet, "/v1/agents/sessions", nil)
+			if test.authorization != "" {
+				request.Header.Set("Authorization", test.authorization)
+			}
+			if test.beta != "" {
+				request.Header.Set("OpenAI-Beta", test.beta)
+			}
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			var body v1.ErrorResponse
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if response.Code != test.status || body.Error.Type != test.kind || !equalOptional(body.Error.Code, test.code) || body.Error.Param != nil {
+				t.Fatalf("%d %s", response.Code, response.Body)
+			}
+		})
 	}
+}
+
+func ptr(value string) *string { return &value }
+
+func equalOptional(got, want *string) bool {
+	return (got == nil) == (want == nil) && (got == nil || *got == *want)
 }
 
 // Session deletion conflicts use the observed official 409 fields.

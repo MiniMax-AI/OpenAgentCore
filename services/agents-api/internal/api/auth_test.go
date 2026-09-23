@@ -3,7 +3,6 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
@@ -115,7 +114,8 @@ func TestCallerPrincipalHeadersAndKeyRotation(t *testing.T) {
 			if w.Code != test.status || called != (test.status == 200) {
 				t.Fatalf("response = %d, called = %v", w.Code, called)
 			}
-			if test.status == 401 && (!strings.Contains(w.Body.String(), "invalid_api_key") || w.Header().Get("WWW-Authenticate") != "Bearer") {
+			// Beta 401s have type invalid_request_error and a null code (HP-07).
+			if test.status == 401 && (w.Body.String() != `{"error":{"message":"A valid Agents API bearer key is required.","type":"invalid_request_error","code":null,"param":null}}`+"\n" || w.Header().Get("WWW-Authenticate") != "Bearer") {
 				t.Fatalf("authentication response = %s", w.Body)
 			}
 		})

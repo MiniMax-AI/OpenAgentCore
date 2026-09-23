@@ -15,6 +15,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 )
 
@@ -75,8 +76,16 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 			}
 		}
 	}
+	return CanonicalPaths(h.routes()), nil
+}
+
+// routes builds the router. HEAD runs the GET route without a body after the
+// same authentication and Beta checks (HP-19). Routes that stream events or
+// download content register an explicit HEAD 405 instead, so HEAD never holds
+// a stream open or reads full content.
+func (h *Handler) routes() *chi.Mux {
 	router := chi.NewRouter()
-	router.Use(log.HTTPMiddleware)
+	router.Use(agentsResponseHeaders, log.HTTPMiddleware, middleware.GetHead)
 	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
@@ -87,6 +96,7 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 		r.Get("/v1/files", h.listSourceFiles)
 		r.Get("/v1/files/{file_id}", h.getSourceFile)
 		r.Get("/v1/files/{file_id}/content", h.sourceFileContent)
+		r.Head("/v1/files/{file_id}/content", methodNotAllowed)
 		r.Delete("/v1/files/{file_id}", h.deleteSourceFile)
 	})
 	h.registerSandboxManagerRoutes(router)
@@ -130,6 +140,7 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 		r.Delete("/agents/sessions/{session_id}", h.deleteSession)
 		r.Post("/agents/sessions/{session_id}/events", h.createEvents)
 		r.Get("/agents/sessions/{session_id}/events", h.streamEvents)
+		r.Head("/agents/sessions/{session_id}/events", methodNotAllowed)
 		r.Get("/agents/sessions/{session_id}/items", h.listItems)
 		r.Get("/agents/sessions/{session_id}/turns", h.listTurns)
 		r.Get("/agents/sessions/{session_id}/turns/{turn_id}", h.getTurn)
@@ -137,15 +148,14 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 		r.Get("/agents/sessions/{session_id}/artifacts", h.listSessionArtifacts)
 		r.Get("/agents/sessions/{session_id}/artifacts/{artifact_id}", h.getSessionArtifact)
 		r.Get("/agents/sessions/{session_id}/artifacts/{artifact_id}/content", h.sessionArtifactContent)
+		r.Head("/agents/sessions/{session_id}/artifacts/{artifact_id}/content", methodNotAllowed)
 		r.Delete("/agents/sessions/{session_id}/artifacts/{artifact_id}", h.deleteSessionArtifact)
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
 			writeError(w, http.StatusNotFound, "unsupported_operation", "This API operation is not supported.")
 		})
-		r.MethodNotAllowed(func(w http.ResponseWriter, _ *http.Request) {
-			writeError(w, http.StatusMethodNotAllowed, "unsupported_operation", "This API method is not supported.")
-		})
+		r.MethodNotAllowed(methodNotAllowed)
 	})
-	return router, nil
+	return router
 }
 
 // createSession atomically reserves or admits initial text with the Session.

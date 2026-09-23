@@ -21,12 +21,12 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 
 // writeError reports every 409 with type conflict_error, as every observed
 // official conflict does (ERR-27); Core-only conflicts keep their own code.
+// Every 401 has type invalid_request_error, as every observed official 401
+// does (HP-07); an empty code serializes as null.
 func writeError(w http.ResponseWriter, status int, code, message string, param ...string) {
 	kind := "invalid_request_error"
 	if status >= 500 {
 		kind = "server_error"
-	} else if status == http.StatusUnauthorized {
-		kind = "authentication_error"
 	} else if status == http.StatusConflict {
 		kind = "conflict_error"
 	} else if code == "not_found_error" || code == "invalid_beta" {

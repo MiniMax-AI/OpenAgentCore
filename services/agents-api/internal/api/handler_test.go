@@ -146,7 +146,12 @@ func TestHTTPRejectsUntrustedOrUnsupportedRequests(t *testing.T) {
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, r)
 			var response v1.ErrorResponse
-			if w.Code != test.status || json.Unmarshal(w.Body.Bytes(), &response) != nil || response.Error.Code == nil || *response.Error.Code == "" || s.tenant != "" {
+			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+				t.Fatalf("response = %d %s: %v", w.Code, w.Body, err)
+			}
+			// Beta 401s have a null code (HP-07); every other rejection names one.
+			coded := response.Error.Code != nil && *response.Error.Code != ""
+			if w.Code != test.status || coded == (test.status == http.StatusUnauthorized) || s.tenant != "" {
 				t.Fatalf("response = %d %s, stored tenant = %s", w.Code, w.Body, s.tenant)
 			}
 		})

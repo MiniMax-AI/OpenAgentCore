@@ -117,17 +117,33 @@ func matchesScopeHeader(r *http.Request, name, expected string) bool {
 
 type principalContextKey struct{}
 
+const invalidBetaMessage = "To access the Agents API, set the 'OpenAI-Beta' header to 'agents=v1'."
+
+// authenticate guards the Beta group. As observed officially (HP-05), the
+// constant OpenAI-Beta check runs first: it reads only that header, and its
+// 400 carries no tenant or resource data. Every request that passes it is
+// authenticated before routing reaches any handler, including the group's 404
+// and 405 responses. The header must have exactly one field value (HP-03).
+// Every Beta 401 has a null code (HP-07).
 func (h *Handler) authenticate(next http.Handler) http.Handler {
-	return h.authenticateProject(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("OpenAI-Beta") != "agents=v1" {
-			writeError(w, http.StatusBadRequest, "invalid_beta", "OpenAI-Beta: agents=v1 is required.")
+	authenticated := h.authenticateCaller(next, false)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if values := r.Header.Values("OpenAI-Beta"); len(values) != 1 || values[0] != "agents=v1" {
+			writeError(w, http.StatusBadRequest, "invalid_beta", invalidBetaMessage)
 			return
 		}
-		next.ServeHTTP(w, r)
-	}))
+		authenticated.ServeHTTP(w, r)
+	})
 }
 
+// authenticateProject guards Files, Skills and Core project extensions, which
+// ignore OpenAI-Beta. As observed on Files and Skills (HP-07), a 401 has a null
+// code without a Bearer credential and invalid_api_key for a rejected one.
 func (h *Handler) authenticateProject(next http.Handler) http.Handler {
+	return h.authenticateCaller(next, true)
+}
+
+func (h *Handler) authenticateCaller(next http.Handler, reportInvalidKey bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		principal, ok, err := h.resolvePrincipal(r)
 		if err != nil {
@@ -135,8 +151,14 @@ func (h *Handler) authenticateProject(next http.Handler) http.Handler {
 			return
 		}
 		if !ok {
+			code := ""
+			// A Bearer credential was supplied: exactly one Authorization header
+			// in the Bearer scheme, rejected by key or scope headers.
+			if _, bearer := projectBearerDigest(r); reportInvalidKey && bearer {
+				code = "invalid_api_key"
+			}
 			w.Header().Set("WWW-Authenticate", "Bearer")
-			writeError(w, http.StatusUnauthorized, "invalid_api_key", "A valid Agents API bearer key is required.")
+			writeError(w, http.StatusUnauthorized, code, "A valid Agents API bearer key is required.")
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalContextKey{}, principal)))

@@ -102,6 +102,10 @@ func TestLiveStreamAuthDisconnectRecoveryAndServerDeadline(t *testing.T) {
 		<-done
 	}
 	response := request("key")
+	// SSE responses carry the request ID and processing time (HP-23/HP-24).
+	if !requestIDPattern.MatchString(response.Header.Get("X-Request-Id")) || response.Header.Get("Openai-Processing-Ms") == "" {
+		t.Fatal("stream headers", response.Header)
+	}
 	reader := bufio.NewReader(response.Body)
 	if line, err := reader.ReadString('\n'); err != nil || line != ": connected\n" {
 		t.Fatal(line, err)

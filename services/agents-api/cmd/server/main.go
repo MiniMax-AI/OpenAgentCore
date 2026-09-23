@@ -258,16 +258,13 @@ func run() error {
 		return err
 	}
 	if daemonHandler != nil {
-		mux := http.NewServeMux()
-		mux.Handle("/api/v1/agent-daemon/", daemonHandler)
-		mux.Handle("/api/v1/agent-daemon/enroll", runtimeenrollment.EnrollmentHandler(executionStore))
-		mux.Handle("/api/v1/agent-daemon/connection", runtimeenrollment.ConnectionHandler(executionStore, registry))
-
+		routes := daemonRoutes{gateway: daemonHandler,
+			enrollment: runtimeenrollment.EnrollmentHandler(executionStore),
+			connection: runtimeenrollment.ConnectionHandler(executionStore, registry)}
 		if managedNodes != nil {
-			mux.Handle("/core/v1/sandbox/node/connect", managedNodes.hub)
+			routes.nodeConnect = managedNodes.hub
 		}
-		mux.Handle("/", handler)
-		handler = mux
+		handler = serverHandler(handler, &routes)
 	}
 	addr := serverAddress()
 	server := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}

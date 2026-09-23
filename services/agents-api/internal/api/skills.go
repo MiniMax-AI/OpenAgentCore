@@ -33,11 +33,13 @@ func (h *Handler) registerSkillRoutes(r chi.Router) {
 	r.Post("/v1/skills/{skill_id}", h.updateSkill)
 	r.Delete("/v1/skills/{skill_id}", h.deleteSkill)
 	r.Get("/v1/skills/{skill_id}/content", h.skillContent)
+	r.Head("/v1/skills/{skill_id}/content", methodNotAllowed)
 	r.Post("/v1/skills/{skill_id}/versions", h.createSkillVersion)
 	r.Get("/v1/skills/{skill_id}/versions", h.listSkillVersions)
 	r.Get("/v1/skills/{skill_id}/versions/{version}", h.getSkillVersion)
 	r.Delete("/v1/skills/{skill_id}/versions/{version}", h.deleteSkillVersion)
 	r.Get("/v1/skills/{skill_id}/versions/{version}/content", h.skillVersionContent)
+	r.Head("/v1/skills/{skill_id}/versions/{version}/content", methodNotAllowed)
 }
 
 func (h *Handler) skillsReady(w http.ResponseWriter) bool {
