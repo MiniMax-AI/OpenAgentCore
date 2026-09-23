@@ -86,7 +86,9 @@ def verify_vault_list(client, other, invalid, peer, binding, saved, root, direct
                         descending[:size], True)
         for params, values in (({"status": "active"}, list(reversed(active))),
                                ([("status[]", "archived")], list(reversed(archived))),
-                               ([("status[]", "active"), ("status[]", "archived")], descending)):
+                               ([("status[]", "active"), ("status[]", "archived")], descending),
+                               ([("status", "archived"), ("status[]", "active")], descending),
+                               ({"tenant_id": "foreign", "unknown": "1"}, descending)):
             verify_page(raw.get(endpoint, headers=headers, params=params), values[:20], True)
         for order, last in (("asc", expected[-1]), ("desc", expected[0])):
             params = {"after": last.id, "order": order}

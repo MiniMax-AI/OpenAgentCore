@@ -36,10 +36,6 @@ func WithExecution(s InputSubmitter) Option { return func(h *Handler) { h.inputs
 // @Failure 400,401,404,409,413,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/events [post]
 func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) != 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Event submission does not accept query parameters.")
-		return
-	}
 	var request struct {
 		Events []json.RawMessage `json:"events"`
 	}

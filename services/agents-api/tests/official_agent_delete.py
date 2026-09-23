@@ -37,12 +37,13 @@ def main():
         assert http.delete(base + "/v1/agents/" + foreign_agent.id, headers=headers).status_code == 404
         assert http.delete(endpoint, headers={"Authorization": "Bearer " + token}).status_code == 400
         assert http.delete(endpoint, headers={"OpenAI-Beta": "agents=v1"}).status_code == 401
-        assert http.delete(endpoint + "?cascade=true", headers=headers).status_code == 400
+        assert http.delete(endpoint + "?cascade=true", headers=headers | {"Authorization": "Bearer " + foreign}).status_code == 404
         assert http.request("DELETE", endpoint, headers=headers, json={"cascade": True}).status_code == 400
         assert agents.retrieve(original.id) == original
         assert sessions.retrieve(current.id) == current
         # The result carries the stored canonical ID, independently of path spelling.
-        raw = agents.with_raw_response.delete(original.id.upper())
+        # cascade is not a pinned parameter: it is ignored and Sessions remain.
+        raw = agents.with_raw_response.delete(original.id.upper(), extra_query={"cascade": "true"})
         expected = {"id": original.id, "object": "agent.deleted", "deleted": True}
         assert raw.status_code == 200 and raw.http_response.json() == expected
         assert raw.parse().to_dict() == expected

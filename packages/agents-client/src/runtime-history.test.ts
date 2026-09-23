@@ -105,10 +105,6 @@ describe("Runtime history client", () => {
     const calls: FetchCall[] = [];
     const controller = new AbortController();
     const response = history();
-    const incarnations = response.series as Array<Record<string, unknown>>;
-    const secondIncarnation = structuredClone(incarnations[0]!);
-    secondIncarnation.started_at = { seconds: 900, nanoseconds: 1 };
-    incarnations.push(secondIncarnation);
     const value = await clientFor(response, calls).retrieveRuntimeHistory(sessionId.toUpperCase(), {
       start: 1000,
       end: 1120,
@@ -121,10 +117,7 @@ describe("Runtime history client", () => {
     expect(calls[0]?.init?.signal).toBe(controller.signal);
     expect(value.series[0]?.points[0]?.cpu?.utilization_ratio).toBe(0);
     expect(value.series[0]?.points[0]?.memory?.usage_bytes).toBe(0);
-    expect(value.series.map((series) => series.started_at)).toEqual([
-      { seconds: 900, nanoseconds: 0 },
-      { seconds: 900, nanoseconds: 1 },
-    ]);
+    expect(value.series.map((series) => series.started_at)).toEqual([{ seconds: 900, nanoseconds: 0 }]);
     expect(value.coverage.sample_count).toBe(2);
     expect(value.token_usage[1]).toMatchObject({ input_tokens: 160, output_tokens: 50 });
   });
@@ -239,9 +232,11 @@ describe("Runtime history client", () => {
       const point = (value.series as Array<{ points: Array<Record<string, unknown>> }>)[0]!.points[0]!;
       point.memory = { contributor_count: 1, usage_bytes: Number.MAX_SAFE_INTEGER + 1, limit_bytes: 2048 };
     }],
-    ["duplicate incarnation", (value: Record<string, unknown>) => {
+    ["duplicate allocation with another start estimate", (value: Record<string, unknown>) => {
       const series = value.series as Array<Record<string, unknown>>;
-      series.push(structuredClone(series[0]!));
+      const duplicate = structuredClone(series[0]!);
+      duplicate.started_at = { seconds: 901, nanoseconds: 0 };
+      series.push(duplicate);
     }],
     ["mixed Environment scope", (value: Record<string, unknown>) => {
       const series = value.series as Array<Record<string, unknown>>;

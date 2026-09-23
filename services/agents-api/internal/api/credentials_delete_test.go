@@ -20,20 +20,23 @@ func (f *credentialFixture) DeleteCredential(_ context.Context, tenant, vault, i
 }
 
 func TestCredentialDeletionConfirmationAndScope(t *testing.T) {
-	h, f, tenant := credentialHandler(t)
-	w := credentialRequest(h, "DELETE", "/v1/vaults/"+f.credential.VaultID+"/credentials/"+f.credential.ID, "")
-	var got map[string]any
-	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &got) != nil {
-		t.Fatal("deletion failed", w.Code)
-	}
-	want := map[string]any{"id": f.credential.ID, "deleted": true, "object": "vault.credential.deleted"}
-	if !reflect.DeepEqual(got, want) || f.tenant != tenant || f.vault != f.credential.VaultID || f.id != f.credential.ID || f.calls != 1 {
-		t.Fatal("deletion changed authenticated scope or confirmation")
+	// Unknown query keys, including a tenant hint, are ignored.
+	for _, query := range []string{"", "?tenant_id=untrusted&unknown=1"} {
+		h, f, tenant := credentialHandler(t)
+		w := credentialRequest(h, "DELETE", "/v1/vaults/"+f.credential.VaultID+"/credentials/"+f.credential.ID+query, "")
+		var got map[string]any
+		if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &got) != nil {
+			t.Fatal("deletion failed", w.Code)
+		}
+		want := map[string]any{"id": f.credential.ID, "deleted": true, "object": "vault.credential.deleted"}
+		if !reflect.DeepEqual(got, want) || f.tenant != tenant || f.vault != f.credential.VaultID || f.id != f.credential.ID || f.calls != 1 {
+			t.Fatal("deletion changed authenticated scope or confirmation")
+		}
 	}
 }
 
 func TestCredentialDeletionRejectsBeforeMutation(t *testing.T) {
-	for _, mode := range []string{"auth", "beta", "query", "body", "null", "vault", "credential", "zero"} {
+	for _, mode := range []string{"auth", "beta", "body", "null", "vault", "credential", "zero", "zero-query"} {
 		t.Run(mode, func(t *testing.T) {
 			h, f, _ := credentialHandler(t)
 			path := "/v1/vaults/" + f.credential.VaultID + "/credentials/" + f.credential.ID
@@ -41,8 +44,6 @@ func TestCredentialDeletionRejectsBeforeMutation(t *testing.T) {
 			switch mode {
 			case "auth":
 				status = http.StatusUnauthorized
-			case "query":
-				path += "?tenant_id=untrusted"
 			case "body":
 				body = `{"token":"credential-canary"}`
 			case "null":
@@ -53,6 +54,8 @@ func TestCredentialDeletionRejectsBeforeMutation(t *testing.T) {
 				path, status = strings.Replace(path, f.credential.ID, "invalid", 1), http.StatusNotFound
 			case "zero":
 				path, status = strings.Replace(path, f.credential.ID, uuid.Nil.String(), 1), http.StatusNotFound
+			case "zero-query":
+				path, status = strings.Replace(path, f.credential.ID, uuid.Nil.String(), 1)+"?tenant_id=untrusted", http.StatusNotFound
 			}
 			r := httptest.NewRequest("DELETE", path, strings.NewReader(body))
 			if mode != "auth" {

@@ -302,7 +302,7 @@ export function projectRuntimeHistory(
   ));
   if (
     new Set(series.map((entry) => entry.environment_id)).size > 1 ||
-    new Set(series.map((entry) => `${entry.allocation_id}\u0000${entry.started_at.seconds}\u0000${entry.started_at.nanoseconds}`)).size !== series.length ||
+    new Set(series.map((entry) => entry.allocation_id)).size !== series.length ||
     tokenUsage.length > maximumPoints || !ordered(tokenUsage) ||
     buckets.length + tokenUsage.length + series.reduce((sum, entry) => sum + entry.points.length, 0) > maximumTotalPoints ||
     tokenUsage.some((point) => point.sampled_at < retainedStart) ||

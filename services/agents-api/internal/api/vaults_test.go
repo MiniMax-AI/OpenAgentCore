@@ -38,6 +38,12 @@ func (f *vaultResourceFixture) GetVault(_ context.Context, tenant, id string) (s
 	return f.vault, f.err
 }
 
+// Vaults are not Agents: /v1/agents/vaults updates an unknown Agent ID, which
+// resolves as a missing Agent after body validation.
+func (f *vaultResourceFixture) UpdateAgent(context.Context, string, string, store.UpdateAgentInput) (store.SavedAgent, error) {
+	return store.SavedAgent{}, store.ErrNotFound
+}
+
 func vaultResourceHandler(t *testing.T) (http.Handler, *vaultResourceFixture) {
 	t.Helper()
 	f := &vaultResourceFixture{vault: store.Vault{ID: uuid.NewString(), TenantID: uuid.NewString(), Metadata: map[string]string{}, CreatedAt: time.Unix(1700000000, 0)}}
@@ -106,16 +112,39 @@ func TestVaultResourceInvalidRequestsDoNotReachStore(t *testing.T) {
 		method, path string
 		status       int
 	}{
-		{"POST", "/v1/vaults?tenant_id=foreign", 400},
 		{"GET", "/v1/vaults/not-a-vault", 404},
 		{"GET", "/v1/vaults/" + uuid.Nil.String(), 404},
-		{"GET", "/v1/vaults/" + uuid.NewString() + "?tenant_id=foreign", 400},
+		{"GET", "/v1/vaults/" + uuid.Nil.String() + "?tenant_id=foreign", 404},
 		{"POST", "/v1/agents/vaults", 404},
 	} {
 		h, f := vaultResourceHandler(t)
 		w := vaultRequest(h, test.method, test.path, `{}`)
 		if w.Code != test.status || f.calls != 0 {
 			t.Fatal(test, w.Code, f.calls)
+		}
+	}
+}
+
+func TestVaultResourceIgnoresUnknownQueryKeys(t *testing.T) {
+	for _, test := range []struct {
+		method string
+		status int
+	}{{"POST", 201}, {"GET", 200}} {
+		h, f := vaultResourceHandler(t)
+		path := "/v1/vaults"
+		if test.method == "GET" {
+			path += "/" + f.vault.ID
+		}
+		w := vaultRequest(h, test.method, path+"?tenant_id=foreign&unknown=1", `{}`)
+		if w.Code != test.status || f.calls != 1 || f.tenant != f.vault.TenantID {
+			t.Fatal(test.method, w.Code, f.calls, f.tenant)
+		}
+		// A missing or foreign Vault stays indistinguishable with the same query.
+		f.err = store.ErrNotFound
+		missing := vaultRequest(h, "GET", "/v1/vaults/"+uuid.NewString()+"?tenant_id=foreign", "")
+		plain := vaultRequest(h, "GET", "/v1/vaults/"+uuid.NewString(), "")
+		if missing.Code != 404 || missing.Body.String() != plain.Body.String() || f.tenant != f.vault.TenantID {
+			t.Fatal("query changed not-found masking", missing.Code, missing.Body.String())
 		}
 	}
 }

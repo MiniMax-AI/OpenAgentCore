@@ -51,10 +51,6 @@ func (h *Handler) subagentsReady(w http.ResponseWriter) bool {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/subagents/{subagent_id} [get]
 func (h *Handler) getSubagent(w http.ResponseWriter, r *http.Request) {
-	if r.URL.RawQuery != "" {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Subagent retrieval does not accept query parameters.")
-		return
-	}
 	if !h.subagentsReady(w) {
 		return
 	}

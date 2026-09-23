@@ -38,7 +38,7 @@ func TestManagedRuntimeOperatorConfigurationIsExplicit(t *testing.T) {
 		t.Fatal(err)
 	}
 	close()
-	if result.InstallationID != config.InstallationID || result.Provider == nil || result.Suspension != nil || result.Maintenance {
+	if result.InstallationID != config.InstallationID || result.Provider == nil || result.Suspension != nil || result.Maintenance || managedRuntimeProviderKind(result) != "docker" {
 		t.Fatal("provider identity or admission policy lost")
 	}
 	for _, mutate := range []func(*managedRuntimeConfig){

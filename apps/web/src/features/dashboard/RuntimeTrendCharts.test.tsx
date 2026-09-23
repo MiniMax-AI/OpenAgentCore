@@ -8,7 +8,7 @@ function sample(sampledAt: number, cpuRatio: number | null): RuntimeTrendSample 
   return {
     sampledAt,
     targets: [{
-      sessionId: "session-1",
+      seriesId: "session-1:allocation-1",
       label: "Runtime worker",
       cpuRatio,
       uptimeSeconds: 120,

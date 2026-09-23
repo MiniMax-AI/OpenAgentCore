@@ -30,9 +30,9 @@ The cursor must name a currently visible File in the same project. The optional
 purpose filter accepts the nine values qualified by validation probes (including
 `evals` and output-purpose names); an unknown or case-variant value returns 400
 with `param: purpose` before cursor resolution. Valid other-purpose filters return
-an empty page because storage currently accepts only `user_data`. Explicit empty
-purpose remains an exact empty filter locally; its upstream successful-page meaning
-is unverified. Successful official filtering/order, deleted-cursor behavior and
+an empty page because storage currently accepts only `user_data`. An explicit empty
+purpose is treated as omitted and unknown query keys are ignored, as observed in the
+[list query tolerance](list-query-semantics.md#list-query-tolerance--september-23-2026) batch. Successful official filtering/order, deleted-cursor behavior and
 pagination during concurrent mutation remain unqualified.
 
 Metadata includes `id`, `object: file`, `bytes`, Unix-second `created_at`,

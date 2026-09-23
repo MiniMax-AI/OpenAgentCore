@@ -58,10 +58,14 @@ def verify_source_file_list(client, other, invalid, peer, expect_error):
         response = raw.get(endpoint, headers=headers, params={"after": foreign.id})
         assert response.status_code == 404 and response.json()["error"]["code"] is None
         assert foreign.id not in response.text
-        for query in ("limit=0", "limit=10001", "limit=null", "order=invalid", "after=a&after=b", "purpose=a&purpose=b", "unknown=x"):
+        for query, code in (("limit=0", None), ("limit=10001", None), ("limit=null", "invalid_request"), ("order=invalid", None),
+                            ("after=a&after=b", "unsupported_parameter"), ("purpose=a&purpose=b", "unsupported_parameter")):
             response = raw.get(endpoint + "?" + query, headers=headers)
             assert response.status_code == 400
-            assert response.json()["error"]["type"] == "invalid_request_error"
+            error = response.json()["error"]
+            assert (error["type"], error["code"], error["param"]) == ("invalid_request_error", code, None), (query, error)
+        for query in ("unknown=x", "purpose=", "tenant_id=other&purpose="):
+            verify_page(raw.get(endpoint + "?" + query, headers=headers), descending, False)
         for purpose in ("unknown", "USER_DATA"):
             response = raw.get(endpoint, headers=headers, params={"purpose": purpose, "after": "file-missing"})
             assert response.status_code == 400

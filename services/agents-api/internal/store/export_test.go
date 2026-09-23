@@ -22,3 +22,6 @@ func FixtureExecutorPrincipal(t *testing.T, s *Store, tenant string) identity.Pr
 	}
 	return p
 }
+
+// SkillArchive builds a minimal valid Skill archive for public HTTP fixtures.
+func SkillArchive(t *testing.T, marker string) []byte { return skillArchive(t, marker) }

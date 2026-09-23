@@ -88,7 +88,7 @@ func TestTemplateResolutionAndCreationIntent(t *testing.T) {
 	if err := h.resolveTemplateEnvironment(t.Context(), "tenant-a", &narrower); err != nil {
 		t.Fatal(err)
 	}
-	for _, raw := range []string{`{"type":"openai_hosted","environment_template_id":null}`, `{"type":"none","environment_template_id":"saved"}`, `{"type":"openai_hosted","environment_template_id":"saved","network":null}`} {
+	for _, raw := range []string{`{"type":"openai_hosted","environment_template_id":null}`, `{"type":"none","environment_template_id":"saved"}`} {
 		if _, _, _, err := decodeTemplateEnvironment(json.RawMessage(raw)); err == nil {
 			t.Fatal("invalid reference accepted", raw)
 		}

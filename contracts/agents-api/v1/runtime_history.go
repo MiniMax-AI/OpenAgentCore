@@ -67,8 +67,8 @@ type RuntimeHistorySeries struct {
 	Points        []RuntimeHistoryPoint `json:"points" binding:"required" validate:"max=10000"`
 }
 
-// RuntimeHistoryTime is a lossless JSON-safe timestamp used as an incarnation
-// identity fence. Other public history timestamps are display/query seconds.
+// RuntimeHistoryTime is a lossless JSON-safe provider start estimate retained
+// for compatible uptime display. AllocationID is the series identity.
 type RuntimeHistoryTime struct {
 	Seconds     int64 `json:"seconds" binding:"required" minimum:"0" maximum:"9007199254740991"`
 	Nanoseconds int   `json:"nanoseconds" binding:"required" minimum:"0" maximum:"999999999"`

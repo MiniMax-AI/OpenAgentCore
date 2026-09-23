@@ -112,8 +112,10 @@ def verify_credentials(client, other, invalid, peer, saved_vaults, canary, expec
             safe_body(raw.request(method, url, **body), 401)
             response = raw.request(method, url, headers={"Authorization": headers["Authorization"]}, **body)
             assert safe_body(response, 400)["error"]["code"] == "invalid_beta"
-        safe_body(raw.post(endpoint, headers=headers, params={"tenant_id": "other"}, json=request), 400)
-        safe_body(raw.get(endpoint + "/" + saved[0].id, headers=headers, params={"include": "token"}), 400)
+        # Unknown query keys are ignored: they neither select a tenant nor expose tokens.
+        safe_body(raw.post(endpoint, headers=headers, params={"tenant_id": "other"}, json={"name": "x"}), 400)
+        plain = safe_body(raw.get(endpoint + "/" + saved[0].id, headers=headers), 200)
+        assert safe_body(raw.get(endpoint + "/" + saved[0].id, headers=headers, params={"include": "token"}), 200) == plain
 
     assert [list(api.beta.agents.sessions.list()) for api in (client, other)] == sessions_before
     assert [client.beta.agents.vaults.retrieve(value.id) for value in vaults] == vaults

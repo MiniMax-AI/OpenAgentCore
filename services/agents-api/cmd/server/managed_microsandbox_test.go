@@ -49,7 +49,7 @@ func TestManagedMicrosandboxConfigurationAndPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer close()
-	if result.InstallationID != key || result.Provider == nil || result.Maintenance {
+	if result.InstallationID != key || result.Provider == nil || result.Maintenance || managedRuntimeProviderKind(result) != "microsandbox" {
 		t.Fatal("microsandbox identity lost")
 	}
 	if _, ok := result.Provider.(sandbox.CheckpointProvider); !ok {

@@ -21,10 +21,6 @@ import (
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/environments/{environment_id} [get]
 func (h *Handler) getEnvironment(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Environment retrieval does not accept query parameters.")
-		return
-	}
 	environment, err := h.store.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
 	if err != nil {
 		writeStoreError(w, r, err)

@@ -25,8 +25,8 @@ func NewResolver(value environmentStore) (*Resolver, error) {
 
 // ResolveRuntimeHistoryScope authorizes the Session through the Core store and
 // returns only durable Core identity. It intentionally does not resolve a
-// current allocation: retained history may contain earlier allocations or
-// multiple compute incarnations that the Reader must keep separately fenced.
+// current allocation: retained history may contain earlier allocations. The
+// Reader keeps each durable allocation as one continuous series.
 func (r *Resolver) ResolveRuntimeHistoryScope(ctx context.Context, tenantID, sessionID string) (runtimehistory.Scope, error) {
 	environment, err := r.store.GetSessionEnvironment(ctx, tenantID, sessionID)
 	if err != nil {

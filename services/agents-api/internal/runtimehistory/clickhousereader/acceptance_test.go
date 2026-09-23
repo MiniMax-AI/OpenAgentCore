@@ -87,7 +87,7 @@ func TestClickHouseCollectorAcceptance(t *testing.T) {
 	deadline := time.Now().Add(20 * time.Second)
 	for {
 		result, err = reader.Query(t.Context(), query)
-		if err == nil && coverageCount(result.Coverage) == 5 && len(result.Series) == 2 {
+		if err == nil && coverageCount(result.Coverage) == 5 && len(result.Series) == 1 {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -98,7 +98,7 @@ func TestClickHouseCollectorAcceptance(t *testing.T) {
 	if err := reader.Close(); err != nil {
 		t.Fatal(err)
 	}
-	assertAcceptanceResult(t, result, firstStartedAt, secondStartedAt)
+	assertAcceptanceResult(t, result, firstStartedAt)
 
 	// A fresh Reader proves history is backend-owned, not process memory.
 	reader = open()
@@ -107,7 +107,7 @@ func TestClickHouseCollectorAcceptance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if coverageCount(reloaded.Coverage) != 5 || len(reloaded.Series) != 2 {
+	if coverageCount(reloaded.Coverage) != 5 || len(reloaded.Series) != 1 {
 		t.Fatalf("history did not survive Reader restart: %+v", reloaded)
 	}
 }
@@ -134,28 +134,26 @@ func coverageCount(values []runtimehistory.CoveragePoint) int {
 	return total
 }
 
-func assertAcceptanceResult(t *testing.T, result runtimehistory.Result, firstStartedAt, secondStartedAt time.Time) {
+func assertAcceptanceResult(t *testing.T, result runtimehistory.Result, firstStartedAt time.Time) {
 	t.Helper()
 	if coverageCount(result.Coverage) != 5 {
 		t.Fatalf("cross-tenant sample leaked into coverage: %+v", result.Coverage)
 	}
-	if len(result.Series) != 2 || !result.Series[0].StartedAt.Equal(firstStartedAt) || !result.Series[1].StartedAt.Equal(secondStartedAt) {
-		t.Fatalf("incarnations were not kept separate and lossless: %+v", result.Series)
+	if len(result.Series) != 1 || !result.Series[0].StartedAt.Equal(firstStartedAt) {
+		t.Fatalf("allocation history was split by compute start estimates: %+v", result.Series)
 	}
 	wantRatios := []float64{.5, 1.0 / 6.0}
-	for index, series := range result.Series {
-		found := false
-		for _, point := range series.Points {
-			if point.CPUUtilizationRatio != nil {
-				if math.Abs(*point.CPUUtilizationRatio-wantRatios[index]) > 1e-9 {
-					t.Fatalf("unexpected CPU ratio for incarnation %d: %+v", index, point)
-				}
-				found = true
+	found := 0
+	for _, point := range result.Series[0].Points {
+		if point.CPUUtilizationRatio != nil {
+			if found >= len(wantRatios) || math.Abs(*point.CPUUtilizationRatio-wantRatios[found]) > 1e-9 {
+				t.Fatalf("unexpected CPU ratio after allocation counter reset: %+v", point)
 			}
+			found++
 		}
-		if !found {
-			t.Fatalf("incarnation %d has no derived CPU point: %+v", index, series)
-		}
+	}
+	if found != len(wantRatios) {
+		t.Fatalf("allocation lost CPU segments across counter reset: %+v", result.Series[0])
 	}
 }
 

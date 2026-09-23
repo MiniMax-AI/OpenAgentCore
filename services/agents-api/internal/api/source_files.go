@@ -31,17 +31,6 @@ func (h *Handler) sourceFilesAvailable(w http.ResponseWriter) bool {
 	return true
 }
 
-func (h *Handler) sourceFilesReady(w http.ResponseWriter, r *http.Request) bool {
-	if !h.sourceFilesAvailable(w) {
-		return false
-	}
-	if r.URL.RawQuery != "" {
-		writeStoreError(w, r, store.ErrInvalidInput)
-		return false
-	}
-	return true
-}
-
 // @Summary Retrieve source file metadata
 // @Description Returns immutable project-owned user_data file metadata. No Beta header is required. Other purposes, expiration and full hosted status/error semantics remain unimplemented or unverified.
 // @Tags Files
@@ -52,7 +41,7 @@ func (h *Handler) sourceFilesReady(w http.ResponseWriter, r *http.Request) bool 
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /files/{file_id} [get]
 func (h *Handler) getSourceFile(w http.ResponseWriter, r *http.Request) {
-	if !h.sourceFilesReady(w, r) {
+	if !h.sourceFilesAvailable(w) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
@@ -75,7 +64,7 @@ func (h *Handler) getSourceFile(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /files/{file_id} [delete]
 func (h *Handler) deleteSourceFile(w http.ResponseWriter, r *http.Request) {
-	if !h.sourceFilesReady(w, r) {
+	if !h.sourceFilesAvailable(w) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)

@@ -69,23 +69,15 @@ func templateResponse(t store.EnvironmentTemplate) v1.EnvironmentTemplate {
 	return v1.EnvironmentTemplate{ID: t.ID, Object: "agent.environment.template", Name: t.Name, CreatedAt: t.CreatedAt.Unix(), UpdatedAt: t.UpdatedAt.Unix(), CapabilityDirectories: append([]string{}, t.CapabilityDirectories...), Network: v1.EnvironmentNetwork{Access: t.NetworkAccess, AllowedDomains: append([]string{}, t.AllowedDomains...)}, Packages: packageMetadata(&t.Packages), Files: templateFileResponse(t.Files), Plugins: pluginResponse(t.Plugins), Skills: skillResponse(t.Skills)}
 }
 
-func templateNoQuery(w http.ResponseWriter, r *http.Request) bool {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "This template operation does not accept query parameters.")
-		return false
-	}
-	return true
-}
-
 func readTemplateInput(w http.ResponseWriter, r *http.Request) (store.EnvironmentTemplateInput, bool) {
-	if !templateNoQuery(w, r) {
-		return store.EnvironmentTemplateInput{}, false
-	}
 	raw, ok := readJSONBodyLimit(w, r, 16*1024*1024, "Request exceeds 16 MiB.")
 	if !ok {
 		return store.EnvironmentTemplateInput{}, false
 	}
 	in, err := decodeTemplateInput(raw)
+	if writeFieldError(w, err) {
+		return in, false
+	}
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", "Template fields are invalid or require unsupported initialization. Name, enabled/disabled or exact-domain restricted network, initial files, env, system/npm/Python packages, setup commands inline/referenced Skill ZIPs, Plugin ZIPs and workspace capability directories are supported.")
 		return in, false
@@ -94,7 +86,7 @@ func readTemplateInput(w http.ResponseWriter, r *http.Request) (store.Environmen
 }
 
 // @Summary Create an Environment Template
-// @Description Saves tenant-owned hosted configuration. Supports nullable name, enabled/disabled or exact-domain restricted network, initial inline/file_id files, confidential env, ordered setup_commands, system/npm/Python packages inline/referenced Skill ZIPs, Plugin ZIPs and workspace-contained capability directories. Omitted/null network defaults to enabled. Restricted network requires 1–100 exact ASCII hostnames; other host forms and populated unsupported installations are rejected before persistence without echoing input. No compute is allocated. Exact hosted error/retry semantics remain unverified.
+// @Description Saves tenant-owned hosted configuration. Supports nullable name, enabled/disabled or exact-domain restricted network, initial inline/file_id files, confidential env, ordered setup_commands, system/npm/Python packages inline/referenced Skill ZIPs, Plugin ZIPs and workspace-contained capability directories. Omitted/null network defaults to enabled. Restricted network requires 1–100 exact ASCII hostnames; other host forms and populated unsupported installations are rejected before persistence without echoing input. Network policy rejections return invalid_request_error with a null param. No compute is allocated. Exact hosted error/retry semantics remain unverified.
 // @Tags Environment Templates
 // @Accept json
 // @Produce json
@@ -128,9 +120,6 @@ func (h *Handler) createEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/environments/templates/{environment_template_id} [get]
 func (h *Handler) getEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
-	if !templateNoQuery(w, r) {
-		return
-	}
 	value, err := h.store.GetEnvironmentTemplate(r.Context(), tenantID(r), chi.URLParam(r, "environment_template_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
@@ -140,7 +129,7 @@ func (h *Handler) getEnvironmentTemplate(w http.ResponseWriter, r *http.Request)
 }
 
 // @Summary Update an Environment Template
-// @Description Supplied fields replace atomically; omitted fields remain unchanged. Null name clears and null network resets to the pinned enabled default. Existing Session snapshots and creation retries remain unchanged. Initial files replace as a list; null/empty clears. File data is encrypted separately and excluded from response metadata. Skills replace as a list; null/empty clears. Skill archives are encrypted separately and omitted from responses. Plugins and capability directories replace as lists; null/empty clears. Plugin archives are encrypted and omitted from responses. Capability directories are snapshotted after setup. Environment MCP execution requires a qualified native transport and runtime network policy. Empty updates advance updated_at without changing saved fields or confidential contents.
+// @Description Supplied fields replace atomically; omitted fields remain unchanged. Null name clears and null network resets to the pinned enabled default. Existing Session snapshots and creation retries remain unchanged. Initial files replace as a list; null/empty clears. File data is encrypted separately and excluded from response metadata. Skills replace as a list; null/empty clears. Skill archives are encrypted separately and omitted from responses. Plugins and capability directories replace as lists; null/empty clears. Plugin archives are encrypted and omitted from responses. Capability directories are snapshotted after setup. Environment MCP execution requires a qualified native transport and runtime network policy. Empty updates advance updated_at without changing saved fields or confidential contents. Network policy rejections return invalid_request_error with a null param.
 // @Tags Environment Templates
 // @Accept json
 // @Produce json
@@ -175,9 +164,6 @@ func (h *Handler) updateEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/environments/templates/{environment_template_id} [delete]
 func (h *Handler) deleteEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
-	if !templateNoQuery(w, r) {
-		return
-	}
 	id, err := h.store.DeleteEnvironmentTemplate(r.Context(), tenantID(r), chi.URLParam(r, "environment_template_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
@@ -187,19 +173,19 @@ func (h *Handler) deleteEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 }
 
 // @Summary List Environment Templates
-// @Description Lists tenant-owned safe template metadata in creation order with ID tie-breaking. Defaults to limit 20 and descending order; limit must be 1–100. Foreign and missing cursors reject identically. Concurrent-page and exact hosted error behavior remain unverified.
+// @Description Lists tenant-owned safe template metadata in creation order with ID tie-breaking. Defaults to limit 20 and descending order; limit 0 is treated as 1 and larger limits as 100. Foreign and missing cursors reject identically. Concurrent-page and exact hosted error behavior remain unverified.
 // @Tags Environment Templates
 // @Produce json
 // @Security BearerAuth
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param after query string false "Previous Template ID"
-// @Param limit query integer false "Page size" default(20) minimum(1) maximum(100)
+// @Param limit query integer false "Page size; 0 is treated as 1 and values above 100 as 100" default(20) minimum(0)
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.EnvironmentTemplateList
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/environments/templates [get]
 func (h *Handler) listEnvironmentTemplates(w http.ResponseWriter, r *http.Request) {
-	options, ok := readPage(w, r)
+	options, ok := readClampedPage(w, r)
 	if !ok {
 		return
 	}

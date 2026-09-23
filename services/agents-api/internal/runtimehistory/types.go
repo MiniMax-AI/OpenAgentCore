@@ -171,8 +171,9 @@ type Series struct {
 }
 
 // Point represents one server-selected bucket. CPUUtilizationRatio is derived
-// only from ordered cumulative counters within this Series' allocation and
-// StartedAt fence. Memory values are the final observed values in the bucket.
+// only from ordered cumulative counters within this Series' allocation. A
+// counter regression resets the rate baseline. Memory values are the final
+// observed values in the bucket.
 type Point struct {
 	Start, End                            time.Time
 	FirstObservedAt, LastObservedAt       time.Time
@@ -266,7 +267,7 @@ func validateResult(query Query, result Result, now time.Time) error {
 		if series.Scope != query.Scope || !canonicalUUID(series.AllocationID) || !validPublicTime(series.StartedAt) || series.StartedAt.After(result.GeneratedAt) || !series.StartedAt.Before(query.End) || !providerTypePattern.MatchString(series.ProviderType) {
 			return errors.New("invalid Runtime history series identity")
 		}
-		key := series.AllocationID + "\x00" + series.StartedAt.UTC().Format(time.RFC3339Nano)
+		key := series.AllocationID
 		if seriesKeys[key] {
 			return errors.New("duplicate Runtime history series")
 		}

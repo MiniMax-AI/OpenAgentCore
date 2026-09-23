@@ -2,6 +2,7 @@
 
 Owned fixtures use real Worker admission with dispatch paused. No native executor
 or model runs, and initial Turn/Item history remains visible throughout the test.
+The tolerance checks follow contracts/agents-api/list-query-semantics.md.
 """
 
 import importlib.metadata
@@ -14,6 +15,167 @@ from pathlib import Path
 import httpx2
 from openai import APIStatusError, DefaultHttpxClient, OpenAI
 
+
+BETA_DUPLICATE = "Failed to deserialize query string: duplicate field `{}`"
+BETA_DIGIT = "Failed to deserialize query string: limit: invalid digit found in string"
+SKILLS_DUPLICATE = ("Duplicate parameter: '{0}'. You provided multiple values for this parameter, whereas only one is "
+                    "allowed. If you are trying to provide a list of values, use the array syntax instead e.g. '{0}[]=<value>'.")
+# Limit policy per family: accepted limit -> page size, or the rejected error fields.
+LIMITS = {
+    "clamp": {"0": 1, "101": None, "-1": ("invalid_request_error", None, BETA_DIGIT), "abc": ("invalid_request_error", None, BETA_DIGIT)},
+    "strict": {"0": ("invalid_request_error", None, "limit must be between 1 and 100"), "101": ("invalid_request_error", None, "limit must be between 1 and 100"),
+               "-1": ("invalid_request_error", None, BETA_DIGIT), "abc": ("invalid_request_error", None, BETA_DIGIT)},
+    "vault": {"0": 1, "-1": 1, "101": None, "abc": ("invalid_request_error", None, BETA_DIGIT)},
+    "skills": {"0": 0, "101": ("integer_above_max_value", "limit", "Invalid 'limit': integer above maximum value. Expected a value <= 100, but got 101 instead."),
+               "-1": ("integer_below_min_value", "limit", "Invalid 'limit': integer below minimum value. Expected a value >= 0, but got -1 instead.")},
+    "files": {"0": (None, None, "limit must be between 1 and 10000."), "10001": (None, None, "limit must be between 1 and 10000.")},
+}
+
+
+def verify_tolerance(raw, url, headers, foreign_headers, name, listing, owned, policy, nested, private):
+    """Checks unknown/repeated keys and limit policy for one family as tenant A and B."""
+    checks = 0
+
+    def get(params, owner=True):
+        response = raw.get(url, headers=headers if owner else foreign_headers, params=params)
+        # Errors and tenant B responses never disclose owned resources or secrets.
+        if not owner or response.status_code != 200:
+            assert all(value not in response.text for value in private), (name, params)
+        return response
+
+    def foreign_matches(params, plain):
+        # Tenant B sees its own view: an empty top-level page or the same parent 404.
+        response = get(params, owner=False)
+        expected = get(plain, owner=False)
+        assert response.status_code == expected.status_code == (404 if nested else 200), (name, params)
+        assert response.json() == expected.json(), (name, params)
+        if not nested:
+            assert response.json()["data"] == [] and response.json()["has_more"] is False, (name, params)
+
+    def rejected(params, code, param, message):
+        nonlocal checks
+        response = get(params)
+        assert response.status_code == 400, (name, params, response.status_code)
+        error = response.json()["error"]
+        assert (error["type"], error["code"], error["param"], error["message"]) == ("invalid_request_error", code, param, message), (name, params, error)
+        # Query parsing precedes resource lookup, so tenant B receives the same error.
+        foreign = get(params, owner=False)
+        assert foreign.status_code == 400 and foreign.json() == response.json(), (name, params)
+        checks += 1
+
+    # A1: unknown keys are ignored for both tenants and through the SDK.
+    plain = {"order": "asc", "limit": 1}
+    baseline = get(plain).json()
+    for extra in ({"query_probe": "1"}, {"tenant_id": "foreign", "limit[]": "5"}, [("query_probe", "1"), ("query_probe", "2")]):
+        params = list(plain.items()) + (list(extra.items()) if isinstance(extra, dict) else extra)
+        assert get(params).json() == baseline, (name, extra)
+        foreign_matches(params, plain)
+        checks += 1
+    assert [value.id for value in listing(order="asc", limit=1, extra_query={"query_probe": "1"}).data] == owned[:1], name
+
+    # B1-B3: a repeated supported key rejects with the family's observed fields.
+    repeated = [("limit", "1"), ("limit", "2")]
+    if policy == "skills":
+        rejected(repeated, "duplicate_parameter", "limit", SKILLS_DUPLICATE.format("limit"))
+    elif policy == "files":
+        rejected(repeated, "unsupported_parameter", None, "Supported list parameters are after, limit, order and purpose, each supplied once.")
+    else:
+        rejected(repeated, "invalid_request_error", None, BETA_DUPLICATE.format("limit"))
+        rejected([("order", "asc"), ("order", "asc")], "invalid_request_error", None, BETA_DUPLICATE.format("order"))
+
+    # C1-C7: limit bounds.
+    for limit, outcome in LIMITS[policy].items():
+        params = {"order": "asc", "limit": limit}
+        if isinstance(outcome, tuple):
+            rejected(params, *outcome)
+            continue
+        size = len(owned) if outcome is None else outcome
+        body = get(params).json()
+        assert [value["id"] for value in body["data"]] == owned[:size], (name, limit)
+        assert body["has_more"] is (size < len(owned)), (name, limit)
+        assert (body["first_id"], body["last_id"]) == ((owned[0], owned[size - 1]) if size else (None, None)), (name, limit)
+        foreign_matches(params, {"order": "asc"})
+        checks += 1
+    if policy == "skills":
+        # A zero page reports only whether a resource follows the cursor.
+        tail = get({"order": "asc", "limit": 0, "after": owned[-1]}).json()
+        assert tail == {"object": "list", "data": [], "has_more": False, "first_id": None, "last_id": None}, name
+        assert listing(limit=0).data == [] and listing(limit=0).has_more is True, name
+        checks += 1
+    return checks
+
+def verify_resource_queries(raw, base, token, foreign, client, owned, session_id, vault_id):
+    """A2: single-resource routes ignore unknown query keys for both tenants."""
+    probe = "?tenant_id=foreign&include=files&cascade=true&query_probe=1&query_probe=2"
+    private = [value for values in owned.values() for value in values]
+    beta = {"OpenAI-Beta": "agents=v1"}
+    checks = 0
+
+    def call(method, path, key, query="", headers=beta, **body):
+        return raw.request(method, base + "/v1" + path + query, headers={**headers, "Authorization": "Bearer " + key}, **body)
+
+    def same(method, path, status, target, headers=beta, **body):
+        nonlocal checks
+        for key, expected in ((token, status), (foreign, 404)):
+            plain, probed = call(method, path, key, "", headers, **body), call(method, path, key, probe, headers, **body)
+            assert plain.status_code == probed.status_code == expected, (method, path, plain.status_code, probed.status_code)
+            assert plain.content == probed.content, (method, path)
+        # A foreign resource stays indistinguishable from a missing one of the same shape.
+        assert all(value not in probed.text for value in private), path
+        absent = target[:-1] + ("1" if target.endswith("0") else "0")
+        missing = call(method, path.replace(target, absent), token, probe, headers, **body)
+        assert missing.status_code == 404 and missing.json() == probed.json(), (path, missing.text, probed.text)
+        checks += 1
+
+    for prefix, target in (("/agents/", owned["agents"][0]), ("/agents/environments/templates/", owned["templates"][0]),
+                           ("/agents/sessions/", session_id), (f"/agents/sessions/{session_id}/turns/", owned["turns"][0]),
+                           ("/vaults/", vault_id), (f"/vaults/{vault_id}/credentials/", owned["credentials"][0])):
+        same("GET", prefix + target, 200, target)
+    for prefix, target in (("/files/", owned["files"][0]), ("/skills/", owned["skills"][0])):
+        same("GET", prefix + target, 200, target, headers={})
+    # An empty event batch is an authorized no-op; the unknown key changes nothing.
+    same("POST", f"/agents/sessions/{session_id}/events", 202, session_id, json={"events": []})
+    with raw.stream("GET", base + f"/v1/agents/sessions/{session_id}/events" + probe,
+                    headers={**beta, "Authorization": "Bearer " + token}) as stream:
+        assert stream.status_code == 200 and stream.headers["content-type"].startswith("text/event-stream")
+    checks += 1
+
+    # Writes with unknown keys apply normally for the owner and stay 404 for tenant B.
+    templates, vaults = client.beta.agents.environments.templates, client.beta.agents.vaults
+    template, vault = templates.create(name="Query Probe Template"), vaults.create(name="Query Probe Vault")
+    for method, path, body in (("POST", "/agents/environments/templates/" + template.id, {"json": {"name": "Foreign"}}),
+                               ("DELETE", "/agents/environments/templates/" + template.id, {}),
+                               ("DELETE", "/vaults/" + vault.id, {})):
+        assert call(method, path, foreign, probe, **body).status_code == 404, (method, path)
+    assert templates.retrieve(template.id) == template and vaults.retrieve(vault.id) == vault
+    renamed = call("POST", "/agents/environments/templates/" + template.id, token, probe, json={"name": "Renamed Probe"})
+    assert renamed.status_code == 200 and renamed.json()["name"] == "Renamed Probe"
+    for path, kind in (("/agents/environments/templates/" + template.id, "agent.environment.template.deleted"), ("/vaults/" + vault.id, "vault.deleted")):
+        deleted = call("DELETE", path, token, probe)
+        assert deleted.status_code == 200 and deleted.json() == {"id": path.rsplit("/", 1)[1], "object": kind, "deleted": True}, path
+        assert call("GET", path, token).status_code == 404, path
+
+    # Uploads: query keys are not form fields and never select a tenant.
+    upload = client.files.create(file=("query-probe.txt", b"probe"), purpose="user_data",
+                                 extra_query={"purpose": "assistants", "tenant_id": "foreign"})
+    assert upload.purpose == "user_data" and call("GET", "/files/" + upload.id, foreign, probe, headers={}).status_code == 404
+    rejected = raw.post(base + "/v1/files?purpose=user_data", headers={"Authorization": "Bearer " + token},
+                        files={"file": ("query-probe.txt", b"probe")}, data={"purpose": "assistants"})
+    assert rejected.status_code == 400
+    client.files.delete(upload.id)
+    manifest = b"---\nname: query-probe\ndescription: Query probe.\n---\nProbe.\n"
+    bundle = [("query-probe/SKILL.md", manifest, "text/markdown")]
+    skill = client.skills.create(files=bundle, extra_query={"tenant_id": "foreign", "default": "true"})
+    target = "/skills/" + skill.id + "/versions"
+    multipart = {"files": [("files[]", ("query-probe/SKILL.md", manifest, "text/markdown"))]}
+    denied = call("POST", target, foreign, probe, headers={}, **multipart)
+    absent = skill.id[:-1] + ("1" if skill.id.endswith("0") else "0")
+    missing = call("POST", "/skills/" + absent + "/versions", token, probe, headers={}, **multipart)
+    assert denied.status_code == missing.status_code == 404 and denied.json() == missing.json()
+    version = client.skills.versions.create(skill.id, files=bundle, extra_query={"default": "true", "tenant_id": "foreign"})
+    assert version.version == "2" and client.skills.retrieve(skill.id).default_version == "1"
+    client.skills.delete(skill.id)
+    return checks + 5
 
 def main():
     base, token, foreign = sys.argv[1:]
@@ -89,6 +251,9 @@ def main():
             ("files", "/files", client.files.list, False, False),
             ("skills", "/skills", client.skills.list, False, False),
         ]
+        policies = {"agents": "clamp", "templates": "clamp", "sessions": "clamp", "items": "clamp", "turns": "strict",
+                    "vaults": "vault", "credentials": "vault", "files": "files", "skills": "skills"}
+        tolerated = 0
         state_before = {name: [value.to_dict() for value in listing(order="asc", limit=1)] for name, _, listing, _, _ in families}
         rejected = 0
         for name, path, listing, beta, nested in families:
@@ -138,6 +303,26 @@ def main():
             else:
                 assert foreign_page.status_code == 200 and foreign_page.json()["data"] == [], name
             assert secret not in foreign_page.text and all(value not in foreign_page.text for value in owned[name]), name
+            private = [secret] + [value for values in owned.values() for value in values]
+            foreign_headers = {**headers, "Authorization": "Bearer " + foreign}
+            tolerated += verify_tolerance(raw, url, headers, foreign_headers, name, listing, owned[name], policies[name], nested, private)
+            if name in {"vaults", "credentials"}:
+                # D1: a scalar status and status[] filter by their union.
+                union = raw.get(url, headers=headers, params=[("order", "asc"), ("status", "active"), ("status[]", "archived")])
+                assert union.status_code == 200 and union.json() == raw.get(url, headers=headers, params={"order": "asc"}).json(), name
+                assert [value.id for value in listing(order="asc", status="active", extra_query={"status[]": "archived"})] == owned[name], name
+                duplicate = raw.get(url, headers=headers, params=[("status", "active"), ("status", "active")])
+                assert duplicate.status_code == 400 and duplicate.json()["error"]["message"] == BETA_DUPLICATE.format("status"), name
+                assert raw.get(url, headers=foreign_headers, params=[("status", "active"), ("status", "active")]).json() == duplicate.json(), name
+                tolerated += 2
+            if name == "files":
+                # D2: an explicit empty purpose is the same as omission.
+                for query in ({"purpose": ""}, {"purpose": "", "query_probe": "1"}):
+                    response = raw.get(url, headers=headers, params={"order": "asc", **query})
+                    assert response.status_code == 200 and [value["id"] for value in response.json()["data"]] == owned[name], name
+                    foreign_page = raw.get(url, headers=foreign_headers, params={"order": "asc", **query})
+                    assert foreign_page.status_code == 200 and foreign_page.json()["data"] == [], name
+                tolerated += 1
             if name in {"vaults", "credentials"}:
                 for query in ({"status": "query-invalid"}, {"status[]": "query-invalid"}):
                     response = raw.get(url, headers=headers, params=query)
@@ -155,7 +340,8 @@ def main():
         assert {name: [value.to_dict() for value in listing(order="asc", limit=1)] for name, _, listing, _, _ in families} == state_before
         assert list(sessions.turns.list(session_id, order="asc")) == turns
         assert list(sessions.items.list(session_id, order="asc")) == items
-        print(json.dumps({"result": "passed", "families": len(families), "sdk_and_raw_rejections": rejected,
+        resources = verify_resource_queries(raw, base, token, foreign, client, owned, session_id, vault_id)
+        print(json.dumps({"single_resource_checks": resources, "result": "passed", "families": len(families), "sdk_and_raw_rejections": rejected, "tolerance_checks": tolerated,
                           "sdk_empty_order_omitted": len(families), "retained_turns": len(turns), "retained_items": len(items), "postgres": True,
                           "worker_admission": True, "native_model_execution": False}))
 

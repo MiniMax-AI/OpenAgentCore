@@ -17,6 +17,7 @@ describe("Product navigation", () => {
     expect(html).toContain("Sessions");
     expect(html).not.toContain("Vaults");
     expect(html).not.toContain("Environments");
+    expect(html).not.toContain("Templates");
     expect(html).toContain('aria-current="page"');
   });
 
@@ -26,6 +27,14 @@ describe("Product navigation", () => {
     );
 
     expect(html).toContain("Vaults");
+    expect(html).toContain('aria-current="page"');
+  });
+
+  it("exposes Templates in managed Environment builds", () => {
+    const html = renderToStaticMarkup(
+      <ProductNavigation active="templates" showTemplates onSelect={() => undefined} />,
+    );
+    expect(html).toContain("Templates");
     expect(html).toContain('aria-current="page"');
   });
 });

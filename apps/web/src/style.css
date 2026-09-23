@@ -4332,10 +4332,13 @@ button.trace-step-row:hover {
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 960px) {
   body {
     min-width: 0;
   }
+}
+
+@media (max-width: 640px) {
 
   .app-sidebar {
     width: 52px;

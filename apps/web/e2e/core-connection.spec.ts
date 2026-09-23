@@ -8,6 +8,10 @@ interface ProbeInstrumentationWindow extends Window {
   __probeCallCount?: number;
   __resolveFirstProbe?: (() => void) | null;
   __stalledProbeCallCount?: number;
+  __holdNextLocalStartup?: boolean;
+  __oldStartupAbortCount?: number;
+  __resolveOldStartup?: (() => void) | null;
+  __resolveNewStartup?: (() => void) | null;
 }
 
 async function resetFixture(request: APIRequestContext) {
@@ -259,6 +263,105 @@ test("switches real connection modes and fences stale probes when the draft chan
   await expect(reopened.getByRole("status")).toHaveCount(0);
   await expect(reopened.getByRole("alert")).toHaveCount(0);
 });
+
+test("clears startup configuration synchronously and fences a stale read when the Core changes", async ({
+  page,
+  request,
+}) => {
+  await page.addInitScript(() => {
+    const target = window as ProbeInstrumentationWindow;
+    const originalFetch = window.fetch.bind(window);
+    const startupResponse = (defaultHarness: "codex" | "claude_sdk", provider: "docker" | "microsandbox") => new Response(JSON.stringify({
+      object: "agents.core.startup_configuration",
+      schema_version: 1,
+      supported: {
+        harnesses: ["claude_sdk", "codex", "mcode"],
+        managed_sandbox_providers: ["docker", "microsandbox"],
+      },
+      configured: {
+        default_harness: defaultHarness,
+        enabled_harnesses: [defaultHarness],
+        daemon_gateway: true,
+        self_hosted: true,
+        managed_sandbox: { enabled: true, provider, maintenance: false },
+        model_providers: [{ harness: defaultHarness, endpoint_configured: true }],
+      },
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+
+    target.__holdNextLocalStartup = false;
+    target.__oldStartupAbortCount = 0;
+    target.__resolveOldStartup = null;
+    target.__resolveNewStartup = null;
+    window.fetch = (input, init) => {
+      const value = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const candidate = new URL(value, window.location.href);
+      if (!candidate.pathname.endsWith("/v1/agents/core/startup-configuration")) return originalFetch(input, init);
+      const authorization = new Headers(init?.headers).get("Authorization");
+      if (target.__holdNextLocalStartup && authorization == null) {
+        target.__holdNextLocalStartup = false;
+        init?.signal?.addEventListener("abort", () => {
+          target.__oldStartupAbortCount = (target.__oldStartupAbortCount ?? 0) + 1;
+        }, { once: true });
+        return new Promise<Response>((resolve) => {
+          target.__resolveOldStartup = () => resolve(startupResponse("codex", "docker"));
+        });
+      }
+      if (authorization === "Bearer replacement-token") {
+        return new Promise<Response>((resolve) => {
+          target.__resolveNewStartup = () => resolve(startupResponse("claude_sdk", "microsandbox"));
+        });
+      }
+      return originalFetch(input, init);
+    };
+  });
+
+  await boot(page, request);
+  await page.getByRole("button", { name: "System", exact: true }).click();
+  const system = page.locator(".system-page");
+  await expect(system.locator(".system-harness-card").filter({ hasText: "Codex" })).toContainText("Enabled");
+  await page.evaluate(() => {
+    (window as ProbeInstrumentationWindow).__holdNextLocalStartup = true;
+  });
+  await system.getByRole("button", { name: "Refresh System status" }).click();
+  await expect.poll(() => page.evaluate(() => typeof (window as ProbeInstrumentationWindow).__resolveOldStartup)).toBe("function");
+
+  const { dialog } = await openConnection(page);
+  await dialog.getByRole("radio", { name: /Other compatible Core/ }).click();
+  await dialog.getByLabel("Compatible Core base URL").fill(`${new URL(page.url()).origin}/v1`);
+  await dialog.getByLabel("Bearer token").fill("replacement-token");
+  await dialog.getByRole("button", { name: "Apply connection" }).click();
+
+  const daemonGateway = system.getByRole("listitem").filter({ hasText: "Daemon gateway" });
+  await expect(daemonGateway).toContainText("Checking…");
+  await expect(system).not.toContainText("Configured for this process");
+  await expect.poll(() => page.evaluate(() => (window as ProbeInstrumentationWindow).__oldStartupAbortCount ?? 0)).toBe(1);
+  await expect.poll(() => page.evaluate(() => typeof (window as ProbeInstrumentationWindow).__resolveNewStartup)).toBe("function");
+  await page.evaluate(() => (window as ProbeInstrumentationWindow).__resolveNewStartup?.());
+  await expect(system.locator(".system-harness-card").filter({ hasText: "Claude SDK" })).toContainText("Enabled");
+  await expect(system.getByRole("listitem").filter({ hasText: "Managed sandbox" })).toContainText("Microsandbox");
+
+  await page.evaluate(() => (window as ProbeInstrumentationWindow).__resolveOldStartup?.());
+  await expect(system.locator(".system-harness-card").filter({ hasText: "Claude SDK" })).toContainText("Enabled");
+  await expect(system).not.toContainText("Docker · Maintenance");
+});
+
+for (const status of [404, 405]) {
+  test(`shows startup configuration as unsupported when an older Core returns ${status}`, async ({ page, request }) => {
+    await page.route("**/v1/agents/core/startup-configuration", (route) => route.fulfill({
+      status,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "unsupported", message: "Unavailable." } }),
+    }));
+    await boot(page, request);
+    await page.getByRole("button", { name: "System", exact: true }).click();
+
+    const system = page.locator(".system-page");
+    await expect(system.getByRole("listitem").filter({ hasText: "Daemon gateway" })).toContainText("Not exposed");
+    await expect(system).toContainText("This Core version does not expose the startup configuration extension");
+    await expect(system).not.toContainText("Configured for this process");
+    await expect(system).not.toContainText("Checking…");
+  });
+}
 
 test("announces loading, authenticated access, and each safe failure state from one GET", async ({
   page,

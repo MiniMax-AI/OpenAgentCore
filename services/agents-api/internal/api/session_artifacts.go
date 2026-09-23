@@ -22,26 +22,22 @@ func WithSessionArtifacts(s SessionArtifactStore) Option {
 	return func(h *Handler) { h.artifacts = s }
 }
 
-func (h *Handler) artifactsReady(w http.ResponseWriter, r *http.Request, list bool) bool {
+func (h *Handler) artifactsReady(w http.ResponseWriter) bool {
 	if h.artifacts == nil {
 		writeError(w, http.StatusServiceUnavailable, "artifact_storage_unavailable", "Artifact storage is unavailable.")
-		return false
-	}
-	if !list && r.URL.RawQuery != "" {
-		writeStoreError(w, r, store.ErrInvalidInput)
 		return false
 	}
 	return true
 }
 
 // @Summary List immutable Session artifacts
-// @Description Lists published outputs independently of Environment availability. Sorting uses publication time and ID. The local default page size is 20; exact upstream defaults and error parity remain unverified.
+// @Description Lists published outputs independently of Environment availability. Sorting uses publication time and ID. A later Turn publishes a path again only when it is new, its bytes changed, or no Artifact remains for it. A malformed environment_id matches nothing. The local default page size is 20; exact upstream defaults and error parity remain unverified.
 // @Tags Artifacts
 // @Produce json
 // @Security BearerAuth
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param session_id path string true "Session ID"
-// @Param environment_id query string false "Producing Environment ID"
+// @Param environment_id query string false "Producing Environment ID; an unknown or malformed ID returns an empty page"
 // @Param after query string false "Last immutable artifact ID"
 // @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
 // @Param order query string false "Publication order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
@@ -49,7 +45,7 @@ func (h *Handler) artifactsReady(w http.ResponseWriter, r *http.Request, list bo
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts [get]
 func (h *Handler) listSessionArtifacts(w http.ResponseWriter, r *http.Request) {
-	if !h.artifactsReady(w, r, true) {
+	if !h.artifactsReady(w) {
 		return
 	}
 	options, ok := readPage(w, r, "environment_id")
@@ -61,11 +57,12 @@ func (h *Handler) listSessionArtifacts(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	response := v1.SessionArtifactList{Data: make([]v1.SessionArtifact, 0, len(page.Artifacts)), HasMore: page.NextCursor != ""}
+	data := make([]v1.SessionArtifact, 0, len(page.Artifacts))
 	for _, artifact := range page.Artifacts {
-		response.Data = append(response.Data, artifactResponse(artifact))
+		data = append(data, artifactResponse(artifact))
 	}
-	writeJSON(w, http.StatusOK, response)
+	first, last := listBounds(data, func(value v1.SessionArtifact) string { return value.ID })
+	writeJSON(w, http.StatusOK, v1.SessionArtifactList{Object: "list", Data: data, HasMore: page.NextCursor != "", FirstID: first, LastID: last})
 }
 
 // @Summary Retrieve immutable artifact metadata
@@ -79,7 +76,7 @@ func (h *Handler) listSessionArtifacts(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts/{artifact_id} [get]
 func (h *Handler) getSessionArtifact(w http.ResponseWriter, r *http.Request) {
-	if !h.artifactsReady(w, r, false) {
+	if !h.artifactsReady(w) {
 		return
 	}
 	artifact, err := h.artifacts.GetSessionArtifact(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"))
@@ -102,7 +99,7 @@ func (h *Handler) getSessionArtifact(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts/{artifact_id} [delete]
 func (h *Handler) deleteSessionArtifact(w http.ResponseWriter, r *http.Request) {
-	if !h.artifactsReady(w, r, false) {
+	if !h.artifactsReady(w) {
 		return
 	}
 	id := chi.URLParam(r, "artifact_id")
@@ -125,7 +122,7 @@ func (h *Handler) deleteSessionArtifact(w http.ResponseWriter, r *http.Request) 
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts/{artifact_id}/content [get]
 func (h *Handler) sessionArtifactContent(w http.ResponseWriter, r *http.Request) {
-	if !h.artifactsReady(w, r, false) {
+	if !h.artifactsReady(w) {
 		return
 	}
 	serveStoredContent(w, r, func(ctx context.Context, consume func(string, int64, io.Reader) error) error {

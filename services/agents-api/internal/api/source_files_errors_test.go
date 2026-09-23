@@ -16,6 +16,11 @@ func TestSourceFileMissingErrorParameters(t *testing.T) {
 		{http.MethodDelete, "/v1/files/file-missing", "id"},
 		{http.MethodGet, "/v1/files/file-missing/content", "id"},
 		{http.MethodGet, "/v1/files?after=file-missing", "after"},
+		// Unknown query keys do not change single-resource or list lookups.
+		{http.MethodGet, "/v1/files/file-missing?unknown=1&tenant_id=foreign", "id"},
+		{http.MethodDelete, "/v1/files/file-missing?unknown=1", "id"},
+		{http.MethodGet, "/v1/files/file-missing/content?unknown=1", "id"},
+		{http.MethodGet, "/v1/files?after=file-missing&unknown=1", "after"},
 	} {
 		t.Run(tc.method+tc.path, func(t *testing.T) {
 			f := &sourceFilesFixture{listErr: fmt.Errorf("wrapped: %w", store.ErrNotFound)}

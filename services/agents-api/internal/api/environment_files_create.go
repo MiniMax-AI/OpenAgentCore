@@ -42,10 +42,6 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 		writeStoreError(w, r, err)
 		return
 	}
-	if r.URL.RawQuery != "" {
-		writeStoreError(w, r, store.ErrInvalidInput)
-		return
-	}
 	const maxJSON = int64(((proto.WorkspaceWriteMaxBytes+2)/3)*4 + (16 << 10))
 	raw, ok := readJSONBodyLimit(w, r, maxJSON, "Inline upload exceeds this service's bounded file limit.")
 	if !ok {
@@ -94,7 +90,7 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	} else {
-		if !h.sourceFilesReady(w, r) {
+		if !h.sourceFilesAvailable(w) {
 			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)

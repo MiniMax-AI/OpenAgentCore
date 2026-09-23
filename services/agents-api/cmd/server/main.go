@@ -80,12 +80,16 @@ func run() error {
 	if engine == "" {
 		engine = "codex"
 	}
+	kinds, err := enabledHarnesses(engine)
+	if err != nil {
+		return err
+	}
 	managed, closeManaged, err := managedRuntimes()
 	if err != nil {
 		return err
 	}
 	defer closeManaged()
-	transientOptions, err := executionOptions()
+	transientOptions, modelProviderEndpoints, err := executionOptionsConfiguration()
 	if err != nil {
 		return err
 	}
@@ -176,10 +180,6 @@ func run() error {
 			}
 		}()
 		options = append(options, api.WithExecution(worker), api.WithEnvironmentDirectoryReader(worker), api.WithEnvironmentFileWriter(worker))
-		kinds, err := enabledHarnesses(engine)
-		if err != nil {
-			return err
-		}
 		options = append(options, api.WithHarnesses(kinds))
 		if managed != nil {
 			options = append(options, api.WithHostedEnvironments())
@@ -211,6 +211,7 @@ func run() error {
 			<-samplerDone
 		}()
 	}
+	options = append(options, api.WithStartupConfiguration(coreStartupConfiguration(engine, kinds, registry != nil, modelProviderEndpoints, managedRuntimeProviderKind(managed), managed)))
 	handler, err := api.NewHandler(executionStore, auth, engine, options...)
 	if err != nil {
 		return err

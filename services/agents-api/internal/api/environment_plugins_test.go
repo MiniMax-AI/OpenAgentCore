@@ -81,7 +81,7 @@ func TestPluginsSharedParsingConfidentialMetadataAndOverrides(t *testing.T) {
 	}
 	lookup := &templateLookupStore{network: "enabled", plugins: template.Initialization.Plugins, directories: template.Initialization.CapabilityDirectories}
 	h := Handler{store: lookup}
-	for _, override := range []string{"", `,"plugins":[],"capability_directories":[]`} {
+	for _, override := range []string{"", `,"plugins":null,"capability_directories":null`, `,"plugins":[],"capability_directories":[]`} {
 		if err = json.Unmarshal([]byte(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","environment_template_id":"template"`+override+`}}`), &decoded); err != nil {
 			t.Fatal(err)
 		}
@@ -97,16 +97,11 @@ func TestPluginsSharedParsingConfidentialMetadataAndOverrides(t *testing.T) {
 			t.Fatal(err)
 		}
 		want := 1
-		if override != "" {
+		if strings.Contains(override, "[]") {
 			want = 0
 		}
 		if len(in.initialization.Plugins) != want || len(in.initialization.CapabilityDirectories) != want || len(in.Environment.Plugins) != want {
 			t.Fatal("inheritance/replacement")
-		}
-	}
-	for _, field := range []string{`"plugins":null`, `"capability_directories":null`} {
-		if _, _, _, err := decodeTemplateEnvironment([]byte(`{"type":"openai_hosted","environment_template_id":"template",` + field + `}`)); err == nil {
-			t.Fatal("unqualified null override")
 		}
 	}
 	for _, directory := range []string{`null`, `"/private"`, `"/workspace/../private"`, `"relative"`} {

@@ -12,6 +12,9 @@ type SessionArtifact struct {
 }
 
 type SessionArtifactList struct {
+	Object  string            `json:"object" enums:"list" binding:"required"`
+	FirstID *string           `json:"first_id" extensions:"x-nullable"`
+	LastID  *string           `json:"last_id" extensions:"x-nullable"`
 	Data    []SessionArtifact `json:"data" binding:"required"`
 	HasMore bool              `json:"has_more" binding:"required"`
 }

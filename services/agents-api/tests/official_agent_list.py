@@ -41,12 +41,14 @@ def verify_agent_list(client, other, invalid, saved, expect_error):
         default = raw.get(url, headers=headers).json()
         assert len(default["data"]) == min(20, len(saved)) and default["has_more"] == (len(saved) > 20)
         assert [agent["id"] for agent in default["data"]] == [agent.id for agent in desc[:20]]
-        for params in ({"limit": "0"}, {"limit": "-1"}, {"limit": "1.5"}, {"limit": "null"},
+        for params in ({"limit": "-1"}, {"limit": "1.5"}, {"limit": "null"},
                        {"limit": ""}, {"limit": str(2**63)}, {"order": "newest"}, {"after": "invalid-id"},
-                       {"tenant_id": "other"}, [("limit", "1"), ("limit", "2")]):
+                       [("limit", "1"), ("limit", "2")]):
             response = raw.get(url, headers=headers, params=params)
             assert response.status_code == 400, (params, response.status_code)
             assert response.json()["error"]["type"] == "invalid_request_error"
+        zero = raw.get(url, headers=headers, params={"limit": "0", "tenant_id": "other"}).json()
+        assert [agent["id"] for agent in zero["data"]] == [desc[0].id] and zero["has_more"] is True
         assert raw.get(url).status_code == 401
     print("Agent list: fixed SDK auto-pagination/raw HTTP, order/cursors, snapshots, isolation and local limit/envelope behavior passed; exact upstream defaults/caps/errors remain unverified.")
     return [agent.id for agent in asc]

@@ -39,6 +39,7 @@ type runtimeLifecycle struct {
 	pendingCursor string
 	connections   map[string]*runtimeConnection
 	initializing  *runtimeInitialization
+	wakeHints     chan struct{}
 }
 
 func newRuntimeLifecycle(s *store.Store, registry *gateway.Registry, config *RuntimeProvider) (*runtimeLifecycle, error) {
@@ -63,7 +64,7 @@ func newRuntimeLifecycle(s *store.Store, registry *gateway.Registry, config *Run
 		copied.Suspension = &policy
 	}
 	ctx, stop := context.WithCancel(context.Background())
-	return &runtimeLifecycle{store: s, registry: registry, config: copied, gate: make(chan struct{}, 1), ctx: ctx, stop: stop, connections: make(map[string]*runtimeConnection)}, nil
+	return &runtimeLifecycle{store: s, registry: registry, config: copied, gate: make(chan struct{}, 1), ctx: ctx, stop: stop, connections: make(map[string]*runtimeConnection), wakeHints: make(chan struct{}, 1)}, nil
 }
 
 func (r *runtimeLifecycle) lock(ctx context.Context) error {
@@ -331,14 +332,5 @@ func runtimeReference(owner store.RuntimeAllocation) sandbox.Reference {
 func (w *Worker) runManagedRuntimes(ctx context.Context) error {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	for {
-		if err := w.ReconcileManagedRuntimes(ctx); err != nil {
-			return err
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-		}
-	}
+	return runRuntimeMaintenance(ctx, ticker.C, w.runtimes.wakeHints, w.ReconcileManagedRuntimes)
 }

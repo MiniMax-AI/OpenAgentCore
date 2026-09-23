@@ -123,7 +123,10 @@ native continuity and same-tenant device bindings. The public API applies schema
 validation/defaults before storage. Internal bounds are 64 KiB for metadata and
 512 KiB for configuration. Keep credentials out of both. Public metadata permits
 at most 16 string pairs, 64-character keys and 512-character values; storage bounds
-do not replace those rules. Tenant identity comes from authenticated credentials,
+do not replace those rules. Violations and non-string values return
+`invalid_request_error` with a `metadata` or `metadata.<key>` param. PostgreSQL
+cannot store U+0000, so requests containing it in any stored string return 400
+before anything is written; this is a local limit, not hosted parity. Tenant identity comes from authenticated credentials,
 never metadata or a caller-supplied business identity.
 
 ## Internal Turn persistence
@@ -202,6 +205,8 @@ The SDK base URL is `http://127.0.0.1:8091/v1`. Requests require a bearer key.
 Agents and Vault routes also require `OpenAI-Beta: agents=v1` (set by their SDK
 resources); general Files routes do not. Supported operations include:
 
+- Safe read-only [Core startup configuration](../../contracts/agents-api/startup-configuration.md)
+  for build support and process selections, without Runtime or Session observations.
 - Saved Agent create/retrieve/update/list/delete.
 - Session create/retrieve/list/delete and metadata-only update. Creation supports inline
   configuration or a saved `agent_id`, field replacements, initial text
@@ -224,7 +229,8 @@ Execution uses the selected
 [engine profile](../../contracts/agents-api/README.md#public-engine-profiles),
 including `none` and the colocated self-hosted profile described below.
 Ordinary JSON requests have a 1 MiB body limit; file transfers use the separate
-bounds in the Files contracts. Session lists support `after`, `limit` (1..100),
+bounds in the Files contracts. Session lists support `after`, `limit` (0 is treated
+as 1 and values above 100 as 100),
 `order` (`asc`/`desc`) and optional immutable root `agent_id`. The local defaults
 are 20 and descending order; exact hosted limits/error semantics remain unverified.
 Session updates require the metadata field; null/empty clears it and an object

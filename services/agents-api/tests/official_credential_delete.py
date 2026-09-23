@@ -26,15 +26,17 @@ def verify_credential_deletion(client, other, invalid, peer, canary, expect_erro
         assert raw.delete(url).status_code == 401
         response = raw.delete(url, headers={"Authorization": headers["Authorization"]})
         assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_beta"
-        for kwargs in [{"params": {"include": "token"}}, {"content": b"{}"}]:
-            assert raw.request("DELETE", url, headers=headers, **kwargs).status_code == 400
+        # The body rejects; the unknown include key is ignored and never exposes the token.
+        for kwargs in [{"content": b"{}"}, {"params": {"include": "token"}, "content": b"{}"}]:
+            response = raw.request("DELETE", url, headers=headers, **kwargs)
+            assert response.status_code == 400 and canary not in response.text
         assert credentials.retrieve(target.id, vault_id=vault.id) == target
         response = peer.beta.agents.vaults.credentials.with_raw_response.delete(target.id, vault_id=vault.id)
         expected = {"id": target.id, "deleted": True, "object": "vault.credential.deleted"}
         assert response.status_code == 200 and response.parse().to_dict() == expected
         assert response.http_response.json() == expected and canary not in response.http_response.text
         assert response.headers["cache-control"] == "no-store"
-        response = raw.delete(endpoint + "/" + values[1].id, headers=headers)
+        response = raw.delete(endpoint + "/" + values[1].id, headers=headers, params={"include": "token"})
         assert response.status_code == 200 and response.json() == {**expected, "id": values[1].id}
         assert canary not in response.text
         for value in values[:2]:

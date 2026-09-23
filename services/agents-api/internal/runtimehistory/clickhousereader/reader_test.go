@@ -206,6 +206,37 @@ func TestReaderRejectsIncompleteSessionTokenUsage(t *testing.T) {
 	}
 }
 
+func TestReaderKeepsStartedAtJitterInOneAllocationSeries(t *testing.T) {
+	start := time.Date(2026, 9, 23, 8, 0, 0, 0, time.UTC)
+	firstStarted := start.Add(-time.Minute).UnixNano()
+	secondStarted := start.Add(-time.Minute + 1500*time.Millisecond).UnixNano()
+	baseline := start.Add(-10 * time.Second).UnixNano()
+	observed := start.Add(10 * time.Second).UnixNano()
+	client := &fakeClient{rows: &fakeRows{values: [][]any{
+		metricRow(baseline, baseline, testAllocation, &firstStarted, "microsandbox", "observed", otlpexporter.SampleName, 1),
+		metricRow(baseline, baseline, testAllocation, &firstStarted, "microsandbox", "observed", otlpexporter.CPUUsageName, 1),
+		metricRow(baseline, baseline, testAllocation, &firstStarted, "microsandbox", "observed", otlpexporter.CPUCapacityName, 2),
+		metricRow(observed, observed, testAllocation, &secondStarted, "microsandbox", "observed", otlpexporter.SampleName, 1),
+		metricRow(observed, observed, testAllocation, &secondStarted, "microsandbox", "observed", otlpexporter.CPUUsageName, 3),
+		metricRow(observed, observed, testAllocation, &secondStarted, "microsandbox", "observed", otlpexporter.CPUCapacityName, 2),
+	}}}
+	reader, err := newReader(client, testCapabilities(), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader.now = func() time.Time { return start.Add(time.Minute) }
+	result, err := reader.Query(t.Context(), testQuery(start))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Series) != 1 || !result.Series[0].StartedAt.Equal(time.Unix(0, firstStarted)) {
+		t.Fatalf("start-time jitter split one allocation: %+v", result.Series)
+	}
+	if len(result.Series[0].Points) != 1 || result.Series[0].Points[0].CPUUtilizationRatio == nil || *result.Series[0].Points[0].CPUUtilizationRatio != .05 {
+		t.Fatalf("allocation CPU interval was not retained: %+v", result.Series[0].Points)
+	}
+}
+
 func runtimehistoryResponseValidation(query runtimehistory.Query, result runtimehistory.Result) error {
 	response := runtimehistory.Response{
 		Capabilities: testCapabilities(), Scope: query.Scope,

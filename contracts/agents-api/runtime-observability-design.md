@@ -168,14 +168,14 @@ CPU percentage is derived from the delta between two cumulative samples and thei
 observation times. A single sample cannot truthfully supply CPU percentage.
 
 The API projection may additionally expose `usage_cores` and `utilization_ratio`
-only when the service has two ordered samples for the same Runtime incarnation.
+only when the service has two ordered samples for the same Runtime allocation.
 A future process-local observation cache may keep the previous cumulative value
 for this calculation. Phase 2 intentionally leaves both derived fields null
 because it has only one provider sample per request. The browser-local live window
 therefore derives interval utilization from adjacent cumulative samples only when
-Session, allocation, compute `started_at`, and provider observation order still
-match. Restart, replacement, counter regression, missing capacity, or cache loss
-creates a gap; none changes the cumulative source measurement or lifecycle state.
+Session, allocation, and provider observation order still match. Counter regression,
+missing capacity, or cache loss creates a gap; none changes the cumulative source
+measurement or lifecycle state.
 
 ## 8. Duration semantics
 
@@ -334,9 +334,9 @@ Core-owned tenant, Session, Environment, allocation, mode, provider type,
 status, safe reason, collection source (`on_read` or `periodic`), and Core
 resolved/observed timestamps are metric attributes. The explicit nanosecond
 timestamps preserve the record join key when a backend's generic OTLP tables
-store metric event time at lower precision. CPU, capacity, and memory points
-are exported only when the sample also carries the compute `started_at` fence;
-that fence is included as an attribute on every such point. Provider keys,
+store metric event time at lower precision. CPU, capacity, and memory points are
+exported only when the sample also carries a provider start estimate; it is
+included for compatible display but is not series identity. Provider keys,
 provider receipts, native container/pod/instance
 identifiers, raw errors, paths, and credentials are not attributes. Missing
 measurements produce no value point; they are represented only by the explicit
@@ -377,8 +377,9 @@ before calling a Reader. Reader queries always carry tenant, Session, and
 Environment scope plus a bounded start, exclusive end, server-selected step,
 and total point budget. Provider-native identity is never a query input.
 
-Reader results remain divided by allocation and the lossless compute `started_at`
-seconds-plus-nanoseconds fence.
+Reader results remain divided by allocation. Provider `started_at` values are
+retained only as compatible display metadata and never split one durable allocation
+into multiple Dashboard series.
 Every bucket reports explicit observation coverage and nullable CPU/memory
 values. CPU utilization may be derived only from ordered cumulative counters
 inside one fence; successive intervals are assigned to the bucket containing
@@ -398,7 +399,8 @@ This internal boundary, the Session-scoped public extension, capability discover
 strict client, and production ClickHouse reference Reader are implemented. The
 Reader queries only the specialized projection, always includes tenant, Session,
 Environment, bounded time, and `collection_source = 'periodic'` predicates, and
-aggregates resource points by allocation plus lossless incarnation fence. Durable
+aggregates resource points by allocation, resetting CPU derivation after a
+cumulative-counter regression. Durable
 Web ranges remain gated on real retention, isolation, restart, and incarnation
 acceptance.
 
@@ -563,13 +565,13 @@ Implemented for the browser-local current-snapshot live window.
   observation results. It is disabled by default, drops on queue saturation, and
   cannot fail the current-observation request path.
 - Implemented: optional server-only OTLP/HTTP protobuf transport for the six
-  documented Runtime instruments, including allocation and compute-incarnation
-  fencing attributes. Configuration is strict and secrets never reach Web.
+  documented Runtime instruments, including allocation identity and provider
+  start metadata. Configuration is strict and secrets never reach Web.
 - Implemented: optional execution-owner singleton sampling across all nondeleted
   managed Sessions. Keyset scans, provider concurrency, source deadlines, and
   non-overlapping sweeps are bounded; collection source is exported explicitly.
 - Implemented: backend-neutral `runtimehistory` types and service validation.
-  Tenant/Session/Environment scope precedes every Reader query; incarnation,
+  Tenant/Session/Environment scope precedes every Reader query; allocation,
   coverage, nullability, ordering, range and total-point invariants are enforced.
 - Implemented: safe public capability discovery, bounded Session-scoped history
   query routes, generated OpenAPI schemas, and strict `packages/agents-client`
@@ -579,8 +581,8 @@ Implemented for the browser-local current-snapshot live window.
   tenant/Session/Environment/periodic-source query predicates. No backend is a
   Core execution dependency.
 - Qualified: real OTLP Collector-to-ClickHouse acceptance covers tenant isolation,
-  periodic-only public reads, Reader restart persistence, and multiple Runtime
-  incarnations without cross-fence CPU derivation.
+  periodic-only public reads, Reader restart persistence, continuous allocation
+  series, and CPU baseline reset after cumulative-counter regression.
 - Implemented: Core Web discovers capabilities, reloads bounded Session histories
   with bounded concurrency, and exposes explicit Live versus History sources with
   1h, 6h, and 24h Durable ranges, including canonical Session token throughput.

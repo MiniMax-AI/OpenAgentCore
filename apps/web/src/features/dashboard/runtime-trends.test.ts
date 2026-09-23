@@ -140,7 +140,7 @@ describe("Runtime live-window trends", () => {
     ]);
   });
 
-  it("derives real CPU utilization from cumulative samples within one Runtime incarnation", () => {
+  it("derives real CPU utilization from cumulative samples within one allocation", () => {
     const cumulative = (at: number, usage: number) => snapshot(at, {
       cpuRatio: null,
       cpuUsageCores: null,
@@ -154,12 +154,27 @@ describe("Runtime live-window trends", () => {
     expect(samples.map((sample) => sample.targets[0]?.cpuRatio ?? null)).toEqual([null, .5, .5]);
   });
 
-  it("does not derive CPU across restarts, allocation changes, or counter regressions", () => {
+  it("uses allocation identity for Live chart series while ignoring start-time jitter", () => {
+    const first = runtimeTrendSample(snapshot(60_000, { cpuRatio: .25, startedAt: 0 }));
+    const jittered = runtimeTrendSample(snapshot(120_000, { cpuRatio: .5, startedAt: 1 }));
+    const replaced = runtimeTrendSample(snapshot(180_000, {
+      cpuRatio: .5,
+      startedAt: 1,
+      allocationId: "44444444-4444-4444-8444-444444444444",
+    }));
+    expect(first.targets[0]?.seriesId).toBe(jittered.targets[0]?.seriesId);
+    expect(replaced.targets[0]?.seriesId).not.toBe(first.targets[0]?.seriesId);
+  });
+
+  it("keeps one allocation across start changes but resets CPU on allocation changes or counter regressions", () => {
     const base = snapshot(60_000, {
       cpuRatio: null, cpuUsageCores: null, cpuUsageSecondsTotal: 100, startedAt: 0,
     });
+    const continued = appendRuntimeTrendSample(appendRuntimeTrendSample([], base), snapshot(120_000, {
+      cpuRatio: null, cpuUsageCores: null, cpuUsageSecondsTotal: 160, startedAt: 1,
+    }));
+    expect(continued.at(-1)?.targets[0]?.cpuRatio ?? null).toBe(.5);
     for (const next of [
-      snapshot(120_000, { cpuRatio: null, cpuUsageCores: null, cpuUsageSecondsTotal: 160, startedAt: 1 }),
       snapshot(120_000, { cpuRatio: null, cpuUsageCores: null, cpuUsageSecondsTotal: 160, startedAt: 0, allocationId: "44444444-4444-4444-8444-444444444444" }),
       snapshot(120_000, { cpuRatio: null, cpuUsageCores: null, cpuUsageSecondsTotal: 10, startedAt: 0 }),
     ]) {
@@ -168,16 +183,15 @@ describe("Runtime live-window trends", () => {
     }
   });
 
-  it("does not connect directly reported CPU across Runtime incarnation fences", () => {
+  it("keeps directly reported CPU continuous across start changes but not stale observations", () => {
     const base = snapshot(60_000, { cpuRatio: .25, startedAt: 0 });
-    for (const next of [
-      snapshot(120_000, { cpuRatio: .5, startedAt: 1 }),
-      snapshot(120_000, { cpuRatio: .5, startedAt: 0, allocationId: "44444444-4444-4444-8444-444444444444" }),
+    const continued = appendRuntimeTrendSample(appendRuntimeTrendSample([], base), snapshot(120_000, { cpuRatio: .5, startedAt: 1 }));
+    expect(continued.at(-1)?.targets[0]?.cpuRatio ?? null).toBe(.5);
+    const stale = appendRuntimeTrendSample(
+      appendRuntimeTrendSample([], base),
       snapshot(120_000, { cpuRatio: .5, startedAt: 0, observedAt: 60 }),
-    ]) {
-      const samples = appendRuntimeTrendSample(appendRuntimeTrendSample([], base), next);
-      expect(samples.at(-1)?.targets[0]?.cpuRatio ?? null).toBeNull();
-    }
+    );
+    expect(stale.at(-1)?.targets[0]?.cpuRatio ?? null).toBeNull();
   });
 
   it("rejects non-finite CPU ratios produced by finite provider inputs", () => {
