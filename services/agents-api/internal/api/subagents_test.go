@@ -32,9 +32,11 @@ func sampleSubagent() v1.Subagent {
 	return v1.Subagent{ID: "child", Object: "agent.session.subagent", SessionID: "session", ParentAgentID: "root", OpenedAt: 1700000000, Status: "active"}
 }
 
+// sampleSubagentTurn has the official child Turn shape: agent_id is the Session's
+// Agent ID and subagent_id identifies the child.
 func sampleSubagentTurn() v1.Turn {
 	id := "child"
-	return v1.Turn{ID: "turn", AgentID: id, SubagentID: &id, SessionID: "session", Object: "agent.session.turn", Status: "completed", CreatedAt: 1700000001}
+	return v1.Turn{ID: "turn", AgentID: "root", SubagentID: &id, SessionID: "session", Object: "agent.session.turn", Status: "completed", CreatedAt: 1700000001}
 }
 
 func (s *subagentReadStore) GetSubagent(_ context.Context, tenant, session, subagent string) (v1.Subagent, error) {
@@ -81,16 +83,18 @@ func (s *subagentReadStore) items() v1.ItemList {
 	return v1.ItemList{Data: []v1.Item{{ID: "item", TurnID: "turn", Type: "agent_message", SenderAgentID: "child", RecipientAgentID: "root", Content: []v1.ItemContent{{Type: "output_text", Text: &text}}}}, HasMore: true}
 }
 
+// Item lists clamp limit like Session Items; the Subagent and Subagent Turn lists
+// reject it, as the official service does.
 var subagentRoutes = []struct {
 	path, method, subagent, turn string
-	list                         bool
+	list, clamped                bool
 }{
-	{"", "list", "", "", true},
-	{"/child", "get", "child", "", false},
-	{"/child/items", "items", "child", "", true},
-	{"/child/turns", "turns", "child", "", true},
-	{"/child/turns/turn", "turn", "child", "turn", false},
-	{"/child/turns/turn/items", "turn_items", "child", "turn", true},
+	{"", "list", "", "", true, false},
+	{"/child", "get", "child", "", false, false},
+	{"/child/items", "items", "child", "", true, true},
+	{"/child/turns", "turns", "child", "", true, false},
+	{"/child/turns/turn", "turn", "child", "turn", false, false},
+	{"/child/turns/turn/items", "turn_items", "child", "turn", true, true},
 }
 
 func requestSubagents(h http.Handler, path, auth, beta string) *httptest.ResponseRecorder {
@@ -120,6 +124,10 @@ func TestSubagentRoutesPreserveAuthenticatedParentScope(t *testing.T) {
 				if s.limit != 20 || s.ascending || s.after != "" || string(body["has_more"]) != "true" {
 					t.Fatalf("list defaults: %+v %s", s, w.Body)
 				}
+				// Every Subagent list uses the common envelope.
+				if string(body["object"]) != `"list"` || len(body["first_id"]) < 3 || string(body["first_id"]) != string(body["last_id"]) {
+					t.Fatalf("list envelope: %s", w.Body)
+				}
 				w = requestSubagents(h, route.path+"?after=last&limit=2&order=asc", "Bearer test-api-key", "agents=v1")
 				if w.Code != http.StatusOK || s.after != "last" || s.limit != 2 || !s.ascending {
 					t.Fatalf("pagination: %+v %s", s, w.Body)
@@ -130,7 +138,7 @@ func TestSubagentRoutesPreserveAuthenticatedParentScope(t *testing.T) {
 						t.Fatalf("%s missing null: %s", field, w.Body)
 					}
 				}
-			} else if string(body["agent_id"]) != `"child"` || string(body["subagent_id"]) != `"child"` || string(body["usage"]) != "null" {
+			} else if string(body["agent_id"]) != `"root"` || string(body["subagent_id"]) != `"child"` || string(body["usage"]) != "null" {
 				t.Fatalf("child Turn identity: %s", w.Body)
 			}
 		})
@@ -144,11 +152,32 @@ func TestSubagentRoutesRejectInvalidQueriesBeforeStore(t *testing.T) {
 		if !route.list {
 			continue
 		}
-		for _, query := range []string{"limit=0", "limit=101", "limit=null", "limit=-1", "limit=2&limit=3", "order=random", "order=asc&order=desc", "after=a&after=b"} {
+		queries := []string{"limit=null", "limit=-1", "limit=2&limit=3", "order=random", "order=asc&order=desc", "after=a&after=b"}
+		if !route.clamped {
+			queries = append(queries, "limit=0", "limit=101")
+		}
+		for _, query := range queries {
 			calls := s.calls
 			w := requestSubagents(h, route.path+"?"+query, "Bearer test-api-key", "agents=v1")
 			if w.Code != http.StatusBadRequest || s.calls != calls || !strings.Contains(w.Body.String(), `"code":"invalid_request_error"`) {
 				t.Fatalf("accepted %s?%s: %d %s", route.path, query, w.Code, w.Body)
+			}
+		}
+	}
+}
+
+func TestSubagentItemListsClampLimit(t *testing.T) {
+	s := &subagentReadStore{}
+	h, _, tenant := testHandler(t, WithSubagents(s))
+	for _, route := range subagentRoutes {
+		if !route.clamped {
+			continue
+		}
+		for query, limit := range map[string]int{"limit=0": 1, "limit=1": 1, "limit=100": 100, "limit=101": 100, "limit=100000": 100} {
+			calls := s.calls
+			w := requestSubagents(h, route.path+"?"+query, "Bearer test-api-key", "agents=v1")
+			if w.Code != http.StatusOK || s.calls != calls+1 || s.method != route.method || s.limit != limit || s.tenant != tenant {
+				t.Fatalf("%s?%s: %d %s %+v", route.path, query, w.Code, w.Body, s)
 			}
 		}
 	}
@@ -224,9 +253,6 @@ func TestSubagentRoutesDistinguishEmptyFromUnavailable(t *testing.T) {
 		if route.list {
 			w = requestSubagents(h, route.path, "Bearer test-api-key", "agents=v1")
 			expected := `{"object":"list","first_id":null,"last_id":null,"data":[],"has_more":false}`
-			if route.method == "list" {
-				expected = `{"data":[],"has_more":false}`
-			}
 			if w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != expected {
 				t.Fatalf("empty page: %d %s", w.Code, w.Body)
 			}

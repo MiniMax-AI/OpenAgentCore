@@ -2412,11 +2412,22 @@ definitions:
         items:
           $ref: '#/definitions/v1.Subagent'
         type: array
+      first_id:
+        type: string
+        x-nullable: true
       has_more:
         type: boolean
+      last_id:
+        type: string
+        x-nullable: true
+      object:
+        enum:
+        - list
+        type: string
     required:
     - data
     - has_more
+    - object
     type: object
   v1.SummaryText:
     properties:
@@ -4576,7 +4587,7 @@ paths:
   /agents/sessions/{session_id}/subagents:
     get:
       description: Includes nested and closed Subagents. Cursors belong to the same
-        tenant and Session.
+        tenant and Session. A limit outside 1–100 is rejected.
       parameters:
       - description: agents=v1
         in: header
@@ -4718,10 +4729,9 @@ paths:
         name: after
         type: string
       - default: 20
-        description: Page size
+        description: Page size; 0 is treated as 1 and values above 100 as 100
         in: query
-        maximum: 100
-        minimum: 1
+        minimum: 0
         name: limit
         type: integer
       - default: desc
@@ -4767,8 +4777,9 @@ paths:
       - Subagents
   /agents/sessions/{session_id}/subagents/{subagent_id}/turns:
     get:
-      description: Includes this Subagent's Turns after resume. Cursors belong to
-        the same tenant, Session and Subagent. Missing recorded usage remains null.
+      description: Includes this Subagent's Turns after resume, with the Session's
+        Agent ID as agent_id. Cursors belong to the same tenant, Session and Subagent.
+        Missing recorded usage remains null. A limit outside 1–100 is rejected.
       parameters:
       - description: agents=v1
         in: header
@@ -4839,9 +4850,10 @@ paths:
       - Subagents
   /agents/sessions/{session_id}/subagents/{subagent_id}/turns/{turn_id}:
     get:
-      description: Returns the same canonical Turn exposed by the Session Turn endpoint,
-        scoped to the owning Subagent. Unknown or inaccessible parent scopes return
-        not found.
+      description: Returns a Turn owned by this Subagent. Its agent_id is the Session's
+        Agent ID and its subagent_id identifies the Subagent. Session Turn routes
+        do not return child Turns. Unknown or inaccessible parent scopes return not
+        found.
       parameters:
       - description: agents=v1
         in: header
@@ -4925,10 +4937,9 @@ paths:
         name: after
         type: string
       - default: 20
-        description: Page size
+        description: Page size; 0 is treated as 1 and values above 100 as 100
         in: query
-        maximum: 100
-        minimum: 1
+        minimum: 0
         name: limit
         type: integer
       - default: desc
@@ -4974,9 +4985,10 @@ paths:
       - Subagents
   /agents/sessions/{session_id}/turns:
     get:
-      description: Returns persisted state in creation order. The cursor belongs to
-        the same Session and tenant. Usage contains the latest recorded complete token
-        breakdown; missing measurements remain null.
+      description: Returns the Session's root Turns in creation order; Subagent Turns
+        are listed through the Subagent Turn routes. The cursor belongs to the same
+        Session and tenant. Usage contains the latest recorded complete token breakdown;
+        missing measurements remain null.
       parameters:
       - description: agents=v1
         in: header
@@ -5038,6 +5050,9 @@ paths:
       - Turns
   /agents/sessions/{session_id}/turns/{turn_id}:
     get:
+      description: Returns a root Turn of this Session. A Subagent Turn ID returns
+        the same not found error as a missing Turn; read it through the Subagent Turn
+        routes.
       parameters:
       - description: agents=v1
         in: header

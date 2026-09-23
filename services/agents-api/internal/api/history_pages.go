@@ -33,3 +33,11 @@ func itemListResponse(data []v1.Item, more bool) v1.ItemList {
 	first, last := listBounds(data, func(value v1.Item) string { return value.ID })
 	return v1.ItemList{Object: "list", Data: data, HasMore: more, FirstID: first, LastID: last}
 }
+
+func subagentListResponse(data []v1.Subagent, more bool) v1.SubagentList {
+	if data == nil {
+		data = []v1.Subagent{}
+	}
+	first, last := listBounds(data, func(value v1.Subagent) string { return value.ID })
+	return v1.SubagentList{Object: "list", Data: data, HasMore: more, FirstID: first, LastID: last}
+}

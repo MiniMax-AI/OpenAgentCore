@@ -44,16 +44,31 @@ func TestTurnWireShapeIncludesNullableSubagentIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertJSONEqual(t, body, `{"id":"turn","agent_id":"root","subagent_id":null,"session_id":"session","object":"agent.session.turn","status":"completed","created_at":1700000000,"started_at":null,"completed_at":null,"error":null,"usage":null}`)
+	// A child Turn keeps the Session's Agent ID; subagent_id identifies the child.
 	child := "child"
-	turn.AgentID, turn.SubagentID = child, &child
+	turn.SubagentID = &child
 	body, err = json.Marshal(turn)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var returned Turn
-	if err := json.Unmarshal(body, &returned); err != nil || returned.SubagentID == nil || *returned.SubagentID != child || returned.AgentID != child {
+	if err := json.Unmarshal(body, &returned); err != nil || returned.SubagentID == nil || *returned.SubagentID != child || returned.AgentID != "root" {
 		t.Fatalf("child identity: %s (%v)", body, err)
 	}
+}
+
+func TestSubagentListUsesCommonEnvelope(t *testing.T) {
+	first := "child"
+	body, err := json.Marshal(SubagentList{Object: "list", FirstID: &first, LastID: &first, Data: []Subagent{{ID: first, Object: "agent.session.subagent", SessionID: "session", ParentAgentID: "root", OpenedAt: 1700000000, Status: "active"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertJSONEqual(t, body, `{"object":"list","first_id":"child","last_id":"child","has_more":false,"data":[{"id":"child","object":"agent.session.subagent","session_id":"session","parent_agent_id":"root","opened_at":1700000000,"closed_at":null,"name":null,"instructions":null,"status":"active"}]}`)
+	body, err = json.Marshal(SubagentList{Object: "list", Data: []Subagent{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertJSONEqual(t, body, `{"object":"list","first_id":null,"last_id":null,"data":[],"has_more":false}`)
 }
 
 func TestCoordinationItemsMatchPinnedWireShapes(t *testing.T) {
