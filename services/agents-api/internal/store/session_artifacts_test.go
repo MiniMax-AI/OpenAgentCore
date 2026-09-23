@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/google/uuid"
 )
 
@@ -446,5 +448,129 @@ func TestSessionArtifactsRepublishOnlyNewChangedOrDeletedPaths(t *testing.T) {
 	}
 	if count := sourceObjectCount(t, pool); count != before {
 		t.Fatalf("objects leaked: %d -> %d", before, count)
+	}
+}
+
+// Publication time can come from the Runtime's reported completion and invert
+// the order of Turns; the newest version for a path still follows Turn order.
+func TestSessionArtifactsNewestVersionFollowsTurnOrder(t *testing.T) {
+	s, _ := testStore(t)
+	tenant := uuid.NewString()
+	created, err := s.CreateSession(t.Context(), tenant, environmentInput("artifact-order", "openai_hosted", "/workspace"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := created.ID
+	env, err := s.GetSessionEnvironment(t.Context(), tenant, session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Turn 1 reports a native completion one hour ahead, so its Artifact is
+	// published later than every following Turn's.
+	first := submitMessage(t, s, tenant, session, "artifact-order-1")
+	transition(t, s, tenant, session, first.TurnID, TurnQueued, TurnInProgress)
+	stageArtifactOutputs(t, s, tenant, session, env.ID, first.TurnID, map[string]string{"b.txt": "bravo"})
+	future := time.Now().Add(time.Hour).UnixMilli()
+	if _, err := s.CompleteExecution(t.Context(), tenant, session, first.TurnID, TurnCompleted, json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, future)), "", first.Sequence); err != nil {
+		t.Fatal(err)
+	}
+	one := publishedByTurn(t, s, tenant, session, first.TurnID)["b.txt"]
+	run := func(key, body string) map[string]SessionArtifact {
+		t.Helper()
+		turn := startArtifactTurn(t, s, tenant, session, key)
+		stageArtifactOutputs(t, s, tenant, session, env.ID, turn, map[string]string{"b.txt": body})
+		transition(t, s, tenant, session, turn, TurnInProgress, TurnCompleted)
+		return publishedByTurn(t, s, tenant, session, turn)
+	}
+	two := run("artifact-order-2", "bravo-v2")["b.txt"]
+	if two.ID == "" || !two.CreatedAt.Before(one.CreatedAt) {
+		t.Fatalf("fixture did not invert publication time: %+v %+v", one, two)
+	}
+	// Turn 2's version is the newest although Turn 1 was published later.
+	if got := run("artifact-order-3", "bravo-v2"); len(got) != 0 {
+		t.Fatalf("unchanged bytes of the newest Turn republished: %+v", got)
+	}
+	if got := publishedPaths(run("artifact-order-4", "bravo")); strings.Join(got, ",") != "b.txt" {
+		t.Fatalf("bytes of an older Turn's version were not republished: %v", got)
+	}
+}
+
+// A deletion that holds the Session lock while Turn completion waits for it is
+// seen by the completion transaction, which then republishes the path.
+func TestSessionArtifactsCompletionWaitsForConcurrentDeletion(t *testing.T) {
+	s, pool := testStore(t)
+	tenant, session, environment, first := artifactTurn(t, s, "openai_hosted")
+	before := sourceObjectCount(t, pool)
+	stageArtifactOutputs(t, s, tenant, session, environment, first, map[string]string{"a.txt": "alpha"})
+	transition(t, s, tenant, session, first, TurnInProgress, TurnCompleted)
+	newest := publishedByTurn(t, s, tenant, session, first)["a.txt"]
+	turn := startArtifactTurn(t, s, tenant, session, "artifact-concurrent-delete")
+	stageArtifactOutputs(t, s, tenant, session, environment, turn, map[string]string{"a.txt": "alpha"})
+
+	// Delete exactly as DeleteSessionArtifact does, but keep the transaction open.
+	tx, err := pool.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(context.Background())
+	lookup, err := artifactLookup(tenant, session, newest.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := s.queries.WithTx(tx)
+	if _, err := q.LockSession(t.Context(), sqlc.LockSessionParams{TenantID: lookup.TenantID, ID: lookup.SessionID}); err != nil {
+		t.Fatal(err)
+	}
+	oid, err := q.DeleteSessionArtifact(t.Context(), sqlc.DeleteSessionArtifactParams(lookup))
+	if err != nil {
+		t.Fatal(err)
+	}
+	objects := tx.LargeObjects()
+	if err := objects.Unlink(t.Context(), oid.Uint32); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.TransitionTurn(t.Context(), tenant, session, turn, TurnTransition{ExpectedStatus: TurnInProgress, Status: TurnCompleted})
+		done <- err
+	}()
+	// Completion must be blocked on the Session lock before the deletion commits.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var waiting int
+		if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'").Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting > 0 {
+			break
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("completion did not wait for the Session lock: %v", err)
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("completion never waited for the Session lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if status, err := s.GetTurn(t.Context(), tenant, session, turn); err != nil || status.Status != TurnInProgress {
+		t.Fatalf("Turn settled while the deletion held the lock: %+v %v", status, err)
+	}
+	if err := tx.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	published := publishedByTurn(t, s, tenant, session, turn)
+	if got := publishedPaths(published); strings.Join(got, ",") != "a.txt" || artifactBytes(t, s, tenant, session, published["a.txt"].ID) != "alpha" {
+		t.Fatalf("concurrent deletion was not republished: %v", got)
+	}
+	if _, err := s.GetSessionArtifact(t.Context(), tenant, session, newest.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("deleted Artifact remains: %v", err)
+	}
+	if count := sourceObjectCount(t, pool); count != before+1 {
+		t.Fatalf("private objects: %d -> %d, want one published Artifact", before, count)
 	}
 }
