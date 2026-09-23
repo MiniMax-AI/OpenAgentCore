@@ -4,6 +4,7 @@
 import base64
 import contextlib
 import hashlib
+import gzip
 import io
 import json
 import os
@@ -425,6 +426,51 @@ class InstallerTests(unittest.TestCase):
                       ("--web-only", "--sandbox-provider", "true")):
             with self.subTest(flags=flags), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 self.args(*flags)
+
+    def test_local_microsandbox_accepts_actual_thin_and_offline_native_layouts(self):
+        for offline in (False, True):
+            with self.subTest(offline=offline):
+                bundle = self.bundle()
+                payloads = {}
+                for name, entry in self.manifest["artifacts"].items():
+                    payload = gzip.compress(b"runtime fixture") if name == "images/runtime.tar.gz" else b"\x7fELFfixture"
+                    payloads[entry["filename"]] = payload
+                    entry.update(sha256=hashlib.sha256(payload).hexdigest(), size=len(payload))
+                    if name == "images/runtime.tar.gz":
+                        entry.update(unpacked_sha256=hashlib.sha256(b"runtime fixture").hexdigest(), unpacked_size=len(b"runtime fixture"))
+                    if offline:
+                        target = bundle / "artifacts" / entry["filename"]
+                        target.parent.mkdir(exist_ok=True)
+                        target.write_bytes(payload)
+                    else:
+                        self.manifest["artifact_base_url"] = "https://release.example/immutable"
+                    (bundle / name.removesuffix(".gz")).unlink()
+                (bundle / "manifest.json").write_text(json.dumps(self.manifest))
+                self.write_checksums(bundle)
+                requested = []
+                def response(url, **kwargs):
+                    requested.append(url.rsplit("/", 1)[-1])
+                    return io.BytesIO(payloads[requested[-1]])
+                def host_command(arguments, failure):
+                    return SimpleNamespace(returncode=0, stdout="yes" if arguments[0] == "loginctl" else "", stderr="")
+                with mock.patch.object(install, "__file__", str(bundle / "install.py")), \
+                        mock.patch.object(install.platform, "system", return_value="Linux"), \
+                        mock.patch.object(install.platform, "machine", return_value="x86_64"), \
+                        mock.patch.object(install.os, "access", return_value=True), \
+                        mock.patch.object(install, "run", return_value=SimpleNamespace(stdout="", returncode=0)), \
+                        mock.patch.object(install, "wait_http", return_value=True), \
+                        mock.patch.object(install, "import_runtime"), \
+                        mock.patch.object(install.native_service, "_run", side_effect=host_command), \
+                        mock.patch("distribution.urllib.request.build_opener", return_value=SimpleNamespace(open=response)), \
+                        contextlib.redirect_stdout(io.StringIO()):
+                    install.main(["--install-dir", str(self.root), "--sandbox-provider", "true", "--provider", "microsandbox"])
+                self.assertTrue((self.root / "native/bin/agents-api").is_file())
+                self.assertTrue((self.root / "native/bin/agents-api-microsandbox-provider").is_file())
+                self.assertFalse((self.root / "native/bin/parsar-sandbox-node").exists())
+                self.assertNotIn(self.manifest["artifacts"]["native/bin/parsar-sandbox-node"]["filename"], requested)
+                self.assertEqual(len(requested), 0 if offline else 4)
+                shutil.rmtree(bundle)
+                shutil.rmtree(self.root)
 
     def test_default_main_skips_kvm_native_service_and_runtime_import(self):
         bundle = self.bundle()
