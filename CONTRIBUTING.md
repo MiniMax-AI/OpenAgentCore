@@ -76,6 +76,18 @@ behavior separately; do not reproduce observed upstream server failures as
 compatibility behavior. See `contracts/agents-api/list-query-semantics.md` for the
 bounded evidence.
 
+Report validation failures with official evidence through the typed field error,
+which emits `invalid_request_error` with the observed param and message; keep
+other local codes until their official fields are sampled. A malformed path
+identifier must produce exactly the response of a well-formed missing one on that
+route, including invalid bodies, queries and storage availability: resolve it to
+the never-assigned maximum UUID and let the missing path run, or reject it
+directly only where the lookup is the next check. Malformed list cursors and
+request-body references keep their own errors. Reject U+0000 in metadata
+explicitly with its `metadata.<key>` param; other stored strings rely on the
+PostgreSQL error mapping, so keep each request's writes in one transaction. See
+`contracts/agents-api/official-semantics-alignment.md`.
+
 Keep runtime state, test artifacts and build output under `~/.parsar/`. Require
 absolute user-supplied working directories. Keep credentials out of source and
 logs. Update this guide when architecture, ownership or generated contracts change.

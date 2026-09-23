@@ -239,7 +239,8 @@ upgrade the protocol.
   authentication and Beta header as other resources. The response contains only
   `id`, `object: vault`, `created_at`, `name` and `metadata`. Omitted name stays null;
   explicit null is rejected. Supplied strings are trimmed and must contain 1–256
-  UTF-8 bytes. Omitted/null metadata becomes `{}` and values must be strings.
+  UTF-8 bytes. Omitted/null metadata becomes `{}`; a non-string value returns
+  `invalid_request_error` with param `metadata.<key>`.
   Session-specific metadata pair/character limits do not apply. The existing
   64 KiB encoded metadata and 1 MiB HTTP body bounds are local implementation
   limits. Creation does not start execution. Retrieval maps missing, malformed and
@@ -479,7 +480,10 @@ The Store's internal DTO is not the upstream response model. The API layer must
 validate and resolve the upstream schema before persistence, and report only
 supported options. For example, upstream metadata is limited to 16 pairs with
 64-character keys and 512-character values; a storage byte limit is not a
-replacement for that public validation.
+replacement for that public validation. Violations return `invalid_request_error`
+with the official `metadata` or `metadata.<key>` param. U+0000 in stored strings
+is a local PostgreSQL limit and returns 400 without writing; see the
+[validation error batch](official-semantics-alignment.md#validation-error-fields--september-23).
 
 Use the pinned official Python client against the actual service, with response
 validation enabled, for supported Session/Turn/Items operations, pagination, streaming,
