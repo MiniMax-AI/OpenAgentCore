@@ -1,0 +1,116 @@
+name: core-release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Full source commit SHA to build
+        required: true
+        type: string
+      offline:
+        description: Also create the full offline archive
+        default: false
+        type: boolean
+      draft_release:
+        description: Upload files to a new draft release; never publish
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-release-${{ inputs.ref || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    outputs:
+      revision: ${{ steps.source.outputs.revision }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - name: Pin source identity
+        id: source
+        env:
+          REQUESTED_REF: ${{ inputs.ref }}
+        run: |
+          if [[ -n "$REQUESTED_REF" && ! "$REQUESTED_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'Manual releases require a full commit SHA' >&2
+            exit 1
+          fi
+          revision="$(git rev-parse HEAD)"
+          if [[ -n "$REQUESTED_REF" && "$REQUESTED_REF" != "$revision" ]]; then exit 1; fi
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Install build prerequisites
+        run: |
+          npm install --global pnpm@10.30.3
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libssl-dev
+          rustup toolchain install 1.95.0 --profile minimal
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.parsar/cache/go-build
+            ~/.parsar/cache/go-mod
+            ~/.parsar/cache/executor-cargo
+            ~/.parsar/cache/executor-target
+          key: core-release-${{ runner.os }}-${{ hashFiles('go.sum', 'packages/codex-executor/Cargo.lock') }}
+      - name: Check release metadata and prepare pinned harnesses
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 scripts/core-distribution-manifest.test.py
+          bash scripts/prepare-release-runtimes.sh
+      - name: Build matched artifacts
+        env:
+          RELEASE_REVISION: ${{ steps.source.outputs.revision }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          CORE_DISTRIBUTION_OFFLINE: ${{ inputs.offline && '1' || '0' }}
+        run: |
+          inputs="$HOME/.parsar/build/release-inputs/inputs.json"
+          export AGENTS_RUNTIME_CODEX_PACKAGE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
+          export MCODE_HARNESS_BUILD_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["mcode"])' "$inputs")"
+          export CORE_DISTRIBUTION_RELEASE_BASE_URL="https://github.com/$RELEASE_REPOSITORY/releases/download/$RELEASE_REVISION"
+          bash scripts/build-core-distribution.sh
+          mkdir -p "$HOME/.parsar/build/release-upload"
+          for asset in "$HOME/.parsar/build/core-distribution/"*; do
+            if [[ -f "$asset" ]]; then ln "$asset" "$HOME/.parsar/build/release-upload/"; fi
+          done
+      - uses: actions/upload-artifact@v6
+        with:
+          name: core-release-${{ steps.source.outputs.revision }}
+          path: ~/.parsar/build/release-upload/*
+          compression-level: 0
+          if-no-files-found: error
+
+  draft:
+    if: github.event_name == 'workflow_dispatch' && inputs.draft_release
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: core-release-${{ needs.build.outputs.revision }}
+          path: release-upload
+      - name: Create an unpublished draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_REVISION: ${{ needs.build.outputs.revision }}
+        run: |
+          printf 'Matched Linux amd64 artifacts from commit %s. Build output is not live execution qualification.\n' "$RELEASE_REVISION" > release-notes.md
+          gh release create "$RELEASE_REVISION" --draft --target "$RELEASE_REVISION" \
+            --title "Parsar Core $RELEASE_REVISION" --notes-file release-notes.md release-upload/*

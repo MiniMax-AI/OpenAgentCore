@@ -7,6 +7,17 @@ umask 022
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 runtime_root="${PARSAR_HOME:-$HOME/.parsar}"
 output_dir="${CORE_DISTRIBUTION_BUILD_DIR:-$runtime_root/build/core-distribution}"
+release_base_url="${CORE_DISTRIBUTION_RELEASE_BASE_URL:-}"
+offline="${CORE_DISTRIBUTION_OFFLINE:-0}"
+if [[ "$offline" != 0 && "$offline" != 1 ]]; then
+  printf 'CORE_DISTRIBUTION_OFFLINE must be 0 or 1\n' >&2
+  exit 1
+fi
+if [[ -z "$release_base_url" && "$offline" != 1 ]]; then
+  printf 'Set CORE_DISTRIBUTION_RELEASE_BASE_URL, or explicitly select CORE_DISTRIBUTION_OFFLINE=1\n' >&2
+  exit 1
+fi
+python3 "$repo_root/scripts/core-distribution-manifest.py" release-base "$release_base_url"
 export GOCACHE="${GOCACHE:-$runtime_root/cache/go-build}"
 export GOMODCACHE="${GOMODCACHE:-$runtime_root/cache/go-mod}"
 export GOOS=linux GOARCH=amd64 GOAMD64=v1 GOTOOLCHAIN=local
@@ -74,9 +85,10 @@ if [[ "$(go env GOVERSION)" != "$required_go" ]]; then
   printf 'Distribution build requires %s\n' "$required_go" >&2
   exit 1
 fi
-for file in install.sh install.py configuration.py native_service.py node_install.py; do
+for file in install.sh install.py configuration.py native_service.py node_install.py distribution.py self_hosted_install.py; do
   cp "deploy/install/$file" "$bundle/$file"
 done
+python3 scripts/core-distribution-manifest.py bootstraps "$bundle" "$source_epoch"
 mkdir -p "$bundle/docs"
 cp -R docs/getting-started "$bundle/docs/"
 cp README.md "$bundle/"
@@ -111,8 +123,11 @@ build_image --platform linux/amd64 --iidfile "$stage/core.id" \
   --label "org.opencontainers.image.revision=$revision" "$stage/core"
 core_image="$(cat "$stage/core.id")"
 # Fail at packaging time if the helper or runtime requires unavailable host libraries.
-docker run --rm --network none --entrypoint /bin/sh "$core_image" -ec \
-  'for p in /usr/local/bin/agents-api-microsandbox-provider /opt/microsandbox/msb /opt/microsandbox/libkrunfw.so.5.6.1; do ! ldd "$p" | grep "not found"; done; /opt/microsandbox/msb --version'
+docker run --rm --network none --entrypoint /bin/sh \
+  --mount "type=bind,src=$stage/core/microsandbox,dst=/opt/microsandbox,readonly" \
+  --mount "type=bind,src=$stage/core/bin/agents-api-microsandbox-provider,dst=/opt/provider,readonly" \
+  "$core_image" -ec \
+  'for p in /opt/provider /opt/microsandbox/msb /opt/microsandbox/libkrunfw.so.5.6.1; do ! ldd "$p" | grep "not found"; done; /opt/microsandbox/msb --version'
 
 CORE_CONSOLE_BUILD_DIR="$stage/web" scripts/build-core-console.sh
 pnpm install --frozen-lockfile
@@ -125,6 +140,8 @@ build_image --platform linux/amd64 --iidfile "$stage/web.id" \
 export AGENTS_EXECUTOR_BUILD_DIR="$stage/helpers"
 scripts/build-agents-executor.sh
 CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$stage/parsar-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
+cp "$stage/parsar-daemon" "$bundle/native/bin/parsar-daemon"
+CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$bundle/native/bin/parsar-runtime" ./services/agents-api/cmd/runtime
 codex_image="${CORE_DISTRIBUTION_CODEX_IMAGE:-}"
 claude_image="${CORE_DISTRIBUTION_CLAUDE_IMAGE:-}"
 mcode_image="${CORE_DISTRIBUTION_MCODE_IMAGE:-}"
@@ -184,23 +201,37 @@ done
 mkdir -m 0700 "$stage/msb-cache"
 msb=(docker run --rm --network none --user "$(id -u):$(id -g)" \
   --mount "type=bind,src=$stage/msb-cache,dst=/cache" \
+  --mount "type=bind,src=$stage/core/microsandbox,dst=/opt/microsandbox,readonly" \
   --mount "type=bind,src=$bundle/images/runtime.tar,dst=/runtime.tar,readonly" \
   --env MSB_HOME=/cache --env MSB_BACKEND=local --env MSB_PATH=/opt/microsandbox/msb \
   --env MSB_LIBKRUNFW_PATH=/opt/microsandbox/libkrunfw.so.5.6.1 \
   --entrypoint /opt/microsandbox/msb "$core_image")
 "${msb[@]}" image load --input /runtime.tar --tag parsar-core-runtime:distribution --quiet
 "${msb[@]}" image inspect parsar-core-runtime:distribution --format json > "$stage/runtime-inspect.json"
-python3 scripts/core-distribution-manifest.py manifest "$bundle" "$stage" "$revision" "$source_tree"
+python3 scripts/core-distribution-manifest.py manifest "$bundle" "$stage" "$revision" "$source_tree" "$release_base_url" "$offline"
 require_clean_source
 if [[ "$(git -C "$repo_root" rev-parse HEAD)" != "$revision" ]]; then
   printf 'Source changed during distribution build\n' >&2
   exit 1
 fi
-python3 scripts/core-distribution-manifest.py archive "$bundle" "$source_epoch"
 archive_name="$(basename "$bundle").tar.gz"
-if [[ -e "$output_dir/$(basename "$bundle")" || -e "$output_dir/$archive_name" ]]; then
+if [[ -e "$output_dir/$(basename "$bundle")" || -e "$output_dir/$archive_name" || -e "$output_dir/${archive_name%.tar.gz}-offline.tar.gz" ]]; then
   printf 'A distribution already exists for this revision; choose a fresh output directory\n' >&2
   exit 1
 fi
-mv "$stage/$archive_name" "$stage/$archive_name.sha256" "$bundle" "$output_dir/"
-printf 'Core distribution: %s/%s\n' "$output_dir" "$archive_name"
+if [[ -n "$release_base_url" ]]; then
+  python3 scripts/core-distribution-manifest.py archive "$bundle" "$source_epoch"
+  mv "$stage/$archive_name" "$stage/$archive_name.sha256" "$output_dir/"
+  printf 'Core distribution: %s/%s\n' "$output_dir" "$archive_name"
+fi
+if [[ "$offline" == 1 ]]; then
+  mkdir "$bundle/artifacts"
+  # Hard links keep the optional archive from requiring another Runtime-sized copy.
+  for asset in "$stage/artifacts/"*; do ln "$asset" "$bundle/artifacts/"; done
+  python3 scripts/core-distribution-manifest.py archive "$bundle" "$source_epoch" offline
+  offline_name="${archive_name%.tar.gz}-offline.tar.gz"
+  mv "$stage/$offline_name" "$stage/$offline_name.sha256" "$output_dir/"
+  printf 'Offline Core distribution: %s/%s\n' "$output_dir" "$offline_name"
+fi
+mv "$stage/artifacts/"* "$output_dir/"
+mv "$bundle" "$output_dir/"

@@ -1,5 +1,6 @@
 """Regression checks for offline distribution identity and archive integrity."""
 
+import gzip
 import hashlib
 import importlib.util
 import json
@@ -7,11 +8,17 @@ import pathlib
 import tarfile
 import tempfile
 import unittest
+import zipfile
 
 
 spec = importlib.util.spec_from_file_location("distribution", pathlib.Path(__file__).with_name("core-distribution-manifest.py"))
 distribution = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(distribution)
+
+
+REVISION = "a" * 40
+TREE = "b" * 40
+RELEASE_BASE = "https://example.com/releases/" + REVISION
 
 
 class DistributionTests(unittest.TestCase):
@@ -31,12 +38,21 @@ class DistributionTests(unittest.TestCase):
             (self.stage / (name + ".id")).write_text("sha256:" + str(number) * 64 + "\n")
         self.inspection = {"digest": "sha256:" + "a" * 64, "architecture": "amd64", "os": "linux"}
         self.write_inspection()
+        for logical in distribution.ARTIFACTS:
+            path = self.bundle / logical.replace("images/runtime.tar.gz", "images/runtime.tar")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"payload:" + logical.encode())
+            if logical.startswith("native/"):
+                path.chmod(0o555)
+
+    def manifest(self, base=RELEASE_BASE, offline="0"):
+        distribution.manifest(self.bundle, self.stage, REVISION, TREE, base, offline)
 
     def write_inspection(self):
         (self.stage / "runtime-inspect.json").write_text(json.dumps(self.inspection))
 
     def test_oci_manifest_identity_is_distinct_from_docker_config_identity(self):
-        distribution.manifest(self.bundle, self.stage, "commit", "tree")
+        self.manifest()
         metadata = json.loads((self.bundle / "manifest.json").read_text())
         self.assertEqual(metadata["runtime_ref"], "parsar-core-runtime@sha256:" + "a" * 64)
         self.assertEqual(metadata["images"]["runtime"], "sha256:" + "3" * 64)
@@ -50,20 +66,20 @@ class DistributionTests(unittest.TestCase):
         self.inspection["config"] = {"digest": "sha256:" + "3" * 64}
         self.write_inspection()
         with self.assertRaisesRegex(ValueError, "manifest digest"):
-            distribution.manifest(self.bundle, self.stage, "commit", "tree")
+            self.manifest()
 
     def test_wrong_guest_platform_rejected(self):
         self.inspection["architecture"] = "arm64"
         self.write_inspection()
         with self.assertRaisesRegex(ValueError, "platform"):
-            distribution.manifest(self.bundle, self.stage, "commit", "tree")
+            self.manifest()
 
     def test_archive_reproducible_and_installer_executable(self):
         native = self.bundle / "native/bin/agents-api"
-        native.parent.mkdir(parents=True)
+        native.parent.mkdir(parents=True, exist_ok=True)
         native.write_bytes(b"native executable")
         native.chmod(0o555)
-        distribution.manifest(self.bundle, self.stage, "commit", "tree")
+        self.manifest()
         distribution.archive(self.bundle, "1700000000")
         archive = self.bundle.with_name(self.bundle.name + ".tar.gz")
         first = archive.read_bytes()
@@ -82,6 +98,61 @@ class DistributionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "checksum mismatch"):
             distribution.extract_runtime(archive, destination)
         self.assertFalse(destination.exists())
+
+    def test_thin_archive_and_detached_payload_share_one_manifest(self):
+        self.manifest()
+        raw_manifest = (self.bundle / "manifest.json").read_bytes()
+        metadata = json.loads(raw_manifest)
+        self.assertEqual(metadata["artifact_base_url"], RELEASE_BASE)
+        self.assertEqual(set(metadata["artifacts"]), set(distribution.ARTIFACTS))
+        for logical, artifact in metadata["artifacts"].items():
+            path = self.stage / "artifacts" / artifact["filename"]
+            self.assertEqual((self.bundle / logical).exists(), logical == "runtime/seccomp.json")
+            self.assertTrue(artifact["filename"].startswith("parsar-core-" + REVISION + "-linux-amd64-"))
+            self.assertEqual(artifact["size"], path.stat().st_size)
+            self.assertEqual(artifact["sha256"], distribution.sha256(path))
+        runtime = self.stage / "artifacts" / metadata["artifacts"]["images/runtime.tar.gz"]["filename"]
+        self.assertEqual(gzip.decompress(runtime.read_bytes()), b"payload:images/runtime.tar.gz")
+        runtime_entry = metadata["artifacts"]["images/runtime.tar.gz"]
+        self.assertEqual(runtime_entry["unpacked_size"], len(b"payload:images/runtime.tar.gz"))
+        self.assertEqual(runtime_entry["unpacked_sha256"], hashlib.sha256(b"payload:images/runtime.tar.gz").hexdigest())
+        self.assertFalse((self.bundle / "images/runtime.tar").exists())
+        distribution.archive(self.bundle, "1700000000")
+        thin = self.bundle.with_name(self.bundle.name + ".tar.gz")
+        with tarfile.open(thin) as contents:
+            self.assertFalse(any("/artifacts/" in entry.name or "/native/" in entry.name for entry in contents))
+        (self.stage / "artifacts").rename(self.bundle / "artifacts")
+        distribution.archive(self.bundle, "1700000000", "offline")
+        offline = self.bundle.with_name(self.bundle.name + "-offline.tar.gz")
+        with tarfile.open(offline) as contents:
+            self.assertEqual(contents.extractfile(self.bundle.name + "/manifest.json").read(), raw_manifest)
+            for artifact in metadata["artifacts"].values():
+                self.assertIsNotNone(contents.getmember(self.bundle.name + "/artifacts/" + artifact["filename"]))
+        distribution.checksums(self.bundle)
+        self.assertNotIn("artifacts/", (self.bundle / "SHA256SUMS").read_text())
+
+    def test_release_location_and_explicit_offline_requirements(self):
+        for invalid in ("http://example.com/release/v1", "https://example.com/", "https://example.com/latest",
+                        "https://user:secret@example.com/v1", "https://example.com/v1?token=secret"):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                distribution.release_base(invalid)
+        with self.assertRaisesRegex(ValueError, "explicit offline"):
+            self.manifest(base="")
+        self.manifest(base="", offline="1")
+        self.assertEqual(json.loads((self.bundle / "manifest.json").read_text())["artifact_base_url"], "")
+
+    def test_bootstraps_include_shared_downloader_and_are_reproducible(self):
+        for name in ("node_install.py", "self_hosted_install.py", "distribution.py"):
+            (self.bundle / name).write_text("# " + name + "\n")
+        distribution.bootstraps(self.bundle, "1700000000")
+        first = (self.bundle / "node-install.pyz").read_bytes()
+        distribution.bootstraps(self.bundle, "1700000000")
+        self.assertEqual(first, (self.bundle / "node-install.pyz").read_bytes())
+        for script, filename in (("node_install.py", "node-install.pyz"),
+                                 ("self_hosted_install.py", "self-hosted-install.pyz")):
+            with zipfile.ZipFile(self.bundle / filename) as contents:
+                self.assertEqual(set(contents.namelist()), {"__main__.py", "distribution.py"})
+                self.assertEqual(contents.read("__main__.py"), (self.bundle / script).read_bytes())
 
 
 if __name__ == "__main__":

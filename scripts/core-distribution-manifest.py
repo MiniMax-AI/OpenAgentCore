@@ -1,18 +1,33 @@
 #!/usr/bin/env python3
-"""Verify distribution inputs and write the offline bundle's public metadata."""
+"""Verify matched distribution inputs and package independently fetched artifacts."""
 
 import gzip
 import hashlib
 import json
+import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
+from urllib.parse import urlsplit
+import zipapp
 
 
 RUNTIME_ARCHIVE_SHA256 = "47c223e3ef5298abf05f47ed9f87981106e400d99bb3f1d042d4d6881346b18b"
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
+ARTIFACTS = {
+    "images/runtime.tar.gz": "runtime.tar.gz",
+    "native/bin/parsar-sandbox-node": "sandbox-node",
+    "native/bin/parsar-daemon": "daemon",
+    "native/bin/parsar-runtime": "runtime-launcher",
+    "native/bin/agents-api-microsandbox-provider": "microsandbox-provider",
+    "native/microsandbox/msb": "msb",
+    "native/microsandbox/libkrunfw.so.5.6.1": "libkrunfw.so.5.6.1",
+    "runtime/seccomp.json": "seccomp.json",
+}
 
 
 def sha256(path):
@@ -74,8 +89,63 @@ def extract_runtime(archive, destination):
             (destination / name).chmod(0o555)
 
 
-def manifest(bundle, stage, revision, source_tree):
+def release_base(value):
+    if not value:
+        return ""
+    parsed = urlsplit(value)
+    if (parsed.scheme != "https" or not parsed.hostname or parsed.username is not None
+            or parsed.password is not None or parsed.query or parsed.fragment
+            or any(c.isspace() or ord(c) < 32 for c in value) or "\\" in value
+            or not parsed.path.strip("/") or "latest" in parsed.path.lower().split("/")):
+        raise ValueError("Release base must be a versioned HTTPS directory, never latest")
+    parsed.port
+    return value.rstrip("/")
+
+
+def package_artifacts(bundle, stage, revision):
+    """Move optional payload out of Core; the manifest owns every asset digest."""
+    assets = stage / "artifacts"
+    assets.mkdir()
+    runtime = bundle / "images/runtime.tar"
+    compressed = bundle / "images/runtime.tar.gz"
+    unpacked = {"unpacked_sha256": sha256(runtime), "unpacked_size": runtime.stat().st_size}
+    with runtime.open("rb") as source, compressed.open("wb") as raw:
+        with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0, compresslevel=6) as output:
+            shutil.copyfileobj(source, output, 1024 * 1024)
+    runtime.unlink()
+    result = {}
+    for logical, suffix in ARTIFACTS.items():
+        filename = f"parsar-core-{revision}-linux-amd64-{suffix}"
+        target = assets / filename
+        if logical == "runtime/seccomp.json":
+            shutil.copyfile(bundle / logical, target)
+        else:
+            (bundle / logical).replace(target)
+        result[logical] = {"filename": filename, "sha256": sha256(target), "size": target.stat().st_size}
+        if logical == "images/runtime.tar.gz":
+            result[logical].update(unpacked)
+    return result
+
+
+def bootstraps(bundle, epoch):
+    bundle = pathlib.Path(bundle)
+    for source, output in (("node_install.py", "node-install.pyz"),
+                           ("self_hosted_install.py", "self-hosted-install.pyz")):
+        with tempfile.TemporaryDirectory(dir=bundle.parent) as directory:
+            for original, packaged in ((source, "__main__.py"), ("distribution.py", "distribution.py")):
+                target = pathlib.Path(directory) / packaged
+                shutil.copyfile(bundle / original, target)
+                os.utime(target, (int(epoch), int(epoch)))
+            zipapp.create_archive(directory, bundle / output, compressed=True)
+
+
+def manifest(bundle, stage, revision, source_tree, artifact_base_url="", offline="0"):
     bundle, stage = pathlib.Path(bundle), pathlib.Path(stage)
+    artifact_base_url = release_base(artifact_base_url)
+    if not artifact_base_url and offline != "1":
+        raise ValueError("Online distributions require a release base; select explicit offline output otherwise")
+    if not re.fullmatch(r"[0-9a-f]{40}", revision) or not re.fullmatch(r"[0-9a-f]{40}", source_tree):
+        raise ValueError("Distribution source commit and tree must be full Git identities")
     inspected = json.loads((stage / "runtime-inspect.json").read_text())
     digest = inspected.get("digest", "")
     if not isinstance(digest, str) or not DIGEST.fullmatch(digest):
@@ -89,6 +159,8 @@ def manifest(bundle, stage, revision, source_tree):
         "source_commit": revision,
         "source_tree": source_tree,
         "platform": "linux/amd64",
+        "artifact_base_url": artifact_base_url,
+        "artifacts": package_artifacts(bundle, stage, revision),
         "images": images,
         "runtime_ref": "parsar-core-runtime@" + digest,
         "microsandbox": {
@@ -98,13 +170,23 @@ def manifest(bundle, stage, revision, source_tree):
         },
     }
     (bundle / "manifest.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
-    members = sorted(path for path in bundle.rglob("*") if path.is_file())
+    checksums(bundle)
+
+
+def checksums(bundle):
+    bundle = pathlib.Path(bundle)
+    # Optional payload hashes are already authenticated by manifest.json.
+    members = sorted(path for path in bundle.rglob("*") if path.is_file()
+                     and path.relative_to(bundle).parts[0] != "artifacts"
+                     and path.name != "SHA256SUMS")
     (bundle / "SHA256SUMS").write_text("".join(sha256(path) + "  " + path.relative_to(bundle).as_posix() + "\n" for path in members))
 
 
-def archive(bundle, epoch):
+def archive(bundle, epoch, variant=""):
     bundle = pathlib.Path(bundle)
-    output = bundle.with_name(bundle.name + ".tar.gz")
+    if variant not in ("", "offline"):
+        raise ValueError("Unknown distribution archive variant")
+    output = bundle.with_name(bundle.name + ("-" + variant if variant else "") + ".tar.gz")
     with output.open("wb") as raw, gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as compressed:
         with tarfile.open(fileobj=compressed, mode="w", format=tarfile.PAX_FORMAT) as tar:
             for path in sorted(bundle.rglob("*")):
@@ -124,10 +206,11 @@ def archive(bundle, epoch):
 
 
 if __name__ == "__main__":
-    commands = {"extract-runtime": extract_runtime, "verify-runtime": verify_runtime, "verify-image": verify_image, "manifest": manifest, "archive": archive}
+    commands = {"extract-runtime": extract_runtime, "verify-runtime": verify_runtime, "verify-image": verify_image,
+                "manifest": manifest, "archive": archive, "bootstraps": bootstraps, "release-base": release_base}
     try:
         commands[sys.argv[1]](*sys.argv[2:])
     except (KeyError, TypeError):
-        sys.exit("Usage: core-distribution-manifest.py extract-runtime|verify-runtime|verify-image|manifest|archive ARGS...")
+        sys.exit("Usage: core-distribution-manifest.py extract-runtime|verify-runtime|verify-image|manifest|archive|bootstraps|release-base ARGS...")
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         sys.exit(str(error))
