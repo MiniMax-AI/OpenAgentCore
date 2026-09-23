@@ -1798,6 +1798,16 @@ describe("OpenAIAgentsClient", () => {
     await expect(missing.listEnvironmentFiles("environment", { path: "/workspace/missing" })).resolves.toEqual(empty);
   });
 
+  it("accepts exactly 5 MiB of inline Environment file data", async () => {
+    const calls: FetchCall[] = [];
+    const size = 5 * 1024 * 1024;
+    const result = { environment_id: "environment", object: "agent.environment.file", path: "/workspace/big.bin", size_bytes: size };
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(result, 201), calls) });
+    await expect(client.createEnvironmentFile("environment", { type: "inline", data: btoa("a".repeat(size)), path: result.path }))
+      .resolves.toEqual(result);
+    expect(calls).toHaveLength(1);
+  });
+
   it("requires 201 Created for an Environment file and never retries another success status", async () => {
     const calls: FetchCall[] = [];
     const result = {
@@ -1828,6 +1838,11 @@ describe("OpenAIAgentsClient", () => {
       data: "YR==",
       path: "/workspace/file.txt",
     })).rejects.toThrow("strict standard Base64");
+    await expect(client.createEnvironmentFile("environment", {
+      type: "inline",
+      data: btoa("a".repeat(5 * 1024 * 1024 + 1)),
+      path: "/workspace/file.txt",
+    })).rejects.toThrow("at most 5 MiB");
     await expect(client.createEnvironmentFile("environment", {
       type: "file_id",
       file_id: "file-16e1f26e-8cf6-4272-9c31-d470b08d31af",

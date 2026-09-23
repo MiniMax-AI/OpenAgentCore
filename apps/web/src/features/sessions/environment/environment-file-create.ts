@@ -3,7 +3,8 @@ import type {
   EnvironmentFile,
 } from "@agents-core-web/agents-client";
 
-export const maxInlineEnvironmentFileBytes = 50 * 1024 * 1024;
+// Core applies the official 5 MiB decoded bound to inline data; Source File copies keep 50 MiB.
+export const maxInlineEnvironmentFileBytes = 5 * 1024 * 1024;
 
 export const inlineEnvironmentFileReadFailure =
   "The selected local file could not be read. The selection and destination are unchanged; nothing was sent to Core.";
@@ -61,7 +62,7 @@ export function validInlineEnvironmentFileByteLength(bytes: number): boolean {
  */
 export function arrayBufferToStandardBase64(buffer: ArrayBuffer): string {
   if (!validInlineEnvironmentFileByteLength(buffer.byteLength)) {
-    throw new RangeError("Environment files must be at most 50 MiB.");
+    throw new RangeError("Inline Environment files must be at most 5 MiB.");
   }
 
   const bytes = new Uint8Array(buffer);
@@ -103,7 +104,7 @@ export async function submitInlineEnvironmentFile(
     return {
       kind: "validation_error",
       draft,
-      message: "The selected file must contain at most 50 MiB.",
+      message: "The selected file must contain at most 5 MiB.",
     };
   }
 
@@ -120,7 +121,7 @@ export async function submitInlineEnvironmentFile(
       return {
         kind: "validation_error",
         draft,
-        message: "The decoded file content must contain at most 50 MiB.",
+        message: "The decoded file content must contain at most 5 MiB.",
       };
     }
 

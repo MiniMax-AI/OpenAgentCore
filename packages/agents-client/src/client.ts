@@ -273,6 +273,8 @@ const canonicalUuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[
 const sourceFileIdPattern = /^file-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const maxSourceFileBytes = 512 * 1024 * 1024;
 const maxEnvironmentFileBytes = 50 * 1024 * 1024;
+// Core applies the official 5 MiB decoded bound to inline data; file_id copies keep 50 MiB.
+const maxInlineEnvironmentFileBytes = 5 * 1024 * 1024;
 const environmentTemplateFields = new Set([
   "id", "object", "name", "network", "capability_directories", "packages",
   "files", "plugins", "skills", "created_at", "updated_at",
@@ -1731,13 +1733,15 @@ function projectEnvironmentFile(
 function strictBase64DecodedBytes(value: unknown): number | null {
   if (typeof value !== "string") return null;
   if (value === "") return 0;
-  if (value.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
+  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
+  // A flat character class stays linear; a grouped quantifier overflows the
+  // regular-expression stack on multi-megabyte inline data.
+  if (value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*$/.test(value.slice(0, value.length - padding))) {
     return null;
   }
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  if (value.endsWith("==") && (alphabet.indexOf(value[value.length - 3] ?? "") & 15) !== 0) return null;
-  if (value.endsWith("=") && !value.endsWith("==") && (alphabet.indexOf(value[value.length - 2] ?? "") & 3) !== 0) return null;
-  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
+  if (padding === 2 && (alphabet.indexOf(value[value.length - 3] ?? "") & 15) !== 0) return null;
+  if (padding === 1 && (alphabet.indexOf(value[value.length - 2] ?? "") & 3) !== 0) return null;
   return (value.length / 4) * 3 - padding;
 }
 
@@ -2373,7 +2377,9 @@ export class OpenAIAgentsClient implements AgentCore {
       }
       const decodedBytes = strictBase64DecodedBytes(input.data);
       if (decodedBytes === null) throw new TypeError("Inline Environment file data must be strict standard Base64.");
-      if (decodedBytes > maxEnvironmentFileBytes) throw new TypeError("Environment files must be at most 50 MiB.");
+      if (decodedBytes > maxInlineEnvironmentFileBytes) {
+        throw new TypeError("Inline Environment file data must decode to at most 5 MiB.");
+      }
       expectedSize = decodedBytes;
     } else if (input.type === "file_id") {
       if (

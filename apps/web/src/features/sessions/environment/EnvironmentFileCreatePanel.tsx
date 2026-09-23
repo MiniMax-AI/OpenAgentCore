@@ -101,7 +101,7 @@ export function EnvironmentFileCreatePanel({
         <FilePlus2 size={14} strokeWidth={1.5} aria-hidden="true" />
         <div>
           <strong id="environment-file-create-heading">Add inline Workspace file</strong>
-          <small>Explicit local selection · one write attempt · 50 MiB maximum</small>
+          <small>Explicit local selection · one write attempt · 5 MiB maximum</small>
         </div>
       </header>
 
@@ -121,7 +121,7 @@ export function EnvironmentFileCreatePanel({
           </p>
         ) : null}
         {!sizeValid ? (
-          <p className="environment-file-create-validation">This file exceeds the 50 MiB inline-content limit.</p>
+          <p className="environment-file-create-validation">This file exceeds the 5 MiB inline-content limit.</p>
         ) : null}
 
         <label>

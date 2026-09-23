@@ -44,7 +44,8 @@ describe("EnvironmentFileCreatePanel", () => {
     expect(validInlineEnvironmentFilePath(`/workspace/${"界".repeat(1_363)}`)).toBe(false);
   });
 
-  it("enforces the decoded 50 MiB boundary and encodes multibyte bytes as standard Base64", () => {
+  it("enforces the decoded 5 MiB boundary and encodes multibyte bytes as standard Base64", () => {
+    expect(maxInlineEnvironmentFileBytes).toBe(5 * 1024 * 1024);
     expect(validInlineEnvironmentFileByteLength(maxInlineEnvironmentFileBytes)).toBe(true);
     expect(validInlineEnvironmentFileByteLength(maxInlineEnvironmentFileBytes + 1)).toBe(false);
     expect(validInlineEnvironmentFileByteLength(-1)).toBe(false);
