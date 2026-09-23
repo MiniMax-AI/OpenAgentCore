@@ -55,6 +55,13 @@ func (s *Session) onUsageUpdated(raw json.RawMessage) {
 		}
 		s.usageTotal = *p.TokenUsage.Total
 		u := subtractUsage(s.usageTotal, s.usageBaseline)
+		if u.InputTokens == 0 && u.OutputTokens == 0 && u.TotalTokens == 0 {
+			// The thread total has not advanced past this Turn's baseline. It
+			// reports no usage for this Turn, e.g. when native sends it after an
+			// interrupt before any response reported usage; publishing the
+			// difference would turn missing usage into measured zeros.
+			return
+		}
 		observed = &u
 	} else if p.Usage != nil && s.usageTurnID != "" && (p.TurnID == "" || p.TurnID == s.usageTurnID) {
 		u := *p.Usage

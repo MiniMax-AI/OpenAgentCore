@@ -152,3 +152,41 @@ func TestAbnormalTerminationTransmitsKnownUsage(t *testing.T) {
 		t.Fatalf("known usage missing from Done: %+v", done.Usage)
 	}
 }
+
+// Native sends the unchanged thread total when a Turn is interrupted before any
+// response reported usage (EVT-24). That measures nothing for this Turn, so the
+// cancellation outcome keeps usage unknown instead of reporting zeros.
+func TestUnadvancedThreadTotalIsNotTurnUsage(t *testing.T) {
+	previous := `{"inputTokens":13444,"cachedInputTokens":6656,"outputTokens":120,"reasoningOutputTokens":43,"totalTokens":13564}`
+	for name, replay := range map[string]string{
+		"resumed thread": `{"threadId":"thread","turnId":"previous","tokenUsage":{"total":` + previous + `}}`,
+		"fresh thread":   "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			out := make(chan proto.Envelope, 8)
+			s := &Session{runID: "run", out: out, cancelCtx: t.Context(), cfg: defaultSessionConfig()}
+			s.setThreadID("thread")
+			total := `{"inputTokens":0,"cachedInputTokens":0,"outputTokens":0,"reasoningOutputTokens":0,"totalTokens":0}`
+			if replay != "" {
+				s.onUsageUpdated(json.RawMessage(replay))
+				total = previous
+			}
+			s.onTurnStarted(json.RawMessage(`{"threadId":"thread","turn":{"id":"current"}}`))
+			s.onUsageUpdated(json.RawMessage(`{"threadId":"thread","turnId":"current","tokenUsage":{"total":` + total + `}}`))
+			if len(out) != 0 || s.latestUsage != nil {
+				t.Fatalf("unadvanced total published as usage: %+v", s.latestUsage)
+			}
+			outcome := s.CancellationOutcome()
+			if outcome.Usage.Tokens != nil || outcome.Usage.Provider != "" {
+				t.Fatalf("cancellation reported unknown usage: %+v", outcome.Usage)
+			}
+			// A later advanced total is still this Turn's measurement.
+			advanced := `{"inputTokens":13500,"cachedInputTokens":6656,"outputTokens":130,"reasoningOutputTokens":43,"totalTokens":13630}`
+			s.onUsageUpdated(json.RawMessage(`{"threadId":"thread","turnId":"current","tokenUsage":{"total":` + advanced + `}}`))
+			got := s.CancellationOutcome().Usage.Tokens
+			if got == nil || got.TotalTokens == 0 || len(out) != 1 {
+				t.Fatalf("advanced usage lost: %+v", got)
+			}
+		})
+	}
+}
