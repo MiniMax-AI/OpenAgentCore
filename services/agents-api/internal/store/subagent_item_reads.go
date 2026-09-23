@@ -38,21 +38,16 @@ func (s *Store) listChildItems(ctx context.Context, tenant, session, child, turn
 			p.TurnID = row.ID
 		}
 		if after != "" {
-			id, err := parseID(after)
-			if err != nil {
-				return err
-			}
-			row, err := q.GetChildItem(ctx, sqlc.GetChildItemParams{SessionID: sid, SubagentID: childID, ID: id})
-			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrNotFound
+			// Any cursor outside this child (and Turn) scope, including a
+			// malformed one, uses the Session Item cursor error.
+			row, err := q.GetChildItem(ctx, sqlc.GetChildItemParams{SessionID: sid, SubagentID: childID, ID: parsePathID(after)})
+			if errors.Is(err, pgx.ErrNoRows) || (err == nil && p.TurnID.Valid && p.TurnID != row.TurnID) {
+				return errItemCursor
 			}
 			if err != nil {
 				return err
 			}
-			if p.TurnID.Valid && p.TurnID != row.TurnID {
-				return ErrNotFound
-			}
-			p.AfterID = id
+			p.AfterID = row.ID
 			p.AfterCreated = row.TurnCreatedAt
 			p.AfterTurn = row.TurnID
 			p.AfterPosition = row.Position

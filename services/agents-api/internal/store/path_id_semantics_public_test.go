@@ -384,11 +384,14 @@ func TestMalformedPathIDsMatchMissingPostgres(t *testing.T) {
 		}
 	}
 
-	// Malformed list cursors remain invalid requests rather than missing resources.
-	for _, list := range []string{"/turns", "/items", "/subagents", "/artifacts"} {
+	// A malformed list cursor answers like any other unresolved cursor of that
+	// list: 404 on lookup-family lists and the family's 400 elsewhere (see
+	// list_cursor_public_test.go). A malformed parent still answers first.
+	for list, want := range map[string]int{"/turns": 404, "/items": 400, "/subagents": 400, "/artifacts": 400} {
 		status, body := client.do(owner, http.MethodGet, "/v1/agents/sessions/"+session+list+"?after=not-a-uuid", "", nil)
-		if status != http.StatusBadRequest || !strings.Contains(body, `"code":"invalid_request"`) {
-			t.Errorf("malformed %s cursor = %d %s", list, status, body)
+		missingCursorStatus, missingCursorBody := client.do(owner, http.MethodGet, "/v1/agents/sessions/"+session+list+"?after="+missing, "", nil)
+		if status != want || status != missingCursorStatus || body != missingCursorBody {
+			t.Errorf("malformed %s cursor = %d %s; missing cursor %d %s", list, status, body, missingCursorStatus, missingCursorBody)
 		}
 		missingStatus, missingBody := client.do(owner, http.MethodGet, "/v1/agents/sessions/"+missing+list+"?after=not-a-uuid", "", nil)
 		status, body = client.do(owner, http.MethodGet, "/v1/agents/sessions/not-a-uuid"+list+"?after=not-a-uuid", "", nil)
@@ -396,11 +399,11 @@ func TestMalformedPathIDsMatchMissingPostgres(t *testing.T) {
 			t.Errorf("malformed Session with malformed %s cursor = %d %s; missing %d %s", list, status, body, missingStatus, missingBody)
 		}
 	}
-	// Top-level cursors keep their existing family behavior; Templates already
-	// resolved malformed cursors as missing before this change.
-	for list, want := range map[string]int{"/v1/agents/sessions": 400, "/v1/agents": 400, "/v1/vaults": 400, "/v1/vaults/" + vault + "/credentials": 400, "/v1/agents/environments/templates": 404} {
-		if status, body := client.do(owner, http.MethodGet, list+"?after=not-a-uuid", "", nil); status != want {
-			t.Errorf("malformed %s cursor = %d %s; want %d", list, status, body, want)
+	for _, list := range []string{"/v1/agents/sessions", "/v1/agents", "/v1/vaults", "/v1/vaults/" + vault + "/credentials", "/v1/agents/environments/templates"} {
+		status, body := client.do(owner, http.MethodGet, list+"?after=not-a-uuid", "", nil)
+		missingStatus, missingBody := client.do(owner, http.MethodGet, list+"?after="+missing, "", nil)
+		if status != http.StatusNotFound || status != missingStatus || body != missingBody {
+			t.Errorf("malformed %s cursor = %d %s; missing %d %s", list, status, body, missingStatus, missingBody)
 		}
 	}
 	if after := databaseDigest(t, pool); !mapsEqual(before, after) {

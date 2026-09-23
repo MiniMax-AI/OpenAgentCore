@@ -7,7 +7,7 @@ import (
 )
 
 // @Summary List reusable Agents
-// @Description Lists only the authenticated tenant's saved Agents, independently of Sessions. Limit 0 is treated as 1 and larger limits as 100, as observed on the hosted service. The local default is 20; exact upstream default/cap and empty cursor fields remain unverified.
+// @Description Lists only the authenticated tenant's saved Agents, independently of Sessions. Limit 0 is treated as 1 and larger limits as 100, as observed on the hosted service. The local default is 20; exact upstream default/cap and empty cursor fields remain unverified. An unknown, malformed or foreign after cursor returns not found.
 // @Tags Agents
 // @Produce json
 // @Security BearerAuth

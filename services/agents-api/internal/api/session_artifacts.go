@@ -31,7 +31,7 @@ func (h *Handler) artifactsReady(w http.ResponseWriter) bool {
 }
 
 // @Summary List immutable Session artifacts
-// @Description Lists published outputs independently of Environment availability. Sorting uses publication time and ID. A later Turn publishes a path again only when it is new, its bytes changed, or no Artifact remains for it. A malformed environment_id matches nothing. The local default page size is 20; exact upstream defaults and error parity remain unverified.
+// @Description Lists published outputs independently of Environment availability. Sorting uses publication time and ID. A later Turn publishes a path again only when it is new, its bytes changed, or no Artifact remains for it. A malformed environment_id matches nothing. An after value that is not an Artifact of this Session, including a malformed one, returns 400 invalid_request_error with the message "after is not a valid artifact ID". The local default page size is 20; exact upstream defaults remain unverified.
 // @Tags Artifacts
 // @Produce json
 // @Security BearerAuth

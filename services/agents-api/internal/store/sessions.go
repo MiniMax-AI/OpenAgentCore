@@ -225,11 +225,7 @@ func (s *Store) ListSessions(ctx context.Context, tenantID, cursor string, limit
 		params.AgentID = pgtype.Text{String: *agentID, Valid: true}
 	}
 	if cursor != "" {
-		// A malformed cursor remains an invalid request, unlike a path identifier.
-		if _, err := parseID(cursor); err != nil {
-			return SessionPage{}, err
-		}
-		after, err := s.GetSession(ctx, tenantID, cursor)
+		after, err := s.GetSession(ctx, tenantID, lookupCursor(cursor))
 		if err != nil {
 			return SessionPage{}, err
 		}
@@ -271,7 +267,7 @@ var UnknownResourceID = uuid.Max.String()
 // parsePathID parses a caller-supplied resource path identifier. A value that
 // cannot name a resource resolves to UnknownResourceID, so the request follows
 // exactly the path of a well-formed missing identifier, including validation
-// order. List cursors and request-body references keep parseID.
+// order. Request-body references keep parseID; see lookupCursor for cursors.
 func parsePathID(value string) pgtype.UUID {
 	id, err := parseID(value)
 	if err != nil {

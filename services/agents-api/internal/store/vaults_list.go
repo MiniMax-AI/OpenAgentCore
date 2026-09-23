@@ -32,7 +32,7 @@ func (s *Store) ListVaults(ctx context.Context, tenantID, cursor string, limit i
 	}
 	params := sqlc.ListVaultsParams{TenantID: tenant, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending, Statuses: statuses}
 	if cursor != "" {
-		after, err := s.GetVault(ctx, tenantID, cursor)
+		after, err := s.GetVault(ctx, tenantID, lookupCursor(cursor))
 		if err != nil {
 			return VaultPage{}, err
 		}

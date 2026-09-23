@@ -172,14 +172,16 @@ func TestSessionArtifactListEnvelopeAndEnvironmentFilterPostgres(t *testing.T) {
 			}
 		}
 	}
-	// Cursor validation and page bounds keep their own errors under any filter.
-	for _, query := range []url.Values{{"environment_id": {"not-a-uuid"}, "after": {"not-a-uuid"}}, {"environment_id": {"not-a-uuid"}, "limit": {"0"}}} {
-		if status, raw, _ := list(owner, session, query); status != http.StatusBadRequest {
+	// Cursor validation and page bounds keep their own errors under any filter;
+	// malformed and unknown cursors share the Artifact cursor error.
+	const invalidCursor = `{"error":{"message":"after is not a valid artifact ID","type":"invalid_request_error","code":"invalid_request_error","param":null}}` + "\n"
+	for _, query := range []url.Values{{"environment_id": {"not-a-uuid"}, "after": {"not-a-uuid"}}, {"environment_id": {"not-a-uuid"}, "after": {uuid.NewString()}}} {
+		if status, raw, _ := list(owner, session, query); status != http.StatusBadRequest || raw != invalidCursor {
 			t.Errorf("%v: %d %s", query, status, raw)
 		}
 	}
-	if status, raw, _ := list(owner, session, url.Values{"environment_id": {"not-a-uuid"}, "after": {uuid.NewString()}}); status != http.StatusNotFound {
-		t.Errorf("unknown cursor with malformed filter: %d %s", status, raw)
+	if status, raw, _ := list(owner, session, url.Values{"environment_id": {"not-a-uuid"}, "limit": {"0"}}); status != http.StatusBadRequest || raw == invalidCursor {
+		t.Errorf("limit 0 with malformed filter: %d %s", status, raw)
 	}
 
 	// Tenant and Session scoping precede the filter: foreign and missing Sessions stay 404.

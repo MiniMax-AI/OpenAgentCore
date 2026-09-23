@@ -54,13 +54,11 @@ func (s *Store) ListSessionArtifacts(ctx context.Context, tenantID, sessionID, e
 		params.EnvironmentID = parsePathID(environmentID)
 	}
 	if cursor != "" {
-		// A malformed cursor remains an invalid request, unlike a path identifier.
-		if _, err := parseID(cursor); err != nil {
-			return ArtifactPage{}, err
-		}
+		// Any cursor that is not an Artifact of this Session, including a
+		// malformed one, is an invalid cursor rather than a missing resource.
 		after, err := s.GetSessionArtifact(ctx, tenantID, sessionID, cursor)
 		if err != nil {
-			return ArtifactPage{}, err
+			return ArtifactPage{}, unresolvedCursor(err, errArtifactCursor)
 		}
 		params.AfterCreated = pgtype.Timestamptz{Time: after.CreatedAt, Valid: true}
 		params.AfterID, _ = parseID(after.ID)

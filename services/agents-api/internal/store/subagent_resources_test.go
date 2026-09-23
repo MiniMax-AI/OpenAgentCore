@@ -130,8 +130,8 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 	if _, err = s.GetSubagentTurn(ctx, tenant, session.ID, nested.ID, tid); !errors.Is(err, ErrNotFound) {
 		t.Fatal("nested ownership", err)
 	}
-	if _, err = s.ListSubagentItems(ctx, tenant, session.ID, nested.ID, own.Data[0].ID, 20, true); !errors.Is(err, ErrNotFound) {
-		t.Fatal("foreign cursor", err)
+	if _, err = s.ListSubagentItems(ctx, tenant, session.ID, nested.ID, own.Data[0].ID, 20, true); !errors.Is(err, errItemCursor) {
+		t.Fatal("another child's Item cursor", err)
 	}
 	if _, err = s.GetSubagent(ctx, uuid.NewString(), session.ID, child.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatal("foreign tenant", err)

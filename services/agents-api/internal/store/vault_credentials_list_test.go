@@ -116,7 +116,7 @@ func TestCredentialListFilteringOwnershipAndKeylessReconnect(t *testing.T) {
 		}
 	}
 	for _, tc := range []struct{ owner, vault, cursor string }{
-		{tenant, vaults[0].ID, otherVault.ID}, {tenant, vaults[0].ID, otherProject.ID}, {tenant, vaults[0].ID, uuid.NewString()},
+		{tenant, vaults[0].ID, otherVault.ID}, {tenant, vaults[0].ID, otherProject.ID}, {tenant, vaults[0].ID, uuid.NewString()}, {tenant, vaults[0].ID, "invalid"},
 		{tenant, vaults[2].ID, ""}, {foreign, vaults[0].ID, ""}, {tenant, uuid.NewString(), ""},
 	} {
 		if _, err := reader.ListCredentials(ctx, tc.owner, tc.vault, tc.cursor, 20, false, nil); !errors.Is(err, ErrNotFound) {
@@ -133,7 +133,7 @@ func TestCredentialListFilteringOwnershipAndKeylessReconnect(t *testing.T) {
 		owner, vault, cursor string
 		limit                int
 		statuses             []string
-	}{{"invalid", vaults[0].ID, "", 20, nil}, {tenant, "invalid", "", 20, nil}, {tenant, vaults[0].ID, "invalid", 20, nil}, {tenant, vaults[0].ID, "", 0, nil}, {tenant, vaults[0].ID, "", 101, nil}, {tenant, vaults[0].ID, "", 20, []string{"deleted"}}} {
+	}{{"invalid", vaults[0].ID, "", 20, nil}, {tenant, "invalid", "", 20, nil}, {tenant, vaults[0].ID, "", 0, nil}, {tenant, vaults[0].ID, "", 101, nil}, {tenant, vaults[0].ID, "", 20, []string{"deleted"}}} {
 		if _, err := reader.ListCredentials(ctx, tc.owner, tc.vault, tc.cursor, tc.limit, false, tc.statuses); !errors.Is(err, ErrInvalidInput) {
 			t.Fatal("invalid internal query accepted", err)
 		}

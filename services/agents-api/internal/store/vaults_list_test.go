@@ -92,16 +92,16 @@ func TestVaultListFilteringPaginationAndReconnect(t *testing.T) {
 			}
 		}
 	}
-	for _, cursor := range []string{foreign.ID, uuid.NewString()} {
+	for _, cursor := range []string{foreign.ID, uuid.NewString(), "invalid"} {
 		if _, err := s.ListVaults(ctx, tenant, cursor, 20, true, []string{"archived"}); !errors.Is(err, ErrNotFound) {
-			t.Fatalf("foreign/unknown cursor: %v", err)
+			t.Fatalf("foreign/unknown/malformed cursor: %v", err)
 		}
 	}
 	for _, tc := range []struct {
 		tenant, cursor string
 		limit          int
 		statuses       []string
-	}{{"invalid", "", 20, nil}, {tenant, "invalid", 20, nil}, {tenant, "", 0, nil}, {tenant, "", 101, nil}, {tenant, "", 20, []string{"deleted"}}} {
+	}{{"invalid", "", 20, nil}, {tenant, "", 0, nil}, {tenant, "", 101, nil}, {tenant, "", 20, []string{"deleted"}}} {
 		if _, err := s.ListVaults(ctx, tc.tenant, tc.cursor, tc.limit, true, tc.statuses); !errors.Is(err, ErrInvalidInput) {
 			t.Fatalf("invalid store query: %v", err)
 		}

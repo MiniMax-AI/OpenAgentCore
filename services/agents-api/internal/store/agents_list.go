@@ -24,7 +24,7 @@ func (s *Store) ListAgents(ctx context.Context, tenantID, cursor string, limit i
 	}
 	params := sqlc.ListAgentsParams{TenantID: tenant, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending}
 	if cursor != "" {
-		after, err := s.GetAgent(ctx, tenantID, cursor)
+		after, err := s.GetAgent(ctx, tenantID, lookupCursor(cursor))
 		if err != nil {
 			return AgentPage{}, err
 		}

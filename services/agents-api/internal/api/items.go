@@ -6,7 +6,7 @@ import (
 )
 
 // @Summary List persisted execution Items
-// @Description Returns supported message and tool Items in first-observation order. Native engine fields are projected explicitly; unfinished Items on terminal Turns are incomplete. Cursors belong to the same tenant and Session.
+// @Description Returns supported message and tool Items in first-observation order. Native engine fields are projected explicitly; unfinished Items on terminal Turns are incomplete. Cursors are Items of the same tenant and Session. Any other after value, including a malformed one, returns 400 invalid_request_error with the message "Invalid session item ID in `after`".
 // @Tags Items
 // @Produce json
 // @Security BearerAuth

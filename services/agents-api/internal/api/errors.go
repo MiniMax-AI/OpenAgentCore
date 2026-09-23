@@ -65,6 +65,7 @@ func writeFieldError(w http.ResponseWriter, err error) bool {
 }
 
 func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFoundParam ...string) {
+	var cursor *store.InvalidCursorError
 	switch {
 	case errors.Is(err, store.ErrExecutorCredentialExists):
 		writeError(w, http.StatusConflict, "executor_credential_exists", "This executor key ID already exists. Explicitly rotate it to replace the secret.")
@@ -95,6 +96,14 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 		writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", "This Session's harness does not accept a message whose text is only whitespace. Include non-whitespace text or an image, or use a harness that supports whitespace-only text.")
 	case errors.Is(err, execution.ErrExecutionUnavailable):
 		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Execution is not available on this service.")
+	case errors.As(err, &cursor):
+		// Observed official fields for an unresolved list cursor: Skill versions
+		// use invalid_value on after, Beta lists invalid_request_error with a null param.
+		if listFamilyOf(r) == skillsList {
+			writeError(w, http.StatusBadRequest, "invalid_value", cursor.Message, "after")
+		} else {
+			writeError(w, http.StatusBadRequest, "invalid_request_error", cursor.Message)
+		}
 	case errors.Is(err, store.ErrNotFound):
 		code := "not_found_error"
 		// Files and Skills retain their non-beta error envelope.

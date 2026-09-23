@@ -7,7 +7,7 @@ import (
 )
 
 // @Summary List safe Vault Credential metadata
-// @Description Lists only metadata from the authenticated project's requested Vault, without decryption or execution. Includes active and archived Credentials by default, independently of Vault status. Status accepts a scalar, the SDK status[] array or both, filtering by their union; a repeated scalar is rejected. Limits default to 20 and clamp to 1–100. Equal creation times use ID ordering. Hosted errors, concurrent-page behavior and archive/delete lifecycle remain unverified or unimplemented.
+// @Description Lists only metadata from the authenticated project's requested Vault, without decryption or execution. An unknown, malformed or foreign after cursor, including another Vault's Credential, returns not found. Includes active and archived Credentials by default, independently of Vault status. Status accepts a scalar, the SDK status[] array or both, filtering by their union; a repeated scalar is rejected. Limits default to 20 and clamp to 1–100. Equal creation times use ID ordering. Hosted errors, concurrent-page behavior and archive/delete lifecycle remain unverified or unimplemented.
 // @Tags Credentials
 // @Produce json
 // @Security BearerAuth

@@ -63,7 +63,7 @@ func (h *Handler) getSubagent(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary List Session Subagents
-// @Description Includes nested and closed Subagents. Cursors belong to the same tenant and Session. A limit outside 1–100 is rejected.
+// @Description Includes nested and closed Subagents. Cursors are Subagents of the same tenant and Session. Any other after value, including a malformed one, returns 400 invalid_request_error with the message "Invalid resource ID in `after`". A limit outside 1–100 is rejected.
 // @Tags Subagents
 // @Produce json
 // @Security BearerAuth
@@ -89,7 +89,7 @@ func (h *Handler) listSubagents(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary List a Subagent's Items
-// @Description Returns only this Subagent's own Items across all its Turns, not its descendants' Items. Cursors belong to the same tenant, Session and Subagent.
+// @Description Returns only this Subagent's own Items across all its Turns, not its descendants' Items. Cursors are Items of the same tenant, Session and Subagent. Any other after value, including a malformed one, returns 400 invalid_request_error with the message "Invalid session item ID in `after`".
 // @Tags Subagents
 // @Produce json
 // @Security BearerAuth

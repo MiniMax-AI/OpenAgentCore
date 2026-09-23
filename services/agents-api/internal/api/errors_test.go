@@ -44,6 +44,25 @@ func TestResourceNotFoundErrorSurfaces(t *testing.T) {
 	}
 }
 
+// An unresolved list cursor keeps its store message; Skill versions use the
+// observed invalid_value code on after, Beta lists invalid_request_error with a
+// null param.
+func TestInvalidCursorErrorFields(t *testing.T) {
+	for path, want := range map[string]string{
+		"/v1/agents/sessions/session/items":         `{"error":{"message":"Invalid session item ID in ` + "`after`" + `","type":"invalid_request_error","code":"invalid_request_error","param":null}}`,
+		"/v1/agents/sessions/session/subagents":     `{"error":{"message":"Invalid session item ID in ` + "`after`" + `","type":"invalid_request_error","code":"invalid_request_error","param":null}}`,
+		"/v1/skills/skill_missing/versions":         `{"error":{"message":"Invalid session item ID in ` + "`after`" + `","type":"invalid_request_error","code":"invalid_value","param":"after"}}`,
+		"/v1/agents/sessions/session/artifacts?x=1": `{"error":{"message":"Invalid session item ID in ` + "`after`" + `","type":"invalid_request_error","code":"invalid_request_error","param":null}}`,
+	} {
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		writeStoreError(response, request, fmt.Errorf("list: %w", &store.InvalidCursorError{Message: "Invalid session item ID in `after`"}))
+		if response.Code != http.StatusBadRequest || response.Body.String() != want+"\n" {
+			t.Errorf("%s: %d %s", path, response.Code, response.Body)
+		}
+	}
+}
+
 func TestMissingBetaErrorAfterAuthentication(t *testing.T) {
 	for _, authenticated := range []bool{false, true} {
 		handler, _, _ := testHandler(t)
