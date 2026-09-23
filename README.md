@@ -1,18 +1,15 @@
-# OpenAgentCore
-
-![OpenAgentCore: One core. Many agents. Open infrastructure for AI agents.](docs/assets/openagentcore-banner.png)
+# Parsar Core
 
 **Open-source Agents API infrastructure, with your choice of native harness.**
 
-Run Codex, Claude Code and MiniMax Code behind one execution API. OpenAgentCore
+Run Codex, Claude Code and MiniMax Code behind one execution API. Parsar Core
 owns Sessions, environments, files, credentials and execution history; each
 native harness keeps its own model and tool loop. Core runs independently of the
 Parsar product.
 
 Core and its Web console ship together. The default installation runs Core, Web
-and PostgreSQL with zero execution nodes. A local sandbox provider is optional:
-enable microsandbox or Docker explicitly when installing. With a provider enabled,
-Core creates each required sandbox from the colocated Runtime image. Model
+and PostgreSQL with zero execution nodes. Add execution nodes through Web when
+you are ready. Core creates each required sandbox from the shared Runtime image. Model
 credentials are supplied through the existing write-only API extension.
 
 Hosted deployments use one selected provider across local or remote nodes. The
@@ -22,7 +19,28 @@ existing Sessions retain their node across disconnects and resume.
 
 ## Start here
 
-- [Install Core and Web](docs/getting-started/install.md)
+1. **Install Core and Web.** Obtain and verify a matching Linux amd64 bundle,
+   then run its installer. For node access, choose a reachable HTTPS address
+   before the first install and configure your DNS/TLS reverse proxy:
+
+   ```sh
+   ./install.sh --public-url https://core.example
+   ```
+
+   This starts Core, Web and PostgreSQL with zero execution nodes. Public release
+   bundles are not published yet; see the [installation guide](docs/getting-started/install.md)
+   for building a bundle and the host/network prerequisites.
+2. **Sign in to Web.** Open the console address printed by the installer. Use
+   `admin` and the password in `~/.parsar/core/config/console.password`.
+   The paired console needs no additional API key setup.
+3. **Add a node.** Open **Hosted Sandbox Manager**, choose Docker or microsandbox,
+   and confirm the reachable Core origin. Select **Generate node command**, then
+   copy and run it on a prepared Linux host. Web shows when the node is online
+   and its provider is ready. All nodes in a deployment use the same provider.
+
+Installation and node enrollment do not call a model. Once a node is ready,
+run an optional API example with your own model credentials.
+
 - [Make your first API request](docs/getting-started/quickstart.md)
 - [Service health, data and operations](docs/getting-started/operations.md)
 - [Hosted Sandbox Manager](services/agents-api/HOSTED-SANDBOX-MANAGER.md)
@@ -30,11 +48,16 @@ existing Sessions retain their node across disconnects and resume.
 - [Add or select a harness](contracts/agents-api/harness-selection.md)
 - [Public landing page source](site/index.html)
 
-After verifying and extracting a matching Linux amd64 distribution:
+### Other installation options
+
+Run these from an extracted distribution. The plain command uses loopback for
+local console/API access. For node enrollment, use the reachable origin described
+above; the installer does not change an existing installation's public URL.
+Installing a local provider is optional, and is not required for adding nodes in Web.
 
 ```sh
-./install.sh                    # Core + Web + PostgreSQL, no sandbox provider
-./install.sh --core-only        # Core + PostgreSQL, no sandbox provider
+./install.sh                    # Core + Web + PostgreSQL, loopback access, zero nodes
+./install.sh --core-only        # Core + PostgreSQL, zero nodes
 ./install.sh --sandbox-provider true --provider microsandbox
 ./install.sh --sandbox-provider true --provider docker
 ```

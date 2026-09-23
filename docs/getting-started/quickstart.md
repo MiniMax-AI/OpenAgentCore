@@ -32,10 +32,11 @@ environment. Installation has no mandatory sample task.
 
 ## Run a Session when you are ready
 
-This example requires an installation created with a local sandbox provider
-enabled. The default installation has zero execution nodes. Choose microsandbox
-or Docker using the [installation options](install.md#installation-choices);
-adding these flags to an existing default installation is not a supported migration.
+This example requires a connected node whose provider is ready. The default
+installation has zero execution nodes: sign in to Web and
+[add a Docker or microsandbox node](install.md#add-nodes-after-a-default-installation).
+A local provider enabled during installation also satisfies this requirement.
+You do not need to reinstall Core or change installer flags to add nodes in Web.
 
 Core creates the sandbox through its Provider using the prepared Runtime image,
 then initializes the daemon, native harness and workspace inside it. You do not

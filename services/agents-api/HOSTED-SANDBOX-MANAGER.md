@@ -29,8 +29,10 @@ node installation payload. Project keys cannot register, edit or remove nodes.
 
 Default installation starts Core, Web and PostgreSQL without local compute.
 Hosted Sandbox Manager first asks for Docker or microsandbox and the public HTTPS
-Core origin reachable from node hosts and sandbox guests. Use Core's origin, not
-the Web console URL; the proxy must forward API routes and WebSocket upgrades.
+Core origin reachable from node hosts and sandbox guests. In a paired installation,
+use the shared HTTPS origin configured with `--public-url`; its proxy forwards
+Core API routes and WebSocket upgrades as well as Web. A separate console-only
+address that does not forward Core's transport routes is insufficient.
 HTTP loopback is accepted only for local development. A guest's loopback address
 cannot reach its Core host.
 

@@ -1,9 +1,9 @@
 # Operate your Core
 
 The installation operator owns the host, storage and service availability.
-The default installation has zero execution nodes. When a sandbox provider is
-enabled during installation, the operator also maintains its containers or
-microVMs. Provider operations below apply to that optional configuration. Service
+The default installation has zero execution nodes. After nodes are added in Web,
+their operators maintain the node services, containers or microVMs on those hosts.
+A provider enabled during installation runs locally on the Core host. Service
 health and provider state are separate from a Session's public execution state.
 
 ## Read service health
@@ -35,8 +35,8 @@ Use these observations for distinct questions:
 Container liveness alone is not a healthy native harness or an available model.
 Use public Session, Turn, Items, Environment and Usage reads for execution. Reuse
 Core's Runtime observations for sandbox details when available; do not infer
-execution truth from Docker or invent a second lifecycle collector. The existing
-Web is unchanged by this installation batch.
+execution truth from Docker or invent a second lifecycle collector. Use Web's
+**Hosted Sandbox Manager** for node connection, provider readiness and placement.
 
 ## Stop and restart
 
@@ -48,7 +48,9 @@ Settle active work before a planned restart. Then:
 ```
 
 This stops the control-plane services and retains the database, Runtime state and
-credentials. For microsandbox, the systemd user unit uses `KillMode=process`:
+credentials. Nodes added through Web run their own services; stopping Core does
+not stop those node services. For a local microsandbox installation, the Core
+systemd user unit uses `KillMode=process`:
 only Core stops; microVMs and their work may remain running. Docker-owned Runtime
 containers likewise remain Provider resources. The command does not promise to
 stop all compute. Release resources through the existing Core API before a full
@@ -71,8 +73,12 @@ Retain together:
 
 - the dedicated PostgreSQL volume, including large objects;
 - `config/credential.key`, caller identity configuration and provider identity;
-- `admin/` when a local provider is enabled, containing the separate sandbox
+- `admin/`, including on zero-node installations, containing the separate sandbox
   administrator key and Core's digest configuration;
+- each separately installed node's private configuration and persistent identity
+  directory on its host (`~/.parsar/nodes/<installation-id>/` for the Web-generated
+  installer), as described in the
+  [node guide](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host);
 - `state/sandbox-node` when a local provider is enabled, including its private
   node credential and highest accepted owner epoch;
 - microsandbox's private state/cache/disks/snapshots, or Docker-owned Runtime
@@ -97,6 +103,9 @@ claiming the upgrade complete; there is no downgrade or history migration promis
 
 The installer refuses to enable, disable or replace a sandbox provider on an
 existing installation. Changing flags and rerunning is not a migration procedure.
+This restriction does not prevent a zero-node deployment from selecting its first
+provider and adding nodes through Web. After selection, every node uses that
+provider; the Web setup does not switch it.
 For an installation with a provider, follow the [maintenance and provider-switch procedure](https://github.com/MiniMax-AI/parsar-core/blob/main/services/agents-api/deploy/microsandbox/README.md#change-the-deployment-provider).
 The installer never migrates Sessions between providers or deletes old compute.
 
@@ -104,8 +113,12 @@ The installer never migrates Sessions between providers or deletes old compute.
 
 API and console bind to host loopback. With native Core, PostgreSQL publishes an
 installation-specific loopback port; with container Core it has no published port.
-The production Web proxy only forwards the public `/v1` surface to its configured
-Core; it never receives the Docker socket, KVM device or provider/model secrets.
+The production Web proxy forwards the public `/v1` surface and allowlisted sandbox
+administration routes to its configured Core after console login. It keeps the
+separate project and administrator credentials on the server. Fixed node/daemon
+transport routes use their own authentication; `/node-install/` serves only the
+matched non-secret node payload. Web has no Docker or KVM authority and does not
+expose its server-held credentials to the browser.
 It requires an independent console password and rejects untrusted browser origins.
 This is a single-operator console deployment, not a multi-user identity system.
 
