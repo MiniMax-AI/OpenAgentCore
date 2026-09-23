@@ -113,7 +113,9 @@ def verify_credential_list(client, other, invalid, peer, binding, saved_vaults, 
                         vault.id, descending[:size], True, canary)
         for params, values in (({"status": "active"}, list(reversed(active))),
                                ([("status[]", "archived")], list(reversed(archived))),
-                               ([("status[]", "active"), ("status[]", "archived")], descending)):
+                               ([("status[]", "active"), ("status[]", "archived")], descending),
+                               ([("status", "archived"), ("status[]", "active")], descending),
+                               ({"include": "token", "tenant_id": "foreign"}, descending)):
             verify_page(raw.get(endpoint, headers=headers, params=params), vault.id, values[:20], True, canary)
         for order, values in (("asc", expected), ("desc", descending)):
             params = {"order": order, "limit": "100"}
@@ -138,9 +140,8 @@ def verify_credential_list(client, other, invalid, peer, binding, saved_vaults, 
             expect_error(NotFoundError, lambda: credentials.list(owner, after=cursor))
         invalid_queries = [
             {"after": "invalid-credential"}, {"status": "unknown"}, {"limit": "null"},
-            {"order": "invalid"}, {"include": "token"}, {"tenant_id": "foreign"},
-            [("status", "active"), ("status", "archived")],
-            [("status", "active"), ("status[]", "archived")],
+            {"order": "invalid"}, [("status", "active"), ("status", "archived")],
+            [("status", "active"), ("status[]", "unknown")],
         ]
         for params in invalid_queries:
             safe_error(raw.get(endpoint, headers=headers, params=params), 400)

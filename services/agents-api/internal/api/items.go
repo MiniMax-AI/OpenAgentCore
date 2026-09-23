@@ -13,13 +13,13 @@ import (
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param session_id path string true "Session ID"
 // @Param after query string false "Last Item ID from the previous page"
-// @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
+// @Param limit query int false "Page size; 0 is treated as 1 and values above 100 as 100" minimum(0) default(20)
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.ItemList
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/items [get]
 func (h *Handler) listItems(w http.ResponseWriter, r *http.Request) {
-	options, ok := readPage(w, r)
+	options, ok := readClampedPage(w, r)
 	if !ok {
 		return
 	}

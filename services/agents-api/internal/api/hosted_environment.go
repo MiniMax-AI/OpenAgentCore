@@ -9,8 +9,13 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
+// errNetworkPolicy reports a network policy outside the qualified forms. The
+// official service rejects these with invalid_request_error and a null param.
+var errNetworkPolicy = &fieldError{message: "network access must be enabled, disabled or restricted; restricted access requires 1–100 exact ASCII hostnames, and allowed_domains is only accepted with restricted access."}
+
 // decodeHostedEnvironment keeps unsupported installations explicit, while
 // accepting the protocol's omitted/null/empty defaults for the basic profile.
+// Unsupported fields are reported before network policy, independently of map order.
 func decodeHostedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) != nil {
@@ -25,14 +30,6 @@ func decodeHostedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 		switch name {
 		case "type":
 		case "network":
-			if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
-				continue
-			}
-			var network v1.EnvironmentNetworkInput
-			if decodeInputObject(value, &network, "access", "allowed_domains") != nil || (agentnetwork.Policy{Access: network.Access, AllowedDomains: network.AllowedDomains}).Validate() != nil {
-				return nil, store.ErrInvalidInput
-			}
-			env.Network = &network
 		case "files":
 			files, err := decodeInitialFiles(value)
 			if err != nil {
@@ -53,6 +50,16 @@ func decodeHostedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 		default:
 			return nil, store.ErrInvalidInput
 		}
+	}
+	if value, supplied := fields["network"]; supplied && !bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+		var network v1.EnvironmentNetworkInput
+		if decodeInputObject(value, &network, "access", "allowed_domains") != nil {
+			return nil, store.ErrInvalidInput
+		}
+		if (agentnetwork.Policy{Access: network.Access, AllowedDomains: network.AllowedDomains}).Validate() != nil {
+			return nil, errNetworkPolicy
+		}
+		env.Network = &network
 	}
 	return env, nil
 }

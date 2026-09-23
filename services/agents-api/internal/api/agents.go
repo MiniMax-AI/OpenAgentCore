@@ -20,7 +20,7 @@ type AgentStore interface {
 }
 
 // @Summary Create a reusable Agent
-// @Description Persists configuration independently of execution. Supports model/name/instructions/metadata, explicit reasoning and service tiers, multi_agent, text/json_schema, function/tool_search/programmatic_tool_calling and HTTP MCP with nullable credential_id and explicit service origin and boolean required defaulting to false. Saving credential_id grants no access: Session admission checks attached Vault ownership and destination. MCP allowed_tools preserves null versus empty; saved HTTP transport includes empty headers. Model-derived reasoning defaults, other MCP variants, enabled web_search and public retry conformance remain incomplete. Explicit disabled web_search can be saved; Session execution also accepts explicit disabled programmatic_tool_calling through qualified Runtime controls. Session execution admits only its supported configuration subset.
+// @Description Persists configuration independently of execution. Names over 128 characters and metadata outside 16 string pairs with 64-character keys and 512-character values return invalid_request_error with the official param; U+0000 in stored strings is rejected as a local storage limit. Supports model/name/instructions/metadata, explicit reasoning and service tiers, multi_agent, text/json_schema, function/tool_search/programmatic_tool_calling and HTTP MCP with nullable credential_id and explicit service origin and boolean required defaulting to false. Saving credential_id grants no access: Session admission checks attached Vault ownership and destination. MCP allowed_tools preserves null versus empty; saved HTTP transport includes empty headers. Model-derived reasoning defaults, other MCP variants, enabled web_search and public retry conformance remain incomplete. Explicit disabled web_search can be saved; Session execution also accepts explicit disabled programmatic_tool_calling through qualified Runtime controls. Session execution admits only its supported configuration subset.
 // @Tags Agents
 // @Accept json
 // @Produce json
@@ -31,12 +31,11 @@ type AgentStore interface {
 // @Failure 400,401,413,500 {object} v1.ErrorResponse
 // @Router /agents [post]
 func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Agent creation does not accept query parameters.")
-		return
-	}
 	raw, ok := readJSONBody(w, r)
 	if !ok {
+		return
+	}
+	if writeFieldError(w, metadataTypeError(raw)) {
 		return
 	}
 	var request v1.CreateAgentRequest
@@ -46,7 +45,9 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	input, err := resolveSavedAgent(request)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())
+		if !writeFieldError(w, err) {
+			writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())
+		}
 		return
 	}
 	agent, err := h.store.CreateAgent(r.Context(), tenantID(r), input)
@@ -68,10 +69,6 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/{agent_id} [get]
 func (h *Handler) getAgent(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Agent retrieval does not accept query parameters.")
-		return
-	}
 	agent, err := h.lookupAgent(r.Context(), tenantID(r), chi.URLParam(r, "agent_id"))
 	if err != nil {
 		writeStoreError(w, r, err)

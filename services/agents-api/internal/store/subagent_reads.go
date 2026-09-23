@@ -13,11 +13,7 @@ import (
 )
 
 func publicSubagent(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, id string) (v1.Subagent, error) {
-	parsed, err := parseID(id)
-	if err != nil {
-		return v1.Subagent{}, err
-	}
-	row, err := q.GetPublicSubagent(ctx, sqlc.GetPublicSubagentParams{SessionID: session, ID: parsed})
+	row, err := q.GetPublicSubagent(ctx, sqlc.GetPublicSubagentParams{SessionID: session, ID: parsePathID(id)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return v1.Subagent{}, ErrNotFound
 	}
@@ -56,6 +52,10 @@ func (s *Store) ListSubagents(ctx context.Context, tenant, session, after string
 	err := s.withPublicSession(ctx, tenant, session, func(ctx context.Context, q *sqlc.Queries, sid pgtype.UUID) error {
 		p := sqlc.ListPublicSubagentsParams{SessionID: sid, Ascending: asc, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}}
 		if after != "" {
+			// A malformed cursor remains an invalid request, unlike a path identifier.
+			if _, err := parseID(after); err != nil {
+				return err
+			}
 			cursor, err := publicSubagent(ctx, q, sid, after)
 			if err != nil {
 				return err
@@ -84,11 +84,7 @@ func (s *Store) ListSubagents(ctx context.Context, tenant, session, after string
 }
 
 func childTurn(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, child, id string) (sqlc.SubagentTurn, error) {
-	parsed, err := parseID(id)
-	if err != nil {
-		return sqlc.SubagentTurn{}, err
-	}
-	row, err := q.GetChildTurn(ctx, sqlc.GetChildTurnParams{SessionID: session, ID: parsed})
+	row, err := q.GetChildTurn(ctx, sqlc.GetChildTurnParams{SessionID: session, ID: parsePathID(id)})
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && uuid.UUID(row.SubagentID.Bytes).String() != child) {
 		return row, ErrNotFound
 	}
@@ -140,6 +136,9 @@ func (s *Store) ListSubagentTurns(ctx context.Context, tenant, session, child, a
 		childID, _ := parseID(child)
 		p := sqlc.ListChildTurnsParams{SessionID: sid, SubagentID: childID, Ascending: asc, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}}
 		if after != "" {
+			if _, err := parseID(after); err != nil {
+				return err
+			}
 			row, err := childTurn(ctx, q, sid, child, after)
 			if err != nil {
 				return err

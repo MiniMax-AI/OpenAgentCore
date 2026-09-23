@@ -7,7 +7,7 @@ import (
 )
 
 // @Summary List source files
-// @Description Lists project-owned Files without reading their bodies. The limit defaults to 10000 and must be 1–10000. Equal creation times use ID ordering. Purpose validation precedes cursor lookup; current storage contains only user_data. An explicit empty purpose retains the local exact-filter behavior. Hosted positive filtering, default order and concurrent-page behavior remain unverified. No Beta header is required.
+// @Description Lists project-owned Files without reading their bodies. The limit defaults to 10000 and must be 1–10000. Equal creation times use ID ordering. Purpose validation precedes cursor lookup; current storage contains only user_data. An explicit empty purpose is treated as omitted. Repeated purpose values remain rejected. Hosted positive filtering, default order and concurrent-page behavior remain unverified. No Beta header is required.
 // @Tags Files
 // @Produce json
 // @Security BearerAuth
@@ -44,16 +44,17 @@ func (h *Handler) listSourceFiles(w http.ResponseWriter, r *http.Request) {
 
 func readSourceFilePage(w http.ResponseWriter, r *http.Request) (pageOptions, *string, bool) {
 	q := r.URL.Query()
-	options, ok := readPageQueryLimits(w, r, q, 10000, 10000, true, "purpose")
+	options, ok := readPageQueryLimits(w, r, q, 10000, 10000, false, "purpose")
 	if !ok {
 		return pageOptions{}, nil, false
 	}
-	values, present := q["purpose"]
-	if !present {
+	// An explicit empty purpose applies no filter, as observed on the hosted service.
+	values := q["purpose"]
+	if len(values) == 0 || values[0] == "" {
 		return options, nil, true
 	}
 	switch values[0] {
-	case "", "user_data", "assistants", "batch", "fine-tune", "vision", "evals", "assistants_output", "batch_output", "fine-tune-results":
+	case "user_data", "assistants", "batch", "fine-tune", "vision", "evals", "assistants_output", "batch_output", "fine-tune-results":
 	default:
 		writeError(w, http.StatusBadRequest, "", "Invalid purpose.", "purpose")
 		return pageOptions{}, nil, false

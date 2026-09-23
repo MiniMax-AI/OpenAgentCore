@@ -98,7 +98,7 @@ paths start at `/vaults`, not `/agents/vaults`.
 | sessions.events | create, stream | Text/cancel/function-result admission and live events; function-action state snapshots supported |
 | sessions.turns | retrieve, list | Implemented reads; lifecycle conformance still partial |
 | sessions.items | list | Partial Item variants |
-| sessions.artifacts | retrieve, list, delete, content | Shared output capture and immutable stored reads/deletion on accepted Docker profiles and [qualified user-managed workflows](user-managed-runtime-v1.md) (prior Core-managed E2B evidence remains historical), including retained downloads after Runtime loss; exact upstream defaults/errors, unchanged-file republishing and cancellation-edge parity remain unverified |
+| sessions.artifacts | retrieve, list, delete, content | Shared output capture and immutable stored reads/deletion on accepted Docker profiles and [qualified user-managed workflows](user-managed-runtime-v1.md) (prior Core-managed E2B evidence remains historical), including retained downloads after Runtime loss. [Aligned](official-semantics-alignment.md#artifact-capture-and-listing--september-23) output symlink skipping, unchanged-path non-republication, the list envelope and malformed filters; exact upstream defaults/errors, hard-link/special-file capture and cancellation-edge parity remain unverified |
 | sessions.subagents | retrieve, list | [Three-harness Docker reads, native lifecycle limits and real evidence](subagents.md); full multi-agent semantics remain partial |
 | sessions.subagents.items | list | Qualified own-child history reads; full Item variants and live child streaming remain partial |
 | sessions.subagents.turns | retrieve, list | Implemented; shared Session/child IDs |
@@ -185,7 +185,7 @@ user-managed enrollment remain outside this qualification.
 | Area | Missing or unverified scope |
 | --- | --- |
 | Subagents / multi_agent | Six reads and same-child recovery have three-harness Docker evidence; optional native operations, live child progress, full lifecycle/interactions and tool combinations remain explicit gaps |
-| Environment Templates | Unsupported restricted hostname forms, null network/list selection and exact hosted errors remain gaps. Template-reference env/files/commands/packages composition follows [qualified field rules](environment-templates.md#template-and-inline-configuration-composition). CRUD/list, files, env/setup/system/npm/Python, inline/referenced Skills, Plugins, workspace capability directories and Session references have recorded coverage. Environment Plugin MCP transport and placement limits are [listed separately](environment-templates.md#environment-origin-mcp-plugins) |
+| Environment Templates | Unsupported restricted hostname forms and exact hosted errors remain gaps. Referenced null network and capability-list selection follow [qualified inheritance rules](template-null-selection.md). Template-reference env/files/commands/packages composition follows [qualified field rules](environment-templates.md#template-and-inline-configuration-composition). CRUD/list, files, env/setup/system/npm/Python, inline/referenced Skills, Plugins, workspace capability directories and Session references have recorded coverage. Environment Plugin MCP transport and placement limits are [listed separately](environment-templates.md#environment-origin-mcp-plugins) |
 | Input and configuration | Non-text initial input, broader content/configuration unions and reasoning/verbosity combinations; [structured output](structured-output.md) has qualified Claude function profiles on none and Core-managed Docker openai_hosted, with other combinations remaining gaps |
 | Tools and interactions | [Deferred discovery qualification](tool-search.md), other tool types, effective tool-set enforcement and result/cancel publication ordering; MiniMax public functions and service-origin MCP remain unsupported |
 | Vault and Credentials | Archive semantics, in-flight token withdrawal and exact hosted selection/error behavior; static/OAuth CRUD, replacement and scoped dispatch-time refresh are implemented (see credential guide for qualification) |
@@ -250,7 +250,8 @@ upgrade the protocol.
   authentication and Beta header as other resources. The response contains only
   `id`, `object: vault`, `created_at`, `name` and `metadata`. Omitted name stays null;
   explicit null is rejected. Supplied strings are trimmed and must contain 1–256
-  UTF-8 bytes. Omitted/null metadata becomes `{}` and values must be strings.
+  UTF-8 bytes. Omitted/null metadata becomes `{}`; a non-string value returns
+  `invalid_request_error` with param `metadata.<key>`.
   Session-specific metadata pair/character limits do not apply. The existing
   64 KiB encoded metadata and 1 MiB HTTP body bounds are local implementation
   limits. Creation does not start execution. Retrieval maps missing, malformed and
@@ -262,8 +263,9 @@ upgrade the protocol.
   classification is stored, never returned; existing/new Vaults default active.
   Synthetic archived fixtures prove read/filter behavior only. No public archive
   writer or delete-to-archive mapping is implemented. Equal creation times use ID
-  order locally; repeated scalars and mixed status encodings are rejected. Exact
-  hosted query errors and pagination over changing data remain unverified.
+  order locally. A repeated scalar status is rejected; a scalar combined with
+  `status[]` filters by their union. Other hosted query errors and pagination over
+  changing data remain unverified.
 - `DELETE /vaults/{vault_id}` returns `id`, `deleted: true` and `object: vault.deleted`
   after project-scoped parent removal and atomic cascade of all stored Credentials.
   It needs no encryption key or execution connection. Local parent/child reads,
@@ -319,8 +321,9 @@ upgrade the protocol.
   404. Exact hosted errors and overlapping creation/deletion ordering are unverified.
 - `GET /agents` lists tenant-owned reusable resources with `after`, `limit` and
   `order` (default `desc`). It uses creation-time/ID keysets and the same resource
-  mapping as retrieval. Positive int64 limits are accepted; pages contain up to
-  100 resources, with `has_more` and the final resource ID guiding continuation.
+  mapping as retrieval. Limit 0 is treated as 1 and larger limits as 100; negative
+  and non-integer limits reject. Pages contain up to 100 resources, with `has_more`
+  and the final resource ID guiding continuation.
   The local default is 20. The list envelope includes `object`, `data`, `has_more`,
   `first_id` and `last_id`; empty pages use null IDs. The pinned SDK omits null
   limits and empty cursors. Exact upstream default/cap, empty-envelope nullability
@@ -381,7 +384,8 @@ upgrade the protocol.
   and character limits as creation. Preserve execution state, effective configuration
   and the original creation retry identity. Fixed SDK/raw HTTP checks cover these
   distinctions, tenant isolation, active Session reads and restart persistence.
-- `GET /agents/sessions` accepts `after`, `limit` (1..100, default 20), `order`
+- `GET /agents/sessions` accepts `after`, `limit` (default 20; 0 is treated as 1 and
+  values above 100 as 100), `order`
   (default `desc`) and optional `agent_id`. The filter matches the immutable root
   Agent ID, including inline IDs and Sessions whose saved source was changed or
   deleted. Filter before pagination within the authenticated tenant; no source
@@ -487,7 +491,10 @@ The Store's internal DTO is not the upstream response model. The API layer must
 validate and resolve the upstream schema before persistence, and report only
 supported options. For example, upstream metadata is limited to 16 pairs with
 64-character keys and 512-character values; a storage byte limit is not a
-replacement for that public validation.
+replacement for that public validation. Violations return `invalid_request_error`
+with the official `metadata` or `metadata.<key>` param. U+0000 in stored strings
+is a local PostgreSQL limit and returns 400 without writing; see the
+[validation error batch](official-semantics-alignment.md#validation-error-fields--september-23).
 
 Use the pinned official Python client against the actual service, with response
 validation enabled, for supported Session/Turn/Items operations, pagination, streaming,
@@ -847,6 +854,10 @@ establish complete ownership, hosted key lifecycle or error compatibility. See t
 [standalone configuration](../../services/agents-api/README.md#standalone-http-service).
 
 Core documents its optional [harness selection extension](harness-selection.md) separately from the pinned upstream contract.
+
+The [Core startup configuration extension](startup-configuration.md) exposes only
+safe build support and process configuration facts. It does not report Runtime,
+Session or Environment observations and is not a readiness endpoint.
 
 Model endpoints and credentials may be supplied at Session creation through the
 [write-only execution extension](model-execution.md). Provider catalogs and their

@@ -45,8 +45,16 @@ func (s *Store) BeginTurnArtifactCapture(ctx context.Context, tenantID, sessionI
 	})
 }
 
+// settleTurnArtifacts runs in the Turn's terminal transaction under the Session
+// lock, which also orders Artifact deletion and allows one active Turn. The
+// republication decision therefore sees exactly the Artifacts that remain when
+// the Turn completes: new paths, changed bytes and paths whose newest Artifact
+// was deleted are published; unchanged paths keep their existing Artifact IDs.
 func settleTurnArtifacts(ctx context.Context, q *sqlc.Queries, turn sqlc.Turn) error {
 	if turn.Status == TurnCompleted {
+		if err := q.DeleteUnchangedTurnArtifacts(ctx, sqlc.DeleteUnchangedTurnArtifactsParams{SessionID: turn.SessionID, TurnID: turn.ID}); err != nil {
+			return err
+		}
 		return q.PublishTurnArtifacts(ctx, sqlc.PublishTurnArtifactsParams{SessionID: turn.SessionID, TurnID: turn.ID, CreatedAt: turn.CompletedAt})
 	}
 	return q.DeleteUnpublishedTurnArtifacts(ctx, sqlc.DeleteUnpublishedTurnArtifactsParams{SessionID: turn.SessionID, TurnID: turn.ID})

@@ -63,7 +63,8 @@ func TestSessionMetadataPreservesCreationAndExecutionData(t *testing.T) {
 		{uuid.NewString(), first.ID, nil, ErrNotFound},
 		{tenant, uuid.NewString(), nil, ErrNotFound},
 		{"invalid", first.ID, nil, ErrInvalidInput},
-		{tenant, "invalid", nil, ErrInvalidInput},
+		// A malformed path identifier is indistinguishable from a missing Session.
+		{tenant, "invalid", nil, ErrNotFound},
 		{tenant, first.ID, map[string]string{"large": strings.Repeat("x", 64*1024)}, ErrInvalidInput},
 	} {
 		if _, err := s.UpdateSessionMetadata(ctx, test.tenant, test.session, test.metadata); !errors.Is(err, test.want) {

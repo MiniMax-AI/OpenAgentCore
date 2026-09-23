@@ -33,7 +33,9 @@ def verify_network_resources(client, foreign, http, agent):
             {'access': 'enabled', 'allowed_domains': ['example.com']},
         ]:
             for target in [endpoint, root + '/agents/environments/templates']:
-                assert http.post(target, headers=headers, json={'network': network}).status_code == 400
+                response = http.post(target, headers=headers, json={'network': network})
+                assert response.status_code == 400 and response.json()['error']['code'] == 'invalid_request_error'
+                assert response.json()['error']['param'] is None
             assert templates.retrieve(template.id).network.to_dict() == NETWORK
         for override in [{'access': 'enabled'}, {'access': 'restricted', 'allowed_domains': ['sub.example.com']},
                          {'access': 'restricted', 'allowed_domains': ['example.org']}]:

@@ -141,17 +141,35 @@ func TestSubagentRoutesRejectInvalidQueriesBeforeStore(t *testing.T) {
 	s := &subagentReadStore{}
 	h, _, _ := testHandler(t, WithSubagents(s))
 	for _, route := range subagentRoutes {
-		queries := []string{"unknown=1", "tenant_id=foreign"}
-		if route.list {
-			queries = append(queries, "limit=0", "limit=101", "limit=null", "limit=2&limit=3", "order=random", "order=asc&order=desc", "after=a&after=b")
-		} else {
-			queries = append(queries, "limit=1", "after=a", "order=asc")
+		if !route.list {
+			continue
 		}
-		for _, query := range queries {
+		for _, query := range []string{"limit=0", "limit=101", "limit=null", "limit=-1", "limit=2&limit=3", "order=random", "order=asc&order=desc", "after=a&after=b"} {
 			calls := s.calls
 			w := requestSubagents(h, route.path+"?"+query, "Bearer test-api-key", "agents=v1")
-			if w.Code != http.StatusBadRequest || s.calls != calls {
+			if w.Code != http.StatusBadRequest || s.calls != calls || !strings.Contains(w.Body.String(), `"code":"invalid_request_error"`) {
 				t.Fatalf("accepted %s?%s: %d %s", route.path, query, w.Code, w.Body)
+			}
+		}
+	}
+}
+
+func TestSubagentRoutesIgnoreUnknownQueryKeys(t *testing.T) {
+	s := &subagentReadStore{}
+	h, _, tenant := testHandler(t, WithSubagents(s))
+	for _, route := range subagentRoutes {
+		// Retrieval routes also ignore list keys, which carry no semantics there.
+		for _, query := range []string{"unknown=1", "tenant_id=foreign&unknown=1&unknown=2", "limit=1&after=a&order=asc"} {
+			if route.list && strings.Contains(query, "limit") {
+				continue
+			}
+			calls := s.calls
+			w := requestSubagents(h, route.path+"?"+query, "Bearer test-api-key", "agents=v1")
+			if w.Code != http.StatusOK || s.calls != calls+1 || s.method != route.method || s.tenant != tenant || s.subagent != route.subagent || s.turn != route.turn {
+				t.Fatalf("query changed %s?%s: %d %s %+v", route.path, query, w.Code, w.Body, s)
+			}
+			if route.list && (s.limit != 20 || s.after != "" || s.ascending) {
+				t.Fatalf("unknown keys changed pagination: %+v", s)
 			}
 		}
 	}

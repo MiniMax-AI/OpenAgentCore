@@ -13,6 +13,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	sandboxdocker "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/docker"
+	sandboxmicrosandbox "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/microsandbox"
 	"github.com/google/uuid"
 	"github.com/moby/moby/client"
 )
@@ -107,6 +108,20 @@ func managedRuntimes() (*execution.RuntimeProvider, func(), error) {
 		return nil, closeProvider, errors.New("managed provider must be docker or microsandbox")
 	}
 	return result, closeProvider, nil
+}
+
+func managedRuntimeProviderKind(runtime *execution.RuntimeProvider) string {
+	if runtime == nil {
+		return ""
+	}
+	switch runtime.Provider.(type) {
+	case *sandboxdocker.Provider:
+		return "docker"
+	case *sandboxmicrosandbox.Provider:
+		return "microsandbox"
+	default:
+		return ""
+	}
 }
 
 func managedBackendFingerprint(kind, namespace string) string {

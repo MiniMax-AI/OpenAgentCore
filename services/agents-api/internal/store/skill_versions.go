@@ -13,7 +13,7 @@ import (
 var ErrDefaultSkillVersion = errors.New("cannot delete the default skill version")
 
 func (s *Store) CreateSkillVersion(ctx context.Context, tenantID, skillID string, archive []byte, makeDefault bool) (SkillVersion, error) {
-	tenant, id, err := skillIDs(tenantID, skillID)
+	tenant, id, err := skillPathIDs(tenantID, skillID)
 	if err != nil {
 		return SkillVersion{}, err
 	}
@@ -44,14 +44,11 @@ func (s *Store) CreateSkillVersion(ctx context.Context, tenantID, skillID string
 }
 
 func (s *Store) GetSkillVersion(ctx context.Context, tenantID, skillID, version string) (SkillVersion, error) {
-	tenant, id, err := skillIDs(tenantID, skillID)
+	tenant, id, err := skillPathIDs(tenantID, skillID)
 	if err != nil {
 		return SkillVersion{}, err
 	}
-	number, err := skillVersionNumber(version)
-	if err != nil {
-		return SkillVersion{}, err
-	}
+	number := skillPathVersion(version)
 	row, err := s.queries.GetSkillVersion(ctx, sqlc.GetSkillVersionParams{TenantID: tenant, SkillID: id, Version: number})
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrNotFound
@@ -61,14 +58,11 @@ func (s *Store) GetSkillVersion(ctx context.Context, tenantID, skillID, version 
 
 // ReadSkillVersion reads metadata and encrypted bytes from one authorized row.
 func (s *Store) ReadSkillVersion(ctx context.Context, tenantID, skillID, version string) (SkillVersion, []byte, error) {
-	tenant, id, err := skillIDs(tenantID, skillID)
+	tenant, id, err := skillPathIDs(tenantID, skillID)
 	if err != nil {
 		return SkillVersion{}, nil, err
 	}
-	number, err := skillVersionNumber(version)
-	if err != nil {
-		return SkillVersion{}, nil, err
-	}
+	number := skillPathVersion(version)
 	row, err := s.queries.ReadSkillVersion(ctx, sqlc.ReadSkillVersionParams{TenantID: tenant, SkillID: id, Version: number})
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrNotFound
@@ -93,14 +87,11 @@ func (s *Store) openSkillVersion(row sqlc.SkillVersion) (SkillVersion, []byte, e
 }
 
 func (s *Store) DeleteSkillVersion(ctx context.Context, tenantID, skillID, version string) (SkillVersion, error) {
-	tenant, id, err := skillIDs(tenantID, skillID)
+	tenant, id, err := skillPathIDs(tenantID, skillID)
 	if err != nil {
 		return SkillVersion{}, err
 	}
-	number, err := skillVersionNumber(version)
-	if err != nil {
-		return SkillVersion{}, err
-	}
+	number := skillPathVersion(version)
 	var result SkillVersion
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
@@ -129,7 +120,7 @@ func (s *Store) DeleteSkillVersion(ctx context.Context, tenantID, skillID, versi
 
 // ReadDefaultSkillVersion selects the pointer and immutable content in one read.
 func (s *Store) ReadDefaultSkillVersion(ctx context.Context, tenantID, skillID string) (SkillVersion, []byte, error) {
-	tenant, id, err := skillIDs(tenantID, skillID)
+	tenant, id, err := skillPathIDs(tenantID, skillID)
 	if err != nil {
 		return SkillVersion{}, nil, err
 	}

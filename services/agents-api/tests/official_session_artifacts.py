@@ -1,6 +1,20 @@
-"""Pinned SDK and raw HTTP checks for known immutable Session output versions."""
+"""Pinned SDK and raw HTTP checks for known immutable Session output versions.
+
+`expected` maps each Turn ID to the outputs it published. A later Turn
+publishes a path only when it is new, its bytes changed, or no Artifact
+remains for it, so unchanged outputs stay under their earlier Turn.
+"""
 
 from openai import NotFoundError
+
+EMPTY_PAGE = {"object": "list", "data": [], "first_id": None, "last_id": None, "has_more": False}
+
+
+def check_envelope(page):
+    """Assert the common list envelope used by Session, Turn and Item lists."""
+    assert set(page) == {"object", "data", "first_id", "last_id", "has_more"} and page["object"] == "list"
+    ids = [item["id"] for item in page["data"]]
+    assert (page["first_id"], page["last_id"]) == ((ids[0], ids[-1]) if ids else (None, None))
 
 
 def verify_session_artifacts(client, foreign, http, session_id, environment_id, expected):
@@ -40,6 +54,7 @@ def verify_session_artifacts(client, foreign, http, session_id, environment_id, 
             assert response.status_code == 200
             page = response.json()
             assert isinstance(page["data"], list) and type(page["has_more"]) is bool
+            check_envelope(page)
             assert len(page["data"]) <= 2
             seen.extend(item["id"] for item in page["data"])
             if not page["has_more"]:
@@ -51,6 +66,12 @@ def verify_session_artifacts(client, foreign, http, session_id, environment_id, 
         assert seen == wanted_ids, "Raw HTTP pagination changed order or completeness"
     assert [item.id for item in resource.list(session_id)] == list(reversed(ascending_ids))
     assert [item.id for item in resource.list(session_id, after=None, environment_id=None, limit=None)] == list(reversed(ascending_ids))
+
+    # Another, unknown or malformed Environment ID matches nothing.
+    for other_environment in ("00000000-0000-4000-8000-000000000000", "not-a-uuid"):
+        response = http.get(endpoint, headers=headers, params={"environment_id": other_environment})
+        assert response.status_code == 200 and response.json() == EMPTY_PAGE
+        assert list(resource.list(session_id, environment_id=other_environment)) == []
 
     assert http.get(endpoint, headers={"Authorization": headers["Authorization"]}).status_code == 400
     assert http.get(endpoint, headers={"OpenAI-Beta": "agents=v1"}).status_code == 401

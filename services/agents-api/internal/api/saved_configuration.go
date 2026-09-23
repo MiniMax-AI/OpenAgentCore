@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"unicode/utf8"
 
@@ -20,12 +21,14 @@ func resolveSavedAgent(input v1.CreateAgentRequest) (store.CreateAgentInput, err
 
 // Update requests reuse field validation without requiring an omitted model.
 func resolveSavedFields(input v1.CreateAgentRequest) (store.CreateAgentInput, error) {
-	if input.Name != nil && utf8.RuneCountInString(*input.Name) > 128 {
-		return store.CreateAgentInput{}, errors.New("name must be at most 128 characters.")
+	if input.Name != nil {
+		if length := utf8.RuneCountInString(*input.Name); length > 128 {
+			return store.CreateAgentInput{}, &fieldError{param: "name", message: fmt.Sprintf("Invalid 'name': string too long. Expected a string with maximum length 128, but got a string with length %d instead.", length)}
+		}
 	}
 	metadata, err := stringMetadata(input.Metadata)
 	if err != nil {
-		return store.CreateAgentInput{}, errors.New("metadata values must be strings.")
+		return store.CreateAgentInput{}, err
 	}
 	if err := validateMetadata(metadata); err != nil {
 		return store.CreateAgentInput{}, err

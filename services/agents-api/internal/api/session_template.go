@@ -28,15 +28,6 @@ func decodeTemplateEnvironment(raw json.RawMessage) (*v1.Environment, string, js
 	if json.Unmarshal(reference, &id) != nil || id == "" || json.Unmarshal(fields["type"], &kind) != nil || kind != "openai_hosted" {
 		return nil, "", nil, store.ErrInvalidInput
 	}
-	// Explicit null override semantics are unconfirmed; do not guess inheritance.
-	if value, exists := fields["network"]; exists && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
-		return nil, "", nil, store.ErrInvalidInput
-	}
-	for _, name := range []string{"skills", "plugins", "capability_directories"} {
-		if value, exists := fields[name]; exists && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
-			return nil, "", nil, store.ErrInvalidInput
-		}
-	}
 	delete(fields, "environment_template_id")
 	inline, err := json.Marshal(fields)
 	if err != nil {
@@ -58,7 +49,7 @@ func (h *Handler) resolveTemplateEnvironment(ctx context.Context, tenant string,
 	if json.Unmarshal(input.templateEnvironment, &fields) != nil {
 		return store.ErrInvalidInput
 	}
-	if _, supplied := fields["network"]; !supplied {
+	if !templateFieldOverride(fields, "network") {
 		input.Environment.Network = &v1.EnvironmentNetworkInput{Access: template.NetworkAccess, AllowedDomains: append([]string{}, template.AllowedDomains...)}
 	}
 	effective := agentnetwork.Policy{Access: input.Environment.Network.Access, AllowedDomains: input.Environment.Network.AllowedDomains}
@@ -66,15 +57,15 @@ func (h *Handler) resolveTemplateEnvironment(ctx context.Context, tenant string,
 		return store.ErrInvalidInput
 	}
 	skills := input.initialization.Skills
-	if _, supplied := fields["skills"]; !supplied {
+	if !templateFieldOverride(fields, "skills") {
 		skills = template.Initialization.Skills
 	}
 	plugins := input.initialization.Plugins
-	if _, supplied := fields["plugins"]; !supplied {
+	if !templateFieldOverride(fields, "plugins") {
 		plugins = template.Initialization.Plugins
 	}
 	directories := input.initialization.CapabilityDirectories
-	if _, supplied := fields["capability_directories"]; !supplied {
+	if !templateFieldOverride(fields, "capability_directories") {
 		directories = template.Initialization.CapabilityDirectories
 	}
 	setup := template.Initialization

@@ -383,6 +383,7 @@ function initialState() {
     sourceFiles: new Map(),
     hostedWorkspaceFiles: [],
     environmentTemplates: [],
+    environmentTemplateSequence: 0,
     sessionCreateReceipts: new Map(),
     controls: {
       createAgentResponseVariant: "valid",
@@ -415,7 +416,15 @@ function initialState() {
       environmentFileCreateStatus: 200,
       environmentFileCreateResponseLoss: 0,
       environmentTemplateListStatus: 200,
+      environmentTemplateListDelayMs: 0,
+      environmentTemplatePageSize: 100,
       environmentTemplateCreateStatus: 200,
+      environmentTemplateRetrieveStatus: 200,
+      environmentTemplateRetrieveDelayMs: 0,
+      environmentTemplateUpdateStatus: 200,
+      environmentTemplateUpdateDelayMs: 0,
+      environmentTemplateDeleteStatus: 200,
+      environmentTemplateDeleteDelayMs: 0,
       environmentResourceStatus: "pending",
       environmentResourceVariant: "valid",
       environmentEventStatus: 0,
@@ -875,6 +884,30 @@ const server = http.createServer(async (request, response) => {
     const body = request.method === "GET" || request.method === "DELETE" ? undefined : await readJson(request);
     recordRequest(request, url, body);
 
+    if (request.method === "GET" && url.pathname === "/v1/agents/core/startup-configuration") {
+      if (url.search) return sendError(response, 400, "Fixture startup configuration does not accept query parameters.");
+      response.setHeader("cache-control", "no-store");
+      return sendJson(response, {
+        object: "agents.core.startup_configuration",
+        schema_version: 1,
+        supported: {
+          harnesses: ["claude_sdk", "codex", "mcode"],
+          managed_sandbox_providers: ["docker", "microsandbox"],
+        },
+        configured: {
+          default_harness: "codex",
+          enabled_harnesses: ["claude_sdk", "codex"],
+          daemon_gateway: true,
+          self_hosted: true,
+          managed_sandbox: { enabled: true, provider: "docker", maintenance: false },
+          model_providers: [
+            { harness: "claude_sdk", endpoint_configured: false },
+            { harness: "codex", endpoint_configured: true },
+          ],
+        },
+      });
+    }
+
     if (url.pathname === "/v1/vaults") {
       if (request.method === "GET") return sendJson(response, page(state.vaults));
       if (request.method === "POST") {
@@ -973,6 +1006,7 @@ const server = http.createServer(async (request, response) => {
       const defaults = savedAgent(`agent_created_${state.sequence}`, body.name ?? null, body.model, baseline + state.sequence);
       const created = {
         ...defaults,
+        ...(body.x_agents_core === undefined ? {} : { x_agents_core: body.x_agents_core }),
         instructions: body.instructions ?? null,
         metadata: body.metadata ?? {},
         multi_agent: body.multi_agent ?? { enabled: false, max_concurrent_subagents: null },
@@ -1332,13 +1366,22 @@ const server = http.createServer(async (request, response) => {
           return sendError(response, 400, "Fixture Environment Template query is invalid.");
         }
         const templates = [...state.environmentTemplates]
-          .sort((left, right) => left.created_at - right.created_at);
+          .sort((left, right) => left.created_at - right.created_at || left.id.localeCompare(right.id));
         if (order === "desc") templates.reverse();
-        const page = templates.slice(0, limit);
+        const after = url.searchParams.get("after");
+        const before = url.searchParams.get("before");
+        const start = after ? templates.findIndex((template) => template.id === after) + 1 : 0;
+        const end = before ? templates.findIndex((template) => template.id === before) : templates.length;
+        if ((after && start === 0) || end < 0) return sendError(response, 404, "Fixture Template cursor not found.");
+        const page = templates.slice(start, Math.min(end, start + Math.min(limit, state.controls.environmentTemplatePageSize)));
+        const delayMs = state.controls.environmentTemplateListDelayMs;
+        state.controls.environmentTemplateListDelayMs = 0;
+        if (delayMs) await wait(delayMs);
+        if (response.destroyed) return;
         return sendJson(response, {
           object: "list",
           data: page,
-          has_more: page.length < templates.length,
+          has_more: start + page.length < end,
           first_id: page[0]?.id ?? null,
           last_id: page.at(-1)?.id ?? null,
         });
@@ -1363,7 +1406,7 @@ const server = http.createServer(async (request, response) => {
         if (body.name !== undefined && body.name !== null && typeof body.name !== "string") {
           return sendError(response, 400, "Fixture Environment Template name is invalid.");
         }
-        const index = state.environmentTemplates.length + 1;
+        const index = ++state.environmentTemplateSequence;
         const created = Math.floor(Date.now() / 1000);
         const template = {
           id: `4${String(index).padStart(7, "0")}-1111-4111-8111-111111111111`,
@@ -1382,6 +1425,38 @@ const server = http.createServer(async (request, response) => {
         return sendJson(response, template, 201);
       }
       return sendError(response, 405, "This API method is not supported.", "unsupported_operation");
+    }
+
+    const templateMatch = url.pathname.match(/^\/v1\/agents\/environments\/templates\/([^/]+)$/u);
+    if (templateMatch) {
+      if (request.headers["openai-beta"] !== "agents=v1") {
+        return sendError(response, 400, "Fixture Environment Templates require the Agents beta header.");
+      }
+      const template = state.environmentTemplates.find((entry) => entry.id === decodeURIComponent(templateMatch[1]));
+      if (!template) return sendError(response, 404, "Fixture Environment Template not found.");
+      const operation = { GET: "Retrieve", POST: "Update", DELETE: "Delete" }[request.method];
+      if (!operation) return sendError(response, 405, "This API method is not supported.", "unsupported_operation");
+      const control = consumeControl(`environmentTemplate${operation}`);
+      if (control.delayMs) await wait(control.delayMs);
+      if (response.destroyed) return;
+      if (control.status !== 200) return sendError(response, control.status, `Fixture Environment Template ${operation.toLowerCase()} failed.`);
+      if (request.method === "GET") return sendJson(response, template);
+      if (request.method === "DELETE") {
+        state.environmentTemplates = state.environmentTemplates.filter((entry) => entry.id !== template.id);
+        return sendJson(response, { id: template.id, object: "agent.environment.template.deleted", deleted: true });
+      }
+      if (!isRecord(body) || !hasOnlyKeys(body, ["name", "network"]) ||
+        (body.name !== undefined && body.name !== null && typeof body.name !== "string")) {
+        return sendError(response, 400, "Fixture Environment Template patch is invalid.");
+      }
+      if (body.network !== undefined && body.network !== null &&
+        (!isRecord(body.network) || !hasOnlyKeys(body.network, ["access"]) || !["enabled", "disabled"].includes(body.network.access))) {
+        return sendError(response, 400, "Fixture Environment Template network is unsupported.");
+      }
+      if (Object.hasOwn(body, "name")) template.name = body.name;
+      if (Object.hasOwn(body, "network")) template.network = { access: body.network?.access ?? "enabled", allowed_domains: [] };
+      template.updated_at = Math.max(template.updated_at + 1, Math.floor(Date.now() / 1000));
+      return sendJson(response, template);
     }
 
     const environmentFilesMatch = url.pathname.match(/^\/v1\/agents\/environments\/([^/]+)\/files$/);

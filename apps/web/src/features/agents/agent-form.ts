@@ -3,6 +3,7 @@ import type {
   AgentReasoningSummary,
   AgentServiceTier,
   AgentTextFormat,
+  CoreHarnessKind,
   CreateAgentInput,
   SavedAgent,
   ConfigurableAgentToolInput,
@@ -45,6 +46,8 @@ export type AgentFormSubmitInput = CreateAgentInput | UpdateAgentInput;
 
 export interface AgentFormValues {
   name: string;
+  harness: CoreHarnessKind | "";
+  harnessModified: boolean;
   model: string;
   instructions: string;
   metadata: string;
@@ -59,6 +62,7 @@ export interface AgentFormValues {
 
 export interface AgentFormValidation {
   configurationError?: string;
+  harnessError?: string;
   input?: AgentFormSubmitInput;
   metadataError?: string;
   modelError?: string;
@@ -187,6 +191,8 @@ export function toolDraftsFromAgent(agent: SavedAgent | undefined, catalog: Vaul
 export function valuesFromAgent(agent?: SavedAgent, catalog: VaultCatalog | null = null): AgentFormValues {
   return {
     name: agent?.name ?? "",
+    harness: agent?.x_agents_core?.harness ?? "",
+    harnessModified: false,
     model: agent?.model ?? "",
     instructions: agent?.instructions ?? "",
     metadata: JSON.stringify(agent?.metadata ?? {}, null, 2),
@@ -331,6 +337,11 @@ export function validateAgentForm(
     },
     ...(serializedTools ? { tools: serializedTools } : {}),
   };
+  if (intent === "create") {
+    if (values.harness) input.x_agents_core = { harness: values.harness };
+  } else if (values.harnessModified) {
+    input.x_agents_core = values.harness ? { harness: values.harness } : null;
+  }
   if (intent === "update") {
     input.reasoning = {
       effort: values.reasoningEffort || null,

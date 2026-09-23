@@ -43,16 +43,48 @@ func TestSourceFileListParametersAndEnvelope(t *testing.T) {
 }
 
 func TestSourceFileListRejectsInvalidQueriesBeforeStorage(t *testing.T) {
-	for _, query := range []string{
-		"limit=", "limit=0", "limit=10001", "limit=1.5", "limit=1&limit=2",
-		"order=", "order=invalid", "after=a&after=b", "purpose=a&purpose=b", "tenant_id=foreign",
+	duplicate := "Supported list parameters are after, limit, order and purpose, each supplied once."
+	for _, test := range []struct {
+		query, message string
+		code           any
+	}{
+		// Hosted range errors have a null code; other local rejections are unchanged.
+		{"limit=0", "limit must be between 1 and 10000.", nil},
+		{"limit=10001", "limit must be between 1 and 10000.", nil},
+		{"limit=-1", "limit must be between 1 and 10000.", nil},
+		{"limit=", "limit must be between 1 and 10000.", "invalid_request"},
+		{"limit=1.5", "limit must be between 1 and 10000.", "invalid_request"},
+		{"limit=1&limit=2", duplicate, "unsupported_parameter"},
+		{"after=a&after=b", duplicate, "unsupported_parameter"},
+		{"purpose=a&purpose=b", duplicate, "unsupported_parameter"},
+		{"purpose=user_data&purpose=user_data", duplicate, "unsupported_parameter"},
+		{"order=", "order must be asc or desc.", nil},
+		{"order=invalid", "order must be asc or desc.", nil},
 	} {
-		f := &sourceFilesFixture{}
-		h, _ := environmentFileCreateHandler(t, WithSourceFiles(f))
-		server := newSourceFileServer(t, h)
-		status, _ := sourceRequest(t, server, http.MethodGet, "/v1/files?"+query, "files-key", "", nil)
-		if status != http.StatusBadRequest || f.listCalls != 0 {
-			t.Fatalf("invalid %q: status=%d calls=%d", query, status, f.listCalls)
+		t.Run(test.query, func(t *testing.T) {
+			f := &sourceFilesFixture{}
+			h, _ := environmentFileCreateHandler(t, WithSourceFiles(f))
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodGet, "/v1/files?"+test.query, nil)
+			r.Header.Set("Authorization", "Bearer files-key")
+			h.ServeHTTP(w, r)
+			assertListQueryError(t, w, test.code, nil, test.message)
+			if f.listCalls != 0 {
+				t.Fatalf("invalid %q reached storage", test.query)
+			}
+		})
+	}
+}
+
+func TestSourceFileListIgnoresUnknownKeysAndEmptyPurpose(t *testing.T) {
+	f := &sourceFilesFixture{}
+	h, env := environmentFileCreateHandler(t, WithSourceFiles(f))
+	server := newSourceFileServer(t, h)
+	want, wantBody := sourceRequest(t, server, http.MethodGet, "/v1/files?after=file-a&limit=2&order=asc", "files-key", "", nil)
+	for _, query := range []string{"purpose=", "unknown=1", "tenant_id=foreign", "purpose[]=batch", "unknown=1&unknown=2&purpose="} {
+		status, body := sourceRequest(t, server, http.MethodGet, "/v1/files?after=file-a&limit=2&order=asc&"+query, "files-key", "", nil)
+		if status != want || string(body) != string(wantBody) || f.tenant != env.environment.TenantID || f.listPurpose != nil || f.listAfter != "file-a" || f.listLimit != 2 || !f.listAsc {
+			t.Fatalf("%s changed the listing: %d %s tenant=%s purpose=%v", query, status, body, f.tenant, f.listPurpose)
 		}
 	}
 }
@@ -85,7 +117,10 @@ func TestSourceFileListPurposeValidationBeforeCursorLookup(t *testing.T) {
 			if e := body["error"]; e["type"] != "invalid_request_error" || e["code"] != nil || e["param"] != wantParam {
 				t.Fatalf("purpose error projection: %s", raw)
 			}
-			if wantCalls == 1 && (f.listPurpose == nil || *f.listPurpose != purpose) {
+			if wantCalls == 1 && purpose == "" && f.listPurpose != nil {
+				t.Fatalf("empty purpose filtered: %v", *f.listPurpose)
+			}
+			if wantCalls == 1 && purpose != "" && (f.listPurpose == nil || *f.listPurpose != purpose) {
 				t.Fatalf("purpose filter changed: %v", f.listPurpose)
 			}
 		})

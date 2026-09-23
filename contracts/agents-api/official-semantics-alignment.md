@@ -136,3 +136,137 @@ checks passed independently. Rebase onto main `6a3131e` preserved every batch pa
 The combined tree at `4981580` passed API, execution, contract and dedicated-PostgreSQL
 Environment scheduling/initial-input/creation-stream regressions. No new E2B,
 OAuth provider or native capability combination was qualified.
+
+## Validation error fields — September 23
+
+This batch aligns validation failures that Core already rejected with the
+official `code` and `param` fields. It does not change any limit. Evidence comes
+from the campaign scan at main `284cbcf`, recorded privately in
+`~/.parsar/remediation/20260923/campaign-scan-1/{vaults-agents,sessions,skills-files-templates}/findings.json`
+(VA-07, VA-08, VA-09, VA-10, SES-28 and SFT-20), plus the September 22 Session
+observation that `{"metadata":{"a":null}}` returns param `metadata.a`.
+
+| Row | Case | Core behavior |
+| --- | --- | --- |
+| M1–M3 | More than 16 metadata pairs, a key over 64 characters, a value over 512 characters (Agent create/update, Session create/update) | 400 with type and code `invalid_request_error`, param `metadata` or `metadata.<key>`, and the observed official message with the actual count or length. Pairs are checked before keys and values, and keys in sorted order. |
+| M4 | A non-string metadata value: integer, number, boolean, object, array or null (Agent create/update, Session create/update and Vault create; neither Core nor the pinned SDK has a Vault update) | 400 `invalid_request_error`, param `metadata.<key>`, message `Invalid type for 'metadata.<key>': expected a string, but got <kind> instead.` The first such value in document order is reported before the generic whole-body error. Templates accept no metadata. |
+| M5 | Vault metadata size | Unchanged: no pair or length limits, only the local 64 KiB storage bound. |
+| N1 | Agent `name` over 128 characters | 400 `invalid_request_error`, param `name`, observed message. Empty and untrimmed names stay accepted. |
+| U1 | U+0000 in a stored string | Never 500 and nothing is written. Metadata keys and values report `metadata.<key>`; other strings return 400 `invalid_request_error` with a null param. This is a local limit: PostgreSQL text and jsonb cannot store U+0000, while the official service accepts and echoes it. |
+| I1/I2 | A malformed path identifier on any Beta resource route, and on Files, Skills and Skill versions | Byte-for-byte the response of a well-formed missing identifier on that route, including invalid bodies and queries, and a deployment without credential encryption. Foreign, missing and malformed identifiers stay indistinguishable. |
+| T1 | Template network rejections (wildcard, port, scheme, IPv6, empty host, empty/null/omitted list with `restricted`, more than 100 domains, domains with another access) and the shared inline Session network | 400 `invalid_request_error` with a null param. Accepted hostname forms are unchanged; other unsupported installation fields keep `unsupported_or_invalid_configuration`. |
+
+Decisions:
+
+- A typed field error carries the param and message through the existing error
+  writer. Metadata type errors are found by reading the metadata object in
+  document order before generic decoding; limit checks keep their previous
+  position, so validation order relative to lookups (SES-33) is unchanged.
+- U+0000 is checked explicitly in metadata, so the param is exact. All other
+  stored strings rely on mapping PostgreSQL `22021` (U+0000 or invalid UTF-8 in
+  a text parameter) and `22P05` (`\u0000` in jsonb) to 400 with the generic
+  message "Request text contains characters this service cannot store or compare,
+  such as U+0000 or invalid UTF-8." The same mapping covers query filters, for
+  example `agent_id=%ff` on the Session list. The persisted string fields are too
+  many to check one by one, and the database is the single place that knows which
+  strings are stored. The failing statement aborts its transaction; real-PostgreSQL
+  tests compare every public table before and after the rejected requests.
+- A malformed path identifier resolves to the maximum UUID, which Core never
+  assigns because it only generates version 4 and 5 UUIDs. The request then
+  follows exactly the missing-identifier path, including body, query and storage
+  checks. Routes whose lookup is the next check keep their direct not-found
+  response. Malformed list cursors and request-body references are unchanged:
+  Session, Turn, Item, Subagent, Artifact, Agent, Vault and Credential cursors
+  still return 400 `invalid_request`, and Template cursors keep their existing
+  not-found response.
+- Network messages are Core wording; the official prose is not copied.
+- Documented message difference for M2: the official message abbreviated a
+  65-character key as `'KKK...KKK'`. That single sample of identical characters
+  cannot reveal the abbreviation rule, so Core quotes the full key. Status, type,
+  code and param match.
+
+Deferred and unchanged: accepting and storing U+0000; hostname forms accepted
+officially (SFT-21) and `disabled` with domains, which the official service
+accepts (SFT-22); non-canonical UUID spellings such as uppercase, braces or
+`urn:uuid:` still resolve to the same resource; Skill sole-version deletion and
+number reuse; Session deletion lifecycle; whitespace input; response defaults;
+the Environment Files list query parser; and the Files `limit=abc` code.
+
+Go handler tests cover every row. Real-PostgreSQL tests replay every path-ID
+route for malformed, missing and foreign identifiers (tenant B), with valid and
+invalid bodies and queries, and replay U+0000 on every create/update family with
+a database digest proving no writes. The pinned-SDK acceptance scripts assert the
+new codes, params and messages. Independent real-Core acceptance is recorded
+separately by the coordinator.
+
+## Artifact capture and listing — September 23
+
+This batch aligns Session Artifact capture and listing with the first official
+Artifact observations. Evidence comes from the hosted-environment campaign scan
+recorded privately in `~/.parsar/remediation/20260923/campaign-scan-2/hosted-env/`
+(`findings.json` HE-50..62, raw records under `official/` and `run1/`). The probe
+used three owned Sessions and two tiny `gpt-6-astra` Turns; all three Sessions
+were deleted. Official Turn 1 created regular, nested and empty outputs plus
+`outputs/link.txt -> a.txt`; Turn 2 only wrote `outputs/c.txt` after one Artifact
+was deleted.
+
+| Row | Case | Core behavior |
+| --- | --- | --- |
+| A1 | A symlink below `outputs/` at Turn completion: to a file or directory, dangling, or pointing outside the workspace (HE-51) | Skipped by its `lstat` type: never followed, opened or resolved, and no Artifact. Every regular file is still captured and the Turn completes. |
+| A2 | Later Turns in the same Session (HE-52) | A path is published again only when it has no remaining published Artifact in the Session, or its bytes (sha256) differ from the newest remaining one. Unchanged paths keep their existing Artifact IDs. The first Turn is unchanged. |
+| A3 | List envelope (HE-53) | `object: list`, `data`, `first_id`, `last_id`, `has_more`, with null first/last IDs on an empty page, like the Session, Turn and Item lists. Paging and cursors are unchanged. |
+| A4 | Malformed `environment_id` filter (HE-56) | 200 with an empty page, as for another existing Environment. Session lookup still runs first, so foreign and missing Sessions remain 404; cursor and limit errors are unchanged. |
+
+Decisions:
+
+- The Rust export helper handles every link kind the same way. Official evidence
+  shows one relative link to a file; telling the other kinds apart would require
+  resolving the link, which the confinement rules forbid. A link still counts as
+  a directory entry, so creating or removing one during export is a concurrent
+  change.
+- The republication decision runs in the Turn's terminal transaction, not in the
+  private capture transaction. Capture commits and releases the Session lock
+  before the Turn completes, so an Artifact deletion can commit in between. The
+  terminal transaction holds the Session lock that also orders Artifact deletion,
+  and only one Turn per Session can be active, so the decision sees exactly the
+  Artifacts that remain at completion. Unchanged staged rows are deleted and their
+  private large objects unlinked in that transaction; published rows are never
+  modified.
+- "Newest" follows the producing Turn's database creation time, then its ID.
+  Publication time can come from the Runtime's reported completion and is not a
+  reliable order between Turns.
+- Known difference from the batch plan's wording, accepted as a local decision:
+  the plan republishes a path whose newest Artifact was deleted, but Core compares
+  against the newest *remaining* published Artifact. Deletion is physical and
+  leaves no record, and adding one would need a schema change outside this batch.
+  Example: Turn 1 publishes `b.txt` as `bravo`, Turn 2 publishes `bravo-v2`, and
+  the Turn 2 Artifact is then deleted. A later Turn whose `b.txt` is `bravo-v2`
+  republishes it, because the remaining Turn 1 version differs. A later Turn whose
+  `b.txt` is `bravo` publishes nothing, because the remaining Turn 1 Artifact
+  already has those bytes. The official behavior for this case is unobserved.
+- A malformed filter resolves to the never-assigned maximum UUID, as for
+  malformed path identifiers, so it matches nothing without a database text
+  comparison. An empty `environment_id=` still means no filter.
+
+Deferred and unchanged: a linked `outputs` root, hard links, FIFOs, sockets,
+devices and device crossings still reject the whole capture and fail the Turn
+with `artifact_capture_failed`; there is no official evidence for them yet.
+Republication after changed bytes is inferred rather than observed, and the
+deleted-newest case above is unobserved. The unknown `after` cursor (HE-57)
+belongs to ERROR-PROTOCOL-001. Subagent lists keep their `data`/`has_more`
+envelope until there is official Subagent evidence. Artifact IDs keep the Core
+UUID format. Paths removed from the workspace keep their Artifacts.
+
+Rust tests cover every link kind, including absolute links to a secret outside
+the workspace and a relative link to a workspace file outside `outputs/`; an
+inotify watch proves no target is opened or read, with a positive control. They
+also keep the hard-link, socket, FIFO, linked-root and concurrent-change
+rejections. Real-PostgreSQL store tests cover new, unchanged, changed,
+changed-back, deleted-then-unchanged and deleted-during-capture paths, a deletion
+that holds the Session lock while Turn completion waits, Turn-ordered newest
+versions with inverted publication times, Session scoping and private object
+accounting. Handler and real-PostgreSQL HTTP tests
+cover the envelope, other, foreign and malformed filters, and foreign or missing
+Sessions. The pinned-SDK and raw HTTP verifier used by live acceptance runs
+against PostgreSQL across three Turns. Real Core, daemon and model acceptance is
+recorded separately by the coordinator.

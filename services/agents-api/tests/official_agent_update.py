@@ -58,7 +58,10 @@ def main():
             response = http.post(base + "/v1/agents/" + target,
                                  headers=headers | {"Authorization": "Bearer " + foreign}, json={"name": "foreign"})
             assert response.status_code == 404
-        assert http.post(endpoint + "?unknown=1", headers=headers, json={}).status_code == 400
+        # Unknown query keys are ignored; the body and resource scope still decide.
+        assert http.post(endpoint + "?unknown=1", headers=headers, json={"updated_at": 1}).status_code == 400
+        assert http.post(endpoint + "?unknown=1", headers=headers | {"Authorization": "Bearer " + foreign},
+                         json={"name": "foreign"}).status_code == 404
         assert http.post(endpoint, headers={"Authorization": "Bearer " + token}, json={}).status_code == 400
         assert http.post(endpoint, headers={"OpenAI-Beta": "agents=v1"}, json={}).status_code == 401
         assert agents.retrieve(original.id) == updated

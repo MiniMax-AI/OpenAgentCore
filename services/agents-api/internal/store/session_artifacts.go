@@ -50,13 +50,14 @@ func (s *Store) ListSessionArtifacts(ctx context.Context, tenantID, sessionID, e
 	session, _ := parseID(sessionID)
 	params := sqlc.ListSessionArtifactsParams{TenantID: tenant, SessionID: session, PageLimit: int32(limit + 1), Ascending: ascending, AfterID: pgtype.UUID{Valid: true}}
 	if environmentID != "" {
-		var err error
-		params.EnvironmentID, err = parseID(environmentID)
-		if err != nil {
-			return ArtifactPage{}, err
-		}
+		// A malformed filter matches nothing, like another Environment's ID (HE-56).
+		params.EnvironmentID = parsePathID(environmentID)
 	}
 	if cursor != "" {
+		// A malformed cursor remains an invalid request, unlike a path identifier.
+		if _, err := parseID(cursor); err != nil {
+			return ArtifactPage{}, err
+		}
 		after, err := s.GetSessionArtifact(ctx, tenantID, sessionID, cursor)
 		if err != nil {
 			return ArtifactPage{}, err
@@ -148,7 +149,7 @@ func (s *Store) DeleteSessionArtifact(ctx context.Context, tenantID, sessionID, 
 }
 
 func artifactLookup(tenantID, sessionID, artifactID string) (sqlc.GetSessionArtifactParams, error) {
-	ids, err := turnLookup(tenantID, sessionID, artifactID)
+	ids, err := publicTurnLookup(tenantID, sessionID, artifactID)
 	return sqlc.GetSessionArtifactParams{TenantID: ids.TenantID, SessionID: ids.SessionID, ID: ids.ID}, err
 }
 

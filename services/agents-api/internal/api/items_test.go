@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
@@ -40,9 +41,14 @@ func TestItemRouteUsesAuthenticationAndSharedPagination(t *testing.T) {
 	if w := request("", "test-api-key"); w.Code != 200 || s.limit != 20 || s.ascending || w.Body.String() != "{\"object\":\"list\",\"first_id\":null,\"last_id\":null,\"data\":[],\"has_more\":false}\n" {
 		t.Fatal(w.Code, w.Body, s)
 	}
-	for _, q := range []string{"?limit=0", "?limit=101", "?order=bad", "?limit=2&limit=3", "?tenant_id=other"} {
-		if w := request(q, "test-api-key"); w.Code != 400 {
-			t.Fatal(q, w.Code)
+	for q, limit := range map[string]int{"?limit=0": 1, "?limit=101": 100, "?limit=1000&tenant_id=other&unknown=1": 100} {
+		if w := request(q, "test-api-key"); w.Code != 200 || s.limit != limit || s.tenant != tenant {
+			t.Fatal(q, w.Code, s.limit, s.tenant)
+		}
+	}
+	for _, q := range []string{"?limit=-1", "?limit=abc", "?order=bad", "?limit=2&limit=3"} {
+		if w := request(q, "test-api-key"); w.Code != 400 || !strings.Contains(w.Body.String(), `"code":"invalid_request_error"`) {
+			t.Fatal(q, w.Code, w.Body)
 		}
 	}
 	if w := request("", "invalid"); w.Code != 401 {

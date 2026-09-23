@@ -71,6 +71,14 @@ def verify_vaults(client, other, invalid, peer, binding, expect_error):
             assert response.status_code == 400
             assert response.json()["error"]["type"] == "invalid_request_error"
             expect_error(BadRequestError, lambda: vaults.create(extra_body=request))
+        # Metadata value types use the official code and param. U+0000 is a local
+        # storage limit: metadata reports its key, while other strings have no param.
+        for request, param in (({"metadata": {"bad": 1}}, "metadata.bad"), ({"metadata": {"bad": None}}, "metadata.bad"),
+                               ({"metadata": {"k": "a\x00b"}}, "metadata.k"), ({"metadata": {"a\x00b": "v"}}, "metadata.a\x00b"),
+                               ({"name": "a\x00b"}, None)):
+            response = raw.post(base, headers=headers, json=request)
+            assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_request_error"
+            assert response.json()["error"]["param"] == param
         for content in ("null", "[]", "{} {}"):
             assert raw.post(base, headers=headers, content=content).status_code == 400
 
@@ -96,8 +104,11 @@ def verify_vaults(client, other, invalid, peer, binding, expect_error):
                 response = raw.request(method, base + suffix, headers=request_headers,
                                        json={} if method == "POST" else None)
                 assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_beta"
-        assert raw.post(base, headers=headers, params={"tenant_id": "other"}, json={}).status_code == 400
-        assert raw.get(base + "/" + saved[0].id, headers=headers, params={"include": "credentials"}).status_code == 400
+        # Unknown query keys are ignored; they never select a tenant or expand a Vault.
+        assert raw.post(base, headers=headers, params={"tenant_id": "other"}, json={"name": 1}).status_code == 400
+        plain = raw.get(base + "/" + saved[0].id, headers=headers)
+        expanded = raw.get(base + "/" + saved[0].id, headers=headers, params={"include": "credentials"})
+        assert plain.status_code == expanded.status_code == 200 and expanded.json() == plain.json()
         alias = str(client.base_url).rstrip("/") + "/agents/vaults/" + saved[0].id
         assert raw.get(alias, headers=headers).status_code == 404
 

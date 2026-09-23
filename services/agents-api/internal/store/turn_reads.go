@@ -25,6 +25,10 @@ func (s *Store) ListTurns(ctx context.Context, tenantID, sessionID, cursor strin
 	session, _ := parseID(sessionID)
 	params := sqlc.ListTurnsParams{TenantID: tenant, SessionID: session, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending}
 	if cursor != "" {
+		// A malformed cursor remains an invalid request, unlike a path identifier.
+		if _, err := parseID(cursor); err != nil {
+			return TurnPage{}, err
+		}
 		after, err := s.GetTurn(ctx, tenantID, sessionID, cursor)
 		if err != nil {
 			return TurnPage{}, err

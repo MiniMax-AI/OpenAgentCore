@@ -40,13 +40,9 @@ func (h *Handler) registerSkillRoutes(r chi.Router) {
 	r.Get("/v1/skills/{skill_id}/versions/{version}/content", h.skillVersionContent)
 }
 
-func (h *Handler) skillsReady(w http.ResponseWriter, r *http.Request, list bool) bool {
+func (h *Handler) skillsReady(w http.ResponseWriter) bool {
 	if h.skills == nil {
 		writeError(w, http.StatusServiceUnavailable, "skill_storage_unavailable", "Skill storage is unavailable.")
-		return false
-	}
-	if !list && r.URL.RawQuery != "" {
-		writeStoreError(w, r, store.ErrInvalidInput)
 		return false
 	}
 	return true
@@ -61,7 +57,7 @@ func (h *Handler) skillsReady(w http.ResponseWriter, r *http.Request, list bool)
 // @Success 200 {object} v1.Skill
 // @Router /skills/{skill_id} [get]
 func (h *Handler) getSkill(w http.ResponseWriter, r *http.Request) {
-	if !h.skillsReady(w, r, false) {
+	if !h.skillsReady(w) {
 		return
 	}
 	value, err := h.skills.GetSkill(r.Context(), tenantID(r), chi.URLParam(r, "skill_id"))
@@ -83,7 +79,7 @@ func (h *Handler) getSkill(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.Skill
 // @Router /skills/{skill_id} [post]
 func (h *Handler) updateSkill(w http.ResponseWriter, r *http.Request) {
-	if !h.skillsReady(w, r, false) {
+	if !h.skillsReady(w) {
 		return
 	}
 	body, ok := readJSONBodyLimit(w, r, 64<<10, "Request exceeds 64 KiB.")
@@ -112,7 +108,7 @@ func (h *Handler) updateSkill(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.SkillDeleted
 // @Router /skills/{skill_id} [delete]
 func (h *Handler) deleteSkill(w http.ResponseWriter, r *http.Request) {
-	if !h.skillsReady(w, r, false) {
+	if !h.skillsReady(w) {
 		return
 	}
 	id := chi.URLParam(r, "skill_id")
@@ -132,7 +128,7 @@ func (h *Handler) deleteSkill(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.SkillVersion
 // @Router /skills/{skill_id}/versions/{version} [get]
 func (h *Handler) getSkillVersion(w http.ResponseWriter, r *http.Request) {
-	if !h.skillsReady(w, r, false) {
+	if !h.skillsReady(w) {
 		return
 	}
 	value, err := h.skills.GetSkillVersion(r.Context(), tenantID(r), chi.URLParam(r, "skill_id"), chi.URLParam(r, "version"))
@@ -153,7 +149,7 @@ func (h *Handler) getSkillVersion(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.SkillVersionDeleted
 // @Router /skills/{skill_id}/versions/{version} [delete]
 func (h *Handler) deleteSkillVersion(w http.ResponseWriter, r *http.Request) {
-	if !h.skillsReady(w, r, false) {
+	if !h.skillsReady(w) {
 		return
 	}
 	value, err := h.skills.DeleteSkillVersion(r.Context(), tenantID(r), chi.URLParam(r, "skill_id"), chi.URLParam(r, "version"))

@@ -49,14 +49,14 @@ def main():
                 rejected(404, lambda: other.delete(session.id))
                 assert http.delete(endpoint, headers={"Authorization": "Bearer " + token}).status_code == 400
                 assert http.delete(endpoint, headers={"OpenAI-Beta": "agents=v1"}).status_code == 401
-                assert http.delete(endpoint + "?cascade=true", headers=headers).status_code == 400
+                assert http.delete(endpoint + "?cascade=true", headers=headers | {"Authorization": "Bearer " + foreign}).status_code == 404
                 for body in ("null", "{}"):
                     assert http.request("DELETE", endpoint, headers=headers, content=body).status_code == 400
                 assert sessions.retrieve(session.id).id == session.id
                 # Existing live streams close on public removal without a fabricated event.
                 with http.stream("GET", endpoint + "/events", headers=headers) as stream:
                     assert stream.status_code == 200
-                    raw = sessions.with_raw_response.delete(session.id.upper())
+                    raw = sessions.with_raw_response.delete(session.id.upper(), extra_query={"cascade": "true"})
                     expected = {"id": session.id, "object": "agent.session.deleted", "deleted": True}
                     assert raw.status_code == 200 and raw.http_response.json() == expected
                     assert raw.parse().to_dict() == expected

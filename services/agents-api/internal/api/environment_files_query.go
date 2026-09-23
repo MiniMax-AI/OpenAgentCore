@@ -40,7 +40,7 @@ func readEnvironmentFileQuery(w http.ResponseWriter, r *http.Request, environmen
 			pageQuery[key] = values
 		}
 	}
-	page, ok := readPageQuery(w, r, pageQuery, true)
+	page, ok := readPageQuery(w, r, pageQuery, false)
 	if !ok {
 		return options, false
 	}

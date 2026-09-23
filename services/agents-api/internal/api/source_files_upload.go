@@ -25,7 +25,7 @@ const sourceTransferTimeout = 5 * time.Minute
 // @Failure 400,401,413,500,503 {object} v1.ErrorResponse
 // @Router /files [post]
 func (h *Handler) createSourceFile(w http.ResponseWriter, r *http.Request) {
-	if !h.sourceFilesReady(w, r) {
+	if !h.sourceFilesAvailable(w) {
 		return
 	}
 	deadline := time.Now().Add(sourceTransferTimeout)
