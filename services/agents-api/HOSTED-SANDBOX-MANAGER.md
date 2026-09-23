@@ -145,7 +145,10 @@ do not extend snapshot retention.
 ## Register a host
 
 The paired console provides a complete installation command. It downloads only
-fixed public distribution artifacts from `/node-install/`; the enrollment token
+a matched bootstrap from `/node-install/`, then checksum-verified prebuilt assets
+from the manifest release URL or offline console payload. It reuses verified cache
+entries and exact imported images, then waits for Core to confirm connection and
+provider readiness. The enrollment token
 is transient and never a console/project credential. Python 3.9+, a systemd user
 session with lingering, and Docker access or KVM/native-library prerequisites
 must already exist on the target host. Rerunning the same command preserves the

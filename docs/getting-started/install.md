@@ -147,14 +147,24 @@ Environment. The [credential contract](../../contracts/agents-api/environment-ex
 describes issuance, rotation and revocation. Save the response to an owned,
 mode-0600 file. Keep the project caller key on your application machine.
 
-Download `self-hosted-install.pyz` and `SHA256SUMS` from your Core's HTTPS
-`/node-install/` endpoint. Verify the bootstrap entry in `SHA256SUMS`, then run:
+After saving the restricted credential on your execution machine, run one command
+with your Core origin, Environment ID and returned `remote_url`. This downloads
+and verifies the matching bootstrap before starting it:
 
 ```sh
-python3 self-hosted-install.pyz --source-url https://core.example \
-  --environment-id ENVIRONMENT_UUID \
-  --remote wss://core.example/api/v1/agent-daemon/ws \
-  --credential-file /absolute/private/executor-key.json
+(
+  set -eu
+  core=https://core.example
+  work=$(mktemp -d)
+  trap 'rm -rf "$work"' EXIT
+  curl -fsS "$core/node-install/self-hosted-install.pyz" -o "$work/self-hosted-install.pyz"
+  curl -fsS "$core/node-install/SHA256SUMS" -o "$work/SHA256SUMS"
+  (cd "$work"; awk '$2 == "self-hosted-install.pyz"' SHA256SUMS | sha256sum -c -)
+  python3 "$work/self-hosted-install.pyz" --source-url "$core" \
+    --environment-id ENVIRONMENT_UUID \
+    --remote wss://core.example/api/v1/agent-daemon/ws \
+    --credential-file /absolute/private/executor-key.json
+)
 ```
 
 Use the exact Environment ID and reachable `remote_url` returned by your Session.
