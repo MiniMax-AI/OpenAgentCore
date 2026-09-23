@@ -184,9 +184,11 @@ Decisions:
 - Real failures keep their errors. The existing `invalid_path` code also covers
   unsafe entry names inside a directory, and `not_found` also covers a missing
   workspace root and an entry removed during observation; mapping either would hide
-  a failure as an empty listing. A missing or replaced root keeps 404 or 503,
-  permission denial, observation errors, transport loss and uncertain output keep
-  503, and tenant and Environment authorization run first. The shared workspace path
+  a failure as an empty listing. A missing or replaced root keeps 404 or 503. A
+  root removed after it was opened fails every lookup, so the helper checks that
+  the opened root still has a link before reporting `not_directory` and otherwise
+  keeps 404. Permission denial, observation errors, transport loss and uncertain
+  output keep 503, and tenant and Environment authorization run first. The shared workspace path
   code and the write installer are unchanged.
 - The list path is rejected instead of normalized. `..` and other non-clean forms
   use the F7 message. Outside paths, backslash, control characters, invalid UTF-8

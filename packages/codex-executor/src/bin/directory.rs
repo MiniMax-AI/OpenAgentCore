@@ -1,11 +1,11 @@
-use rustix::fs::FileType;
+use rustix::fs::{FileType, fstat};
 #[path = "../directory.rs"]
 mod directory;
 use directory::observe;
 #[path = "../workspace_path.rs"]
 mod workspace_path;
 use serde_json::json;
-use std::{io, path::Path};
+use std::{io, os::fd::OwnedFd, path::Path};
 use workspace_path::{anchor, directory};
 
 fn run() -> io::Result<serde_json::Value> {
@@ -36,21 +36,8 @@ fn list(root: &str, relative: &str, limit: &str) -> io::Result<serde_json::Value
         return Err(io::ErrorKind::InvalidInput.into());
     }
     let root = anchor(Path::new(root))?;
-    let selected = match directory(&root, relative) {
-        Ok(selected) => selected,
-        // Only the requested path's own resolution below the anchored root is
-        // classified: a missing component, a regular file or a symbolic link
-        // (never followed) does not name a listable directory. Root, permission
-        // and observation failures keep their existing codes.
-        Err(error)
-            if matches!(
-                error.kind(),
-                io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
-            ) =>
-        {
-            return Ok(json!({"version": 1, "error": "not_directory"}));
-        }
-        Err(error) => return Err(error),
+    let Some(selected) = select(&root, relative)? else {
+        return Ok(json!({"version": 1, "error": "not_directory"}));
     };
     let result = observe(&selected, limit)?;
     let entries: Vec<_> = result
@@ -67,6 +54,30 @@ fn list(root: &str, relative: &str, limit: &str) -> io::Result<serde_json::Value
         })
         .collect();
     Ok(json!({"version": 1, "directory": {"entries": entries, "truncated": result.truncated}}))
+}
+
+/// Resolves the requested path below the anchored root. `None` means that
+/// path does not name a listable directory: a missing component, a regular file
+/// or a symbolic link (never followed). Root, permission and observation
+/// failures keep their existing codes.
+fn select(root: &OwnedFd, relative: &str) -> io::Result<Option<OwnedFd>> {
+    match directory(root, relative) {
+        Ok(selected) => Ok(Some(selected)),
+        Err(error)
+            if matches!(
+                error.kind(),
+                io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+            ) =>
+        {
+            // A root removed after it was opened fails every lookup; that is
+            // a missing workspace, not a missing requested directory.
+            if fstat(root)?.st_nlink == 0 {
+                return Err(io::ErrorKind::NotFound.into());
+            }
+            Ok(None)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 fn main() -> std::process::ExitCode {
@@ -92,7 +103,8 @@ fn main() -> std::process::ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::list;
+    use super::{list, select};
+    use crate::workspace_path::anchor;
     use std::{fs, io, os::unix::fs::symlink};
 
     fn code(result: io::Result<serde_json::Value>) -> String {
@@ -147,5 +159,20 @@ mod tests {
         assert_eq!(code(list(&linked_root, "", "10")), "NotADirectory");
         let file_root = format!("{root}/file.txt");
         assert_eq!(code(list(&file_root, "", "10")), "NotADirectory");
+    }
+
+    #[test]
+    fn a_root_removed_after_opening_is_not_an_empty_directory() {
+        let workspace = tempfile::tempdir().unwrap();
+        let root = workspace.path().join("workspace");
+        fs::create_dir_all(root.join("d")).unwrap();
+        let anchored = anchor(&root).unwrap();
+        assert!(matches!(select(&anchored, "missing"), Ok(None)));
+        fs::remove_dir_all(&root).unwrap();
+        for path in ["d", "missing", "missing/deeper"] {
+            let error = select(&anchored, path).expect_err(path);
+            assert_eq!(error.kind(), io::ErrorKind::NotFound, "{path}");
+        }
+        assert!(!matches!(select(&anchored, ""), Ok(None)));
     }
 }
