@@ -40,13 +40,20 @@ def verify_pending_actions(client, foreign, http, model, evidence):
         assert raw == [item.to_dict() for item in sessions.items.list(sid, limit=100, order="asc").data]
         return raw
 
-    def submit(sid, event, key, expected=202, auth=None):
+    # Expected (type, code) of each public rejection; every error param is null.
+    missing = ("not_found_error", "not_found_error")
+    bad_target = ("invalid_request_error", "invalid_request_error")
+    conflict = ("conflict_error", "conflict_error")
+    key_reuse = ("conflict_error", "idempotency_conflict")
+
+    def submit(sid, event, key, expected=202, auth=None, error=None):
         response = http.post(endpoint + "/" + sid + "/events", headers={**(auth or headers), "Idempotency-Key": key}, json={"events": [event]})
         assert response.status_code == expected, (key, response.status_code, response.text)
         if expected == 202:
             assert response.content == b""
         else:
-            assert response.json()["error"]["code"] in {"not_found_error", "turn_conflict", "idempotency_conflict"}
+            body = response.json()["error"]
+            assert (body["type"], body["code"], body["param"]) == (*error, None), (key, body)
         return {"request": key, "status": response.status_code}
 
     try:
@@ -92,13 +99,16 @@ def verify_pending_actions(client, foreign, http, model, evidence):
                 assert sessions.retrieve(other.id).status == "idle"
                 assert sessions.turns.list(other.id).data == [] and items(other.id) == []
 
-            for label, target, value, auth in (
-                ("wrong-tenant", session.id, event, foreign_headers),
-                ("wrong-session", other.id, event, headers),
-                ("wrong-turn", session.id, {**event, "turn_id": proof["rounds"][index - 1]["recovered_turn"]["id"] if index else str(uuid.uuid4())}, headers),
-                ("wrong-call", session.id, {**event, "call_id": "absent-" + uuid.uuid4().hex}, headers),
+            # A foreign Session is not found; inside an owned Session an unknown
+            # call or a call of another Turn is a request error.
+            for label, target, value, auth, status, error in (
+                ("wrong-tenant", session.id, event, foreign_headers, 404, missing),
+                ("wrong-session", other.id, event, headers, 400, bad_target),
+                ("wrong-turn", session.id, {**event, "turn_id": proof["rounds"][index - 1]["recovered_turn"]["id"] if index else str(uuid.uuid4())}, headers, 400, bad_target),
+                ("malformed-turn", session.id, {**event, "turn_id": "turn_" + uuid.uuid4().hex}, headers, 400, bad_target),
+                ("wrong-call", session.id, {**event, "call_id": "absent-" + uuid.uuid4().hex}, headers, 400, bad_target),
             ):
-                current["refusals"].append(submit(target, value, label + "-" + mode, 404, auth))
+                current["refusals"].append(submit(target, value, label + "-" + mode, status, auth, error))
                 pending_unchanged()
             for path in ("/" + session.id, turn_path, "/" + session.id + "/items"):
                 assert http.get(endpoint + path, headers=foreign_headers).status_code == 404
@@ -112,8 +122,8 @@ def verify_pending_actions(client, foreign, http, model, evidence):
                 sessions.events.create(session.id, events=[submitted], idempotency_key=key)
                 current["retry"] = submit(session.id, submitted, key)
                 if mode != "cancel":
-                    current["conflict"] = submit(session.id, {**event, "output": "changed"}, key, 409)
-                    current["new_identity_conflict"] = submit(session.id, {**event, "output": "changed"}, key + "-changed", 409)
+                    current["conflict"] = submit(session.id, {**event, "output": "changed"}, key, 409, error=key_reuse)
+                    current["new_identity_conflict"] = submit(session.id, {**event, "output": "changed"}, key + "-changed", 409, error=conflict)
                 for received in stream:
                     current["after_reconnect"].append(received.to_dict())
                     if received.type == "agent.session.idle":
@@ -135,7 +145,7 @@ def verify_pending_actions(client, foreign, http, model, evidence):
             assert terminal_events[0]["type"] == "agent.session.turn." + terminal.status
             current["terminal_retry"] = submit(session.id, submitted, key)
             if mode == "cancel":
-                current["late_result"] = submit(session.id, event, key + "-late-result", 409)
+                current["late_result"] = submit(session.id, event, key + "-late-result", 409, error=conflict)
             else:
                 current["same_result_new_identity"] = submit(session.id, event, key + "-same-result")
 

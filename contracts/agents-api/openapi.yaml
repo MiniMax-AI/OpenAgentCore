@@ -4550,20 +4550,27 @@ paths:
         batches reuse existing scoped result admission and application receipts without
         creating a Turn or bypassing a pending reservation. Mixed prepared-environment
         batches remain unsupported. HTTP expiry/cancellation use local 409 environment_input_expired/environment_input_cancelled
-        errors; exact hosted failure mapping is unverified. Losing execution ownership
-        returns 503. The response write deadline accommodates the admission window
-        for either prepared Environment, independently of new-hosted-admission and
-        executor URL settings. Disconnecting the waiting HTTP request does not cancel
-        retained work or restart its deadline. Retry keys identify the whole ordered
-        batch. Function output accepts text or ordered text/image parts subject to
-        engine support; Claude SDK accepts text results and, on none and qualified
-        openai_hosted, successful inline PNG/JPEG results, preserving ordered content;
-        error images and remote references reject before admission. Native image resizing
-        may change bytes. Runtime image-result support is checked only for image-bearing
-        delivery. Codex and Claude SDK on none and qualified openai_hosted accept
-        ordered inline PNG/JPEG image messages. Self-hosted profiles and other engines
-        remain text-only; remote image URLs are unsupported. Image references are
-        retained unchanged without service-side downloads.
+        errors; exact hosted failure mapping is unverified. Input the Session cannot
+        accept in its current state, such as a result after cancellation or a batch
+        while earlier input is pending, and a result that differs from the call's
+        saved result return 409 with type and code conflict_error; reusing an Idempotency-Key
+        with a different batch returns the local 409 idempotency_conflict. Inside
+        an owned Session, a result for an unknown call or for a call of another Turn
+        returns 400 invalid_request_error and changes nothing; missing and foreign
+        Sessions return 404. Losing execution ownership returns 503. The response
+        write deadline accommodates the admission window for either prepared Environment,
+        independently of new-hosted-admission and executor URL settings. Disconnecting
+        the waiting HTTP request does not cancel retained work or restart its deadline.
+        Retry keys identify the whole ordered batch. Function output accepts text
+        or ordered text/image parts subject to engine support; Claude SDK accepts
+        text results and, on none and qualified openai_hosted, successful inline PNG/JPEG
+        results, preserving ordered content; error images and remote references reject
+        before admission. Native image resizing may change bytes. Runtime image-result
+        support is checked only for image-bearing delivery. Codex and Claude SDK on
+        none and qualified openai_hosted accept ordered inline PNG/JPEG image messages.
+        Self-hosted profiles and other engines remain text-only; remote image URLs
+        are unsupported. Image references are retained unchanged without service-side
+        downloads.
       parameters:
       - description: agents=v1
         in: header

@@ -121,8 +121,13 @@ def main():
                 raw_submit(session_id, str(uuid.uuid4()), events, 400)
             missing_function = [{"type": "agent.session.input.tool_result", "turn_id": turn_id,
                                  "call_id": "unknown-function", "success": True, "output": "not admitted"}]
-            sdk_submit(session_id, str(uuid.uuid4()), missing_function, 404)
-            raw_submit(session_id, str(uuid.uuid4()), missing_function, 404)
+            # An unknown call in the caller's own Session is a request error.
+            sdk_submit(session_id, str(uuid.uuid4()), missing_function, 400)
+            raw_submit(session_id, str(uuid.uuid4()), missing_function, 400)
+            unknown = raw.post(endpoint + session_id + "/events", json={"events": missing_function},
+                               headers={"Idempotency-Key": str(uuid.uuid4()), "Authorization": "Bearer " + token})
+            assert unknown.json() == {"error": {"type": "invalid_request_error", "code": "invalid_request_error",
+                                                "param": None, "message": "Unknown pending tool call."}}
             raw_submit(session_id, "foreign-cancel", expected=404, key_token=settings["foreign_token"])
             for missing in (result["deleted_id"], str(uuid.uuid4())):
                 sdk_submit(missing, "missing-cancel", expected=404)

@@ -72,7 +72,7 @@ func TestFunctionCallsPersistCompleteResultsAndReceipts(t *testing.T) {
 		if err := reopened.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, id, json.RawMessage(expected)); err != nil {
 			t.Fatal(err)
 		}
-		if err := reopened.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, id, json.RawMessage(`{"success":false,"error":"changed"}`)); !errors.Is(err, ErrIdempotencyConflict) {
+		if err := reopened.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, id, json.RawMessage(`{"success":false,"error":"changed"}`)); !errors.Is(err, ErrFunctionResultConflict) {
 			t.Fatal(err)
 		}
 		for range 2 {
@@ -233,7 +233,7 @@ func TestFunctionResultConcurrentSubmissionsChooseOneValue(t *testing.T) {
 	for err := range outcomes {
 		if err == nil {
 			winners++
-		} else if errors.Is(err, ErrIdempotencyConflict) {
+		} else if errors.Is(err, ErrFunctionResultConflict) {
 			conflicts++
 		} else {
 			t.Fatal(err)
