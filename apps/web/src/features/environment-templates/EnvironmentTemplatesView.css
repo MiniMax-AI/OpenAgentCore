@@ -27,7 +27,7 @@
 .template-delete .button.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); background: color-mix(in srgb, var(--danger) 7%, var(--surface)); }
 .template-delete .button.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 13%, var(--surface)); }
 .template-form :is(input, select):focus-visible, .templates-search input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-@media (max-width: 760px) {
+@media (max-width: 1000px) {
   .templates-content { padding: 0 16px 20px; }
   .template-row { flex-wrap: wrap; gap: 16px; }
   .template-identity { flex-basis: 100%; }
@@ -36,3 +36,5 @@
   .templates-page .button, .template-form-actions .button { min-height: 40px; }
 }
 .templates-page { overflow-y: auto; }
+
+.templates-search > .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
