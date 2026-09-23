@@ -15,8 +15,9 @@ type daemonRoutes struct {
 // serverHandler composes the daemon transport routes with the API handler.
 // Path canonicalization wraps the whole composition, so the ServeMux, the API
 // router and every middleware decide on the same canonical path, and the
-// ServeMux never answers a redirect. The API handler canonicalizes again when
-// served alone; the operation is idempotent.
+// ServeMux never redirects a non-canonical path. Its only remaining redirect is
+// the exact daemon prefix /api/v1/agent-daemon to /api/v1/agent-daemon/. The API
+// handler canonicalizes again when served alone; the operation is idempotent.
 func serverHandler(apiHandler http.Handler, daemon *daemonRoutes) http.Handler {
 	if daemon == nil {
 		return apiHandler

@@ -877,7 +877,7 @@ Caller keys now resolve an explicitly configured organization/project and typed
 user/service-account identity. An immutable project-to-tenant mapping is verified
 against PostgreSQL before startup. Optional official organization/project headers
 must match the key's authorized scope; ambiguous or conflicting headers use the
-existing 401 response. Every 401 has type `invalid_request_error`, as observed
+existing 401 response. Every Agents API 401 has type `invalid_request_error`, as observed
 officially; Beta routes report a null code, while Files, Skills and Core project
 extensions report `invalid_api_key` for a rejected Bearer credential and a null
 code without one. This scope-header policy is an implementation choice, not

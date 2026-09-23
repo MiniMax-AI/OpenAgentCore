@@ -806,9 +806,9 @@ ledger records.
 | Row | Case | Core behavior |
 | --- | --- | --- |
 | RH1 | `//`, `.` or `..` path segments (HP-17: `R10`, `R11`, `R17`, `R18`) | Served on the canonical path, never redirected. Empty and dot segments resolve with ServeMux semantics and a trailing slash is kept, so `/v1/agents/x/../` still reaches the trailing-slash 404. The former 301 made the pinned SDK resend an update as a GET and drop it. |
-| RH2 | A percent-encoded unreserved character in the path (HP-18: `R12`) | Decoded before routing, including `%2E` dot segments. Other escapes, such as `%2F`, stay encoded and never separate segments. Malformed, missing and foreign IDs keep the single 404. |
-| RH3 | HEAD on a GET route (HP-19: `R13`, `R16`) | The GET route runs after the same Beta and authentication checks; 200 with its headers and `Content-Length`, no body. The events stream and the File, Skill, Skill version and Artifact content downloads answer HEAD with Core's 405 instead, so HEAD never holds a stream open or reads content. That exclusion is a documented Core difference; official HEAD on those routes is unobserved. |
-| RH4 | Unsupported method (HP-20: `R04`–`R06`) | Unchanged 405 JSON `unsupported_operation`, now with `Allow` listing the route's methods in the observed order, such as `GET,HEAD,POST,DELETE`. |
+| RH2 | A percent-encoded unreserved character in the path (HP-18: `R12`) | Decoded before routing, including `%2E` dot segments. The canonical path is built from the request's own path spelling; bytes that are invalid in an escaped path (such as `{`, `"`, a backslash or non-ASCII) are percent-encoded first. Other escapes, such as `%2F`, `%2f`, `%5C` and double encodings, stay encoded and never separate segments. Malformed, missing and foreign IDs keep the single 404. |
+| RH3 | HEAD on a GET route (HP-19: `R13`, `R16`) | The GET route runs after the same Beta and authentication checks; 200 with its headers and no body. `Content-Length` is present when Go buffers the whole body (about 2 KiB) and omitted for larger responses. The events stream, the File, Skill, Skill version and Artifact content downloads and the live Environment Files directory list answer HEAD with Core's 405 instead, so HEAD never holds a stream open, reads content or waits on a Runtime. That exclusion is a documented Core difference; official HEAD on those routes is unobserved. |
+| RH4 | Unsupported method (HP-20: `R04`–`R06`) | Unchanged 405 JSON `unsupported_operation`, now with `Allow` listing the route's methods in the observed order, such as `GET,HEAD,POST,DELETE`. Routes outside the Beta group, such as `/healthz` and executor credentials, and methods chi does not know, such as `FOO`, now use the same JSON 405 instead of chi's empty one; an unknown method is answered before the Beta and authentication checks, as before. |
 | RH5 | `X-Request-Id` (HP-23) | Every response of the Agents API handler, including 400, 401, 404, 405 and SSE streams, carries a fresh random `req_` plus 32 lowercase hex characters. The ID is attached to the request log context as `request_id` next to the trace carrier. |
 | RH6 | No or invalid credentials without OpenAI-Beta on a Beta route (HP-05: `A06`, `A11`) | 400 `invalid_beta`: the constant Beta check now precedes authentication. Files, Skills and Core project extensions still ignore the header. |
 | RH7 | Repeated OpenAI-Beta header lines (HP-03: `B08`) | 400 `invalid_beta` unless there is exactly one field value, equal to `agents=v1`. |
@@ -825,9 +825,16 @@ Decisions:
   router, every middleware, authentication check and handler see only the
   rewritten path. A dirty or encoded path therefore reaches exactly the route
   group and authentication of its canonical path written literally; internal
-  daemon, node and sandbox routes keep their own authentication. Decoding only
-  unreserved characters is RFC 3986 normalization, so a proxy that normalizes
-  URIs the same way sees the same route.
+  daemon, node and sandbox routes keep their own authentication. The input is the
+  request's own path spelling (`RawPath` when Go keeps one), never a path
+  re-escaped from its decoded form, which would turn `%2F` into a separator when
+  the spelling holds a byte Go considers invalid. `Path` and `RawPath` are then
+  set consistently, so chi, which prefers `RawPath`, and the ServeMux, which uses
+  `EscapedPath`, route on the same string. Decoding only unreserved characters is
+  RFC 3986 normalization, so a proxy that normalizes URIs the same way sees the
+  same route. The ServeMux still redirects the exact daemon prefix
+  `/api/v1/agent-daemon` to `/api/v1/agent-daemon/`; that is daemon transport, not
+  an Agents API path.
 - The Beta check reads only a constant header and returns no tenant or resource
   data. Moving it first changes only responses that were rejected either way:
   every request that passes it is authenticated before the router reaches any
@@ -836,9 +843,10 @@ Decisions:
   reach the Beta group's 404 and 405 after its checks, as before; without the Beta
   header they now report `invalid_beta` instead of 401. Official behavior there is
   unobserved.
-- Every Core 401 has type `invalid_request_error`, including the deployment
-  administrator (`invalid_admin_key`) and sandbox node (`invalid_node_credential`)
-  extensions, whose codes are unchanged.
+- Every 401 of the Agents API handler has type `invalid_request_error`, including
+  the deployment administrator (`invalid_admin_key`) and sandbox node
+  (`invalid_node_credential`) extensions, whose codes are unchanged. Daemon,
+  enrollment and node transport served beside it keep their own formats.
 - The response headers belong to the Agents API handler. Daemon, enrollment and
   node transport routes do not carry them, and the shared log middleware is
   unchanged. A caller-supplied request ID is not echoed; that header is not pinned.
@@ -852,8 +860,12 @@ Go handler tests cover RH1–RH11, including a walk over every registered route:
 unauthenticated requests, with and without the Beta header and with foreign
 credentials, are rejected before any handler, and ten dirty and encoded spellings
 of each path, including traversal from the daemon and sandbox prefixes, give the
-clean path's exact response. A server test replays the daemon-enabled composition
-and checks that no request is redirected. The pinned-SDK script
+clean path's exact response. Raw request-line tests over a real listener cover
+invalid bytes, non-ASCII, `%2F`, `%2f`, `%5C`, double encoding and absolute-form
+URIs in both server configurations, and two fuzz targets assert that any request
+path reaches the same handler, route group and response as its canonical form,
+with chi, the ServeMux and `Path` agreeing on it. A server test replays the
+daemon-enabled composition and checks that no Agents API request is redirected. The pinned-SDK script
 `official_http_routing.py` updates an Agent through base URL `/v1//`, checks
 `_request_id` and the error `request_id`, and the raw checks in the other official
 scripts now expect the Beta check first.

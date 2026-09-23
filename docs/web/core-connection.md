@@ -754,9 +754,9 @@ tenant ↔ organization/project mapping.
 Startup validates project mappings atomically. A conflict aborts startup rather than
 partially accepting the new configuration.
 
-### `400 invalid_beta_header`
+### `400 invalid_beta`
 
-Every `/v1` Agents request must include exactly:
+Every `/v1` Agents request must include exactly one header line:
 
 ```http
 OpenAI-Beta: agents=v1

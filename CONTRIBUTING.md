@@ -111,18 +111,22 @@ PostgreSQL error mapping, so keep each request's writes in one transaction. See
 Serve requests on their canonical path and never redirect. `api.CanonicalPaths`
 wraps the complete server handler in both configurations (the daemon ServeMux and
 the API router alone), so every route group, middleware, authentication check and
-handler sees one path: unreserved escapes decoded, empty and dot segments resolved
-with ServeMux semantics, trailing slash kept, other escapes such as `%2F` left
-encoded. Do not route or authorize on a path outside that wrapper. On the Beta
+handler sees one path. It starts from the request's own spelling, never a path
+re-escaped from its decoded form: invalid bytes are percent-encoded, unreserved
+escapes decoded, empty and dot segments resolved with ServeMux semantics, the
+trailing slash kept, and other escapes such as `%2F` and `%5C` left encoded;
+`Path` and `RawPath` are set consistently for chi and the ServeMux. Do not route
+or authorize on a path outside that wrapper. On the Beta
 group the constant OpenAI-Beta check (exactly one `agents=v1` value) runs before
 authentication, and authentication still precedes every Beta handler, 404 and 405.
-Every 401 has type `invalid_request_error`: null code on Beta routes; on Files,
+Every Agents API 401 has type `invalid_request_error`: null code on Beta routes; on Files,
 Skills and Core project extensions `invalid_api_key` only for a rejected Bearer
 credential. Agents API responses carry a fresh `X-Request-Id` (also in the log
 context), `OpenAI-Version`, `OpenAI-Processing-Ms` and nosniff through the API
 router's own middleware, not the shared log middleware. HEAD runs GET routes;
-streaming and content-download routes register an explicit HEAD 405 instead. A 405
-lists the route's methods in `Allow`.
+streaming, content-download and live directory routes register an explicit HEAD
+405 instead. Every 405 of the API router, unknown methods included, has the JSON
+body and lists the route's methods in `Allow`.
 
 Keep runtime state, test artifacts and build output under `~/.parsar/`. Require
 absolute user-supplied working directories. Keep credentials out of source and
