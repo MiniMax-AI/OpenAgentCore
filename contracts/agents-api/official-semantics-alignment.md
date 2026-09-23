@@ -881,16 +881,20 @@ Evidence is HP-09..HP-15 of the HTTP protocol campaign scan, recorded privately 
 `REPORT.txt`, raw requests in `official-ledger.jsonl`, labels `C01`–`C20`,
 `U01`–`U11`, `S1`): one owned Agent, created, updated and deleted (404 confirmed),
 without a Session or model. The official records cover Agent create and update;
-the other routes are assumed to share the official parser.
+the other routes are assumed to share the official parser. Two later owned probes
+in `~/.parsar/remediation/20260924/http-json-body/official/results.json` created
+nothing: a lone high surrogate escape (`req_1a9b7680d615454ca97c816b25e2f401`) and
+Agent create with `metadata` and `Metadata` but no `model`
+(`req_6ba2a50c71a4410f87a1baac855e82df`).
 
 | Row | Case | Core behavior |
 | --- | --- | --- |
-| B1 | Malformed JSON, trailing data, two concatenated values, a UTF-8 byte order mark or a whitespace-only body (`C01`, `C06`, `C07`, `C12`, `C20`, `U01`, `U05`, `U06`) | 400, type and code `invalid_request_error`, param null: "Invalid body: failed to parse JSON value. Please check the value to ensure it is valid JSON. (Common errors include trailing commas, missing closing brackets, missing quotation marks, etc.)". Agent update no longer returns `unsupported_or_invalid_configuration`. |
+| B1 | Malformed JSON, trailing data, two concatenated values, a UTF-8 byte order mark, a whitespace-only body (`C01`, `C06`, `C07`, `C12`, `C20`, `U01`, `U05`, `U06`), or a string escape that forms a lone or mis-paired UTF-16 surrogate, such as `"\ud800"`, in a key or value (`req_1a9b7680d615454ca97c816b25e2f401`) | 400, type and code `invalid_request_error`, param null: "Invalid body: failed to parse JSON value. Please check the value to ensure it is valid JSON. (Common errors include trailing commas, missing closing brackets, missing quotation marks, etc.)". Agent update no longer returns `unsupported_or_invalid_configuration`. Valid surrogate pairs are accepted; lone surrogates were previously stored as U+FFFD. |
 | B2 | Invalid UTF-8 anywhere in the body (`C13`) | 400 with the same fields: "Invalid body: encountered a unicode decode error when parsing this JSON value. Please check the value to ensure it is valid unicode." Previously the bytes were stored as U+FFFD. |
-| B3 | A repeated object key at any depth (`C08`, `C15`, `C16`, `U07`) | 400 with the same fields: "Invalid body: duplicate JSON key '<key>' at '<path>'. Duplicate JSON keys are not supported." The path joins object keys with `.` and omits array indices: `name`, `metadata.k`, `tools.type`. The first repeat in document order is reported. Previously metadata, Vaults and Templates kept the last value, and Agent configuration returned the local "Duplicate parameter". |
+| B3 | A repeated object key at any depth (`C08`, `C15`, `C16`, `U07`) | 400 with the same fields: "Invalid body: duplicate JSON key '<key>' at '<path>'. Duplicate JSON keys are not supported." The path joins object keys with `.` and omits array indices: `name`, `metadata.k`, `tools.type`. Keys compare after unescaping and case-sensitively: `metadata` and `Metadata` are distinct keys (`req_6ba2a50c71a4410f87a1baac855e82df`). The first repeat in document order is reported. Previously metadata, Vaults and Templates kept the last value, and Agent configuration returned the local "Duplicate parameter". |
 | B4 | A valid root that is not an object (`C05`) | 400 with the same fields: "Invalid type: expected an object, but got <kind> instead." with the existing kind phrases (`a string`, `an integer`, `a number`, `a boolean`). |
 | B5 | A zero-length body or `null` (`C02`, `C03`, `U02`, `U03`) | Treated as `{}`: Agent create reports the missing `model`, Agent update is the documented empty update, Session update keeps its "At least one update field is required" rejection, and Vault create creates an unnamed Vault. A whitespace-only body stays B1. |
-| B6 | Content-Type missing, `text/plain` or form-encoded, including a bodyless POST without Content-Type (`C09`–`C11`, `C19`, `U08`–`U10`) | 400 with the same fields, "expected request with Content-Type: application/json", checked before the body is read. `application/json` and `application/*+json` are accepted case-insensitively, with parameters (`S1`, `U11`, `C17`, `C18`). Previously Core ignored the header and applied the update. |
+| B6 | Content-Type missing, `text/plain` or form-encoded, including a bodyless POST without Content-Type (`C09`–`C11`, `C19`, `U08`–`U10`) | 400 with the same fields, "expected request with Content-Type: application/json", checked before the body is read. `application/json` and `application/*+json` are accepted case-insensitively, with parameters (`S1`, `U11`, `C17`, `C18`); a malformed media type, such as `application/foo bar+json` or a conflicting repeated parameter, is rejected the same way. Previously Core ignored the header and applied the update. |
 | B7 | Valid bodies | Unchanged, including unknown-member errors, configuration validation, route body limits (413) and Core extensions such as `x_agents_core`. |
 
 Order: authentication and Beta handling as before, then B6, then the route's body
@@ -906,8 +910,18 @@ Decisions:
   as `{}` (HP-14); that upstream anomaly is not copied.
 - The duplicate key and path are repeated only when each is at most 256 bytes of
   printable UTF-8, the shared `echotext` rule; otherwise the message is "Invalid
-  body: duplicate JSON key. Duplicate JSON keys are not supported." A lone
-  surrogate escape decodes to U+FFFD and is therefore not repeated either.
+  body: duplicate JSON key. Duplicate JSON keys are not supported."
+- The gate scans each body once in linear time. It keeps key positions in the
+  body, not copies: objects with more than 16 keys use an open-addressing set of
+  4-byte positions, so a body of many short keys allocates about its own size.
+- Member names match exactly on every gated route. encoding/json would match a
+  case variant such as `Metadata`, `Input` or a nested `Role` to the field and
+  let the last copy win; such a key is now an unknown member at any depth,
+  rejected with the route's existing unknown-member error before any write.
+  Agent configuration already did this. On Agent create, a body with `Metadata`
+  and no `model` still reports the unknown member first, while the official
+  service reported the missing `model`; the official order between several
+  errors in one body remains unaligned.
 - Invalid UTF-8 is checked before JSON syntax; the official order for a body with
   both faults was not observed.
 - Not gated: DELETE routes, which keep their empty-body rule, the multipart Files
@@ -915,9 +929,7 @@ Decisions:
   fields), the Core extension `/core/v1/*` routes, including executor credential
   issuance, and the internal daemon, sandbox and node routes.
 
-Unchanged: the schema, route validation and error codes of valid bodies, and
-lone surrogate escapes such as `"\ud800"`, which JSON permits and encoding/json
-still decodes to U+FFFD; the official treatment of such escapes was not observed.
+Unchanged: the schema and the route validation and error codes of valid bodies.
 
 Caller check: the TypeScript client sends `application/json` with every JSON body
 (an empty Agent update sends `{}`), Core Web uses that client, the Go client uses
@@ -925,13 +937,18 @@ the pinned openai-go SDK, the Python acceptance tools send JSON through the pinn
 SDK or `json=`, and the documentation has no JSON POST examples. The Parsar
 product repository does not call these routes.
 
-Go tests cover the gate on its own (B1–B5, the echo bound, accepted media types,
-deep bodies and a differential check of the linear duplicate-key scan against an
-encoding/json token walk) and on all eleven route families (B1–B4, B6, the order against
-authentication, Beta and the body limit, B5/B7 and the excluded routes). A
-real-PostgreSQL test sends B1–B4 and B6 to every route family as the owner and
-as tenant B under a whole-database digest, then checks B5/B7 writes. The pinned-SDK
+Go tests cover the gate on its own (B1–B5, surrogate escapes, the echo bound,
+media type parsing, deep bodies, a differential check of the duplicate-key scan
+against an encoding/json token walk on small and large objects, and an allocation
+bound on many short keys), case-variant members, and all eleven route families
+(B1–B4, B6, the order against authentication, Beta and the body limit, B5/B7). A
+real-PostgreSQL test sends B1–B4, B6 and case-variant members to every route
+family as the owner and as tenant B under a whole-database digest, then checks
+B5/B7 writes; another exercises the excluded DELETE, Files and Skills upload,
+Skills update and executor credential routes with real storage. The pinned-SDK
 scripts `official_agents.py`, `official_agent_update.py`, `official_vaults.py`,
 `official_credentials.py`, `official_credential_rotation.py` and
-`official_session_metadata.py` assert the official messages and no writes.
+`official_session_metadata.py` assert the official messages and recount or reread
+the resources to show no writes; `official_session_requests.py` rejects
+case-variant members without creating a Session.
 Independent acceptance is recorded separately by the coordinator.
