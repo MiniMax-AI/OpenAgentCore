@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"hash/maphash"
-	"io"
 	"mime"
 	"net/http"
 	"strings"
@@ -23,9 +22,12 @@ func readJSONBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 }
 
 func readJSONBodyLimit(w http.ResponseWriter, r *http.Request, limit int64, message string) ([]byte, bool) {
-	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
+	// A doubling buffer allocates about twice the body in total; io.ReadAll's
+	// smaller growth steps allocate about five times a large body.
+	var body bytes.Buffer
+	_, err := body.ReadFrom(http.MaxBytesReader(w, r.Body, limit))
 	if err == nil {
-		return raw, true
+		return body.Bytes(), true
 	}
 	var tooLarge *http.MaxBytesError
 	if errors.As(err, &tooLarge) {
@@ -138,7 +140,7 @@ type scanFrame struct {
 	object, expectKey bool
 	member            uint32   // the position of the key whose value is being read
 	base, count       int      // this object's keys in keyScanner.small while it is small
-	table             []uint32 // key positions once the object is large
+	table             []uint64 // hash tag << 32 | key position, once the object is large
 }
 
 // keyScanner finds repeated keys without copying them: keys are positions in
@@ -292,44 +294,45 @@ func (s *keyScanner) insert(f *scanFrame, position uint32) bool {
 		}
 		s.small = append(s.small, scannedKey{position, hash})
 		if f.count++; f.count > smallObjectKeys {
-			f.table = make([]uint32, 4*smallObjectKeys)
+			f.table = make([]uint64, 4*smallObjectKeys)
 			for _, key := range s.small[f.base:] {
-				s.place(f.table, key.position, key.hash)
+				place(f.table, key.position, key.hash)
 			}
 			s.small = s.small[:f.base]
 		}
 		return false
 	}
-	// Linear probing at a load factor of at most 3/4.
+	// Linear probing at a load factor of at most 3/4. The high 32 hash bits
+	// stored with each position skip comparing keys that cannot be equal.
 	if (f.count+1)*4 > len(f.table)*3 {
-		grown := make([]uint32, 2*len(f.table))
-		for _, key := range f.table {
-			if key != 0 {
-				s.place(grown, key, s.hash(key))
+		grown := make([]uint64, 2*len(f.table))
+		for _, slot := range f.table {
+			if key := uint32(slot); key != 0 {
+				place(grown, key, s.hash(key))
 			}
 		}
 		f.table = grown
 	}
-	mask := uint64(len(f.table) - 1)
+	mask, tag := uint64(len(f.table)-1), hash>>32
 	for i := hash & mask; ; i = (i + 1) & mask {
-		switch key := f.table[i]; {
-		case key == 0:
-			f.table[i] = position
+		switch slot := f.table[i]; {
+		case slot == 0:
+			f.table[i] = tag<<32 | uint64(position)
 			f.count++
 			return false
-		case s.equal(key, position):
+		case slot>>32 == tag && s.equal(uint32(slot), position):
 			return true
 		}
 	}
 }
 
-func (s *keyScanner) place(table []uint32, position uint32, hash uint64) {
+func place(table []uint64, position uint32, hash uint64) {
 	mask := uint64(len(table) - 1)
 	i := hash & mask
 	for table[i] != 0 {
 		i = (i + 1) & mask
 	}
-	table[i] = position
+	table[i] = hash>>32<<32 | uint64(position)
 }
 
 // duplicate returns the repeated key and its path through the enclosing objects.
@@ -337,11 +340,20 @@ func (s *keyScanner) duplicate(position uint32) (string, string) {
 	var segments []string
 	for _, f := range s.frames[:len(s.frames)-1] {
 		if f.object {
-			segments = append(segments, string(appendUnescaped(nil, s.content(f.member))))
+			segments = append(segments, s.text(f.member))
 		}
 	}
-	key := string(appendUnescaped(nil, s.content(position)))
+	key := s.text(position)
 	return key, strings.Join(append(segments, key), ".")
+}
+
+// text returns the unescaped key at position.
+func (s *keyScanner) text(position uint32) string {
+	if position&keyEscaped == 0 {
+		return string(s.content(position))
+	}
+	s.left = appendUnescaped(s.left[:0], s.content(position))
+	return string(s.left)
 }
 
 // appendUnescaped decodes the contents of a valid JSON string whose surrogate

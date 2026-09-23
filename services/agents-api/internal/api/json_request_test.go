@@ -97,12 +97,20 @@ func TestJSONObjectBodyChecks(t *testing.T) {
 			t.Errorf("%.80q: got %v, want %q", body, err, message)
 		}
 	}
-	// Paths are built only for the reported key, so deep bodies with long keys
-	// stay linear in time and memory.
+	// Paths are built only for the reported key, so a deep body with long keys
+	// allocates linearly: building the path at every level would need gigabytes.
 	depth, key := 4000, strings.Repeat("k", 1000)
 	deep := strings.Repeat(`{"`+key+`":[`, depth) + `{"a":1,"a":2}` + strings.Repeat("]}", depth)
-	if _, err := jsonObjectBody([]byte(deep)); err != errBodyDuplicateKey {
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	_, err := jsonObjectBody([]byte(deep))
+	runtime.ReadMemStats(&after)
+	if err != errBodyDuplicateKey {
 		t.Errorf("deep duplicate: %v", err)
+	}
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 4*uint64(len(deep)) {
+		t.Errorf("deep duplicate allocated %d bytes for %d", allocated, len(deep))
 	}
 	deep = strings.Repeat(`{"b":[`, 100) + `{"a":1,"a":2}` + strings.Repeat("]}", 100)
 	if _, err := jsonObjectBody([]byte(deep)); err == nil || err.Error() != duplicateKeyMessage("a", strings.Repeat("b.", 100)+"a") {
@@ -450,7 +458,7 @@ func TestDuplicateJSONKeyMatchesReference(t *testing.T) {
 
 // A body of many short keys needs memory proportional to its key count, not
 // a copy of every key: 116 MiB was allocated for this 16 MiB body before, and
-// about 16 MiB, mostly the growing key-position set, is allocated now.
+// about 32 MiB in total, the growing set of 8-byte slots, is allocated now.
 func TestDuplicateJSONKeyMemory(t *testing.T) {
 	body := manyShortKeys(16 << 20)
 	runtime.GC()
@@ -461,7 +469,7 @@ func TestDuplicateJSONKeyMemory(t *testing.T) {
 	if found || err != nil {
 		t.Fatal(found, err)
 	}
-	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 2*uint64(len(body)) {
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 5*uint64(len(body))/2 {
 		t.Fatalf("allocated %d MiB for a %d MiB body", allocated>>20, len(body)>>20)
 	}
 }
