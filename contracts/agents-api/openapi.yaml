@@ -1096,6 +1096,11 @@ definitions:
         enum:
         - durable
         type: string
+      token_usage:
+        items:
+          $ref: '#/definitions/v1.RuntimeHistoryTokenUsagePoint'
+        maxItems: 10000
+        type: array
     required:
     - coverage
     - generated_at
@@ -1105,6 +1110,7 @@ definitions:
     - series
     - session_id
     - source
+    - token_usage
     type: object
   v1.RuntimeHistoryCPU:
     properties:
@@ -1150,8 +1156,9 @@ definitions:
           enum:
           - cpu
           - memory
+          - tokens
           type: string
-        maxItems: 2
+        maxItems: 3
         type: array
       minimum_step_seconds:
         maximum: 9007199254740991
@@ -1392,6 +1399,35 @@ definitions:
     required:
     - nanoseconds
     - seconds
+    type: object
+  v1.RuntimeHistoryTokenUsagePoint:
+    properties:
+      end:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+      input_tokens:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      output_tokens:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      sampled_at:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      start:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+    required:
+    - end
+    - input_tokens
+    - output_tokens
+    - sampled_at
+    - start
     type: object
   v1.RuntimeInstance:
     properties:

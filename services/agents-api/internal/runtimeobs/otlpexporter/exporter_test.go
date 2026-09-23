@@ -118,6 +118,29 @@ func TestExporterPreservesUnavailableWithoutInventingResourceValues(t *testing.T
 	}
 }
 
+func TestExporterEmitsCanonicalSessionTokenGaugesWithoutProviderValues(t *testing.T) {
+	client := &captureClient{}
+	exporter := newWithClient(client)
+	record := runtimeobs.ExportRecord{
+		TenantID: "tenant", SessionID: "session", EnvironmentID: "environment",
+		Mode: runtimeobs.ModeManaged, Status: runtimeobs.StatusUnavailable, Reason: "sample_timeout",
+		CollectionSource: runtimeobs.CollectionSourcePeriodic,
+		ResolvedAt:       time.Date(2026, 9, 23, 3, 0, 0, 0, time.UTC),
+		TokenUsage:       &runtimeobs.TokenUsage{InputTokens: 120, OutputTokens: 30},
+	}
+	if err := exporter.Export(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	metrics := client.metrics.ScopeMetrics[0].Metrics
+	if len(metrics) != 3 || metrics[0].Name != SampleName || metrics[1].Name != TokenInputName || metrics[2].Name != TokenOutputName {
+		t.Fatalf("unexpected token metrics: %#v", metrics)
+	}
+	input, ok := metrics[1].Data.(metricdata.Gauge[int64])
+	if !ok || len(input.DataPoints) != 1 || input.DataPoints[0].Value != 120 {
+		t.Fatalf("unexpected input token gauge: %#v", metrics[1].Data)
+	}
+}
+
 func TestExporterPreservesObservedCoverageWithoutUnfencedResourceValues(t *testing.T) {
 	client := &captureClient{}
 	exporter := newWithClient(client)

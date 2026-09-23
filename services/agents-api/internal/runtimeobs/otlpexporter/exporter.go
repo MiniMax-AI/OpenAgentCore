@@ -29,6 +29,8 @@ const (
 	MemoryLimitName    = "agents.runtime.memory.limit"
 	SampleName         = "agents.runtime.sample"
 	SampleDurationName = "agents.runtime.sample.duration"
+	TokenInputName     = "agents.session.tokens.input"
+	TokenOutputName    = "agents.session.tokens.output"
 )
 
 var safeLabelPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
@@ -109,6 +111,12 @@ func recordMetrics(record runtimeobs.ExportRecord) ([]metricdata.Metrics, error)
 	if record.SourceDuration > 0 {
 		result = append(result, durationMetric(record, attributes))
 	}
+	if record.TokenUsage != nil {
+		result = append(result,
+			integerGaugeMetric(TokenInputName, "Cumulative measured Session input tokens", "{token}", int64(record.TokenUsage.InputTokens), record.ResolvedAt, attributes),
+			integerGaugeMetric(TokenOutputName, "Cumulative measured Session output tokens", "{token}", int64(record.TokenUsage.OutputTokens), record.ResolvedAt, attributes),
+		)
+	}
 	if record.Sample == nil {
 		return result, nil
 	}
@@ -175,6 +183,10 @@ func validateRecord(record runtimeobs.ExportRecord) error {
 	}
 	if record.SourceDuration > 0 && record.ResolvedAt.Add(-record.SourceDuration).Unix() < 0 {
 		return errors.New("invalid Runtime history source start time")
+	}
+	const maxSafeInteger = uint64(1<<53 - 1)
+	if record.TokenUsage != nil && (record.TokenUsage.InputTokens > maxSafeInteger || record.TokenUsage.OutputTokens > maxSafeInteger) {
+		return errors.New("invalid Runtime history token usage")
 	}
 	if record.Sample == nil {
 		return nil
@@ -277,6 +289,12 @@ func cumulativeMetric(name, description, unit string, value float64, startedAt *
 func gaugeMetric(name, description, unit string, value float64, observedAt time.Time, attributes attribute.Set) metricdata.Metrics {
 	return metricdata.Metrics{Name: name, Description: description, Unit: unit, Data: metricdata.Gauge[float64]{
 		DataPoints: []metricdata.DataPoint[float64]{{Attributes: attributes, Time: observedAt, Value: value}},
+	}}
+}
+
+func integerGaugeMetric(name, description, unit string, value int64, observedAt time.Time, attributes attribute.Set) metricdata.Metrics {
+	return metricdata.Metrics{Name: name, Description: description, Unit: unit, Data: metricdata.Gauge[int64]{
+		DataPoints: []metricdata.DataPoint[int64]{{Attributes: attributes, Time: observedAt, Value: value}},
 	}}
 }
 

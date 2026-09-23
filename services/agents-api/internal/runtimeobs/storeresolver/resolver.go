@@ -1,10 +1,12 @@
 package storeresolver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
@@ -39,6 +41,11 @@ func (r *Resolver) Resolve(ctx context.Context, tenantID, sessionID string) (run
 		return runtimeobs.Target{}, errors.New("invalid stored Runtime environment configuration")
 	}
 	target := runtimeobs.Target{TenantID: session.TenantID, SessionID: session.ID, Mode: runtimeobs.Mode(configuration.Environment.Type)}
+	usage, err := decodeTokenUsage(session.Usage)
+	if err != nil {
+		return runtimeobs.Target{}, err
+	}
+	target.TokenUsage = usage
 	switch target.Mode {
 	case runtimeobs.ModeNone:
 		if session.Environment != nil {
@@ -81,6 +88,54 @@ func (r *Resolver) Resolve(ctx context.Context, tenantID, sessionID string) (run
 	default:
 		return runtimeobs.Target{}, errors.New("invalid stored Runtime environment type")
 	}
+}
+
+type storedTokenUsage struct {
+	InputTokens         *int64                    `json:"input_tokens"`
+	InputTokensDetails  *storedInputTokenDetails  `json:"input_tokens_details"`
+	OutputTokens        *int64                    `json:"output_tokens"`
+	OutputTokensDetails *storedOutputTokenDetails `json:"output_tokens_details"`
+	TotalTokens         *int64                    `json:"total_tokens"`
+}
+
+type storedInputTokenDetails struct {
+	CachedTokens *int64 `json:"cached_tokens"`
+}
+
+type storedOutputTokenDetails struct {
+	ReasoningTokens *int64 `json:"reasoning_tokens"`
+}
+
+func decodeTokenUsage(raw json.RawMessage) (*runtimeobs.TokenUsage, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, nil
+	}
+	var usage storedTokenUsage
+	decoder := json.NewDecoder(bytes.NewReader(trimmed))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&usage); err != nil {
+		return nil, errors.New("invalid stored Session token usage")
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return nil, errors.New("invalid stored Session token usage")
+	}
+	if usage.InputTokens == nil || usage.OutputTokens == nil || usage.TotalTokens == nil ||
+		usage.InputTokensDetails == nil || usage.InputTokensDetails.CachedTokens == nil ||
+		usage.OutputTokensDetails == nil || usage.OutputTokensDetails.ReasoningTokens == nil {
+		return nil, errors.New("invalid stored Session token usage")
+	}
+	const maxSafeInteger = int64(1<<53 - 1)
+	values := []int64{*usage.InputTokens, *usage.OutputTokens, *usage.TotalTokens, *usage.InputTokensDetails.CachedTokens, *usage.OutputTokensDetails.ReasoningTokens}
+	for _, value := range values {
+		if value < 0 || value > maxSafeInteger {
+			return nil, errors.New("invalid stored Session token usage")
+		}
+	}
+	if *usage.InputTokens+*usage.OutputTokens != *usage.TotalTokens {
+		return nil, errors.New("invalid stored Session token usage")
+	}
+	return &runtimeobs.TokenUsage{InputTokens: uint64(*usage.InputTokens), OutputTokens: uint64(*usage.OutputTokens)}, nil
 }
 
 func (r *Resolver) ListRuntimeObservationSessions(ctx context.Context, after string, limit int) (runtimeobs.SessionPage, error) {

@@ -115,7 +115,9 @@ an operator must configure the Reader and qualified periodic collection.
 ## First-phase boundary
 
 The current-snapshot implementation adds no migration, metrics backend, token
-duplication, Kubernetes/E2B source, or telemetry-driven lifecycle action. The
+duplication, Kubernetes/E2B source, or telemetry-driven lifecycle action. Optional
+Durable history separately samples canonical Session Usage into its configured
+metrics backend; provider sources still do not own token accounting. The
 internal source interface admits Docker and microsandbox without changing Session
 attribution or the existing sandbox lifecycle interface.
 

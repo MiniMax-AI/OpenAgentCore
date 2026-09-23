@@ -57,6 +57,27 @@ GROUP BY
 ORDER BY resolved_at_unix_nano, allocation_id, started_at_unix_nano, metric_name
 LIMIT {row_limit:UInt64}`
 
+const tokenUsageQuery = `
+SELECT
+    resolved_at_unix_nano,
+    metric_name,
+    min(value) AS minimum_value,
+    max(value) AS maximum_value
+FROM runtime_history_metrics
+WHERE tenant_id = {tenant_id:String}
+  AND session_id = {session_id:String}
+  AND environment_id = {environment_id:String}
+  AND collection_source = 'periodic'
+  AND resolved_at_unix_nano >= {raw_start:Int64}
+  AND resolved_at_unix_nano < {end:Int64}
+  AND metric_name IN (
+      'agents.session.tokens.input',
+      'agents.session.tokens.output'
+  )
+GROUP BY resolved_at_unix_nano, metric_name
+ORDER BY resolved_at_unix_nano, metric_name
+LIMIT {row_limit:UInt64}`
+
 type Config struct {
 	Address      string
 	Database     string
@@ -173,7 +194,41 @@ func (r *Reader) Query(ctx context.Context, query runtimehistory.Query) (runtime
 	if count >= rowLimit {
 		return runtimehistory.Result{}, errors.New("Runtime history raw result exceeds limit")
 	}
-	return aggregate(query, generatedAt, raw)
+	result, err := aggregate(query, generatedAt, raw)
+	if err != nil || !hasMetric(r.capabilities.Metrics, runtimehistory.MetricTokens) {
+		return result, err
+	}
+	tokenRowLimit := query.MaximumTotalPoints*2 + 1
+	tokenRows, err := r.client.Query(queryCtx, tokenUsageQuery,
+		clickhouse.Named("tenant_id", query.TenantID),
+		clickhouse.Named("session_id", query.SessionID),
+		clickhouse.Named("environment_id", query.EnvironmentID),
+		clickhouse.Named("raw_start", query.Start.UnixNano()),
+		clickhouse.Named("end", query.End.UnixNano()),
+		clickhouse.Named("row_limit", uint64(tokenRowLimit)),
+	)
+	if err != nil {
+		return runtimehistory.Result{}, errors.New("query Runtime history token usage")
+	}
+	defer tokenRows.Close()
+	rawTokens, tokenCount, err := readTokenUsage(tokenRows, query.Start, query.End)
+	if err != nil {
+		return runtimehistory.Result{}, err
+	}
+	if tokenCount >= tokenRowLimit {
+		return runtimehistory.Result{}, errors.New("Runtime history token result exceeds limit")
+	}
+	result.TokenUsage, err = aggregateTokenUsage(query, rawTokens)
+	return result, err
+}
+
+func hasMetric(metrics []runtimehistory.Metric, expected runtimehistory.Metric) bool {
+	for _, metric := range metrics {
+		if metric == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Reader) validateQuery(query runtimehistory.Query) error {
@@ -232,6 +287,86 @@ type rawSample struct {
 	status     runtimeobs.Status
 	hasSample  bool
 	metrics    map[string]float64
+}
+
+type rawTokenUsage struct {
+	resolvedAt                time.Time
+	inputTokens, outputTokens *uint64
+}
+
+func readTokenUsage(resultRows rows, start, end time.Time) ([]rawTokenUsage, int, error) {
+	byResolved := map[int64]*rawTokenUsage{}
+	rowCount := 0
+	for resultRows.Next() {
+		rowCount++
+		var resolvedNano int64
+		var metric string
+		var minimum, maximum float64
+		if err := resultRows.Scan(&resolvedNano, &metric, &minimum, &maximum); err != nil {
+			return nil, rowCount, errors.New("scan Runtime history token row")
+		}
+		resolvedAt := time.Unix(0, resolvedNano).UTC()
+		value, err := safeUint64(minimum)
+		if resolvedNano < 0 || resolvedAt.Before(start) || !resolvedAt.Before(end) || minimum != maximum || err != nil {
+			return nil, rowCount, errors.New("invalid Runtime history token row")
+		}
+		usage := byResolved[resolvedNano]
+		if usage == nil {
+			usage = &rawTokenUsage{resolvedAt: resolvedAt}
+			byResolved[resolvedNano] = usage
+		}
+		switch metric {
+		case otlpexporter.TokenInputName:
+			if usage.inputTokens != nil {
+				return nil, rowCount, errors.New("duplicate Runtime history input token row")
+			}
+			usage.inputTokens = &value
+		case otlpexporter.TokenOutputName:
+			if usage.outputTokens != nil {
+				return nil, rowCount, errors.New("duplicate Runtime history output token row")
+			}
+			usage.outputTokens = &value
+		default:
+			return nil, rowCount, errors.New("invalid Runtime history token metric")
+		}
+	}
+	if err := resultRows.Err(); err != nil {
+		return nil, rowCount, errors.New("iterate Runtime history token rows")
+	}
+	result := make([]rawTokenUsage, 0, len(byResolved))
+	for _, usage := range byResolved {
+		if usage.inputTokens == nil || usage.outputTokens == nil {
+			return nil, rowCount, errors.New("incomplete Runtime history token usage")
+		}
+		result = append(result, *usage)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].resolvedAt.Before(result[j].resolvedAt) })
+	return result, rowCount, nil
+}
+
+func aggregateTokenUsage(query runtimehistory.Query, raw []rawTokenUsage) ([]runtimehistory.TokenUsagePoint, error) {
+	latest := map[int]*rawTokenUsage{}
+	for _, usage := range raw {
+		index := bucketIndex(query, usage.resolvedAt)
+		if index < 0 {
+			continue
+		}
+		previous, ok := latest[index]
+		if !ok || usage.resolvedAt.After(previous.resolvedAt) {
+			value := usage
+			latest[index] = &value
+		}
+	}
+	result := make([]runtimehistory.TokenUsagePoint, 0, len(latest))
+	for _, index := range sortedIndexes(latest) {
+		usage := latest[index]
+		start, end := bucketBounds(query, index)
+		result = append(result, runtimehistory.TokenUsagePoint{
+			Start: start, End: end, SampledAt: usage.resolvedAt,
+			InputTokens: *usage.inputTokens, OutputTokens: *usage.outputTokens,
+		})
+	}
+	return result, nil
 }
 
 func readSamples(resultRows rows, rawStart, end time.Time) ([]*rawSample, int, error) {

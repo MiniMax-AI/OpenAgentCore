@@ -63,7 +63,7 @@ const capabilities: RuntimeHistoryCapabilities = {
   minimum_step_seconds: 30,
   maximum_range_seconds: 86_400,
   maximum_points: 1_000,
-  metrics: ["cpu", "memory"],
+  metrics: ["cpu", "memory", "tokens"],
 };
 
 function history(overrides: Partial<RuntimeHistory> = {}): RuntimeHistory {
@@ -105,6 +105,10 @@ function history(overrides: Partial<RuntimeHistory> = {}): RuntimeHistory {
         memory: { contributor_count: 1, usage_bytes: 768, limit_bytes: 1_024 },
       }],
     }],
+    token_usage: [
+      { start: 100, end: 130, sampled_at: 110, input_tokens: 10, output_tokens: 5 },
+      { start: 130, end: 160, sampled_at: 140, input_tokens: 40, output_tokens: 15 },
+    ],
     ...overrides,
   };
 }
@@ -116,7 +120,7 @@ describe("Runtime Durable Dashboard history", () => {
     expect(runtimeTrendSourceAfterHistoryUnavailable("live")).toBe("live");
   });
 
-  it("projects persisted buckets without synthesizing token history", () => {
+  it("projects persisted Runtime and canonical token history", () => {
     const samples = runtimeDurableTrendSamples([session], [history()]);
     expect(samples).toHaveLength(2);
     expect(samples[0]).toMatchObject({
@@ -128,6 +132,7 @@ describe("Runtime Durable Dashboard history", () => {
       targets: [{ label: "Durable worker", cpuRatio: .25, uptimeSeconds: 99.5 }],
     });
     expect(samples[1]?.targets[0]?.uptimeSeconds).toBe(129.5);
+    expect(samples[1]).toMatchObject({ inputTokensPerMinute: 60, outputTokensPerMinute: 20 });
   });
 
   it("keeps aggregate memory absent when any queried target has no memory value", () => {
@@ -139,6 +144,33 @@ describe("Runtime Durable Dashboard history", () => {
     });
     const samples = runtimeDurableTrendSamples([session, second], [history(), secondHistory]);
     expect(samples.every((sample) => sample.memoryUsageBytes === null && sample.memoryLimitBytes === null)).toBe(true);
+  });
+
+  it("keeps aggregate token throughput absent when any queried Session lacks usage", () => {
+    const second = { ...session, id: "44444444-4444-4444-8444-444444444444" } as AgentSession;
+    const secondHistory = history({ session_id: second.id, token_usage: [] });
+    const samples = runtimeDurableTrendSamples([session, second], [history(), secondHistory]);
+    expect(samples.every((sample) => sample.inputTokensPerMinute === null && sample.outputTokensPerMinute === null)).toBe(true);
+  });
+
+  it("derives each Session token rate from its actual sample interval", () => {
+    const samples = runtimeDurableTrendSamples([session], [history({
+      token_usage: [
+        { start: 100, end: 130, sampled_at: 105, input_tokens: 10, output_tokens: 5 },
+        { start: 130, end: 160, sampled_at: 150, input_tokens: 40, output_tokens: 20 },
+      ],
+    })]);
+    expect(samples[1]).toMatchObject({ inputTokensPerMinute: 40, outputTokensPerMinute: 20 });
+  });
+
+  it("keeps a token counter regression as a gap instead of inventing throughput", () => {
+    const samples = runtimeDurableTrendSamples([session], [history({
+      token_usage: [
+        { start: 100, end: 130, sampled_at: 110, input_tokens: 100, output_tokens: 20 },
+        { start: 130, end: 160, sampled_at: 140, input_tokens: 90, output_tokens: 30 },
+      ],
+    })]);
+    expect(samples[1]).toMatchObject({ inputTokensPerMinute: null, outputTokensPerMinute: 20 });
   });
 
   it("loads capability-gated Session histories with a bounded common range", async () => {

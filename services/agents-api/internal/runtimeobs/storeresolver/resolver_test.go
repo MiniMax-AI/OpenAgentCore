@@ -44,7 +44,7 @@ func TestResolverListsOnlyProviderNeutralSessionIdentity(t *testing.T) {
 
 func TestResolverBindsManagedSessionEnvironmentAndAllocation(t *testing.T) {
 	r, err := NewResolver(resolverStore{
-		session: store.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Environment: &store.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
+		session: store.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Usage: []byte(`{"input_tokens":120,"input_tokens_details":{"cached_tokens":20},"output_tokens":30,"output_tokens_details":{"reasoning_tokens":10},"total_tokens":150}`), Environment: &store.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
 		allocation: store.RuntimeAllocation{
 			ID: "allocation", TenantID: "tenant", SessionID: "session", EnvironmentID: "environment",
 			ProviderKey: "provider", DeviceID: "device", ComputePhase: "running", ComputeState: []byte(`{"current":{"name":"sandbox"}}`),
@@ -65,6 +65,42 @@ func TestResolverBindsManagedSessionEnvironmentAndAllocation(t *testing.T) {
 	}
 	if target.Instance.ComputePhase != "running" {
 		t.Fatalf("compute phase was not retained: %s", target.Instance.ComputePhase)
+	}
+	if target.TokenUsage == nil || target.TokenUsage.InputTokens != 120 || target.TokenUsage.OutputTokens != 30 {
+		t.Fatalf("canonical Session usage was not retained: %+v", target.TokenUsage)
+	}
+}
+
+func TestResolverRejectsInvalidCanonicalSessionUsage(t *testing.T) {
+	for _, usage := range []string{
+		`{"input_tokens":2,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":4}`,
+		`{}`,
+		`{"total_tokens":0}`,
+		`{"input_tokens":0,"input_tokens_details":{"cached_tokens":-1},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":0}`,
+		`{"input_tokens":0,"input_tokens_details":{"cached_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":0,"unknown":0}`,
+	} {
+		resolver, err := NewResolver(resolverStore{session: store.Session{
+			ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"none"}}`), Usage: []byte(usage),
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := resolver.Resolve(t.Context(), "tenant", "session"); err == nil {
+			t.Fatalf("invalid Session token usage was accepted: %s", usage)
+		}
+	}
+}
+
+func TestResolverKeepsNullCanonicalSessionUsageAbsent(t *testing.T) {
+	resolver, err := NewResolver(resolverStore{session: store.Session{
+		ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"none"}}`), Usage: []byte(" \n null \t"),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := resolver.Resolve(t.Context(), "tenant", "session")
+	if err != nil || target.TokenUsage != nil {
+		t.Fatalf("null Session usage was not kept absent: %+v %v", target.TokenUsage, err)
 	}
 }
 

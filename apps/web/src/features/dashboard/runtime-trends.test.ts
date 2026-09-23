@@ -202,7 +202,7 @@ describe("Runtime live-window trends", () => {
     expect(samples.at(-1)?.targets[0]?.cpuRatio ?? null).toBeNull();
   });
 
-  it("matches token counters by Session without creating churn spikes", () => {
+  it("keeps Session-set churn as a gap instead of publishing partial throughput", () => {
     const first = snapshot(60_000, { input: 100, output: 20 });
     const second = snapshot(120_000, { input: 220, output: 50 });
     second.sessions.push({
@@ -216,8 +216,8 @@ describe("Runtime live-window trends", () => {
     samples = appendRuntimeTrendSample(samples, third);
     expect(tokenThroughput(samples)).toEqual([
       { sampledAt: 60_000, inputPerMinute: null, outputPerMinute: null },
-      { sampledAt: 120_000, inputPerMinute: 120, outputPerMinute: 30 },
-      { sampledAt: 180_000, inputPerMinute: 30, outputPerMinute: null },
+      { sampledAt: 120_000, inputPerMinute: null, outputPerMinute: null },
+      { sampledAt: 180_000, inputPerMinute: null, outputPerMinute: null },
     ]);
   });
 

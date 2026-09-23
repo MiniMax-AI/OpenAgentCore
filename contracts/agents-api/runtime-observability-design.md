@@ -234,6 +234,8 @@ Recommended instruments are:
 - `agents.runtime.cpu.capacity` cores;
 - `agents.runtime.memory.usage` bytes;
 - `agents.runtime.memory.limit` bytes;
+- `agents.session.tokens.input` cumulative measured tokens;
+- `agents.session.tokens.output` cumulative measured tokens;
 - `agents.runtime.sample` success/unavailable count; and
 - `agents.runtime.sample.duration` seconds.
 
@@ -323,6 +325,8 @@ The OTLP request uses standard protobuf metrics and these instruments:
 | `agents.runtime.cpu.capacity` | gauge, cores | configured provider capacity |
 | `agents.runtime.memory.usage` | gauge, bytes | provider memory usage |
 | `agents.runtime.memory.limit` | gauge, bytes | configured provider limit |
+| `agents.session.tokens.input` | gauge, tokens | canonical cumulative Session Usage |
+| `agents.session.tokens.output` | gauge, tokens | canonical cumulative Session Usage |
 | `agents.runtime.sample` | monotonic delta sum | one validated result, including unavailable/unsupported |
 | `agents.runtime.sample.duration` | delta histogram, seconds | bounded provider read duration |
 
@@ -479,10 +483,18 @@ persisted by Core.
 
 ## 12. Token usage boundary
 
-Runtime observations do not duplicate token usage. Web uses the existing canonical
-Session Usage snapshot and joins it to Runtime rows by `session_id`. The Dashboard
-shows both total and coverage, such as `1.84M reported by 7/8 Sessions`. Missing or
-incomplete native usage remains unknown.
+Provider Runtime sources do not own or report token usage. During a periodic
+history sweep, the Core resolver reads the existing canonical cumulative Session
+Usage snapshot from the execution store alongside Runtime identity. The exporter
+emits Session-scoped input/output token gauges with the same Session and sampling
+time, independently of Docker, microsandbox, Kubernetes, or another provider.
+ClickHouse retains those cumulative points separately from allocation/incarnation
+series. Web derives throughput from adjacent nondecreasing points. Missing or
+incomplete native usage and counter regressions remain gaps, never zero.
+
+The current snapshot API still does not duplicate Usage fields: Web joins its
+existing Session collection by exact `session_id`. The Dashboard reports measured
+coverage and never estimates missing usage.
 
 Cost and billing stay outside this Core API. A product may join billing in its own
 authorized backend, never by exposing product credentials to Core Web.
@@ -571,7 +583,7 @@ Implemented for the browser-local current-snapshot live window.
   incarnations without cross-fence CPU derivation.
 - Implemented: Core Web discovers capabilities, reloads bounded Session histories
   with bounded concurrency, and exposes explicit Live versus History sources with
-  1h, 6h, and 24h Durable ranges. Token throughput remains honestly Live-only.
+  1h, 6h, and 24h Durable ranges, including canonical Session token throughput.
 - Not implemented: exporter queue/drop/error coverage telemetry.
 
 ### Phase 5: additional sources

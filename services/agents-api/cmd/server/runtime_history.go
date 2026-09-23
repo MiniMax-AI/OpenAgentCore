@@ -129,7 +129,7 @@ func runtimeHistory(ctx context.Context) (runtimeHistorySetup, error) {
 			Capabilities: runtimehistory.Capabilities{
 				CollectionMode: mode, SampleInterval: interval, Retention: 7 * 24 * time.Hour, MinimumStep: minimumStep, MaximumRange: 24 * time.Hour,
 				MaximumPoints: 1_000, MaximumSeries: 64, MaximumTotalPoints: 10_000,
-				Metrics: []runtimehistory.Metric{runtimehistory.MetricCPU, runtimehistory.MetricMemory},
+				Metrics: []runtimehistory.Metric{runtimehistory.MetricCPU, runtimehistory.MetricMemory, runtimehistory.MetricTokens},
 			},
 		})
 		if err != nil {

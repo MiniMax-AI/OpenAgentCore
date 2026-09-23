@@ -40,6 +40,7 @@ export interface RuntimeTrendSample {
 
 export interface RuntimeTrendTokenTotal {
   sessionId: string;
+  sampledAt: number;
   inputTokens: number;
   outputTokens: number;
 }
@@ -90,13 +91,13 @@ function uptimeSeconds(observation: RuntimeObservation): number | null {
     : null;
 }
 
-function tokenTotals(sessions: readonly AgentSession[]): RuntimeTrendTokenTotal[] {
+function tokenTotals(sessions: readonly AgentSession[], sampledAt: number): RuntimeTrendTokenTotal[] {
   return sessions.flatMap((session): RuntimeTrendTokenTotal[] => {
     const inputTokens = safeInteger(session.usage?.input_tokens);
     const outputTokens = safeInteger(session.usage?.output_tokens);
     return inputTokens === null || outputTokens === null
       ? []
-      : [{ sessionId: session.id, inputTokens, outputTokens }];
+      : [{ sessionId: session.id, sampledAt, inputTokens, outputTokens }];
   });
 }
 
@@ -164,7 +165,7 @@ export function runtimeTrendSample(snapshot: RuntimeDashboardSnapshot): RuntimeT
     memoryLimitBytes: pairedMemory.length === 0
       ? null
       : pairedMemory.reduce((total, target) => total + (target.memoryLimitBytes ?? 0), 0),
-    tokenTotals: tokenTotals(snapshot.sessions),
+    tokenTotals: tokenTotals(snapshot.sessions, snapshot.loadedAt),
     inputTokensPerMinute: null,
     outputTokensPerMinute: null,
   };
@@ -226,25 +227,44 @@ function tokenRate(
   previous: RuntimeTrendSample,
   next: RuntimeTrendSample,
 ): Pick<RuntimeTrendSample, "inputTokensPerMinute" | "outputTokensPerMinute"> {
-  const elapsedMinutes = (next.sampledAt - previous.sampledAt) / 60_000;
-  if (elapsedMinutes <= 0) return { inputTokensPerMinute: null, outputTokensPerMinute: null };
   const previousTotals = new Map(previous.tokenTotals.map((total) => [total.sessionId, total]));
+  if (previousTotals.size === 0 || previousTotals.size !== next.tokenTotals.length ||
+      next.tokenTotals.some((current) => !previousTotals.has(current.sessionId))) {
+    return { inputTokensPerMinute: null, outputTokensPerMinute: null };
+  }
   const pairs = next.tokenTotals.flatMap((current): Array<[RuntimeTrendTokenTotal, RuntimeTrendTokenTotal]> => {
     const prior = previousTotals.get(current.sessionId);
     return prior ? [[prior, current]] : [];
   });
-  const inputDeltas = pairs.map(([prior, current]) => current.inputTokens - prior.inputTokens);
-  const outputDeltas = pairs.map(([prior, current]) => current.outputTokens - prior.outputTokens);
-  const inputDelta = inputDeltas.length > 0 && inputDeltas.every((delta) => delta >= 0)
-    ? inputDeltas.reduce((total, delta) => total + delta, 0)
+  const inputRates = pairs.map(([prior, current]) => {
+    const elapsedMinutes = (current.sampledAt - prior.sampledAt) / 60_000;
+    const delta = current.inputTokens - prior.inputTokens;
+    return elapsedMinutes > 0 && delta >= 0 ? delta / elapsedMinutes : null;
+  });
+  const outputRates = pairs.map(([prior, current]) => {
+    const elapsedMinutes = (current.sampledAt - prior.sampledAt) / 60_000;
+    const delta = current.outputTokens - prior.outputTokens;
+    return elapsedMinutes > 0 && delta >= 0 ? delta / elapsedMinutes : null;
+  });
+  const inputRate = inputRates.length > 0 && inputRates.every((rate) => rate !== null)
+    ? inputRates.reduce<number>((total, rate) => total + (rate ?? 0), 0)
     : null;
-  const outputDelta = outputDeltas.length > 0 && outputDeltas.every((delta) => delta >= 0)
-    ? outputDeltas.reduce((total, delta) => total + delta, 0)
+  const outputRate = outputRates.length > 0 && outputRates.every((rate) => rate !== null)
+    ? outputRates.reduce<number>((total, rate) => total + (rate ?? 0), 0)
     : null;
   return {
-    inputTokensPerMinute: inputDelta === null ? null : inputDelta / elapsedMinutes,
-    outputTokensPerMinute: outputDelta === null ? null : outputDelta / elapsedMinutes,
+    inputTokensPerMinute: inputRate,
+    outputTokensPerMinute: outputRate,
   };
+}
+
+export function deriveTokenThroughput(samples: readonly RuntimeTrendSample[]): RuntimeTrendSample[] {
+  return samples.map((sample, index) => {
+    const current = { ...sample };
+    const previous = samples[index - 1];
+    if (previous) Object.assign(current, tokenRate(previous, sample));
+    return current;
+  });
 }
 
 export function appendRuntimeTrendSample(

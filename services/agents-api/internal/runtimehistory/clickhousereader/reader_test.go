@@ -22,15 +22,23 @@ const (
 )
 
 type fakeClient struct {
-	rows      rows
-	err       error
-	statement string
-	args      []any
-	closed    bool
+	rows       rows
+	rowsQueue  []rows
+	err        error
+	statement  string
+	statements []string
+	args       []any
+	closed     bool
 }
 
 func (c *fakeClient) Query(_ context.Context, statement string, args ...any) (rows, error) {
 	c.statement, c.args = statement, append([]any(nil), args...)
+	c.statements = append(c.statements, statement)
+	if len(c.rowsQueue) > 0 {
+		value := c.rowsQueue[0]
+		c.rowsQueue = c.rowsQueue[1:]
+		return value, c.err
+	}
 	return c.rows, c.err
 }
 
@@ -153,6 +161,48 @@ func TestReaderQueriesMandatoryScopeAndAggregatesFencedHistory(t *testing.T) {
 	}
 	if err := runtimehistoryResponseValidation(testQuery(start), result); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestReaderReturnsSessionTokenUsageIndependentOfRuntimeIncarnation(t *testing.T) {
+	start := time.Date(2026, 9, 23, 8, 0, 0, 0, time.UTC)
+	first := start.Add(10 * time.Second).UnixNano()
+	second := start.Add(40 * time.Second).UnixNano()
+	client := &fakeClient{rowsQueue: []rows{
+		&fakeRows{},
+		&fakeRows{values: [][]any{
+			{first, otlpexporter.TokenInputName, float64(100), float64(100)},
+			{first, otlpexporter.TokenOutputName, float64(20), float64(20)},
+			{second, otlpexporter.TokenInputName, float64(160), float64(160)},
+			{second, otlpexporter.TokenOutputName, float64(50), float64(50)},
+		}},
+	}}
+	capabilities := testCapabilities()
+	capabilities.Metrics = append(capabilities.Metrics, runtimehistory.MetricTokens)
+	reader, err := newReader(client, capabilities, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader.now = func() time.Time { return start.Add(time.Minute) }
+	result, err := reader.Query(t.Context(), testQuery(start))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.statements) != 2 || !strings.Contains(client.statements[1], "agents.session.tokens.input") {
+		t.Fatalf("token query was not issued separately: %#v", client.statements)
+	}
+	if len(result.TokenUsage) != 2 || result.TokenUsage[0].InputTokens != 100 || result.TokenUsage[1].OutputTokens != 50 {
+		t.Fatalf("unexpected token usage history: %+v", result.TokenUsage)
+	}
+}
+
+func TestReaderRejectsIncompleteSessionTokenUsage(t *testing.T) {
+	start := time.Date(2026, 9, 23, 8, 0, 0, 0, time.UTC)
+	rows := &fakeRows{values: [][]any{{
+		start.Add(10 * time.Second).UnixNano(), otlpexporter.TokenInputName, float64(100), float64(100),
+	}}}
+	if _, _, err := readTokenUsage(rows, start, start.Add(time.Minute)); err == nil {
+		t.Fatal("incomplete token usage was accepted")
 	}
 }
 

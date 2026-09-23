@@ -2798,7 +2798,7 @@ test("restores ClickHouse Runtime history after a Dashboard reload", async ({ pa
     body: JSON.stringify({
       object: "agent.runtime_history_capabilities", available: true, reason: null, collection_mode: "periodic",
       sample_interval_seconds: 30, retention_seconds: 604_800, minimum_step_seconds: 30,
-      maximum_range_seconds: 86_400, maximum_points: 1_000, metrics: ["cpu", "memory"],
+      maximum_range_seconds: 86_400, maximum_points: 1_000, metrics: ["cpu", "memory", "tokens"],
     }),
   }));
   await page.route(`**/v1/agents/sessions/${sessionId}/runtime-history*`, async (route) => {
@@ -2840,6 +2840,13 @@ test("restores ClickHouse Runtime history after a Dashboard reload", async ({ pa
           environment_id: environmentId, allocation_id: allocationId,
           started_at: { seconds: startedAt, nanoseconds: 123_456_789 }, provider_type: "docker", points,
         }],
+        token_usage: points.map((_, index) => ({
+          start: start + index * 30,
+          end: start + (index + 1) * 30,
+          sampled_at: start + index * 30 + 20,
+          input_tokens: 10_000 + index * 300,
+          output_tokens: 2_000 + index * 60,
+        })),
       }),
     });
   });
@@ -2852,7 +2859,7 @@ test("restores ClickHouse Runtime history after a Dashboard reload", async ({ pa
   await expect(dashboard.getByText("CPU usage durable trend available")).toBeAttached();
   await expect(dashboard).toContainText("120 buckets");
   await expect(dashboard).toContainText("120/120 observations");
-  await expect(dashboard.getByText("Live-only metric", { exact: true })).toBeVisible();
+  await expect(dashboard.getByText("Token throughput durable trend available")).toBeAttached();
   const durableCpuChart = dashboard.getByLabel("CPU usage: 120 retained buckets");
   await expect(dashboard.getByRole("region", { name: "CPU usage durable history chart" })).toBeVisible();
   const durableCpuCard = durableCpuChart.locator("xpath=ancestor::section[contains(@class, 'dashboard-runtime-trend-card')]");

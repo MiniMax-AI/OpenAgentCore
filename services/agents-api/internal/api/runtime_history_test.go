@@ -36,7 +36,7 @@ func historyCapabilities(mode runtimehistory.CollectionMode) runtimehistory.Capa
 	value := runtimehistory.Capabilities{
 		CollectionMode: mode, Retention: 7 * 24 * time.Hour, MinimumStep: 30 * time.Second,
 		MaximumRange: 24 * time.Hour, MaximumPoints: 1_000, MaximumSeries: 64, MaximumTotalPoints: 10_000,
-		Metrics: []runtimehistory.Metric{runtimehistory.MetricCPU, runtimehistory.MetricMemory},
+		Metrics: []runtimehistory.Metric{runtimehistory.MetricCPU, runtimehistory.MetricMemory, runtimehistory.MetricTokens},
 	}
 	if mode == runtimehistory.CollectionPeriodic {
 		value.SampleInterval = 30 * time.Second
@@ -113,8 +113,9 @@ func TestRuntimeHistoryRouteBindsAuthenticatedSessionAndPreservesCoverage(t *tes
 	service.response = runtimehistory.Response{
 		Capabilities: service.capabilities, Scope: scope,
 		Requested: runtimehistory.Range{Start: start, End: now, MaxPoints: 60}, Resolution: time.Minute, GeneratedAt: now, RetainedFrom: &start,
-		Coverage: []runtimehistory.CoveragePoint{coveragePoint},
-		Series:   []runtimehistory.Series{{Scope: scope, AllocationID: allocationID, StartedAt: start.Add(-time.Minute), ProviderType: "docker", Points: []runtimehistory.Point{resourcePoint}}},
+		Coverage:   []runtimehistory.CoveragePoint{coveragePoint},
+		Series:     []runtimehistory.Series{{Scope: scope, AllocationID: allocationID, StartedAt: start.Add(-time.Minute), ProviderType: "docker", Points: []runtimehistory.Point{resourcePoint}}},
+		TokenUsage: []runtimehistory.TokenUsagePoint{{Start: start, End: start.Add(time.Minute), SampledAt: start.Add(10 * time.Second), InputTokens: 120, OutputTokens: 30}},
 	}
 	secondIncarnation := service.response.Series[0]
 	secondIncarnation.StartedAt = secondIncarnation.StartedAt.Add(time.Nanosecond)
@@ -124,7 +125,7 @@ func TestRuntimeHistoryRouteBindsAuthenticatedSessionAndPreservesCoverage(t *tes
 		t.Fatalf("history returned %d: %s", response.Code, response.Body)
 	}
 	var value v1.RuntimeHistory
-	if json.Unmarshal(response.Body.Bytes(), &value) != nil || value.Object != "agent.runtime_history" || value.Source != "durable" || value.SessionID != sessionID || value.ResolutionSeconds != 60 || value.Coverage.SampleCount != 1 || value.Coverage.ExpectedSampleCount != 120 || len(value.Coverage.Buckets) != 1 || len(value.Series) != 2 || len(value.Series[0].Points) != 1 || value.Series[0].StartedAt.Seconds != value.Series[1].StartedAt.Seconds || value.Series[0].StartedAt.Nanoseconds == value.Series[1].StartedAt.Nanoseconds {
+	if json.Unmarshal(response.Body.Bytes(), &value) != nil || value.Object != "agent.runtime_history" || value.Source != "durable" || value.SessionID != sessionID || value.ResolutionSeconds != 60 || value.Coverage.SampleCount != 1 || value.Coverage.ExpectedSampleCount != 120 || len(value.Coverage.Buckets) != 1 || len(value.Series) != 2 || len(value.Series[0].Points) != 1 || value.Series[0].StartedAt.Seconds != value.Series[1].StartedAt.Seconds || value.Series[0].StartedAt.Nanoseconds == value.Series[1].StartedAt.Nanoseconds || len(value.TokenUsage) != 1 || value.TokenUsage[0].InputTokens != 120 || value.TokenUsage[0].OutputTokens != 30 {
 		t.Fatalf("invalid history response: %s", response.Body)
 	}
 	point := value.Series[0].Points[0]

@@ -216,7 +216,14 @@ func runtimeHistoryResponse(value runtimehistory.Response, expectedTenantID, exp
 		Object: "agent.runtime_history", Source: "durable", SessionID: value.SessionID,
 		RequestedRange:    v1.RuntimeHistoryRange{Start: value.Requested.Start.Unix(), End: value.Requested.End.Unix()},
 		ResolutionSeconds: int64(value.Resolution / time.Second), GeneratedAt: value.GeneratedAt.Unix(), Coverage: coverage,
-		Series: make([]v1.RuntimeHistorySeries, 0, len(value.Series)),
+		Series:     make([]v1.RuntimeHistorySeries, 0, len(value.Series)),
+		TokenUsage: make([]v1.RuntimeHistoryTokenUsagePoint, 0, len(value.TokenUsage)),
+	}
+	for _, point := range value.TokenUsage {
+		response.TokenUsage = append(response.TokenUsage, v1.RuntimeHistoryTokenUsagePoint{
+			Start: point.Start.Unix(), End: point.End.Unix(), SampledAt: point.SampledAt.Unix(),
+			InputTokens: point.InputTokens, OutputTokens: point.OutputTokens,
+		})
 	}
 	for _, series := range value.Series {
 		converted := v1.RuntimeHistorySeries{

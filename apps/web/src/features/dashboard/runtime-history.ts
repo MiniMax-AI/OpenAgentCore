@@ -6,7 +6,7 @@ import type {
 } from "@agents-core-web/agents-client";
 
 import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";
-import type { RuntimeTrendSample, RuntimeTrendTarget } from "./runtime-trends";
+import { deriveTokenThroughput, type RuntimeTrendSample, type RuntimeTrendTarget } from "./runtime-trends";
 
 export const RUNTIME_DURABLE_TARGET_LIMIT = 24;
 export const RUNTIME_DURABLE_MAX_POINTS = 120;
@@ -82,6 +82,7 @@ interface MutableBucket {
   sampledAt: number;
   targets: Map<string, RuntimeTrendTarget>;
   memory: Map<string, { observedAt: number; usage: number; limit: number }>;
+  tokens: Map<string, { sampledAt: number; inputTokens: number; outputTokens: number }>;
 }
 
 function incarnationLabel(title: string, history: RuntimeHistory, startedAt: number): string {
@@ -102,7 +103,7 @@ export function runtimeDurableTrendSamples(
   const bucket = (sampledAt: number): MutableBucket => {
     let value = buckets.get(sampledAt);
     if (!value) {
-      value = { sampledAt, targets: new Map(), memory: new Map() };
+      value = { sampledAt, targets: new Map(), memory: new Map(), tokens: new Map() };
       buckets.set(sampledAt, value);
     }
     return value;
@@ -110,6 +111,13 @@ export function runtimeDurableTrendSamples(
 
   for (const history of histories) {
     for (const coverage of history.coverage.buckets) bucket(coverage.end * 1_000);
+    for (const usage of history.token_usage) {
+      bucket(usage.end * 1_000).tokens.set(history.session_id, {
+        sampledAt: usage.sampled_at * 1_000,
+        inputTokens: usage.input_tokens,
+        outputTokens: usage.output_tokens,
+      });
+    }
     for (const series of history.series) {
       const startedAt = series.started_at.seconds + series.started_at.nanoseconds / 1_000_000_000;
       const targetID = `${history.session_id}:${series.allocation_id}:${series.started_at.seconds}:${series.started_at.nanoseconds}`;
@@ -136,7 +144,7 @@ export function runtimeDurableTrendSamples(
     }
   }
 
-  return [...buckets.values()].sort((left, right) => left.sampledAt - right.sampledAt).map((value) => {
+  const samples = [...buckets.values()].sort((left, right) => left.sampledAt - right.sampledAt).map((value) => {
     const completeMemory = sessions.length > 0 && value.memory.size === sessions.length;
     return {
       sampledAt: value.sampledAt,
@@ -148,11 +156,14 @@ export function runtimeDurableTrendSamples(
       memoryLimitBytes: completeMemory
         ? [...value.memory.values()].reduce((total, current) => total + current.limit, 0)
         : null,
-      tokenTotals: [],
+      tokenTotals: value.tokens.size === sessions.length
+        ? [...value.tokens.entries()].map(([sessionId, usage]) => ({ sessionId, ...usage }))
+        : [],
       inputTokensPerMinute: null,
       outputTokensPerMinute: null,
     };
   });
+  return deriveTokenThroughput(samples);
 }
 
 export async function loadRuntimeDurableSnapshot(

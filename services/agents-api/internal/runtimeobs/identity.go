@@ -28,4 +28,14 @@ type Target struct {
 	TenantID, SessionID, EnvironmentID string
 	Mode                               Mode
 	Instance                           Instance
+	// TokenUsage is the latest canonical Core Session Usage snapshot. It is
+	// Session-scoped and deliberately independent of the provider Runtime.
+	TokenUsage *TokenUsage
+}
+
+// TokenUsage contains cumulative measured Session counters. Missing native
+// measurements remain nil at the Target level and are never treated as zero.
+type TokenUsage struct {
+	InputTokens  uint64
+	OutputTokens uint64
 }

@@ -30,8 +30,11 @@ or lifecycle decisions.
    exporter creates the generic metric tables. Keep the OTLP receiver private or
    authenticate it at the network/proxy boundary.
 2. After `metrics_gauge` and `metrics_sum` exist, apply
-   [`001_runtime_history.sql`](001_runtime_history.sql) to the same database.
-   The materialized views retain only the five values needed by the history API;
+   [`001_runtime_history.sql`](001_runtime_history.sql), then
+   [`002_session_token_usage.sql`](002_session_token_usage.sql), to the same
+   database.
+   The materialized views retain only the five Runtime values and two canonical
+   Session token counters needed by the history API;
    provider receipts, native container identities, paths, and raw errors never
    enter the projection.
    Grant the Collector identity the minimum source-column reads required when

@@ -37,7 +37,7 @@ The route accepts no query parameters. An unconfigured Core returns:
 
 `available=true` requires `collection_mode=periodic`, a qualified positive sample
 interval, a validated Reader, retention and query bounds, and at least one of
-`cpu` or `memory`. A Reader backed only by request-triggered samples returns
+`cpu`, `memory`, or `tokens`. A Reader backed only by request-triggered samples returns
 `reason=periodic_collection_required`; Web must not call that data Durable.
 Malformed capability configuration fails closed as unconfigured. Backend names,
 URLs, credentials, table names, and tenant data are never capability fields.
@@ -78,7 +78,8 @@ query inputs.
     "expected_sample_count": 120,
     "buckets": []
   },
-  "series": []
+  "series": [],
+  "token_usage": []
 }
 ```
 
@@ -107,9 +108,14 @@ successive counter intervals are assigned to the bucket containing their right
 endpoint and combined by CPU-capacity time. Memory values are the last observed
 values in a bucket. Every point contains
 observation and contributor counts. Missing values are null and gaps remain gaps.
-Numeric zero is retained as an observed value. The endpoint does not return token
-history: token throughput remains sourced from canonical Session Usage and is
-Live-only until a separate durable usage contract exists.
+Numeric zero is retained as an observed value.
+
+`token_usage` is Session-scoped rather than allocation-scoped. Each point is the
+last cumulative canonical Session Usage snapshot sampled in that bucket and
+contains `input_tokens`, `output_tokens`, and `sampled_at`. Web derives throughput
+only from adjacent nondecreasing cumulative points. A missing measurement or a
+counter regression produces a gap; it is never filled with zero. These counters
+are measured model usage, not price, cost, or billing records.
 
 Core Web queries each current managed Session through this boundary with bounded
 concurrency and an all-or-nothing target budget. It offers 1h, 6h, and 24h History
@@ -150,7 +156,7 @@ interface AgentCore {
 
 The client validates exact fields, capability consistency, requested-range echo,
 Session identity, half-open bucket ordering, coverage totals, incarnation identity,
-contributor counts, nullability, finite numbers, and response size. Unknown fields
+contributor counts, token usage ordering, nullability, finite numbers, and response size. Unknown fields
 or malformed data reject the entire response with a 502 client projection error.
 
 ## Explicit boundaries

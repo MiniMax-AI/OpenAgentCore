@@ -10,18 +10,29 @@ type RuntimeHistoryCapabilities struct {
 	MinimumStepSeconds    *int64   `json:"minimum_step_seconds" extensions:"x-nullable" binding:"required" minimum:"1" maximum:"9007199254740991"`
 	MaximumRangeSeconds   *int64   `json:"maximum_range_seconds" extensions:"x-nullable" binding:"required" minimum:"1" maximum:"9007199254740991"`
 	MaximumPoints         *int     `json:"maximum_points" extensions:"x-nullable" binding:"required" minimum:"2" maximum:"10000"`
-	Metrics               []string `json:"metrics" binding:"required" validate:"max=2" enums:"cpu,memory"`
+	Metrics               []string `json:"metrics" binding:"required" validate:"max=3" enums:"cpu,memory,tokens"`
 }
 
 type RuntimeHistory struct {
-	Object            string                 `json:"object" enums:"agent.runtime_history" binding:"required"`
-	Source            string                 `json:"source" enums:"durable" binding:"required"`
-	SessionID         string                 `json:"session_id" binding:"required" format:"uuid"`
-	RequestedRange    RuntimeHistoryRange    `json:"requested_range" binding:"required"`
-	ResolutionSeconds int64                  `json:"resolution_seconds" binding:"required" minimum:"1" maximum:"9007199254740991"`
-	GeneratedAt       int64                  `json:"generated_at" binding:"required" minimum:"0" maximum:"9007199254740991"`
-	Coverage          RuntimeHistoryCoverage `json:"coverage" binding:"required"`
-	Series            []RuntimeHistorySeries `json:"series" binding:"required" validate:"max=1000"`
+	Object            string                          `json:"object" enums:"agent.runtime_history" binding:"required"`
+	Source            string                          `json:"source" enums:"durable" binding:"required"`
+	SessionID         string                          `json:"session_id" binding:"required" format:"uuid"`
+	RequestedRange    RuntimeHistoryRange             `json:"requested_range" binding:"required"`
+	ResolutionSeconds int64                           `json:"resolution_seconds" binding:"required" minimum:"1" maximum:"9007199254740991"`
+	GeneratedAt       int64                           `json:"generated_at" binding:"required" minimum:"0" maximum:"9007199254740991"`
+	Coverage          RuntimeHistoryCoverage          `json:"coverage" binding:"required"`
+	Series            []RuntimeHistorySeries          `json:"series" binding:"required" validate:"max=1000"`
+	TokenUsage        []RuntimeHistoryTokenUsagePoint `json:"token_usage" binding:"required" validate:"max=10000"`
+}
+
+// RuntimeHistoryTokenUsagePoint is the final cumulative canonical Session
+// Usage snapshot observed in one server-selected bucket.
+type RuntimeHistoryTokenUsagePoint struct {
+	Start        int64  `json:"start" binding:"required" minimum:"0" maximum:"9007199254740991"`
+	End          int64  `json:"end" binding:"required" minimum:"1" maximum:"9007199254740991"`
+	SampledAt    int64  `json:"sampled_at" binding:"required" minimum:"0" maximum:"9007199254740991"`
+	InputTokens  uint64 `json:"input_tokens" binding:"required" minimum:"0" maximum:"9007199254740991"`
+	OutputTokens uint64 `json:"output_tokens" binding:"required" minimum:"0" maximum:"9007199254740991"`
 }
 
 type RuntimeHistoryRange struct {

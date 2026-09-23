@@ -36,7 +36,7 @@ function capabilities(overrides: Record<string, unknown> = {}): Record<string, u
     minimum_step_seconds: 30,
     maximum_range_seconds: 86400,
     maximum_points: 1000,
-    metrics: ["cpu", "memory"],
+    metrics: ["cpu", "memory", "tokens"],
     ...overrides,
   };
 }
@@ -86,6 +86,10 @@ function history(overrides: Record<string, unknown> = {}): Record<string, unknow
         memory: { contributor_count: 1, usage_bytes: 0, limit_bytes: 2048 },
       }, { ...second, cpu: null, memory: null }],
     }],
+    token_usage: [
+      { start: 1000, end: 1060, sampled_at: 1010, input_tokens: 100, output_tokens: 20 },
+      { start: 1060, end: 1120, sampled_at: 1070, input_tokens: 160, output_tokens: 50 },
+    ],
     ...overrides,
   };
 }
@@ -122,6 +126,7 @@ describe("Runtime history client", () => {
       { seconds: 900, nanoseconds: 1 },
     ]);
     expect(value.coverage.sample_count).toBe(2);
+    expect(value.token_usage[1]).toMatchObject({ input_tokens: 160, output_tokens: 50 });
   });
 
   it("rejects invalid requests before fetch", async () => {
@@ -211,6 +216,17 @@ describe("Runtime history client", () => {
       coverage.sample_count = 1;
       coverage.buckets = [coverage.buckets[1]!];
     }],
+    ["token sample predates retention", (value: Record<string, unknown>) => {
+      const coverage = value.coverage as { retained_start: number; first_sample_at: number; last_sample_at: number; sample_count: number; buckets: Array<Record<string, unknown>> };
+      coverage.retained_start = 1020;
+      coverage.first_sample_at = 1070;
+      coverage.last_sample_at = 1070;
+      coverage.sample_count = 1;
+      coverage.buckets = [coverage.buckets[1]!];
+      const series = (value.series as Array<{ points: Array<Record<string, unknown>> }>)[0]!;
+      series.points = series.points.slice(1);
+      (value.token_usage as Array<Record<string, unknown>>)[0]!.sampled_at = 1010;
+    }],
     ["overlapping buckets", (value: Record<string, unknown>) => {
       const buckets = (value.coverage as { buckets: Array<Record<string, unknown>> }).buckets;
       buckets[1]!.start = 1050;
@@ -233,6 +249,15 @@ describe("Runtime history client", () => {
       foreign.environment_id = "44444444-4444-4444-8444-444444444444";
       foreign.allocation_id = "55555555-5555-4555-8555-555555555555";
       series.push(foreign);
+    }],
+    ["unsafe token usage", (value: Record<string, unknown>) => {
+      (value.token_usage as Array<Record<string, unknown>>)[0]!.input_tokens = Number.MAX_SAFE_INTEGER + 1;
+    }],
+    ["token sample outside bucket", (value: Record<string, unknown>) => {
+      (value.token_usage as Array<Record<string, unknown>>)[0]!.sampled_at = 1060;
+    }],
+    ["overlapping token buckets", (value: Record<string, unknown>) => {
+      (value.token_usage as Array<Record<string, unknown>>)[1]!.start = 1050;
     }],
   ] as const) {
     it(`rejects ${name} in history`, async () => {

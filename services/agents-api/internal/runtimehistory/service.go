@@ -83,6 +83,7 @@ func (s *Service) QuerySession(ctx context.Context, tenantID, sessionID string, 
 		RetainedFrom: cloneTime(result.RetainedFrom),
 		Coverage:     append([]CoveragePoint(nil), result.Coverage...),
 		Series:       cloneSeries(result.Series),
+		TokenUsage:   append([]TokenUsagePoint(nil), result.TokenUsage...),
 	}, nil
 }
 

@@ -47,7 +47,7 @@ func capabilities() Capabilities {
 		MaximumPoints:      1_000,
 		MaximumSeries:      64,
 		MaximumTotalPoints: 10_000,
-		Metrics:            []Metric{MetricCPU, MetricMemory},
+		Metrics:            []Metric{MetricCPU, MetricMemory, MetricTokens},
 	}
 }
 
@@ -59,7 +59,9 @@ func TestServiceAuthorizesAndBoundsBackendQuery(t *testing.T) {
 	memory, limit := uint64(1024), uint64(2048)
 	scope := Scope{TenantID: tenantID, SessionID: sessionID, EnvironmentID: environmentID}
 	reader := &fakeReader{capabilities: capabilities()}
-	reader.result = Result{GeneratedAt: now, RetainedFrom: &start, Series: []Series{{
+	reader.result = Result{GeneratedAt: now, RetainedFrom: &start, TokenUsage: []TokenUsagePoint{{
+		Start: start, End: start.Add(30 * time.Second), SampledAt: start.Add(20 * time.Second), InputTokens: 120, OutputTokens: 30,
+	}}, Series: []Series{{
 		Scope: scope, AllocationID: allocationID, StartedAt: startedAt, ProviderType: "docker",
 		Points: []Point{{
 			Start: start, End: start.Add(30 * time.Second), FirstObservedAt: start.Add(time.Second), LastObservedAt: start.Add(20 * time.Second),
@@ -82,6 +84,10 @@ func TestServiceAuthorizesAndBoundsBackendQuery(t *testing.T) {
 	ratio = .9
 	if response.Series[0].Points[0].CPUUtilizationRatio == nil || *response.Series[0].Points[0].CPUUtilizationRatio != .25 {
 		t.Fatal("response aliases backend-owned metric memory")
+	}
+	reader.result.TokenUsage[0].InputTokens = 999
+	if response.TokenUsage[0].InputTokens != 120 {
+		t.Fatal("response aliases backend-owned token usage memory")
 	}
 }
 
@@ -243,6 +249,16 @@ func TestServiceRejectsMalformedBackendResults(t *testing.T) {
 			point.ObservationCount, point.ObservedCount = 1, 1
 			point.FirstObservedAt, point.LastObservedAt = point.Start, point.Start.Add(time.Second)
 			result.GeneratedAt = point.Start
+		},
+		"token sample outside bucket": func(result *Result) {
+			result.TokenUsage = []TokenUsagePoint{{
+				Start: start, End: start.Add(time.Minute), SampledAt: start.Add(time.Minute), InputTokens: 1, OutputTokens: 1,
+			}}
+		},
+		"unsafe token count": func(result *Result) {
+			result.TokenUsage = []TokenUsagePoint{{
+				Start: start, End: start.Add(time.Minute), SampledAt: start, InputTokens: maxSafeInteger + 1,
+			}}
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

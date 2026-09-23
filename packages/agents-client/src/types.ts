@@ -831,7 +831,7 @@ export interface RuntimeObservationList extends ListPage<RuntimeObservation> {
 
 export type RuntimeHistoryCollectionMode = "on_read" | "periodic";
 export type RuntimeHistoryCapabilityReason = "not_configured" | "periodic_collection_required";
-export type RuntimeHistoryMetric = "cpu" | "memory";
+export type RuntimeHistoryMetric = "cpu" | "memory" | "tokens";
 
 export interface RuntimeHistoryCapabilities {
   object: "agent.runtime_history_capabilities";
@@ -910,6 +910,14 @@ export interface RuntimeHistoryCoverage {
   buckets: RuntimeHistoryCoveragePoint[];
 }
 
+export interface RuntimeHistoryTokenUsagePoint {
+  start: number;
+  end: number;
+  sampled_at: number;
+  input_tokens: number;
+  output_tokens: number;
+}
+
 export interface RuntimeHistory {
   object: "agent.runtime_history";
   source: "durable";
@@ -919,6 +927,7 @@ export interface RuntimeHistory {
   generated_at: number;
   coverage: RuntimeHistoryCoverage;
   series: RuntimeHistorySeries[];
+  token_usage: RuntimeHistoryTokenUsagePoint[];
 }
 
 export interface AgentCore {

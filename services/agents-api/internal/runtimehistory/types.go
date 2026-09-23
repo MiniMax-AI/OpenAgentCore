@@ -22,6 +22,7 @@ type Metric string
 const (
 	MetricCPU    Metric = "cpu"
 	MetricMemory Metric = "memory"
+	MetricTokens Metric = "tokens"
 )
 
 var providerTypePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
@@ -95,12 +96,12 @@ func (c Capabilities) Validate() error {
 	if c.MaximumSeries < 1 || c.MaximumSeries > 1_000 || c.MaximumTotalPoints < c.MaximumPoints || c.MaximumTotalPoints > 100_000 {
 		return errors.New("invalid Runtime history result limits")
 	}
-	if len(c.Metrics) == 0 || len(c.Metrics) > 2 {
+	if len(c.Metrics) == 0 || len(c.Metrics) > 3 {
 		return errors.New("invalid Runtime history metrics")
 	}
 	seen := map[Metric]bool{}
 	for _, metric := range c.Metrics {
-		if metric != MetricCPU && metric != MetricMemory || seen[metric] {
+		if metric != MetricCPU && metric != MetricMemory && metric != MetricTokens || seen[metric] {
 			return errors.New("invalid Runtime history metrics")
 		}
 		seen[metric] = true
@@ -143,6 +144,15 @@ type Result struct {
 	RetainedFrom *time.Time
 	Coverage     []CoveragePoint
 	Series       []Series
+	TokenUsage   []TokenUsagePoint
+}
+
+// TokenUsagePoint is the final cumulative canonical Session Usage snapshot in
+// one bucket. Throughput is derived from ordered adjacent points by clients.
+type TokenUsagePoint struct {
+	Start, End                time.Time
+	SampledAt                 time.Time
+	InputTokens, OutputTokens uint64
 }
 
 type CoveragePoint struct {
@@ -183,6 +193,7 @@ type Response struct {
 	RetainedFrom *time.Time
 	Coverage     []CoveragePoint
 	Series       []Series
+	TokenUsage   []TokenUsagePoint
 }
 
 func (r Response) Validate(now time.Time) error {
@@ -200,7 +211,7 @@ func (r Response) Validate(now time.Time) error {
 		Scope: r.Scope, Start: r.Requested.Start, End: r.Requested.End, Step: r.Resolution, Retention: r.Retention, MaxPoints: r.Requested.MaxPoints,
 		MaximumSeries: r.MaximumSeries, MaximumTotalPoints: r.MaximumTotalPoints,
 	}
-	if err := validateResult(query, Result{GeneratedAt: r.GeneratedAt, RetainedFrom: r.RetainedFrom, Coverage: r.Coverage, Series: r.Series}, now); err != nil {
+	if err := validateResult(query, Result{GeneratedAt: r.GeneratedAt, RetainedFrom: r.RetainedFrom, Coverage: r.Coverage, Series: r.Series, TokenUsage: r.TokenUsage}, now); err != nil {
 		return ErrInvalidResult
 	}
 	return nil
@@ -278,6 +289,23 @@ func validateResult(query Query, result Result, now time.Time) error {
 			if pointIndex > 0 && series.Points[pointIndex-1].End.After(point.Start) {
 				return errors.New("Runtime history points overlap or are out of order")
 			}
+		}
+	}
+	if len(result.TokenUsage) > query.MaxPoints {
+		return errors.New("Runtime history result exceeds token point limit")
+	}
+	totalPoints += len(result.TokenUsage)
+	if totalPoints > query.MaximumTotalPoints {
+		return errors.New("Runtime history result exceeds point limit")
+	}
+	for index, point := range result.TokenUsage {
+		if !validPublicBoundary(point.Start) || !validPublicBoundary(point.End) || point.Start.Before(query.Start) || !point.End.After(point.Start) || point.End.After(query.End) || point.End.Sub(point.Start) > query.Step ||
+			!validPublicTime(point.SampledAt) || point.SampledAt.Before(point.Start) || !point.SampledAt.Before(point.End) || point.SampledAt.After(result.GeneratedAt) || point.SampledAt.Before(retainedStart) ||
+			point.InputTokens > maxSafeInteger || point.OutputTokens > maxSafeInteger {
+			return errors.New("invalid Runtime history token usage point")
+		}
+		if index > 0 && result.TokenUsage[index-1].End.After(point.Start) {
+			return errors.New("Runtime history token usage points overlap or are out of order")
 		}
 	}
 	return nil

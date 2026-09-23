@@ -31,6 +31,7 @@ type ExportRecord struct {
 	ResolvedAt     time.Time
 	SourceDuration time.Duration
 	Sample         *Sample
+	TokenUsage     *TokenUsage
 }
 
 // Exporter persists or forwards sanitized Runtime observation records. Core
@@ -166,7 +167,16 @@ func exportRecord(observation Observation, collectionSource CollectionSource) Ex
 		ResolvedAt:       observation.ResolvedAt,
 		SourceDuration:   observation.SourceDuration,
 		Sample:           cloneSample(observation.Sample),
+		TokenUsage:       cloneTokenUsage(observation.Target.TokenUsage),
 	}
+}
+
+func cloneTokenUsage(usage *TokenUsage) *TokenUsage {
+	if usage == nil {
+		return nil
+	}
+	cloned := *usage
+	return &cloned
 }
 
 func cloneSample(sample *Sample) *Sample {

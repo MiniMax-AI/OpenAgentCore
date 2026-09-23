@@ -8,6 +8,7 @@ import type {
   RuntimeHistoryPoint,
   RuntimeHistoryQuery,
   RuntimeHistorySeries,
+  RuntimeHistoryTokenUsagePoint,
 } from "./types";
 
 type InvalidRuntimeHistory = (message?: string) => never;
@@ -17,7 +18,7 @@ const capabilityFields = new Set([
   "retention_seconds", "minimum_step_seconds", "maximum_range_seconds", "maximum_points", "metrics",
 ]);
 const historyFields = new Set([
-  "object", "source", "session_id", "requested_range", "resolution_seconds", "generated_at", "coverage", "series",
+  "object", "source", "session_id", "requested_range", "resolution_seconds", "generated_at", "coverage", "series", "token_usage",
 ]);
 const rangeFields = new Set(["start", "end"]);
 const coverageFields = new Set([
@@ -31,8 +32,9 @@ const timeFields = new Set(["seconds", "nanoseconds"]);
 const pointFields = new Set([...coveragePointFields, "cpu", "memory"]);
 const cpuFields = new Set(["contributor_count", "utilization_ratio", "capacity_cores"]);
 const memoryFields = new Set(["contributor_count", "usage_bytes", "limit_bytes"]);
+const tokenUsageFields = new Set(["start", "end", "sampled_at", "input_tokens", "output_tokens"]);
 const providerTypePattern = /^[a-z][a-z0-9_]{0,31}$/;
-const metrics = new Set(["cpu", "memory"]);
+const metrics = new Set(["cpu", "memory", "tokens"]);
 const reasons = new Set(["not_configured", "periodic_collection_required"]);
 const maximumSeries = 1_000;
 const maximumTotalPoints = 100_000;
@@ -185,8 +187,32 @@ function projectPoint(
   return { ...coverage, cpu, memory };
 }
 
-function ordered(points: readonly RuntimeHistoryCoveragePoint[]): boolean {
+function ordered(points: readonly { start: number; end: number }[]): boolean {
   return points.every((point, index) => index === 0 || points[index - 1]!.end <= point.start);
+}
+
+function projectTokenUsagePoint(
+  value: unknown,
+  requestedStart: number,
+  requestedEnd: number,
+  resolution: number,
+  generatedAt: number,
+  invalid: InvalidRuntimeHistory,
+): RuntimeHistoryTokenUsagePoint {
+  if (
+    !isRecord(value) || !exactFields(value, tokenUsageFields) ||
+    !isNonnegativeInteger(value.start) || !positiveInteger(value.end) ||
+    value.start < requestedStart || value.end <= value.start || value.end > requestedEnd || value.end - value.start > resolution ||
+    !isNonnegativeInteger(value.sampled_at) || value.sampled_at < value.start || value.sampled_at >= value.end || value.sampled_at > generatedAt ||
+    !isNonnegativeInteger(value.input_tokens) || !isNonnegativeInteger(value.output_tokens)
+  ) return invalid();
+  return {
+    start: value.start,
+    end: value.end,
+    sampled_at: value.sampled_at,
+    input_tokens: value.input_tokens,
+    output_tokens: value.output_tokens,
+  };
 }
 
 function projectSeries(
@@ -236,7 +262,7 @@ export function projectRuntimeHistory(
     value.requested_range.start !== requested.start || value.requested_range.end !== requested.end ||
     !positiveInteger(value.resolution_seconds) || !isNonnegativeInteger(value.generated_at) ||
     !isRecord(value.coverage) || !exactFields(value.coverage, coverageFields) || !Array.isArray(value.coverage.buckets) ||
-    !Array.isArray(value.series)
+    !Array.isArray(value.series) || !Array.isArray(value.token_usage)
   ) return invalid();
   const sessionId = canonicalUuid(value.session_id);
   if (sessionId === null) return invalid();
@@ -271,10 +297,15 @@ export function projectRuntimeHistory(
   const series = value.series.map((entry) => projectSeries(
     entry, requested.start, requested.end, value.resolution_seconds as number, generatedAt, maximumPoints, invalid,
   ));
+  const tokenUsage = value.token_usage.map((entry) => projectTokenUsagePoint(
+    entry, requested.start, requested.end, value.resolution_seconds as number, generatedAt, invalid,
+  ));
   if (
     new Set(series.map((entry) => entry.environment_id)).size > 1 ||
     new Set(series.map((entry) => `${entry.allocation_id}\u0000${entry.started_at.seconds}\u0000${entry.started_at.nanoseconds}`)).size !== series.length ||
-    buckets.length + series.reduce((sum, entry) => sum + entry.points.length, 0) > maximumTotalPoints ||
+    tokenUsage.length > maximumPoints || !ordered(tokenUsage) ||
+    buckets.length + tokenUsage.length + series.reduce((sum, entry) => sum + entry.points.length, 0) > maximumTotalPoints ||
+    tokenUsage.some((point) => point.sampled_at < retainedStart) ||
     series.some((entry) => entry.points.some((point) => point.first_observed_at !== null && point.first_observed_at < retainedStart)) ||
     series.some((entry) => entry.points.some((point) => point.last_observed_at !== null && point.last_observed_at > generatedAt))
   ) return invalid();
@@ -294,5 +325,6 @@ export function projectRuntimeHistory(
       buckets,
     },
     series,
+    token_usage: tokenUsage,
   };
 }
