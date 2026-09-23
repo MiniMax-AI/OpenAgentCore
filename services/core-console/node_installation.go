@@ -112,7 +112,7 @@ func nodeTransportRequest(r *http.Request) bool {
 	switch r.URL.Path {
 	case "/core/v1/sandbox/enroll", "/api/v1/agent-daemon/enroll", "/api/v1/agent-daemon/bootstrap":
 		return r.Method == http.MethodPost && r.Header.Get("Upgrade") == ""
-	case "/core/v1/sandbox/node/identity", "/api/v1/agent-daemon/device-status":
+	case "/core/v1/sandbox/node/identity", "/api/v1/agent-daemon/device-status", "/api/v1/agent-daemon/connection":
 		return r.Method == http.MethodGet && r.Header.Get("Upgrade") == ""
 	case "/core/v1/sandbox/node/connect", "/api/v1/agent-daemon/ws":
 		return r.Method == http.MethodGet && strings.EqualFold(r.Header.Get("Upgrade"), "websocket")

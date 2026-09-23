@@ -255,6 +255,7 @@ func run() error {
 		mux := http.NewServeMux()
 		mux.Handle("/api/v1/agent-daemon/", daemonHandler)
 		mux.Handle("/api/v1/agent-daemon/enroll", runtimeenrollment.EnrollmentHandler(executionStore))
+		mux.Handle("/api/v1/agent-daemon/connection", runtimeenrollment.ConnectionHandler(executionStore, registry))
 
 		if managedNodes != nil {
 			mux.Handle("/core/v1/sandbox/node/connect", managedNodes.hub)

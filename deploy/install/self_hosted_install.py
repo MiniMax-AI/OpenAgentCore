@@ -3,6 +3,7 @@
 import argparse
 import fcntl
 import getpass
+import http.client
 import json
 import os
 from pathlib import Path
@@ -11,7 +12,10 @@ import re
 import stat
 import subprocess
 import sys
-from urllib.parse import urlsplit
+import time
+import urllib.error
+import urllib.request
+from urllib.parse import urlencode, urlsplit
 import uuid
 
 from distribution import DistributionError, load_manifest, obtain_artifact, runtime_archive
@@ -104,6 +108,59 @@ def preflight():
             'Docker access through /var/run/docker.sock is required')
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, message, headers, url):
+        raise InstallError('Core connection redirects are not supported; check the returned remote_url')
+
+
+def open_connection(request, timeout):
+    return urllib.request.build_opener(NoRedirect()).open(request, timeout=timeout)
+
+
+def wait_connected(remote, environment, key, container, timeout=60):
+    # Only the validated daemon origin receives the restricted credential.
+    identity(environment, remote)
+    address = urlsplit(remote)
+    endpoint = 'https://' + address.netloc + '/api/v1/agent-daemon/connection?'
+    request = urllib.request.Request(endpoint + urlencode({'environment_id': environment}),
+                                     headers={'Authorization': 'Bearer ' + key['executor_token']})
+    guidance = (' Inspect with: docker --host unix:///var/run/docker.sock logs --tail 100 ' + container
+                + '. Check the Runtime network, TLS and executor credential, then rerun the same installation command.'
+                + ' Keep the existing container, volumes and installation state; do not replace history.')
+    deadline = time.monotonic() + timeout
+    detail = 'Core has not confirmed this Environment connection'
+    while time.monotonic() < deadline:
+        try:
+            with open_connection(request, min(10, max(0.1, deadline - time.monotonic()))) as response:
+                raw = response.read(4097)
+            if len(raw) > 4096:
+                raise ValueError()
+            result = json.loads(raw)
+            if (not isinstance(result, dict) or set(result) != {'environment_id', 'status'}
+                    or result['environment_id'] != environment
+                    or result['status'] not in ('connected', 'disconnected')):
+                raise ValueError()
+            if result['status'] == 'connected':
+                print('Runtime connected to Environment ' + environment + ': ' + container)
+                return
+            detail = 'Core reports this Environment disconnected'
+        except urllib.error.HTTPError as error:
+            if error.code not in (408, 429, 500, 502, 503, 504):
+                raise InstallError('Core connection check rejected (HTTP ' + str(error.code)
+                                   + '); verify the exact Environment and active executor key.' + guidance) from None
+            detail = 'Core connection check unavailable (HTTP ' + str(error.code) + ')'
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead):
+            detail = 'Cannot reach the Core connection endpoint; check DNS, TLS and network access'
+        except (ValueError, TypeError, UnicodeError):
+            raise InstallError('Core returned an invalid connection response.' + guidance) from None
+        except InstallError as error:
+            raise InstallError(str(error) + guidance) from None
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            time.sleep(min(2, remaining))
+    raise InstallError('Runtime connection timed out: ' + detail + '.' + guidance)
+
+
 def inspect_prior_launch(root, state):
     docker = 'docker --host unix:///var/run/docker.sock'
     filters = (' --filter label=io.parsar.agents-api.installation=' + state['installation_id']
@@ -132,11 +189,10 @@ def inspect_prior_launch(root, state):
         raise InstallError('The retained container does not match this installation and Environment.' + guidance)
     if status == 'running':
         print('Runtime already running: ' + name)
-        print('Read the Session to confirm connection; a running container does not establish it.')
-        return
+        return name
     if status == 'exited':
         raise InstallError('The existing Runtime is stopped. Preserve its history and resume that same container with: '
-                           + docker + ' start ' + name + '. Then read the Session to confirm connection.')
+                           + docker + ' start ' + name + '. Then rerun the same installation command to confirm connection.')
     raise InstallError('The retained Runtime requires inspection before continuing.' + guidance)
 
 
@@ -160,7 +216,11 @@ def install(args, root):
         state = dict(target, installation_id=str(uuid.uuid4()))
         write_private(state_file, state)
     if (root / 'launch.json').exists() or (root / 'launch.json').is_symlink():
-        inspect_prior_launch(root, state)
+        name = inspect_prior_launch(root, state)
+        key = credential(private_read(root / 'executor-key.json'), args.environment_id)
+        if args.credential_file and credential(private_read(Path(args.credential_file)), args.environment_id) != key:
+            raise InstallError('Stored executor credential differs; inspect the existing installation')
+        wait_connected(args.remote, args.environment_id, key, name)
         return
     key_file = root / 'executor-key.json'
     if key_file.exists():
@@ -200,7 +260,8 @@ def install(args, root):
         raise InstallError('Runtime launcher returned an invalid result; inspect the retained container')
     write_private(root / 'started.json', result)
     print('Runtime started: ' + result['container'])
-    print('Read the Session to confirm connection. Stop this user-owned Runtime with: docker stop ' + result['container'])
+    wait_connected(args.remote, args.environment_id, key, result['container'])
+    print('Stop this user-owned Runtime with: docker --host unix:///var/run/docker.sock stop ' + result['container'])
 
 
 def main():

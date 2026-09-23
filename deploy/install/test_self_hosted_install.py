@@ -14,7 +14,9 @@ import self_hosted_install as installer
 
 class SelfHostedInstallTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory()
+        base = Path.home() / '.parsar/tests/selfhost-install'
+        base.mkdir(parents=True, exist_ok=True)
+        self.temporary = tempfile.TemporaryDirectory(dir=base)
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve()
         self.environment = str(uuid.uuid4())
@@ -25,6 +27,8 @@ class SelfHostedInstallTests(unittest.TestCase):
         installer.write_private(self.source_key, self.key)
         self.args = argparse.Namespace(source_url='https://core.example', offline_root=None,
             environment_id=self.environment, remote=self.remote, credential_file=str(self.source_key))
+        self.wait = patch.object(installer, 'wait_connected').start()
+        self.addCleanup(patch.stopall)
         self.manifest = {'source_commit': 'a' * 40, 'platform': 'linux/amd64',
                          'images': {'runtime': 'sha256:' + 'b' * 64}}
 
@@ -70,6 +74,32 @@ class SelfHostedInstallTests(unittest.TestCase):
             with self.assertRaises(installer.InstallError): installer.install(self.args, self.root)
             self.assertEqual(len(commands), 3)
 
+    def test_connection_failure_retry_preserves_same_container_and_credential(self):
+        commands = []
+        name = 'parsar-selfhost-'+'c'*32
+        def checked(command, message, timeout=30):
+            commands.append(command)
+            if 'container' in command:
+                state = json.loads(installer.private_read(self.root/'installation.json'))
+                labels = {'io.parsar.agents-api.installation': state['installation_id'],
+                          'io.parsar.agents-api.environment': self.environment,
+                          'io.parsar.agents-api.user-owned': 'true'}
+                return json.dumps(labels)+' running'
+            if 'inspect' in command: return self.manifest['images']['runtime'] + ' linux/amd64'
+            return json.dumps({'container': name, 'status': 'started'})
+        self.wait.side_effect = [installer.InstallError('connection timed out'), None]
+        with patch.object(installer, 'load_manifest', return_value=self.manifest), \
+                patch.object(installer, 'obtain_artifact', side_effect=lambda m, n, dest, o: dest), \
+                patch.object(installer, 'checked', side_effect=checked), contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(installer.InstallError, 'timed out'):
+                installer.install(self.args, self.root)
+            original = {name: (self.root/name).read_bytes() for name in ('installation.json', 'launch.json', 'started.json', 'executor-key.json')}
+            installer.install(self.args, self.root)
+        self.assertEqual(len([c for c in commands if c[0].endswith('parsar-runtime')]), 1)
+        self.assertEqual(self.wait.call_count, 2)
+        self.wait.assert_called_with(self.remote, self.environment, self.key, name)
+        self.assertEqual(original, {name: (self.root/name).read_bytes() for name in original})
+
     def test_cached_runtime_avoids_archive_download_and_load(self):
         def checked(command, message, timeout=30):
             self.assertNotIn('load', command)
@@ -112,7 +142,7 @@ class SelfHostedInstallTests(unittest.TestCase):
                 contextlib.redirect_stdout(io.StringIO()) as output:
             installer.inspect_prior_launch(self.root, state)
             self.assertIn('already running', output.getvalue())
-            self.assertIn('Read the Session to confirm connection', output.getvalue())
+            self.assertNotIn('connected to Environment', output.getvalue())
         with patch.object(installer, 'checked', return_value=json.dumps(labels)+' exited'):
             with self.assertRaisesRegex(installer.InstallError, 'start '+name):
                 installer.inspect_prior_launch(self.root, state)

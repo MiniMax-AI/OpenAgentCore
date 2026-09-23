@@ -14,6 +14,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtime"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeenrollment"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -48,6 +49,36 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	connection := runtimeenrollment.ConnectionHandler(s, registry)
+	assertConnection := func(target, token, status string, code int) {
+		t.Helper()
+		request := httptest.NewRequest("GET", "/api/v1/agent-daemon/connection?environment_id="+target, nil)
+		request.Header.Set("Authorization", "Bearer "+token)
+		response := httptest.NewRecorder()
+		connection.ServeHTTP(response, request)
+		if response.Code != code || response.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("connection status %d, want %d", response.Code, code)
+		}
+		if code == 200 {
+			var got map[string]string
+			if json.Unmarshal(response.Body.Bytes(), &got) != nil || len(got) != 2 || got["environment_id"] != target || got["status"] != status {
+				t.Fatalf("connection response: %s", response.Body.String())
+			}
+		}
+	}
+	assertConnection(environment.ID, key.Token, "disconnected", 200)
+	assertConnection(uuid.NewString(), key.Token, "", 401)
+	otherKey, err := s.IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertConnection(environment.ID, otherKey.Token, "", 409)
+	foreign := store.FixtureExecutorPrincipal(t, s, uuid.NewString())
+	foreignKey, err := s.IssueExecutorCredential(t.Context(), foreign, uuid.NewString(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertConnection(environment.ID, foreignKey.Token, "", 401)
 	server.Config.Handler = handler
 	server.Start()
 	t.Cleanup(func() { server.Close(); runtime.CloseConnections(registry) })
@@ -101,10 +132,13 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	}
 	first := connect(key.Token)
 	await("connected")
+	assertConnection(environment.ID, key.Token, "connected", 200)
 	rotated, err := s.RotateExecutorCredential(t.Context(), principal, key.KeyID)
 	if err != nil {
 		t.Fatal(err)
 	}
+	assertConnection(environment.ID, key.Token, "", 401)
+	assertConnection(environment.ID, rotated.Token, "disconnected", 200)
 	// No heartbeat is sent: the Worker's authority check must fence the old socket.
 	await("disconnected")
 	_ = first.SetReadDeadline(time.Now().Add(time.Second))
@@ -113,6 +147,7 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	}
 	second := connect(rotated.Token)
 	await("connected")
+	assertConnection(environment.ID, rotated.Token, "connected", 200)
 	stop()
 	stop = nil
 	// A new Core owner clears prior transport evidence, then observes the same
@@ -122,6 +157,7 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	if err = s.RevokeExecutorCredential(t.Context(), principal, key.KeyID); err != nil {
 		t.Fatal(err)
 	}
+	assertConnection(environment.ID, rotated.Token, "", 401)
 	await("disconnected")
 	_ = second.SetReadDeadline(time.Now().Add(time.Second))
 	if _, _, err = second.ReadMessage(); err == nil {

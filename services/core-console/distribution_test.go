@@ -15,7 +15,7 @@ import (
 func TestEnvironmentConnectionCredentialsStayScoped(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		want := "Bearer project-token"
-		if r.URL.Path == "/api/v1/agent-daemon/enroll" {
+		if r.URL.Path == "/api/v1/agent-daemon/enroll" || r.URL.Path == "/api/v1/agent-daemon/connection" {
 			want = "Bearer executor-key"
 		}
 		if r.Header.Get("Authorization") != want {
@@ -46,6 +46,9 @@ func TestEnvironmentConnectionCredentialsStayScoped(t *testing.T) {
 		{"GET", "/core/v1/environments/env/executor-credentials", "", 404},
 		{"POST", "/api/v1/agent-daemon/enroll", "executor-key", 200},
 		{"POST", "/api/v1/agent-daemon/enroll", "", 403},
+		{"GET", "/api/v1/agent-daemon/connection?environment_id=env", "executor-key", 200},
+		{"GET", "/api/v1/agent-daemon/connection?environment_id=env", "", 403},
+		{"POST", "/api/v1/agent-daemon/connection", "executor-key", 403},
 	} {
 		req := consoleRequest(t, server, tc.method, tc.path)
 		if tc.bearer != "" {

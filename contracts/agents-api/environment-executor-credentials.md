@@ -51,8 +51,32 @@ history volumes belong to the operator. Failed or uncertain launches retain
 their volumes and installation receipt for inspection instead of replacing
 history or retrying enrollment. Session deletion does not reclaim these volumes.
 Rerunning the installer inspects a previously started container only after its
-installation and Environment labels match. It reports running separately from
-Session connection, or gives a command to start the same stopped container.
+installation and Environment labels match. Both first launch and rerun wait up
+to 60 seconds for authenticated Core connection confirmation; a running container
+alone does not establish connection. A stopped container receives a command to
+start that same container before rerunning the installer.
 An uncertain launch without a success receipt gives label-filtered container
 and volume inspection commands and never creates a replacement. A cached image
 with the exact distribution digest and platform skips image download and import.
+
+## Private connection confirmation
+
+`GET /api/v1/agent-daemon/connection?environment_id=UUID` uses the existing
+executor bearer, passed unchanged through the console. It is part of the private
+daemon transport, not the public Agents API. It reads existing authorization and
+binding only; it never enrolls a device, starts execution or changes resources.
+The no-store response contains only the requested `environment_id` and `status`
+(`connected` or `disconnected`). Connected requires the existing Environment
+observation, its exact Session/device binding, current executor authority and a
+live gateway socket authenticated with that same credential. A stale observation
+or a socket carrying the former rotated key cannot confirm connection.
+
+Invalid, revoked, foreign or deleted-Session authority returns 401; a different
+key for an already bound Environment returns 409. Responses do not expose the
+actual binding or database diagnostics. The installer derives this HTTPS route
+from the validated returned `remote_url`, rejects redirects, retries transient
+read failures within its deadline and polls at two-second intervals. Permanent
+rejections fail immediately. On timeout or rejection it retains the container,
+volumes, credential and receipts, and prints bounded Docker log inspection and
+same-command retry guidance. This confirms authenticated connectivity, not model
+credentials, harness capabilities or completed execution.
