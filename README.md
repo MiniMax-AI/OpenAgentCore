@@ -1,5 +1,7 @@
 # Parsar Core
 
+![One core. Many agents. Open infrastructure for AI agents.](docs/assets/openagentcore-banner.png)
+
 **Open-source Agents API infrastructure, with your choice of native harness.**
 
 Run Codex, Claude Code and MiniMax Code behind one execution API. Parsar Core
