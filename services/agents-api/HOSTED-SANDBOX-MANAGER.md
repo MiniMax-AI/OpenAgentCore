@@ -157,7 +157,9 @@ There is no per-node drain switch. Online, eligible nodes participate
 automatically. A node with instances, retained snapshots, pending allocations,
 unknown operations or cleanup records cannot be removed. Resolve those resources
 through their normal lifecycle and then retry; the API reports the conflict.
-Offline resources remain owned and visible. The configured embedded local node
+Offline resources remain owned and visible. Explicit removal permanently retires
+the node identity; adding that host again requires a fresh private state directory.
+Ordinary disconnects and host restarts reuse the original identity. The configured embedded local node
 also cannot be removed until its local configuration is disabled through the
 maintenance transition. That transition currently changes the deployment backend
 configuration and requires resources on all nodes to be cleared; it is not a
@@ -184,6 +186,17 @@ corrupt resources remain owned and appear with a sanitized diagnostic. Restore
 the original host/storage or explicitly resolve the affected Session. Preserve
 the identity directory alongside backend storage backups: losing that directory
 is a recovery incident, not permission to register over existing resources.
+
+Each registered node has an independent serial lifecycle worker, including its
+resource scans, pending creation, initialization and direct provisioning. A slow
+or stuck helper on one node does not hold another node's lifecycle gate or scan
+page. Offline workers retain their resource records and resume observation after
+reconnection. Lifecycle concurrency is one operation per node, so its total grows
+with the registered node count; there is no fixed global provider concurrency
+limit. The single Core execution lease and atomic per-node capacity checks remain
+in force. Losing the execution lease stops every worker; an ordinary provider
+failure affects only its node. Shutdown cancels and drains workers and direct
+provisioning before releasing that lease.
 
 Connections use heartbeats and bounded reconnect backoff. Operation timeouts are
 relative budgets measured locally on receipt, so host wall-clock skew cannot

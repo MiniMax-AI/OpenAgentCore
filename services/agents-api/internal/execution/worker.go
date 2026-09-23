@@ -20,7 +20,7 @@ type Worker struct {
 	fileWrites          chan fileWriteRequest
 	stopped             chan struct{}
 	stopOnce            sync.Once
-	runtimes            *runtimeLifecycle
+	runtimes            *runtimeManager
 	enrolledConnections map[string]*runtimeConnection
 }
 
@@ -32,7 +32,7 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher) (*Worker, error) {
 	owned := *dispatcher
 	owned.Store = lease.Store()
 	worker := &Worker{dispatcher: &owned, admission: dispatcher.Store, lease: lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), enrolledConnections: make(map[string]*runtimeConnection)}
-	worker.runtimes, err = newRuntimeLifecycle(owned.Store, owned.Registry, owned.ManagedRuntimes)
+	worker.runtimes, err = newRuntimeManager(owned.Store, owned.Registry, owned.ManagedRuntimes)
 	if err != nil {
 		_ = lease.Close(context.Background())
 		return nil, err
@@ -117,8 +117,7 @@ func (w *Worker) Run(ctx context.Context) error {
 		running.Wait()
 		if w.runtimes != nil {
 			// Drain an external provisioning caller before releasing the writer lease.
-			w.runtimes.gate <- struct{}{}
-			<-w.runtimes.gate
+			w.runtimes.drain()
 		}
 		closeCtx, stop := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stop()

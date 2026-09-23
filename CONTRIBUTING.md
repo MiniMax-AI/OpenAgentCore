@@ -370,7 +370,8 @@ settlement distinct. Advance at most one bounded initialization operation per fu
 maintenance scan. At allocation EOF, begin the next page in the same call rather
 than consume an observation interval on an empty page. Refill at most once, retain
 the 32-allocation per-call bound and the five-second ticker, and never loop on an
-empty store. Use process-local progress and the existing lifecycle gate.
+empty store. For managed nodes these bounds apply independently to each node.
+Use process-local progress and the same node lifecycle gate as direct provisioning.
 
 After a next-Turn input is durably pending, a completed managed allocation in a
 suspension/recovery phase may hint this loop. Initial inputs, cold creation,
@@ -618,6 +619,28 @@ Persist only bounded, sanitized observation codes for offline, missing or
 unconfirmed resources; keep these separate from the lifecycle and do not invent
 a successful running observation after a host restart.
 
+Managed lifecycle state is owned by one serial worker per registered node:
+its gate, allocation and pending cursors, connections, initialization progress and
+wake hints are not shared with other nodes. A thin coordinator discovers nodes
+and owns worker shutdown; it never holds its map mutex during database, provider
+or wait operations. Each worker advances independently, including when another
+node is online but its provider is stuck. Do not add a shared scan barrier or
+global provider pool: lifecycle concurrency is at most one operation per node,
+and grows with the registered node count. This is not a fixed global limit.
+Keep offline workers so retained resources remain observable after reconnect.
+
+Allocation scans filter by the fixed node before their 32-row page limit; pending
+scans join the unreleased committed placement. Each node advances its own cursor,
+including failed observations, and wraps once at EOF. Direct provisioning resolves
+the tenant-scoped existing placement before entering that same node's gate; an
+existing allocation must agree with the placement. Never choose another node.
+Legacy allocations without node identity retain one separate serial lifecycle.
+The coordinator stops accepting work and cancels and drains all node workers and
+direct callers before releasing the sole execution lease. Lease loss is global;
+ordinary provider failures stay within their node. Session locks, deployment
+capacity transactions and revision/one-shot receipts remain authoritative, with
+no external operation holding a database lock.
+
 Commit environment-to-node placement with Session creation and its creation retry
 identity. Automatic selection chooses an eligible node; explicit
 `x_agents_core.sandbox_node_id` fails if unavailable or full. The optional
@@ -686,7 +709,7 @@ harness or keep an agent process alive across Turns solely to meet this feature.
 The acceptance boundary is a next Turn in the same Session with history, files
 and configuration intact, without replaying an earlier request.
 
-The existing Worker lease, Session lock and lifecycle gate own both providers.
+The existing Worker lease, Session lock and per-node lifecycle gates own both providers.
 New Turn claims, file-write intents and capture admission serialize under the
 Session lock. Turn and file-write admission share the same compute-phase check;
 existing receipts remain readable. New pending work cancels capture and wakes

@@ -28,7 +28,7 @@ func (w *Worker) hintRuntimeWake(ctx context.Context, session store.Session) {
 	switch owner.ComputePhase {
 	case "quiescing", "suspending", "suspended", "restoring", "waking":
 		select {
-		case r.wakeHints <- struct{}{}:
+		case r.hints(owner.NodeID) <- struct{}{}:
 		default:
 		}
 	}
