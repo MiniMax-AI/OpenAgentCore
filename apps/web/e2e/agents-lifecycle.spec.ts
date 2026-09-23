@@ -3030,17 +3030,26 @@ test("publishes Dashboard counts only after every top-level Agent and Session pa
     });
   });
 
-  await openSessionsFromHome(page);
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+  await page.goto("/");
   const dashboard = page.locator(".dashboard-page");
+  // The synthetic second Session has no Runtime observation. Let that initial
+  // snapshot finish before navigation, so requests cannot be aborted mid-chain.
+  await expect(dashboard.locator(".dashboard-source-badge").filter({ hasText: "Runtime" })).toContainText("Unavailable");
+  expect(sessionAfters).toEqual([null, "session_snapshot", null, "session_snapshot"]);
+  await page.getByRole("button", { name: "Sessions", exact: true }).click();
+  await expect.poll(() => sessionAfters.length).toBe(6);
+  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
   await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Agents" })).toContainText("3");
   await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Sessions" })).toContainText("2");
   expect(agentAfters).toEqual([null, "agent_b"]);
-  // Session collection loads once for the page and once per Runtime snapshot.
-  // Returning to Dashboard refreshes Runtime immediately instead of waiting 30 seconds.
-  await expect.poll(() => sessionAfters.length).toBe(6);
-  expect(sessionAfters.filter((after) => after === null)).toHaveLength(3);
-  expect(sessionAfters.filter((after) => after === "session_snapshot")).toHaveLength(3);
+  // Session collection loads once; the unavailable Runtime snapshot is retried
+  // on entry to Sessions and again on return to Dashboard. Each reads both pages.
+  await expect.poll(() => sessionAfters).toEqual([
+    null, "session_snapshot",
+    null, "session_snapshot",
+    null, "session_snapshot",
+    null, "session_snapshot",
+  ]);
 });
 
 test("keeps the previous Dashboard result when pagination exceeds the safety limit", async ({ page, request }) => {
