@@ -89,6 +89,8 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 		writeError(w, http.StatusConflict, "environment_input_expired", "The environment input deadline elapsed before admission.")
 	case errors.Is(err, execution.ErrEnvironmentInputCancelled):
 		writeError(w, http.StatusConflict, "environment_input_cancelled", "The environment input was cancelled before admission.")
+	case errors.Is(err, execution.ErrWhitespaceOnlyText):
+		writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", "This Session's harness does not accept a message whose text is only whitespace. Include non-whitespace text or an image, or use a harness that supports whitespace-only text.")
 	case errors.Is(err, execution.ErrExecutionUnavailable):
 		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Execution is not available on this service.")
 	case errors.Is(err, store.ErrNotFound):

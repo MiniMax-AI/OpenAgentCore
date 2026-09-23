@@ -58,6 +58,9 @@ func validateProfileInputs(profile engine.Profile, placement string, inputs []st
 			if err := validateMessageImageProfile(profile, placement, messages); err != nil {
 				return err
 			}
+			if err := validateMessageTextProfile(profile, messages); err != nil {
+				return err
+			}
 			continue
 		}
 		if input.Kind != "tool_result" || profile.ValidateFunctionResult == nil {

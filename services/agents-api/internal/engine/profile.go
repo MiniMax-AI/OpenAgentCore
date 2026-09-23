@@ -22,6 +22,10 @@ type Profile struct {
 	ValidateConfiguration                      func(agent v1.Agent, environment *v1.Environment, hasDaemon bool) error
 	ValidateTools                              func(environment *v1.Environment, hasDaemon bool, functions []proto.FunctionTool, mcp []proto.MCPHTTPServer) error
 	ValidateFunctionResult                     func(placement string, result proto.FunctionResultPayload) error
+	// WhitespaceOnlyText qualifies messages without an image or non-whitespace
+	// text. Unqualified harnesses reject them at admission; Core never trims or
+	// pads model input to fit a harness.
+	WhitespaceOnlyText bool
 }
 
 func (p Profile) Accepts(placement string) bool {

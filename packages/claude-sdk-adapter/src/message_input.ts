@@ -3,6 +3,11 @@ import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 export type InputContent = { type: "input_text"; text: string } | { type: "input_image"; image_url: string };
 export type MessageInput = { content: InputContent[] }[];
 
+// Core admission declares whitespace-only text unqualified for this harness.
+export class EmptyUserMessageError extends Error {
+  constructor() { super("Empty user message."); }
+}
+
 // This is the common Runtime representation; native image blocks stay here.
 export function parseMessageInput(value: unknown): MessageInput {
   if (!Array.isArray(value) || !value.length) throw new Error("Invalid user messages.");
@@ -11,7 +16,7 @@ export function parseMessageInput(value: unknown): MessageInput {
         !Array.isArray(message.content) || !message.content.length) throw new Error("Invalid user message.");
     const content = parseInputContent(message.content);
     const meaningful = content.some(part => part.type === "input_image" || Boolean(part.text.trim()));
-    if (!meaningful) throw new Error("Empty user message.");
+    if (!meaningful) throw new EmptyUserMessageError();
   }
   return value as MessageInput;
 }

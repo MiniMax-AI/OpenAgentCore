@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,7 +9,9 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/api"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
 )
@@ -88,6 +91,93 @@ func TestWhitespaceInputStoredVerbatimPostgres(t *testing.T) {
 	}
 	if after := databaseDigest(t, pool); !mapsEqual(before, after) {
 		t.Error("rejected empty input changed persisted state")
+	}
+}
+
+// W6: harness profiles declare whether whitespace-only text is qualified. Codex
+// and MiniMax Code admit it; Claude SDK rejects it at Session creation and
+// events.create, before any write, reservation or promotion.
+func TestWhitespaceOnlyTextHarnessAdmissionPostgres(t *testing.T) {
+	s, pool := store.NewManagedTestStore(t)
+	token := uuid.NewString()
+	auth, err := api.NewAuthenticator([]api.APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "whitespace-harness", TokenSHA256: device.HashCredential(token), TenantID: uuid.NewString()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Real Worker admission with dispatch paused keeps admitted Turns queued.
+	worker, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		stopped, cancel := context.WithCancel(context.Background())
+		cancel()
+		if err := worker.Run(stopped); err != context.Canceled {
+			t.Error(err)
+		}
+	})
+	serve := func(engine string) pathIDClient {
+		handler, err := api.NewHandler(s, auth, engine, api.WithExecution(worker), api.WithEnvironmentRemoteURL("https://offline-executor.example"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		server := httptest.NewServer(handler)
+		t.Cleanup(server.Close)
+		return pathIDClient{t: t, server: server}
+	}
+	events := func(client pathIDClient, session, body string) (int, string) {
+		return client.do(token, http.MethodPost, "/v1/agents/sessions/"+session+"/events", "application/json", []byte(body))
+	}
+	const cancel = `{"events":[{"type":"agent.session.input.cancel"}]}`
+	const whitespace = `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"   "}]},{"role":"user","content":[{"type":"input_text","text":"\n\t"}]}]}]}`
+
+	for _, engine := range []string{"codex", "mcode"} {
+		client := serve(engine)
+		session := client.created(token, "/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"none"},"input":"   "}`)
+		if status, body := events(client, session, cancel); status != http.StatusAccepted {
+			t.Fatalf("%s cancel: %d %s", engine, status, body)
+		}
+		if status, body := events(client, session, whitespace); status != http.StatusAccepted {
+			t.Fatalf("%s events: %d %s", engine, status, body)
+		}
+		if got := userTexts(t, client, token, session); !reflect.DeepEqual(got, [][]string{{"   "}, {"   "}, {"\n\t"}}) {
+			t.Errorf("%s Items %q", engine, got)
+		}
+	}
+
+	claude := serve("claude_sdk")
+	session := claude.created(token, "/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"none"},"input":"Start."}`)
+	if status, body := events(claude, session, cancel); status != http.StatusAccepted {
+		t.Fatalf("claude cancel: %d %s", status, body)
+	}
+	before := databaseDigest(t, pool)
+	const rejection = `{"error":{"message":"This Session's harness does not accept a message whose text is only whitespace. Include non-whitespace text or an image, or use a harness that supports whitespace-only text.","type":"invalid_request_error","code":"unsupported_or_invalid_configuration","param":null}}` + "\n"
+	for _, body := range []string{
+		`{"agent":{"model":"m"},"environment":{"type":"none"},"input":"   "}`,
+		`{"agent":{"model":"m"},"environment":{"type":"none"},"input":[{"role":"user","content":[{"type":"input_text","text":"\n\t"}]}]}`,
+		`{"agent":{"model":"m"},"environment":{"type":"none"},"input":[{"role":"user","content":[{"type":"input_text","text":"x"}]},{"role":"user","content":[{"type":"input_text","text":""},{"type":"input_text","text":" "}]}]}`,
+		`{"agent":{"model":"m"},"environment":{"type":"none"},"stream":true,"input":"   "}`,
+		// The self-hosted initial reservation is never created.
+		`{"agent":{"model":"m"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"input":"   "}`,
+	} {
+		if status, response := claude.do(token, http.MethodPost, "/v1/agents/sessions", "application/json", []byte(body)); status != http.StatusBadRequest || response != rejection {
+			t.Errorf("claude create %s: %d %s", body, status, response)
+		}
+	}
+	for _, body := range []string{whitespace, `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"x"}]},{"role":"user","content":[{"type":"input_text","text":"\t"}]}]}]}`} {
+		if status, response := events(claude, session, body); status != http.StatusBadRequest || response != rejection {
+			t.Errorf("claude events %s: %d %s", body, status, response)
+		}
+	}
+	if after := databaseDigest(t, pool); !mapsEqual(before, after) {
+		t.Error("rejected whitespace-only text changed persisted state")
+	}
+	// Whitespace beside non-whitespace text in one message remains admitted verbatim.
+	if status, body := events(claude, session, `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"   "},{"type":"input_text","text":"Reply only OK."}]}]}]}`); status != http.StatusAccepted {
+		t.Fatalf("claude mixed events: %d %s", status, body)
+	}
+	if got := userTexts(t, claude, token, session); !reflect.DeepEqual(got, [][]string{{"Start."}, {"   ", "Reply only OK."}}) {
+		t.Errorf("claude Items %q", got)
 	}
 }
 

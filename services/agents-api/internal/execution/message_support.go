@@ -3,12 +3,38 @@ package execution
 import (
 	"errors"
 	"slices"
+	"strings"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/engine"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
+
+// ErrWhitespaceOnlyText is a declared native limitation reported before any
+// write, reservation or promotion.
+var ErrWhitespaceOnlyText = errors.New("whitespace-only message text is not supported by this harness")
+
+// validateMessageTextProfile rejects a message without an image or any
+// non-whitespace text when the harness has not qualified such input.
+func validateMessageTextProfile(profile engine.Profile, input proto.MessageInput) error {
+	if profile.WhitespaceOnlyText {
+		return nil
+	}
+	for _, message := range input {
+		meaningful := false
+		for _, part := range message.Content {
+			if part.Type == "input_image" || (part.Text != nil && strings.TrimSpace(*part.Text) != "") {
+				meaningful = true
+				break
+			}
+		}
+		if !meaningful {
+			return ErrWhitespaceOnlyText
+		}
+	}
+	return nil
+}
 
 func validateMessageImageProfile(profile engine.Profile, placement string, input proto.MessageInput) error {
 	if !input.HasImages() {
