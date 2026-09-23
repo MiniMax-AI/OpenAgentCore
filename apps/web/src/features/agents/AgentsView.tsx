@@ -16,6 +16,7 @@ import { sessionAdmissionBlocker } from "./session-admission";
 
 interface AgentsViewProps {
   openAgentId?: string;
+  onOpenAgentConsumed?: (id: string) => void;
   agents: SavedAgent[];
   busy: boolean;
   coreBaseUrl?: string;
@@ -135,6 +136,7 @@ export function AgentDeleteConfirmation({ agent }: { agent: SavedAgent }) {
 
 export function AgentsView({
   openAgentId,
+  onOpenAgentConsumed,
   agents,
   busy,
   coreBaseUrl = "/v1",
@@ -267,8 +269,9 @@ export function AgentsView({
     const agent = agents.find((candidate) => candidate.id === openAgentId);
     if (!agent) return;
     lastOpenAgentRef.current = openAgentId;
+    onOpenAgentConsumed?.(openAgentId);
     void retrieveForEdit(agent);
-  }, [openAgentId, agents]);
+  }, [openAgentId, agents, onOpenAgentConsumed]);
 
   const submitCreate = async (input: CreateAgentInput) => {
     const request = requestGate.current.begin();

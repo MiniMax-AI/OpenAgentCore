@@ -101,7 +101,7 @@
 .first-agent-summary > p { font-size: 11px; color: var(--fg-muted); margin: 0; }
 .first-agent-card > code { margin-left: auto; max-width: 32%; overflow-wrap: anywhere; color: var(--fg-muted); font: 10px/1.7 var(--font-mono); }
 .first-agent-card > button { flex-shrink: 0; }
-.first-run-home button:focus-visible, .first-run-home pre:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.first-run-home button:focus-visible, .first-run-home pre:focus-visible, .first-run-home h2[tabindex="-1"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 @keyframes first-run-enter { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes first-run-symbol { from { opacity: 0; transform: scale(.88); } to { opacity: 1; transform: scale(1); } }
 @keyframes first-run-indicator { from { transform: scaleX(.3); } to { transform: scaleX(1); } }

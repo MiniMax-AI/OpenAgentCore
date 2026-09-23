@@ -224,6 +224,12 @@ test("runs the copied local request against Core and reveals only its matching A
   await expect(page.locator(".first-run-home")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Ada's first Agent 云", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Saved definition", exact: true })).toContainText(createdId);
+  await page.getByRole("button", { name: "Back to Agents", exact: true }).click();
+  await page.getByRole("button", { name: "Sessions", exact: true }).click();
+  await expect(page.locator(".session-page")).toBeVisible();
+  await page.getByRole("button", { name: "Agents", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Agents", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Saved definition", exact: true })).toHaveCount(0);
 });
 
 test("creates one Agent through Run here and clears its transient model key", async ({ page, request }) => {

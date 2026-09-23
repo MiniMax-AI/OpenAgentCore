@@ -2254,6 +2254,7 @@ export function App() {
     turnsSessionIdRef.current = null;
     setTurnsSessionId(null);
     setTurns([]);
+    setIntroductionAgentId(undefined);
     setConnection(normalized);
     setConnectionOpen(false);
   };
@@ -2436,6 +2437,7 @@ export function App() {
             <AgentsView
               key={`agents:${coreGeneration}`}
               openAgentId={introductionAgentId}
+              onOpenAgentConsumed={(id) => setIntroductionAgentId((current) => current === id ? undefined : current)}
               agents={agents}
               busy={busy}
               coreBaseUrl={connection.baseUrl}
