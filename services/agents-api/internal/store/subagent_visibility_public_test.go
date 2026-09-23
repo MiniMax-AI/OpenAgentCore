@@ -28,12 +28,19 @@ type visibilityEvent struct {
 	} `json:"item"`
 }
 
-// collectEvents returns every data frame until the stream ends or is stopped.
-func collectEvents(t *testing.T, stream sseLines) <-chan []visibilityEvent {
+type eventCollector struct {
+	// idle closes when agent.session.idle follows a Turn completion; done then
+	// receives every data frame once the stream ends or is stopped.
+	idle chan struct{}
+	done chan []visibilityEvent
+}
+
+func collectEvents(t *testing.T, stream sseLines) eventCollector {
 	t.Helper()
-	done := make(chan []visibilityEvent, 1)
+	collector := eventCollector{idle: make(chan struct{}), done: make(chan []visibilityEvent, 1)}
 	go func() {
 		var events []visibilityEvent
+		completed, idle := false, false
 		for line := range stream.lines {
 			if data, ok := strings.CutPrefix(line, "data: "); ok {
 				var event visibilityEvent
@@ -41,11 +48,16 @@ func collectEvents(t *testing.T, stream sseLines) <-chan []visibilityEvent {
 					event.Type = "invalid"
 				}
 				events = append(events, event)
+				completed = completed || event.Type == "agent.session.turn.completed"
+				if completed && !idle && event.Type == "agent.session.idle" {
+					idle = true
+					close(collector.idle)
+				}
 			}
 		}
-		done <- events
+		collector.done <- events
 	}()
-	return done
+	return collector
 }
 
 func subagentFixture(kind string, value any) store.ExecutionEvent {
@@ -273,14 +285,21 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 	// neither stream carries child Turn or child Item events.
 	var streamed []visibilityEvent
 	select {
-	case streamed = <-creation:
+	case streamed = <-creation.done:
 	case <-time.After(10 * time.Second):
 		t.Fatal("creation stream did not settle")
+	}
+	// The GET stream polls independently; stop it only after it has delivered the
+	// root Turn's idle, the last event this test records.
+	select {
+	case <-observed.idle:
+	case <-time.After(10 * time.Second):
+		t.Fatal("GET stream did not deliver the root idle")
 	}
 	live.stop()
 	var liveEvents []visibilityEvent
 	select {
-	case liveEvents = <-observed:
+	case liveEvents = <-observed.done:
 	case <-time.After(10 * time.Second):
 		t.Fatal("GET stream did not stop")
 	}
