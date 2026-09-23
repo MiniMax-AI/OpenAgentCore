@@ -71,6 +71,22 @@ def main():
                 response = http.post(base + "/v1/agents/" + target, headers=auth, json=body)
                 assert response.status_code == 400 and response.json()["error"] == expected, (body, response.text)
             assert agents.retrieve(original.id) == updated
+        # Saved web_search keeps every pinned mode (TV-05). Session admission still
+        # rejects enabled search, while a same-key retry recovers its earlier Session.
+        searched = agents.update(original.id, tools=[{"type": "web_search", "context_size": "low"}])
+        assert [t.to_dict() for t in searched.tools] == [
+            {"type": "web_search", "mode": "live", "context_size": "low", "allowed_domains": None, "location": None}]
+        assert agents.retrieve(original.id) == searched
+        response = http.post(base + "/v1/agents/sessions", headers=headers, json=spec)
+        assert response.status_code == 400 and response.json()["error"] == {
+            "type": "invalid_request_error", "code": "unsupported_or_invalid_configuration", "param": None,
+            "message": "Only disabled web_search is qualified for execution."}, response.text
+        assert sessions.create(**spec, extra_headers=retry) == old
+        emptied = agents.update(original.id, tools=[{"type": "web_search", "mode": "live", "allowed_domains": []}])
+        assert http.get(endpoint, headers=headers).json()["tools"] == [
+            {"type": "web_search", "mode": "live", "context_size": "medium", "allowed_domains": [], "location": None}]
+        assert agents.retrieve(original.id) == emptied
+        updated = agents.update(original.id, tools=[tool])
         for target in (original.id, str(uuid.uuid4()), "invalid", str(uuid.UUID(int=0))):
             response = http.post(base + "/v1/agents/" + target,
                                  headers=headers | {"Authorization": "Bearer " + foreign}, json={"name": "foreign"})

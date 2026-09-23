@@ -153,7 +153,25 @@ def verify_agents(client, other, invalid, expect_error):
         expect_error(BadRequestError, lambda: agents.create(model="x", extra_headers={"OpenAI-Beta": ""}))
         assert raw.post(base, json={"model": "x"}).status_code == 401
         # Unsupported families are explicit gaps, not schema-conformance evidence.
-        for tool in ({"type": "web_search"}, {"type": "mcp", "server_label": "x", "transport": {"type": "http", "server_url": "https://example.invalid"}}):
-            expect_error(BadRequestError, lambda: agents.create(model="x", tools=[tool]))
-    print("Reusable Agents: fixed SDK/raw HTTP create/retrieve, explicit configuration, known defaults, isolation and validation passed; model defaults/MCP/web_search/retry semantics remain gaps.")
+        mcp = {"type": "mcp", "server_label": "x", "transport": {"type": "http", "server_url": "https://example.invalid"}}
+        expect_error(BadRequestError, lambda: agents.create(model="x", tools=[mcp]))
+        # Every pinned web_search mode is saved as the official service does (TV-05);
+        # omitted or null mode is saved as live. Session admission still rejects it.
+        live = {"type": "web_search", "mode": "live", "context_size": "medium", "allowed_domains": None, "location": None}
+        for tool, expected in (
+            ({"type": "web_search"}, live),
+            ({"type": "web_search", "mode": None}, live),
+            ({"type": "web_search", "mode": "cached", "context_size": "high", "allowed_domains": ["example.com"],
+              "location": {"country": "FR", "city": "Paris"}},
+             {"type": "web_search", "mode": "cached", "context_size": "high", "allowed_domains": ["example.com"],
+              "location": {"city": "Paris", "country": "FR", "region": None, "timezone": None}}),
+        ):
+            response = agents.with_raw_response.create(model="x", tools=[tool])
+            agent = response.parse()
+            assert response.status_code == 201 and response.http_response.json()["tools"] == [expected]
+            assert [t.to_dict() for t in agent.tools] == [expected]
+            assert raw.get(base + "/" + agent.id, headers=headers).json()["tools"] == [expected]
+            assert agents.retrieve(agent.id) == agent
+            saved.append(agent)
+    print("Reusable Agents: fixed SDK/raw HTTP create/retrieve, explicit configuration, known defaults, saved web_search modes, isolation and validation passed; model defaults/MCP/retry semantics and enabled web_search execution remain gaps.")
     return saved

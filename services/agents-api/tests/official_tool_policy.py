@@ -133,6 +133,10 @@ def main():
             # Saving PTC intent is independent of Session execution qualification.
             enabled_agent = client.beta.agents.create(model=model, tools=[{"type": "programmatic_tool_calling", "enabled": True}])
             reject_configuration({"agent_id": enabled_agent.id, "environment": {"type": "none"}, "input": "Verify rejected tool policy configuration."})
+            # Saved enabled or omitted-mode search is resource data (TV-05); admission still rejects it.
+            for search in ({"type": "web_search"}, {"type": "web_search", "mode": "cached"}):
+                searched = client.beta.agents.create(model=model, tools=[search])
+                reject_configuration({"agent_id": searched.id, "environment": {"type": "none"}, "input": "Verify rejected tool policy configuration."})
             # Omitted-tool default projections are covered by the queued SDK/raw
             # resource fixture; these live cases exercise explicit disabled tools.
             for aid in proof["agents"]:
