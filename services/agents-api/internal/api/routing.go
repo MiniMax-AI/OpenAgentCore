@@ -198,7 +198,20 @@ func allowedMethods(r *http.Request) string {
 	if routePath == "" {
 		routePath = r.URL.Path
 	}
-	routed := func(method string) bool { return rctx.Routes.Match(chi.NewRouteContext(), method, routePath) }
+	routed := func(method string) bool {
+		pattern := rctx.Routes.Find(chi.NewRouteContext(), method, routePath)
+		if pattern == "" {
+			return false
+		}
+		// chi's Find stops at the exact path of a mounted router, which serves
+		// that path as its own "/" route.
+		for _, route := range rctx.Routes.Routes() {
+			if route.SubRoutes != nil && (pattern == strings.TrimSuffix(route.Pattern, "/*") || pattern == strings.TrimSuffix(route.Pattern, "*")) {
+				return route.SubRoutes.Find(chi.NewRouteContext(), method, "/") != ""
+			}
+		}
+		return true
+	}
 	var allowed []string
 	if routed(http.MethodGet) {
 		allowed = append(allowed, http.MethodGet)

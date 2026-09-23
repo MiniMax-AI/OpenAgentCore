@@ -439,6 +439,26 @@ func TestMethodNotAllowedListsRouteMethods(t *testing.T) {
 			t.Errorf("%s %s = %d %q %s", test.method, test.path, got.Code, got.Header().Get("Allow"), got.Body)
 		}
 	}
+	// Routes outside the Beta group and unknown methods use the same 405.
+	executor := "/core/v1/environments/" + uuid.NewString() + "/executor-credentials"
+	for _, test := range []struct {
+		method, path, allow string
+		header              http.Header
+	}{
+		{http.MethodPost, "/healthz", "GET,HEAD", nil},
+		{http.MethodPut, executor, "POST", withHeaders(project)},
+		{http.MethodGet, executor + "/" + uuid.NewString(), "DELETE", withHeaders(project)},
+		{"FOO", "/v1/agents", "GET,HEAD,POST", nil},
+		{"FOO", "/v1//agents/" + s.agent.ID, "GET,HEAD,POST,DELETE", nil},
+	} {
+		got := serve(handler, test.method, test.path, "", test.header)
+		if got.Code != http.StatusMethodNotAllowed || got.Body.String() != notAllowedV1 || got.Header().Get("Allow") != test.allow {
+			t.Errorf("%s %s = %d %q %s", test.method, test.path, got.Code, got.Header().Get("Allow"), got.Body)
+		}
+	}
+	if got := serve(handler, http.MethodPut, executor, "", nil); got.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated executor 405 = %d %s", got.Code, got.Body)
+	}
 	if got := serve(handler, http.MethodPut, "/v1/agents/"+s.agent.ID, "", withHeaders(beta)); got.Code != http.StatusUnauthorized || got.Header().Get("Allow") != "" {
 		t.Fatalf("unauthenticated 405 = %d %s", got.Code, got.Body)
 	}
@@ -447,8 +467,9 @@ func TestMethodNotAllowedListsRouteMethods(t *testing.T) {
 	}
 }
 
-// HEAD runs a GET route without a body after the same checks (HP-19). SSE and
-// content-download routes answer 405 without opening a stream or reading content.
+// HEAD runs a GET route without a body after the same checks (HP-19). SSE,
+// content-download and live directory routes answer 405 without opening a
+// stream, reading content or waiting on a Runtime.
 func TestHeadRequests(t *testing.T) {
 	handler, _, s := routingFixture(t)
 	server := httptest.NewServer(handler)
@@ -488,6 +509,7 @@ func TestHeadRequests(t *testing.T) {
 	session := "/v1/agents/sessions/" + uuid.NewString()
 	for _, test := range []struct{ path, allow string }{
 		{session + "/events", "GET,POST"},
+		{"/v1/agents/environments/" + uuid.NewString() + "/files", "GET,POST"},
 		{session + "/artifacts/" + uuid.NewString() + "/content", "GET"},
 		{"/v1/files/file-missing/content", "GET"},
 		{"/v1/skills/skill-missing/content", "GET"},

@@ -80,12 +80,15 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 }
 
 // routes builds the router. HEAD runs the GET route without a body after the
-// same authentication and Beta checks (HP-19). Routes that stream events or
-// download content register an explicit HEAD 405 instead, so HEAD never holds
-// a stream open or reads full content.
+// same authentication and Beta checks (HP-19). Routes that stream events,
+// download content or read a live workspace directory register an explicit
+// HEAD 405 instead, so HEAD never holds a stream open, reads full content or
+// waits on a Runtime. Every 405, including unknown methods and routes outside
+// the Beta group, has the JSON body and Allow header.
 func (h *Handler) routes() *chi.Mux {
 	router := chi.NewRouter()
 	router.Use(agentsResponseHeaders, log.HTTPMiddleware, middleware.GetHead)
+	router.MethodNotAllowed(methodNotAllowed)
 	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
@@ -127,6 +130,7 @@ func (h *Handler) routes() *chi.Mux {
 		r.Delete("/agents/environments/templates/{environment_template_id}", h.deleteEnvironmentTemplate)
 		r.Get("/agents/environments/{environment_id}", h.getEnvironment)
 		r.Get("/agents/environments/{environment_id}/files", h.listEnvironmentFiles)
+		r.Head("/agents/environments/{environment_id}/files", methodNotAllowed)
 		r.Post("/agents/environments/{environment_id}/files", h.createEnvironmentFile)
 		r.Post("/agents/sessions", h.createSession)
 		r.Get("/agents/sessions", h.listSessions)
