@@ -19,12 +19,14 @@ type SkillVersionPage struct {
 	HasMore  bool
 }
 
+// ListSkills and ListSkillVersions accept limit 0: the page is empty and HasMore
+// reports whether any resource follows the cursor.
 func (s *Store) ListSkills(ctx context.Context, tenantID, after string, limit int, ascending bool) (SkillPage, error) {
 	tenant, err := parseID(tenantID)
 	if err != nil {
 		return SkillPage{}, err
 	}
-	if limit < 1 || limit > 100 {
+	if limit < 0 || limit > 100 {
 		return SkillPage{}, ErrInvalidInput
 	}
 	params := sqlc.ListSkillsParams{TenantID: tenant, PageLimit: int32(limit + 1), Ascending: ascending, AfterID: pgtype.UUID{Valid: true}}
@@ -55,7 +57,7 @@ func (s *Store) ListSkillVersions(ctx context.Context, tenantID, skillID, after 
 	if err != nil {
 		return SkillVersionPage{}, err
 	}
-	if limit < 1 || limit > 100 {
+	if limit < 0 || limit > 100 {
 		return SkillVersionPage{}, ErrInvalidInput
 	}
 	if _, err := s.GetSkill(ctx, tenantID, skillID); err != nil {

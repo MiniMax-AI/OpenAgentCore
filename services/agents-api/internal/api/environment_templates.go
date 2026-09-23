@@ -187,19 +187,19 @@ func (h *Handler) deleteEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 }
 
 // @Summary List Environment Templates
-// @Description Lists tenant-owned safe template metadata in creation order with ID tie-breaking. Defaults to limit 20 and descending order; limit must be 1–100. Foreign and missing cursors reject identically. Concurrent-page and exact hosted error behavior remain unverified.
+// @Description Lists tenant-owned safe template metadata in creation order with ID tie-breaking. Defaults to limit 20 and descending order; limit 0 is treated as 1 and larger limits as 100. Foreign and missing cursors reject identically. Concurrent-page and exact hosted error behavior remain unverified.
 // @Tags Environment Templates
 // @Produce json
 // @Security BearerAuth
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param after query string false "Previous Template ID"
-// @Param limit query integer false "Page size" default(20) minimum(1) maximum(100)
+// @Param limit query integer false "Page size; 0 is treated as 1 and values above 100 as 100" default(20) minimum(0)
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.EnvironmentTemplateList
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/environments/templates [get]
 func (h *Handler) listEnvironmentTemplates(w http.ResponseWriter, r *http.Request) {
-	options, ok := readPage(w, r)
+	options, ok := readClampedPage(w, r)
 	if !ok {
 		return
 	}

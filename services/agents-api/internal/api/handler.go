@@ -321,13 +321,13 @@ func (h *Handler) respondSessionStatus(w http.ResponseWriter, r *http.Request, s
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param agent_id query string false "Root Agent ID whose Sessions to return"
 // @Param after query string false "Last Session ID from the previous page"
-// @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
+// @Param limit query int false "Page size; 0 is treated as 1 and values above 100 as 100" minimum(0) default(20)
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.SessionList
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/sessions [get]
 func (h *Handler) listSessions(w http.ResponseWriter, r *http.Request) {
-	options, ok := readPage(w, r, "agent_id")
+	options, ok := readClampedPage(w, r, "agent_id")
 	if !ok {
 		return
 	}
