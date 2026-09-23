@@ -415,8 +415,23 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(web["environment"]["CORE_CONSOLE_ORIGIN"], "https://core.example")
         self.assertEqual(web["ports"], ["127.0.0.1:8080:8080"])
         self.assertEqual(state["public_url"], "https://core.example")
+        self.assertEqual(self.document("compose.json")["services"]["core"]["environment"]["AGENTS_API_DAEMON_WS_URL"],
+                         "wss://core.example/api/v1/agent-daemon/ws")
         with self.assertRaises(install.InstallError):
             self.initialize("--public-url", "https://other.example")
+
+    def test_public_daemon_address_is_shared_across_placement_modes(self):
+        state = self.initialize("--public-url", "https://core.example:8443")
+        for provider in (None, "docker", "microsandbox"):
+            with self.subTest(provider=provider):
+                configured = dict(state, provider=provider, database_port=15432)
+                env = install.core_environment(self.root, configured, "fixture-password")
+                self.assertEqual(env["AGENTS_API_DAEMON_WS_URL"],
+                                 "wss://core.example:8443/api/v1/agent-daemon/ws")
+                configured["public_url"] = None
+                local = install.core_environment(self.root, configured, "fixture-password")
+                expected_host = "host.microsandbox.internal:8091" if provider == "microsandbox" else "core:8091"
+                self.assertEqual(local["AGENTS_API_DAEMON_WS_URL"], "ws://" + expected_host + "/api/v1/agent-daemon/ws")
 
     def test_provider_requires_explicit_enablement_and_cannot_belong_to_web_only(self):
         self.assertIsNone(self.args("--sandbox-provider", "false").provider)

@@ -1580,7 +1580,10 @@ Environment/key binding and current authenticated connection; it never enrolls,
 allocates, wakes a sandbox or grants project resource access. Console forwarding
 preserves this credential without replacing it with an administrator or project
 key. Bounded polling and reruns retain the original container and history;
-timeout is a diagnostic failure, not permission to relaunch.
+timeout is a diagnostic failure, not permission to relaunch. An explicit installer
+`--public-url` supplies both the console origin and the advertised daemon `wss`
+origin. Keep local managed Provider routing separate; do not return an internal
+Compose hostname to a user-managed Runtime when an external origin was supplied.
 
 The distribution build sets umask 022 for non-root-readable payloads; installation
 credentials and state retain their explicit private permissions.

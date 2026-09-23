@@ -268,7 +268,9 @@ For nodes added through Web, install with the intended shared HTTPS endpoint:
 ./install.sh --public-url https://core.example
 ```
 
-Configure your TLS reverse proxy to forward that origin to the loopback Web port,
+The installer also uses this origin for the `wss` connection URL returned by
+self-hosted Sessions, so remote Runtime hosts never receive a Compose-only
+hostname. Configure your TLS reverse proxy to forward that origin to the loopback Web port,
 preserve Host, and support WebSocket upgrades. The bundled Web forwards the fixed
 node and daemon transport routes to Core using their own credentials. Both the
 node host and its sandbox guests must reach this address. Installation does not

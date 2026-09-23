@@ -42,13 +42,15 @@ def core_environment(root, state, database_password):
     config = str(Path(root) / "config") if native else "/config"
     database = f'127.0.0.1:{state["database_port"]}' if native else "database:5432"
     daemon_host = f'host.microsandbox.internal:{state["core_port"]}' if native else "core:8091"
+    daemon_url = (state["public_url"].replace("https://", "wss://", 1) if state.get("public_url")
+                  else f"ws://{daemon_host}") + "/api/v1/agent-daemon/ws"
     result = {
         "AGENTS_API_DATABASE_URL": f"postgres://agents_api:{database_password}@{database}/agents_api?sslmode=disable",
         "AGENTS_API_KEYS_FILE": config + "/keys.json",
         "AGENTS_API_CREDENTIAL_KEY_FILE": config + "/credential.key",
         "AGENTS_API_ADDR": f'127.0.0.1:{state["core_port"]}' if native else ":8091",
         "AGENTS_API_ENGINE": "codex", "AGENTS_API_HARNESSES": "codex,claude_sdk,mcode",
-        "AGENTS_API_DAEMON_WS_URL": f"ws://{daemon_host}/api/v1/agent-daemon/ws",
+        "AGENTS_API_DAEMON_WS_URL": daemon_url,
     }
     result["AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE"] = (
         str(Path(root) / "admin/digests.json") if native else "/admin/digests.json")
