@@ -859,8 +859,14 @@ native Run; they do not request model credentials or mutate the workspace. Cance
 retains the existing Turn/reservation semantics. Do not introduce a second queue.
 Publish metadata in the same transaction as Turn completion. Failed/cancelled Turns
 discard private objects, and Session deletion removes both private and published
-copies. Reuse the source-file snapshot reader pattern and common content response;
-artifact deletion does not alter workspace files. Hosted execution requires the
+copies. The exporter skips output symlinks by their `lstat` type without following,
+opening or resolving them; hard links, other special files, device crossings and
+concurrent changes still reject the capture. In that completion transaction, drop
+staged paths whose sha256 equals the newest remaining published Artifact for the
+path in the Session, so later Turns publish only new, changed or no-longer-published
+paths and never modify existing Artifacts. Reuse the source-file snapshot reader
+pattern and common content response; artifact deletion does not alter workspace
+files. Hosted execution requires the
 Runtime's bounded output-export capability and exact read-only preparation binding;
 capability advertisement alone does not qualify an operator's deployment.
 Exporter component checks do not establish public Artifact compatibility.
