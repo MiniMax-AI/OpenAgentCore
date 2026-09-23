@@ -235,9 +235,15 @@ Decisions:
 - "Newest" follows the producing Turn's database creation time, then its ID.
   Publication time can come from the Runtime's reported completion and is not a
   reliable order between Turns.
-- Deletion is physical and leaves no tombstone. If the newest version of a path
-  was deleted and an older version remains, the comparison uses the older one:
-  bytes equal to it are not republished.
+- Known difference from the batch plan's wording, accepted as a local decision:
+  the plan republishes a path whose newest Artifact was deleted, but Core compares
+  against the newest *remaining* published Artifact. Deletion is physical and
+  leaves no record, and adding one would need a schema change outside this batch.
+  Example: Turn 1 publishes `b.txt` as `bravo`, Turn 2 publishes `bravo-v2`, and
+  the Turn 2 Artifact is then deleted. A later Turn whose `b.txt` is `bravo-v2`
+  republishes it, because the remaining Turn 1 version differs. A later Turn whose
+  `b.txt` is `bravo` publishes nothing, because the remaining Turn 1 Artifact
+  already has those bytes. The official behavior for this case is unobserved.
 - A malformed filter resolves to the never-assigned maximum UUID, as for
   malformed path identifiers, so it matches nothing without a database text
   comparison. An empty `environment_id=` still means no filter.
@@ -256,8 +262,10 @@ the workspace and a relative link to a workspace file outside `outputs/`; an
 inotify watch proves no target is opened or read, with a positive control. They
 also keep the hard-link, socket, FIFO, linked-root and concurrent-change
 rejections. Real-PostgreSQL store tests cover new, unchanged, changed,
-changed-back, deleted-then-unchanged and deleted-during-capture paths, Session
-scoping and private object accounting. Handler and real-PostgreSQL HTTP tests
+changed-back, deleted-then-unchanged and deleted-during-capture paths, a deletion
+that holds the Session lock while Turn completion waits, Turn-ordered newest
+versions with inverted publication times, Session scoping and private object
+accounting. Handler and real-PostgreSQL HTTP tests
 cover the envelope, other, foreign and malformed filters, and foreign or missing
 Sessions. The pinned-SDK and raw HTTP verifier used by live acceptance runs
 against PostgreSQL across three Turns. Real Core, daemon and model acceptance is
