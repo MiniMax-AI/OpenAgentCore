@@ -336,10 +336,22 @@ function TrendChart({
   useEffect(() => {
     const plot = plotRef.current;
     if (!plot) return;
+    const currentX = plot.scales.x;
+    const preserveZoom = zoomed && currentX !== undefined &&
+      Number.isFinite(currentX.min) && Number.isFinite(currentX.max);
+    const xMinimum = preserveZoom ? currentX!.min! : domain.start / 1_000;
+    const xMaximum = preserveZoom ? currentX!.max! : domain.end / 1_000;
     plot.setData(chartData, false);
     plot.setScale("y", { min: 0, max: Math.max(1, maximum) });
-    if (!zoomedRef.current) plot.setScale("x", { min: domain.start / 1_000, max: domain.end / 1_000 });
-  }, [chartData, domain, maximum]);
+    // Reapplying x recalculates uPlot's visible data indices after setData,
+    // while preserving an active drag-selected range.
+    plot.setScale("x", { min: xMinimum, max: xMaximum });
+    // setData(..., false) preserves the selected time range, but uPlot does not
+    // commit a draw when the explicit scales are unchanged. Memory keeps stable
+    // series ids across loading and loaded states, so force the refreshed paths
+    // onto the canvas even when its 0..limit scale remains identical.
+    plot.redraw(false);
+  }, [chartData, domain, maximum, zoomed]);
 
   useEffect(() => {
     const plot = plotRef.current;

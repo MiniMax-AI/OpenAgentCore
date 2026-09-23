@@ -2644,6 +2644,27 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
   await expect(dashboard.locator(".dashboard-runtime-sample-count")).toContainText("3 samples");
   await expect(dashboard.getByText("CPU usage live trend available")).toBeAttached();
   await expect(dashboard).not.toContainText("Collecting live samples");
+  const memoryCard = dashboard.getByRole("region", { name: "Memory usage live chart" });
+  const memoryStrokePixelCount = () => memoryCard.locator("canvas").evaluate((canvas: HTMLCanvasElement) => {
+    const context = canvas.getContext("2d");
+    if (!context) return 0;
+    const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
+    let pixels = 0;
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const offset = (y * width + x) * 4;
+        const red = data[offset] ?? 0;
+        const green = data[offset + 1] ?? 0;
+        const blue = data[offset + 2] ?? 0;
+        const alpha = data[offset + 3] ?? 0;
+        if (alpha > 128 && Math.abs(red - 185) < 20 && Math.abs(green - 152) < 20 && Math.abs(blue - 244) < 20) {
+          pixels += 1;
+        }
+      }
+    }
+    return pixels;
+  });
+  expect(await memoryStrokePixelCount()).toBeGreaterThan(0);
   const cpuChart = dashboard.getByLabel("CPU usage: 3 live samples");
   const cpuCard = cpuChart.locator("xpath=ancestor::section[contains(@class, 'dashboard-runtime-trend-card')]");
   await cpuChart.focus();
@@ -2847,6 +2868,13 @@ test("restores ClickHouse Runtime history after a Dashboard reload", async ({ pa
   await page.mouse.move(durablePlotBox!.x + durablePlotBox!.width * .8, durablePlotBox!.y + durablePlotBox!.height / 2, { steps: 8 });
   await page.mouse.up();
   await expect.poll(async () => Number(await durableCpuChart.getAttribute("data-view-start"))).toBeGreaterThan(durableInitialStart);
+  const durableZoomStart = Number(await durableCpuChart.getAttribute("data-view-start"));
+  const durableZoomEnd = Number(await durableCpuChart.getAttribute("data-view-end"));
+  await expect(durableCpuCard.getByRole("button", { name: "Reset zoom" })).toBeVisible();
+  await page.getByRole("button", { name: "Refresh Dashboard snapshot" }).click();
+  const refreshedDurableCpuChart = dashboard.getByLabel("CPU usage: 4 retained buckets");
+  await expect(refreshedDurableCpuChart).toHaveAttribute("data-view-start", String(durableZoomStart));
+  await expect(refreshedDurableCpuChart).toHaveAttribute("data-view-end", String(durableZoomEnd));
 
   await page.reload();
   await expect(dashboard.getByRole("group", { name: "Runtime trend source" })).toHaveCount(0);
