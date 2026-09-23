@@ -5,8 +5,9 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
 } from "react";
+import uPlot from "uplot";
+import "uplot/dist/uPlot.min.css";
 
 import { formatDashboardBytes, formatDashboardDuration, formatDashboardTokens } from "./dashboard-model";
 import { tokenThroughput, type RuntimeTrendSample } from "./runtime-trends";
@@ -32,20 +33,10 @@ interface TrendBand {
 
 export type RuntimeTrendSource = "live" | "durable";
 
-const WIDTH = 640;
-const HEIGHT = 220;
-const PLOT = { left: 52, right: 16, top: 22, bottom: 34 };
-
 interface TimeWindow {
   start: number;
   end: number;
 }
-
-type TimelineDrag = {
-  kind: "start" | "end" | "window";
-  originClientX: number;
-  originWindow: TimeWindow;
-};
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
@@ -59,224 +50,16 @@ function timeLabel(value: number): string {
   return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-function segments(points: readonly TrendPoint[]): TrendPoint[][] {
-  const result: TrendPoint[][] = [];
-  let current: TrendPoint[] = [];
-  for (const point of points) {
-    if (point.value === null || !Number.isFinite(point.value)) {
-      if (current.length > 0) result.push(current);
-      current = [];
-    } else current.push(point);
-  }
-  if (current.length > 0) result.push(current);
-  return result;
-}
+const toneColors: Record<TrendSeries["tone"], string> = {
+  orange: "#f59e52",
+  green: "#50d5a0",
+  blue: "#78a7ff",
+  purple: "#b998f4",
+};
 
-function linePath(points: readonly TrendPoint[], x: (value: number) => number, y: (value: number) => number): string {
-  if (points.length === 0) return "";
-  const first = points[0]!;
-  let result = `M ${x(first.sampledAt)} ${y(first.value ?? 0)}`;
-  for (let index = 1; index < points.length; index += 1) {
-    const previous = points[index - 1]!;
-    const current = points[index]!;
-    const previousX = x(previous.sampledAt);
-    const currentX = x(current.sampledAt);
-    const controlOffset = (currentX - previousX) / 3;
-    result += ` C ${previousX + controlOffset} ${y(previous.value ?? 0)} ${currentX - controlOffset} ${y(current.value ?? 0)} ${currentX} ${y(current.value ?? 0)}`;
-  }
-  return result;
-}
-
-function nearestTime(times: readonly number[], target: number): number | null {
-  if (times.length === 0) return null;
-  let nearest = times[0]!;
-  let distance = Math.abs(nearest - target);
-  for (let index = 1; index < times.length; index += 1) {
-    const candidate = times[index]!;
-    const candidateDistance = Math.abs(candidate - target);
-    if (candidateDistance < distance) {
-      nearest = candidate;
-      distance = candidateDistance;
-    }
-  }
-  return nearest;
-}
-
-export function runtimeChartViewBoxX(clientOffsetX: number, renderedWidth: number, renderedHeight: number): number {
-  if (renderedWidth <= 0 || renderedHeight <= 0) return PLOT.left;
-  const scale = Math.min(renderedWidth / WIDTH, renderedHeight / HEIGHT);
-  const contentWidth = WIDTH * scale;
-  const horizontalInset = (renderedWidth - contentWidth) / 2;
-  return clamp((clientOffsetX - horizontalInset) / scale, PLOT.left, WIDTH - PLOT.right);
-}
-
-export function runtimeChartRenderedX(viewBoxX: number, renderedWidth: number, renderedHeight: number): number {
-  if (renderedWidth <= 0 || renderedHeight <= 0) return 0;
-  const scale = Math.min(renderedWidth / WIDTH, renderedHeight / HEIGHT);
-  const contentWidth = WIDTH * scale;
-  const horizontalInset = (renderedWidth - contentWidth) / 2;
-  return horizontalInset + clamp(viewBoxX, 0, WIDTH) * scale;
-}
-
-function TimeRangeNavigator({
-  domain,
-  value,
-  onChange,
-  source,
-  title,
-}: {
-  domain: TimeWindow;
-  value: TimeWindow;
-  onChange: (next: TimeWindow) => void;
-  source: RuntimeTrendSource;
-  title: string;
-}) {
-  const trackRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<TimelineDrag | null>(null);
-  const [dragging, setDragging] = useState<TimelineDrag["kind"] | null>(null);
-  const span = Math.max(1, domain.end - domain.start);
-  const step = Math.max(1_000, Math.round(span / 100));
-  const minimumWindow = Math.min(span, Math.max(step, 30_000, Math.ceil(span * .1)));
-  const position = (time: number) => clamp((time - domain.start) / span * 100, 0, 100);
-
-  const timeFromClientX = (clientX: number): number => {
-    const rect = trackRef.current?.getBoundingClientRect();
-    if (!rect || rect.width <= 0) return domain.start;
-    return domain.start + clamp((clientX - rect.left) / rect.width, 0, 1) * span;
-  };
-
-  const updateDrag = (clientX: number) => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    if (drag.kind === "start") {
-      onChange({ start: clamp(timeFromClientX(clientX), domain.start, value.end - minimumWindow), end: value.end });
-      return;
-    }
-    if (drag.kind === "end") {
-      onChange({ start: value.start, end: clamp(timeFromClientX(clientX), value.start + minimumWindow, domain.end) });
-      return;
-    }
-    const rect = trackRef.current?.getBoundingClientRect();
-    if (!rect || rect.width <= 0) return;
-    const delta = (clientX - drag.originClientX) / rect.width * span;
-    const width = drag.originWindow.end - drag.originWindow.start;
-    const start = clamp(drag.originWindow.start + delta, domain.start, domain.end - width);
-    onChange({ start, end: start + width });
-  };
-
-  const beginDrag = (event: ReactPointerEvent, kind: TimelineDrag["kind"], moveImmediately = false) => {
-    event.preventDefault();
-    event.stopPropagation();
-    dragRef.current = { kind, originClientX: event.clientX, originWindow: value };
-    setDragging(kind);
-    event.currentTarget.setPointerCapture(event.pointerId);
-    if (moveImmediately) updateDrag(event.clientX);
-  };
-
-  const endDrag = (event: ReactPointerEvent) => {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    dragRef.current = null;
-    setDragging(null);
-  };
-
-  const adjustHandle = (kind: "start" | "end", event: ReactKeyboardEvent<HTMLButtonElement>) => {
-    let delta = 0;
-    if (event.key === "ArrowLeft" || event.key === "ArrowDown") delta = -step;
-    else if (event.key === "ArrowRight" || event.key === "ArrowUp") delta = step;
-    else if (event.key === "Home") delta = kind === "start" ? domain.start - value.start : value.start + minimumWindow - value.end;
-    else if (event.key === "End") delta = kind === "start" ? value.end - minimumWindow - value.start : domain.end - value.end;
-    else return;
-    event.preventDefault();
-    if (kind === "start") onChange({ start: clamp(value.start + delta, domain.start, value.end - minimumWindow), end: value.end });
-    else onChange({ start: value.start, end: clamp(value.end + delta, value.start + minimumWindow, domain.end) });
-  };
-
-  const panWindow = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
-    const width = value.end - value.start;
-    let start = value.start;
-    if (event.key === "ArrowLeft" || event.key === "ArrowDown") start -= step;
-    else if (event.key === "ArrowRight" || event.key === "ArrowUp") start += step;
-    else if (event.key === "Home") start = domain.start;
-    else if (event.key === "End") start = domain.end - width;
-    else return;
-    event.preventDefault();
-    const clampedStart = clamp(start, domain.start, domain.end - width);
-    onChange({ start: clampedStart, end: clampedStart + width });
-  };
-
-  const startPercent = position(value.start);
-  const endPercent = position(value.end);
-  const fullRange = value.start <= domain.start && value.end >= domain.end;
-
-  return (
-    <section className="dashboard-runtime-timeline" aria-label={`${title} timeline`}>
-      <header>
-        <div>
-          <strong>Time range</strong>
-          <span>Drag handles to zoom · window to pan</span>
-        </div>
-        <div>
-          <time dateTime={new Date(value.start).toISOString()}>{timeLabel(value.start)}</time>
-          <span>—</span>
-          <time dateTime={new Date(value.end).toISOString()}>{timeLabel(value.end)}</time>
-          <button type="button" disabled={fullRange} onClick={() => onChange(domain)}>Reset</button>
-        </div>
-      </header>
-      <div
-        ref={trackRef}
-        className={`dashboard-runtime-timeline-track${dragging ? " is-dragging" : ""}`}
-        onPointerDown={(event) => {
-          const time = timeFromClientX(event.clientX);
-          beginDrag(event, Math.abs(time - value.start) <= Math.abs(time - value.end) ? "start" : "end", true);
-        }}
-        onPointerMove={(event) => updateDrag(event.clientX)}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onLostPointerCapture={() => { dragRef.current = null; setDragging(null); }}
-      >
-        <div className="dashboard-runtime-timeline-rail" />
-        <button
-          type="button"
-          className="dashboard-runtime-timeline-selection"
-          style={{ left: `${startPercent}%`, width: `${Math.max(0, endPercent - startPercent)}%` }}
-          aria-label={`Pan ${title} timeline window`}
-          title="Drag to pan; use arrow keys for precise movement"
-          disabled={fullRange}
-          onKeyDown={panWindow}
-          onPointerDown={(event) => beginDrag(event, "window")}
-        />
-        <button
-          type="button"
-          className="dashboard-runtime-timeline-handle dashboard-runtime-timeline-handle-start"
-          style={{ left: `${startPercent}%` }}
-          role="slider"
-          aria-label={`${title} timeline start`}
-          aria-valuemin={domain.start}
-          aria-valuemax={value.end - minimumWindow}
-          aria-valuenow={Math.round(value.start)}
-          aria-valuetext={new Date(value.start).toLocaleString()}
-          onKeyDown={(event) => adjustHandle("start", event)}
-          onPointerDown={(event) => beginDrag(event, "start")}
-        />
-        <button
-          type="button"
-          className="dashboard-runtime-timeline-handle dashboard-runtime-timeline-handle-end"
-          style={{ left: `${endPercent}%` }}
-          role="slider"
-          aria-label={`${title} timeline end`}
-          aria-valuemin={value.start + minimumWindow}
-          aria-valuemax={domain.end}
-          aria-valuenow={Math.round(value.end)}
-          aria-valuetext={new Date(value.end).toLocaleString()}
-          onKeyDown={(event) => adjustHandle("end", event)}
-          onPointerDown={(event) => beginDrag(event, "end")}
-        />
-      </div>
-      <div className="dashboard-runtime-timeline-bounds" aria-hidden="true">
-        <time>{timeLabel(domain.start)}</time><span>{source === "durable" ? "retained history" : "live window"}</span><time>{timeLabel(domain.end)}</time>
-      </div>
-    </section>
-  );
+function withAlpha(hex: string, alpha: number): string {
+  const value = Number.parseInt(hex.slice(1), 16);
+  return `rgba(${value >> 16}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
 }
 
 function TrendChart({
@@ -308,105 +91,247 @@ function TrendChart({
   emptyMessage?: string;
   emptyDetail?: string;
 }) {
-  const clipId = useId().replaceAll(":", "");
-  const instructionId = `${clipId}-instructions`;
-  const svgRef = useRef<SVGSVGElement>(null);
+  const instructionId = `${useId().replaceAll(":", "")}-instructions`;
+  const mountRef = useRef<HTMLDivElement>(null);
+  const plotRef = useRef<uPlot | null>(null);
+  const pinnedRef = useRef(false);
+  const zoomedRef = useRef(false);
   const [hiddenSeries, setHiddenSeries] = useState<ReadonlySet<string>>(() => new Set());
-  const [hoveredAt, setHoveredAt] = useState<number | null>(null);
-  const [pinnedAt, setPinnedAt] = useState<number | null>(null);
-  const [svgSize, setSvgSize] = useState({ width: WIDTH, height: HEIGHT });
+  const [tooltip, setTooltip] = useState<{ idx: number; left: number; pinned: boolean } | null>(null);
+  const [zoomed, setZoomed] = useState(false);
+  const [theme, setTheme] = useState("");
   const domain = useMemo(() => ({ start: rangeStart, end: Math.max(rangeStart + 1, rangeEnd) }), [rangeEnd, rangeStart]);
+  const domainRef = useRef(domain);
+  const hiddenSeriesRef = useRef(hiddenSeries);
+  domainRef.current = domain;
+  hiddenSeriesRef.current = hiddenSeries;
   const [viewRange, setViewRange] = useState<TimeWindow>(domain);
-  const previousDomain = useRef(domain);
-  const start = Math.max(rangeStart, viewRange.start);
-  const end = Math.min(Math.max(rangeStart + 1, rangeEnd), viewRange.end);
-  const range = Math.max(1, end - start);
-  const plotWidth = WIDTH - PLOT.left - PLOT.right;
-  const plotHeight = HEIGHT - PLOT.top - PLOT.bottom;
-  const yMaximum = Math.max(1, maximum);
-  const x = (sampledAt: number) => PLOT.left + (sampledAt - start) / range * plotWidth;
-  const y = (value: number) => PLOT.top + (1 - Math.min(yMaximum, Math.max(0, value)) / yMaximum) * plotHeight;
-  const visibleSeries = series.filter((entry) => !hiddenSeries.has(entry.id)).map((entry) => ({
-    ...entry,
-    points: entry.points.filter((point) => point.sampledAt >= start && point.sampledAt <= end),
-  }));
-  const visibleSamples = samples.filter((sample) => sample.sampledAt >= start && sample.sampledAt <= end);
-  const hasLine = visibleSeries.some((entry) => segments(entry.points).some((segment) => segment.length >= 2));
+  const visibleSeries = series.filter((entry) => !hiddenSeries.has(entry.id));
+  const hasLine = visibleSeries.some((entry) => entry.points.some((point, index) => (
+    point.value !== null && Number.isFinite(point.value)
+      && index > 0
+      && entry.points[index - 1]?.value !== null
+      && Number.isFinite(entry.points[index - 1]?.value)
+  )));
   const validPoints = Math.max(0, ...visibleSeries.map((entry) => entry.points.filter((point) => (
     point.value !== null && Number.isFinite(point.value)
   )).length));
-  const xTicks = [start, start + range / 2, end];
-  const interactiveTimes = [...new Set(visibleSeries.flatMap((entry) => entry.points
-    .map((point) => point.sampledAt)))].sort((left, right) => left - right);
-  const selectedAt = pinnedAt ?? hoveredAt;
-  const selectedValues = selectedAt === null ? [] : visibleSeries.map((entry) => ({
-    ...entry,
-    value: entry.points.find((point) => point.sampledAt === selectedAt)?.value ?? null,
-  }));
-  const selectedX = selectedAt === null ? null : x(selectedAt);
-  const tooltipLeft = selectedX === null
-    ? 50
-    : runtimeChartRenderedX(selectedX, svgSize.width, svgSize.height) / Math.max(1, svgSize.width) * 100;
+  const times = useMemo(() => [...new Set(series.flatMap((entry) => entry.points.map((point) => point.sampledAt)))].sort((left, right) => left - right), [series]);
+  const chartData = useMemo<uPlot.AlignedData>(() => [
+    times.map((value) => value / 1_000),
+    ...series.map((entry) => {
+      const values = new Map(entry.points.map((point) => [point.sampledAt, point.value]));
+      return times.map((value) => values.get(value) ?? null);
+    }),
+  ], [series, times]);
+  const dataRef = useRef(chartData);
+  const formatRef = useRef(formatValue);
+  const maximumRef = useRef(maximum);
+  dataRef.current = chartData;
+  formatRef.current = formatValue;
+  maximumRef.current = maximum;
+  const seriesKey = series.map((entry) => `${entry.id}:${entry.label}:${entry.tone}:${entry.fill ? 1 : 0}`).join("|");
+  const bandsKey = bands.map((band) => `${band.from}:${band.to}:${band.tone}`).join("|");
+  const ticksKey = ticks.join(":");
+  const selectedTimestamp = tooltip === null ? null : chartData[0][tooltip.idx];
+  const selectedAt = selectedTimestamp === null || selectedTimestamp === undefined ? null : selectedTimestamp * 1_000;
+  const selectedValues = tooltip === null ? [] : visibleSeries.map((entry) => {
+    const seriesIndex = series.findIndex((candidate) => candidate.id === entry.id);
+    return { ...entry, value: chartData[seriesIndex + 1]?.[tooltip.idx] ?? null };
+  });
 
   useEffect(() => {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const updateSize = () => {
-      const rect = svg.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) setSvgSize({ width: rect.width, height: rect.height });
-    };
-    updateSize();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(updateSize);
-    observer.observe(svg);
+    const update = () => setTheme(document.documentElement.dataset.theme ?? "light");
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
-    const previous = previousDomain.current;
-    setViewRange((current) => {
-      const tolerance = Math.max(1_000, (previous.end - previous.start) / 100);
-      const wasFullRange = current.start <= previous.start + tolerance && current.end >= previous.end - tolerance;
-      if (wasFullRange) return domain;
-      const width = Math.min(current.end - current.start, domain.end - domain.start);
-      const wasFollowing = current.end >= previous.end - tolerance;
-      const nextEnd = wasFollowing ? domain.end : clamp(current.end, domain.start + width, domain.end);
-      return { start: clamp(nextEnd - width, domain.start, domain.end - width), end: nextEnd };
+    const mount = mountRef.current;
+    if (!mount || theme === "") return;
+    const styles = getComputedStyle(mount);
+    const color = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback;
+    const axisColor = color("--fg-muted", theme === "dark" ? "#a8adb8" : "#6f7480");
+    const gridColor = color("--line", theme === "dark" ? "#30343b" : "#e3e5e8");
+    const surfaceColor = color("--surface", theme === "dark" ? "#17191d" : "#ffffff");
+    const yMaximum = Math.max(1, maximum);
+    const bandColors: Record<TrendBand["tone"], string> = {
+      safe: withAlpha("#50d5a0", .07),
+      warning: withAlpha("#f59e52", .07),
+      danger: withAlpha("#ef6a72", .07),
+    };
+    const options: uPlot.Options = {
+      width: Math.max(320, mount.clientWidth),
+      height: 220,
+      padding: [10, 8, 0, 0],
+      legend: { show: false },
+      scales: {
+        x: { time: true },
+        y: { auto: false, range: [0, yMaximum] },
+      },
+      axes: [
+        {
+          stroke: axisColor,
+          grid: { stroke: gridColor, width: 1 },
+          ticks: { stroke: gridColor, width: 1 },
+          values: (_plot, values) => values.map((value) => timeLabel(value * 1_000)),
+          font: "8px ui-monospace, SFMono-Regular, Menlo, monospace",
+          size: 28,
+        },
+        {
+          stroke: axisColor,
+          grid: { stroke: gridColor, width: 1 },
+          ticks: { stroke: gridColor, width: 1 },
+          splits: () => ticks.map((tick) => Math.max(1, maximumRef.current) * tick).sort((left, right) => left - right),
+          values: (_plot, values) => values.map((value) => formatRef.current(value)),
+          font: "8px ui-monospace, SFMono-Regular, Menlo, monospace",
+          size: 52,
+        },
+      ],
+      cursor: {
+        x: true,
+        y: true,
+        lock: false,
+        drag: { x: true, y: false, setScale: true, dist: 8 },
+        points: { size: 7, width: 2, fill: surfaceColor },
+      },
+      select: { show: true, left: 0, top: 0, width: 0, height: 0 },
+      series: [
+        {},
+        ...series.map((entry): uPlot.Series => ({
+          label: entry.label,
+          show: !hiddenSeriesRef.current.has(entry.id),
+          stroke: toneColors[entry.tone],
+          fill: entry.fill ? withAlpha(toneColors[entry.tone], .13) : undefined,
+          width: 2,
+          spanGaps: false,
+          points: { show: false },
+        })),
+      ],
+      hooks: {
+        drawClear: bands.length === 0 ? [] : [(plot) => {
+          for (const band of bands) {
+            const top = plot.valToPos(band.to, "y", true);
+            const bottom = plot.valToPos(band.from, "y", true);
+            plot.ctx.fillStyle = bandColors[band.tone];
+            plot.ctx.fillRect(plot.bbox.left, top, plot.bbox.width, Math.max(0, bottom - top));
+          }
+        }],
+        setCursor: [(plot) => {
+          const idx = plot.cursor.idx;
+          if (idx === null || idx === undefined || pinnedRef.current) return;
+          const left = ((plot.cursor.left ?? 0) + plot.bbox.left / uPlot.pxRatio) / Math.max(1, plot.width) * 100;
+          setTooltip({ idx, left: clamp(left, 18, 82), pinned: pinnedRef.current });
+        }],
+        setScale: [(plot, scaleKey) => {
+          if (scaleKey !== "x") return;
+          const scale = plot.scales.x;
+          if (!scale || scale.min === undefined || scale.max === undefined) return;
+          const currentDomain = domainRef.current;
+          const tolerance = Math.max(1, (currentDomain.end - currentDomain.start) / 100_000);
+          const isZoomed = Math.abs(scale.min * 1_000 - currentDomain.start) > tolerance || Math.abs(scale.max * 1_000 - currentDomain.end) > tolerance;
+          zoomedRef.current = isZoomed;
+          setZoomed(isZoomed);
+          setViewRange({ start: scale.min * 1_000, end: scale.max * 1_000 });
+        }],
+      },
+    };
+    const plot = new uPlot(options, dataRef.current, mount);
+    plotRef.current = plot;
+    plot.setScale("x", { min: domain.start / 1_000, max: domain.end / 1_000 });
+    let pointerStart = 0;
+    let moved = false;
+    const pointerDown = (event: PointerEvent) => { pointerStart = event.clientX; moved = false; };
+    const pointerMove = (event: PointerEvent) => {
+      if (moved || Math.abs(event.clientX - pointerStart) < 8) return;
+      moved = true;
+      pinnedRef.current = false;
+      setTooltip(null);
+    };
+    const click = () => {
+      if (moved || plot.cursor.idx === null || plot.cursor.idx === undefined) return;
+      pinnedRef.current = !pinnedRef.current;
+      setTooltip((current) => current === null ? null : { ...current, pinned: pinnedRef.current });
+    };
+    const leave = () => { if (!pinnedRef.current) setTooltip(null); };
+    const reset = (event: MouseEvent) => {
+      event.preventDefault();
+      pinnedRef.current = false;
+      setTooltip(null);
+      const currentDomain = domainRef.current;
+      plot.setScale("x", { min: currentDomain.start / 1_000, max: currentDomain.end / 1_000 });
+    };
+    plot.over.addEventListener("pointerdown", pointerDown);
+    plot.over.addEventListener("pointermove", pointerMove);
+    plot.over.addEventListener("click", click);
+    plot.over.addEventListener("mouseleave", leave);
+    plot.over.addEventListener("dblclick", reset);
+    const resize = new ResizeObserver(() => {
+      const width = mount.clientWidth;
+      if (width > 0 && width !== plot.width) plot.setSize({ width, height: 220 });
     });
-    previousDomain.current = domain;
-  }, [domain]);
+    resize.observe(mount);
+    return () => {
+      resize.disconnect();
+      plot.destroy();
+      if (plotRef.current === plot) plotRef.current = null;
+    };
+  // Data updates are applied without rebuilding so a selected time range remains stable.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bandsKey, seriesKey, source, theme, ticksKey]);
 
   useEffect(() => {
-    if (hoveredAt !== null && (hoveredAt < start || hoveredAt > end)) setHoveredAt(null);
-    if (pinnedAt !== null && (pinnedAt < start || pinnedAt > end)) setPinnedAt(null);
-  }, [end, hoveredAt, pinnedAt, start]);
+    const plot = plotRef.current;
+    if (!plot) return;
+    plot.setData(chartData, false);
+    plot.setScale("y", { min: 0, max: Math.max(1, maximum) });
+    if (!zoomedRef.current) plot.setScale("x", { min: domain.start / 1_000, max: domain.end / 1_000 });
+  }, [chartData, domain, maximum]);
 
-  const selectFromPointer = (event: { currentTarget: SVGSVGElement; clientX: number }): number | null => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return null;
-    const viewBoxX = runtimeChartViewBoxX(event.clientX - rect.left, rect.width, rect.height);
-    return nearestTime(interactiveTimes, start + (viewBoxX - PLOT.left) / plotWidth * range);
+  useEffect(() => {
+    const plot = plotRef.current;
+    if (!plot) return;
+    series.forEach((entry, index) => plot.setSeries(index + 1, { show: !hiddenSeries.has(entry.id) }));
+  }, [hiddenSeries, series]);
+
+  const resetZoom = () => {
+    zoomedRef.current = false;
+    setZoomed(false);
+    setViewRange(domain);
+    plotRef.current?.setScale("x", { min: domain.start / 1_000, max: domain.end / 1_000 });
   };
 
-  const handleKeyboard = (event: ReactKeyboardEvent<SVGSVGElement>) => {
+  const handleKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
-      setPinnedAt(null);
-      setHoveredAt(null);
+      pinnedRef.current = false;
+      setTooltip(null);
       return;
     }
-    if (interactiveTimes.length === 0) return;
-    const current = selectedAt === null ? interactiveTimes.length - 1 : interactiveTimes.indexOf(selectedAt);
+    const visibleIndices = times.flatMap((time, index) => time >= viewRange.start && time <= viewRange.end ? [index] : []);
+    if (visibleIndices.length === 0) return;
+    const currentPosition = tooltip === null ? visibleIndices.length - 1 : visibleIndices.indexOf(tooltip.idx);
     if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
       event.preventDefault();
       const offset = event.key === "ArrowLeft" ? -1 : 1;
-      const next = interactiveTimes[clamp(current + offset, 0, interactiveTimes.length - 1)]!;
-      setPinnedAt(next);
-      setHoveredAt(next);
+      const position = currentPosition < 0
+        ? visibleIndices.length - 1
+        : clamp(currentPosition + offset, 0, visibleIndices.length - 1);
+      const idx = visibleIndices[position]!;
+      const plot = plotRef.current;
+      const plotLeft = plot?.valToPos(times[idx]! / 1_000, "x") ?? 0;
+      const left = plot === null
+        ? 50
+        : (plotLeft + plot.bbox.left / uPlot.pxRatio) / Math.max(1, plot.width) * 100;
+      pinnedRef.current = true;
+      if (plot) plot.setCursor({ left: plotLeft, top: 0 });
+      setTooltip({ idx, left: clamp(left, 18, 82), pinned: true });
     } else if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      const next = selectedAt ?? interactiveTimes.at(-1)!;
-      setPinnedAt(pinnedAt === next ? null : next);
-      setHoveredAt(next);
+      pinnedRef.current = !pinnedRef.current;
+      const idx = tooltip?.idx ?? visibleIndices.at(-1)!;
+      setTooltip({ idx, left: tooltip?.left ?? 50, pinned: pinnedRef.current });
     }
   };
 
@@ -437,94 +362,40 @@ function TrendChart({
               ><i className={`dashboard-runtime-trend-${entry.tone}`} />{entry.label}</button>
             );
           })}
+          {zoomed ? <button type="button" className="dashboard-runtime-chart-reset" onClick={resetZoom}>Reset zoom</button> : null}
         </div>
       </header>
-      <div className="dashboard-runtime-chart-frame">
-        <p id={instructionId} className="dashboard-runtime-visually-hidden">Move the pointer over the plot for exact values. Click to pin a time. Use Left and Right arrows to move the pinned selection, and Escape to clear it.</p>
-        <svg
-          ref={svgRef}
-          viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+      <div
+        className="dashboard-runtime-chart-frame dashboard-runtime-uplot-frame"
+        onKeyDown={handleKeyboard}
+      >
+        <p id={instructionId} className="dashboard-runtime-visually-hidden">Move the pointer over the plot for exact values. Drag horizontally to select and zoom a time range. Double-click or use Reset zoom to restore the full range. Click to pin a time. Use Left and Right arrows to move the pinned selection, and Escape to clear it.</p>
+        <div
+          ref={mountRef}
+          className="dashboard-runtime-uplot"
           role="application"
           tabIndex={0}
           aria-label={`${title}: ${samples.length} ${sampleLabel}`}
           aria-describedby={instructionId}
-          data-view-start={Math.round(start)}
-          data-view-end={Math.round(end)}
-          onPointerMove={(event) => {
-            const nearest = selectFromPointer(event);
-            if (nearest !== null) setHoveredAt(nearest);
-          }}
-          onPointerLeave={() => { if (pinnedAt === null) setHoveredAt(null); }}
-          onClick={(event) => {
-            const nearest = selectFromPointer(event);
-            if (nearest !== null) {
-              setHoveredAt(nearest);
-              setPinnedAt((current) => current === nearest ? null : nearest);
-            }
-          }}
-          onKeyDown={handleKeyboard}
-        >
-          <defs><clipPath id={clipId}><rect x={PLOT.left} y={PLOT.top} width={plotWidth} height={plotHeight} /></clipPath></defs>
-          {bands.map((band) => (
-            <rect key={`${band.from}:${band.to}`} className={`dashboard-runtime-trend-band dashboard-runtime-trend-band-${band.tone}`} x={PLOT.left} y={y(band.to)} width={plotWidth} height={Math.max(0, y(band.from) - y(band.to))} />
-          ))}
-          {ticks.map((tick) => {
-            const value = yMaximum * tick;
-            return (
-              <g key={tick}>
-                <line className="dashboard-runtime-trend-gridline" x1={PLOT.left} x2={WIDTH - PLOT.right} y1={y(value)} y2={y(value)} />
-                <text className="dashboard-runtime-trend-axis" x={PLOT.left - 8} y={y(value) + 4} textAnchor="end">{formatValue(value)}</text>
-              </g>
-            );
-          })}
-          {visibleSamples.length > 0 ? xTicks.map((tick, index) => (
-            <text key={`${tick}:${index}`} className="dashboard-runtime-trend-axis" x={x(tick)} y={HEIGHT - 8} textAnchor={index === 0 ? "start" : index === 2 ? "end" : "middle"}>{timeLabel(tick)}</text>
-          )) : null}
-          <g clipPath={`url(#${clipId})`}>
-          {visibleSeries.flatMap((entry) => segments(entry.points).flatMap((segment, index) => {
-            const key = `${entry.id}:${index}`;
-            if (segment.length === 1) {
-              return <circle key={key} className={`dashboard-runtime-trend-dot dashboard-runtime-trend-stroke-${entry.tone}`} cx={x(segment[0]!.sampledAt)} cy={y(segment[0]!.value ?? 0)} r="3" />;
-            }
-            const path = linePath(segment, x, y);
-            const last = segment.at(-1)!;
-            return [
-              entry.fill ? (
-                <path
-                  key={`${key}:area`}
-                  className={`dashboard-runtime-trend-area dashboard-runtime-trend-fill-${entry.tone}`}
-                  d={`${path} L ${x(last.sampledAt)} ${y(0)} L ${x(segment[0]!.sampledAt)} ${y(0)} Z`}
-                />
-              ) : null,
-              <path key={`${key}:line`} className={`dashboard-runtime-trend-line dashboard-runtime-trend-stroke-${entry.tone}`} d={path} />,
-              <circle key={`${key}:latest`} className={`dashboard-runtime-trend-latest dashboard-runtime-trend-stroke-${entry.tone}`} cx={x(last.sampledAt)} cy={y(last.value ?? 0)} r="2.75" />,
-            ];
-          }))}
-          {selectedX === null ? null : (
-            <>
-              <line className="dashboard-runtime-trend-crosshair" x1={selectedX} x2={selectedX} y1={PLOT.top} y2={HEIGHT - PLOT.bottom} />
-              {selectedValues.map((entry) => entry.value === null ? null : (
-                <circle key={`selected:${entry.id}`} className={`dashboard-runtime-trend-selected dashboard-runtime-trend-stroke-${entry.tone}`} cx={selectedX} cy={y(entry.value)} r="4" />
-              ))}
-            </>
-          )}
-          </g>
-        </svg>
+          data-chart-engine="uplot"
+          data-view-start={Math.round(viewRange.start)}
+          data-view-end={Math.round(viewRange.end)}
+          data-selected-at={selectedAt === null ? undefined : Math.round(selectedAt)}
+        />
         {selectedAt === null ? null : (
           <div
-            className={`dashboard-runtime-trend-tooltip${pinnedAt === null ? "" : " is-pinned"}`}
+            className={`dashboard-runtime-trend-tooltip${tooltip?.pinned ? " is-pinned" : ""}`}
             role="status"
-            style={{ left: `${clamp(tooltipLeft, 18, 82)}%` }}
+            style={{ left: `${tooltip?.left ?? 50}%` }}
           >
-            <header><time dateTime={new Date(selectedAt).toISOString()}>{new Date(selectedAt).toLocaleString()}</time>{pinnedAt === null ? <span>Hover</span> : <span>Pinned</span>}</header>
+            <header><time dateTime={new Date(selectedAt).toISOString()}>{new Date(selectedAt).toLocaleString()}</time>{tooltip?.pinned ? <span>Pinned</span> : <span>Hover</span>}</header>
             {selectedValues.map((entry) => (
               <div key={entry.id}><i className={`dashboard-runtime-trend-${entry.tone}`} /><span>{entry.label}</span><strong>{entry.value === null ? "Unavailable" : formatValue(entry.value)}</strong></div>
             ))}
           </div>
         )}
-        {!hasLine ? <div className="dashboard-runtime-chart-collecting"><strong>{visibleSeries.length === 0 ? "All series hidden" : emptyMessage}</strong><span>{visibleSeries.length === 0 ? "Use the legend to show a series" : emptyDetail ?? `${validPoints}/2 valid points · ${visibleSamples.length} snapshots · no history is synthesized`}</span></div> : null}
+        {!hasLine ? <div className="dashboard-runtime-chart-collecting"><strong>{visibleSeries.length === 0 ? "All series hidden" : emptyMessage}</strong><span>{visibleSeries.length === 0 ? "Use the legend to show a series" : emptyDetail ?? `${validPoints}/2 valid points · ${samples.length} snapshots · no history is synthesized`}</span></div> : null}
       </div>
-      <TimeRangeNavigator domain={domain} value={viewRange} onChange={setViewRange} source={source} title={title} />
       <table className="dashboard-runtime-trend-accessible">
         <caption>{hasLine
           ? `${title} ${source} trend available`
