@@ -18,17 +18,19 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
 const (
-	routingKey      = "routing-project-key"
-	routingAdminKey = "routing-admin-key"
-	unauthorizedV1  = `{"error":{"message":"A valid Agents API bearer key is required.","type":"invalid_request_error","code":null,"param":null}}` + "\n"
-	invalidBetaV1   = `{"error":{"message":"To access the Agents API, set the 'OpenAI-Beta' header to 'agents=v1'.","type":"invalid_beta","code":"invalid_beta","param":null}}` + "\n"
-	notAllowedV1    = `{"error":{"message":"This API method is not supported.","type":"invalid_request_error","code":"unsupported_operation","param":null}}` + "\n"
+	routingKey        = "routing-project-key"
+	routingDerivedKey = "routing-derived-key"
+	routingAdminKey   = "routing-admin-key"
+	unauthorizedV1    = `{"error":{"message":"A valid Agents API bearer key is required.","type":"invalid_request_error","code":null,"param":null}}` + "\n"
+	invalidBetaV1     = `{"error":{"message":"To access the Agents API, set the 'OpenAI-Beta' header to 'agents=v1'.","type":"invalid_beta","code":"invalid_beta","param":null}}` + "\n"
+	notAllowedV1      = `{"error":{"message":"This API method is not supported.","type":"invalid_request_error","code":"unsupported_operation","param":null}}` + "\n"
 )
 
 var requestIDPattern = regexp.MustCompile(`^req_[0-9a-f]{32}$`)
@@ -70,6 +72,20 @@ func (s *routingStore) UpdateAgent(_ context.Context, tenant, id string, input s
 	return s.agent, nil
 }
 
+// routingKeys resolves one derived project API key to the static routing
+// binding. Key management methods panic, so administrator handlers are traps.
+type routingKeys struct {
+	ProjectAPIKeyStore
+	principal identity.Principal
+}
+
+func (k routingKeys) ResolveProjectAPIKey(_ context.Context, digest string) (store.ProjectAPIKeyBinding, error) {
+	if digest != device.HashCredential(routingDerivedKey) {
+		return store.ProjectAPIKeyBinding{}, store.ErrNotFound
+	}
+	return store.ProjectAPIKeyBinding{BindingDigest: device.HashCredential(routingKey), Principal: k.principal}, nil
+}
+
 // missingFiles reports every File as missing.
 type missingFiles struct{ SourceFileStore }
 
@@ -79,7 +95,8 @@ func (missingFiles) GetSourceFile(context.Context, string, string) (store.Source
 
 // routingFixture returns the served handler and, for route enumeration, a
 // router built from an identically configured Handler. Sandbox administration
-// uses a zero Store, which panics if a handler is ever reached.
+// uses a zero Store and project API key management a trap store, which panic
+// if a handler is ever reached; derived project keys resolve normally.
 func routingFixture(t *testing.T) (http.Handler, *chi.Mux, *routingStore) {
 	t.Helper()
 	tenant := uuid.NewString()
@@ -93,7 +110,11 @@ func routingFixture(t *testing.T) (http.Handler, *chi.Mux, *routingStore) {
 	}
 	s := &routingStore{tenant: tenant, agent: store.SavedAgent{ID: uuid.NewString(), TenantID: tenant, Metadata: map[string]string{},
 		Configuration: json.RawMessage(`{"model":"fixture"}`), CreatedAt: time.Unix(1700000000, 0), UpdatedAt: time.Unix(1700000000, 0)}}
-	options := []Option{WithSandboxManager(&store.Store{}, admin), WithSourceFiles(missingFiles{})}
+	static, ok := auth.staticBinding(device.HashCredential(routingKey))
+	if !ok {
+		t.Fatal("static routing binding is missing")
+	}
+	options := []Option{WithSandboxManager(&store.Store{}, admin), WithProjectAPIKeys(routingKeys{principal: static}, admin), WithSourceFiles(missingFiles{})}
 	handler, err := NewHandler(s, auth, "codex", options...)
 	if err != nil {
 		t.Fatal(err)
@@ -200,6 +221,11 @@ func TestNonCanonicalPathsServeTheCleanRoute(t *testing.T) {
 			t.Fatalf("handler saw a non-canonical ID %q", lookup)
 		}
 	}
+	// A derived project API key authenticates the canonical route like its parent.
+	derived := withHeaders([]string{"Authorization", "Bearer " + routingDerivedKey}, beta)
+	if got := serve(handler, http.MethodGet, "/v1//agents/%2e/"+id, "", derived); !sameResponse(got, clean) {
+		t.Fatalf("derived key through // = %d %s", got.Code, got.Body)
+	}
 	list := serve(handler, http.MethodGet, "/v1/agents", "", authenticated)
 	if got := serve(handler, http.MethodGet, "/v1//agents", "", authenticated); list.Code != http.StatusOK || !sameResponse(got, list) {
 		t.Fatalf("list through // = %d %s", got.Code, got.Body)
@@ -275,19 +301,22 @@ func TestEveryRouteAuthenticatesItsCanonicalPath(t *testing.T) {
 	selfAuthenticated := map[string]bool{"GET /healthz": false, "POST /core/v1/sandbox/enroll": false, "GET /core/v1/sandbox/node/identity": false}
 	credentials := []http.Header{{}, withHeaders(beta), withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta),
 		withHeaders([]string{"Authorization", "Basic " + routingKey}, beta), withHeaders([]string{"Authorization", "Bearer wrong"}),
-		withHeaders(project), withHeaders(project, []string{"OpenAI-Beta", "agents=v0"})}
+		withHeaders(project), withHeaders(project, []string{"OpenAI-Beta", "agents=v0"}),
+		withHeaders([]string{"Authorization", "Bearer " + routingDerivedKey}), withHeaders([]string{"Authorization", "Bearer " + routingDerivedKey}, beta)}
 	routes := 0
+	walked := map[string]bool{}
 	err := chi.Walk(router, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		walked[method+" "+route] = true
 		if _, ok := selfAuthenticated[method+" "+route]; ok {
 			selfAuthenticated[method+" "+route] = true
 			return nil
 		}
 		routes++
 		clean := concretePath(route)
-		admin := strings.HasPrefix(route, "/core/v1/sandbox/")
+		admin := strings.HasPrefix(route, "/core/v1/sandbox/") || strings.HasPrefix(route, "/core/v1/project-api-keys/")
 		betaGroup := strings.HasPrefix(route, "/v1/") && !strings.HasPrefix(route, "/v1/files") && !strings.HasPrefix(route, "/v1/skills")
 		for _, header := range credentials {
-			projectKey := header.Get("Authorization") == "Bearer "+routingKey
+			projectKey := header.Get("Authorization") == "Bearer "+routingKey || header.Get("Authorization") == "Bearer "+routingDerivedKey
 			betaHeader := header.Get("OpenAI-Beta") == "agents=v1"
 			adminKey := header.Get("Authorization") == "Bearer "+routingAdminKey
 			if admin && adminKey || !admin && projectKey && (betaHeader || !betaGroup) {
@@ -312,12 +341,18 @@ func TestEveryRouteAuthenticatesItsCanonicalPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	for _, route := range []string{"GET /core/v1/project-api-keys/{binding_digest}/", "POST /core/v1/project-api-keys/{binding_digest}/",
+		"DELETE /core/v1/project-api-keys/{binding_digest}/{key_id}", "GET /core/v1/sandbox/nodes", "DELETE /core/v1/environments/{environment_id}/executor-credentials/{key_id}"} {
+		if !walked[route] {
+			t.Errorf("route %s was not walked", route)
+		}
+	}
 	for route, found := range selfAuthenticated {
 		if !found {
 			t.Errorf("self-authenticated route %s is no longer registered", route)
 		}
 	}
-	if routes < 70 || len(s.lookups) != 0 || len(s.updates) != 0 {
+	if routes < 73 || len(s.lookups) != 0 || len(s.updates) != 0 {
 		t.Fatalf("walked %d routes; store lookups %v updates %v", routes, s.lookups, s.updates)
 	}
 	// Traversal into internal groups keeps their own authentication.
@@ -332,6 +367,11 @@ func TestEveryRouteAuthenticatesItsCanonicalPath(t *testing.T) {
 		{"/v1/agents/..%2F..%2Fcore/v1/sandbox/nodes", withHeaders(project, beta), http.StatusNotFound, "unsupported_operation"},
 		{"/core/v1/sandbox/%2E%2E/%2E%2E/%2E%2E/v1/agents", withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta), http.StatusUnauthorized, ""},
 		{"/core/v1/sandbox/nodes%2F..%2F..%2F..%2Fv1%2Fagents", withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta), http.StatusNotFound, ""},
+		// Project API key management keeps deployment administrator authority.
+		{"/v1/%2E%2E/core/v1/project-api-keys/" + device.HashCredential(routingKey), withHeaders(project, beta), http.StatusUnauthorized, "invalid_admin_key"},
+		{"/v1/agents//../../core/v1/project-api-keys/" + device.HashCredential(routingKey), withHeaders([]string{"Authorization", "Bearer " + routingDerivedKey}, beta), http.StatusUnauthorized, "invalid_admin_key"},
+		{"/v1/x{/..%2F..%2Fcore/v1/project-api-keys/" + device.HashCredential(routingKey), http.Header{}, http.StatusBadRequest, "invalid_beta"},
+		{"/core/v1/project-api-keys/" + device.HashCredential(routingKey) + "/%2E%2E/%2E%2E/%2E%2E/%2E%2E/v1/agents", withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta), http.StatusUnauthorized, ""},
 	} {
 		got := serve(handler, http.MethodGet, test.target, "", test.header)
 		if got.Code != test.status || (test.code != "" && !strings.Contains(got.Body.String(), `"code":"`+test.code+`"`)) {
@@ -711,11 +751,14 @@ var canonicalPathSeeds = []string{
 	"v1/files/..%2F..%2Fv1/skills", "0\"%2F", "core/v1/sandbox/nodes{%2F..%2F..%2F..%2Fv1/agents", "v1/agents/%252F..",
 	"api/v1/agent-daemon/%2E%2E/%2E%2E/%2E%2E/v1/agents", "v1/x{/%2e./core/v1/sandbox/node/identity", "v1/agents/%7E%5F%2D%41",
 	"core/v1/environments/x/executor-credentials/%2E%2E/%2E%2E/%2E%2E/%2E%2E/core/v1/sandbox/nodes",
+	"v1/x{/..%2F..%2Fcore/v1/project-api-keys/x", "core/v1/project-api-keys/x/%2E%2E/%2E%2E/%2E%2E/%2E%2E/v1/agents",
+	"v1/%2E%2E/core/v1/project-api-keys/x/", "core/v1/project-api-keys//x/y",
 }
 
 // Differential property over arbitrary request paths: the routed outcome for
-// no credentials, the Beta header and the administrator key equals that of
-// the canonical form, and every layer sees one consistent canonical path.
+// no credentials, the Beta header, the administrator key and a derived project
+// API key equals that of the canonical form, and every layer sees one
+// consistent canonical path.
 func FuzzCanonicalPathsRouteLikeTheirCanonicalForm(f *testing.F) {
 	for _, seed := range canonicalPathSeeds {
 		f.Add(seed)
@@ -725,7 +768,8 @@ func FuzzCanonicalPathsRouteLikeTheirCanonicalForm(f *testing.F) {
 			t.Skip()
 		}
 		handler, _, _ := routingFixture(t)
-		for _, header := range []http.Header{{}, withHeaders(beta), withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta)} {
+		for _, header := range []http.Header{{}, withHeaders(beta), withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta),
+			withHeaders([]string{"Authorization", "Bearer " + routingDerivedKey}, beta)} {
 			request, err := parseRaw(http.MethodGet, "/"+path, header)
 			if err != nil {
 				t.Skip()

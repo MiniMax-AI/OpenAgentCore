@@ -71,6 +71,8 @@ func TestMCPCredentialSelectionPublicPostgres(t *testing.T) {
 		// Per-response headers; every other header takes part in comparisons.
 		response.Header.Del("Date")
 		response.Header.Del("Traceparent")
+		response.Header.Del("X-Request-Id")
+		response.Header.Del("Openai-Processing-Ms")
 		return selectionResponse{status: response.StatusCode, header: response.Header, body: raw.String()}
 	}
 

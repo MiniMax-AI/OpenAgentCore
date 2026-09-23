@@ -845,7 +845,10 @@ Decisions:
   unobserved.
 - Every 401 of the Agents API handler has type `invalid_request_error`, including
   the deployment administrator (`invalid_admin_key`) and sandbox node
-  (`invalid_node_credential`) extensions, whose codes are unchanged. Daemon,
+  (`invalid_node_credential`) extensions, whose codes are unchanged. Project API
+  key management keeps its deployment administrator authentication behind the
+  same canonical path; derived project keys authenticate exactly as their static
+  parent binding, under the Beta and Files rules above. Daemon,
   enrollment and node transport served beside it keep their own formats.
 - The response headers belong to the Agents API handler. Daemon, enrollment and
   node transport routes do not carry them, and the shared log middleware is

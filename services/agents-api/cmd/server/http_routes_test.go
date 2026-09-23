@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -64,6 +65,13 @@ func TestServerHandlerRoutesCanonicalPaths(t *testing.T) {
 // trapStore panics on every store call, marking a request that reached a handler.
 type trapStore struct{ api.ResourceStore }
 
+// trapKeys finds no derived project API key; key management calls panic.
+type trapKeys struct{ api.ProjectAPIKeyStore }
+
+func (trapKeys) ResolveProjectAPIKey(context.Context, string) (store.ProjectAPIKeyBinding, error) {
+	return store.ProjectAPIKeyBinding{}, store.ErrNotFound
+}
+
 // daemonComposition serves the real API handler beside sentinel daemon routes.
 func daemonComposition(t testing.TB) http.Handler {
 	t.Helper()
@@ -76,7 +84,7 @@ func daemonComposition(t testing.TB) http.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	apiHandler, err := api.NewHandler(trapStore{}, auth, "codex", api.WithSandboxManager(&store.Store{}, admin))
+	apiHandler, err := api.NewHandler(trapStore{}, auth, "codex", api.WithSandboxManager(&store.Store{}, admin), api.WithProjectAPIKeys(trapKeys{}, admin))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,6 +132,8 @@ func TestServerHandlerRawPathsKeepEncodedSeparators(t *testing.T) {
 		{"/v1/x\"/..%2f..%2fapi/v1/agent-daemon/connection", "400"},
 		{"/v1/\xc3\xa9/..%2F..%2Fcore/v1/sandbox/node/connect", "400"},
 		{"/v1/x{/..%2F..%2Fcore/v1/sandbox/nodes", "400"},
+		{"/v1/x{/..%2F..%2Fcore/v1/project-api-keys/x", "400"},
+		{"/v1/x{/../../core/v1/project-api-keys/x", "401"},
 		{"/v1/x\\/..%5C..%5Capi/v1/agent-daemon/ws", "400"},
 		{"http://example.test/v1/x{/..%252F..%252Fapi/v1/agent-daemon/enroll", "400"},
 		{"/v1/x{/../../api/v1/agent-daemon/enroll", "204"},
@@ -156,7 +166,8 @@ func TestServerHandlerRawPathsKeepEncodedSeparators(t *testing.T) {
 func FuzzServerHandlerRoutesLikeCanonicalForm(f *testing.F) {
 	for _, seed := range []string{"v1//agents", "v1/x{/..%2F..%2Fapi/v1/agent-daemon/enroll", "api/v1/agent-daemon%2Fenroll",
 		"v1/\xc3\xa9/../../api/v1/agent-daemon/ws", "core/v1/sandbox/node/%2E%2E/node/connect", "0\"%2F", "api/v1/agent-daemon",
-		"v1/x\\/..%5C..%5Capi/v1/agent-daemon/connection", "v1/agents/%252F%2e%2E/x"} {
+		"v1/x\\/..%5C..%5Capi/v1/agent-daemon/connection", "v1/agents/%252F%2e%2E/x", "v1/x{/..%2F..%2Fcore/v1/project-api-keys/x",
+		"core/v1/project-api-keys/x/%2E%2E/%2E%2E/%2E%2E/%2E%2E/api/v1/agent-daemon/enroll"} {
 		f.Add(seed)
 	}
 	handler := daemonComposition(f)
