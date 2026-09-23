@@ -90,6 +90,10 @@ def verify_hosted_structured(client, foreign, http, model, kind, restart, eviden
             complete = next(i for i, e in enumerate(events) if e["type"] == "agent.session.turn.completed")
             assert added < done < complete
             assert next(e["text"] for e in events if e["type"] == "agent.session.turn.output_text.done" and e["item_id"] == answer["id"]) == raw
+            # The native final is framed like a streamed message; deltas carry its exact text (EVT-10).
+            assert events[added]["item"]["status"] == "in_progress" and events[added]["item"]["content"] == []
+            deltas = [e["delta"] for e in events if e["type"] == "agent.session.turn.output_text.delta" and e["item_id"] == answer["id"]]
+            assert deltas and "".join(deltas) == raw, deltas
         artifacts = [a for a in sessions.artifacts.list(sid, limit=100) if a.path == expected["path"] and a.turn_id == turn.id]
         assert len(artifacts) == 1
         with sessions.artifacts.with_streaming_response.content(artifacts[0].id, session_id=sid) as response:

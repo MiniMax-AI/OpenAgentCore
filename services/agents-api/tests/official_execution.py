@@ -86,6 +86,23 @@ def main():
         assert text_events[-1].text == answers[0].content[0].text
         deltas = [value.delta for value in text_events if value.type.endswith(".delta")]
         assert len(deltas) >= 2 and "".join(deltas) == answers[0].content[0].text, deltas
+        # Official sequence: the answer is added empty and in progress, then an
+        # empty part, deltas and completion (EVT-10). Input Items carry explicit
+        # null output_index and phase (EVT-09).
+        def about_answer(value):
+            item = getattr(value, "item", None)
+            return getattr(value, "item_id", None) == answers[0].id or (item is not None and item.id == answers[0].id)
+        answer_events = [value for value in first_events if about_answer(value)]
+        answer_types = [value.type.removeprefix("agent.session.turn.") for value in answer_events]
+        assert answer_types[:2] == ["item.added", "content_part.added"], answer_types
+        assert answer_types[-3:] == ["output_text.done", "content_part.done", "item.done"], answer_types
+        assert set(answer_types[2:-3]) == {"output_text.delta"}, answer_types
+        assert answer_events[0].item.status == "in_progress" and answer_events[0].item.content == []
+        assert answer_events[1].part.text == ""
+        user_added = [value for value in first_events if value.type == "agent.session.turn.item.added" and value.item.role == "user"]
+        assert len(user_added) == 2 and all(value.output_index is None and "output_index" in value.to_dict() and
+                                            value.item.to_dict().get("phase", "missing") is None for value in user_added)
+        assert sessions.retrieve(session.id).to_dict()["agent"]["reasoning"] == {"effort": None, "summary": None}
         try:
             create(message("changed")["input"], extra_headers=creation_key)
             raise AssertionError("changed retry accepted")

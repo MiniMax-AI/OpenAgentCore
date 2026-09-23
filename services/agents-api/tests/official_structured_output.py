@@ -78,6 +78,10 @@ def final(session, events=None):
         done = next(i for i, e in enumerate(events) if e["type"] == "agent.session.turn.item.done" and e["item"]["id"] == item_id)
         terminal = next(i for i, e in enumerate(events) if e["type"] == "agent.session.turn.completed")
         assert added < done < terminal
+        # The native final is framed like a streamed message; deltas carry its exact text (EVT-10).
+        assert events[added]["item"]["status"] == "in_progress" and events[added]["item"]["content"] == []
+        deltas = [e["delta"] for e in events if e["type"] == "agent.session.turn.output_text.delta" and e["item_id"] == item_id]
+        assert deltas and "".join(deltas) == text, deltas
         assert next(e["text"] for e in events if e["type"] == "agent.session.turn.output_text.done" and e["item_id"] == item_id) == text
     return answers[-1].id
 

@@ -28,9 +28,10 @@ func recordItemChange(ctx context.Context, q *sqlc.Queries, session pgtype.UUID,
 	textMessage := item.Type == "message" && item.Role == "assistant" && len(item.Content) == 1 && item.Content[0].Text != nil
 	if previous.ID == "" {
 		initial := item
-		if textMessage && delta != nil {
-			empty := ""
-			initial.Content = []v1.ItemContent{{Type: "output_text", Text: &empty}}
+		if textMessage {
+			// Assistant text is added empty and in progress; its text arrives
+			// only through deltas, as in official streams (EVT-10).
+			initial.Status, initial.Content = "in_progress", []v1.ItemContent{}
 		}
 		event := base
 		event.Item = &initial
@@ -38,11 +39,17 @@ func recordItemChange(ctx context.Context, q *sqlc.Queries, session pgtype.UUID,
 			return err
 		}
 		if textMessage {
-			zero := 0
+			zero, empty := 0, ""
 			event = base
-			event.ItemID, event.ContentIndex, event.Part = item.ID, &zero, &initial.Content[0]
+			event.ItemID, event.ContentIndex, event.Part = item.ID, &zero, &v1.ItemContent{Type: item.Content[0].Type, Text: &empty}
 			if err := emit("content_part.added", event); err != nil {
 				return err
+			}
+			if delta == nil {
+				// A first observation without its own fragment, such as a
+				// non-streamed native final, carries its unchanged text in one
+				// delta. This frames the text; it never alters it.
+				delta = item.Content[0].Text
 			}
 		}
 	}
