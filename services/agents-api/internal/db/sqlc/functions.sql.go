@@ -209,6 +209,24 @@ func (q *Queries) MatchFunctionResult(ctx context.Context, arg MatchFunctionResu
 	return i, err
 }
 
+const sessionHasFunctionCall = `-- name: SessionHasFunctionCall :one
+SELECT EXISTS (
+    SELECT 1 FROM function_calls WHERE session_id = $1 AND call_id = $2
+)::boolean AS found
+`
+
+type SessionHasFunctionCallParams struct {
+	SessionID pgtype.UUID `json:"session_id"`
+	CallID    string      `json:"call_id"`
+}
+
+func (q *Queries) SessionHasFunctionCall(ctx context.Context, arg SessionHasFunctionCallParams) (bool, error) {
+	row := q.db.QueryRow(ctx, sessionHasFunctionCall, arg.SessionID, arg.CallID)
+	var found bool
+	err := row.Scan(&found)
+	return found, err
+}
+
 const submitFunctionResult = `-- name: SubmitFunctionResult :exec
 UPDATE function_calls SET result = $4 WHERE session_id = $1 AND turn_id = $2 AND call_id = $3
 `

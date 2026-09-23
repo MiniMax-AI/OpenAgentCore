@@ -132,7 +132,8 @@ func TestSkillsOwnershipEncryptionAndVersions(t *testing.T) {
 	if err != nil || next.HasMore || len(next.Versions) != 6 || next.Versions[0].Version != 4 {
 		t.Fatal("version resource cursor", next, err)
 	}
-	if _, err = s.ListSkillVersions(t.Context(), tenant, created.ID, "3", 20, true); !errors.Is(err, ErrNotFound) {
+	var cursorErr *InvalidCursorError
+	if _, err = s.ListSkillVersions(t.Context(), tenant, created.ID, "3", 20, true); !errors.As(err, &cursorErr) || cursorErr.Message != "Invalid 'after': '3'. Expected an ID that begins with 'skillver'." {
 		t.Fatal("numeric version is not a cursor", err)
 	}
 	if _, err = s.UpdateSkillDefault(t.Context(), tenant, created.ID, "999"); !errors.Is(err, ErrNotFound) {

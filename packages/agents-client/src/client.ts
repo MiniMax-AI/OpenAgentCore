@@ -1,4 +1,4 @@
-import { projectExecutionConfiguration, projectConfigurationCapabilities } from "./execution-configuration-projection";
+import { projectExecutionConfiguration } from "./execution-configuration-projection";
 import { exactFields, onlyFields, isRecord, hasOwn, canonicalUuid, isNonnegativeInteger, sameResourceId } from "./response-projection";
 import { projectTokenUsage } from "./usage-projection";
 import { projectAgentTurn, projectSessionItem, projectItemContent, projectHistoryPage, validateHistoryPageOptions } from "./history-projection";
@@ -29,7 +29,6 @@ import type {
   CreateSessionStreamOptions,
   CoreStartupConfiguration,
   SessionExecutionConfiguration,
-  StartupConfigurationReadOptions,
   CoreHarnessKind,
   CoreManagedSandboxProvider,
   FunctionResultContent,
@@ -125,7 +124,8 @@ export class CreationStreamRetryError extends AgentCoreError {
  * Core deletes only a durably idle or failed Session without required actions
  * or pending input. Any other Session is rejected with HTTP 409 and code
  * `conflict_error` and left unchanged: cancel its work, wait until it is idle,
- * then delete it.
+ * then delete it. Apply this only to a `deleteSession` failure: Session input
+ * conflicts use the same status and code.
  */
 export function isSessionDeletionConflict(error: unknown): error is AgentCoreError {
   return error instanceof AgentCoreError && error.status === 409 && error.code === "conflict_error";
@@ -161,7 +161,7 @@ function invalidStartupConfiguration(): never {
 }
 
 function projectStartupConfiguration(value: unknown): CoreStartupConfiguration {
-  if (!isRecord(value) || !onlyFields(value, new Set([...startupConfigurationFields, "configuration_capabilities"])) || value.object !== "agents.core.startup_configuration" || value.schema_version !== 1 ||
+  if (!isRecord(value) || !exactFields(value, startupConfigurationFields) || value.object !== "agents.core.startup_configuration" || value.schema_version !== 1 ||
     !isRecord(value.supported) || !exactFields(value.supported, startupSupportedFields) ||
     !sortedUnique(value.supported.harnesses, isHarnessKind) || !sortedUnique(value.supported.managed_sandbox_providers, isSandboxProvider) ||
     !isRecord(value.configured) || !exactFields(value.configured, startupConfiguredFields) ||
@@ -196,15 +196,9 @@ function projectStartupConfiguration(value: unknown): CoreStartupConfiguration {
     return invalidStartupConfiguration();
   }
   const projectedProviders = modelProviders as Array<Record<string, unknown>>;
-  const capabilities = hasOwn(value, "configuration_capabilities")
-    ? projectConfigurationCapabilities(value.configuration_capabilities, invalidStartupConfiguration) : undefined;
-  if (capabilities && (supportedHarnesses.some((harness) => !capabilities.harnesses.some((entry) => entry.harness === harness)) || capabilities.harnesses.some((entry) =>
-    entry.enabled !== enabledHarnesses.includes(entry.harness as CoreHarnessKind) ||
-    entry.default !== (entry.harness === configured.default_harness)))) return invalidStartupConfiguration();
   return {
     object: "agents.core.startup_configuration",
     schema_version: 1,
-    ...(capabilities ? { configuration_capabilities: capabilities } : {}),
     supported: {
       harnesses: [...supportedHarnesses],
       managed_sandbox_providers: [...supportedSandboxProviders],
@@ -1863,8 +1857,8 @@ function projectEnvironmentFileList(
 }
 
 export class OpenAIAgentsClient implements AgentCore {
-  async retrieveStartupConfiguration(options?: StartupConfigurationReadOptions): Promise<CoreStartupConfiguration> {
-    const value = await this.request<unknown>(`/agents/core/startup-configuration${options?.includeConfigurationCapabilities ? "?include=configuration_capabilities" : ""}`, { signal: options?.signal }, 200);
+  async retrieveStartupConfiguration(options?: ReadOptions): Promise<CoreStartupConfiguration> {
+    const value = await this.request<unknown>("/agents/core/startup-configuration", { signal: options?.signal }, 200);
     return projectStartupConfiguration(value);
   }
 
@@ -2571,6 +2565,15 @@ export class OpenAIAgentsClient implements AgentCore {
     return this.submitEvents(sessionId, [{ type: "agent.session.input.cancel" }], idempotencyKey);
   }
 
+  /**
+   * Submits one function result. Core rejects a result the Session cannot accept,
+   * such as one after cancellation or one that differs from the saved result,
+   * with HTTP 409 `conflict_error`. A call that is unknown or belongs to another
+   * Turn of the Session is HTTP 400 `invalid_request_error`; nothing changes.
+   * Cores before these codes used 409 `turn_conflict`/`idempotency_conflict`
+   * and 404 for unknown targets: treat any 409 as a conflict, and 400 (new) or
+   * 404 (older, within an owned Session) as an unknown target.
+   */
   submitFunctionResult(sessionId: string, input: FunctionResultInput, idempotencyKey: string): Promise<void> {
     const event: SessionToolResultInputEvent = {
       type: "agent.session.input.tool_result",

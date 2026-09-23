@@ -236,12 +236,11 @@ func (q *Queries) GetSkillVersion(ctx context.Context, arg GetSkillVersionParams
 
 const getSkillVersionByID = `-- name: GetSkillVersionByID :one
 SELECT id, tenant_id, skill_id, version, name, description, created_at
-FROM skill_versions WHERE tenant_id = $1 AND skill_id = $2 AND id = $3
+FROM skill_versions WHERE tenant_id = $1 AND id = $2
 `
 
 type GetSkillVersionByIDParams struct {
 	TenantID pgtype.UUID `json:"tenant_id"`
-	SkillID  pgtype.UUID `json:"skill_id"`
 	ID       pgtype.UUID `json:"id"`
 }
 
@@ -255,8 +254,9 @@ type GetSkillVersionByIDRow struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+// Tenant-wide, so a list cursor can tell another Skill's version from a missing one.
 func (q *Queries) GetSkillVersionByID(ctx context.Context, arg GetSkillVersionByIDParams) (GetSkillVersionByIDRow, error) {
-	row := q.db.QueryRow(ctx, getSkillVersionByID, arg.TenantID, arg.SkillID, arg.ID)
+	row := q.db.QueryRow(ctx, getSkillVersionByID, arg.TenantID, arg.ID)
 	var i GetSkillVersionByIDRow
 	err := row.Scan(
 		&i.ID,

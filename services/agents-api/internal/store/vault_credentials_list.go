@@ -35,7 +35,7 @@ func (s *Store) ListCredentials(ctx context.Context, tenantID, vaultID, cursor s
 	parent, _ := parseID(vault.ID)
 	params := sqlc.ListCredentialsParams{TenantID: tenant, VaultID: parent, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending, Statuses: statuses}
 	if cursor != "" {
-		after, err := s.GetCredential(ctx, tenantID, vaultID, cursor)
+		after, err := s.GetCredential(ctx, tenantID, vaultID, lookupCursor(cursor))
 		if err != nil {
 			return CredentialPage{}, err
 		}

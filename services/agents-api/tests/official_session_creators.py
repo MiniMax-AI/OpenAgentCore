@@ -40,6 +40,7 @@ def verify_session_creators(client, owner, other, rotated, peer, same_id, spec, 
                     assert response.headers["content-type"].split(";")[0] == "application/json"
                     response.read()
                     assert response.json()["error"]["code"] == "idempotency_conflict"
+                    assert response.json()["error"]["type"] == "conflict_error"
                     assert_no_creator_fields(response.json()["error"])
             response = raw.post(endpoint, headers=auth | key, json=request)
             assert response.status_code == 201 and response.json() == current.to_dict()

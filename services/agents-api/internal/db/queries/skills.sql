@@ -46,8 +46,9 @@ SELECT id, tenant_id, skill_id, version, name, description, created_at
 FROM skill_versions WHERE tenant_id = $1 AND skill_id = $2 AND version = $3;
 
 -- name: GetSkillVersionByID :one
+-- Tenant-wide, so a list cursor can tell another Skill's version from a missing one.
 SELECT id, tenant_id, skill_id, version, name, description, created_at
-FROM skill_versions WHERE tenant_id = $1 AND skill_id = $2 AND id = $3;
+FROM skill_versions WHERE tenant_id = $1 AND id = $2;
 
 -- name: ReadSkillVersion :one
 SELECT * FROM skill_versions WHERE tenant_id = $1 AND skill_id = $2 AND version = $3;

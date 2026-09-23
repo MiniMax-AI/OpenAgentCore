@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -190,6 +191,27 @@ func TestListOrderErrorEnvelopes(t *testing.T) {
 			})
 		}
 	}
+}
+
+// The Skills order error repeats the value only when it is short and printable,
+// so a long or control-character value cannot inflate the response.
+func TestSkillsOrderErrorBoundsEcho(t *testing.T) {
+	const bounded = "Invalid value. Supported values are: 'asc' and 'desc'."
+	for _, order := range []string{strings.Repeat("x", 257), strings.Repeat("\x01", 100), "bad\nvalue", "\xff"} {
+		for _, path := range []string{"/v1/skills", "/v1/skills/skill-example/versions"} {
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodGet, path+"?order="+url.QueryEscape(order), nil)
+			if _, ok := readPage(w, r); ok {
+				t.Fatal("invalid order accepted")
+			}
+			assertListQueryError(t, w, "invalid_value", "order", bounded)
+		}
+	}
+	w := httptest.NewRecorder()
+	if _, ok := readPage(w, httptest.NewRequest(http.MethodGet, "/v1/skills?order="+strings.Repeat("y", 256), nil)); ok {
+		t.Fatal("invalid order accepted")
+	}
+	assertListQueryError(t, w, "invalid_value", "order", "Invalid value: '"+strings.Repeat("y", 256)+"'. Supported values are: 'asc' and 'desc'.")
 }
 
 func TestListQueryErrorPrecedence(t *testing.T) {

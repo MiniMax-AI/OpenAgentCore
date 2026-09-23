@@ -2,13 +2,14 @@
 
 Owned fixtures use real Worker admission with dispatch paused. No native executor
 or model runs, and initial Turn/Item history remains visible throughout the test.
-The tolerance checks follow contracts/agents-api/list-query-semantics.md.
+The tolerance and cursor checks follow contracts/agents-api/list-query-semantics.md.
 """
 
 import importlib.metadata
 import json
 import secrets
 import sys
+import uuid
 from contextlib import ExitStack
 from pathlib import Path
 
@@ -30,6 +31,128 @@ LIMITS = {
                "-1": ("integer_below_min_value", "limit", "Invalid 'limit': integer below minimum value. Expected a value >= 0, but got -1 instead.")},
     "files": {"0": (None, None, "limit must be between 1 and 10000."), "10001": (None, None, "limit must be between 1 and 10000.")},
 }
+
+
+# Unresolved `after` cursors (cursor error batch rows C1, C2, C5 and K1).
+LOOKUP_MISSING = {"message": "Resource not found.", "type": "not_found_error", "code": "not_found_error", "param": None}
+SKILLS_MISSING = {"message": "Resource not found.", "type": "invalid_request_error", "code": None, "param": None}
+FILES_MISSING = {"message": "Resource not found.", "type": "invalid_request_error", "code": None, "param": "after"}
+ITEM_CURSOR = {"message": "Invalid session item ID in `after`", "type": "invalid_request_error",
+               "code": "invalid_request_error", "param": None}
+OTHER_SKILL_VERSION = {"message": "Skill version cursor does not match this skill.", "type": "invalid_request_error",
+                       "code": "invalid_value", "param": "after"}
+
+
+def version_prefix_error(value):
+    return {"message": f"Invalid 'after': '{value}'. Expected an ID that begins with 'skillver'.",
+            "type": "invalid_request_error", "code": "invalid_value", "param": "after"}
+
+
+def verify_cursors(raw, base, token, foreign, client, owned, session_id, vault_id, cleanup):
+    """Checks unresolved cursors through raw HTTP and the SDK for tenants A and B.
+
+    Tenant B owns one resource per family, so its IDs are real foreign cursors,
+    and tenant A's IDs are foreign cursors for B. Subagent and Artifact lists need
+    seeded execution history and are covered by the Go PostgreSQL tests.
+    """
+    checks = 0
+    other = cleanup.enter_context(OpenAI(api_key=foreign, base_url=base + "/v1", max_retries=0,
+                                         http_client=DefaultHttpxClient(trust_env=False)))
+    b_agent = other.beta.agents.create(model="query-fixture-model", name="Foreign Cursor Agent")
+    cleanup.callback(other.beta.agents.delete, b_agent.id)
+    b_template = other.beta.agents.environments.templates.create(name="Foreign Cursor Template")
+    cleanup.callback(other.beta.agents.environments.templates.delete, b_template.id)
+    b_vault = other.beta.agents.vaults.create(name="Foreign Cursor Vault")
+    cleanup.callback(other.beta.agents.vaults.delete, b_vault.id)
+    b_credential = other.beta.agents.vaults.credentials.create(
+        b_vault.id, name="Foreign Cursor Credential",
+        auth={"type": "static_bearer", "mcp_server_url": "https://query.example.invalid/mcp", "token": "foreign-" + secrets.token_hex(8)})
+    b_session = other.beta.agents.sessions.create(agent_id=b_agent.id, environment={"type": "none"}, input="Foreign cursor history.")
+    cleanup.callback(other.beta.agents.sessions.delete, b_session.id)
+    other.beta.agents.sessions.events.create(b_session.id, events=[{"type": "agent.session.input.cancel"}])
+    b_turn = other.beta.agents.sessions.turns.list(b_session.id).data[0].id
+    b_item = other.beta.agents.sessions.items.list(b_session.id).data[0].id
+    b_file = other.files.create(file=("foreign-cursor.txt", b"Foreign cursor fixture"), purpose="user_data")
+    cleanup.callback(other.files.delete, b_file.id)
+    manifest = b"---\nname: foreign-cursor\ndescription: Foreign cursor fixture.\n---\nCursor.\n"
+    b_skill = other.skills.create(files=[("foreign-cursor/SKILL.md", manifest, "text/markdown")])
+    cleanup.callback(other.skills.delete, b_skill.id)
+    b_version = other.skills.versions.list(b_skill.id).data[0].id
+
+    agents, sessions, vaults = client.beta.agents, client.beta.agents.sessions, client.beta.agents.vaults
+    skill = owned["skills"][0]
+    first_version = client.skills.versions.list(skill, order="asc").data[0].id
+    manifest = b"---\nname: query-0\ndescription: Second owned version.\n---\nCursor.\n"
+    later_version = client.skills.versions.create(skill, files=[("query-0/SKILL.md", manifest, "text/markdown")]).id
+    other_version = client.skills.versions.list(owned["skills"][1]).data[0].id
+    other_turn = sessions.turns.list(owned["sessions"][1]).data[0].id
+    other_item = sessions.items.list(owned["sessions"][1]).data[0].id
+
+    def expect(key, path, status, error, cursors, listing=None, beta=True):
+        nonlocal checks
+        headers = {"Authorization": "Bearer " + key}
+        if beta:
+            headers["OpenAI-Beta"] = "agents=v1"
+        for cursor in cursors:
+            response = raw.get(base + "/v1" + path, headers=headers, params={"after": cursor})
+            assert response.status_code == status and response.json() == {"error": error}, (path, cursor, response.status_code, response.text)
+            if listing is not None:
+                try:
+                    listing(after=cursor)
+                except APIStatusError as sdk_error:
+                    assert sdk_error.status_code == status and sdk_error.body == error, (path, cursor, sdk_error.body)
+                else:
+                    raise AssertionError(f"SDK accepted {path} cursor {cursor}")
+            checks += 1
+
+    random = str(uuid.uuid4())
+    malformed = ["not-a-valid-id", str(uuid.UUID(int=0))]
+    # C1: lookup-family lists answer malformed, other-type, other-parent and foreign
+    # cursors exactly like a missing one.
+    lookups = [
+        ("/agents", agents.list, ["agent_" + secrets.token_hex(25), owned["sessions"][0], b_agent.id]),
+        ("/agents/environments/templates", agents.environments.templates.list, ["envtmpl_" + secrets.token_hex(25), owned["vaults"][0], b_template.id]),
+        ("/agents/sessions", sessions.list, ["sess_" + secrets.token_hex(25), owned["agents"][0], b_session.id]),
+        (f"/agents/sessions/{session_id}/turns", lambda **q: sessions.turns.list(session_id, **q), ["turn_" + secrets.token_hex(25), owned["items"][0], other_turn, b_turn]),
+        ("/vaults", vaults.list, ["vault_" + secrets.token_hex(25), owned["credentials"][0], b_vault.id]),
+        (f"/vaults/{vault_id}/credentials", lambda **q: vaults.credentials.list(vault_id, **q), ["credential_" + secrets.token_hex(25), vault_id, b_credential.id]),
+    ]
+    for path, listing, cursors in lookups:
+        expect(token, path, 404, LOOKUP_MISSING, [random, *malformed, *cursors], listing)
+    for path, _, _ in lookups[:3] + lookups[4:5]:
+        expect(foreign, path, 404, LOOKUP_MISSING, [owned["agents"][0], owned["sessions"][0], owned["templates"][0], owned["vaults"][0]])
+    expect(foreign, f"/agents/sessions/{b_session.id}/turns", 404, LOOKUP_MISSING, owned["turns"])
+    expect(foreign, f"/vaults/{b_vault.id}/credentials", 404, LOOKUP_MISSING, owned["credentials"])
+    # C2: any cursor that is not an Item of this Session.
+    items = lambda **q: sessions.items.list(session_id, **q)
+    expect(token, f"/agents/sessions/{session_id}/items", 400, ITEM_CURSOR,
+           [random, *malformed, "msg_" + secrets.token_hex(25), owned["turns"][0], other_item, b_item], items)
+    expect(foreign, f"/agents/sessions/{b_session.id}/items", 400, ITEM_CURSOR, owned["items"])
+    # C5: Skill versions tell non-version values, other Skills' versions and missing versions apart.
+    versions = lambda **q: client.skills.versions.list(skill, **q)
+    for value in ("not-a-valid-id", skill, random):
+        expect(token, f"/skills/{skill}/versions", 400, version_prefix_error(value), [value], versions, beta=False)
+    # A long or unprintable value is not repeated in the message.
+    unechoed = {**version_prefix_error(""), "message": "Invalid 'after'. Expected an ID that begins with 'skillver'."}
+    expect(token, f"/skills/{skill}/versions", 400, unechoed, ["x" * 300, "bad\x01value"], versions, beta=False)
+    expect(token, f"/skills/{skill}/versions", 400, OTHER_SKILL_VERSION, [other_version], versions, beta=False)
+    expect(token, f"/skills/{skill}/versions", 404, SKILLS_MISSING, ["skillver_" + random, "skillver_not-a-uuid", b_version], versions, beta=False)
+    expect(foreign, f"/skills/{b_skill.id}/versions", 404, SKILLS_MISSING, [first_version, later_version], beta=False)
+    assert [value.id for value in versions(order="asc", after=first_version)] == [later_version]
+    # K1: Files and Skills keep their missing-cursor errors.
+    expect(token, "/files", 404, FILES_MISSING, ["file-" + secrets.token_hex(12), "not-a-valid-id", b_file.id], client.files.list, beta=False)
+    expect(token, "/skills", 404, SKILLS_MISSING, ["skill_" + random, "not-a-valid-id", b_skill.id], client.skills.list, beta=False)
+    # K3: a foreign or missing parent is 404 before its cursor is read.
+    for foreign_path, missing_path, beta in (
+            (f"/agents/sessions/{session_id}/turns", f"/agents/sessions/{random}/turns", True),
+            (f"/agents/sessions/{session_id}/items", f"/agents/sessions/{random}/items", True),
+            (f"/vaults/{vault_id}/credentials", f"/vaults/{random}/credentials", True),
+            (f"/skills/{skill}/versions", f"/skills/skill_{random}/versions", False)):
+        headers = {"Authorization": "Bearer " + foreign, **({"OpenAI-Beta": "agents=v1"} if beta else {})}
+        missing = raw.get(base + "/v1" + missing_path, headers=headers)
+        assert missing.status_code == 404, missing_path
+        expect(foreign, foreign_path, 404, missing.json()["error"], ["not-a-valid-id", owned["items"][0], b_item, first_version], beta=beta)
+    return checks
 
 
 def verify_tolerance(raw, url, headers, foreign_headers, name, listing, owned, policy, nested, private):
@@ -340,8 +463,9 @@ def main():
         assert {name: [value.to_dict() for value in listing(order="asc", limit=1)] for name, _, listing, _, _ in families} == state_before
         assert list(sessions.turns.list(session_id, order="asc")) == turns
         assert list(sessions.items.list(session_id, order="asc")) == items
+        cursors = verify_cursors(raw, base, token, foreign, client, owned, session_id, vault_id, cleanup)
         resources = verify_resource_queries(raw, base, token, foreign, client, owned, session_id, vault_id)
-        print(json.dumps({"single_resource_checks": resources, "result": "passed", "families": len(families), "sdk_and_raw_rejections": rejected, "tolerance_checks": tolerated,
+        print(json.dumps({"single_resource_checks": resources, "cursor_checks": cursors, "result": "passed", "families": len(families), "sdk_and_raw_rejections": rejected, "tolerance_checks": tolerated,
                           "sdk_empty_order_omitted": len(families), "retained_turns": len(turns), "retained_items": len(items), "postgres": True,
                           "worker_admission": True, "native_model_execution": False}))
 

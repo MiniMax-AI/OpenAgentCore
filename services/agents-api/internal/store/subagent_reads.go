@@ -52,13 +52,11 @@ func (s *Store) ListSubagents(ctx context.Context, tenant, session, after string
 	err := s.withPublicSession(ctx, tenant, session, func(ctx context.Context, q *sqlc.Queries, sid pgtype.UUID) error {
 		p := sqlc.ListPublicSubagentsParams{SessionID: sid, Ascending: asc, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}}
 		if after != "" {
-			// A malformed cursor remains an invalid request, unlike a path identifier.
-			if _, err := parseID(after); err != nil {
-				return err
-			}
+			// Any cursor that is not a Subagent of this Session, including a
+			// malformed one, is an invalid cursor rather than a missing resource.
 			cursor, err := publicSubagent(ctx, q, sid, after)
 			if err != nil {
-				return err
+				return unresolvedCursor(err, errResourceCursor)
 			}
 			p.AfterOpened = pgtype.Int8{Int64: cursor.OpenedAt, Valid: true}
 			p.AfterID, _ = parseID(after)
@@ -153,12 +151,10 @@ func (s *Store) ListSubagentTurns(ctx context.Context, tenant, session, child, a
 		childID, _ := parseID(child)
 		p := sqlc.ListChildTurnsParams{SessionID: sid, SubagentID: childID, Ascending: asc, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}}
 		if after != "" {
-			if _, err := parseID(after); err != nil {
-				return err
-			}
+			// Root Turns and other children's Turns are outside this list.
 			row, err := childTurn(ctx, q, sid, child, after)
 			if err != nil {
-				return err
+				return unresolvedCursor(err, errResourceCursor)
 			}
 			p.AfterCreated = row.CreatedAt
 			p.AfterID = row.ID

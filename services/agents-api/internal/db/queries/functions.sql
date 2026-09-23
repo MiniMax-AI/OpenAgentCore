@@ -18,6 +18,11 @@ WHERE f.session_id = $1 AND f.turn_id = $2 AND NOT f.applied
     AND t.status IN ('in_progress', 'waiting') AND t.cancel_requested_at IS NULL
 ORDER BY f.created_at, f.call_id;
 
+-- name: SessionHasFunctionCall :one
+SELECT EXISTS (
+    SELECT 1 FROM function_calls WHERE session_id = sqlc.arg(session_id) AND call_id = sqlc.arg(call_id)
+)::boolean AS found;
+
 -- name: MatchFunctionResult :one
 SELECT (result IS NOT NULL)::boolean AS submitted, COALESCE(result = sqlc.arg(result)::jsonb, false)::boolean AS matches
 FROM function_calls

@@ -42,7 +42,7 @@ func (h *Handler) listSkills(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary List Skill versions
-// @Description Orders by version number; after identifies a version resource, not a version number. No contents are decrypted. Limit 0 returns an empty page whose has_more reports whether any version follows the cursor.
+// @Description Orders by version number; after identifies a version resource, not a version number. An after value that does not begin with skillver, or a version of another Skill, returns 400 invalid_value with param after; a missing version returns not found. No contents are decrypted. Limit 0 returns an empty page whose has_more reports whether any version follows the cursor.
 // @Tags Skills
 // @Produce json
 // @Security BearerAuth

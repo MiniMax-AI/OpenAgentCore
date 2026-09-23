@@ -43,7 +43,7 @@ func (h *Handler) getTurn(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary List execution Turns
-// @Description Returns the Session's root Turns in creation order; Subagent Turns are listed through the Subagent Turn routes. The cursor belongs to the same Session and tenant. Usage contains the latest recorded complete token breakdown; missing measurements remain null.
+// @Description Returns the Session's root Turns in creation order; Subagent Turns are listed through the Subagent Turn routes. The cursor belongs to the same Session and tenant; any other after value, including a malformed one or a Subagent Turn ID, returns not found. Usage contains the latest recorded complete token breakdown; missing measurements remain null.
 // @Tags Turns
 // @Produce json
 // @Security BearerAuth

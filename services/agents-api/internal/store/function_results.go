@@ -10,6 +10,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// ErrFunctionResultConflict rejects a result that differs from the one already
+// saved for its call, including after the Turn ended (EVT-12).
+var ErrFunctionResultConflict = errors.New("tool call already has a different result")
+
 // SubmitFunctionResult stores a caller-validated result object; its wire schema belongs to the API.
 func (s *Store) SubmitFunctionResult(ctx context.Context, tenantID, sessionID, turnID, callID string, result json.RawMessage) error {
 	if len(result) == 0 || len(result) > 512*1024 {
@@ -77,7 +81,7 @@ func storeFunctionResult(ctx context.Context, q *sqlc.Queries, turn sqlc.Turn, c
 	}
 	if match.Submitted {
 		if !match.Matches {
-			return ErrIdempotencyConflict
+			return ErrFunctionResultConflict
 		}
 		return nil
 	}

@@ -24,19 +24,17 @@ func (s *Store) ListItems(ctx context.Context, tenantID, sessionID, cursor strin
 	err := s.withPublicSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		p := sqlc.ListSessionItemsParams{SessionID: session, PageLimit: int32(limit + 1), Ascending: ascending, AfterID: pgtype.UUID{Valid: true}}
 		if cursor != "" {
-			id, err := parseID(cursor)
-			if err != nil {
-				return err
-			}
-			row, err := q.GetSessionItem(ctx, sqlc.GetSessionItemParams{SessionID: session, ID: id})
+			// Any cursor that is not an Item of this Session, including a
+			// malformed one, is an invalid cursor rather than a missing resource.
+			row, err := q.GetSessionItem(ctx, sqlc.GetSessionItemParams{SessionID: session, ID: parsePathID(cursor)})
 			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrNotFound
+				return errItemCursor
 			}
 			if err != nil {
 				return err
 			}
 			p.AfterCreated = row.CreatedAt
-			p.AfterID = id
+			p.AfterID = row.ID
 			p.AfterPosition = row.Position
 		}
 		rows, err := q.ListSessionItems(ctx, p)

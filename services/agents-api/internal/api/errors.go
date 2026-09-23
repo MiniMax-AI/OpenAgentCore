@@ -19,13 +19,17 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 
+// writeError reports every 409 with type conflict_error, as every observed
+// official conflict does (ERR-27); Core-only conflicts keep their own code.
 func writeError(w http.ResponseWriter, status int, code, message string, param ...string) {
 	kind := "invalid_request_error"
 	if status >= 500 {
 		kind = "server_error"
 	} else if status == http.StatusUnauthorized {
 		kind = "authentication_error"
-	} else if code == "not_found_error" || code == "invalid_beta" || code == "conflict_error" {
+	} else if status == http.StatusConflict {
+		kind = "conflict_error"
+	} else if code == "not_found_error" || code == "invalid_beta" {
 		kind = code
 	}
 	var errorCode *string
@@ -37,6 +41,20 @@ func writeError(w http.ResponseWriter, status int, code, message string, param .
 		errorParam = &param[0]
 	}
 	writeJSON(w, status, v1.ErrorResponse{Error: v1.APIError{Message: message, Type: kind, Code: errorCode, Param: errorParam}})
+}
+
+// writeInputError reports Session input admission failures. Input that the
+// Session cannot accept in its current state is the official conflict_error;
+// Idempotency-Key reuse keeps Core's local idempotency_conflict code.
+func writeInputError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, store.ErrSessionInputPending):
+		writeError(w, http.StatusConflict, "conflict_error", "Earlier input to this Session is still pending.")
+	case errors.Is(err, store.ErrTurnConflict):
+		writeError(w, http.StatusConflict, "conflict_error", "The Turn cannot accept this input in its current state.")
+	default:
+		writeStoreError(w, r, err)
+	}
 }
 
 const unstorableTextMessage = "Request text contains characters this service cannot store or compare, such as U+0000 or invalid UTF-8."
@@ -65,6 +83,7 @@ func writeFieldError(w http.ResponseWriter, err error) bool {
 }
 
 func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFoundParam ...string) {
+	var cursor *store.InvalidCursorError
 	switch {
 	case errors.Is(err, store.ErrExecutorCredentialExists):
 		writeError(w, http.StatusConflict, "executor_credential_exists", "This executor key ID already exists. Explicitly rotate it to replace the secret.")
@@ -95,6 +114,14 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 		writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", "This Session's harness does not accept a message whose text is only whitespace. Include non-whitespace text or an image, or use a harness that supports whitespace-only text.")
 	case errors.Is(err, execution.ErrExecutionUnavailable):
 		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Execution is not available on this service.")
+	case errors.As(err, &cursor):
+		// Observed official fields for an unresolved list cursor: Skill versions
+		// use invalid_value on after, Beta lists invalid_request_error with a null param.
+		if listFamilyOf(r) == skillsList {
+			writeError(w, http.StatusBadRequest, "invalid_value", cursor.Message, "after")
+		} else {
+			writeError(w, http.StatusBadRequest, "invalid_request_error", cursor.Message)
+		}
 	case errors.Is(err, store.ErrNotFound):
 		code := "not_found_error"
 		// Files and Skills retain their non-beta error envelope.
@@ -105,6 +132,12 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 	case errors.Is(err, store.ErrSessionNotIdle):
 		// Observed official status, type, code, null param and message.
 		writeError(w, http.StatusConflict, "conflict_error", "session must be durably idle or failed without required actions before deletion")
+	case errors.Is(err, store.ErrUnknownFunctionCall):
+		writeError(w, http.StatusBadRequest, "invalid_request_error", "Unknown pending tool call.")
+	case errors.Is(err, store.ErrFunctionCallTurnMismatch):
+		writeError(w, http.StatusBadRequest, "invalid_request_error", "The tool call belongs to a different Turn.")
+	case errors.Is(err, store.ErrFunctionResultConflict):
+		writeError(w, http.StatusConflict, "conflict_error", "The tool call already has a different result.")
 	case errors.Is(err, store.ErrTurnConflict):
 		writeError(w, http.StatusConflict, "turn_conflict", "The Turn cannot accept this input in its current state.")
 	case errors.Is(err, store.ErrIdempotencyConflict):

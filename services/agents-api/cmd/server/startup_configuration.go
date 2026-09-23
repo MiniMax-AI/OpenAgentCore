@@ -2,7 +2,6 @@ package main
 
 import (
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
-	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig/builtin"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/engine"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 )
@@ -21,7 +20,7 @@ func coreStartupConfiguration(defaultHarness string, enabledHarnesses []string, 
 		provider := managedProviderKind
 		managedConfiguration = v1.CoreManagedSandboxConfiguration{Enabled: true, Provider: &provider, Maintenance: managed.Maintenance}
 	}
-	result := v1.CoreStartupConfiguration{
+	return v1.CoreStartupConfiguration{
 		Object: "agents.core.startup_configuration", SchemaVersion: 1,
 		Supported: v1.CoreSupportedConfiguration{
 			Harnesses: (engine.Catalog{}).Kinds(), ManagedSandboxProviders: []string{"docker", "microsandbox"},
@@ -31,6 +30,4 @@ func coreStartupConfiguration(defaultHarness string, enabledHarnesses []string, 
 			ManagedSandbox: managedConfiguration, ModelProviders: modelProviders,
 		},
 	}
-	result.ConfigurationCapabilities = configurationCapabilities(engine.Catalog{}, builtin.Registry(), result.Configured)
-	return result
 }

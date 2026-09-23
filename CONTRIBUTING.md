@@ -88,15 +88,22 @@ observed upstream server failures as compatibility behavior. See
 
 Report validation failures with official evidence through the typed field error,
 which emits `invalid_request_error` with the observed param and message; keep
-other local codes until their official fields are sampled. Agent configuration
+other local codes until their official fields are sampled. Every 409 has type
+`conflict_error`. Session input conflicts and changed tool results also use code
+`conflict_error`; documented Core-only conflicts, such as Idempotency-Key reuse,
+sandbox administration and Environment input states, keep their local codes. Agent configuration
 (saved create/update and the inline Session agent) uses one path-tracking
 validator of the pinned shapes before its parsers and harness admission, which
 keep their local codes; do not grow it into a JSON Schema engine. A malformed path
 identifier must produce exactly the response of a well-formed missing one on that
 route, including invalid bodies, queries and storage availability: resolve it to
 the never-assigned maximum UUID and let the missing path run, or reject it
-directly only where the lookup is the next check. Malformed list cursors and
-request-body references keep their own errors. Reject U+0000 in metadata
+directly only where the lookup is the next check. Request-body references keep
+their own errors. An `after` cursor that does not resolve inside its already
+resolved parent, malformed ones included, returns that list family's observed
+error: the missing-resource 404 on lookup lists, otherwise the typed store cursor
+error. Foreign and missing cursors stay identical; see
+`contracts/agents-api/list-query-semantics.md`. Reject U+0000 in metadata
 explicitly with its `metadata.<key>` param; other stored strings rely on the
 PostgreSQL error mapping, so keep each request's writes in one transaction. See
 `contracts/agents-api/official-semantics-alignment.md`.
@@ -1979,18 +1986,13 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   identity; retries cannot replace it. Keep this query separate from runtime
   observations and do not touch activity or wake sandboxes. The versioned contract
   is `contracts/agents-api/execution-configuration.md`.
-- Provider configuration support belongs to shared adapter-owned declarations in
-  `internal/harnessconfig`. One immutable declaration registry supplies public
-  provider validation, startup discovery and the optional safe provider descriptor
-  on native adapter registration. The separate engine catalog qualifies operations,
-  not a duplicate table of provider facts. Core owns credential environment and
-  endpoint admission policy, deployment enablement and safe HTTP projection. No parallel
-  HTTP harness table or readiness gate is permitted. The startup query includes
-  these declarations only with `include=configuration_capabilities`, preserving
-  its legacy default response for installed strict clients; the extension has an
-  independent schema version. Advertise build scope and unknown live availability,
-  not universal support across deployed Runtime versions. Operation-specific
-  admission remains authoritative; an extra registry declaration cannot enable it.
+- Provider input validation uses the adapter-owned rules in `internal/harnessconfig`.
+  Keep one internal registry for protocol and token-limit validation; Core owns
+  credential environment and endpoint admission policy. These rules are not a
+  public discovery API or Runtime registration descriptor. Operation qualification
+  and live readiness retain their existing owners. The Core startup view keeps its
+  basic supported/configured deployment snapshot and accepts no query parameters.
+  Session frozen execution-configuration reads remain a separate Core extension.
 - Public Agent updates use `POST /v1/agents/{agent_id}` with the same tenant/Beta
   boundary and shared saved-field validation. Preserve omission separately from
   null; only supplied fields replace saved values. Metadata is a separate whole-map
@@ -2306,7 +2308,9 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   Turn/call identity selects an existing call; admission never creates a Turn for
   a result. Save the complete result and its input retry record in the same Session
   transaction. Any invalid target, conflicting result or later batch error rolls
-  back the whole request. Identical saved results remain retryable after termination
+  back the whole request. Resolve targets only after the tenant Session lookup:
+  an unknown call or a call of another Turn is 400 `invalid_request_error`, and
+  missing or foreign Sessions keep one 404. Identical saved results remain retryable after termination
   without applying them again. The execution input cursor skips function results;
   their separate native receipts still determine application. Public result events
   validate variant-specific fields and required values before admission; retain

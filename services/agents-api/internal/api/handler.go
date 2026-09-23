@@ -325,7 +325,7 @@ func (h *Handler) respondSessionStatus(w http.ResponseWriter, r *http.Request, s
 }
 
 // @Summary List execution Sessions
-// @Description Cursor and results are scoped to the authenticated execution tenant. Optional agent_id matches the immutable root Agent ID, including inline Agents and historical Sessions whose saved source was updated or deleted. Omission lists all Agents. Returns the same Environment and pending-input activity projection as Session retrieval, including self_hosted Sessions.
+// @Description Cursor and results are scoped to the authenticated execution tenant; an unknown, malformed or foreign after cursor returns not found. Optional agent_id matches the immutable root Agent ID, including inline Agents and historical Sessions whose saved source was updated or deleted. Omission lists all Agents. Returns the same Environment and pending-input activity projection as Session retrieval, including self_hosted Sessions.
 // @Tags Sessions
 // @Produce json
 // @Security BearerAuth

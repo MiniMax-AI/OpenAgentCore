@@ -54,16 +54,7 @@ console.log(frozen.model.value, frozen.model.source, frozen.harness.value);
 if (frozen.model_provider.status === "available") {
   console.log(frozen.model_provider.configuration?.protocol);
 }
-
-const startup = await client.retrieveStartupConfiguration({
-  includeConfigurationCapabilities: true,
-});
-const declarations = startup.configuration_capabilities;
-// Build support and deployment enablement do not prove live Runtime readiness.
-console.log(declarations?.harnesses, declarations?.runtime_availability);
 ```
 
-The startup option is explicit to preserve the legacy response for older clients.
-On servers predating this extension, use the default startup read; requesting the
-new include parameter is unsupported. Configuration reads do not execute or wake
-Sessions. See [the query contract](../../contracts/agents-api/execution-configuration.md).
+Configuration reads do not execute or wake Sessions. See
+[the query contract](../../contracts/agents-api/execution-configuration.md).

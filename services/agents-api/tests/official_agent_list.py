@@ -42,11 +42,15 @@ def verify_agent_list(client, other, invalid, saved, expect_error):
         assert len(default["data"]) == min(20, len(saved)) and default["has_more"] == (len(saved) > 20)
         assert [agent["id"] for agent in default["data"]] == [agent.id for agent in desc[:20]]
         for params in ({"limit": "-1"}, {"limit": "1.5"}, {"limit": "null"},
-                       {"limit": ""}, {"limit": str(2**63)}, {"order": "newest"}, {"after": "invalid-id"},
+                       {"limit": ""}, {"limit": str(2**63)}, {"order": "newest"},
                        [("limit", "1"), ("limit", "2")]):
             response = raw.get(url, headers=headers, params=params)
             assert response.status_code == 400, (params, response.status_code)
             assert response.json()["error"]["type"] == "invalid_request_error"
+        # A malformed cursor is a missing one.
+        missing = raw.get(url, headers=headers, params={"after": str(uuid.uuid4())})
+        malformed = raw.get(url, headers=headers, params={"after": "invalid-id"})
+        assert missing.status_code == malformed.status_code == 404 and missing.json() == malformed.json()
         zero = raw.get(url, headers=headers, params={"limit": "0", "tenant_id": "other"}).json()
         assert [agent["id"] for agent in zero["data"]] == [desc[0].id] and zero["has_more"] is True
         assert raw.get(url).status_code == 401

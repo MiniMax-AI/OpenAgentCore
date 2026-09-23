@@ -208,7 +208,8 @@ Sessions and two child Turns, all deleted.
 
 Unchanged: Subagent retrieve fields and statuses, child history contents (SAT-12
 remains unknown; Core keeps the child input Item), the hidden task text, the
-single `subagent.created` emission, cursor error semantics (SAT-04, HE-57), native
+single `subagent.created` emission, cursor error semantics (SAT-04, HE-57, since
+aligned by the [list cursor error batch](list-query-semantics.md#list-cursor-errors--september-23-2026)), native
 history ownership, cancellation, cold continuation and tenant isolation.
 
 ### Acceptance boundary

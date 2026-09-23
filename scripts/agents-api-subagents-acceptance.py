@@ -175,6 +175,13 @@ def main():
                 require(isinstance(body.get("error"), dict), "error_envelope_missing")
             return body
 
+        def cursor_error(suffix, after):
+            """An unresolved cursor is the family's official 400 (ERROR-PROTOCOL-001)."""
+            message = "Invalid session item ID in `after`" if suffix.endswith("/items") else "Invalid resource ID in `after`"
+            error = raw(suffix, {"after": after}, expected=400)["error"]
+            require(error == {"message": message, "type": "invalid_request_error", "code": "invalid_request_error",
+                              "param": None}, "cursor_error_mismatch")
+
         def sdk_list(resource, *pos, **keywords):
             values, seen = [], set()
             for item in resource.list(*pos, limit=100, order="asc", **keywords):
@@ -269,7 +276,7 @@ def main():
             require(defaults["data"] == list(reversed(expected))[:20], "pagination_defaults_mismatch")
             # Unknown list keys are ignored (list query tolerance, row A1).
             require(raw(suffix, {"unknown": "value"})["data"] == defaults["data"], "unknown_list_key_not_ignored")
-            raw(suffix, {"after": str(uuid.uuid4())}, expected=404)
+            cursor_error(suffix, str(uuid.uuid4()))
             raw(suffix, {"order": "invalid"}, expected=400)
             raw(suffix, other=True, expected=404)
 
@@ -377,15 +384,15 @@ def main():
                 require(root_turn, "fixture_not_observed_root_turn")
                 raw(suffix + "/turns/" + root_turn, expected=404)
                 raw(suffix + "/turns/" + root_turn + "/items", expected=404)
-                raw(suffix + "/turns", {"after": root_turn}, expected=404)
+                cursor_error(suffix + "/turns", root_turn)
                 if root_items:
-                    raw(suffix + "/items", {"after": root_items[0]["id"]}, expected=404)
+                    cursor_error(suffix + "/items", root_items[0]["id"])
                 summaries.append({"id": child, "parent_agent_id": identifier(sub["parent_agent_id"]),
                                   "status": sub["status"], "opened_at": sub["opened_at"], "closed_at": sub["closed_at"],
                                   "turn_ids": sorted(own_turn_ids), "item_ids": sorted(own_item_ids)})
             first, second = summaries[:2]
             raw("/subagents/" + first["id"] + "/turns/" + second["turn_ids"][0], expected=404)
-            raw("/subagents/" + first["id"] + "/items", {"after": second["item_ids"][0]}, expected=404)
+            cursor_error("/subagents/" + first["id"] + "/items", second["item_ids"][0])
             # Session Turn reads carry root work only (SAT-07).
             visible("session_turns_root_only", lambda: require(
                 all(turn.get("subagent_id") is None and turn["agent_id"] == root for turn in turns) and

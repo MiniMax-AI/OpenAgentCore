@@ -173,7 +173,7 @@ func (h *Handler) deleteEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 }
 
 // @Summary List Environment Templates
-// @Description Lists tenant-owned safe template metadata in creation order with ID tie-breaking. Defaults to limit 20 and descending order; limit 0 is treated as 1 and larger limits as 100. Foreign and missing cursors reject identically. Concurrent-page and exact hosted error behavior remain unverified.
+// @Description Lists tenant-owned safe template metadata in creation order with ID tie-breaking. Defaults to limit 20 and descending order; limit 0 is treated as 1 and larger limits as 100. Foreign, missing and malformed cursors return the same not found error. Concurrent-page and exact hosted error behavior remain unverified.
 // @Tags Environment Templates
 // @Produce json
 // @Security BearerAuth

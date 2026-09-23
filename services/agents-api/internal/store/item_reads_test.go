@@ -102,9 +102,15 @@ func TestItemsRecoverSnapshotsPartialResultsPaginationAndIsolation(t *testing.T)
 		}
 	}
 	other, _ := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "other"})
-	for _, scope := range []struct{ tenant, session, cursor string }{{uuid.NewString(), session.ID, ""}, {tenant, other.ID, page.Items[0].ID}} {
-		if _, err = s.ListItems(ctx, scope.tenant, scope.session, scope.cursor, 20, true); !errors.Is(err, store.ErrNotFound) {
-			t.Fatal(err)
+	// A foreign parent is not found before the cursor is read.
+	if _, err = s.ListItems(ctx, uuid.NewString(), session.ID, page.Items[0].ID, 20, true); !errors.Is(err, store.ErrNotFound) {
+		t.Fatal(err)
+	}
+	// Another Session's Item is an invalid cursor here, like a missing or malformed one.
+	for _, cursor := range []string{page.Items[0].ID, uuid.NewString(), "not-a-uuid"} {
+		var invalid *store.InvalidCursorError
+		if _, err = s.ListItems(ctx, tenant, other.ID, cursor, 20, true); !errors.As(err, &invalid) || invalid.Message != "Invalid session item ID in `after`" {
+			t.Fatal(cursor, err)
 		}
 	}
 }

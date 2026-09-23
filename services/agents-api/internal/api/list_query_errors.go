@@ -34,7 +34,12 @@ func writeListOrderError(w http.ResponseWriter, r *http.Request, order string) {
 	case filesList:
 		writeError(w, http.StatusBadRequest, "", "order must be asc or desc.")
 	case skillsList:
-		writeError(w, http.StatusBadRequest, "invalid_value", fmt.Sprintf("Invalid value: '%s'. Supported values are: 'asc' and 'desc'.", order), "order")
+		// The observed message echoes the value; a long or unprintable one is left out.
+		message := "Invalid value. Supported values are: 'asc' and 'desc'."
+		if echoableField(order) {
+			message = fmt.Sprintf("Invalid value: '%s'. Supported values are: 'asc' and 'desc'.", order)
+		}
+		writeError(w, http.StatusBadRequest, "invalid_value", message, "order")
 	default:
 		writeError(w, http.StatusBadRequest, "invalid_request_error", fmt.Sprintf("Failed to deserialize query string: order: unknown variant `%s`, expected `asc` or `desc`", order))
 	}

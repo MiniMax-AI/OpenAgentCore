@@ -193,3 +193,79 @@ streams, updates and deletions ignore unknown keys. This is resource and query
 acceptance with no model execution: query parsing does not affect execution, so
 live model acceptance does not apply. The independent batch acceptance, server gate
 and review are recorded separately when complete.
+
+## List cursor errors — September 23, 2026
+
+The pin is unchanged: SDK 3.13.0, commit `d7c41ef`, `agents=v1`. This batch starts
+from main `c5cb6b56` and aligns the response to an `after` cursor that does not
+resolve within its list (ERROR-PROTOCOL-001). Findings with request IDs are retained
+in `~/.parsar/remediation/20260923/campaign-scan-4/errors/findings.json` (ERR-01..06,
+raw records labelled `cur-*` in `official/results.json`), with SAT-04 from campaign
+scan 3 and HE-57 from campaign scan 2; the batch plan is
+`~/.parsar/remediation/20260923/cursor-errors/PLAN.md`. "Unresolved" covers a random
+well-formed ID, a malformed value, an ID of another resource type, a resource of
+another parent, a deleted resource and a resource of another tenant.
+
+| Row | Lists | Core behavior for an unresolved cursor | Evidence (finding: request ID) |
+| --- | --- | --- | --- |
+| C1 | Agents, Sessions, Turns, Templates, Vaults, Credentials | 404, type and code `not_found_error`, param null, `Resource not found.` A malformed cursor takes the missing-cursor path instead of the former 400 `invalid_request`, so every unresolved cursor, including a foreign one, gives the same bytes | ERR-01: `req_68e57640f20d451e879f11e8882e9542`, `req_3aee69064ee544eeafaf1fead240e3cb`, `req_a6c9a7b7d84d4db49117a57be9b1e16d`; ERR-13 (random, other type, other parent): `req_a740ac9e3a55476ea9bf0ebf7e53272c`, `req_9df334089c33493584d3ceb5d8c86041`, `req_90aa82ac18ab4a82bf49f940c25a467e`, `req_44a2293ebaf049df8674ef5ea0379abd`, `req_ff3df24a0d4a4e21a2464b5c1ee38179` |
+| C2 | Session Items, Subagent Items, Subagent Turn Items | 400, type and code `invalid_request_error`, param null, ``Invalid session item ID in `after` `` | ERR-02: `req_bab2c1aee7dd4415a814bcb94d0dac24`, `req_8d981f935c144b8ebe1a6c2866edb2ea`, `req_aa6340e02f1345758e7b28e83e8f1095`, `req_c71cb02b9363422d92222bf0a5b3df80`; ERR-03: `req_bf7fb4a67c004405b549e848d9dc4be8`, `req_0486db0d18a8415a96eb9410fc62d369`, `req_b21069abb6ad42608e8d3d1ca6f7fa1c`, `req_7531a7851063434098949ed171432af9` |
+| C3 | Subagents, Subagent Turns | 400, type and code `invalid_request_error`, param null, ``Invalid resource ID in `after` `` | ERR-04: `req_6d21661de5a74df4bc35c27ad1d1dca8`, `req_6368d24f88dd4eb2acd230745e704621`, `req_5803615424dd424bbf8f007291f37cf9`, `req_f7f5232125bc49278ebde73738d00f7b`; SAT-04: `req_23bdf5f0b8f24813b191634eb6e69256`, `req_e76ce5d4c6494b06a788d3c342f76ad2`, `req_83b9d26129fd43eea67b795b684bbb55` |
+| C4 | Session Artifacts | 400, type and code `invalid_request_error`, param null, `after is not a valid artifact ID` | ERR-05: `req_9c4aa6bfabfe4e6599cb317c416c04f4`, `req_333f2ca75b274ad7aedb1e854b28eb57`, `req_5ef5b49127c443f19f6a18d324d2e8e5`; HE-57: `req_22bb488390324d9ebd7779e0be6b7f6b` |
+| C5 | Skill versions | A value that does not begin with `skillver`: 400, type `invalid_request_error`, code `invalid_value`, param `after`, ``Invalid 'after': '<value>'. Expected an ID that begins with 'skillver'.`` (``Invalid 'after'. Expected an ID that begins with 'skillver'.`` when the value is not echoed). A version of another Skill in the tenant: the same fields with `Skill version cursor does not match this skill.` A missing, deleted or foreign version, or a `skillver` value with a malformed tail: unchanged 404, type `invalid_request_error`, null code and param | ERR-06: `req_0e7ac00f5359403b952b66d88afb8011`, `req_41d7bcc6522c4230a785b0f23e7043ae`, `req_9b3cd31591594c9797252408cc871512`, `req_7e78eb04a9d04c8497b93d9206a206be`, `req_5d037c1b64cb4475ae11b5b5ab572c84` |
+| K1 | Files, Skills, Environment Files `page` | Unchanged: Files 404 with param `after`, Skills 404 with null code and param, Environment Files keeps its page token error | ERR-08: `req_e8a09b54bc804eaa9344270a69943252`; ERR-09: `req_a0b0414f74474cb2a1f1b61dac54edb7`; ERR-17: `req_5c2494e082714500bccbadbf60c6195d` |
+| K2 | Valid cursors | Unchanged ordering, paging, `has_more`, first and last IDs and limits | — |
+| K3 | Missing or foreign parent: Session, Vault, Subagent, child Turn, Skill | Still 404 before the cursor is read, including a Skill version cursor that does not begin with `skillver` | — |
+
+### Decisions
+
+- One typed store error carries the family message. The API chooses the fields by
+  path family, as for order errors: Skill versions use `invalid_value` with param
+  `after`, the Beta lists `invalid_request_error` with a null param.
+- C1 lists reuse the malformed path-ID approach: a cursor that cannot name a
+  resource resolves to the never-assigned maximum UUID and the normal lookup runs,
+  so storage failures and missing rows behave exactly as for a well-formed cursor.
+  The Core Runtime observation list pages by Session ID and follows the same rule.
+- Every cursor is resolved only inside its already resolved parent and tenant.
+  Other-parent, other-type and foreign cursors therefore take the same path as a
+  missing one and cannot reveal another tenant's resources.
+- The Skill version cursor lookup is now tenant-wide, without a schema change, so
+  another Skill's version can be told apart from a missing one; another tenant's
+  version is still missing. The `skillver` prefix check is case-sensitive and uses
+  the observed prefix.
+- Like the official message, the prefix error repeats the caller's value, but
+  only when it is at most 256 bytes of valid, printable UTF-8, the rule already
+  used for echoed field names. A longer, unprintable or invalid UTF-8 value is not
+  echoed, so the error body stays bounded; the Skills `order` error follows the
+  same rule (`Invalid value. Supported values are: 'asc' and 'desc'.`).
+- A parent lookup and its cursor lookup that run as separate statements
+  (Artifacts and Skill versions) re-check the parent before reporting a 400, so a
+  parent deleted in between still gives its 404. Deleted Sessions and Skills never
+  reappear, so a parent found by the re-check also existed when the cursor was
+  read. Item and Subagent lists read both inside one locked Session transaction.
+- Observed upstream failures are not copied: a Turn cursor from another Session
+  (ERR-11) and a Credential cursor equal to its Vault ID (ERR-12) stay 404, and a
+  Skills cursor that is not a Skill ID (ERR-10) stays the Skills 404.
+
+Unobserved and inferred: a Subagent Turn Items cursor naming another Turn of the
+same child, another Session's Artifact, and every foreign-tenant cursor follow their
+family's rule without an official sample.
+
+Deferred: deleted Agent and Session cursors, which still anchor pages officially
+(ERR-15), would need tombstones; the official 404 message text naming the resource
+(ERR-16) is not copied; 409 fields belong to a separate batch.
+
+### Acceptance boundary
+
+Go store tests cover each changed list, and `list_cursor_public_test.go` replays
+rows C1–C5 and K1–K3 over real HTTP and PostgreSQL for tenant A and tenant B, with
+seeded Subagent and Artifact history and exact response bytes, including long,
+control-character and invalid UTF-8 Skill version cursors. For K2 it pages every
+changed list one resource at a time in both orders and checks the page contents,
+`has_more` and the first and last IDs. The path-ID and
+Artifact filter replays and the API error mapping test were updated.
+`official_list_query.py` checks rows C1, C2, C5, K1 and K3 through raw HTTP and the
+pinned SDK for both tenants, and the Subagent acceptance script asserts the C2 and
+C3 errors on child lists. This is resource and query acceptance with no model
+execution. The independent replay, server gate and review are recorded separately
+when complete.

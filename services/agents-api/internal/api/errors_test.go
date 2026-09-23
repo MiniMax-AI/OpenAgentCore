@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
@@ -44,6 +46,25 @@ func TestResourceNotFoundErrorSurfaces(t *testing.T) {
 	}
 }
 
+// An unresolved list cursor keeps its store message; Skill versions use the
+// observed invalid_value code on after, Beta lists invalid_request_error with a
+// null param.
+func TestInvalidCursorErrorFields(t *testing.T) {
+	for path, want := range map[string]string{
+		"/v1/agents/sessions/session/items":         `{"error":{"message":"Invalid session item ID in ` + "`after`" + `","type":"invalid_request_error","code":"invalid_request_error","param":null}}`,
+		"/v1/agents/sessions/session/subagents":     `{"error":{"message":"Invalid session item ID in ` + "`after`" + `","type":"invalid_request_error","code":"invalid_request_error","param":null}}`,
+		"/v1/skills/skill_missing/versions":         `{"error":{"message":"Invalid session item ID in ` + "`after`" + `","type":"invalid_request_error","code":"invalid_value","param":"after"}}`,
+		"/v1/agents/sessions/session/artifacts?x=1": `{"error":{"message":"Invalid session item ID in ` + "`after`" + `","type":"invalid_request_error","code":"invalid_request_error","param":null}}`,
+	} {
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		writeStoreError(response, request, fmt.Errorf("list: %w", &store.InvalidCursorError{Message: "Invalid session item ID in `after`"}))
+		if response.Code != http.StatusBadRequest || response.Body.String() != want+"\n" {
+			t.Errorf("%s: %d %s", path, response.Code, response.Body)
+		}
+	}
+}
+
 func TestMissingBetaErrorAfterAuthentication(t *testing.T) {
 	for _, authenticated := range []bool{false, true} {
 		handler, _, _ := testHandler(t)
@@ -75,5 +96,40 @@ func TestSessionDeletionConflictError(t *testing.T) {
 	want := `{"error":{"message":"session must be durably idle or failed without required actions before deletion","type":"conflict_error","code":"conflict_error","param":null}}` + "\n"
 	if response.Code != http.StatusConflict || response.Body.String() != want {
 		t.Fatalf("response = %d %s", response.Code, response.Body)
+	}
+}
+
+// Every 409 has type conflict_error (ERR-27). Core-only conflicts keep their
+// documented local code; outside Session input, a Turn conflict keeps
+// turn_conflict because the official behavior there is unobserved.
+func TestConflictErrorsUseConflictType(t *testing.T) {
+	for err, code := range map[error]string{
+		store.ErrSandboxDeploymentConflict:     "sandbox_deployment_conflict",
+		store.ErrRuntimeNodeInUse:              "runtime_node_in_use",
+		store.ErrRuntimeLocalNodeConfigured:    "runtime_local_node_configured",
+		store.ErrEnvironmentUnavailable:        "environment_unavailable",
+		execution.ErrEnvironmentInputExpired:   "environment_input_expired",
+		execution.ErrEnvironmentInputCancelled: "environment_input_cancelled",
+		store.ErrSessionNotIdle:                "conflict_error",
+		store.ErrFunctionResultConflict:        "conflict_error",
+		store.ErrIdempotencyConflict:           "idempotency_conflict",
+		store.ErrTurnConflict:                  "turn_conflict",
+		store.ErrSessionInputPending:           "turn_conflict",
+	} {
+		t.Run(code, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/v1/agents/environments/environment/files", nil)
+			writeStoreError(response, request, fmt.Errorf("operation: %w", err))
+			var body v1.ErrorResponse
+			if response.Code != http.StatusConflict || json.Unmarshal(response.Body.Bytes(), &body) != nil ||
+				body.Error.Type != "conflict_error" || body.Error.Code == nil || *body.Error.Code != code || body.Error.Param != nil {
+				t.Fatalf("%v: %d %s", err, response.Code, response.Body)
+			}
+		})
+	}
+	response := httptest.NewRecorder()
+	writeError(response, http.StatusConflict, "runtime_history_unsupported", "Runtime history is not supported for this Session.")
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), `"type":"conflict_error","code":"runtime_history_unsupported"`) {
+		t.Fatal(response.Body)
 	}
 }

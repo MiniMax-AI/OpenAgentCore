@@ -190,7 +190,7 @@ func (s *Store) ListEnvironmentTemplates(ctx context.Context, tenantID, cursor s
 	}
 	params := sqlc.ListEnvironmentTemplatesParams{TenantID: tenant, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending}
 	if cursor != "" {
-		after, err := s.GetEnvironmentTemplate(ctx, tenantID, cursor)
+		after, err := s.GetEnvironmentTemplate(ctx, tenantID, lookupCursor(cursor))
 		if err != nil {
 			return EnvironmentTemplatePage{}, err
 		}

@@ -1,5 +1,5 @@
-// Package builtin composes configuration declarations shared by Core admission
-// and the adapter profile registry. It contains no native launch configuration.
+// Package builtin composes adapter-owned provider validation rules for Core.
+// It contains no native launch configuration or public discovery contract.
 package builtin
 
 import (

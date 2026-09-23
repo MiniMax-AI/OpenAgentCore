@@ -128,33 +128,6 @@ definitions:
     required:
     - harness
     type: object
-  v1.CoreConfigurationCapabilities:
-    properties:
-      admission:
-        $ref: '#/definitions/v1.CoreModelProviderAdmission'
-      harnesses:
-        items:
-          $ref: '#/definitions/v1.CoreHarnessConfigurationSupport'
-        type: array
-      runtime_availability:
-        enum:
-        - unknown
-        type: string
-      schema_version:
-        enum:
-        - 1
-        type: integer
-      scope:
-        enum:
-        - core_build_provider_configuration
-        type: string
-    required:
-    - admission
-    - harnesses
-    - runtime_availability
-    - schema_version
-    - scope
-    type: object
   v1.CoreConfiguredStartupConfiguration:
     properties:
       daemon_gateway:
@@ -189,30 +162,6 @@ definitions:
     - model_providers
     - self_hosted
     type: object
-  v1.CoreHarnessConfigurationSupport:
-    properties:
-      default:
-        type: boolean
-      enabled:
-        type: boolean
-      harness:
-        type: string
-      providers:
-        items:
-          $ref: '#/definitions/v1.CoreProviderProtocolSupport'
-        type: array
-      support:
-        enum:
-        - supported
-        - unknown
-        type: string
-    required:
-    - default
-    - enabled
-    - harness
-    - providers
-    - support
-    type: object
   v1.CoreHarnessModelProviderConfiguration:
     properties:
       endpoint_configured:
@@ -244,83 +193,8 @@ definitions:
     - maintenance
     - provider
     type: object
-  v1.CoreModelProviderAdmission:
-    properties:
-      base_url:
-        $ref: '#/definitions/v1.CoreProviderEndpointRules'
-      credential_environment_types:
-        items:
-          enum:
-          - openai_hosted
-          type: string
-        type: array
-      token_limits:
-        $ref: '#/definitions/v1.CoreProviderTokenLimitRules'
-    required:
-    - base_url
-    - credential_environment_types
-    - token_limits
-    type: object
-  v1.CoreProviderEndpointRules:
-    properties:
-      fragment:
-        type: boolean
-      query:
-        type: boolean
-      schemes:
-        items:
-          enum:
-          - https
-          type: string
-        type: array
-      user_info:
-        type: boolean
-    required:
-    - fragment
-    - query
-    - schemes
-    - user_info
-    type: object
-  v1.CoreProviderProtocolSupport:
-    properties:
-      positive_fields:
-        items:
-          enum:
-          - context_window
-          - max_output_tokens
-          type: string
-        type: array
-      protocol:
-        type: string
-      required_fields:
-        items:
-          enum:
-          - protocol
-          - base_url
-          - api_key
-          - context_window
-          - max_output_tokens
-          type: string
-        type: array
-    required:
-    - positive_fields
-    - protocol
-    - required_fields
-    type: object
-  v1.CoreProviderTokenLimitRules:
-    properties:
-      max_output_not_above_context:
-        type: boolean
-      minimum:
-        type: integer
-    required:
-    - max_output_not_above_context
-    - minimum
-    type: object
   v1.CoreStartupConfiguration:
     properties:
-      configuration_capabilities:
-        $ref: '#/definitions/v1.CoreConfigurationCapabilities'
       configured:
         $ref: '#/definitions/v1.CoreConfiguredStartupConfiguration'
       object:
@@ -2986,7 +2860,8 @@ paths:
       description: Lists only the authenticated tenant's saved Agents, independently
         of Sessions. Limit 0 is treated as 1 and larger limits as 100, as observed
         on the hosted service. The local default is 20; exact upstream default/cap
-        and empty cursor fields remain unverified.
+        and empty cursor fields remain unverified. An unknown, malformed or foreign
+        after cursor returns not found.
       parameters:
       - description: agents=v1
         in: header
@@ -3266,12 +3141,6 @@ paths:
         name: OpenAI-Beta
         required: true
         type: string
-      - description: Opt in to versioned provider configuration capabilities
-        enum:
-        - configuration_capabilities
-        in: query
-        name: include
-        type: string
       produces:
       - application/json
       responses:
@@ -3504,8 +3373,9 @@ paths:
     get:
       description: Lists tenant-owned safe template metadata in creation order with
         ID tie-breaking. Defaults to limit 20 and descending order; limit 0 is treated
-        as 1 and larger limits as 100. Foreign and missing cursors reject identically.
-        Concurrent-page and exact hosted error behavior remain unverified.
+        as 1 and larger limits as 100. Foreign, missing and malformed cursors return
+        the same not found error. Concurrent-page and exact hosted error behavior
+        remain unverified.
       parameters:
       - description: agents=v1
         in: header
@@ -3855,11 +3725,12 @@ paths:
       - Runtime observations
   /agents/sessions:
     get:
-      description: Cursor and results are scoped to the authenticated execution tenant.
-        Optional agent_id matches the immutable root Agent ID, including inline Agents
-        and historical Sessions whose saved source was updated or deleted. Omission
-        lists all Agents. Returns the same Environment and pending-input activity
-        projection as Session retrieval, including self_hosted Sessions.
+      description: Cursor and results are scoped to the authenticated execution tenant;
+        an unknown, malformed or foreign after cursor returns not found. Optional
+        agent_id matches the immutable root Agent ID, including inline Agents and
+        historical Sessions whose saved source was updated or deleted. Omission lists
+        all Agents. Returns the same Environment and pending-input activity projection
+        as Session retrieval, including self_hosted Sessions.
       parameters:
       - description: agents=v1
         in: header
@@ -4249,8 +4120,10 @@ paths:
       description: Lists published outputs independently of Environment availability.
         Sorting uses publication time and ID. A later Turn publishes a path again
         only when it is new, its bytes changed, or no Artifact remains for it. A malformed
-        environment_id matches nothing. The local default page size is 20; exact upstream
-        defaults and error parity remain unverified.
+        environment_id matches nothing. An after value that is not an Artifact of
+        this Session, including a malformed one, returns 400 invalid_request_error
+        with the message "after is not a valid artifact ID". The local default page
+        size is 20; exact upstream defaults remain unverified.
       parameters:
       - description: agents=v1
         in: header
@@ -4545,20 +4418,27 @@ paths:
         batches reuse existing scoped result admission and application receipts without
         creating a Turn or bypassing a pending reservation. Mixed prepared-environment
         batches remain unsupported. HTTP expiry/cancellation use local 409 environment_input_expired/environment_input_cancelled
-        errors; exact hosted failure mapping is unverified. Losing execution ownership
-        returns 503. The response write deadline accommodates the admission window
-        for either prepared Environment, independently of new-hosted-admission and
-        executor URL settings. Disconnecting the waiting HTTP request does not cancel
-        retained work or restart its deadline. Retry keys identify the whole ordered
-        batch. Function output accepts text or ordered text/image parts subject to
-        engine support; Claude SDK accepts text results and, on none and qualified
-        openai_hosted, successful inline PNG/JPEG results, preserving ordered content;
-        error images and remote references reject before admission. Native image resizing
-        may change bytes. Runtime image-result support is checked only for image-bearing
-        delivery. Codex and Claude SDK on none and qualified openai_hosted accept
-        ordered inline PNG/JPEG image messages. Self-hosted profiles and other engines
-        remain text-only; remote image URLs are unsupported. Image references are
-        retained unchanged without service-side downloads.
+        errors; exact hosted failure mapping is unverified. Input the Session cannot
+        accept in its current state, such as a result after cancellation or a batch
+        while earlier input is pending, and a result that differs from the call's
+        saved result return 409 with type and code conflict_error; reusing an Idempotency-Key
+        with a different batch returns the local 409 idempotency_conflict. Inside
+        an owned Session, a result for an unknown call or for a call of another Turn
+        returns 400 invalid_request_error and changes nothing; missing and foreign
+        Sessions return 404. Losing execution ownership returns 503. The response
+        write deadline accommodates the admission window for either prepared Environment,
+        independently of new-hosted-admission and executor URL settings. Disconnecting
+        the waiting HTTP request does not cancel retained work or restart its deadline.
+        Retry keys identify the whole ordered batch. Function output accepts text
+        or ordered text/image parts subject to engine support; Claude SDK accepts
+        text results and, on none and qualified openai_hosted, successful inline PNG/JPEG
+        results, preserving ordered content; error images and remote references reject
+        before admission. Native image resizing may change bytes. Runtime image-result
+        support is checked only for image-bearing delivery. Codex and Claude SDK on
+        none and qualified openai_hosted accept ordered inline PNG/JPEG image messages.
+        Self-hosted profiles and other engines remain text-only; remote image URLs
+        are unsupported. Image references are retained unchanged without service-side
+        downloads.
       parameters:
       - description: agents=v1
         in: header
@@ -4670,7 +4550,9 @@ paths:
     get:
       description: Returns supported message and tool Items in first-observation order.
         Native engine fields are projected explicitly; unfinished Items on terminal
-        Turns are incomplete. Cursors belong to the same tenant and Session.
+        Turns are incomplete. Cursors are Items of the same tenant and Session. Any
+        other after value, including a malformed one, returns 400 invalid_request_error
+        with the message "Invalid session item ID in `after`".
       parameters:
       - description: agents=v1
         in: header
@@ -4888,8 +4770,10 @@ paths:
       - Core
   /agents/sessions/{session_id}/subagents:
     get:
-      description: Includes nested and closed Subagents. Cursors belong to the same
-        tenant and Session. A limit outside 1–100 is rejected.
+      description: Includes nested and closed Subagents. Cursors are Subagents of
+        the same tenant and Session. Any other after value, including a malformed
+        one, returns 400 invalid_request_error with the message "Invalid resource
+        ID in `after`". A limit outside 1–100 is rejected.
       parameters:
       - description: agents=v1
         in: header
@@ -5009,7 +4893,9 @@ paths:
   /agents/sessions/{session_id}/subagents/{subagent_id}/items:
     get:
       description: Returns only this Subagent's own Items across all its Turns, not
-        its descendants' Items. Cursors belong to the same tenant, Session and Subagent.
+        its descendants' Items. Cursors are Items of the same tenant, Session and
+        Subagent. Any other after value, including a malformed one, returns 400 invalid_request_error
+        with the message "Invalid session item ID in `after`".
       parameters:
       - description: agents=v1
         in: header
@@ -5080,8 +4966,10 @@ paths:
   /agents/sessions/{session_id}/subagents/{subagent_id}/turns:
     get:
       description: Includes this Subagent's Turns after resume, with the Session's
-        Agent ID as agent_id. Cursors belong to the same tenant, Session and Subagent.
-        Missing recorded usage remains null. A limit outside 1–100 is rejected.
+        Agent ID as agent_id. Cursors are Turns of the same tenant, Session and Subagent.
+        Any other after value, including a malformed one, returns 400 invalid_request_error
+        with the message "Invalid resource ID in `after`". Missing recorded usage
+        remains null. A limit outside 1–100 is rejected.
       parameters:
       - description: agents=v1
         in: header
@@ -5211,8 +5099,10 @@ paths:
       - Subagents
   /agents/sessions/{session_id}/subagents/{subagent_id}/turns/{turn_id}/items:
     get:
-      description: Returns Items owned by this exact Subagent Turn. Cursors belong
-        to the same tenant, Session, Subagent and Turn.
+      description: Returns Items owned by this exact Subagent Turn. Cursors are Items
+        of the same tenant, Session, Subagent and Turn. Any other after value, including
+        a malformed one, returns 400 invalid_request_error with the message "Invalid
+        session item ID in `after`".
       parameters:
       - description: agents=v1
         in: header
@@ -5289,8 +5179,9 @@ paths:
     get:
       description: Returns the Session's root Turns in creation order; Subagent Turns
         are listed through the Subagent Turn routes. The cursor belongs to the same
-        Session and tenant. Usage contains the latest recorded complete token breakdown;
-        missing measurements remain null.
+        Session and tenant; any other after value, including a malformed one or a
+        Subagent Turn ID, returns not found. Usage contains the latest recorded complete
+        token breakdown; missing measurements remain null.
       parameters:
       - description: agents=v1
         in: header
@@ -5833,8 +5724,10 @@ paths:
   /skills/{skill_id}/versions:
     get:
       description: Orders by version number; after identifies a version resource,
-        not a version number. No contents are decrypted. Limit 0 returns an empty
-        page whose has_more reports whether any version follows the cursor.
+        not a version number. An after value that does not begin with skillver, or
+        a version of another Skill, returns 400 invalid_value with param after; a
+        missing version returns not found. No contents are decrypted. Limit 0 returns
+        an empty page whose has_more reports whether any version follows the cursor.
       parameters:
       - description: Skill ID
         in: path
@@ -5981,12 +5874,13 @@ paths:
       - Skills
   /vaults:
     get:
-      description: Lists project-owned Vaults independently of execution. Includes
-        active and archived records by default. Status accepts a scalar, the SDK's
-        status[] array or both, filtering by their union; a repeated scalar is rejected.
-        Limits default to 20 and clamp to 1–100. Equal creation times use ID ordering;
-        exact hosted errors and concurrent-page behavior remain unverified. Archive/delete
-        lifecycle is not implemented.
+      description: Lists project-owned Vaults independently of execution. An unknown,
+        malformed or foreign after cursor returns not found. Includes active and archived
+        records by default. Status accepts a scalar, the SDK's status[] array or both,
+        filtering by their union; a repeated scalar is rejected. Limits default to
+        20 and clamp to 1–100. Equal creation times use ID ordering; exact hosted
+        errors and concurrent-page behavior remain unverified. Archive/delete lifecycle
+        is not implemented.
       parameters:
       - description: agents=v1
         in: header
@@ -6205,12 +6099,13 @@ paths:
   /vaults/{vault_id}/credentials:
     get:
       description: Lists only metadata from the authenticated project's requested
-        Vault, without decryption or execution. Includes active and archived Credentials
-        by default, independently of Vault status. Status accepts a scalar, the SDK
-        status[] array or both, filtering by their union; a repeated scalar is rejected.
-        Limits default to 20 and clamp to 1–100. Equal creation times use ID ordering.
-        Hosted errors, concurrent-page behavior and archive/delete lifecycle remain
-        unverified or unimplemented.
+        Vault, without decryption or execution. An unknown, malformed or foreign after
+        cursor, including another Vault's Credential, returns not found. Includes
+        active and archived Credentials by default, independently of Vault status.
+        Status accepts a scalar, the SDK status[] array or both, filtering by their
+        union; a repeated scalar is rejected. Limits default to 20 and clamp to 1–100.
+        Equal creation times use ID ordering. Hosted errors, concurrent-page behavior
+        and archive/delete lifecycle remain unverified or unimplemented.
       parameters:
       - description: agents=v1
         in: header

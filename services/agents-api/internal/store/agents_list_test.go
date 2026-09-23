@@ -74,13 +74,11 @@ func TestAgentListPaginationIsolationAndReconnect(t *testing.T) {
 	if got := read(s, false); !slices.Equal(got, reverse) {
 		t.Fatalf("descending equal timestamps: %v", got)
 	}
-	for _, after := range []string{foreign.ID, uuid.NewString()} {
+	// A malformed cursor follows the missing-cursor path (ERR-01).
+	for _, after := range []string{foreign.ID, uuid.NewString(), "not-an-id"} {
 		if _, err := s.ListAgents(ctx, tenant, after, 2, true); !errors.Is(err, ErrNotFound) {
-			t.Fatalf("unowned/unknown cursor accepted: %v", err)
+			t.Fatalf("unowned/unknown/malformed cursor accepted: %v", err)
 		}
-	}
-	if _, err := s.ListAgents(ctx, tenant, "not-an-id", 2, true); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("invalid cursor accepted: %v", err)
 	}
 	tail, err := s.ListAgents(ctx, tenant, ids[len(ids)-1], 2, true)
 	if err != nil || tail.Agents == nil || len(tail.Agents) != 0 || tail.NextCursor != "" {

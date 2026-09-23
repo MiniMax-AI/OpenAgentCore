@@ -31,7 +31,7 @@ func (h *Handler) getSubagentTurn(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary List a Subagent's Turns
-// @Description Includes this Subagent's Turns after resume, with the Session's Agent ID as agent_id. Cursors belong to the same tenant, Session and Subagent. Missing recorded usage remains null. A limit outside 1–100 is rejected.
+// @Description Includes this Subagent's Turns after resume, with the Session's Agent ID as agent_id. Cursors are Turns of the same tenant, Session and Subagent. Any other after value, including a malformed one, returns 400 invalid_request_error with the message "Invalid resource ID in `after`". Missing recorded usage remains null. A limit outside 1–100 is rejected.
 // @Tags Subagents
 // @Produce json
 // @Security BearerAuth
@@ -58,7 +58,7 @@ func (h *Handler) listSubagentTurns(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary List a Subagent Turn's Items
-// @Description Returns Items owned by this exact Subagent Turn. Cursors belong to the same tenant, Session, Subagent and Turn.
+// @Description Returns Items owned by this exact Subagent Turn. Cursors are Items of the same tenant, Session, Subagent and Turn. Any other after value, including a malformed one, returns 400 invalid_request_error with the message "Invalid session item ID in `after`".
 // @Tags Subagents
 // @Produce json
 // @Security BearerAuth

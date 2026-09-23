@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/jackc/pgx/v5"
@@ -65,16 +66,29 @@ func (s *Store) ListSkillVersions(ctx context.Context, tenantID, skillID, after 
 	}
 	params := sqlc.ListSkillVersionsParams{TenantID: tenant, SkillID: id, PageLimit: int32(limit + 1), Ascending: ascending}
 	if after != "" {
+		// A value that is not a version resource ID is invalid; a well-formed
+		// version missing from this tenant, including another tenant's, is not
+		// found; another Skill's version in this tenant does not match.
+		if !strings.HasPrefix(after, "skillver") {
+			return SkillVersionPage{}, skillVersionCursorPrefix(after)
+		}
 		cursorID, err := skillResourceID(after, "skillver_")
 		if err != nil {
 			return SkillVersionPage{}, err
 		}
-		cursor, err := s.queries.GetSkillVersionByID(ctx, sqlc.GetSkillVersionByIDParams{TenantID: tenant, SkillID: id, ID: cursorID})
+		cursor, err := s.queries.GetSkillVersionByID(ctx, sqlc.GetSkillVersionByIDParams{TenantID: tenant, ID: cursorID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return SkillVersionPage{}, ErrNotFound
 		}
 		if err != nil {
 			return SkillVersionPage{}, err
+		}
+		if cursor.SkillID != id {
+			// As for Artifacts, a Skill deleted since its lookup stays not found.
+			if _, err := s.GetSkill(ctx, tenantID, skillID); err != nil {
+				return SkillVersionPage{}, err
+			}
+			return SkillVersionPage{}, errSkillVersionCursorParent
 		}
 		params.AfterVersion = pgtype.Int8{Int64: cursor.Version, Valid: true}
 	}

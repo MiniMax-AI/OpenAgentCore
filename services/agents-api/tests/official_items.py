@@ -13,7 +13,8 @@ def verify_items(a, b, invalid, session, peer_session, turns, expect_error):
     peer_items = list(items.list(peer_session))
     assert len(peer_items) == 1 and peer_items[0].role == "user"
     expect_error(NotFoundError, lambda: b.beta.agents.sessions.items.list(session))
-    expect_error(NotFoundError, lambda: items.list(peer_session, after=recovered[0].id))
+    # Another Session's Item is an invalid cursor, not a missing resource.
+    expect_error(BadRequestError, lambda: items.list(peer_session, after=recovered[0].id))
     expect_error(AuthenticationError, lambda: invalid.beta.agents.sessions.items.list(session))
     assert items.list(session, limit=101).data == items.list(session, limit=100).data
     assert items.list(session, limit=0, order="asc").data == [recovered[0]]

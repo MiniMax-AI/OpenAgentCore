@@ -22,6 +22,10 @@ const (
 	EnvironmentInputFailed    = "failed"
 )
 
+// ErrSessionInputPending rejects a new input batch while earlier Session input
+// still waits for admission. It remains a Turn conflict for internal callers.
+var ErrSessionInputPending = fmt.Errorf("%w: session input is still pending", ErrTurnConflict)
+
 // EnvironmentInputReservation is private admission state, not a public Session projection.
 type EnvironmentInputReservation struct {
 	ID        string
@@ -278,7 +282,7 @@ func checkEnvironmentInputGate(ctx context.Context, q *sqlc.Queries, session pgt
 		return ErrIdempotencyConflict
 	}
 	if gate.Blocked {
-		return ErrTurnConflict
+		return ErrSessionInputPending
 	}
 	return nil
 }

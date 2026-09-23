@@ -27,12 +27,8 @@ func (s *Store) ListTurns(ctx context.Context, tenantID, sessionID, cursor strin
 	session, _ := parseID(sessionID)
 	params := sqlc.ListRootTurnsParams{TenantID: tenant, SessionID: session, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending}
 	if cursor != "" {
-		// A malformed cursor remains an invalid request, unlike a path identifier.
-		if _, err := parseID(cursor); err != nil {
-			return TurnPage{}, err
-		}
 		// A child Turn is not a Session Turn, so its ID is a missing cursor here.
-		after, err := s.GetTurn(ctx, tenantID, sessionID, cursor)
+		after, err := s.GetTurn(ctx, tenantID, sessionID, lookupCursor(cursor))
 		if err != nil {
 			return TurnPage{}, err
 		}

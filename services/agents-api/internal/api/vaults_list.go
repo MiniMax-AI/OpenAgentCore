@@ -7,7 +7,7 @@ import (
 )
 
 // @Summary List Vaults
-// @Description Lists project-owned Vaults independently of execution. Includes active and archived records by default. Status accepts a scalar, the SDK's status[] array or both, filtering by their union; a repeated scalar is rejected. Limits default to 20 and clamp to 1–100. Equal creation times use ID ordering; exact hosted errors and concurrent-page behavior remain unverified. Archive/delete lifecycle is not implemented.
+// @Description Lists project-owned Vaults independently of execution. An unknown, malformed or foreign after cursor returns not found. Includes active and archived records by default. Status accepts a scalar, the SDK's status[] array or both, filtering by their union; a repeated scalar is rejected. Limits default to 20 and clamp to 1–100. Equal creation times use ID ordering; exact hosted errors and concurrent-page behavior remain unverified. Archive/delete lifecycle is not implemented.
 // @Tags Vaults
 // @Produce json
 // @Security BearerAuth

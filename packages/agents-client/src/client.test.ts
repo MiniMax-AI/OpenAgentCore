@@ -653,7 +653,7 @@ describe("OpenAIAgentsClient", () => {
       fetch: recordingFetch(jsonResponse({ error: {
         code: "idempotency_conflict",
         message: "Creation key conflicts with another request.",
-        type: "invalid_request_error",
+        type: "conflict_error",
       } }, 409), calls),
     });
 
@@ -664,7 +664,7 @@ describe("OpenAIAgentsClient", () => {
     )).rejects.toMatchObject({
       status: 409,
       code: "idempotency_conflict",
-      errorType: "invalid_request_error",
+      errorType: "conflict_error",
     });
     expect(calls).toHaveLength(1);
     expect(onOpen).not.toHaveBeenCalled();
@@ -2220,6 +2220,25 @@ describe("OpenAIAgentsClient", () => {
       key as unknown as string,
     )).toThrow("Idempotency key must be non-blank and at most 128 UTF-8 bytes.");
     expect(calls).toHaveLength(0);
+  });
+
+  it("surfaces function result conflicts and target errors with their official fields", async () => {
+    const input = { callId: "call", turnId: "turn", success: true, output: "value" };
+    for (const [status, type, code, message] of [
+      [409, "conflict_error", "conflict_error", "The tool call already has a different result."],
+      [409, "conflict_error", "conflict_error", "The Turn cannot accept this input in its current state."],
+      [400, "invalid_request_error", "invalid_request_error", "Unknown pending tool call."],
+      [400, "invalid_request_error", "invalid_request_error", "The tool call belongs to a different Turn."],
+    ] as const) {
+      const calls: FetchCall[] = [];
+      const client = new OpenAIAgentsClient({
+        fetch: recordingFetch(jsonResponse({ error: { type, code, message, param: null } }, status), calls),
+      });
+      const error = await client.submitFunctionResult("session", input, "result-key").catch((value: unknown) => value);
+      expect(error).toBeInstanceOf(AgentCoreError);
+      expect(error).toMatchObject({ status, code, errorType: type, param: null, message });
+      expect(calls).toHaveLength(1);
+    }
   });
 
   it("keeps the three legacy single-event helpers on the public batch wire", async () => {

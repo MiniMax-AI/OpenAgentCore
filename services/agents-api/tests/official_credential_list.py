@@ -135,11 +135,12 @@ def verify_credential_list(client, other, invalid, peer, binding, saved_vaults, 
             safe_error(raw.get(base + owner + "/credentials", headers=headers), 404)
             expect_error(NotFoundError, lambda: credentials.list(owner))
         for owner, cursor in ((vault.id, sibling.id), (vault.id, foreign.id),
-                              (empty_vault.id, expected[0].id), (vault.id, str(uuid.uuid4()))):
+                              (empty_vault.id, expected[0].id), (vault.id, str(uuid.uuid4())),
+                              (vault.id, "invalid-credential")):
             safe_error(raw.get(base + owner + "/credentials", headers=headers, params={"after": cursor}), 404)
             expect_error(NotFoundError, lambda: credentials.list(owner, after=cursor))
         invalid_queries = [
-            {"after": "invalid-credential"}, {"status": "unknown"}, {"limit": "null"},
+            {"status": "unknown"}, {"limit": "null"},
             {"order": "invalid"}, [("status", "active"), ("status", "archived")],
             [("status", "active"), ("status[]", "unknown")],
         ]

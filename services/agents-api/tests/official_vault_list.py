@@ -104,7 +104,10 @@ def verify_vault_list(client, other, invalid, peer, binding, saved, root, direct
         response = raw.get(endpoint, headers=headers, params={"after": foreign.id})
         assert response.status_code == 404 and response.json()["error"]["code"] == "not_found_error"
         assert foreign.id not in response.text
-        for params in ({"after": "invalid-vault"}, {"status": "unknown"}, {"limit": "null"}):
+        # A malformed cursor is a missing one.
+        invalid_cursor = raw.get(endpoint, headers=headers, params={"after": "invalid-vault"})
+        assert invalid_cursor.status_code == 404 and invalid_cursor.json() == response.json()
+        for params in ({"status": "unknown"}, {"limit": "null"}):
             response = raw.get(endpoint, headers=headers, params=params)
             assert response.status_code == 400
             assert response.json()["error"]["type"] == "invalid_request_error"
