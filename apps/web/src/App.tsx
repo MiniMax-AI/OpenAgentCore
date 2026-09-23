@@ -2025,7 +2025,12 @@ export function App() {
     const isCurrent = () => generation === connectionGenerationRef.current;
     await requestSessionCancelBeforeDelete(core, sessionId, createIdempotencyKey());
     const settled = await waitForSessionIdle(core, sessionId, { isCurrent });
-    if (settled === "stale" || !isCurrent()) return false;
+    if (settled === "stale" || !isCurrent()) {
+      throw new SessionActionError(
+        "The cancellation was sent, but the Core connection changed before deletion, so no deletion was attempted. The current Core view was kept.",
+        "request_failed",
+      );
+    }
     if (settled === "missing") {
       return removeSessionFromWorkspace(sessionId, "Session is absent from Agent Core after cancellation.");
     }
