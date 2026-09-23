@@ -23,6 +23,10 @@ export function handleSandboxFixture(request, response, url, sendJson, sendError
   }
   if (path === "/__fixture/sandbox") { sendJson(response, { nodes, calls }); return true; }
   if (path === "/__fixture/sandbox-microsandbox") { provider = "microsandbox"; sendJson(response, {}); return true; }
+  const projectRoute = path === "/v1/sandbox/nodes" || /^\/v1\/agents\/sessions\/[^/]+\/sandbox-placement$/.test(path);
+  if (projectRoute && request.headers["openai-beta"] !== "agents=v1") {
+    sendError(response, 400, "OpenAI-Beta: agents=v1 is required.", "invalid_beta"); return true;
+  }
   if (path === "/v1/sandbox/nodes") { sendJson(response, { data: nodes.map(({ id, name, online }) => ({ id, name, available: online })) }); return true; }
   if (/^\/v1\/agents\/sessions\/[^/]+\/sandbox-placement$/.test(path)) {
     sendJson(response, { node_id: "node-local", node_name: "Core server", available: !diagnostic, state: "active", compute_phase: "running", diagnostic }); return true;

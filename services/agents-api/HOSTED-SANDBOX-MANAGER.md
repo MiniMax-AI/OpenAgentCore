@@ -96,7 +96,12 @@ its connection to Core; Core does not need SSH or an exposed Docker TCP daemon.
 Registration persists the node identity before contacting Core, allowing a lost
 registration response to be recovered without replacing the identity. Keep the
 state directory on persistent storage, private to the node service account.
-One process owns it at a time. The enrollment token is not the node credential.
+One process owns it at a time. Do not copy a node identity into another state
+directory or onto another host. Core rejects duplicate connections while the
+original connection is opening, live or finishing disconnect cleanup. A half-open
+connection must reach its heartbeat timeout before a reconnect can be admitted;
+the node retries with bounded backoff. These checks do not attest physical host
+identity. The enrollment token is not the node credential.
 
 ## Placement and recovery
 

@@ -41,7 +41,8 @@ func (q *Queries) AdoptRuntimePlacements(ctx context.Context, arg AdoptRuntimePl
 }
 
 const bindLegacyRuntimeAllocations = `-- name: BindLegacyRuntimeAllocations :exec
-UPDATE runtime_allocations SET node_id=$1 WHERE provider_key=$2 AND node_id IS NULL
+UPDATE runtime_allocations SET node_id=$1,compute_activity_at=clock_timestamp()
+WHERE provider_key=$2 AND node_id IS NULL
 `
 
 type BindLegacyRuntimeAllocationsParams struct {

@@ -153,3 +153,54 @@ func TestUnmanagedRootCompletionStillRejectsEarlierClock(t *testing.T) {
 		t.Fatal("unmanaged timing contract changed", err)
 	}
 }
+
+func TestManagedIdleClockLegacyAdoptionStartsIdleOnce(t *testing.T) {
+	for _, skew := range []time.Duration{-269 * time.Second, 269 * time.Second} {
+		t.Run(skew.String(), func(t *testing.T) {
+			s, _ := newManagedTestStore(t)
+			w := executionLease(t, s).Store()
+			d := deploymentSelection()
+			deploymentConfigure(t, w, &d)
+			tenant := uuid.NewString()
+			_, environment := localEnvironment(t, s, tenant)
+			owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, d.InstallationID, device.HashCredential("runtime"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			owner, err = w.ObserveRuntimeRunning(t.Context(), owner)
+			if err != nil {
+				t.Fatal(err)
+			}
+			owner, err = w.SetRuntimeCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"original"}`), nil, time.Time{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			until := runtimeDatabaseTime(t, s).Add(time.Hour)
+			runtimeSuspensionSQL(t, s.pool, "UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '10 minutes',compute_retained_until=$2 WHERE id=$1", owner.ID, until)
+			turn := runtimeSuspensionCompleted(t, s.pool, owner)
+			source := runtimeDatabaseTime(t, s).Add(skew).Truncate(time.Millisecond)
+			runtimeSuspensionSQL(t, s.pool, "UPDATE turns SET completed_at=$2 WHERE id=$1", turn, source)
+			d.ProviderKind = "microsandbox"
+			d.LocalNodeID = uuid.NewString()
+			d.LocalCredentialSHA256 = device.HashCredential("node")
+			d.LocalMaxActive, d.LocalMaxRetained = 1, 1
+			before := runtimeDatabaseTime(t, s)
+			deploymentConfigure(t, w, &d)
+			after := runtimeDatabaseTime(t, s)
+			adopted, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
+			if err != nil || adopted.ID != owner.ID || adopted.NodeID != d.LocalNodeID || adopted.ComputeRevision != owner.ComputeRevision || string(adopted.ComputeState) != string(owner.ComputeState) || adopted.ComputeRetainedUntil == nil || !adopted.ComputeRetainedUntil.Equal(until) {
+				t.Fatal("adoption changed retained compute", adopted, err)
+			}
+			deploymentConfigure(t, w, &d)
+			unchanged, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
+			if err != nil || !unchanged.ComputeActivityAt.Equal(adopted.ComputeActivityAt) {
+				t.Fatal("restart reset adoption idle anchor", unchanged, err)
+			}
+			verifyManagedIdleClock(t, s, w, adopted, before, after)
+			read, err := s.GetTurn(t.Context(), tenant, owner.SessionID, turn)
+			if err != nil || !read.CompletedAt.Equal(source) {
+				t.Fatal("adoption changed native completion timestamp", read, err)
+			}
+		})
+	}
+}

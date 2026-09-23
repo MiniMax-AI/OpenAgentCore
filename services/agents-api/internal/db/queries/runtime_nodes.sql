@@ -82,7 +82,8 @@ AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=e.id)
 ON CONFLICT(environment_id) DO NOTHING;
 
 -- name: BindLegacyRuntimeAllocations :exec
-UPDATE runtime_allocations SET node_id=$1 WHERE provider_key=$2 AND node_id IS NULL;
+UPDATE runtime_allocations SET node_id=$1,compute_activity_at=clock_timestamp()
+WHERE provider_key=$2 AND node_id IS NULL;
 
 -- name: ListNodeRuntimeAllocations :many
 SELECT a.id,a.node_id,a.observation_error,a.state,a.compute_phase,a.initialization,a.created_at,a.environment_id,e.session_id,s.tenant_id

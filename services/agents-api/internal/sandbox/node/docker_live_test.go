@@ -110,6 +110,16 @@ func TestDockerNodeTransportLifecycle(t *testing.T) {
 	hub.mu.Lock()
 	previous := hub.peers[id.NodeID]
 	hub.mu.Unlock()
+	assertDuplicateRejected(t, server.URL, id.NodeID, credential)
+	hub.mu.Lock()
+	retained := hub.peers[id.NodeID] == previous
+	hub.mu.Unlock()
+	if !retained {
+		t.Fatal("duplicate connection replaced real Docker node")
+	}
+	if command("/bin/cat", "/workspace/node-transport-proof").Stdout != "node-transport-persisted" {
+		t.Fatal("duplicate disrupted live node")
+	}
 	hub.Disconnect(id.NodeID)
 	wait(t, func() bool {
 		hub.mu.Lock()
@@ -150,5 +160,5 @@ func TestDockerNodeTransportLifecycle(t *testing.T) {
 		t.Fatal("container retained after cleanup", err)
 	}
 	// Kill verifies removal of both named Runtime volumes before returning.
-	t.Logf("real Docker node transport passed: installation=%s allocation=%s compute=%s; reconnect and node restart retained identity/file; owned container and volumes removed", id.InstallationID, r.AllocationID, info.ProviderID)
+	t.Logf("real Docker node transport passed: installation=%s allocation=%s compute=%s; duplicate connection rejected; reconnect and node restart retained identity/file; owned container and volumes removed", id.InstallationID, r.AllocationID, info.ProviderID)
 }

@@ -181,11 +181,16 @@ func TestHubExpiresSilentNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	wait(t, func() bool { return hub.Online(id.NodeID) })
+	assertDuplicateRejected(t, server.URL, id.NodeID, "test")
 	_ = conn.SetReadDeadline(time.Now().Add(38 * time.Second))
 	if _, err = readFrame(conn); err == nil {
 		t.Fatal("silent node connection survived deadline")
 	}
 	wait(t, func() bool { return !hub.Online(id.NodeID) })
+	wait(t, func() bool { return reservationReleased(hub, id.NodeID) })
+	replacement := connectRawNode(t, server.URL, id)
+	defer replacement.Close()
+	wait(t, func() bool { return hub.Online(id.NodeID) })
 }
 
 func TestDegradedNodeRetainsObservationAndCleanup(t *testing.T) {

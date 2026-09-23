@@ -593,7 +593,11 @@ One execution owner manages local and remote nodes through the same finite
 Provider protocol. The embedded local node preserves existing single-host setup;
 remote nodes actively connect over authenticated TLS. Persist private node
 identity and highest owner epoch; refuse another process using the same identity
-or a changed backend namespace. Heartbeats establish provider readiness and
+or a changed backend namespace. Reserve each NodeID before transport upgrade and
+retain that reservation through disconnect cleanup; a duplicate connection must
+not replace a live or opening connection. Keep one private state directory per
+node and never copy its identity to another host. This is connection exclusion,
+not host attestation. Heartbeats establish provider readiness and
 last-observed host metrics, never Session activity. Transport reconnects use
 bounded backoff. Send relative operation budgets, anchored to the node clock at
 receipt and consumed while queued; clocks on different hosts need not agree. Core
@@ -618,7 +622,10 @@ unresolved resources; new placement and suspended-to-restoring admission share a
 database lock. Confirmed cleanup releases placement capacity. Under the existing
 execution lease, adopt old single-host resources only after the installation and
 backend fingerprint match, retaining them and pending Environments on the local
-node. Never infer a host from an identical socket path on another machine.
+node. First adoption initializes the idle activity anchor from the database clock
+in the same binding transaction. Later startups preserve that anchor and the
+existing snapshot retention deadline. Never infer a host from an identical socket
+path on another machine.
 
 Do not add node-level drain controls. Refuse node removal with pending allocations,
 instances, snapshots, unknown results or cleanup resources. Offline ownership is

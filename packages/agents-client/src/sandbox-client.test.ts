@@ -29,7 +29,10 @@ describe("Core sandbox credential boundaries", () => {
     expect(fetch.mock.calls[0]?.[0]).toBe("/v1/sandbox/nodes");
     expect(fetch.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
     expect(fetch.mock.calls[1]?.[0]).toBe("/v1/agents/sessions/session%2Fa/sandbox-placement");
-    expect(new Headers(fetch.mock.calls[1]?.[1]?.headers).get("Authorization")).toBe("Bearer project-only");
+    for (const [, init] of fetch.mock.calls) {
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer project-only");
+      expect(new Headers(init?.headers).get("OpenAI-Beta")).toBe("agents=v1");
+    }
   });
   it("preserves resource conflict errors without retry or fallback", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: { code: "runtime_node_in_use", message: "Node has retained resources.", type: "conflict_error" } }, 409));

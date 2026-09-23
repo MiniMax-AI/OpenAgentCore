@@ -25,7 +25,9 @@ type Hub struct {
 	options HubOptions
 	mu      sync.Mutex
 	peers   map[string]*peer
-	closed  bool
+	// reservations cover opening, live and closing connections for one identity.
+	reservations map[string]struct{}
+	closed       bool
 }
 
 type peer struct {
@@ -42,7 +44,9 @@ type peer struct {
 	once     sync.Once
 }
 
-func NewHub(options HubOptions) *Hub { return &Hub{options: options, peers: map[string]*peer{}} }
+func NewHub(options HubOptions) *Hub {
+	return &Hub{options: options, peers: map[string]*peer{}, reservations: map[string]struct{}{}}
+}
 func (h *Hub) Online(id string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -103,6 +107,23 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "owner unavailable", http.StatusServiceUnavailable)
 		return
 	}
+
+	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
+		http.Error(w, "node unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if _, reserved := h.reservations[id]; reserved {
+		h.mu.Unlock()
+		http.Error(w, "node identity already connected", http.StatusConflict)
+		return
+	}
+	h.reservations[id] = struct{}{}
+	h.mu.Unlock()
+	// Registered first, this runs after peer removal and the fenced disconnect
+	// callback. A duplicate cannot replace a connection still being retired.
+	defer func() { h.mu.Lock(); delete(h.reservations, id); h.mu.Unlock() }()
 	upgrade := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return r.Header.Get("Origin") == "" }}
 	conn, err := upgrade.Upgrade(w, r, nil)
 	if err != nil {
@@ -155,11 +176,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	old := h.peers[id]
 	h.peers[id] = p
-	if old != nil {
-		old.close()
-	}
 	h.mu.Unlock()
 
 	for {

@@ -54,10 +54,10 @@ export interface SandboxPlacement {
 /** Project-scoped extensions, using the ordinary /v1 project credential. */
 export class SandboxProjectClient extends OpenAIAgentsClient {
   listSandboxNodes(options?: ReadOptions): Promise<{ data: SandboxDirectoryNode[] }> {
-    return this.request("/sandbox/nodes", { signal: options?.signal }, undefined, false);
+    return this.request("/sandbox/nodes", { signal: options?.signal });
   }
   retrieveSandboxPlacement(sessionId: string, options?: ReadOptions): Promise<SandboxPlacement> {
-    return this.request(`/agents/sessions/${encodeURIComponent(sessionId)}/sandbox-placement`, { signal: options?.signal }, undefined, false);
+    return this.request(`/agents/sessions/${encodeURIComponent(sessionId)}/sandbox-placement`, { signal: options?.signal });
   }
 }
 /** Deployment administration requires its own credential and /core/v1/sandbox base. */
