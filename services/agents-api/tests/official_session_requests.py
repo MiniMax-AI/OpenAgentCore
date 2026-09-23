@@ -18,6 +18,10 @@ def verify_session_create_requests(client, spec):
         ({"metadata": {"label": None}}, "metadata.label"),
         ({"metadata": {"empty": "", "label": None}}, "metadata.label"),
         ({"metadata": {"label": 0}}, "metadata.label"), ({"metadata": []}, None),
+        # Member names match exactly: a case variant is an unknown member, not an
+        # alias that replaces the field (req_6ba2a50c71a4410f87a1baac855e82df).
+        ({"Metadata": {"label": "case"}}, None), ({"Input": "Case variant."}, None), ({"STREAM": False}, None),
+        ({"environment": {**spec["environment"], "Type": "self_hosted"}}, None),
     ]
     headers = {"Authorization": f"Bearer {client.api_key}", "OpenAI-Beta": "agents=v1"}
     with httpx2.Client(trust_env=False, timeout=10) as raw:

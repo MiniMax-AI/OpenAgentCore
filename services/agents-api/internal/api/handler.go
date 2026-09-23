@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
@@ -189,7 +190,8 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	var request decodedSessionRequest
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
+	// A case variant of a member, such as Metadata, is an unknown member.
+	if caseVariantMember(raw, reflect.TypeOf(request)) || decoder.Decode(&request) != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "Request must be a JSON object containing supported fields.")
 		return
 	}

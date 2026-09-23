@@ -31,14 +31,14 @@ func credentialExpiry(value *string) bool {
 	return err == nil
 }
 
+// credentialAuthType reads the exact type member; a case variant is unknown.
 func credentialAuthType(raw json.RawMessage) string {
-	var value struct {
-		Type string `json:"type"`
-	}
-	if json.Unmarshal(raw, &value) != nil {
+	var fields map[string]json.RawMessage
+	var value string
+	if json.Unmarshal(raw, &fields) != nil || json.Unmarshal(fields["type"], &value) != nil {
 		return ""
 	}
-	return value.Type
+	return value
 }
 
 func oauthCredentialCreate(raw json.RawMessage, name string) (store.CreateOAuthCredentialInput, error) {

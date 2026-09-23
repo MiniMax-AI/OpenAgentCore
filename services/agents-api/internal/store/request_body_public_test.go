@@ -101,6 +101,23 @@ func TestRequestBodyGateRejectsWithoutWritesPostgres(t *testing.T) {
 			}
 		}
 	}
+	// Member names match exactly: a case variant is an unknown member, never an
+	// alias whose value replaces the field (req_6ba2a50c71a4410f87a1baac855e82df).
+	message := `[{"role":"assistant","Role":"user","content":[{"type":"input_text","text":"case"}]}]`
+	for _, request := range []struct{ path, body string }{
+		{"/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"none"},"input":"case","Metadata":{"k":"v"}}`},
+		{"/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"none"},"Input":"case"}`},
+		{"/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"none"},"input":` + message + `}`},
+		{"/v1/agents/sessions/" + session + "/events", `{"Events":[{"type":"agent.session.input.cancel"}]}`},
+		{"/v1/agents/sessions/" + session + "/events", `{"events":[{"type":"agent.session.input.message","input":` + message + `}]}`},
+		{"/v1/vaults/" + vault + "/credentials", `{"name":"case","auth":{"type":"mcp_oauth","mcp_server_url":"https://mcp.example/mcp","access_token":"a","refresh":{"client_id":"c","Client_ID":"d","refresh_token":"r","token_endpoint":"https://issuer.example/token","token_endpoint_auth":{"type":"none"}}}}`},
+	} {
+		for _, token := range []string{owner, foreign} {
+			if status, body := client.do(token, http.MethodPost, request.path, "application/json", []byte(request.body)); status != http.StatusBadRequest && status != http.StatusNotFound {
+				t.Errorf("%s %s: %d %s", request.path, request.body, status, body)
+			}
+		}
+	}
 	if after := databaseDigest(t, pool); !mapsEqual(before, after) {
 		t.Fatal("a rejected body changed persisted state")
 	}
@@ -141,3 +158,4 @@ func TestRequestBodyGateRejectsWithoutWritesPostgres(t *testing.T) {
 		t.Fatalf("foreign list: %d %s", status, body)
 	}
 }
+

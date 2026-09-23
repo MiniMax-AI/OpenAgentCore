@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"reflect"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
@@ -44,7 +45,8 @@ func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
+	// A case variant of events is an unknown member; events decode exactly too.
+	if caseVariantMember(raw, reflect.TypeOf(request)) || decoder.Decode(&request) != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid Session input event request.")
 		return
 	}
