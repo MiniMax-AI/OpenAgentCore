@@ -5,6 +5,10 @@ import (
 	"strings"
 )
 
+func publicAPIRequest(r *http.Request) bool {
+	return r.URL.Path == "/v1" || strings.HasPrefix(r.URL.Path, "/v1/")
+}
+
 // Only deployment administration is exposed through the console. Enrollment and
 // node identity/transport calls connect directly to Core with their own credentials.
 func sandboxAdminRequest(r *http.Request) bool {

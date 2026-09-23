@@ -119,8 +119,11 @@ separate project and administrator credentials on the server. Fixed node/daemon
 transport routes use their own authentication; `/node-install/` serves only the
 matched non-secret node payload. Web has no Docker or KVM authority and does not
 expose its server-held credentials to the browser.
-It requires an independent console password and rejects untrusted browser origins.
-This is a single-operator console deployment, not a multi-user identity system.
+It requires an independent administrator login and rejects untrusted browser origins.
+New installations store the administrator password hash in private console state;
+legacy installations retain Basic authentication. There is only one Web role,
+with full console authority; Agent API caller keys remain separate. Back up the
+console account state, and sign in again after a console restart.
 
 A native Core restart preserves resident microVM processes. Host reboot, user
 manager termination and loss of a running microVM are not equivalent to that

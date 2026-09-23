@@ -1,0 +1,20 @@
+.api-key-panel { padding: 26px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.api-key-heading { display: flex; align-items: center; gap: 10px; }
+.api-key-heading h3 { font-size: 16px; font-weight: 550; letter-spacing: -.02em; margin: 0; }
+.api-key-panel header p, .api-key-caption { font-size: 12px; line-height: 1.7; color: var(--fg-muted); }
+.api-key-create { display: flex; gap: 12px; align-items: end; margin: 22px 0; }
+.api-key-create .field { flex: 1; }
+.api-key-create .field span { font-size: 12px; }
+.api-key-create input { min-height: 36px; }
+.api-key-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.api-key-secret { display: grid; gap: 14px; padding: 20px; margin: 20px 0; background: var(--surface-subtle); border: 1px solid var(--line-strong); border-radius: 10px; }
+.api-key-secret strong { font-size: 13px; font-weight: 500; }
+.api-key-secret input { width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 6px; font-family: var(--font-mono); font-size: 12px; color: var(--fg); background: var(--surface); }
+.api-key-list-heading { display: flex; align-items: center; justify-content: space-between; font-size: 12px; margin-top: 20px; color: var(--fg-muted); }
+.api-key-list { padding: 0; margin: 0; list-style: none; }
+.api-key-list > li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 0; border-top: 1px solid var(--line); }
+.api-key-list strong { font-size: 13px; display: block; font-weight: 500; }
+.api-key-list span { display: block; font-size: 11px; color: var(--fg-muted); margin-top: 5px; }
+.api-key-confirm { flex-basis: 100%; font-size: 12px; }
+.api-key-error { color: var(--danger); font-size: 12px; line-height: 1.7; }
+.api-keys-page { max-width: 920px; margin: 0 auto; }

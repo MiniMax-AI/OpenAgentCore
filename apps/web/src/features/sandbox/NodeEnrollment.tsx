@@ -9,7 +9,7 @@ import { sandboxCoreOrigin } from "./core-origin";
 import type { SandboxConsoleConfig } from "./console-config";
 import { nodeInstallCommand } from "./enrollment-command";
 
-export function NodeEnrollment({ client, consoleConfig, deployment, nodes, disabled, fresh, onRefresh }: {
+export function NodeEnrollment({ client, consoleConfig, deployment, nodes, disabled, fresh, onRefresh, onConnected }: {
   client: SandboxAdminClient;
   consoleConfig: SandboxConsoleConfig;
   deployment: SandboxDeployment;
@@ -17,6 +17,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, disab
   disabled: boolean;
   fresh: boolean;
   onRefresh: () => void;
+  onConnected?: (id: string) => void;
 }) {
   const { t, locale } = useLocale();
   const [open, setOpen] = useState(false);
@@ -29,6 +30,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, disab
   const generation = useRef(0);
   const request = useRef<AbortController | null>(null);
   const knownIds = useRef(new Set<string>());
+  const revealedId = useRef<string | null>(null);
   const sourceUrl = sandboxCoreOrigin(window.location.origin);
   const coreUrl = sandboxCoreOrigin(deployment.core_url || window.location.origin);
   const available = Boolean(consoleConfig.node_installer && sourceUrl && coreUrl);
@@ -37,6 +39,11 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, disab
   const command = enrollment && available && !expired && !connected
     ? nodeInstallCommand(enrollment.token, coreUrl!, sourceUrl!, deployment.provider, deployment.installation_id, consoleConfig.node_installer_sha256) : "";
   useEffect(() => () => { generation.current++; request.current?.abort(); }, []);
+  useEffect(() => {
+    if (!open || !enrollment || !connected || revealedId.current === connected.id) return;
+    revealedId.current = connected.id;
+    onConnected?.(connected.id);
+  }, [open, enrollment, connected, onConnected]);
   useEffect(() => {
     if (!open || !enrollment) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -58,6 +65,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, disab
     generation.current++;
     const controller = new AbortController(); request.current = controller;
     knownIds.current = new Set(nodes.map((node) => node.id));
+    revealedId.current = null;
     setBusy(true); setEnrollment(null); setError(null); setCopied(false); setCopyFailed(false);
     try {
       // Capture the current node set before issuing a one-time enrollment token.

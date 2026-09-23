@@ -65,26 +65,57 @@ retains that URL for remote node downloads; it does not silently change mirrors.
 ## Sign in to Web
 
 Installation creates private configuration under `~/.parsar/core`, a dedicated
-PostgreSQL volume, an API caller key and a credential encryption key. It also
-creates a separate console password and deployment administrator key. Secret values
-are not printed.
+PostgreSQL volume, an API caller key and a credential encryption key. New Web
+installations create a one-time console setup key and a separate deployment
+administrator key. Secret values are not printed.
 
 Open the console address printed by the installer (`https://core.example` in
-the example above). Sign in as `admin` using the password in
-`~/.parsar/core/config/console.password`. The bundled console is already connected
-to Core; you do not need to paste an API key.
+the example above). On the first visit, enter the setup key from
+`~/.parsar/core/config/console.setup.key`, choose an administrator username and
+password, and keep your sign-in details safe. The Web has one role: administrator,
+with access to every console operation. It has no secondary user roles. The paired
+console already connects to Core; no API key is needed to sign in.
+
+On a paired deployment, the first-run Home creates an Agent API key, then guides you through optional
+host enrollment and a real Agent request. Save the generated key when it is shown;
+its secret is returned only once. The **API keys** page lists safe metadata and
+lets you create or revoke keys later. You can skip or replay it from **Getting started**. Hosts registered here
+supply sandbox resources for **hosted** Sessions; self-hosted Sessions use their
+application-managed environments. The request workbench lets you configure model,
+provider and harness defaults and run the generated request from your machine.
+Caller API keys authorize Core requests; model provider keys authorize model calls.
+Neither is the administrator password. Examples read environment variables or ask
+for keys privately in the terminal, and reject HTTP redirects. Keep the generated Core API key for later requests from your own machine.
+A Web-only installation without paired key management guides you to use an
+existing Core API key and still allows the request workbench.
+Creating a saved Agent stores its configuration; it does not start a Session or
+call the model. The full protocol surface and execution support are documented
+in the [API guide](./quickstart.md).
 
 Default local ports and private files:
 
 - API: `http://127.0.0.1:8091/v1`
 - Web upstream: `http://127.0.0.1:8080`; use the configured public URL in your browser
-- Console password file: `~/.parsar/core/config/console.password`
-- API caller key file: `~/.parsar/core/config/caller.key`
-- Sandbox administrator key file: `~/.parsar/core/admin/sandbox-admin.key`
+- One-time setup key: `~/.parsar/core/config/console.setup.key`
+- Administrator state: `~/.parsar/core/state/console/` (`admin.json` and `registered`)
+- API caller key: `~/.parsar/core/config/caller.key`
+- Sandbox administrator key: `~/.parsar/core/admin/sandbox-admin.key`
 
 Use exactly the displayed console address; the production proxy validates its
-configured browser origin. The console password authenticates to the Web server;
-the server holds the independent Core key. Model keys remain API execution input.
+configured origin. The account file contains a password hash, not a recoverable
+password. Back up the private console state along with installation configuration;
+do not remove it to reset a password or reopen registration. Cookie sessions expire
+after 12 hours and on console restart; the account survives restarts. Existing
+installations retain `admin` Basic login with `config/console.password`; rerunning
+the installer does not silently migrate their authentication mode.
+
+Manual account-mode consoles set `CORE_CONSOLE_AUTH_MODE=account`, an absolute
+`CORE_CONSOLE_STATE_DIR` (private writable directory) and
+`CORE_CONSOLE_SETUP_KEY_FILE` (private credential file). Keep state outside the
+static Web root. Setup/login/logout use private `/console/auth` routes and do not
+extend the public Agent API. Public `/v1` requests carrying an explicit caller
+Bearer are forwarded unchanged to Core; browser cookie requests use the paired
+console's server-held caller key. The console never exports that key to the page.
 
 Every Core installation creates a separate private deployment administrator key at
 `admin/sandbox-admin.key`. Core loads its SHA-256 digest from

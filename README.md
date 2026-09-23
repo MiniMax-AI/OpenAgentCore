@@ -33,8 +33,11 @@ existing Sessions retain their node across disconnects and resume.
    bundles are not published yet; see the [installation guide](docs/getting-started/install.md)
    for building a bundle and the host/network prerequisites.
 2. **Sign in to Web.** Open the console address printed by the installer. Use
-   `admin` and the password in `~/.parsar/core/config/console.password`.
-   The paired console needs no additional API key setup.
+   the one-time key in `~/.parsar/core/config/console.setup.key` to register your
+   administrator account, then keep your chosen username and password safe.
+   Existing installations retain their `admin` / `console.password` login.
+   The console connects to Core automatically. During first-run, create and save
+   an Agent API key for requests from your own machine or application.
 3. **Add a node.** Open **Hosted Sandbox Manager**, choose Docker or microsandbox,
    and initialize the deployment. The paired console address is used by default;
    advanced network settings allow a different reachable HTTPS origin. Select

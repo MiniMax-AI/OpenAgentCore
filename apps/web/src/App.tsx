@@ -16,6 +16,13 @@ import type {
   UpdateAgentInput,
 } from "@agents-core-web/agents-client";
 
+import { ConsoleNavigation } from "./features/first-run/ConsoleNavigation";
+import { isLocalProxyBaseUrl } from "./lib/connection";
+import { ApiKeyPanel } from "./features/api-keys/ApiKeyPanel";
+import { FirstRunHome } from "./features/first-run/FirstRunHome";
+import { ConsoleAccountMenu } from "./features/first-run/ConsoleAccess";
+import { useIntroduction } from "./features/first-run/useIntroduction";
+import { useLocale } from "./lib/LocaleProvider";
 import { SandboxManagerView } from "./features/sandbox/SandboxManagerView";
 import { SandboxProvider } from "./features/sandbox/SandboxContext";
 import { SystemNavigation } from "./components/SystemNavigation";
@@ -143,13 +150,13 @@ import {
   waitForStreamReconnect,
 } from "./lib/stream-reconnect";
 
-type View = ProductView | "system" | "sandbox";
+type View = ProductView | "system" | "sandbox" | "api-keys";
 
 function viewFromLocation(): View {
   if (typeof window === "undefined") return "dashboard";
   const candidate = window.location.hash.slice(1);
   if (candidate === "templates" && __AGENTS_CORE_WEB_OPENAI_HOSTED_SESSIONS__) return "templates";
-  return candidate === "agents" || candidate === "sessions" || candidate === "vaults" || candidate === "system" || candidate === "sandbox"
+  return candidate === "agents" || candidate === "sessions" || candidate === "vaults" || candidate === "system" || candidate === "sandbox" || candidate === "api-keys"
     ? candidate
     : "dashboard";
 }
@@ -251,6 +258,10 @@ export function App() {
   const [view, setView] = useState<View>(viewFromLocation);
   const [connection, setConnection] = useState<CoreConnection>(() => loadConnection());
   const [connectionOpen, setConnectionOpen] = useState(false);
+  const introduction = useIntroduction(connection.baseUrl);
+  const { t } = useLocale();
+  const showIntroduction = introduction.available && introduction.visible && view === "dashboard";
+  const [introductionAgentId, setIntroductionAgentId] = useState<string | undefined>();
 
   useEffect(() => {
     const hash = view === "dashboard" ? "" : `#${view}`;
@@ -2284,12 +2295,14 @@ export function App() {
         </div>
 
         <ProductNavigation
-          active={view === "system" || view === "sandbox" ? null : view}
+          active={showIntroduction || view === "system" || view === "sandbox" || view === "api-keys" ? null : view}
           onSelect={(nextView) => setView(nextView)}
           showVaults={vaultSupported === true}
           showTemplates={__AGENTS_CORE_WEB_OPENAI_HOSTED_SESSIONS__}
         />
 
+        <ConsoleNavigation showIntroduction={showIntroduction} introductionAvailable={introduction.available} keysAvailable={isLocalProxyBaseUrl(connection.baseUrl)} activeView={view}
+          onIntroduction={() => { introduction.replay(); setView("dashboard"); }} onKeys={() => setView("api-keys")} />
         <SystemNavigation active={view === "system" || view === "sandbox" ? view : null} onSelect={setView} />
 
         <div className="sidebar-footer">
@@ -2309,6 +2322,7 @@ export function App() {
             </span>
             <Settings2 size={14} strokeWidth={1.5} />
           </button>
+          <ConsoleAccountMenu />
           <ThemeMenu />
         </div>
       </aside>
@@ -2332,7 +2346,14 @@ export function App() {
               onConfigureConnection={() => setConnectionOpen(true)}
             />
           ) : null}
-          <div className="cached-page-view" hidden={view !== "dashboard"}>
+          {showIntroduction ? <FirstRunHome
+            key={`intro:${coreGeneration}`}
+            connection={connection} core={core} username={introduction.username}
+            initialStep={introduction.step} onStepChange={introduction.setStep}
+            onDone={introduction.dismiss} onRefresh={() => { void refreshAgents(); }}
+            onOpenAgent={(id) => { setIntroductionAgentId(id); void refreshAgents(); setView("agents"); }}
+          /> : null}
+          <div className="cached-page-view" hidden={view !== "dashboard" || showIntroduction}>
             <DashboardView
               agents={agents}
               sessions={sessions}
@@ -2414,6 +2435,7 @@ export function App() {
           {view === "agents" ? (
             <AgentsView
               key={`agents:${coreGeneration}`}
+              openAgentId={introductionAgentId}
               agents={agents}
               busy={busy}
               coreBaseUrl={connection.baseUrl}
@@ -2441,6 +2463,7 @@ export function App() {
               operations={vaultOperations}
             />
           ) : null}
+          {view === "api-keys" && isLocalProxyBaseUrl(connection.baseUrl) ? <section className="page-section api-keys-page"><header className="page-header"><h1>{t("API keys")}</h1></header><ApiKeyPanel /></section> : null}
           {view === "sandbox" ? <SandboxManagerView key={`sandbox:${coreGeneration}`} coreBaseUrl={connection.baseUrl} /> : null}
           {view === "system" ? (
             <SystemView

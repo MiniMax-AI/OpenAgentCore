@@ -23,6 +23,7 @@ type console struct {
 	transport           *http.Transport
 	host                string
 	password            [sha256.Size]byte
+	auth                *consoleAuth
 }
 
 func newConsole(c config) (*console, error) {
@@ -37,6 +38,13 @@ func newConsole(c config) (*console, error) {
 	}
 	origin, _ := url.Parse(c.origin)
 	h := &console{config: c, root: root, host: origin.Host, password: sha256.Sum256([]byte(c.password))}
+	if c.authMode == "account" {
+		h.auth, err = newConsoleAuth(c)
+		if err != nil {
+			root.Close()
+			return nil, err
+		}
+	}
 	if c.nodePayloadDir != "" {
 		h.nodePayload, err = os.OpenRoot(c.nodePayloadDir)
 		if err != nil {
@@ -64,9 +72,9 @@ func newConsole(c config) (*console, error) {
 			r.Out.Header.Del("Cookie")
 			r.Out.Header.Del("Origin")
 			r.Out.Header.Del("Referer")
-			if (projectExtensionRequest(r.In) && explicitBearer(r.In)) || nodeTransportRequest(r.In) || (sandboxAdminRequest(r.In) && c.adminToken == "") {
+			if ((publicAPIRequest(r.In) || projectExtensionRequest(r.In)) && explicitBearer(r.In)) || nodeTransportRequest(r.In) || (sandboxAdminRequest(r.In) && c.adminToken == "") {
 				r.Out.Header.Set("Authorization", r.In.Header.Get("Authorization"))
-			} else if sandboxAdminRequest(r.In) {
+			} else if sandboxAdminRequest(r.In) || projectKeyAdminRequest(r.In) {
 				r.Out.Header.Set("Authorization", "Bearer "+c.adminToken)
 			} else {
 				r.Out.Header.Set("Authorization", "Bearer "+c.token)
@@ -113,6 +121,16 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "ok\n")
 		return
 	}
+	if publicAPIRequest(r) && explicitBearer(r) {
+		if r.Host != h.host || !safePath(r.URL.Path) || r.URL.IsAbs() ||
+			r.Method == http.MethodConnect || r.Method == http.MethodTrace || r.Header.Get("Upgrade") != "" ||
+			!h.validOriginHeaders(r) {
+			authError(w, http.StatusForbidden, "Invalid project API request")
+			return
+		}
+		h.proxy.ServeHTTP(w, r)
+		return
+	}
 	if (h.adminToken != "" && nodeTransportRequest(r)) || (projectExtensionRequest(r) && explicitBearer(r)) {
 		if r.Host != h.host || !safePath(r.URL.Path) || r.URL.IsAbs() || !explicitBearer(r) || (r.Header.Get("Origin") != "" && r.Header.Get("Origin") != h.origin) {
 			http.Error(w, "Invalid node transport request", http.StatusForbidden)
@@ -130,11 +148,25 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !h.sameOrigin(r) {
-		http.Error(w, "Forbidden", http.StatusForbidden)
+		authError(w, http.StatusForbidden, "Forbidden")
 		return
 	}
 	if !safePath(r.URL.Path) || r.URL.IsAbs() || r.Method == http.MethodConnect || r.Method == http.MethodTrace || r.Header.Get("Upgrade") != "" {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+	if r.URL.Path == "/console/auth" || strings.HasPrefix(r.URL.Path, "/console/auth/") {
+		if h.auth != nil {
+			h.auth.serve(w, r)
+		} else if r.URL.Path == "/console/auth" && r.Method == http.MethodGet {
+			authJSON(w, http.StatusOK, map[string]string{"mode": "legacy"})
+		} else {
+			authError(w, http.StatusNotFound, "Account authentication is not configured")
+		}
+		return
+	}
+	if h.auth != nil && publicConsoleAsset(r) {
+		h.serveStatic(w, r)
 		return
 	}
 	if (r.URL.Path == "/core" || strings.HasPrefix(r.URL.Path, "/core/")) && h.adminToken == "" && !projectExtensionRequest(r) {
@@ -149,17 +181,28 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.proxy.ServeHTTP(w, r)
 		return
 	}
-	username, password, ok := r.BasicAuth()
-	digest := sha256.Sum256([]byte(password))
-	userDigest, adminDigest := sha256.Sum256([]byte(username)), sha256.Sum256([]byte("admin"))
-	if !ok || len(r.Header.Values("Authorization")) != 1 ||
-		subtle.ConstantTimeCompare(digest[:], h.password[:])&subtle.ConstantTimeCompare(userDigest[:], adminDigest[:]) != 1 {
-		w.Header().Set("WWW-Authenticate", `Basic realm="Core console", charset="UTF-8"`)
-		http.Error(w, "Authentication required", http.StatusUnauthorized)
-		return
+	if h.auth != nil {
+		if h.auth.authenticated(r) == "" {
+			authError(w, http.StatusUnauthorized, "Sign in to the console")
+			return
+		}
+	} else {
+		username, password, ok := r.BasicAuth()
+		digest := sha256.Sum256([]byte(password))
+		userDigest, adminDigest := sha256.Sum256([]byte(username)), sha256.Sum256([]byte("admin"))
+		if !ok || len(r.Header.Values("Authorization")) != 1 ||
+			subtle.ConstantTimeCompare(digest[:], h.password[:])&subtle.ConstantTimeCompare(userDigest[:], adminDigest[:]) != 1 {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Core console", charset="UTF-8"`)
+			http.Error(w, "Authentication required", http.StatusUnauthorized)
+			return
+		}
 	}
 	if r.URL.Path == "/console/config" && r.Method == http.MethodGet {
 		h.serveConsoleConfiguration(w, r)
+		return
+	}
+	if consoleAPIKeysRequest(r) {
+		h.serveAPIKeys(w, r)
 		return
 	}
 	if r.URL.Path == "/core" || strings.HasPrefix(r.URL.Path, "/core/") {
@@ -178,17 +221,7 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *console) sameOrigin(r *http.Request) bool {
-	if r.Host != h.host {
-		return false
-	}
-	if origins := r.Header.Values("Origin"); len(origins) > 1 || (len(origins) == 1 && origins[0] != h.origin) {
-		return false
-	}
-	sites := r.Header.Values("Sec-Fetch-Site")
-	if len(sites) > 1 {
-		return false
-	}
-	if len(sites) == 1 && sites[0] != "same-origin" && sites[0] != "none" {
+	if r.Host != h.host || !h.validOriginHeaders(r) {
 		return false
 	}
 	// Modern browsers provide Fetch Metadata; older same-origin requests carry
@@ -199,6 +232,20 @@ func (h *console) sameOrigin(r *http.Request) bool {
 		if err != nil || referrer.Scheme+"://"+referrer.Host != h.origin {
 			return false
 		}
+	}
+	return true
+}
+
+func (h *console) validOriginHeaders(r *http.Request) bool {
+	if origins := r.Header.Values("Origin"); len(origins) > 1 || (len(origins) == 1 && origins[0] != h.origin) {
+		return false
+	}
+	sites := r.Header.Values("Sec-Fetch-Site")
+	if len(sites) > 1 {
+		return false
+	}
+	if len(sites) == 1 && sites[0] != "same-origin" && sites[0] != "none" {
+		return false
 	}
 	return true
 }

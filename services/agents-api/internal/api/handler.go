@@ -42,6 +42,7 @@ type Handler struct {
 	policy                execution.Policy
 	store                 ResourceStore
 	auth                  *Authenticator
+	projectKeys           ProjectAPIKeyStore
 	harnesses             map[string]bool
 	modelProviderDefaults ModelProviderDefaults
 	engine                string
@@ -89,6 +90,7 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 		r.Delete("/v1/files/{file_id}", h.deleteSourceFile)
 	})
 	h.registerSandboxManagerRoutes(router)
+	h.registerProjectAPIKeyRoutes(router)
 	h.registerEnvironmentExecutorRoutes(router)
 	router.Route("/v1", func(r chi.Router) {
 		r.Use(h.authenticate)

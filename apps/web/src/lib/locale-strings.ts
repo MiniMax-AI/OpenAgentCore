@@ -1,4 +1,10 @@
+import { apiKeyChinese } from "./api-key-strings";
+import { firstRunChinese } from "./first-run-strings";
+import { consoleAuthChinese } from "./console-auth-strings";
 export const chinese = {
+  ...apiKeyChinese,
+  ...consoleAuthChinese,
+  ...firstRunChinese,
   "This console address cannot be used by sandbox guests. Enter the HTTPS Core address that your nodes and guests can reach.": "沙箱无法使用此控制台地址。请输入节点和沙箱都能访问的 HTTPS Core 地址。",
   "Use an HTTPS Core origin reachable from every node and sandbox guest, without a path or credentials. The console URL may be different.": "请输入所有节点和沙箱都能访问的 HTTPS Core 源地址，不含路径或凭据。此地址可能与控制台地址不同。",
   "Enter a non-loopback HTTPS origin, such as https://core.example.": "请输入非回环的 HTTPS 源地址，例如 https://core.example。",

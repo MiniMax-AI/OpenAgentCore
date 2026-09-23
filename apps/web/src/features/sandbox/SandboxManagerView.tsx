@@ -11,14 +11,14 @@ import { SandboxSetup } from "./SandboxSetup";
 import { NodeEnrollment } from "./NodeEnrollment";
 import "./SandboxManagerView.css";
 
-export function SandboxManagerView({ coreBaseUrl }: { coreBaseUrl: string }) {
+export function SandboxManagerView({ coreBaseUrl, presentation = "manager" }: { coreBaseUrl: string; presentation?: "manager" | "home" }) {
   const { t, locale } = useLocale();
   return <section className="sandbox-manager" lang={locale}>
-    {isLocalProxyBaseUrl(coreBaseUrl) ? <SandboxAccess key={coreBaseUrl} /> : <p role="status">{t("Sandbox management is available through the signed-in console connection. Switch the Core connection to /v1 to manage this deployment.")}</p>}
+    {isLocalProxyBaseUrl(coreBaseUrl) ? <SandboxAccess key={coreBaseUrl} presentation={presentation} /> : <p role="status">{t("Sandbox management is available through the signed-in console connection. Switch the Core connection to /v1 to manage this deployment.")}</p>}
   </section>;
 }
 
-function SandboxAccess() {
+function SandboxAccess({ presentation }: { presentation: "manager" | "home" }) {
   const { t } = useLocale();
   const [config, setConfig] = useState<SandboxConsoleConfig | null>(null);
   const [checking, setChecking] = useState(true);
@@ -33,10 +33,10 @@ function SandboxAccess() {
   }, [revision]);
   if (checking) return <p role="status">{t("Connecting to this console's Core…")}</p>;
   if (!config?.sandbox_admin) return <div><p role="alert">{t("Sandbox administration is not configured on this console. Ask the deployment administrator to configure access.")}</p><button type="button" className="button outline" onClick={() => setRevision((value) => value + 1)}>{t("Refresh sandbox state")}</button></div>;
-  return <SandboxManager consoleConfig={config} />;
+  return <SandboxManager consoleConfig={config} presentation={presentation} />;
 }
 
-function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig }) {
+function SandboxManager({ consoleConfig, presentation }: { consoleConfig: SandboxConsoleConfig; presentation: "manager" | "home" }) {
   const { t, locale } = useLocale();
   const client = useMemo(() => new SandboxAdminClient({ baseUrl: "/core/v1/sandbox" }), []);
   const [snapshot, setSnapshot] = useState<{ deployment: SandboxDeployment; nodes: SandboxNode[]; allocations: SandboxAllocation[] } | null>(null);
@@ -49,6 +49,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const selectedNode = snapshot?.nodes.find((node) => node.id === selectedId);
   const [removeId, setRemoveId] = useState<string | null>(null);
   const refresh = useCallback(() => setRevision((value) => value + 1), []);
+  const revealNode = useCallback((id: string) => { setSelectedId(id); setRemoveId(null); }, []);
   const initialCoreUrl = window.location.origin;
   const [setupNeedsRefresh, setSetupNeedsRefresh] = useState(false);
   const lifetime = useRef<AbortController | null>(null);
@@ -93,18 +94,19 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     finally { if (!controller.signal.aborted) setBusy(false); }
   }
   return <div className="sandbox-content form-stack">
-    <header className="sandbox-heading"><div><h1>{t("Hosted Sandbox Manager")}</h1><p>{t("Your hosts for running sandboxes.")}</p></div><div className="sandbox-actions">
+    <header className="sandbox-heading"><div>{presentation === "home" ? <h2>{t("Node network")}</h2> : <><h1>{t("Hosted Sandbox Manager")}</h1><p>{t("Your hosts for running sandboxes.")}</p></>}</div><div className="sandbox-actions">
       <button type="button" className="icon-button sandbox-refresh" disabled={loading || busy} aria-label={t("Refresh sandbox state")} title={t("Refresh sandbox state")} onClick={refresh}><RefreshCw size={17} /></button>
-      {snapshot?.deployment.provider ? <NodeEnrollment client={client} consoleConfig={consoleConfig} deployment={snapshot.deployment} nodes={snapshot.nodes} disabled={busy || loading || error !== null} fresh={fresh} onRefresh={refresh} /> : null}
+      {snapshot?.deployment.provider ? <NodeEnrollment client={client} consoleConfig={consoleConfig} deployment={snapshot.deployment} nodes={snapshot.nodes} disabled={busy || loading || error !== null} fresh={fresh} onRefresh={refresh} onConnected={revealNode} /> : null}
     </div></header>
     {loading && !snapshot ? <p role="status">{t("Loading sandbox state…")}</p> : null}
     {busy ? <span role="status">{t("Saving sandbox change…")}</span> : null}
     {error !== null ? <p role="alert" className="sandbox-error">{sandboxRequestError(error, locale)}{setupNeedsRefresh ? ` ${t("Refresh sandbox state to confirm whether setup was saved before submitting again.")}` : ""}{snapshot ? ` ${t("Previously loaded state is shown below.")}` : ""}</p> : null}
     {snapshot && !snapshot.deployment.provider ? <SandboxSetup key={revision} initialCoreUrl={initialCoreUrl} disabled={busy || loading || setupNeedsRefresh || error !== null} onInitialize={initialize} /> : null}
+    {presentation === "home" && snapshot && !snapshot.deployment.provider ? <SandboxTopology nodes={snapshot.nodes} allocations={snapshot.allocations} stale={!fresh} selectedId={selectedId} onSelect={revealNode} /> : null}
     {snapshot?.deployment.provider ? <>
       {snapshot.deployment.maintenance ? <p className="sandbox-maintenance" role="status">{t("Maintenance is enabled. New sandbox placement is paused.")}</p> : null}
       <section aria-labelledby="sandbox-nodes-heading"><div className="sandbox-section-heading"><h2 id="sandbox-nodes-heading">{t("Nodes")}</h2><span>{snapshot.nodes.length}</span></div>
-        {snapshot.nodes.length ? <SandboxTopology nodes={snapshot.nodes} allocations={snapshot.allocations} stale={!fresh} selectedId={selectedId} onSelect={(id) => { setSelectedId(id); setRemoveId(null); }} /> : <div className="sandbox-empty"><Server size={32} strokeWidth={1.25} /><h3>{t("Add your first node")}</h3><p>{t("No nodes registered. Add a node to provide hosted capacity.")}</p></div>}
+        {snapshot.nodes.length || presentation === "home" ? <SandboxTopology nodes={snapshot.nodes} allocations={snapshot.allocations} stale={!fresh} selectedId={selectedId} onSelect={revealNode} /> : <div className="sandbox-empty"><Server size={32} strokeWidth={1.25} /><h3>{t("Add your first node")}</h3><p>{t("No nodes registered. Add a node to provide hosted capacity.")}</p></div>}
         {selectedNode ? <div id="sandbox-selected-node" className="sandbox-selected-node"><SandboxNodeCard key={selectedNode.id} node={selectedNode} allocations={snapshot.allocations.filter((allocation) => allocation.node_id === selectedNode.id)} stale={!fresh} disabled={busy || loading} confirming={removeId === selectedNode.id} onRemove={() => setRemoveId(selectedNode.id)} onConfirm={() => void remove()} onCancel={() => setRemoveId(null)} /></div> : null}
       </section>
       <details className="sandbox-deployment-details"><summary>{t("Deployment details")}</summary><dl className="sandbox-summary">

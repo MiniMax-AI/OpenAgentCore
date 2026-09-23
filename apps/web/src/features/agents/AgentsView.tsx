@@ -15,6 +15,7 @@ import { type AgentTemplate, valuesFromAgentTemplate } from "./agent-templates";
 import { sessionAdmissionBlocker } from "./session-admission";
 
 interface AgentsViewProps {
+  openAgentId?: string;
   agents: SavedAgent[];
   busy: boolean;
   coreBaseUrl?: string;
@@ -133,6 +134,7 @@ export function AgentDeleteConfirmation({ agent }: { agent: SavedAgent }) {
 }
 
 export function AgentsView({
+  openAgentId,
   agents,
   busy,
   coreBaseUrl = "/v1",
@@ -161,6 +163,7 @@ export function AgentsView({
   const returnFocusRef = useRef<ReturnFocusTarget | null>(null);
   const failedOpenFocusRef = useRef<ReturnFocusTarget | null>(null);
   const lastCreateRequestRef = useRef(0);
+  const lastOpenAgentRef = useRef<string | undefined>(undefined);
   const knownModels = agents.map((agent) => agent.model);
   const normalizedQuery = query.trim().toLowerCase();
   const filteredAgents = normalizedQuery
@@ -258,6 +261,14 @@ export function AgentsView({
       if (requestGate.current.isCurrent(request)) setOpeningAgentId(null);
     }
   };
+
+  useEffect(() => {
+    if (!openAgentId || lastOpenAgentRef.current === openAgentId) return;
+    const agent = agents.find((candidate) => candidate.id === openAgentId);
+    if (!agent) return;
+    lastOpenAgentRef.current = openAgentId;
+    void retrieveForEdit(agent);
+  }, [openAgentId, agents]);
 
   const submitCreate = async (input: CreateAgentInput) => {
     const request = requestGate.current.begin();

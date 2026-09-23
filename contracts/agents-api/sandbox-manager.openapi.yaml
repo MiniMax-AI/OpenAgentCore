@@ -7,6 +7,22 @@ definitions:
       rotate:
         type: boolean
     type: object
+  api.ProjectAPIKeyList:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/store.ProjectAPIKey'
+        type: array
+      has_more:
+        type: boolean
+    type: object
+  api.ProjectAPIKeyRequest:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+    type: object
   api.SandboxAllocationList:
     properties:
       data:
@@ -46,6 +62,34 @@ definitions:
       executor_token:
         type: string
       key_id:
+        type: string
+    type: object
+  store.IssuedProjectAPIKey:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      key:
+        type: string
+      name:
+        type: string
+      prefix:
+        type: string
+      revoked_at:
+        type: string
+    type: object
+  store.ProjectAPIKey:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      prefix:
+        type: string
+      revoked_at:
         type: string
     type: object
   store.RuntimeDeploymentView:
@@ -299,6 +343,133 @@ paths:
       summary: Revoke an Environment executor credential
       tags:
         - Environment Executor
+  /core/v1/project-api-keys/{binding_digest}:
+    get:
+      description: Core extension requiring deployment administrator authority. The binding digest selects only a statically configured caller; it does not authenticate. Returns safe metadata, never key secrets or token digests. Derived keys freeze that caller's principal and stop authenticating when the static parent is removed or rebound.
+      parameters:
+        - description: Configured caller SHA-256 binding selector
+          in: path
+          name: binding_digest
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ProjectAPIKeyList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List project API keys for a configured caller binding
+      tags:
+        - Project API Keys
+    post:
+      consumes:
+        - application/json
+      description: Core extension requiring deployment administrator authority. Generates an independent random secret, stores only its digest and returns the secret once. A duplicate request ID returns 409 without replaying the secret. After an uncertain response, list the ID and revoke it explicitly before creating another key. The key inherits the frozen static caller principal and cannot manage keys or deployment resources.
+      parameters:
+        - description: Configured caller SHA-256 binding selector
+          in: path
+          name: binding_digest
+          required: true
+          type: string
+        - description: Key ID and display name
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/api.ProjectAPIKeyRequest'
+      produces:
+        - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/store.IssuedProjectAPIKey'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Create a project API key for a configured caller binding
+      tags:
+        - Project API Keys
+  /core/v1/project-api-keys/{binding_digest}/{key_id}:
+    delete:
+      description: Core extension requiring deployment administrator authority. Scopes the key ID to the exact configured parent binding and principal. Revocation prevents future authenticated requests; it does not cancel already admitted operations or streams. Missing and foreign IDs return the same 404 response.
+      parameters:
+        - description: Configured caller SHA-256 binding selector
+          in: path
+          name: binding_digest
+          required: true
+          type: string
+        - description: Project API key UUID
+          in: path
+          name: key_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SandboxMutationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Revoke a project API key
+      tags:
+        - Project API Keys
   /core/v1/sandbox/deployment:
     get:
       description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.

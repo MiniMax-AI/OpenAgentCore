@@ -133,6 +133,21 @@ type InitialEnvironmentFile struct {
 	Contents  []byte      `json:"contents"`
 }
 
+type ProjectApiKey struct {
+	ID             pgtype.UUID        `json:"id"`
+	Name           string             `json:"name"`
+	Prefix         string             `json:"prefix"`
+	TokenSha256    string             `json:"token_sha256"`
+	BindingDigest  string             `json:"binding_digest"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	OrganizationID string             `json:"organization_id"`
+	ProjectID      string             `json:"project_id"`
+	SubjectKind    string             `json:"subject_kind"`
+	SubjectID      string             `json:"subject_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	RevokedAt      pgtype.Timestamptz `json:"revoked_at"`
+}
+
 type PublicExecutionTurn struct {
 	ID                     pgtype.UUID        `json:"id"`
 	SessionID              pgtype.UUID        `json:"session_id"`

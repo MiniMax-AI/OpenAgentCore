@@ -166,6 +166,16 @@ func run() error {
 	if managedNodes != nil {
 		options = append(options, api.WithSandboxManager(executionStore, managedNodes.admin))
 	}
+	var keyAdmin *api.DeploymentAuthenticator
+	if managedNodes != nil {
+		keyAdmin = managedNodes.admin
+	} else {
+		keyAdmin, err = deploymentAdminAuthenticator()
+		if err != nil {
+			return err
+		}
+	}
+	options = append(options, api.WithProjectAPIKeys(executionStore, keyAdmin))
 	if history.Reader != nil {
 		historyResolver, resolverErr := historystoreresolver.NewResolver(executionStore)
 		if resolverErr != nil {

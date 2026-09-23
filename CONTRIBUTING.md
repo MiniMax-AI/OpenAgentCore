@@ -1666,8 +1666,9 @@ credential encryption key. Provider identity/backend namespace and native histor
 must not change on a repeated install.
 
 `services/core-console` serves the production Web build and forwards public `/v1`
-requests to one configured Core using its project bearer, after console Basic
-authentication. The paired console uses the same login for allowlisted sandbox
+requests to one configured Core using its project bearer after administrator
+authentication. New installations use a console-local single administrator account;
+existing installations without explicit account mode retain Basic authentication. The paired console uses the same login for allowlisted sandbox
 management routes and supplies its private server-side administrator token from
 `CORE_CONSOLE_SANDBOX_ADMIN_TOKEN_FILE`. The browser receives only capability
 flags through `/console/config`, never the deployment bearer. Project API keys
@@ -1701,7 +1702,66 @@ verification, and passes the enrollment credential only to the installer process
 Both proxy paths retain fixed-origin, cross-site, safe-path, redirect and Upgrade
 restrictions through the standard Go reverse proxy with streaming/cancellation.
 The console implements no product identity, resource semantics, Runtime discovery
-or execution loop.
+or execution loop. Its local administrator account grants the complete console
+surface; do not introduce Web roles, invitations or per-project Web identities.
+Agent API caller keys remain independent of the administrator password and cookie.
+Explicit, unambiguous caller Bearer requests to public `/v1` routes pass through
+unchanged to Core, without borrowing the console's caller or administrator key.
+The same origin, path, method and transport restrictions still apply.
+
+Account mode is explicit (`CORE_CONSOLE_AUTH_MODE=account`) and requires a private
+setup-key file and a private writable state directory. Only the installation's
+one-time setup credential can claim the administrator account. The atomic durable
+account record stores a password hash; corruption or a missing required credential
+must never reopen registration. Account creation is race-safe. Cookie sessions are
+bounded, HttpOnly, SameSite Strict and Secure for HTTPS origins; a restart requires
+sign-in again, without deleting the account. Unauthenticated access is limited to
+the static login UI, finite console authentication routes and the existing
+independently authenticated node/project transports. Authentication requests use
+same-origin JSON POSTs with bounded bodies and bounded password-hash work.
+
+Console-managed Agent API keys live in Core PostgreSQL, separate from console
+login state and model credentials. Only deployment administrator authentication
+can create, list or revoke them through the Core management extension. The console
+bridge derives the static parent binding digest from its private caller token;
+never accept a browser-supplied parent, tenant or subject. A static parent digest
+is a selector, not authentication. Freeze the complete configured principal with
+each derived key, and reject it whenever the current static binding is missing or
+changed. Never derive keys from another dynamic key. The issuer returns a random
+secret once and stores only its digest and safe metadata. Reads never return key
+material. Check revocation on each dynamic-key request without an auth cache;
+database failures fail closed. Static configured-key authentication remains
+independent of this lookup. Keep key management outside public `/v1` resources.
+
+A caller-supplied creation UUID identifies a single key issuance. A repeated UUID
+returns conflict without replaying or rotating a secret. After an uncertain create,
+read the safe list and explicitly revoke an inaccessible key before replacing it;
+any explicit retry uses the same UUID. The first-run UI reminds the operator to
+save the key and use it for subsequent Agent API calls. Never persist a displayed
+key in browser storage or carry it into the request code or URL. The console has
+one administrator role and no project/role editor.
+The `/console/config` `api_keys` capability controls whether key management is
+available. Paired consoles require an active saved key before continuing from the
+access step. Web-only consoles with `api_keys: false` instead explain how to use
+an existing Core key and allow the introduction to continue without key-management
+requests. A failed or malformed capability read must not imply either capability.
+
+First-run Home is a skippable/replayable console introduction after account setup.
+It does not change public Core resource semantics or block ordinary administration.
+Keep new onboarding state and components outside the oversized `App.tsx`. Persist
+only non-secret presentation progress; password, setup key and model provider key
+must not enter browser storage or generated code samples. Creating a saved Agent
+is an explicit write through the existing API. Reconcile uncertain results before
+another write, and associate external examples with their exact metadata marker,
+not arbitrary new resources or name matches. The request workbench generates code
+from its real form fields; local execution obtains caller and model keys separately.
+Generated examples reject redirects so credentials stay at the selected API origin.
+A registered host supplies sandbox resources only for hosted Sessions; self-hosted
+execution remains application-managed. Reuse the existing enrollment and topology
+contracts. Show actual confirmed resources, no simulated work or Agent-to-node
+ownership. Use nonlinear motion for transitions and success emphasis, preserve
+keyboard focus, and honor reduced motion. Compatibility scope and caveats belong
+in documentation, not in the introduction.
 The console has neither KVM nor Docker authority; its static root contains no
 secrets. Installation exposes only loopback API/console ports. Remote exposure
 requires an operator-configured HTTPS/access boundary. Web-only mode can connect

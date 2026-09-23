@@ -104,13 +104,13 @@ func TestSandboxAdminAndProjectAuthorityRemainSeparate(t *testing.T) {
 		t.Fatal("Core admin rejection was replaced or added a browser Basic challenge")
 	}
 	r = adminRequest(t, server.URL, "GET", "/v1/agents", "separate-admin-key")
-	response, _ = responseBody(t, server, r)
-	if response.StatusCode != 401 || !strings.HasPrefix(response.Header.Get("WWW-Authenticate"), "Basic ") || calls.Load() != 1 {
-		t.Fatal("admin bearer bypassed ordinary console login")
+	response, body = responseBody(t, server, r)
+	if response.StatusCode != 401 || response.Header.Get("WWW-Authenticate") != "" || calls.Load() != 2 || !strings.Contains(body, "invalid_admin_key") {
+		t.Fatal("Core must reject the administrator bearer on project API routes")
 	}
 	r = consoleRequest(t, server, "GET", "/v1/agents")
 	response, _ = responseBody(t, server, r)
-	if response.StatusCode != 204 || calls.Load() != 2 {
+	if response.StatusCode != 204 || calls.Load() != 3 {
 		t.Fatal("Basic project request no longer uses the configured project credential")
 	}
 }

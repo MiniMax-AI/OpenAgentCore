@@ -113,14 +113,25 @@ def compose_config(root, state, manifest, database_password):
             "image": manifest["images"]["web"], "user": identity, "restart": "unless-stopped",
             "ports": [f'127.0.0.1:{state["web_port"]}:8080'], "read_only": True,
             "security_opt": ["no-new-privileges:true"],
-            "volumes": [bind(config / "caller.key", "/config/caller.key"),
-                        bind(config / "console.password", "/config/console.password")],
+            "volumes": [bind(config / "caller.key", "/config/caller.key")],
             "environment": {"CORE_CONSOLE_ORIGIN": state.get("public_url") or f'http://127.0.0.1:{state["web_port"]}',
                 "CORE_CONSOLE_UPSTREAM": (f'http://127.0.0.1:{state["core_port"]}' if native
                                           else state.get("core_url") or "http://core:8091"),
-                "CORE_CONSOLE_TOKEN_FILE": "/config/caller.key",
-                "CORE_CONSOLE_PASSWORD_FILE": "/config/console.password"},
+                "CORE_CONSOLE_TOKEN_FILE": "/config/caller.key"},
         }
+        if state.get("console_auth") == "account":
+            services["web"]["volumes"].extend([
+                bind(config / "console.setup.key", "/config/console.setup.key"),
+                bind(root / "state/console", "/state/console", False),
+            ])
+            services["web"]["environment"].update(
+                CORE_CONSOLE_AUTH_MODE="account",
+                CORE_CONSOLE_SETUP_KEY_FILE="/config/console.setup.key",
+                CORE_CONSOLE_STATE_DIR="/state/console",
+            )
+        else:
+            services["web"]["volumes"].append(bind(config / "console.password", "/config/console.password"))
+            services["web"]["environment"]["CORE_CONSOLE_PASSWORD_FILE"] = "/config/console.password"
         if state["mode"] == "all":
             services["web"]["volumes"].extend([
                 bind(root / "admin/sandbox-admin.key", "/admin/sandbox-admin.key"),

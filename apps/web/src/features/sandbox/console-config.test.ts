@@ -18,4 +18,12 @@ describe("bundled console capabilities", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Not found", { status: 404 })));
     expect(await sandboxConsoleConfig(new AbortController().signal)).toBeNull();
   });
+  it.each([true, false])("preserves explicit API key management capability %s", async (enabled) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ api_keys: enabled }))));
+    expect((await sandboxConsoleConfig(new AbortController().signal))?.api_keys).toBe(enabled);
+  });
+  it("keeps an absent or malformed API key capability unknown", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ api_keys: "false" }))));
+    expect((await sandboxConsoleConfig(new AbortController().signal))?.api_keys).toBeUndefined();
+  });
 });
