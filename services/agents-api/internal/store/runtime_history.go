@@ -10,9 +10,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// InsertRuntimeHistorySample copies a sanitized periodic observation. Canonical
-// Session/Turn Usage remains the accounting authority; these counters are only
-// sampled chart values. Deleted or mismatched owners cannot create orphan rows.
+// InsertRuntimeHistorySample copies a sanitized periodic observation. Public
+// Session/Turn Usage remains the accounting authority; these measured counters
+// are only sampled chart values. Deleted or mismatched owners cannot create orphan rows.
 func (s *Store) InsertRuntimeHistorySample(ctx context.Context, record runtimeobs.ExportRecord) error {
 	tenant, err := parseID(record.TenantID)
 	if err != nil {

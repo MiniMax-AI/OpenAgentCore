@@ -147,6 +147,19 @@ func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 	usage := func(input int) []store.ExecutionEvent {
 		return []store.ExecutionEvent{{Kind: "usage", Payload: json.RawMessage(fmt.Sprintf(`{"tokens":{"input_tokens":%d,"cached_input_tokens":4,"output_tokens":3,"reasoning_output_tokens":2,"total_tokens":%d}}`, input, input+3))}}
 	}
+	// Runtime telemetry keeps counting every recorded snapshot, active Turns
+	// included, and is scoped to the tenant.
+	measured := func(want int64) {
+		t.Helper()
+		got, err := s.MeasuredSessionUsage(ctx, tenant, session.ID)
+		var value v1.TokenUsage
+		if err != nil || (want < 0) != (got == nil) || (want >= 0 && (json.Unmarshal(got, &value) != nil || value.TotalTokens != want)) {
+			t.Fatalf("measured usage = %s %v, want total %d", got, err, want)
+		}
+		if foreign, err := s.MeasuredSessionUsage(ctx, uuid.NewString(), session.ID); err != nil || foreign != nil {
+			t.Fatalf("foreign measured usage: %s %v", foreign, err)
+		}
+	}
 	total := func(want int64) {
 		t.Helper()
 		got, err := s.GetSession(ctx, tenant, session.ID)
@@ -197,6 +210,7 @@ func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 		return changes[len(changes)-1].SessionUsage
 	}
 	total(-1)
+	measured(-1)
 	first := submit("first")
 	total(-1)
 	move(first.TurnID, store.TurnQueued, store.TurnInProgress)
@@ -205,6 +219,7 @@ func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 	}
 	// An active Turn's recorded snapshot does not count yet.
 	total(-1)
+	measured(13)
 	finish(first, store.TurnCompleted)
 	total(13)
 	if idle := lastIdleUsage(); idle == nil {
@@ -221,6 +236,7 @@ func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 	total(-1)
 	move(second.TurnID, store.TurnInProgress, store.TurnWaiting)
 	total(-1)
+	measured(36)
 	move(second.TurnID, store.TurnWaiting, store.TurnInProgress)
 	finish(second, store.TurnCancelled)
 	total(36)
@@ -229,6 +245,7 @@ func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 	move(third.TurnID, store.TurnQueued, store.TurnInProgress)
 	finish(third, store.TurnCancelled)
 	total(-1)
+	measured(36)
 	if idle := lastIdleUsage(); idle != nil && string(idle) != "null" {
 		t.Fatalf("settled Session snapshot usage: %s", idle)
 	}
@@ -239,4 +256,5 @@ func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 	}
 	finish(fourth, store.TurnCompleted)
 	total(-1)
+	measured(69)
 }

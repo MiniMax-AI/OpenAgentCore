@@ -14,6 +14,7 @@ import (
 
 type sessionStore interface {
 	GetSession(context.Context, string, string) (store.Session, error)
+	MeasuredSessionUsage(context.Context, string, string) (json.RawMessage, error)
 	GetRuntimeAllocation(context.Context, string, string) (store.RuntimeAllocation, error)
 	ListRuntimeObservationSessions(context.Context, string, int) (store.RuntimeObservationSessionPage, error)
 }
@@ -41,7 +42,13 @@ func (r *Resolver) Resolve(ctx context.Context, tenantID, sessionID string) (run
 		return runtimeobs.Target{}, errors.New("invalid stored Runtime environment configuration")
 	}
 	target := runtimeobs.Target{TenantID: session.TenantID, SessionID: session.ID, Mode: runtimeobs.Mode(configuration.Environment.Type)}
-	usage, err := decodeTokenUsage(session.Usage)
+	// Telemetry counts measured usage continuously, including active Turns.
+	// Public Session usage stays null until every root Turn ends measured.
+	measured, err := r.store.MeasuredSessionUsage(ctx, session.TenantID, session.ID)
+	if err != nil {
+		return runtimeobs.Target{}, fmt.Errorf("resolve Runtime Session usage: %w", err)
+	}
+	usage, err := decodeTokenUsage(measured)
 	if err != nil {
 		return runtimeobs.Target{}, err
 	}

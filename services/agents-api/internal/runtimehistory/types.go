@@ -147,8 +147,8 @@ type Result struct {
 	TokenUsage   []TokenUsagePoint
 }
 
-// TokenUsagePoint is the final cumulative canonical Session Usage snapshot in
-// one bucket. Throughput is derived from ordered adjacent points by clients.
+// TokenUsagePoint is the final cumulative measured Session usage, active Turns
+// included, in one bucket. Throughput is derived from ordered adjacent points by clients.
 type TokenUsagePoint struct {
 	Start, End                time.Time
 	SampledAt                 time.Time

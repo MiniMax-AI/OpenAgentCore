@@ -16,3 +16,17 @@ SELECT CASE WHEN count(*) = 0
  'total_tokens', sum((token_usage->>'total_tokens')::numeric)
 ) END::jsonb AS usage
 FROM turns WHERE session_id = $1;
+
+-- name: SessionMeasuredTokenUsage :one
+-- Core-internal measured usage for Runtime telemetry, not public Session usage:
+-- the sum of every recorded root Turn snapshot, including active Turns, null
+-- only when nothing is recorded. The tenant join keeps the read scoped.
+SELECT CASE WHEN count(t.token_usage) = 0 THEN NULL ELSE jsonb_build_object(
+ 'input_tokens', sum((t.token_usage->>'input_tokens')::numeric),
+ 'input_tokens_details', jsonb_build_object('cached_tokens', sum((t.token_usage->'input_tokens_details'->>'cached_tokens')::numeric)),
+ 'output_tokens', sum((t.token_usage->>'output_tokens')::numeric),
+ 'output_tokens_details', jsonb_build_object('reasoning_tokens', sum((t.token_usage->'output_tokens_details'->>'reasoning_tokens')::numeric)),
+ 'total_tokens', sum((t.token_usage->>'total_tokens')::numeric)
+) END::jsonb AS usage
+FROM sessions s JOIN turns t ON t.session_id = s.id
+WHERE s.tenant_id = $1 AND s.id = $2 AND s.deleted_at IS NULL;

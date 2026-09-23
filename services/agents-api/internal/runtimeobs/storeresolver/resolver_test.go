@@ -2,6 +2,7 @@ package storeresolver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 
 type resolverStore struct {
 	session       store.Session
+	measured      json.RawMessage
 	allocation    store.RuntimeAllocation
 	allocationErr error
 	page          store.RuntimeObservationSessionPage
@@ -18,6 +20,13 @@ type resolverStore struct {
 
 func (s resolverStore) GetSession(context.Context, string, string) (store.Session, error) {
 	return s.session, nil
+}
+
+func (s resolverStore) MeasuredSessionUsage(_ context.Context, tenant, session string) (json.RawMessage, error) {
+	if tenant != s.session.TenantID || session != s.session.ID {
+		return nil, errors.New("measured usage read for another Session")
+	}
+	return s.measured, nil
 }
 
 func (s resolverStore) GetRuntimeAllocation(context.Context, string, string) (store.RuntimeAllocation, error) {
@@ -44,7 +53,8 @@ func TestResolverListsOnlyProviderNeutralSessionIdentity(t *testing.T) {
 
 func TestResolverBindsManagedSessionEnvironmentAndAllocation(t *testing.T) {
 	r, err := NewResolver(resolverStore{
-		session: store.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Usage: []byte(`{"input_tokens":120,"input_tokens_details":{"cached_tokens":20},"output_tokens":30,"output_tokens_details":{"reasoning_tokens":10},"total_tokens":150}`), Environment: &store.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
+		session:  store.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Environment: &store.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
+		measured: []byte(`{"input_tokens":120,"input_tokens_details":{"cached_tokens":20},"output_tokens":30,"output_tokens_details":{"reasoning_tokens":10},"total_tokens":150}`),
 		allocation: store.RuntimeAllocation{
 			ID: "allocation", TenantID: "tenant", SessionID: "session", EnvironmentID: "environment",
 			ProviderKey: "provider", DeviceID: "device", ComputePhase: "running", ComputeState: []byte(`{"current":{"name":"sandbox"}}`),
@@ -67,7 +77,7 @@ func TestResolverBindsManagedSessionEnvironmentAndAllocation(t *testing.T) {
 		t.Fatalf("compute phase was not retained: %s", target.Instance.ComputePhase)
 	}
 	if target.TokenUsage == nil || target.TokenUsage.InputTokens != 120 || target.TokenUsage.OutputTokens != 30 {
-		t.Fatalf("canonical Session usage was not retained: %+v", target.TokenUsage)
+		t.Fatalf("measured Session usage was not retained: %+v", target.TokenUsage)
 	}
 }
 
@@ -80,8 +90,8 @@ func TestResolverRejectsInvalidCanonicalSessionUsage(t *testing.T) {
 		`{"input_tokens":0,"input_tokens_details":{"cached_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":0,"unknown":0}`,
 	} {
 		resolver, err := NewResolver(resolverStore{session: store.Session{
-			ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"none"}}`), Usage: []byte(usage),
-		}})
+			ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"none"}}`),
+		}, measured: []byte(usage)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -93,14 +103,38 @@ func TestResolverRejectsInvalidCanonicalSessionUsage(t *testing.T) {
 
 func TestResolverKeepsNullCanonicalSessionUsageAbsent(t *testing.T) {
 	resolver, err := NewResolver(resolverStore{session: store.Session{
-		ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"none"}}`), Usage: []byte(" \n null \t"),
-	}})
+		ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"none"}}`),
+	}, measured: []byte(" \n null \t")})
 	if err != nil {
 		t.Fatal(err)
 	}
 	target, err := resolver.Resolve(t.Context(), "tenant", "session")
 	if err != nil || target.TokenUsage != nil {
 		t.Fatalf("null Session usage was not kept absent: %+v %v", target.TokenUsage, err)
+	}
+}
+
+// Telemetry reads measured usage, not the public Session value, which stays
+// null while a root Turn runs.
+func TestResolverUsesMeasuredRatherThanPublicSessionUsage(t *testing.T) {
+	measured := `{"input_tokens":7,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":10}`
+	for _, test := range []struct {
+		public, measured string
+		want             *runtimeobs.TokenUsage
+	}{
+		{"null", measured, &runtimeobs.TokenUsage{InputTokens: 7, OutputTokens: 3}},
+		{measured, "null", nil},
+	} {
+		resolver, err := NewResolver(resolverStore{session: store.Session{
+			ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"none"}}`), Usage: []byte(test.public),
+		}, measured: []byte(test.measured)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		target, err := resolver.Resolve(t.Context(), "tenant", "session")
+		if err != nil || (target.TokenUsage == nil) != (test.want == nil) || (test.want != nil && *target.TokenUsage != *test.want) {
+			t.Fatalf("usage source: %+v %v", target.TokenUsage, err)
+		}
 	}
 }
 

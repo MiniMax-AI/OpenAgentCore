@@ -26,6 +26,33 @@ func (q *Queries) PutTurnUsage(ctx context.Context, arg PutTurnUsageParams) erro
 	return err
 }
 
+const sessionMeasuredTokenUsage = `-- name: SessionMeasuredTokenUsage :one
+SELECT CASE WHEN count(t.token_usage) = 0 THEN NULL ELSE jsonb_build_object(
+ 'input_tokens', sum((t.token_usage->>'input_tokens')::numeric),
+ 'input_tokens_details', jsonb_build_object('cached_tokens', sum((t.token_usage->'input_tokens_details'->>'cached_tokens')::numeric)),
+ 'output_tokens', sum((t.token_usage->>'output_tokens')::numeric),
+ 'output_tokens_details', jsonb_build_object('reasoning_tokens', sum((t.token_usage->'output_tokens_details'->>'reasoning_tokens')::numeric)),
+ 'total_tokens', sum((t.token_usage->>'total_tokens')::numeric)
+) END::jsonb AS usage
+FROM sessions s JOIN turns t ON t.session_id = s.id
+WHERE s.tenant_id = $1 AND s.id = $2 AND s.deleted_at IS NULL
+`
+
+type SessionMeasuredTokenUsageParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+// Core-internal measured usage for Runtime telemetry, not public Session usage:
+// the sum of every recorded root Turn snapshot, including active Turns, null
+// only when nothing is recorded. The tenant join keeps the read scoped.
+func (q *Queries) SessionMeasuredTokenUsage(ctx context.Context, arg SessionMeasuredTokenUsageParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, sessionMeasuredTokenUsage, arg.TenantID, arg.ID)
+	var usage []byte
+	err := row.Scan(&usage)
+	return usage, err
+}
+
 const sessionTokenUsage = `-- name: SessionTokenUsage :one
 SELECT CASE WHEN count(*) = 0
   OR bool_or(token_usage IS NULL OR status NOT IN ('completed', 'failed', 'cancelled')) THEN NULL ELSE jsonb_build_object(

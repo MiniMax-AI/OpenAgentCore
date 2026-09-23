@@ -25,8 +25,9 @@ type RuntimeHistory struct {
 	TokenUsage        []RuntimeHistoryTokenUsagePoint `json:"token_usage" binding:"required" validate:"max=10000"`
 }
 
-// RuntimeHistoryTokenUsagePoint is the final cumulative canonical Session
-// Usage snapshot observed in one server-selected bucket.
+// RuntimeHistoryTokenUsagePoint is the final cumulative measured Session usage
+// observed in one server-selected bucket. It counts every recorded root Turn
+// snapshot, active Turns included, unlike public Session usage.
 type RuntimeHistoryTokenUsagePoint struct {
 	Start        int64  `json:"start" binding:"required" minimum:"0" maximum:"9007199254740991"`
 	End          int64  `json:"end" binding:"required" minimum:"1" maximum:"9007199254740991"`
