@@ -48,13 +48,20 @@ as observed officially. The shared daemon validator, daemon dispatch and the
 TypeScript client apply the same rule. Core Web keeps its local nonblank rule for
 the composer and the Start Session form ([Web architecture](../../docs/web/architecture.md)).
 
-Codex and MiniMax Code adapters deliver whitespace-only text unchanged; MiniMax
-public input, as for all text, carries its extra empty text block, which native
-ACP joins with a blank line. The separately packaged Claude bridge still rejects
-a message without non-whitespace text: initial and prepared input end the run with
-`invalid_request`, and active steering aborts the running Turn. Native acceptance
-of whitespace-only Turns on every harness is pending live evidence, which decides
-between a declared admission limitation and adapter alignment.
+Harness profiles declare whether whitespace-only text is qualified, through the
+same engine profile that declares image placements. Codex and MiniMax Code are
+qualified and deliver such text unchanged; MiniMax public input, as for all text,
+carries its extra empty text block, which native ACP joins with a blank line.
+Claude SDK is not qualified: the bridge and Anthropic-compatible providers reject
+text without a non-whitespace character. For Claude SDK Sessions, a message
+without an image or any non-whitespace text is rejected at Session creation and
+`events.create` with 400 `unsupported_or_invalid_configuration`, before any write,
+input reservation or promotion, so no Turn starts and a running Turn is never
+disturbed. Whitespace beside non-whitespace text in the same message is admitted
+unchanged. Core never trims or pads model input to fit a harness. If such a
+message still reaches the Claude bridge while steering, the bridge rejects that
+input and the active Turn continues; initial and prepared input still end with
+`invalid_request`, which admission makes unreachable.
 
 ## Runtime boundary
 

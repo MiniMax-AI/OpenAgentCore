@@ -470,7 +470,7 @@ deleted.
 | W3 | `events.create` message with whitespace-only `input_text` parts, including two such messages in one event (SES-04) | 202; one Turn, Items verbatim. String `content` or string `input` stay type errors, as observed officially. |
 | W4 | Empty string, empty `content`, empty `input`, or a message whose text parts are all empty (SES-05..07) | Unchanged 400 `invalid_request` with the generic message and null param, without writes. The official responses use code `invalid_request_error`, specific messages and, for the empty create string, param `input`; aligning them is outside this batch. |
 | W5 | A message with parts `["", "real text"]` (SES-08) | Unchanged: accepted and stored with the empty part. Official behavior is unobserved; its per-part error message suggests it may reject. |
-| W6 | Native execution of a whitespace-only Turn on Codex, Claude SDK and MiniMax Code | Decided by live acceptance and recorded separately. The Claude bridge still rejects such messages itself. |
+| W6 | Native execution of a whitespace-only Turn on Codex, Claude SDK and MiniMax Code | Declared per harness through the engine profile. Codex and MiniMax Code admit and deliver the text unchanged. Claude SDK is not qualified: a message without an image or non-whitespace text returns 400 `unsupported_or_invalid_configuration` at Session creation (including streaming and self-hosted creation) and `events.create`, before any write, reservation or promotion. Live native outcomes are recorded separately. |
 
 Decisions:
 
@@ -478,12 +478,28 @@ Decisions:
   trims. Image reference checks are unchanged. The rule applies wherever the
   validator runs: Core admission for create and events, Worker delivery, daemon
   steering and prepared start, and the Codex and MiniMax adapters.
+- W6 reuses the engine profile that declares image placements: a
+  `WhitespaceOnlyText` qualification checked with the other input profile rules
+  during Worker admission, without engine-name branches in handlers. The Claude
+  bridge and Anthropic-compatible providers reject text blocks without
+  non-whitespace characters, so Core declares the combination instead of failing
+  the Turn or rewriting input. Whitespace beside non-whitespace text in one
+  message stays admitted for every harness. As a fallback, the bridge now
+  rejects such a steering input without aborting the active Turn.
 - The TypeScript client mirrored the old rule for event batches; it now rejects
   only messages whose text is empty. Core Web keeps its local nonblank composer
   and Start Session rules; they are a UI choice, not protocol validation.
 - No schema, model output or image rule changes.
 
-Go proto, dispatch, Codex and API handler tests cover W1–W5. A real-PostgreSQL
+Follow-up: Codex omits the `text` field of an empty text part (`omitempty` on
+its native input), so a W5 message `["", "text"]` may be rejected natively. It is
+recorded rather than changed here, because removing the tag would also add empty
+text to image parts.
+
+Go proto, dispatch, Codex and API handler tests cover W1–W5. Profile, error
+mapping and real-PostgreSQL Worker tests cover W6 admission: Codex and MiniMax
+Code admit and store the text, and Claude SDK rejects at none, streaming and
+self-hosted creation and at events.create without writes. A real-PostgreSQL
 test creates Sessions and submits events over HTTP, reads back the exact user
 Item text, and proves the W4 rejections write nothing; the pinned-SDK initial
 input script asserts the same. Real Core, daemon and model acceptance is recorded

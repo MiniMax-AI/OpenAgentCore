@@ -345,7 +345,10 @@ The private daemon wire protocol is 0.5.0. Initial, prepared and active input us
 the same ordered MessageInput contract, replacing scalar prompts and attachments.
 User-message boundaries and text/image order remain intact through Core and the
 Runtime wire; adapters own native conversion and receipt aggregation. Text-only
-transports reject image content rather than dropping it. Codex has a flat native
+transports reject image content rather than dropping it. Text is never trimmed:
+engine profiles declare whether whitespace-only messages are qualified, and
+unqualified harnesses (Claude SDK) reject them at admission rather than having
+their input rewritten. Codex has a flat native
 input list and uses blank-line separators between messages; this does not preserve
 independent native user-message boundaries. No old wire fallback is maintained.
 Deploy Core and daemon together; the existing major/minor WebSocket check rejects
