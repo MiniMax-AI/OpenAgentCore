@@ -47,7 +47,7 @@ export function failPendingSend(
 ): FailedPendingSend {
   return {
     ...pending,
-    code: error instanceof AgentCoreError ? error.code : undefined,
+    code: error instanceof AgentCoreError ? error.code ?? undefined : undefined,
     message,
     uncertain: isUncertainSendFailure(error),
   };

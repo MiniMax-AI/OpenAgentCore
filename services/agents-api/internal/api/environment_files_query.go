@@ -29,7 +29,7 @@ func readEnvironmentFileQuery(w http.ResponseWriter, r *http.Request, environmen
 		return options, false
 	}
 	for key, values := range q {
-		if !slices.Contains([]string{"path", "limit", "order", "page"}, key) || len(values) != 1 || values[0] == "" {
+		if !slices.Contains([]string{"path", "limit", "order", "page"}, key) || len(values) != 1 || (key != "order" && values[0] == "") {
 			writeError(w, http.StatusBadRequest, "invalid_request", "Supported list parameters are path, limit, order and page, each supplied once with a nonempty value.")
 			return options, false
 		}
@@ -40,7 +40,7 @@ func readEnvironmentFileQuery(w http.ResponseWriter, r *http.Request, environmen
 			pageQuery[key] = values
 		}
 	}
-	page, ok := readPageQuery(w, pageQuery, true)
+	page, ok := readPageQuery(w, r, pageQuery, true)
 	if !ok {
 		return options, false
 	}

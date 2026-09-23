@@ -36,17 +36,17 @@ def verify_credentials(client, other, invalid, peer, saved_vaults, canary, expec
 
     with httpx2.Client(trust_env=False, timeout=10) as raw:
         response = credentials.with_raw_response.create(vault.id, **request)
-        body, value = safe_body(response.http_response, 200), response.parse()
+        body, value = safe_body(response.http_response, 201), response.parse()
         verify_credential(body, vault.id, "Credential 資源", destination)
         assert value.to_dict() == body and abs(value.created_at - time.time()) < 10
         saved.append(value)
 
         # These successful writes exercise opaque strings, not a public token
         # round-trip. Byte preservation is verified by private Store tests.
-        for name, token in (("🧪" * 64, canary + "x" * 1024), ("Empty opaque token", "")):
+        for name, token in (("🧪" * 64, canary + "x" * 1024), ("Whitespace opaque token", " ")):
             response = raw.post(endpoint, headers=headers, json={"name": " " + name + "\n",
                                 "auth": {**auth, "token": token}})
-            body = safe_body(response, 200)
+            body = safe_body(response, 201)
             verify_credential(body, vault.id, name, destination)
             saved.append(credentials.retrieve(body["id"], vault_id=vault.id))
             assert saved[-1].to_dict() == body
@@ -70,6 +70,7 @@ def verify_credentials(client, other, invalid, peer, saved_vaults, canary, expec
             {**request, "name": " " + "🧪" * 64 + "a "},
             {**request, "auth": None}, {**request, "auth": []},
             {**request, "auth": {**auth, "token": 3}},
+            {**request, "auth": {**auth, "token": ""}},
             {**request, "auth": {"type": "mcp_oauth", "mcp_server_url": destination, "access_token": None}},
             {**request, "metadata": {"unexpected": "field"}},
         ]
@@ -93,13 +94,13 @@ def verify_credentials(client, other, invalid, peer, saved_vaults, canary, expec
                                      (vault.id, str(uuid.UUID(int=0))), ("invalid", saved[0].id),
                                      (str(uuid.UUID(int=0)), saved[0].id)):
             response = raw.get(base + owner + "/credentials/" + credential_id, headers=headers)
-            assert safe_body(response, 404)["error"]["code"] == "not_found"
+            assert safe_body(response, 404)["error"]["code"] == "not_found_error"
             assert saved[0].id not in response.text and foreign.id not in response.text
             error = expect_error(NotFoundError, lambda: credentials.retrieve(credential_id, vault_id=owner))
             safe_body(error.response, 404)
         for owner in (foreign_vault.id, str(uuid.uuid4()), "invalid", str(uuid.UUID(int=0))):
             response = raw.post(base + owner + "/credentials", headers=headers, json=request)
-            assert safe_body(response, 404)["error"]["code"] == "not_found"
+            assert safe_body(response, 404)["error"]["code"] == "not_found_error"
         expect_error(NotFoundError, lambda: other.beta.agents.vaults.credentials.retrieve(saved[0].id, vault_id=vault.id))
         expect_error(AuthenticationError, lambda: invalid.beta.agents.vaults.credentials.create(vault.id, **request))
         expect_error(AuthenticationError, lambda: invalid.beta.agents.vaults.credentials.retrieve(saved[0].id, vault_id=vault.id))
@@ -110,7 +111,7 @@ def verify_credentials(client, other, invalid, peer, saved_vaults, canary, expec
             body = {"json": request} if method == "POST" else {}
             safe_body(raw.request(method, url, **body), 401)
             response = raw.request(method, url, headers={"Authorization": headers["Authorization"]}, **body)
-            assert safe_body(response, 400)["error"]["code"] == "invalid_beta_header"
+            assert safe_body(response, 400)["error"]["code"] == "invalid_beta"
         safe_body(raw.post(endpoint, headers=headers, params={"tenant_id": "other"}, json=request), 400)
         safe_body(raw.get(endpoint + "/" + saved[0].id, headers=headers, params={"include": "token"}), 400)
 

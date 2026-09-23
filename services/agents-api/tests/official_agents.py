@@ -19,6 +19,7 @@ def verify_agents(client, other, invalid, expect_error):
                             "multi_agent": None, "reasoning": None,
                             "service_tier": None, "text": None, "tools": None}):
             response = agents.with_raw_response.create(model=" caller-model ", **values)
+            assert response.status_code == 201
             body, agent = response.http_response.json(), response.parse()
             assert set(body) == {"id", "object", "created_at", "updated_at", "metadata", "model", "name",
                                  "instructions", "multi_agent", "reasoning", "service_tier", "text", "tools"}
@@ -40,6 +41,7 @@ def verify_agents(client, other, invalid, expect_error):
                    "text": {"format": {"type": "json_schema", "schema": schema}, "verbosity": "high"},
                    "tools": tools}
         response = agents.with_raw_response.create(**request)
+        assert response.status_code == 201
         body, agent = response.http_response.json(), response.parse()
         for field in ("model", "name", "instructions", "metadata", "reasoning", "service_tier", "text"):
             assert body[field] == request[field], field

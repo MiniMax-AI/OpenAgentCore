@@ -163,6 +163,32 @@ export function sessionInitialInputDraftReducer(
   };
 }
 
+/** Checks the finite text-only Web profile before Session creation. */
+export function sessionInitialInputError(input: unknown, environmentType: string): string | null {
+  if (input == null) {
+    return environmentType === "none" ? "A first message is required without an Environment." : null;
+  }
+  if (typeof input === "string") return isBlank(input) ? "Enter a nonblank first message." : null;
+  if (!Array.isArray(input) || input.length === 0) return "Add at least one user message.";
+  for (const [index, message] of input.entries()) {
+    if (
+      !message || typeof message !== "object" || Array.isArray(message)
+      || Object.keys(message).some((key) => !["type", "role", "content"].includes(key))
+      || (Object.hasOwn(message, "type") && message.type !== "message")
+      || message.role !== "user" || !Array.isArray(message.content) || message.content.length === 0
+      || message.content.some((part: unknown) => (
+        !part || typeof part !== "object" || Array.isArray(part)
+        || Object.keys(part).some((key) => !["type", "text"].includes(key))
+        || !("type" in part) || part.type !== "input_text" || !("text" in part) || typeof part.text !== "string"
+      ))
+    ) return `User message ${index + 1} must contain supported text parts.`;
+    if (isBlank(message.content.map((part: { text: string }) => part.text).join(""))) {
+      return `User message ${index + 1} needs nonblank text across its parts.`;
+    }
+  }
+  return null;
+}
+
 /**
  * Strictly projects the active draft without trimming, joining, regrouping, or
  * otherwise rewriting meaningful user text.

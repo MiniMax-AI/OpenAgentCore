@@ -36,8 +36,8 @@ func TestInitialFilesDecodeAndConfidentialMetadata(t *testing.T) {
 		}
 	}
 	for _, value := range []string{"null", "[]", `[{"type":"inline","path":"/workspace/a","data":""}]`} {
-		if _, _, _, err := decodeTemplateEnvironment(json.RawMessage(`{"type":"openai_hosted","environment_template_id":"template","files":` + value + `}`)); err == nil {
-			t.Fatal("unconfirmed template file override accepted")
+		if _, _, _, err := decodeTemplateEnvironment(json.RawMessage(`{"type":"openai_hosted","environment_template_id":"template","files":` + value + `}`)); err != nil {
+			t.Fatal("supported template file override rejected", err)
 		}
 	}
 }

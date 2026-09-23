@@ -22,7 +22,28 @@ expected = [{"output": '{"ticket":"42","status":"open"}'}, {"error": "Tool handl
 with OpenAI(base_url=base + "/v1", api_key=token, max_retries=0, _strict_response_validation=True,
             http_client=httpx2.Client(trust_env=False, timeout=30)) as client:
     sessions = client.beta.agents.sessions
-    session = sessions.create(agent=agent, environment={"type": "none"})
+    # Complete one controlled initialization Turn before exercising the idle-only
+    # pinned stream helper. This synthetic fixture does not claim live acceptance.
+    with sessions.create(agent=agent, environment={"type": "none"},
+                         input="Look up ticket 42 for stream helper setup.", stream=True) as creation:
+        session = next(creation).session
+        setup_turn = None
+        for event in creation:
+            if event.type == "agent.session.requires_action":
+                action = event.session.required_actions[0]
+                setup_turn = action.turn_id
+                sessions.events.create(session.id, events=[{
+                    "type": "agent.session.input.tool_result", "turn_id": action.turn_id,
+                    "call_id": action.call_id, "success": True,
+                    "output": [{"type": "input_text", "text": "setup complete"}],
+                }])
+            assert event.type not in {"agent.session.failed", "agent.session.turn.failed"}
+            if event.type == "agent.session.idle":
+                break
+        else:
+            raise AssertionError("setup creation stream ended without idle")
+        assert setup_turn is not None
+        assert sessions.turns.retrieve(setup_turn, session_id=session.id).status == "completed"
     turns, calls, handler_calls, observed = [], [], [], []
     for index in range(2):
         def lookup_ticket(arguments):
@@ -67,12 +88,12 @@ with OpenAI(base_url=base + "/v1", api_key=token, max_retries=0, _strict_respons
         assert current.status == "idle" and current.required_actions == []
     items = sessions.items.list(session.id, limit=100, order="asc").data
     results = {item.call_id: item.to_dict() for item in items if item.type == "function_call_output"}
-    assert len(results) == 2 and len(sessions.turns.list(session.id).data) == 2
+    assert len(results) == 3 and len(sessions.turns.list(session.id).data) == 3
     for index, call_id in enumerate(calls):
         assert {key: results[call_id][key] for key in ("output", "error") if key in results[call_id]} == expected[index]
     answers = [item for item in items if item.type == "message" and item.role == "assistant"]
-    assert len(answers) == 2 and all(item.content[0].text == "FUNCTION-EXECUTION-OK" for item in answers)
+    assert len(answers) == 3 and all(item.content[0].text == "FUNCTION-EXECUTION-OK" for item in answers)
     proof = {"session": session.id, "turns": turns, "calls": calls, "handler_calls": handler_calls,
-             "events": observed, "results": results}
+             "events": observed, "results": results, "setup_turn": setup_turn}
     assert "private-handler-exception-must-not-be-exposed" not in json.dumps(proof)
     Path(evidence).write_text(json.dumps(proof))

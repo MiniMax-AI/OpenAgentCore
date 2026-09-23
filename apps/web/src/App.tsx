@@ -40,6 +40,7 @@ import {
   type StreamState,
 } from "./features/sessions/SessionsView";
 import type { SessionStartInput } from "./features/sessions/create/SessionStartDialog";
+import { sessionInitialInputError } from "./features/sessions/create/session-initial-input";
 import { sessionCreateRequestPayload } from "./features/sessions/create/session-create-attempt";
 import { normalizeSessionEnvironmentInput } from "./features/sessions/create/session-environment";
 import { validateSessionAgentSubmission } from "./features/sessions/create/session-start-draft";
@@ -80,6 +81,7 @@ import {
   upsertTurn,
 } from "./features/sessions/turns/turn-state";
 import { SystemView } from "./features/system/SystemView";
+import type { SourceFilesOperations } from "./features/system/SourceFilesPanel";
 import { VaultsView, type VaultOperations } from "./features/vaults/VaultsView";
 import { deriveSessionVaultPlan, loadVaultCatalog, type VaultCatalog } from "./features/vaults/vault-catalog";
 import { requestVaultCreate } from "./features/vaults/vault-operations";
@@ -336,6 +338,14 @@ export function App() {
   sessionAgentFilterRef.current = sessionAgentFilter;
 
   const core = useMemo(() => createCore(connection), [connection]);
+  const sourceFilesOperations = useMemo<SourceFilesOperations>(() => ({
+    uploadSourceFile: (input, options) => core.uploadSourceFile(input, options),
+    retrieveSourceFile: (fileId, options) => core.retrieveSourceFile(fileId, options),
+    deleteSourceFile: (fileId, options) => core.deleteSourceFile(fileId, options),
+    retrieveEnvironment: (environmentId, options) => core.retrieveEnvironment(environmentId, options),
+    createEnvironmentFile: (environmentId, input, options) => core.createEnvironmentFile(environmentId, input, options),
+    listEnvironmentFiles: (environmentId, options) => core.listEnvironmentFiles(environmentId, options),
+  }), [core]);
   const coreGeneration = connectionGenerationRef.current;
   const coreState: CoreConnectionState = agentCollectionState === "ready" || sessionCollectionState === "ready"
     ? "ready"
@@ -1529,6 +1539,12 @@ export function App() {
       notify(error.message, "error");
       throw error;
     }
+    const inputError = sessionInitialInputError(input.input, environmentInput.type);
+    if (inputError) {
+      const error = new Error(`Session was not created. ${inputError}`);
+      notify(error.message, "error");
+      throw error;
+    }
     const request = sessionCreateRequestPayload({
       ...(input.agentMode === "saved" ? { agentId: input.agentId } : {}),
       ...(submittedAgent.requestAgent ? { agent: submittedAgent.requestAgent } : {}),
@@ -1568,7 +1584,7 @@ export function App() {
         throw new Error("The Session creation outcome could not be confirmed.");
       }
       openSession(session);
-      notify("Idle Session created. Opening live events…", "success");
+      notify(input.input === undefined ? "Idle Session created. Opening live events…" : "Session opened. Connecting live events…", "success");
       return;
     }
 

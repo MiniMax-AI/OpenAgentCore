@@ -25,6 +25,7 @@ func decodeInputEvent(raw json.RawMessage) (decodedInputEvent, error) {
 		fields = append(fields, "input")
 		var messages struct {
 			Input []struct {
+				Type    json.RawMessage `json:"type"`
 				Content json.RawMessage `json:"content"`
 			} `json:"input"`
 		}
@@ -32,6 +33,12 @@ func decodeInputEvent(raw json.RawMessage) (decodedInputEvent, error) {
 			return event, store.ErrInvalidInput
 		}
 		for _, message := range messages.Input {
+			if len(message.Type) > 0 {
+				var kind string
+				if json.Unmarshal(message.Type, &kind) != nil || kind != "message" {
+					return event, store.ErrInvalidInput
+				}
+			}
 			if err := validateInputContent(message.Content); err != nil {
 				return event, err
 			}

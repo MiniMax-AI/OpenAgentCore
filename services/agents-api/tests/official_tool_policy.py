@@ -4,6 +4,8 @@ import json
 import sys
 import uuid
 from pathlib import Path
+from contextlib import ExitStack, nullcontext
+from types import SimpleNamespace
 
 import httpx2
 from openai import BadRequestError, NotFoundError, OpenAI
@@ -24,7 +26,7 @@ def main():
     sessions = client.beta.agents.sessions
     headers = {"Authorization": "Bearer " + token, "OpenAI-Beta": "agents=v1"}
     foreign_headers = {**headers, "Authorization": "Bearer " + foreign}
-    proof = {"sessions": [], "omitted": []} if stage == "initial" else json.loads(Path(evidence).read_text())
+    proof = {"sessions": []} if stage == "initial" else json.loads(Path(evidence).read_text())
     tools = [{"type": "web_search", "mode": "disabled"},
              {"type": "programmatic_tool_calling", "enabled": False}]
     # These are pinned response defaults, including explicit nullable fields.
@@ -45,13 +47,14 @@ def main():
         assert [tool.to_dict() for tool in sessions.retrieve(sid).agent.tools] == expected
         assert request("GET", "/sessions/" + sid)["agent"]["tools"] == expected
 
-    def execute(entry, prompt):
+    def execute(entry, prompt, creation=None):
         sid = entry["id"]
         events = []
-        with sessions.events.stream(sid, timeout=150) as stream:
-            sessions.events.create(sid, events=[{"type": "agent.session.input.message", "input": [
-                {"role": "user", "content": [{"type": "input_text", "text": prompt}]}]}],
-                idempotency_key=str(uuid.uuid4()))
+        with (nullcontext(creation) if creation is not None else sessions.events.stream(sid, timeout=150)) as stream:
+            if creation is None:
+                sessions.events.create(sid, events=[{"type": "agent.session.input.message", "input": [
+                    {"role": "user", "content": [{"type": "input_text", "text": prompt}]}]}],
+                    idempotency_key=str(uuid.uuid4()))
             for event in stream:
                 events.append(event.type)
                 assert event.type not in {"agent.session.failed", "agent.session.turn.failed", "agent.session.requires_action"}, event.type
@@ -86,7 +89,7 @@ def main():
         if stage == "initial":
             sdk_agent = client.beta.agents.create(**config)
             assert [tool.to_dict() for tool in sdk_agent.tools] == expected
-            raw_agent = request("POST", "", json=config)
+            raw_agent = request("POST", "", status=201, json=config)
             assert raw_agent["tools"] == expected
             proof["agents"] = [sdk_agent.id, raw_agent["id"]]
             for aid in proof["agents"]:
@@ -100,36 +103,44 @@ def main():
             ]
             for name, payload in payloads:
                 payload["environment"] = {"type": "none"}
-                if name.startswith("sdk"):
-                    sid = sessions.create(**payload).id
-                else:
-                    sid = request("POST", "/sessions", json=payload)["id"]
-                entry = {"id": sid, "path": name, "marker": "TOOL-POLICY-" + uuid.uuid4().hex}
-                proof["sessions"].append(entry)
-                save()
-                check_config(sid)
-                execute(entry, "Remember this exact marker for later: " + entry["marker"] + ". Reply with that marker only.")
+                marker = "TOOL-POLICY-" + uuid.uuid4().hex
+                prompt = "Remember this exact marker for later: " + marker + ". Reply with that marker only."
+                payload.update(input=prompt, stream=True)
+                with ExitStack() as stack:
+                    if name.startswith("sdk"):
+                        creation = stack.enter_context(sessions.create(**payload))
+                        first = next(creation)
+                        assert first.type == "agent.session.created"
+                        sid = first.session.id
+                    else:
+                        response = stack.enter_context(raw.stream("POST", base + "/v1/agents/sessions", headers=headers, json=payload))
+                        assert response.status_code == 201
+                        frames = (json.loads(line[6:]) for line in response.iter_lines() if line.startswith("data: "))
+                        first = next(frames)
+                        assert first["type"] == "agent.session.created"
+                        sid = first["session"]["id"]
+                        creation = (SimpleNamespace(type=frame["type"]) for frame in frames)
+                    entry = {"id": sid, "path": name, "marker": marker}
+                    proof["sessions"].append(entry)
+                    save()
+                    check_config(sid)
+                    execute(entry, prompt, creation=creation)
             for enabled in [{"type": "web_search", "mode": "cached"},
                             {"type": "web_search", "mode": "live"},
                             {"type": "programmatic_tool_calling", "enabled": True}]:
-                reject_configuration({"agent": {"model": model, "tools": [enabled]}, "environment": {"type": "none"}})
-                reject_configuration({"agent_id": sdk_agent.id, "agent": {"tools": [enabled]}, "environment": {"type": "none"}})
+                reject_configuration({"agent": {"model": model, "tools": [enabled]}, "environment": {"type": "none"}, "input": "Verify rejected tool policy configuration."})
+                reject_configuration({"agent_id": sdk_agent.id, "agent": {"tools": [enabled]}, "environment": {"type": "none"}, "input": "Verify rejected tool policy configuration."})
             # Saving PTC intent is independent of Session execution qualification.
             enabled_agent = client.beta.agents.create(model=model, tools=[{"type": "programmatic_tool_calling", "enabled": True}])
-            reject_configuration({"agent_id": enabled_agent.id, "environment": {"type": "none"}})
-            payload = {"agent": {"model": model}, "environment": {"type": "none"}}
-            omitted = sessions.create(**payload)
-            assert omitted.agent.tools == []
-            proof["omitted"].append(omitted.id)
-            omitted_raw = request("POST", "/sessions", json=payload)
-            assert omitted_raw["agent"]["tools"] == []
-            proof["omitted"].append(omitted_raw["id"])
+            reject_configuration({"agent_id": enabled_agent.id, "environment": {"type": "none"}, "input": "Verify rejected tool policy configuration."})
+            # Omitted-tool default projections are covered by the queued SDK/raw
+            # resource fixture; these live cases exercise explicit disabled tools.
             for aid in proof["agents"]:
                 request("GET", "/" + aid, status=404, foreign_tenant=True)
                 request("POST", "/sessions", status=404, foreign_tenant=True,
-                        json={"agent_id": aid, "environment": {"type": "none"}})
+                        json={"agent_id": aid, "environment": {"type": "none"}, "input": "Verify rejected tool policy configuration."})
                 try:
-                    other.beta.agents.sessions.create(agent_id=aid, environment={"type": "none"})
+                    other.beta.agents.sessions.create(agent_id=aid, environment={"type": "none"}, input="Verify foreign Agent rejection.")
                     raise AssertionError("Foreign tenant used a saved Agent")
                 except NotFoundError:
                     pass

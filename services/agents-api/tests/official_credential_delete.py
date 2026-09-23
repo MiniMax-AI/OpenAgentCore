@@ -25,7 +25,7 @@ def verify_credential_deletion(client, other, invalid, peer, canary, expect_erro
         url = endpoint + "/" + target.id
         assert raw.delete(url).status_code == 401
         response = raw.delete(url, headers={"Authorization": headers["Authorization"]})
-        assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_beta_header"
+        assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_beta"
         for kwargs in [{"params": {"include": "token"}}, {"content": b"{}"}]:
             assert raw.request("DELETE", url, headers=headers, **kwargs).status_code == 400
         assert credentials.retrieve(target.id, vault_id=vault.id) == target
@@ -41,7 +41,7 @@ def verify_credential_deletion(client, other, invalid, peer, canary, expect_erro
             url = endpoint + "/" + value.id
             for method in ["GET", "DELETE"]:
                 response = raw.request(method, url, headers=headers)
-                assert response.status_code == 404 and response.json()["error"]["code"] == "not_found"
+                assert response.status_code == 404 and response.json()["error"]["code"] == "not_found_error"
             expect_error(NotFoundError, lambda: credentials.update(value.id, vault_id=vault.id,
                          auth={"type": "static_bearer", "token": canary}))
         for status in [None, ["active"], ["active", "archived"]]:

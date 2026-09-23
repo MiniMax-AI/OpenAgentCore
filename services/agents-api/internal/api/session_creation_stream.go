@@ -56,5 +56,5 @@ func (h *Handler) respondSessionCreationStream(w http.ResponseWriter, r *http.Re
 	if result.Created {
 		initial = &v1.SessionEvent{Type: "agent.session.created", EventID: uuid.NewString(), Session: &response}
 	}
-	h.serveSessionEvents(w, r, events, result.Session, result.Cursor, initial)
+	h.serveSessionEvents(w, r, events, result.Session, result.Cursor, initial, http.StatusCreated)
 }

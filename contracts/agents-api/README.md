@@ -1,5 +1,8 @@
 # Agents API contract
 
+See the [58-operation evidence inventory](operation-evidence.md) for observed official behavior, local verification and remaining unknowns.
+The [list-query comparison](list-query-semantics.md) distinguishes measured order
+errors from unresolved range, cursor and lookup semantics.
 The external reference is [openai-python beta/agents](https://github.com/openai/openai-python/tree/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents),
 pinned in `upstream.json`. Its resource methods, corresponding types, pagination
 and streaming helpers define the compatibility target. This directory records
@@ -10,6 +13,10 @@ resources, including reusable Agents and protocol subagents. The OpenAI Agents
 Python **SDK** is a separate future dependency for business Team orchestration in
 Parsar, not the HTTP contract. Design rules live in
 [CONTRIBUTING.md](../../CONTRIBUTING.md#design-and-compatibility-requirements).
+
+The [resource selector and error qualification](resource-selector-semantics.md)
+records nullable Skill references and source Files not-found parameter fields,
+with official observations separated from Core acceptance.
 
 ## Implementation direction
 
@@ -86,7 +93,7 @@ paths start at `/vaults`, not `/agents/vaults`.
 | Resource | Upstream operations | Current coverage |
 | --- | --- | --- |
 | Root reusable Agents | create, retrieve, update, list, delete | Partial create/retrieve/update/list/delete and Session references; configuration/error gaps remain |
-| Skills and Versions | create, retrieve, update default, list, delete, content | [Tenant-owned encrypted bundles and hosted references](environment-templates.md); qualified upload limits and unresolved hosted semantics are recorded explicitly |
+| Skills and Versions | create, retrieve, update default, list, delete, content | [Tenant-owned encrypted bundles and hosted references](environment-templates.md); [default metadata/content and deletion evidence](file-resource-semantics.md), qualified upload limits and unresolved semantics |
 | sessions | create, retrieve, update, list, delete | Create (ordinary/live), retrieve, list with root-Agent filter, metadata-only update, public deletion with owned Docker cleanup; user-managed compute stays caller-owned; general physical cleanup and exact hosted semantics remain open |
 | sessions.events | create, stream | Text/cancel/function-result admission and live events; function-action state snapshots supported |
 | sessions.turns | retrieve, list | Implemented reads; lifecycle conformance still partial |
@@ -167,7 +174,7 @@ user-managed enrollment remain outside this qualification.
 | Area | Missing or unverified scope |
 | --- | --- |
 | Subagents / multi_agent | Six reads and same-child recovery have three-harness Docker evidence; optional native operations, live child progress, full lifecycle/interactions and tool combinations remain explicit gaps |
-| Environment Templates | Unsupported restricted hostname forms, unqualified installation overrides/null network and exact hosted errors remain gaps. CRUD/list, files, env/setup/system/npm/Python, inline/referenced Skills, Plugins, workspace capability directories and Session references have recorded coverage. Environment Plugin MCP transport and placement limits are [listed separately](environment-templates.md#environment-origin-mcp-plugins) |
+| Environment Templates | Unsupported restricted hostname forms, null network/list selection and exact hosted errors remain gaps. Template-reference env/files/commands/packages composition follows [qualified field rules](environment-templates.md#template-and-inline-configuration-composition). CRUD/list, files, env/setup/system/npm/Python, inline/referenced Skills, Plugins, workspace capability directories and Session references have recorded coverage. Environment Plugin MCP transport and placement limits are [listed separately](environment-templates.md#environment-origin-mcp-plugins) |
 | Input and configuration | Non-text initial input, broader content/configuration unions and reasoning/verbosity combinations; [structured output](structured-output.md) has qualified Claude function profiles on none and Core-managed Docker openai_hosted, with other combinations remaining gaps |
 | Tools and interactions | [Deferred discovery qualification](tool-search.md), other tool types, effective tool-set enforcement and result/cancel publication ordering; MiniMax public functions and service-origin MCP remain unsupported |
 | Vault and Credentials | Archive semantics, in-flight token withdrawal and exact hosted selection/error behavior; static/OAuth CRUD, replacement and scoped dispatch-time refresh are implemented (see credential guide for qualification) |
@@ -180,11 +187,16 @@ including further deployment qualification; this inventory describes merged beha
 
 ## Public semantics
 
+The [September 22 wire comparison](official-semantics-alignment.md) records the
+bounded official-service observations, aligned responses and remaining differences.
+It supplements the fixed SDK baseline; current documentation does not silently
+upgrade the protocol.
+
 - Credentials use `POST /vaults/{vault_id}/credentials` and
   `GET /vaults/{vault_id}/credentials/{credential_id}`. The static profile accepts
   `static_bearer` with required string token and HTTPS destination, plus a
-  required name trimmed to 1–256 UTF-8 bytes. Tokens remain opaque, including empty
-  strings; exact hosted token validation is unverified. The local URL profile
+  required name trimmed to 1–256 UTF-8 bytes. Tokens remain opaque and nonempty; explicitly empty tokens are rejected before
+  mutation, following the sampled official create/update behavior. The local URL profile
   excludes userinfo/fragments and preserves queries without normalization or network
   contact. Public metadata contains identity, owning Vault, name, timestamps and
   auth type/destination; it never returns tokens or ciphertext and can be read
@@ -353,8 +365,8 @@ including further deployment qualification; this inventory describes merged beha
   `stream` nor `agent_id` permits null. Metadata omission/null defaults to an empty
   map; individual values must be strings, including valid empty strings. Validate
   these distinctions before persistence rather than coercing null to Go zero values.
-- `POST /agents/sessions/{id}` updates metadata only: omission preserves it,
-  null or `{}` clears it, and an object replaces all pairs. Apply the same string
+- `POST /agents/sessions/{id}` updates metadata only: an empty update body
+  rejects; `metadata: null` or `metadata: {}` clears it, and an object replaces all pairs. Apply the same string
   and character limits as creation. Preserve execution state, effective configuration
   and the original creation retry identity. Fixed SDK/raw HTTP checks cover these
   distinctions, tenant isolation, active Session reads and restart persistence.
@@ -563,7 +575,9 @@ historical native transport evidence.
 `POST /v1/agents/sessions/{session_id}/events` accepts `agent.session.input.message`
 with ordered user `input_text` content and [qualified image content](message-input.md), `agent.session.input.cancel` and
 `agent.session.input.tool_result`. Successful atomic
-admission returns 204, as consumed by the official `events.create` method. A retry
+admission returns 202 with no body, as observed from the official service.
+An empty event array is an authenticated no-op: it creates no Turn or Item and
+does not reserve an execution retry key. A retry
 key identifies the entire ordered request; conflict does not partially admit it.
 Messages start queued work or steer the active Turn. Individual input messages
 remain distinct Items even when their text shares one native prompt.
@@ -737,14 +751,19 @@ With `none`, this includes the first Turn and input Items. With `self_hosted`, i
 includes the initial reservation and connection action; preparation and Turn
 admission belong to the existing Worker. Creation returns while the executor is
 offline, and an initial deadline failure leaves a failed Session without a Turn.
-Omitted/null input creates an idle Session. Execution must be enabled and the
+Initial input is required for `none`, and for streamed creation outside
+`self_hosted`. Non-streaming hosted and self-hosted creation may omit input or
+supply null. These conditions apply before creation retry lookup; valid retries
+retain the same Session and never duplicate initial work. Existing Session reads
+and subsequent events are unaffected. Execution must be enabled and the
 configured engine must support admission before any initial work is persisted.
 
 Fixed SDK/raw HTTP and PostgreSQL tests cover the accepted forms, saved and inline
 configuration, ordering, tenant isolation, retries, rollback and persistence.
 Image support is bounded as documented above. Empty arrays and blank text
-currently fail the shared message validator; exact upstream handling of these
-cases, local size limits and error details remains unverified. Swagger 2 cannot
+fail the shared message validator. Official probes also rejected empty arrays
+and empty strings, but accepted whitespace-only strings; the latter is a queued
+difference. Full local size-limit and error-detail parity remains unverified. Swagger 2 cannot
 express the string/array union, so input is unconstrained with a type description.
 
 ### Session creation streaming

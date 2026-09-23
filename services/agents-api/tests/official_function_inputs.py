@@ -18,15 +18,15 @@ def result(call, **values):
     return {"type": "agent.session.input.tool_result", "turn_id": turn, "call_id": call, **values}
 
 
-def submit(api, events, key, expected=204, target=session):
+def submit(api, events, key, expected=202, target=session):
     try:
         response = api.beta.agents.sessions.events.with_raw_response.create(
             target, events=events, extra_headers={"Idempotency-Key": key})
-        assert response.status_code == expected == 204
+        assert response.status_code == expected == 202
         assert response.content == b""
     except APIStatusError as error:
         assert error.status_code == expected, (error.status_code, expected, error.message)
-        assert error.body["code"] in {"not_found", "turn_conflict", "idempotency_conflict", "invalid_request"}
+        assert error.body["code"] in {"not_found_error", "turn_conflict", "idempotency_conflict", "invalid_request"}
 
 
 with OpenAI(api_key=token, base_url=base+"/v1", max_retries=0,

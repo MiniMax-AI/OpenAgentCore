@@ -50,8 +50,11 @@ type WebSearchAction struct {
 }
 
 type ItemList struct {
-	Data    []Item `json:"data" binding:"required"`
-	HasMore bool   `json:"has_more" binding:"required"`
+	Object  string  `json:"object" enums:"list" binding:"required"`
+	FirstID *string `json:"first_id" extensions:"x-nullable"`
+	LastID  *string `json:"last_id" extensions:"x-nullable"`
+	Data    []Item  `json:"data" binding:"required"`
+	HasMore bool    `json:"has_more" binding:"required"`
 }
 
 // UnmarshalJSON preserves integer precision in tool arguments and structured results.

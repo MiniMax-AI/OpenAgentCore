@@ -65,7 +65,7 @@ SDK loop or call the Responses API as its Core transport.
 | Profile | Configuration | Result |
 | --- | --- | --- |
 | Daemon-backed `environment:none` chat | PostgreSQL, caller principal, Core with `AGENTS_API_DAEMON_WS_URL`, same-tenant device, connected daemon, native engine/provider setup | Agent CRUD, Sessions, Turns, Items, SSE, and supported execution |
-| HTTP-only | PostgreSQL and caller principal; omit `AGENTS_API_DAEMON_WS_URL` | Agent CRUD and idle Session/history operations; input returns `503 execution_unavailable` |
+| HTTP-only | PostgreSQL and caller principal; omit `AGENTS_API_DAEMON_WS_URL` | Agent CRUD and existing Session/history reads; valid execution creation/input returns `503 execution_unavailable` |
 | Caller-managed `self_hosted` | Codex Core with native registry/executor origin plus an operator-issued executor principal key and caller-started Linux executor | Session-scoped Environment, caller Workspace, native execution after connection |
 | Core-managed `openai_hosted` | Linux amd64 Core host, qualified immutable Runtime image, local Docker provider, execution options, database/caller identity, and daemon gateway reachable from the Runtime | Core provisions, leases, resumes, and reclaims one basic managed Runtime per Session |
 
@@ -451,7 +451,8 @@ env \
   go run ./services/agents-api/cmd/server
 ```
 
-Agent CRUD and idle Session/history operations work. Chat input intentionally returns:
+Agent CRUD and existing Session/history reads work. Conversation-only creation
+requires initial input and enabled execution; execution requests intentionally return:
 
 ```json
 {
@@ -676,9 +677,10 @@ MCP, other engines/providers, and public readiness discovery remain unavailable.
 Web blocks managed creation when the effective Agent contains MCP.
 
 Core provisions the Runtime automatically, so managed Sessions have no caller-run
-launcher, executor key, or `environment_connection` action. Web always consumes the
-creation SSE for this profile, including an idle create, before handing off to the
-ordinary live stream. A connected Environment proves authenticated transport only;
+launcher, executor key, or `environment_connection` action. Web uses JSON for managed creation without input. With initial input, it consumes
+creation SSE before handing off to the ordinary live stream. If creation fails
+before revealing its Session ID, an unchanged manual retry uses the same input
+and key with JSON to recover the original creation; it does not resubmit a Turn. A connected Environment proves authenticated transport only;
 durable Turn and Item state remains the execution result.
 
 For either supported Environment type, Web automatically retrieves the exact current

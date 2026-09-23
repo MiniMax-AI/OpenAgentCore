@@ -14,7 +14,7 @@ import (
 // @Security BearerAuth
 // @Param after query string false "Skill resource cursor"
 // @Param limit query integer false "Page size"
-// @Param order query string false "Creation order" Enums(asc,desc)
+// @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc)
 // @Success 200 {object} v1.SkillList
 // @Router /skills [get]
 func (h *Handler) listSkills(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +49,7 @@ func (h *Handler) listSkills(w http.ResponseWriter, r *http.Request) {
 // @Param skill_id path string true "Skill ID"
 // @Param after query string false "Version resource cursor"
 // @Param limit query integer false "Page size"
-// @Param order query string false "Version order" Enums(asc,desc)
+// @Param order query string false "Version order; omit for descending, explicit empty values are invalid" Enums(asc,desc)
 // @Success 200 {object} v1.SkillVersionList
 // @Router /skills/{skill_id}/versions [get]
 func (h *Handler) listSkillVersions(w http.ResponseWriter, r *http.Request) {

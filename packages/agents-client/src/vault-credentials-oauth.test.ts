@@ -27,8 +27,8 @@ const oauthAuth: McpOAuthCredentialAuth = {
   },
 };
 const oauthCredential: VaultCredential = { ...staticCredential, auth: oauthAuth };
-const jsonResponse = (body: unknown) => new Response(JSON.stringify(body), {
-  status: 200,
+const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+  status,
   headers: { "content-type": "application/json" },
 });
 
@@ -92,7 +92,7 @@ describe("OAuth Credential metadata", () => {
   });
 
   it("rejects an OAuth response to static creation", async () => {
-    const client = new OpenAIAgentsClient({ fetch: (async () => jsonResponse(oauthCredential)) as typeof fetch });
+    const client = new OpenAIAgentsClient({ fetch: (async () => jsonResponse(oauthCredential, 201)) as typeof fetch });
     await expect(client.createVaultCredential(vaultId, {
       name: staticCredential.name,
       auth: { type: "static_bearer", mcp_server_url: staticCredential.auth.mcp_server_url, token: "creation" },

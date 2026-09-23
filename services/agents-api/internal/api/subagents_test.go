@@ -205,7 +205,11 @@ func TestSubagentRoutesDistinguishEmptyFromUnavailable(t *testing.T) {
 		}
 		if route.list {
 			w = requestSubagents(h, route.path, "Bearer test-api-key", "agents=v1")
-			if w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != `{"data":[],"has_more":false}` {
+			expected := `{"object":"list","first_id":null,"last_id":null,"data":[],"has_more":false}`
+			if route.method == "list" {
+				expected = `{"data":[],"has_more":false}`
+			}
+			if w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != expected {
 				t.Fatalf("empty page: %d %s", w.Code, w.Body)
 			}
 		}

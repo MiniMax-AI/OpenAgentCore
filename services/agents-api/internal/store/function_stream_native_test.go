@@ -18,6 +18,7 @@ func TestNativePublicFunctionStreamHelper(t *testing.T) {
 	}
 	h, ctx, home := nativeDispatchHarness(t)
 	model, requests := nativeFunctionResultsModel(t, home, []any{
+		[]any{map[string]any{"type": "input_text", "text": "setup complete"}},
 		`{"ticket":"42","status":"open"}`,
 		"Tool handler failed.",
 	})
@@ -50,7 +51,7 @@ func TestNativePublicFunctionStreamHelper(t *testing.T) {
 	if err != nil || bound.NativeSessionID == "" || bound.Device.ID != h.device.ID {
 		t.Fatal(bound, err)
 	}
-	if requests.Load() != 4 {
+	if requests.Load() != 6 {
 		t.Fatal("unexpected replay or missing native continuation", requests.Load())
 	}
 	t.Logf("Official SDK stream tool handlers, error omission, public history and native application passed; evidence %s", home)

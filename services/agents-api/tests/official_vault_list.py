@@ -100,7 +100,7 @@ def verify_vault_list(client, other, invalid, peer, binding, saved, root, direct
         foreign_headers = headers | {"Authorization": f"Bearer {other.api_key}"}
         verify_page(raw.get(endpoint, headers=foreign_headers, params={"status": "archived"}), [], False)
         response = raw.get(endpoint, headers=headers, params={"after": foreign.id})
-        assert response.status_code == 404 and response.json()["error"]["code"] == "not_found"
+        assert response.status_code == 404 and response.json()["error"]["code"] == "not_found_error"
         assert foreign.id not in response.text
         for params in ({"after": "invalid-vault"}, {"status": "unknown"}, {"limit": "null"}):
             response = raw.get(endpoint, headers=headers, params=params)
@@ -112,7 +112,7 @@ def verify_vault_list(client, other, invalid, peer, binding, saved, root, direct
             if beta is not None:
                 auth["OpenAI-Beta"] = beta
             response = raw.get(endpoint, headers=auth)
-            assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_beta_header"
+            assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_beta"
         for scope in ({"OpenAI-Organization": "wrong-org"}, {"OpenAI-Project": "wrong-project"}):
             assert raw.get(endpoint, headers=headers | scope).status_code == 401
             expect_error(AuthenticationError, lambda: vaults.list(extra_headers=scope))

@@ -24,10 +24,11 @@ def message(text):
     return {"type": "agent.session.input.message", "input": [{"role": "user", "content": [{"type": "input_text", "text": text}]}]}
 
 
-def run(session, prompt, respond=False, cancel=False):
+def run(session, prompt, respond=False, cancel=False, creation=None):
     events, handled = [], False
-    with sessions.events.stream(session, timeout=150) as stream:
-        sessions.events.create(session, events=[message(prompt)], idempotency_key=str(uuid.uuid4()))
+    with (creation or sessions.events.stream(session, timeout=150)) as stream:
+        if creation is None:
+            sessions.events.create(session, events=[message(prompt)], idempotency_key=str(uuid.uuid4()))
         for event in stream:
             events.append(event.to_dict())
             if event.type == "agent.session.requires_action":
@@ -88,10 +89,12 @@ try:
                   "tools": [{"type": "function", "name": "remember", "description": "Return a private memory value.",
                              "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}]}
         saved = client.beta.agents.create(**config)
-        session = sessions.create(agent_id=saved.id, environment={"type": "none"})
+        prompt = "Call remember exactly once and return its exact memory value as the requested JSON. Do not invent it."
+        creation = sessions.create(agent_id=saved.id, environment={"type": "none"}, input=prompt, stream=True)
+        session = next(creation).session
         proof.update(session=session.id, agent=saved.id, memory=str(uuid.uuid4()), format=config["text"]["format"])
         assert session.agent.text.format.to_dict() == proof["format"]
-        events, turn = run(session.id, "Call remember exactly once and return its exact memory value as the requested JSON. Do not invent it.", respond=True)
+        events, turn = run(session.id, prompt, respond=True, creation=creation)
         proof.update(first_events=events, first_output=final(session.id, events))
         assert len([i for i in sessions.items.list(session.id, limit=100).data if i.type == "function_call"]) == 1
         try:
@@ -100,7 +103,7 @@ try:
         except NotFoundError:
             pass
         try:
-            other.beta.agents.sessions.create(agent_id=saved.id, environment={"type": "none"})
+            other.beta.agents.sessions.create(agent_id=saved.id, environment={"type": "none"}, input="Verify foreign Agent rejection.")
             raise AssertionError("cross-tenant Agent reference accepted")
         except NotFoundError:
             pass
@@ -108,7 +111,7 @@ try:
         huge = client.beta.agents.create(model=model, text={"format": {"type": "json_schema", "schema": {"type": "object", "const": 9007199254740993}}})
         assert huge.text.format.to_dict()["schema"]["const"] == 9007199254740993
         try:
-            sessions.create(agent_id=huge.id, environment={"type": "none"})
+            sessions.create(agent_id=huge.id, environment={"type": "none"}, input="Verify unsupported schema rejection.")
             raise AssertionError("lossy runtime schema accepted")
         except BadRequestError:
             pass
@@ -122,12 +125,16 @@ try:
         assert proof["resumed_output"] != proof["first_output"]
         assert len(sessions.turns.list(session.id).data) == 2
         assert len([i for i in sessions.items.list(session.id, limit=100).data if i.type == "function_call"]) == 1
-        cancelled = sessions.create(agent_id=proof["agent"], environment={"type": "none"})
-        events, _ = run(cancelled.id, "Call remember to obtain the memory, then return it as JSON.", cancel=True)
+        prompt = "Call remember to obtain the memory, then return it as JSON."
+        creation = sessions.create(agent_id=proof["agent"], environment={"type": "none"}, input=prompt, stream=True)
+        cancelled = next(creation).session
+        events, _ = run(cancelled.id, prompt, cancel=True, creation=creation)
         assert not any(i.type == "message" and i.role == "assistant" and i.phase == "final_answer" for i in sessions.items.list(cancelled.id, limit=100).data)
         proof["cancel_events"] = events
-        plain = sessions.create(agent_id=proof["agent"], agent={"text": {"format": {"type": "text"}}}, environment={"type": "none"})
-        events, _ = run(plain.id, "Do not use tools. Say PLAIN_OK in ordinary text.")
+        prompt = "Do not use tools. Say PLAIN_OK in ordinary text."
+        creation = sessions.create(agent_id=proof["agent"], agent={"text": {"format": {"type": "text"}}}, environment={"type": "none"}, input=prompt, stream=True)
+        plain = next(creation).session
+        events, _ = run(plain.id, prompt, creation=creation)
         assert any(i.type == "message" and i.role == "assistant" and "PLAIN_OK" in i.content[0].text for i in sessions.items.list(plain.id, limit=100).data)
         proof["plain_events"] = events
         sessions.delete(cancelled.id)

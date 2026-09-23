@@ -25,12 +25,12 @@ Credentials. Configure their independent encryption key and authenticated Sessio
 use through the [credential guide](credentials.md); see [OAuth credentials](oauth-credentials.md)
 for application authorization, dispatch-time refresh and revocation boundaries.
 
-The pinned Python client can save configuration independently of execution:
+The pinned Python client saves an Agent independently, then starts a Session with initial input:
 
 ```python
 agent = client.beta.agents.create(model="your-model", name="Example")
 session = client.beta.agents.sessions.create(
-    agent_id=agent.id, environment={"type": "none"},
+    agent_id=agent.id, environment={"type": "none"}, input="Hello",
 )
 ```
 
@@ -206,8 +206,9 @@ resources); general Files routes do not. Supported operations include:
   for build support and process selections, without Runtime or Session observations.
 - Saved Agent create/retrieve/update/list/delete.
 - Session create/retrieve/list/delete and metadata-only update. Creation supports inline
-  configuration or a saved `agent_id`, field replacements, optional initial text
-  and ordinary or streaming responses.
+  configuration or a saved `agent_id`, field replacements, initial text
+  and ordinary or streaming responses. Initial input is required for `none` and
+  streamed creation outside `self_hosted`.
 - Session event submission and live streaming, Turn retrieve/list and Items list.
 - Environment retrieve for three-harness colocated self-hosted and Docker
   profiles, bounded live file listing, and inline/source copies into qualified
@@ -228,7 +229,8 @@ Ordinary JSON requests have a 1 MiB body limit; file transfers use the separate
 bounds in the Files contracts. Session lists support `after`, `limit` (1..100),
 `order` (`asc`/`desc`) and optional immutable root `agent_id`. The local defaults
 are 20 and descending order; exact hosted limits/error semantics remain unverified.
-Metadata updates preserve omission, clear on null/empty and replace supplied pairs.
+Session updates require the metadata field; null/empty clears it and an object
+replaces supplied pairs. An empty update body rejects before resource lookup.
 
 Delete with `client.beta.agents.sessions.delete(session.id)`. Confirmation means
 public removal: Session/history reads and new input become unavailable. Active
@@ -395,13 +397,8 @@ client = OpenAI(base_url="http://127.0.0.1:8091/v1", api_key="<execution-key>")
 session = client.beta.agents.sessions.create(
     agent={"model": "<model-available-on-the-engine-host>"},
     environment={"type": "none"},
-)
-client.beta.agents.sessions.events.create(
-    session.id,
-    events=[{"type": "agent.session.input.message", "input": [
-        {"role": "user", "content": [{"type": "input_text", "text": "Hello"}]}
-    ]}],
-    idempotency_key="first-message",
+    input="Hello",
+    extra_headers={"Idempotency-Key": "first-message"},
 )
 ```
 
@@ -410,8 +407,8 @@ and daemon credentials authenticate this service, not a model provider. Never pu
 provider secrets in Session metadata. This path does not enable Parsar Skill/SP
 callbacks or bypass the pending product authorization work.
 
-Session creation also accepts `input="Hello"` to admit initial text atomically and
-`stream=True` for created/live events. Open a GET event stream before submitting
+Session creation admits initial text atomically; add `stream=True` for
+created/live events. Open a GET event stream before submitting
 later work, or use the official `sessions.stream` helper for one Turn. Function
 handlers return results through the same public events endpoint. Recover missed
 output with Session/Turn/Items queries; reconnecting SSE does not replay history.
@@ -529,7 +526,7 @@ Neither disconnect nor deletion promises immediate native process quiescence or
 reclaims user-owned E2B/local compute. The user must stop and destroy it explicitly.
 
 Pending input retains its durable identity/deadline through HTTP disconnects. Later
-idle input returns 204 after preparation/admission, not after model completion;
+idle input returns 202 after preparation/admission, not after model completion;
 use client/proxy timeouts above five minutes and recover progress through events
 and reads. Exact upstream failure/error timing remains unverified.
 

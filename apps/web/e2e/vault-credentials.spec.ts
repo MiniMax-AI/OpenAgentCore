@@ -62,8 +62,7 @@ test.describe("Vault capability discovery", () => {
 
       await expect(page.getByRole("button", { name: "Vaults", exact: true })).toHaveCount(0);
       await page.getByRole("button", { name: "System", exact: true }).click();
-      await expect(page.locator(".system-summary-cell").filter({ hasText: "Vaults" }))
-        .toContainText("Unavailable");
+      await expect(page.locator(".system-page")).not.toContainText("Vaults");
     });
   }
 });
@@ -159,7 +158,7 @@ test("creates, replaces, uses, and deletes a write-only Vault Credential", async
   const mcpURL = "https://mcp.example/vault-tools";
   await openAgents(page, request);
 
-  const vaultsNavigation = page.getByRole("button", { name: "Vaults" });
+  const vaultsNavigation = page.getByRole("button", { name: "Vaults", exact: true });
   await expect(vaultsNavigation).toBeVisible();
   await vaultsNavigation.click();
   await page.getByRole("button", { name: "New Vault" }).click();
@@ -171,6 +170,7 @@ test("creates, replaces, uses, and deletes a write-only Vault Credential", async
   await expect(vaultCard).toBeVisible();
   await vaultCard.getByRole("button", { name: "Credential", exact: true }).click();
   const credentialDialog = page.getByRole("dialog", { name: "Add static bearer Credential" });
+  await expect(credentialDialog.getByLabel("Name")).toBeFocused();
   await credentialDialog.getByLabel("Name").fill("Private docs MCP");
   await credentialDialog.getByLabel("Exact MCP server URL").fill(mcpURL);
   await fillWriteOnlyBearer(credentialDialog);
@@ -213,8 +213,9 @@ test("creates, replaces, uses, and deletes a write-only Vault Credential", async
   await openAdvancedSessionSettings(sessionDialog);
   await expect(sessionDialog.getByRole("heading", { name: "Tools & Vaults" })).toBeVisible();
   await expect(sessionDialog).toContainText("Private docs MCP · Runtime credentials");
+  await sessionDialog.getByRole("textbox", { name: /^First message\b/u }).fill("Find the documentation available through this Credential.");
   await sessionDialog.getByRole("button", { name: "Create Session" }).click();
-  await expect(page.locator(".toast-region:not(.toast-region-assertive)")).toContainText("Idle Session created");
+  await expect(page.locator(".toast-region:not(.toast-region-assertive)")).toContainText("Session created with initial input");
 
   requests = await fixtureRequests(request);
   const vaultCreate = requests.find((entry) => entry.method === "POST" && entry.path === "/v1/vaults");
@@ -228,7 +229,7 @@ test("creates, replaces, uses, and deletes a write-only Vault Credential", async
   expect(sessionCreate?.body?.vault_ids).toEqual([vaultId]);
   expect(JSON.stringify(requests)).not.toContain('"token":');
 
-  await page.getByRole("button", { name: "Vaults" }).click();
+  await page.getByRole("button", { name: "Vaults", exact: true }).click();
   const currentVaultCard = page.locator(".vault-card").filter({ hasText: "Runtime credentials" });
   await currentVaultCard.getByRole("button", { name: "Delete Private docs MCP", exact: true }).click();
   const deleteCredentialDialog = page.getByRole("dialog", { name: "Delete Credential?" });

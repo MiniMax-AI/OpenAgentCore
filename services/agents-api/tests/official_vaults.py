@@ -30,7 +30,7 @@ def verify_vaults(client, other, invalid, peer, binding, expect_error):
         for request, name, expected_metadata in cases:
             response = vaults.with_raw_response.create(**request)
             body, value = response.http_response.json(), response.parse()
-            assert response.status_code == 200
+            assert response.status_code == 201
             verify_vault(body, name, expected_metadata)
             assert value.to_dict() == body and abs(value.created_at - time.time()) < 10
             assert vaults.retrieve(value.id) == value
@@ -38,7 +38,7 @@ def verify_vaults(client, other, invalid, peer, binding, expect_error):
             saved.append(value)
 
         response = raw.post(base, headers=headers, json={"name": "\nRaw Vault\t", "metadata": {}})
-        assert response.status_code == 200
+        assert response.status_code == 201
         verify_vault(response.json(), "Raw Vault", {})
         saved.append(vaults.retrieve(response.json()["id"]))
         assert saved[-1].to_dict() == response.json()
@@ -77,7 +77,7 @@ def verify_vaults(client, other, invalid, peer, binding, expect_error):
         for resource_id in (str(uuid.uuid4()), "invalid-vault", str(uuid.UUID(int=0)), foreign.id):
             response = raw.get(base + "/" + resource_id, headers=headers)
             assert response.status_code == 404
-            assert response.json()["error"]["code"] == "not_found"
+            assert response.json()["error"]["code"] == "not_found_error"
             assert resource_id not in response.text
             expect_error(NotFoundError, lambda: vaults.retrieve(resource_id))
         for scope in ({"OpenAI-Organization": "wrong-org"}, {"OpenAI-Project": "wrong-project"}):
@@ -95,7 +95,7 @@ def verify_vaults(client, other, invalid, peer, binding, expect_error):
                     request_headers["OpenAI-Beta"] = beta
                 response = raw.request(method, base + suffix, headers=request_headers,
                                        json={} if method == "POST" else None)
-                assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_beta_header"
+                assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_beta"
         assert raw.post(base, headers=headers, params={"tenant_id": "other"}, json={}).status_code == 400
         assert raw.get(base + "/" + saved[0].id, headers=headers, params={"include": "credentials"}).status_code == 400
         alias = str(client.base_url).rstrip("/") + "/agents/vaults/" + saved[0].id

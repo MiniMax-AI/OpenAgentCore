@@ -78,6 +78,11 @@ client.beta.agents.vaults.credentials.update(
 )
 ```
 
+Explicitly empty access tokens are rejected at creation and replacement. A
+replacement must include a mutable grant field; a type-only or otherwise empty
+patch is rejected before reading or changing secret material. Existing optional
+null semantics below remain qualified separately.
+
 Identity, name, auth type, destination, refresh endpoint/client ID/resource and
 endpoint authentication method remain unchanged. A refresh configuration cannot
 be added to a Credential that was created without one.
