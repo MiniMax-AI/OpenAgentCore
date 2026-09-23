@@ -11,7 +11,7 @@ import (
 )
 
 // @Summary Update execution Session metadata
-// @Description Omit metadata to leave it unchanged, send null or {} to clear it, or supply an object to replace all pairs. Up to 16 string pairs, with keys at most 64 characters and values at most 512 characters. Execution configuration and activity are unchanged. Returns the same safe Environment and pending-input activity projection as Session retrieval.
+// @Description The metadata field is required in an update body. Send null or {} to clear it, or supply an object to replace all pairs. Up to 16 string pairs, with keys at most 64 characters and values at most 512 characters. Execution configuration and activity are unchanged. Returns the same safe Environment and pending-input activity projection as Session retrieval.
 // @Tags Sessions
 // @Accept json
 // @Produce json
@@ -41,7 +41,8 @@ func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 	var session store.Session
 	var err error
 	if len(request.Metadata) == 0 {
-		session, err = h.store.GetSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id"))
+		writeError(w, http.StatusBadRequest, "invalid_request_error", "At least one update field is required")
+		return
 	} else {
 		var values map[string]*string
 		if err := json.Unmarshal(request.Metadata, &values); err != nil {

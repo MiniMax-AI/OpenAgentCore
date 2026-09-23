@@ -86,11 +86,15 @@ func TestHostedEnvironmentResponseHasPinnedShapeAndNoConnectionAction(t *testing
 
 // The execution owner must see idle creation as well as initial-input creation.
 // Resource persistence alone cannot validate the configured managed deployment.
-func TestHostedCreationUsesExecutionAdmissionWithoutInitialInput(t *testing.T) {
+func TestHostedCreationUsesExecutionAdmission(t *testing.T) {
 	for _, stream := range []bool{false, true} {
 		recorder := &hostedCreationRecorder{}
 		handler, fixture := environmentCreationHandler(t, "codex", WithHostedEnvironments(), WithExecution(recorder))
-		body := fmt.Sprintf(`{"agent":{"model":"model"},"environment":{"type":"openai_hosted"},"stream":%t}`, stream)
+		input := ""
+		if stream {
+			input = `,"input":"Initialize the streamed hosted execution."`
+		}
+		body := fmt.Sprintf(`{"agent":{"model":"model"},"environment":{"type":"openai_hosted"},"stream":%t%s}`, stream, input)
 		request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer key")
 		request.Header.Set("OpenAI-Beta", "agents=v1")
@@ -99,7 +103,7 @@ func TestHostedCreationUsesExecutionAdmissionWithoutInitialInput(t *testing.T) {
 		// The recorder deliberately rejects both creation methods. Its rejection
 		// proves admission was used; the resource fixture must remain untouched.
 		if recorder.calls != 1 || fixture.input.Engine != "" || fixture.session.ID != "" || response.Code != http.StatusBadRequest {
-			t.Fatal("idle hosted creation bypassed execution admission", stream, response.Code, response.Body.String())
+			t.Fatal("hosted creation bypassed execution admission", stream, response.Code, response.Body.String())
 		}
 	}
 }

@@ -57,7 +57,7 @@ func (s *Store) submitOne(ctx context.Context, tenantID, sessionID, key string, 
 // batch is the retry identity; replay never re-evaluates a cancellation target.
 // Internal receipts are not the response body of the public events endpoint.
 func (s *Store) SubmitInputs(ctx context.Context, tenantID, sessionID, key string, inputs []Input) ([]InputReceipt, error) {
-	if err := validateInputKey(key); err != nil {
+	if err := ValidateInputKey(key); err != nil {
 		return nil, err
 	}
 	batch, encoded, err := validateInputs(inputs)
@@ -97,7 +97,8 @@ func (s *Store) SubmitInputs(ctx context.Context, tenantID, sessionID, key strin
 	return receipts, nil
 }
 
-func validateInputKey(key string) error {
+// ValidateInputKey enforces the shared request identity limit, including no-op requests.
+func ValidateInputKey(key string) error {
 	if strings.TrimSpace(key) == "" || len(key) > 128 {
 		return fmt.Errorf("%w: idempotency key is required and limited to 128 bytes", ErrInvalidInput)
 	}

@@ -1,7 +1,6 @@
 package api
 
 import (
-	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/go-chi/chi/v5"
 	"net/http"
 )
@@ -15,7 +14,7 @@ import (
 // @Param session_id path string true "Session ID"
 // @Param after query string false "Last Item ID from the previous page"
 // @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
-// @Param order query string false "Creation order" Enums(asc,desc) default(desc)
+// @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.ItemList
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/items [get]
@@ -29,5 +28,5 @@ func (h *Handler) listItems(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, v1.ItemList{Data: page.Items, HasMore: page.HasMore})
+	writeJSON(w, http.StatusOK, itemListResponse(page.Items, page.HasMore))
 }

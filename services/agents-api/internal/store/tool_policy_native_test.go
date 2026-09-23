@@ -91,14 +91,13 @@ func TestNativeToolPolicyPublicExecution(t *testing.T) {
 			ID        string `json:"id"`
 			FirstTurn string `json:"first_turn"`
 		} `json:"sessions"`
-		Omitted []string `json:"omitted"`
 	}
 	raw, err = os.ReadFile(evidence)
-	if err != nil || json.Unmarshal(raw, &proof) != nil || len(proof.Sessions) != 4 || len(proof.Omitted) != 2 {
+	if err != nil || json.Unmarshal(raw, &proof) != nil || len(proof.Sessions) != 4 {
 		t.Fatal("invalid public evidence", err)
 	}
 	page, err := h.s.ListSessions(ctx, h.tenant, "", 100, true, nil)
-	if err != nil || len(page.Sessions) != 1+len(proof.Sessions)+len(proof.Omitted) {
+	if err != nil || len(page.Sessions) != 1+len(proof.Sessions) {
 		t.Fatal("rejected configuration persisted a Session", err)
 	}
 	foreignPage, err := h.s.ListSessions(ctx, foreignTenant, "", 100, true, nil)

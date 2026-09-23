@@ -19,25 +19,26 @@ func TestSessionCreateFieldPresence(t *testing.T) {
 		status       int
 		metadata     map[string]string
 	}{
-		{"omitted", ``, 200, nil},
-		{"false stream", `,"stream":false`, 200, nil},
+		{"omitted", ``, 201, nil},
+		{"false stream", `,"stream":false`, 201, nil},
 		{"null stream", `,"stream":null`, 400, nil},
 		{"whitespace null stream", `,"stream": null `, 400, nil},
 		{"string stream", `,"stream":"false"`, 400, nil},
 		{"numeric stream", `,"stream":0`, 400, nil},
 		{"null agent ID", `,"agent_id":null`, 400, nil},
 		{"numeric agent ID", `,"agent_id":0`, 400, nil},
-		{"null metadata", `,"metadata":null`, 200, nil},
-		{"empty metadata", `,"metadata":{}`, 200, nil},
-		{"string metadata", `,"metadata":{"empty":"","label":"中文🧪"}`, 200, map[string]string{"empty": "", "label": "中文🧪"}},
+		{"null metadata", `,"metadata":null`, 201, nil},
+		{"empty metadata", `,"metadata":{}`, 201, nil},
+		{"string metadata", `,"metadata":{"empty":"","label":"中文🧪"}`, 201, map[string]string{"empty": "", "label": "中文🧪"}},
 		{"null metadata value", `,"metadata":{"label":null}`, 400, nil},
 		{"mixed metadata values", `,"metadata":{"empty":"","label":null}`, 400, nil},
 		{"numeric metadata value", `,"metadata":{"label":0}`, 400, nil},
 		{"array metadata", `,"metadata":[]`, 400, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			handler, saved, _ := testHandler(t)
-			body := `{"agent":{"model":"example"},"environment":{"type":"none"}` + tc.fields + `}`
+			saved := &recordingStore{}
+			handler, _, _ := testHandler(t, WithExecution(&inputRecorder{ResourceStore: saved}))
+			body := `{"agent":{"model":"example"},"environment":{"type":"none"},"input":"Confirm the session metadata."` + tc.fields + `}`
 			request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 			request.Header.Set("Authorization", "Bearer test-api-key")
 			request.Header.Set("OpenAI-Beta", "agents=v1")
@@ -46,12 +47,12 @@ func TestSessionCreateFieldPresence(t *testing.T) {
 			if response.Code != tc.status {
 				t.Fatalf("status = %d, want %d: %s", response.Code, tc.status, response.Body)
 			}
-			if tc.status != http.StatusOK {
+			if tc.status != http.StatusCreated {
 				if saved.tenant != "" {
 					t.Fatal("invalid request reached persistence")
 				}
 				var failure v1.ErrorResponse
-				if json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error.Code != "invalid_request" {
+				if json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error.Code == nil || *failure.Error.Code != "invalid_request" {
 					t.Fatalf("invalid error response: %s", response.Body)
 				}
 				return

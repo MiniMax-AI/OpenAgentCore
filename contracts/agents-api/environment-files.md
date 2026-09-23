@@ -132,7 +132,8 @@ preconfigured Environment ID, model-input text, and two private caller token
 sources (`token_env` or `token_file`). The invoking native fixture supplies an
 existing `uploads` directory and a staging symlink rejection probe, verifies exact
 installed hashes, and has a real model consume source-copied text after source
-deletion. Its source fixture also streams a 512 MiB upload/download and verifies
-that it cannot bypass the smaller destination bound. This distinction
+deletion. Its source fixture also streams a 512 MiB upload, checks public download
+denial, and verifies that it cannot bypass the smaller destination bound. Internal
+large-object streaming integrity has separate PostgreSQL tests. This distinction
 keeps private setup separate from public hosted creation acceptance. Mechanism tests
 exercise detached/unknown outcomes and durable gates independently of model output.

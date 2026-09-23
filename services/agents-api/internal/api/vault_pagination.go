@@ -19,7 +19,7 @@ func readVaultPage(w http.ResponseWriter, r *http.Request) (pageOptions, []strin
 	}
 	for _, status := range statuses {
 		if status != "active" && status != "archived" {
-			writeError(w, http.StatusBadRequest, "invalid_request", "status must be active or archived.")
+			writeError(w, http.StatusBadRequest, "invalid_request_error", "Failed to deserialize query string: status: data did not match any variant of untagged enum VaultStatusFilterParam")
 			return pageOptions{}, nil, false
 		}
 	}
@@ -34,6 +34,6 @@ func readVaultPage(w http.ResponseWriter, r *http.Request) (pageOptions, []strin
 		}
 		q.Set("limit", strconv.FormatInt(max(1, min(requested, 100)), 10))
 	}
-	options, ok := readPageQuery(w, q, false)
+	options, ok := readPageQuery(w, r, q, false)
 	return options, statuses, ok
 }

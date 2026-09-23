@@ -20,6 +20,7 @@ import { validateSessionMetadata } from "../actions/session-actions";
 import {
   createSessionInitialInputDraft,
   projectSessionInitialInput,
+  sessionInitialInputError,
   type SessionInitialInputDraft,
 } from "./session-initial-input";
 
@@ -208,19 +209,21 @@ export function validateSessionStartDetails(
   mode: SessionAgentMode,
   sourceAgent?: SavedAgent,
   catalog: VaultCatalog | null = null,
+  environmentType = "none",
 ): SessionStartDetailsValidation {
   const metadataResult = validateSessionMetadata({
     title: values.title,
     metadata: values.metadata,
   });
   const input = projectSessionInitialInput(values.initialInput);
+  const inputError = input.ok ? sessionInitialInputError(input.input, environmentType) : input.error;
   const agent = mode === "inline"
     ? validateInlineSessionAgent(values, catalog)
     : validateSessionAgentOverrides(values, sourceAgent, catalog);
-  if (!metadataResult.metadata || !input.ok || agent.overrideError || !agent.effectiveAgent) {
+  if (!metadataResult.metadata || !input.ok || inputError || agent.overrideError || !agent.effectiveAgent) {
     return {
       ...(metadataResult.metadataError ? { metadataError: metadataResult.metadataError } : {}),
-      ...(!input.ok ? { inputError: input.error } : {}),
+      ...(inputError ? { inputError } : {}),
       ...(agent.overrideError ? { agentError: agent.overrideError } : {}),
     };
   }

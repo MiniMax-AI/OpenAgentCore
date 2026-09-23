@@ -20,7 +20,7 @@ def verify_credential_rotation(client, other, invalid, peer, saved_vaults, saved
     replacement = {"auth": {"type": "static_bearer", "token": canary + "replacement"}}
     sessions = []
     for selected in (None, original.id):
-        request = {"agent": {"model": "requested-model", "tools": [{
+        request = {"input": "Verify credential rotation fixture admission.", "agent": {"model": "requested-model", "tools": [{
             "type": "mcp", "server_label": "rotating", "credential_id": selected,
             "connection_origin": "service", "allowed_tools": [],
             "transport": {"type": "http", "server_url": destination}}]},
@@ -50,7 +50,7 @@ def verify_credential_rotation(client, other, invalid, peer, saved_vaults, saved
         assert response.parse() == current
         # The public boundary accepts opaque values; private Store tests verify
         # their bytes. The final value also supplies a log-scan canary.
-        for token in ("", " \t" + canary + "\n雪 ", canary + "final"):
+        for token in (" ", " \t" + canary + "\n雪 ", canary + "final"):
             response = raw.post(endpoint, headers=headers, json={"auth": {"type": "static_bearer", "token": token}})
             current = metadata(response, current)
         response = peer.beta.agents.vaults.credentials.with_raw_response.update(
@@ -63,6 +63,7 @@ def verify_credential_rotation(client, other, invalid, peer, saved_vaults, saved
             {"auth": {"type": "static_bearer"}}, {"auth": {"token": canary}},
             {"auth": {"type": None, "token": canary}},
             {"auth": {"type": 3, "token": canary}},
+            {"auth": {"type": "static_bearer", "token": ""}},
             {"auth": {"type": "static_bearer", "token": None}},
             {"auth": {"type": "static_bearer", "token": 3}},
             {"auth": {"type": "mcp_oauth", "access_token": canary}},
@@ -85,7 +86,7 @@ def verify_credential_rotation(client, other, invalid, peer, saved_vaults, saved
                                      (vault.id, str(uuid.UUID(int=0))), ("invalid", original.id),
                                      (str(uuid.UUID(int=0)), original.id)):
             response = raw.post(base + owner + "/credentials/" + credential_id, headers=headers, json=replacement)
-            assert safe(response, 404)["error"]["code"] == "not_found"
+            assert safe(response, 404)["error"]["code"] == "not_found_error"
             assert original.id not in response.text and foreign.id not in response.text
             error = expect_error(NotFoundError, lambda: credentials.update(credential_id, vault_id=owner, **replacement))
             safe(error.response, 404)
@@ -95,7 +96,7 @@ def verify_credential_rotation(client, other, invalid, peer, saved_vaults, saved
             original.id, vault_id=vault.id, **replacement))
         safe(raw.post(endpoint, json=replacement), 401)
         assert safe(raw.post(endpoint, headers={"Authorization": headers["Authorization"]},
-                             json=replacement), 400)["error"]["code"] == "invalid_beta_header"
+                             json=replacement), 400)["error"]["code"] == "invalid_beta"
         for scope in ({"OpenAI-Project": "other-project"}, {"OpenAI-Organization": "other-organization"}):
             expect_error(AuthenticationError, lambda: credentials.update(
                 original.id, vault_id=vault.id, **replacement, extra_headers=scope))
@@ -119,5 +120,5 @@ def verify_rotation_recovery(client, peer, state):
     for request, key, original in sessions:
         assert client.beta.agents.sessions.retrieve(original.id) == original
         assert client.beta.agents.sessions.create(**request, extra_headers=key) == original
-        assert list(client.beta.agents.sessions.turns.list(original.id)) == []
-        assert list(client.beta.agents.sessions.items.list(original.id)) == []
+        assert len(list(client.beta.agents.sessions.turns.list(original.id))) == 1
+        assert [item.content[0].text for item in client.beta.agents.sessions.items.list(original.id)] == [request["input"]]

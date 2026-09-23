@@ -30,10 +30,11 @@ def main():
     def submit(sid, text, key):
         sessions.events.create(sid, events=[message(text)], idempotency_key=key)
 
-    def execute(sid, text, steer=False, cancel=False):
+    def execute(sid, text, steer=False, cancel=False, creation=None):
         types, submitted = [], False
-        with sessions.events.stream(sid, timeout=300) as stream:
-            submit(sid, text, str(uuid.uuid4()))
+        with (creation or sessions.events.stream(sid, timeout=300)) as stream:
+            if creation is None:
+                submit(sid, text, str(uuid.uuid4()))
             for event in stream:
                 types.append(event.type)
                 assert event.type != "agent.session.failed", event
@@ -60,17 +61,19 @@ def main():
     try:
         if stage == "initial":
             marker = "MCODE-MEMORY-" + uuid.uuid4().hex[:12]
-            session = sessions.create(agent={"model": model, "instructions": "Follow user instructions. Remember supplied markers. Do not use tools."}, environment={"type": "none"})
+            prompt = "Remember " + marker + ". Write 120 numbered lines explaining addition, one sentence per line. Start immediately."
+            creation = sessions.create(agent={"model": model, "instructions": "Follow user instructions. Remember supplied markers. Do not use tools."}, environment={"type": "none"}, input=prompt, stream=True)
+            session = next(creation).session
             record = {"session": session.id, "marker": marker, "model": model, "checks": []}
             Path(output).write_text(json.dumps(record, indent=2))
             for agent_patch, environment in [({"tools": [{"type": "function", "name": "f", "parameters": {"type": "object"}}]}, {"type": "none"}), ({"text": {"verbosity": "high"}}, {"type": "none"})]:
-                r = http.post(base + "/v1/agents/sessions", headers=headers, json={"agent": {"model": model, **agent_patch}, "environment": environment})
+                r = http.post(base + "/v1/agents/sessions", headers=headers, json={"agent": {"model": model, **agent_patch}, "environment": environment, "input": "Verify native capability rejection."})
                 assert r.status_code == 400, r.status_code
             # This text-only fixture deliberately has no hosted provisioner.
             r = http.post(base + "/v1/agents/sessions", headers=headers, json={
                 "agent": {"model": model}, "environment": {"type": "openai_hosted"}})
             assert r.status_code == 503 and r.json()["error"]["code"] == "execution_unavailable"
-            record["initial_events"] = execute(session.id, "Remember " + marker + ". Write 120 numbered lines explaining addition, one sentence per line. Start immediately.", steer=True)
+            record["initial_events"] = execute(session.id, prompt, steer=True, creation=creation)
             turns = sessions.turns.list(session.id, order="asc", limit=100).data
             assert len(turns) == 1 and turns[0].status == "completed", [(t.id, t.status) for t in turns]
             record["first_turn"] = turns[0].id

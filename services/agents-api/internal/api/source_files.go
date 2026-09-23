@@ -59,7 +59,7 @@ func (h *Handler) getSourceFile(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	file, err := h.sourceFiles.GetSourceFile(ctx, tenantID(r), chi.URLParam(r, "file_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeStoreError(w, r, err, "id")
 		return
 	}
 	writeJSON(w, http.StatusOK, sourceFileResponse(file))
@@ -82,7 +82,7 @@ func (h *Handler) deleteSourceFile(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	id := chi.URLParam(r, "file_id")
 	if err := h.sourceFiles.DeleteSourceFile(ctx, tenantID(r), id); err != nil {
-		writeStoreError(w, r, err)
+		writeStoreError(w, r, err, "id")
 		return
 	}
 	writeJSON(w, http.StatusOK, v1.SourceFileDeleted{ID: id, Object: "file", Deleted: true})

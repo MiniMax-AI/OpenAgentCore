@@ -11,7 +11,7 @@ import (
 )
 
 // @Summary Update a reusable Agent
-// @Description Preserves omitted fields and replaces supplied fields using shared saved-configuration validation. Null name/instructions clear; null or empty metadata clears all pairs. Existing Session snapshots are unchanged. Nested replacement/null defaults, model-derived reasoning and exact hosted error/no-op timestamp behavior remain incompletely verified.
+// @Description Preserves omitted fields and replaces supplied fields using shared saved-configuration validation. Null name/instructions clear; null or empty metadata clears all pairs. Existing Session snapshots are unchanged. Empty updates advance updated_at without changing saved fields. Nested replacement/null defaults, model-derived reasoning and exact hosted error behavior remain incompletely verified.
 // @Tags Agents
 // @Accept json
 // @Produce json

@@ -13,18 +13,28 @@ import (
 
 const advanceSkillVersion = `-- name: AdvanceSkillVersion :exec
 UPDATE skills SET latest_version = next_version, next_version = next_version + 1,
- default_version = CASE WHEN $1::boolean THEN next_version ELSE default_version END
-WHERE tenant_id = $2 AND id = $3
+ default_version = CASE WHEN $1::boolean THEN next_version ELSE default_version END,
+ name = CASE WHEN $1::boolean THEN $2::text ELSE name END,
+ description = CASE WHEN $1::boolean THEN $3::text ELSE description END
+WHERE tenant_id = $4 AND id = $5
 `
 
 type AdvanceSkillVersionParams struct {
 	MakeDefault bool        `json:"make_default"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
 	TenantID    pgtype.UUID `json:"tenant_id"`
 	ID          pgtype.UUID `json:"id"`
 }
 
 func (q *Queries) AdvanceSkillVersion(ctx context.Context, arg AdvanceSkillVersionParams) error {
-	_, err := q.db.Exec(ctx, advanceSkillVersion, arg.MakeDefault, arg.TenantID, arg.ID)
+	_, err := q.db.Exec(ctx, advanceSkillVersion,
+		arg.MakeDefault,
+		arg.Name,
+		arg.Description,
+		arg.TenantID,
+		arg.ID,
+	)
 	return err
 }
 
@@ -474,17 +484,26 @@ func (q *Queries) RefreshLatestSkillVersion(ctx context.Context, arg RefreshLate
 }
 
 const setDefaultSkillVersion = `-- name: SetDefaultSkillVersion :one
-UPDATE skills SET default_version = $3 WHERE tenant_id = $1 AND id = $2 RETURNING id, tenant_id, name, description, created_at, default_version, latest_version, next_version
+UPDATE skills SET default_version = $3, name = $4, description = $5
+WHERE tenant_id = $1 AND id = $2 RETURNING id, tenant_id, name, description, created_at, default_version, latest_version, next_version
 `
 
 type SetDefaultSkillVersionParams struct {
 	TenantID       pgtype.UUID `json:"tenant_id"`
 	ID             pgtype.UUID `json:"id"`
 	DefaultVersion int64       `json:"default_version"`
+	Name           string      `json:"name"`
+	Description    string      `json:"description"`
 }
 
 func (q *Queries) SetDefaultSkillVersion(ctx context.Context, arg SetDefaultSkillVersionParams) (Skill, error) {
-	row := q.db.QueryRow(ctx, setDefaultSkillVersion, arg.TenantID, arg.ID, arg.DefaultVersion)
+	row := q.db.QueryRow(ctx, setDefaultSkillVersion,
+		arg.TenantID,
+		arg.ID,
+		arg.DefaultVersion,
+		arg.Name,
+		arg.Description,
+	)
 	var i Skill
 	err := row.Scan(
 		&i.ID,

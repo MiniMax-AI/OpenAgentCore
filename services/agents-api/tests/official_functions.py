@@ -19,23 +19,25 @@ agent = {"model":"gpt-5.5","tools":[tool]}
 with OpenAI(base_url=base+"/v1", api_key=token, max_retries=0, _strict_response_validation=True,
             http_client=httpx2.Client(trust_env=False, timeout=30)) as client:
     sessions = client.beta.agents.sessions
-    session = sessions.create(agent=agent, environment={"type":"none"}, extra_headers={"Idempotency-Key":"functions"})
+    creation = sessions.create(agent=agent, environment={"type":"none"}, input="Look up ticket 42", stream=True, extra_headers={"Idempotency-Key":"functions"})
+    session = next(creation).session
     expected = dict(tool, defer_loading=False)
     assert session.agent.tools[0].to_dict() == expected, session.agent.tools
     tool["defer_loading"] = False
-    assert sessions.create(agent=agent, environment={"type":"none"}, extra_headers={"Idempotency-Key":"functions"}).id == session.id
+    assert sessions.create(agent=agent, environment={"type":"none"}, input="Look up ticket 42", extra_headers={"Idempotency-Key":"functions"}).id == session.id
     tool["description"] = "changed"
     try:
-        sessions.create(agent=agent, environment={"type":"none"}, extra_headers={"Idempotency-Key":"functions"})
+        sessions.create(agent=agent, environment={"type":"none"}, input="Look up ticket 42", extra_headers={"Idempotency-Key":"functions"})
         raise AssertionError("changed tools reused a creation identity")
     except ConflictError:
         pass
     turns, calls = [], []
     for index in range(3):
         handled = False
-        with sessions.events.stream(session.id, timeout=30) as stream:
+        with (creation if index == 0 else sessions.events.stream(session.id, timeout=30)) as stream:
             message = {"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"Look up ticket 42"}]}]}
-            sessions.events.create(session.id, events=[message], idempotency_key="message-"+str(index))
+            if index > 0:
+                sessions.events.create(session.id, events=[message], idempotency_key="message-"+str(index))
             for event in stream:
                 if event.type in ("agent.session.turn.item.added", "agent.session.turn.item.done") and event.item.type == "function_call_output":
                     assert event.type == "agent.session.turn.item.added" and event.output_index is None

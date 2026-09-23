@@ -38,7 +38,7 @@ type EnvironmentInputReservation struct {
 // ReserveEnvironmentInput appends to active work or reserves an idle message batch.
 // The Session lock decides both paths; only promotion can create a new Turn.
 func (s *Store) ReserveEnvironmentInput(ctx context.Context, tenantID, sessionID, key string, inputs []Input) (EnvironmentInputReservation, error) {
-	if err := validateInputKey(key); err != nil {
+	if err := ValidateInputKey(key); err != nil {
 		return EnvironmentInputReservation{}, err
 	}
 	batch, encoded, err := validateInitialInputs(inputs)

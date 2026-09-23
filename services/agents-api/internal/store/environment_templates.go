@@ -134,9 +134,6 @@ func (s *Store) UpdateEnvironmentTemplate(ctx context.Context, tenantID, templat
 	if err != nil {
 		return EnvironmentTemplate{}, ErrNotFound
 	}
-	if !in.SetName && !in.SetNetwork && !in.SetFiles && !in.SetEnv && !in.SetSetup && !in.SetPackages && !in.SetSkills && !in.SetPlugins && !in.SetDirectories {
-		return s.GetEnvironmentTemplate(ctx, tenantID, templateID)
-	}
 	var name pgtype.Text
 	if in.Name != nil {
 		name = pgtype.Text{String: *in.Name, Valid: true}

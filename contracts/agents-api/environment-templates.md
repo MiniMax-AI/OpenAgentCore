@@ -67,10 +67,10 @@ sizes for both variants. Initialization keeps file data out of ordinary configur
 resource responses, lifecycle events and command arguments. Templates keep references; each Session authorizes and
 freezes its own encrypted source bytes. Later source deletion cannot change them.
 
-Template `files` omission preserves on update; null/[] clears. Referenced Sessions
-inherit files. Supplying `files` together with `environment_template_id`, including
-null/[], explicitly rejects while replacement/merge/null semantics remain unconfirmed.
-Use a complete standalone inline configuration when a different file set is needed.
+Template `files` omission preserves on update; null/[] clears. In a referencing
+Session, omission and null inherit, while a supplied list replaces the entire file
+set, including `[]` clearing it. Paths are not merged between the two sources.
+The effective list retains the existing validation and tenant-owned source checks.
 
 Core initializes both paths with the same trusted file installer through Provider
 RunCommand. Daemon authentication remains available, but native preparation and live
@@ -118,13 +118,15 @@ SDK 3.13.0 drops a single FileTypes tuple during multipart extraction before sen
 it. Use raw HTTP for a single ZIP with this fixed client; Core does not synthesize
 missing bytes or alter the pinned SDK.
 
-Templates preserve reference selectors: omission selects default at Session
+Templates preserve reference selectors: omission or null selects default at Session
 creation, `"latest"` selects latest, and a positive version string selects that
 version. A Session freezes tenant-authorized bytes and concrete version metadata
 in its creation transaction. Later source deletion, default changes or template
 updates cannot change that Session or its committed creation retry. A supplied
-Session Skill list replaces the template list; omission inherits. Explicit null
-reference versions and null list overrides are not qualified and reject.
+Session Skill list replaces the template list; omission inherits. Template
+responses include `version: null` for an unresolved default selector; resolved
+Session references retain a concrete version string. Null list overrides remain
+unqualified and reject. See [resource selector qualification](resource-selector-semantics.md).
 References return type/skill_id/version/name/description in Session metadata,
 while template responses retain unresolved selectors. Confidential bundle content
 never appears in these metadata responses. The common Runtime installation path
@@ -493,8 +495,8 @@ precede setup commands, nonzero setup prevents start, and runtime-reserved env n
 must reject. The shared initialization batch implements those fields with encrypted snapshots
 and the existing readiness gate. Public reads show packages but omit env/commands.
 Template updates replace each supplied field; omission preserves it and null clears
-it. Referenced Sessions inherit the snapshot; explicit env/packages/setup overrides
-with a template ID reject while override semantics remain unconfirmed.
+it. Referencing Sessions use the composition rules below; these differ from
+Template.update replacement rules.
 
 Files and resolved Skills are installed first, followed by system, npm/Python packages and ordered commands;
 the default cwd is `/workspace`. One command or package operation has the existing
@@ -517,6 +519,100 @@ mentions different GA/beta defaults; this service retains `agents=v1` and the
 errors, no-op timestamps, concurrent pagination and referenced Session null-network
 override semantics remain unverified. The last case explicitly rejects in this
 batch rather than guessing inheritance. This batch is not full protocol compatibility.
+
+## Template and inline configuration composition
+
+The pinned Session description applies the template before inline configuration.
+Owned official API probes on 2026-09-23 establish the following narrower behavior:
+
+| Session field | Omitted or null | Non-null inline value |
+|---|---|---|
+| `env` | Inherit template keys | Overlay by key; inline value wins, `{}` preserves all keys |
+| `setup_commands` | Inherit template sequence | Replace the sequence; `[]` clears it |
+| `files` | Inherit template file set | Replace the complete set; `[]` clears it |
+| `packages` | Inherit all managers | Resolve Python/npm/system independently; `{}` inherits all |
+| Individual package manager | Inherit its template list | Replace that list; `[]` clears it |
+
+Core performs this composition once, before the existing encrypted Session snapshot
+transaction. Env values, command bodies and inline bytes remain absent from public
+metadata. Effective package/file metadata reflects the selected inputs. Caller
+intent still distinguishes omission, null and explicit fields for the local creation
+retry policy; composition does not rewrite it. Later template/source changes do not
+rewrite committed initialization. Existing per-source and effective-size validation,
+network narrowing, Skill/Plugin selection and source authorization remain in place.
+No harness or Provider participates in the merge.
+
+The official evidence used SDK 3.13.0, upstream `d7c41ef`, and `agents=v1`:
+86 authenticated calls, nine owned Sessions, four lifetime Templates (including two
+cleaned setup-script assertion failures), and six completed real `gpt-6-astra` Turns.
+Four exit-zero command outputs confirmed env values and command replacement/order
+for omitted, populated, empty and null inputs. Two further outputs confirmed full
+file replacement and null inheritance, and an initialized empty listing confirmed
+`files=[]`. The omitted-files case reached the bounded readiness limit, so its
+inheritance proof is metadata-only. Package composition is also metadata evidence;
+these official probes do not independently establish installed package versions.
+All owned resources have successful public DELETE receipts; physical upstream
+sandbox destruction was not independently observed.
+
+Private evidence: `~/.parsar/remediation/20260923/template-inline-composition/`,
+subdirectories `official-env-setup` and `official-files-packages`. Reports retain
+fixed-source snapshots, raw status/body/request IDs, command-output proofs,
+accounting, cleanup and credential scans. This covers the observed fixtures rather
+than all possible combinations. Null network and null Skill/Plugin/directory list
+selection remain outside this batch. No new protocol version is introduced.
+
+### Core checks for composition (2026-09-23)
+
+`TestTemplateCompositionOfficialClientPostgres` uses the fixed strict SDK and raw
+HTTP against real Core handlers and PostgreSQL. Six accepted cases and seven
+rejected creation keys cover effective metadata, confidential frozen bytes and
+ordered commands, tenant/source isolation, combined setup-size rejection without
+partial records, and same-intent retries after template and source deletion.
+A second Store/handler verifies reopened persistence; it is not an OS process
+restart and does not run a model. API tests additionally cover raw caller intent,
+non-mutating composition and retained field validation.
+
+The integrated server gate ran `make -o check-web check` at `5589df0`; this includes
+real PostgreSQL tests, byte-for-byte sqlc generation, builds, native bridge checks
+and Rust tests/format/Clippy. A fresh `make check-web` ran locally against the same
+unchanged production diff: 287 client, 583 Web and 76 browser tests passed. Together
+they cover every required `make check` target. `make openapi` regenerated the
+Session description. The optional MiniMax packaged-native scratch/large-output
+probe was skipped because its optional profile variables were unset; this batch
+does not add MiniMax, Claude or E2B native qualification.
+
+### Real Codex Docker composition acceptance (2026-09-23)
+
+The exact `8019ac5` production build ran independently with Core, PostgreSQL and
+Docker Runtime against the real Kimi API. Three completed native model Turns prove:
+
+- A populated-inline Session observed env key precedence, whole-file replacement,
+  ordered replacement commands, Python `packaging==26.0`, and inherited npm/system
+  tools. Its prompt named only the read operation, not the expected canary values.
+- A separate inheritance Session observed null env/files/commands inheritance,
+  retained npm/system tools and absence of the explicitly cleared Python installation
+  directory. After template mutation/deletion and an actual Core process restart,
+  identical-key creation recovered its existing identity/configuration. A second
+  native Turn returned the exact same values and append trace: initialization did
+  not run again. The populated Session itself was not resumed in this run.
+
+Five owned Core Sessions were created over the acceptance attempts. The first two
+failed before any model Turn because the reused private Skill-only runner omitted
+Docker `nested_sandbox: true`, already required by the documented initialization
+profile. Correcting that operator setting resolved the proc-mount failure without
+production changes. In the corrected pair, the populated Session completed its
+native command, but the private runner then required an optional assistant `phase`
+and unwrapped JSON. The original message instead contained matching fenced JSON
+without phase. An offline check preserved and verified the original native output
+and message bytes; no model call was repeated. One new inheritance Session completed
+the remaining two Turns. These failed assertions and operator diagnostics are
+retained alongside successful evidence, not counted as extra successful runs.
+
+Private evidence is under the same batch's `live/` directory and records source,
+binary/image hashes, operator-setting changes, exact native output and cleanup.
+This is Codex/Docker qualification for the described composition paths, not renewed
+qualification of other harnesses or Providers, every package manager combination,
+or complete Template/Agents API semantics.
 
 ## Verification
 
@@ -803,9 +899,9 @@ index under `~/.parsar/remediation/20260921/template-capabilities-design/`.
 
 The current upload profile accepts at most 500 regular files, 5 MiB compressed
 and 20 MiB expanded per bundle. These are qualified implementation limits, not
-published protocol maxima. Exact hosted error parity, null version selection,
-unversioned content selection, top-level metadata across version changes and
-last/default/latest deletion semantics remain recorded gaps. Current resource
-behavior selects default for unversioned content, preserves initial top-level
-metadata, rejects default-version deletion and never reuses version numbers.
-These choices are not verified upstream guarantees.
+published protocol maxima. [File resource qualification](file-resource-semantics.md)
+records default-selected unversioned content and descriptive metadata, default
+deletion rejection with multiple versions, and nondefault latest pointer fallback.
+Core updates the default pointer and top-level name/description atomically, while
+concrete version bytes and previously frozen Sessions remain immutable. Last-version
+deletion, version-number reuse and complete errors/visibility timing remain gaps.

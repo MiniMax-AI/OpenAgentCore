@@ -70,7 +70,7 @@ export interface OpenAIAgentsClientOptions {
 
 interface APIErrorEnvelope {
   error?: {
-    code?: string;
+    code?: string | null;
     message?: string;
     param?: string | null;
     type?: string;
@@ -79,14 +79,14 @@ interface APIErrorEnvelope {
 
 export class AgentCoreError extends Error {
   readonly status: number;
-  readonly code?: string;
+  readonly code?: string | null;
   readonly param?: string | null;
   readonly errorType?: string;
 
   constructor(
     message: string,
     status: number,
-    code?: string,
+    code?: string | null,
     param?: string | null,
     errorType?: string,
   ) {
@@ -331,8 +331,8 @@ function canonicalSessionInputEvent(value: unknown): SessionInputEvent {
 }
 
 function encodeSessionInputBatch(events: readonly SessionInputEvent[]): string {
-  if (!Array.isArray(events) || events.length === 0 || events.length > maxSessionInputEvents) {
-    return invalidSessionInputBatch("Session input event batch must contain 1 through 64 events.");
+  if (!Array.isArray(events) || events.length > maxSessionInputEvents) {
+    return invalidSessionInputBatch("Session input event batch must contain at most 64 events.");
   }
   const body = JSON.stringify({ events: Array.from(events, canonicalSessionInputEvent) });
   // Core's HTTP handler bounds the complete wire request at 1 MiB. Its separate
@@ -1770,7 +1770,7 @@ export class OpenAIAgentsClient implements AgentCore {
     if (!response.ok || (expectedStatus !== undefined && response.status !== expectedStatus)) {
       throw await this.toError(response);
     }
-    if (response.status === 204) return undefined as T;
+    if (response.status === 204 || expectedStatus === 202) return undefined as T;
     return (await response.json()) as T;
   }
 
@@ -1778,6 +1778,7 @@ export class OpenAIAgentsClient implements AgentCore {
     path: string,
     body: string,
     safeMessage: string,
+    expectedStatus: 200 | 201,
   ): Promise<unknown> {
     const headers = this.headers({ "Content-Type": "application/json" });
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
@@ -1785,7 +1786,7 @@ export class OpenAIAgentsClient implements AgentCore {
       headers,
       body,
     });
-    if (!response.ok || response.status !== 200) {
+    if (!response.ok || response.status !== expectedStatus) {
       // A rejected secret-bearing write may reflect attacker-controlled token
       // bytes in every upstream error field. Never parse or expose that body.
       throw new AgentCoreError(safeMessage, response.status, "credential_write_failed");
@@ -1834,7 +1835,7 @@ export class OpenAIAgentsClient implements AgentCore {
     ) {
       throw new TypeError("Vault creation accepts a trimmed name and string metadata only.");
     }
-    const value = await this.request<unknown>("/vaults", { method: "POST", body: JSON.stringify(input) }, 200);
+    const value = await this.request<unknown>("/vaults", { method: "POST", body: JSON.stringify(input) }, 201);
     const vault = projectVault(value);
     const expectedName = input.name ?? null;
     const expectedMetadata = input.metadata ?? {};
@@ -1880,6 +1881,7 @@ export class OpenAIAgentsClient implements AgentCore {
       `/vaults/${encodeURIComponent(vaultId)}/credentials`,
       JSON.stringify(input),
       "Agent Core Credential creation failed.",
+      201,
     );
     const credential = projectVaultCredential(value, vaultId);
     if (credential.auth.type !== "static_bearer" || credential.name !== input.name || credential.auth.mcp_server_url !== input.auth.mcp_server_url) {
@@ -1923,6 +1925,7 @@ export class OpenAIAgentsClient implements AgentCore {
       `/vaults/${encodeURIComponent(vaultId)}/credentials/${encodeURIComponent(credentialId)}`,
       JSON.stringify(input),
       "Agent Core Credential token replacement failed.",
+      200,
     );
     const credential = projectVaultCredential(value, vaultId, credentialId);
     if (
@@ -2121,7 +2124,7 @@ export class OpenAIAgentsClient implements AgentCore {
     const value = await this.request<unknown>(
       "/agents/environments/templates",
       { method: "POST", body, signal: options?.signal },
-      200,
+      201,
     );
     const template = projectEnvironmentTemplate(value);
     const expectedName = input.name === undefined ? null : input.name;
@@ -2380,7 +2383,7 @@ export class OpenAIAgentsClient implements AgentCore {
         headers: { "Idempotency-Key": idempotencyKey },
         body,
       },
-      204,
+      202,
     );
   }
 

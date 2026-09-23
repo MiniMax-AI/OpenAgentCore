@@ -52,13 +52,14 @@ def answer(sid, expected):
     assert all(p >= 0 for p in positions) and positions == sorted(positions), result
 
 
-def run(sid, output=None, expected=None, cancel=False, failed_text=False, validate=False, recall=False):
+def run(sid, output=None, expected=None, cancel=False, failed_text=False, validate=False, recall=False, creation=None):
     events, handled = [], False
     prompt = "Call get_visual exactly once. Read the image returned by that tool and reply with its four band colors from left to right. Do not call it again."
     if recall:
         prompt = "Without calling tools, recall the most recent image from get_visual and repeat its four band colors from left to right."
-    with sessions.events.stream(sid, timeout=180) as stream:
-        sessions.events.create(sid, events=[{"type": "agent.session.input.message", "input": [{"role": "user", "content": [text(prompt)]}]}])
+    with (creation or sessions.events.stream(sid, timeout=180)) as stream:
+        if creation is None:
+            sessions.events.create(sid, events=[{"type": "agent.session.input.message", "input": [{"role": "user", "content": [text(prompt)]}]}])
         for event in stream:
             events.append(event.to_dict())
             if event.type == "agent.session.requires_action":
@@ -89,7 +90,7 @@ def run(sid, output=None, expected=None, cancel=False, failed_text=False, valida
                         assert post(sid, [{**result, "call_id": "unknown-call"}]).status_code in {400, 404, 409}
                         assert items(sid) == before
                     assert sessions.events.create(sid, events=[result], idempotency_key=key) is None
-                    assert post(sid, [result], key).status_code == 204
+                    assert post(sid, [result], key).status_code == 202
                     assert post(sid, [{**result, "output": "different"}], key).status_code == 409
                     proof["calls"].append({"turn": action.turn_id, "call": action.call_id, "output": output, "success": not failed_text})
             assert event.type not in {"agent.session.failed", "agent.session.turn.failed"}, event.to_dict()
@@ -120,13 +121,14 @@ try:
         colors = ["red", "green", "blue", "yellow"]
         secrets.SystemRandom().shuffle(colors)
         proof["colors"] = colors
-        session = sessions.create(agent={"model": model, "tools": [{"type": "function", "name": "get_visual",
-            "description": "Return a visual to inspect.", "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}]}, environment={"type": "none"})
+        creation = sessions.create(agent={"model": model, "tools": [{"type": "function", "name": "get_visual",
+            "description": "Return a visual to inspect.", "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}]}, environment={"type": "none"}, input="Call get_visual exactly once. Read the image returned by that tool and reply with its four band colors from left to right. Do not call it again.", stream=True)
+        session = next(creation).session
         proof["session"] = sid = session.id
         save()
         for scale in [1, 15]:
             output = [text("Read this visual."), {"type": "input_image", "image_url": picture(colors, scale)}, text("Return its four band colors in order.")]
-            run(sid, output, colors, validate=scale == 1)
+            run(sid, output, colors, validate=scale == 1, creation=creation if scale == 1 else None)
         jpeg = base64.b64encode((Path(__file__).parent / "testdata/function-bands.jpg").read_bytes()).decode()
         proof["colors"] = ["yellow", "blue", "red", "green"]
         run(sid, [{"type": "input_image", "image_url": "data:image/jpeg;base64," + jpeg}], proof["colors"])

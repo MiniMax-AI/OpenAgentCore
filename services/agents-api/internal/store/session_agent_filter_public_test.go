@@ -28,13 +28,14 @@ func TestSessionAgentFilterOfficialClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := api.NewHandler(s, auth, "codex")
+	h, err := api.NewHandler(s, auth, "codex", api.WithExecution(s))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(h)
 	defer server.Close()
-	h, err = api.NewHandler(store.New(pool), auth, "codex")
+	recoveredStore := store.New(pool)
+	h, err = api.NewHandler(recoveredStore, auth, "codex", api.WithExecution(recoveredStore))
 	if err != nil {
 		t.Fatal(err)
 	}

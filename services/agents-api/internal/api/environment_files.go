@@ -32,7 +32,7 @@ func WithEnvironmentDirectoryReader(reader EnvironmentDirectoryReader) Option {
 // @Param environment_id path string true "Environment ID"
 // @Param path query string false "Absolute directory inside the Environment workspace"
 // @Param limit query int false "Maximum file count; local default 20" minimum(1) maximum(100)
-// @Param order query string false "Case-sensitive path-component order" Enums(asc,desc) default(desc)
+// @Param order query string false "Case-sensitive path-component order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Param page query string false "Opaque continuation token; keep path, order and limit unchanged"
 // @Success 200 {object} v1.EnvironmentFileList
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse

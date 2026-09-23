@@ -13,7 +13,7 @@ def verify_agent_references(client, other, expect_error):
     resource = agents.create(model=" requested-model ", name="Reusable configuration",
                              instructions="Saved instructions.", metadata={"business": "not-session-metadata"},
                              text={"verbosity": "high"}, tools=[tool])
-    spec = {"agent_id": resource.id, "environment": {"type": "none"}}
+    spec = {"input": "Verify agent references fixture admission.", "agent_id": resource.id, "environment": {"type": "none"}}
     headers = {"Idempotency-Key": "saved-agent-reference"}
     first = sessions.create(**spec, extra_headers=headers)
     expected = resource.to_dict(mode="json")
@@ -51,10 +51,10 @@ def verify_agent_references(client, other, expect_error):
     expect_error(ConflictError, lambda: sessions.create(**spec, agent={"instructions": "Changed"}, extra_headers=headers))
     same_config = agents.create(model=resource.model, name=resource.name, instructions=resource.instructions,
                                 text={"verbosity": "high"}, tools=[tool])
-    expect_error(ConflictError, lambda: sessions.create(agent_id=same_config.id, environment={"type": "none"}, extra_headers=headers))
+    expect_error(ConflictError, lambda: sessions.create(agent_id=same_config.id, input="Verify agent references fixture admission.", environment={"type": "none"}, extra_headers=headers))
     expect_error(NotFoundError, lambda: other.beta.agents.sessions.create(**spec))
     for missing in (str(uuid.uuid4()), "not-an-agent", str(uuid.UUID(int=0))):
-        expect_error(NotFoundError, lambda: sessions.create(agent_id=missing, environment={"type": "none"}))
+        expect_error(NotFoundError, lambda: sessions.create(agent_id=missing, input="Verify agent references fixture admission.", environment={"type": "none"}))
 
     # Configuration storage is broader than execution. Never silently drop an
     # unsupported saved option, but admit a supported whole-field replacement.
@@ -62,24 +62,42 @@ def verify_agent_references(client, other, expect_error):
         ("reasoning", {"effort": "high"}, None),
         ("reasoning", {"summary": "auto"}, {}),
         ("service_tier", "fast", "auto"),
-        ("multi_agent", {"enabled": True}, {"enabled": False}),
         ("text", {"format": {"type": "json_schema", "schema": {"type": "object"}}}, {"verbosity": "medium"}),
         ("tools", [dict(tool, defer_loading=True)], None),
         ("tools", [{"type": "tool_search"}], []),
-        ("tools", [{"type": "programmatic_tool_calling", "enabled": False}], []),
     ):
         unsupported = agents.create(model="model", **{field: value})
-        reference = {"agent_id": unsupported.id, "environment": {"type": "none"}}
+        reference = {"input": "Verify agent references fixture admission.", "agent_id": unsupported.id, "environment": {"type": "none"}}
         expect_error(BadRequestError, lambda: sessions.create(**reference))
         recovered.append(sessions.create(**reference, agent={field: replacement}))
-        expect_error(BadRequestError, lambda: sessions.create(agent={"model": "model", field: value}, environment={"type": "none"}))
+        expect_error(BadRequestError, lambda: sessions.create(agent={"model": "model", field: value}, input="Verify agent references fixture admission.", environment={"type": "none"}))
         assert agents.retrieve(unsupported.id) == unsupported
+
+    # These controls are admitted by the current Codex profile. Both reference
+    # and inline requests must preserve them, and overrides replace the field.
+    for field, value, replacement in (
+        ("multi_agent", {"enabled": True}, {"enabled": False}),
+        ("tools", [{"type": "programmatic_tool_calling", "enabled": False}], []),
+    ):
+        supported = agents.create(model="model", **{field: value})
+        reference = {"input": "Verify agent references fixture admission.", "agent_id": supported.id, "environment": {"type": "none"}}
+        inherited = sessions.create(**reference)
+        inline = sessions.create(agent={"model": "model", field: value}, input="Verify agent references fixture admission.", environment={"type": "none"})
+        expected_field = supported.to_dict(mode="json")[field]
+        assert inherited.agent.to_dict(mode="json")[field] == expected_field
+        assert inline.agent.to_dict(mode="json")[field] == expected_field
+        replaced = sessions.create(**reference, agent={field: replacement})
+        inline_replacement = sessions.create(agent={"model": "model", field: replacement}, input="Verify agent references fixture admission.", environment={"type": "none"})
+        assert replaced.agent.to_dict(mode="json")[field] == inline_replacement.agent.to_dict(mode="json")[field]
+        assert replaced.agent.to_dict(mode="json")[field] != expected_field
+        assert agents.retrieve(supported.id) == supported
+        recovered.extend([inherited, inline, replaced, inline_replacement])
 
     base = str(client.base_url).rstrip("/") + "/agents/sessions"
     auth = {"Authorization": f"Bearer {client.api_key}", "OpenAI-Beta": "agents=v1"}
     with httpx2.Client(trust_env=False, timeout=10) as raw:
         body = raw.post(base, headers=auth, json=spec)
-        assert body.status_code == 200 and body.json()["agent"] == expected
+        assert body.status_code == 201 and body.json()["agent"] == expected
         recovered.append(sessions.retrieve(body.json()["id"]))
         before = {item.id for item in sessions.list()}
         for override in (None, [], {"model": None}, {"model": 1}, {"model": ""},

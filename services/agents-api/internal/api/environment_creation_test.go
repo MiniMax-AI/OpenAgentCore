@@ -92,7 +92,7 @@ func TestSelfHostedEmptyCreationAndStream(t *testing.T) {
 						t.Fatal(err)
 					}
 					defer response.Body.Close()
-					if response.StatusCode != http.StatusOK {
+					if response.StatusCode != http.StatusCreated {
 						t.Fatal("empty creation rejected", response.StatusCode)
 					}
 					var session v1.Session
@@ -205,7 +205,7 @@ func TestSelfHostedCreationRequiresOperatorExecution(t *testing.T) {
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, request)
 			var failure v1.ErrorResponse
-			if response.Code != http.StatusServiceUnavailable || json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error.Code != "execution_unavailable" || fixture.input.Engine != "" {
+			if response.Code != http.StatusServiceUnavailable || json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error.Code == nil || *failure.Error.Code != "execution_unavailable" || fixture.input.Engine != "" {
 				t.Fatal("operator prerequisites did not fail before persistence", response.Code, response.Body.String(), fixture.input)
 			}
 		}
@@ -215,14 +215,14 @@ func TestSelfHostedCreationRequiresOperatorExecution(t *testing.T) {
 func TestHostedCreationRequiresOperatorExecution(t *testing.T) {
 	for _, stream := range []bool{false, true} {
 		handler, fixture := environmentCreationHandler(t, "codex", WithExecution(&inputRecorder{}), WithEnvironmentRemoteURL(environmentOrigin))
-		body := fmt.Sprintf(`{"agent":{"model":"model"},"environment":{"type":"openai_hosted"},"stream":%t}`, stream)
+		body := fmt.Sprintf(`{"agent":{"model":"model"},"environment":{"type":"openai_hosted"},"stream":%t,"input":"Initialize the hosted execution."}`, stream)
 		request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer key")
 		request.Header.Set("OpenAI-Beta", "agents=v1")
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
 		var failure v1.ErrorResponse
-		if response.Code != http.StatusServiceUnavailable || json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error.Code != "execution_unavailable" || fixture.input.Engine != "" {
+		if response.Code != http.StatusServiceUnavailable || json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error.Code == nil || *failure.Error.Code != "execution_unavailable" || fixture.input.Engine != "" {
 			t.Fatal("hosted configuration bypassed operator prerequisites", response.Code, response.Body.String())
 		}
 	}

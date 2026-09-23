@@ -20,7 +20,7 @@ func (f *credentialFixture) UpdateStaticCredential(_ context.Context, tenant, va
 }
 
 func TestCredentialUpdatePreservesOpaqueInputAndSafeProjection(t *testing.T) {
-	for _, token := range []string{"", " \tcredential-canary\n雪 ", "credential-canary"} {
+	for _, token := range []string{" ", " \tcredential-canary\n雪 ", "credential-canary"} {
 		h, f, tenant := credentialHandler(t)
 		f.credential.Name, f.credential.MCPServerURL = "Retained name", "https://example.invalid/mcp?q=x"
 		body, _ := json.Marshal(map[string]any{"auth": map[string]string{"type": "static_bearer", "token": token}})
@@ -43,7 +43,7 @@ func TestCredentialUpdateRejectsInvalidBodiesBeforeStorage(t *testing.T) {
 		`null`, `[]`, `{} {}`, `{}`, `{"auth":null}`, `{"auth":[]}`, `{"auth":{}}`,
 		`{"auth":{"type":"static_bearer"}}`, `{"auth":{"token":"credential-canary"}}`,
 		`{"auth":{"type":null,"token":"credential-canary"}}`, `{"auth":{"type":3,"token":"credential-canary"}}`,
-		`{"auth":{"type":"static_bearer","token":null}}`, `{"auth":{"type":"static_bearer","token":3}}`,
+		`{"auth":{"type":"static_bearer","token":""}}`, `{"auth":{"type":"static_bearer","token":null}}`, `{"auth":{"type":"static_bearer","token":3}}`,
 		`{"auth":{"type":"static_bearer","token":{}}}`, `{"auth":{"type":"static_bearer","token":[]}}`,
 		`{"auth":{"type":"mcp_oauth","access_token":3}}`,
 		`{"auth":{"type":"static_bearer","token":"credential-canary","mcp_server_url":"https://other.invalid"}}`,

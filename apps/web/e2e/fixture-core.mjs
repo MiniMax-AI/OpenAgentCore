@@ -389,6 +389,7 @@ function initialState() {
       sessionCreateDelayMs: 0,
       sessionCreateStatus: 201,
       sessionCreateResponseLoss: 0,
+      sessionCreateStreamMissingIdentity: 0,
       sessionCreateStreamCloseDelayMs: 120,
       sessionListDelayMs: 0,
       sessionListStatus: 200,
@@ -399,7 +400,7 @@ function initialState() {
       updateStatus: 200,
       deleteDelayMs: 0,
       deleteStatus: 200,
-      sendStatus: 204,
+      sendStatus: 202,
       sendResponseLoss: 0,
       itemsScenario: 0,
       turnsScenario: 0,
@@ -842,15 +843,10 @@ const server = http.createServer(async (request, response) => {
       if (request.headers["openai-beta"] != null) return sendError(response, 400, "Source Files do not accept the Agents beta header in this fixture.");
       const source = state.sourceFiles.get(id);
       if (!source) return sendError(response, 404, "Fixture Source File not found.");
-      response.writeHead(200, {
-        "content-type": "application/octet-stream",
-        "content-disposition": `attachment; filename="${source.metadata.filename}"`,
-        "content-length": source.data.length,
-        "cache-control": "no-store",
-        "x-content-type-options": "nosniff",
-      });
-      response.end(source.data);
-      return;
+      return sendJson(response, { error: {
+        message: "Not allowed to download files of purpose: user_data",
+        type: "invalid_request_error", code: null, param: null,
+      } }, 400);
     }
 
     const sourceFileMatch = url.pathname.match(/^\/v1\/files\/([^/]+)$/);
@@ -894,7 +890,7 @@ const server = http.createServer(async (request, response) => {
           metadata: body.metadata ?? {},
         };
         state.vaults.unshift(vault);
-        return sendJson(response, vault);
+        return sendJson(response, vault, 201);
       }
     }
 
@@ -924,7 +920,7 @@ const server = http.createServer(async (request, response) => {
         };
         state.credentials.unshift(credential);
         state.credentialTokens.add(credential.id);
-        return sendJson(response, credential);
+        return sendJson(response, credential, 201);
       }
     }
 
@@ -1021,6 +1017,13 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "POST" && url.pathname === "/v1/agents/sessions") {
+      const hasInitialInput = body.input !== undefined && body.input !== null;
+      const initialInputMessages = hasInitialInput ? sessionInitialInputMessages(body.input) : [];
+      const requiresInitialInput = body.environment?.type === "none"
+        || (body.stream === true && body.environment?.type !== "self_hosted");
+      if ((requiresInitialInput && !hasInitialInput) || (hasInitialInput && !initialInputMessages)) {
+        return sendError(response, 400, "Fixture Session requires valid initial input for this Environment and response mode.");
+      }
       const idempotencyKey = request.headers["idempotency-key"];
       const { stream: _streamResponseMode, ...creationIntent } = body;
       const fingerprint = JSON.stringify(creationIntent);
@@ -1032,7 +1035,7 @@ const server = http.createServer(async (request, response) => {
           return sendError(response, 409, "Fixture idempotency key was reused with a different Session request.");
         }
         if (body.stream === true) {
-          response.writeHead(200, {
+          response.writeHead(201, {
             "content-type": "text/event-stream; charset=utf-8",
             "cache-control": "no-cache, no-transform",
             connection: "keep-alive",
@@ -1041,12 +1044,14 @@ const server = http.createServer(async (request, response) => {
           setTimeout(() => response.end(), state.controls.sessionCreateStreamCloseDelayMs);
           return;
         }
-        return sendJson(response, receipt.session, 200);
+        return sendJson(response, receipt.session, 201);
       }
 
       const control = consumeControl("sessionCreate", 201);
       const responseLoss = state.controls.sessionCreateResponseLoss;
       state.controls.sessionCreateResponseLoss = 0;
+      const missingIdentity = state.controls.sessionCreateStreamMissingIdentity;
+      state.controls.sessionCreateStreamMissingIdentity = 0;
       if (control.delayMs) await wait(control.delayMs);
       if (control.status !== 201) return sendError(response, control.status, "Fixture Session create failed.");
       const savedAgent = typeof body.agent_id === "string"
@@ -1076,11 +1081,6 @@ const server = http.createServer(async (request, response) => {
           typeof value !== "string" || [...key].length > 64 || [...value].length > 512
         )) || Object.keys(body.metadata).length > 16)
       ) return sendError(response, 400, "Fixture Session metadata is invalid.");
-      const hasInitialInput = body.input !== undefined && body.input !== null;
-      const initialInputMessages = hasInitialInput ? sessionInitialInputMessages(body.input) : [];
-      if (hasInitialInput && !initialInputMessages) {
-        return sendError(response, 400, "Fixture initial Session input is invalid.");
-      }
       state.sequence += 1;
       const created = {
         id: `session_created_${state.sequence}`,
@@ -1096,6 +1096,38 @@ const server = http.createServer(async (request, response) => {
         created_at: baseline + state.sequence,
         last_active_at: baseline + state.sequence,
       };
+      const createdSnapshot = structuredClone(created);
+      let initialTurn = null;
+      let initialItems = [];
+      if (hasInitialInput && initialInputMessages) {
+        state.sequence += 1;
+        const turn = {
+          id: `turn_created_${state.sequence}`,
+          agent_id: created.agent.id,
+          session_id: created.id,
+          object: "agent.session.turn",
+          status: "queued",
+          created_at: baseline + state.sequence,
+          started_at: null,
+          completed_at: null,
+          error: null,
+          usage: null,
+        };
+        const items = initialInputMessages.map((message, index) => ({
+          id: `item_created_${state.sequence}_${index + 1}`,
+          turn_id: turn.id,
+          type: "message",
+          status: "completed",
+          role: "user",
+          content: message.content,
+        }));
+        state.turns.push(turn);
+        state.createdSessionItems.set(created.id, items);
+        initialTurn = turn;
+        initialItems = items;
+        created.status = "in_progress";
+        created.last_active_at = baseline + state.sequence;
+      }
       state.sessions.unshift(created);
       if (typeof idempotencyKey === "string") {
         state.sessionCreateReceipts.set(idempotencyKey, { fingerprint, session: created });
@@ -1105,43 +1137,25 @@ const server = http.createServer(async (request, response) => {
         return;
       }
       if (body.stream === true) {
-        const createdSnapshot = structuredClone(created);
-        response.writeHead(200, {
+        response.writeHead(201, {
           "content-type": "text/event-stream; charset=utf-8",
           "cache-control": "no-cache, no-transform",
           connection: "keep-alive",
         });
         response.write(": connected\n\n");
+        if (missingIdentity) {
+          response.end();
+          return;
+        }
         state.sequence += 1;
         response.write(`event: agent.session.created\nid: create_${state.sequence}\ndata: ${JSON.stringify({
           type: "agent.session.created",
           event_id: `create_${state.sequence}`,
           session: createdSnapshot,
         })}\n\n`);
-        if (hasInitialInput && initialInputMessages) {
-          state.sequence += 1;
-          const turn = {
-            id: `turn_created_${state.sequence}`,
-            agent_id: created.agent.id,
-            session_id: created.id,
-            object: "agent.session.turn",
-            status: "queued",
-            created_at: baseline + state.sequence,
-            started_at: null,
-            completed_at: null,
-            error: null,
-            usage: null,
-          };
-          const items = initialInputMessages.map((message, index) => ({
-            id: `item_created_${state.sequence}_${index + 1}`,
-            turn_id: turn.id,
-            type: "message",
-            status: "completed",
-            role: "user",
-            content: message.content,
-          }));
-          state.turns.push(turn);
-          state.createdSessionItems.set(created.id, items);
+        if (initialTurn) {
+          const turn = initialTurn;
+          const items = initialItems;
           response.write(`event: agent.session.turn.created\nid: turn_${state.sequence}\ndata: ${JSON.stringify({
             type: "agent.session.turn.created",
             event_id: `turn_${state.sequence}`,
@@ -1149,8 +1163,6 @@ const server = http.createServer(async (request, response) => {
             turn_id: turn.id,
             turn,
           })}\n\n`);
-          created.status = "in_progress";
-          created.last_active_at = baseline + state.sequence;
           response.write(`event: agent.session.in_progress\nid: progress_${state.sequence}\ndata: ${JSON.stringify({
             type: "agent.session.in_progress",
             event_id: `progress_${state.sequence}`,
@@ -1367,7 +1379,7 @@ const server = http.createServer(async (request, response) => {
           updated_at: created,
         };
         state.environmentTemplates.push(template);
-        return sendJson(response, template);
+        return sendJson(response, template, 201);
       }
       return sendError(response, 405, "This API method is not supported.", "unsupported_operation");
     }
@@ -1566,6 +1578,8 @@ const server = http.createServer(async (request, response) => {
         object: "list",
         data,
         has_more: start + data.length < sessionTurns.length,
+        first_id: data[0]?.id ?? null,
+        last_id: data.at(-1)?.id ?? null,
       });
     }
 
@@ -1573,14 +1587,14 @@ const server = http.createServer(async (request, response) => {
     if (request.method === "POST" && eventsMatch) {
       const status = state.controls.sendStatus;
       const responseLoss = state.controls.sendResponseLoss;
-      state.controls.sendStatus = 204;
+      state.controls.sendStatus = 202;
       state.controls.sendResponseLoss = 0;
       if (responseLoss) {
         response.destroy();
         return;
       }
-      if (status !== 204) return sendError(response, status, "Fixture send failed.");
-      response.writeHead(204);
+      if (status !== 202) return sendError(response, status, "Fixture send failed.");
+      response.writeHead(202);
       response.end();
       return;
     }

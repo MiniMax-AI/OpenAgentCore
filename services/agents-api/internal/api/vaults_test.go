@@ -76,7 +76,7 @@ func TestVaultResourceProjectionWithoutExecution(t *testing.T) {
 		h, f := vaultResourceHandler(t)
 		w := vaultRequest(h, "POST", "/v1/vaults", test.body)
 		var got map[string]any
-		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &got) != nil {
+		if w.Code != 201 || json.Unmarshal(w.Body.Bytes(), &got) != nil {
 			t.Fatal(w.Code, w.Body)
 		}
 		want := map[string]any{"id": f.vault.ID, "object": "vault", "created_at": float64(1700000000), "name": test.name, "metadata": test.metadata}

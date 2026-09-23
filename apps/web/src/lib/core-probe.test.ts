@@ -208,7 +208,7 @@ describe("Core connection probe", () => {
   });
 
   it.each([
-    [jsonResponse({ error: { code: "invalid_beta_header" } }, 400), 400],
+    [jsonResponse({ error: { code: "invalid_beta" } }, 400), 400],
     [jsonResponse({ error: { code: "not_found" } }, 404), 404],
     [jsonResponse({ error: { code: "method_not_allowed" } }, 405), 405],
     [jsonResponse(canonicalPage(), 201), 201],

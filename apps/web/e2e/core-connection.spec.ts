@@ -293,7 +293,7 @@ test("announces loading, authenticated access, and each safe failure state from 
     { status: 200, body: { object: "list", data: [null], has_more: false, first_id: null, last_id: null } },
     { status: 401, body: { error: { code: "invalid_api_key", message: "safe fixture failure" } } },
     { status: 401, body: { error: { code: "gateway_auth_required", message: "safe fixture failure" } } },
-    { status: 400, body: { error: { code: "invalid_beta_header", message: "safe fixture failure" } } },
+    { status: 400, body: { error: { code: "invalid_beta", message: "safe fixture failure" } } },
     { status: 503, body: { error: { code: "unavailable", message: "safe fixture failure" } } },
     { abort: true },
   ];

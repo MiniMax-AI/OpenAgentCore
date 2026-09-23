@@ -80,7 +80,7 @@ func TestSkillReferenceParsingInheritanceAndReplacement(t *testing.T) {
 			t.Fatal("inline reference lost retry intent", err)
 		}
 	}
-	for _, version := range []string{`null`, `1`, `""`, `"0"`} {
+	for _, version := range []string{`1`, `""`, `"0"`} {
 		if _, err := decodeEnvironmentSkills([]byte(`[{"type":"skill_reference","skill_id":"skill-owned","version":` + version + `}]`)); err == nil {
 			t.Fatal("invalid or unconfirmed selector accepted")
 		}

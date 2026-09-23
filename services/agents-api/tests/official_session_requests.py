@@ -36,12 +36,12 @@ def verify_session_create_requests(client, spec):
         key = {"Idempotency-Key": str(uuid.uuid4())}
         first = sessions.create(**spec, extra_headers=key)
         assert first.metadata == {}
-        for fields in [{}, {"input": None}, {"stream": False}, {"metadata": None}, {"metadata": {}},
+        for fields in [{}, {"stream": False}, {"metadata": None}, {"metadata": {}},
                        {"stream": False, "metadata": None}]:
             assert sessions.create(**spec, extra_body=fields, extra_headers=key) == first
             response = raw.post(str(client.base_url).rstrip("/") + "/agents/sessions",
                                 headers={**headers, **key}, json={**spec, **fields})
-            assert response.status_code == 200
+            assert response.status_code == 201
             assert response.json()["id"] == first.id and response.json()["metadata"] == {}
         metadata = {"empty": "", "label": "中文🧪"}
         preserved = sessions.create(**spec, metadata=metadata)

@@ -50,7 +50,7 @@ func TestInitialFilesHTTPInlineLimitsAndRetry(t *testing.T) {
 			r.Header.Set("Idempotency-Key", key)
 			w := httptest.NewRecorder()
 			handler.ServeHTTP(w, r)
-			if w.Code != http.StatusOK {
+			if w.Code != http.StatusCreated {
 				t.Fatalf("size %d: HTTP %d: %s", size, w.Code, w.Body.String())
 			}
 			var response struct {

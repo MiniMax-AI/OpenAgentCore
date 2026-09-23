@@ -160,7 +160,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	activeReceipts := receipts(created.ActiveKey, first)
 	turn, err := s.GetTurn(t.Context(), tenant, created.ID, first)
 	if err != nil || turn.Status != store.TurnInProgress || turn.CancelRequestedAt.IsZero() || !turn.CompletedAt.IsZero() {
-		t.Fatal("204 must admit cancellation without fabricating native completion", err)
+		t.Fatal("202 must admit cancellation without fabricating native completion", err)
 	}
 	itemsAfter, err := s.ListItems(t.Context(), tenant, created.ID, "", 100, true)
 	if err != nil || !reflect.DeepEqual(itemsBefore, itemsAfter) {

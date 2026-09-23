@@ -27,8 +27,8 @@ def main():
         other = client(base, foreign).beta.agents.sessions
         recovered = client(restarted, token).beta.agents.sessions
         agent = api.beta.agents.create(model="test-model")
-        peer = sessions.create(agent_id=agent.id, environment={"type": "none"})
-        foreign_session = other.create(agent={"model": "test-model"}, environment={"type": "none"})
+        peer = sessions.create(agent_id=agent.id, environment={"type": "none"}, input="Verify deletion leaves peer history unchanged.")
+        foreign_session = other.create(agent={"model": "test-model"}, environment={"type": "none"}, input="Verify deletion leaves peer history unchanged.")
         headers = {"Authorization": "Bearer " + token, "OpenAI-Beta": "agents=v1"}
         for saved in (False, True):
             for streaming in (False, True):

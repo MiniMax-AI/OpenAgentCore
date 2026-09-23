@@ -37,6 +37,7 @@ func TestService(t *testing.T) {
 	input := openai.BetaAgentSessionNewParams{
 		Agent:       openai.BetaAgentSessionNewParamsAgent{Model: openai.String("go-client-test-model"), Instructions: openai.String("Keep this configuration.")},
 		Environment: openai.EnvironmentParamUnion{OfParamNone: &openai.EnvironmentParamNone{}},
+		Input:       openai.BetaAgentSessionNewParamsInputUnion{OfString: openai.String("Verify the Go client's queued creation and retry identity.")},
 		Metadata:    map[string]string{"workspace": "not-an-identity"},
 	}
 	retry := option.WithHeader("Idempotency-Key", "go-client-first")
@@ -44,7 +45,7 @@ func TestService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.ID == "" || first.Object != "agent.session" || first.Status != "idle" || first.Agent.Model != "go-client-test-model" || first.Agent.Instructions != "Keep this configuration." || first.Environment.Type != "none" {
+	if first.ID == "" || first.Object != "agent.session" || first.Status != "in_progress" || first.Agent.Model != "go-client-test-model" || first.Agent.Instructions != "Keep this configuration." || first.Environment.Type != "none" {
 		t.Fatal("incorrect resolved Session")
 	}
 	read, err := a.Get(ctx, first.ID)
@@ -54,6 +55,10 @@ func TestService(t *testing.T) {
 	replay, err := a.New(ctx, input, retry)
 	if err != nil || replay.ID != first.ID {
 		t.Fatalf("retry: %v", err)
+	}
+	turns, err := a.Turns.List(ctx, first.ID, openai.BetaAgentSessionTurnListParams{})
+	if err != nil || len(turns.Data) != 1 || turns.Data[0].Status != "queued" {
+		t.Fatalf("creation retry must retain one queued Turn: %v", err)
 	}
 	expectStatus := func(err error, status int) {
 		t.Helper()

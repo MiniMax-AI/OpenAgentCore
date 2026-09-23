@@ -40,13 +40,19 @@ describe("Session start details", () => {
       metadata: JSON.stringify({ team: "web" }),
     };
 
-    expect(validateSessionStartDetails(values, "saved", source)).toEqual({
+    expect(validateSessionStartDetails(values, "saved", source, null, "openai_hosted")).toEqual({
       effectiveAgent: source,
       request: {
         metadata: { team: "web", title: "Release review" },
         stream: false,
       },
     });
+  });
+
+  it.each(["openai_hosted", "self_hosted"])("keeps empty %s creation unstreamed", (environmentType) => {
+    const source = agent();
+    expect(validateSessionStartDetails(sessionStartDetailsFromAgent(source), "saved", source, null, environmentType).request)
+      .toEqual({ metadata: {}, stream: false });
   });
 
   it("enforces the Session metadata limit including title", () => {
@@ -64,7 +70,7 @@ describe("Session start details", () => {
     expect(result.metadataError).toContain("at most 16 pairs");
   });
 
-  it("omits blank text, preserves exact text, and forces creation streaming for input", () => {
+  it("requires nonblank none input, preserves exact text, and streams initial input", () => {
     const source = agent();
     const blank = validateSessionStartDetails({
       ...sessionStartDetailsFromAgent(source),
@@ -77,7 +83,8 @@ describe("Session start details", () => {
     }, "saved", source);
 
     expect(optionalInitialSessionInput("\u0085")).toBeUndefined();
-    expect(blank.request).toEqual({ metadata: {}, stream: false });
+    expect(blank.request).toBeUndefined();
+    expect(blank.inputError).toContain("first message is required");
     expect(nonblank.request).toEqual({ metadata: {}, input: exact, stream: true });
   });
 
@@ -123,7 +130,7 @@ describe("Session start details", () => {
       model: "provider/inline",
       instructions: "Work carefully.",
     });
-    expect(validateSessionStartDetails(values, "inline").request).toEqual({
+    expect(validateSessionStartDetails(values, "inline", undefined, null, "self_hosted").request).toEqual({
       agent: { model: "provider/inline", instructions: "Work carefully." },
       metadata: {},
       stream: false,

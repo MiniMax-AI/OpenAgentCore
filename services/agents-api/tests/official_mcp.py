@@ -24,14 +24,14 @@ def verify_mcp_configuration(client, other, expect_error):
                      "credential_id": None, "request_metadata": {}, "required": readiness.get("required", False),
                      "transport": {**transport, "headers": {}}}
         assert body["tools"] == [canonical]
-        spec = {"agent_id": resource.id, "environment": {"type": "none"}}
+        spec = {"input": "Verify mcp fixture admission.", "agent_id": resource.id, "environment": {"type": "none"}}
         headers = {"Idempotency-Key": "mcp-snapshot-" + resource.id}
         response = sessions.with_raw_response.create(**spec, extra_headers=headers)
         session, body = response.parse(), response.http_response.json()
         assert body["agent"]["tools"] == [{**canonical, "transport": transport}]
         expect_error(NotFoundError, lambda: other.beta.agents.sessions.create(**spec))
         assert sessions.create(agent={"model": "requested-model", "tools": [declared]},
-                               environment={"type": "none"}).agent.tools == session.agent.tools
+                               input="Verify mcp fixture admission.", environment={"type": "none"}).agent.tools == session.agent.tools
         override = sessions.create(**spec, agent={"tools": []})
         assert override.agent.tools == []
         changed = agents.update(resource.id, tools=[])
@@ -57,7 +57,7 @@ def verify_mcp_configuration(client, other, expect_error):
         for operation in (
             lambda: agents.create(model="requested-model", tools=[declaration]),
             lambda: sessions.create(agent={"model": "requested-model", "tools": [declaration]},
-                                    environment={"type": "none"}),
+                                    input="Verify mcp fixture admission.", environment={"type": "none"}),
         ):
             error = expect_error(BadRequestError, operation)
             assert "synthetic-private" not in str(error.body)

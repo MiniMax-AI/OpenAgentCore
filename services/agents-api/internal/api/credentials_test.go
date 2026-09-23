@@ -64,7 +64,7 @@ func TestCredentialSafeProjectionAndOpaqueInput(t *testing.T) {
 	path := "/v1/vaults/" + f.credential.VaultID + "/credentials"
 	w := credentialRequest(h, "POST", path, `{"name":" Vault credential \n","auth":{"type":"static_bearer","mcp_server_url":"https://example.invalid/mcp?q=x","token":" \tcredential-canary\n雪 "}}`)
 	var got map[string]any
-	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &got) != nil {
+	if w.Code != 201 || json.Unmarshal(w.Body.Bytes(), &got) != nil {
 		t.Fatal(w.Code, w.Body)
 	}
 	want := map[string]any{"id": f.credential.ID, "vault_id": f.credential.VaultID, "name": "Vault credential", "object": "vault.credential", "created_at": float64(1700000000), "updated_at": float64(1700000000), "auth": map[string]any{"type": "static_bearer", "mcp_server_url": "https://example.invalid/mcp?q=x"}}
@@ -81,6 +81,7 @@ func TestCredentialInvalidRequestsNeverReachStorage(t *testing.T) {
 	for _, body := range []string{
 		`null`, `[]`, `{} {}`, `{}`, `{"name":null,"auth":{}}`,
 		`{"name":"n","auth":{"type":"static_bearer","mcp_server_url":"https://example.invalid","token":null}}`,
+		`{"name":"n","auth":{"type":"static_bearer","mcp_server_url":"https://example.invalid","token":""}}`,
 		`{"name":"n","auth":{"type":"static_bearer","mcp_server_url":"https://credential-canary@example.invalid","token":"credential-canary"}}`,
 		`{"name":"n","auth":{"type":"mcp_oauth","access_token":"credential-canary"}}`,
 		`{"name":"n","auth":{"type":"static_bearer","mcp_server_url":"http://example.invalid","token":"credential-canary"}}`,

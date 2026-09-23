@@ -17,10 +17,10 @@ func TestSessionHarnessAdmission(t *testing.T) {
 		enabled                                     bool
 		status                                      int
 	}{
-		{"default", "", "", `{"type":"none"}`, "codex", false, 200},
-		{"explicit default", `,"x_agents_core":{"harness":"codex"}`, "", `{"type":"none"}`, "codex", false, 200},
-		{"claude", `,"x_agents_core":{"harness":"claude_sdk"}`, "", `{"type":"none"}`, "claude_sdk", true, 200},
-		{"mcode", `,"x_agents_core":{"harness":"mcode"}`, "", `{"type":"none"}`, "mcode", true, 200},
+		{"default", "", "", `{"type":"none"}`, "codex", false, 201},
+		{"explicit default", `,"x_agents_core":{"harness":"codex"}`, "", `{"type":"none"}`, "codex", false, 201},
+		{"claude", `,"x_agents_core":{"harness":"claude_sdk"}`, "", `{"type":"none"}`, "claude_sdk", true, 201},
+		{"mcode", `,"x_agents_core":{"harness":"mcode"}`, "", `{"type":"none"}`, "mcode", true, 201},
 		{"unavailable", `,"x_agents_core":{"harness":"claude_sdk"}`, "", `{"type":"none"}`, "", false, 400},
 		{"unknown", `,"x_agents_core":{"harness":"other"}`, "", `{"type":"none"}`, "", true, 400},
 		{"empty", `,"x_agents_core":{}`, "", `{"type":"none"}`, "", true, 400},
@@ -33,8 +33,10 @@ func TestSessionHarnessAdmission(t *testing.T) {
 			if tc.enabled {
 				options = append(options, WithHarnesses([]string{"claude_sdk", "mcode"}))
 			}
-			h, s, _ := testHandler(t, options...)
-			r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"fixture"`+tc.extension+tc.extra+`},"environment":`+tc.environment+`}`))
+			s := &recordingStore{}
+			options = append(options, WithExecution(&inputRecorder{ResourceStore: s}))
+			h, _, _ := testHandler(t, options...)
+			r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"fixture"`+tc.extension+tc.extra+`},"environment":`+tc.environment+`,"input":"Run on the selected harness."}`))
 			r.Header.Set("Authorization", "Bearer test-api-key")
 			r.Header.Set("OpenAI-Beta", "agents=v1")
 			w := httptest.NewRecorder()

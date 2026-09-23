@@ -7,7 +7,6 @@ function operations(): SourceFilesOperations {
   return {
     uploadSourceFile: vi.fn(),
     retrieveSourceFile: vi.fn(),
-    downloadSourceFile: vi.fn(),
     deleteSourceFile: vi.fn(),
     retrieveEnvironment: vi.fn(),
     createEnvironmentFile: vi.fn(),
@@ -38,6 +37,8 @@ describe("SourceFilesPanel", () => {
     expect(html).toContain("512 MiB source · 50 MiB destination");
     expect(html).toContain("Upload Source File");
     expect(html).toContain("Operate by Core ID");
+    expect(html).toContain("Uploaded Source Files cannot be downloaded directly");
+    expect(html).not.toContain(">Download</button>");
     expect(html).toContain("Core has no Source Files list API");
     expect(html).toContain("Copy to hosted Workspace");
     expect(html).toContain("Check Environment");
