@@ -111,7 +111,7 @@ model calls.
 
 | # | Case | Official observation | Core rule |
 | --- | --- | --- | --- |
-| V1 | Delete the only remaining version, which is also the default | 200 `{"id": "skillver_…", "object": "skill.version.deleted", "deleted": true, "version": "1"}`; retrieve and versions.list then return 404 (SFT-01) | Same body; the Skill is deleted in the same transaction |
+| V1 | Delete the only remaining version, which is also the default | 200 `{"id": "skillver_…", "object": "skill.version.deleted", "deleted": true, "version": "1"}`; retrieve and versions.list then return 404 (SFT-01) | Same body; the Skill is deleted in the same transaction. The reduced case (delete v2, then v1 is the only version) applies the same rule; official evidence covers only a fresh single-version Skill |
 | V2 | Delete the default while another version is visible | 400 invalid_request_error, invalid_value, param version (SFT-04) | Unchanged |
 | V3 | Delete a nondefault or latest version | 200; latest falls back | Unchanged |
 | V4 | Foreign or missing Skill or version | 404 | Unchanged, indistinguishable |

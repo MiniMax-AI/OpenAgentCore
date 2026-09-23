@@ -167,7 +167,9 @@ unsampled inputs:
 
 These remain registered differences and are not changed here: repeated Files
 `purpose` values (SFT-18); unsampled overflowing limits; Skill sole-version
-deletion and number reuse (SFT-01/02); Session deletion lifecycle (SES-29/30);
+deletion and number reuse (SFT-01/02, since resolved or recorded in
+[file resource semantics](file-resource-semantics.md#sole-version-deletion--september-23-2026));
+Session deletion lifecycle (SES-29/30);
 whitespace input (SES-01..04); Template network forms (SFT-21/22); and response
 defaults (VA-11, SES-23/25). Malformed path IDs (SES-28), metadata and name error
 fields (VA-07/08/09), U+0000 (VA-10) and Template network codes (SFT-20) are

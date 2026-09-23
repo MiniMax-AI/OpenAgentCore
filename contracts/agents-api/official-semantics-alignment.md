@@ -189,7 +189,9 @@ Deferred and unchanged: accepting and storing U+0000; hostname forms accepted
 officially (SFT-21) and `disabled` with domains, which the official service
 accepts (SFT-22); non-canonical UUID spellings such as uppercase, braces or
 `urn:uuid:` still resolve to the same resource; Skill sole-version deletion and
-number reuse; Session deletion lifecycle; whitespace input; response defaults;
+number reuse (since resolved or recorded in
+[file resource semantics](file-resource-semantics.md#sole-version-deletion--september-23-2026));
+Session deletion lifecycle; whitespace input; response defaults;
 and the Files `limit=abc` code. The Environment Files list query parser is aligned
 for unknown and repeated keys by the [Environment Files wire batch](environment-files.md#wire-alignment--september-23-2026);
 it still rejects malformed query encoding locally.
