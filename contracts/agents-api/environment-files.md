@@ -87,10 +87,11 @@ filenames, URLs and filesystem paths cannot substitute for an ID. Both members
 use the same destination writer. Required null/omitted fields, extra fields and
 invalid Base64 are rejected; an unknown top-level field names itself as `param`
 when its name is short and printable.
-Unknown query keys are ignored. Empty bytes are valid. Inline
-paths must be canonical and cannot name the workspace root; the parent must exist.
-The current destination limit is 50 MiB for either source, with bounded JSON and 64 KiB daemon
-frames. These are local limits and policies, not verified upstream restrictions.
+Unknown query keys are ignored. Empty bytes are valid. Paths must
+be canonical and cannot name the workspace root; missing parent directories are
+created. Inline data is limited to 5 MiB decoded, the official bound; a `file_id`
+copy keeps the local 50 MiB destination limit, with bounded JSON and 64 KiB daemon
+frames. See the [write semantics](#write-semantics--september-23-2026).
 
 Creation uses the same tenant Environment lookup as listing. The Worker checks the
 stored local profile, immutable exact device/Environment binding and live capability.
@@ -105,11 +106,10 @@ does not establish isolation or public hosted admission.
 Before sending any bytes, persist the mutation identity and request digest under
 the Session lock. Pending input/execution and another unresolved upload exclude a
 new mutation. The Runtime receives the complete body, verifies its digest and uses
-the existing installer to replace the destination with a fresh mode-0600 inode.
-Existing hard-link aliases retain their original contents. Uploads do not create
-parent directories or preserve destination permissions; exact upstream overwrite
-and metadata behavior remain unverified. Later independent tool writes can change
-the installed file; the response does not promise a snapshot.
+the shared installer in its create mode: it creates missing parents and installs a
+fresh mode-0600 file without replacing or following any existing path. Later
+independent tool writes can change the installed file; the response does not
+promise a snapshot.
 
 Only an exact committed/rejected receipt settles durable ownership. Caller detach,
 connection loss, timeout or missing output cannot be treated as rejection. Unknown
@@ -225,16 +225,17 @@ Decisions:
   The client and Web accept only the new envelope and 201.
 
 Deferred and unchanged: recursive listing (HE-30); creating parent directories,
-overwrite and the 50 MiB inline limit (HE-11/12/15, which change the shared
-installer); the Environment retrieve `files[]` projection (HE-03); Environment
+overwrite and the inline limit (HE-11/12/15), since aligned by the
+[write semantics](#write-semantics--september-23-2026) batch; the Environment
+retrieve `files[]` projection (HE-03); Environment
 events (HE-02); the `self_hosted` status value (HE-04); `self_hosted` Files
 support, which the official service refuses and Core's daemon keeps; limit bounds,
 the default path and ordering. Malformed query encoding (such as `?foo=%GG` or `;`
 separators) stays a local rejection on this list, while the shared lists drop those
 pairs; there is no official sample.
-The official conflict and size-limit messages and the deleted-Session 404 message
-are not adopted. The Claude SDK adapter directory reader, used only when a daemon has
-no local workspace binding, is unchanged: F5 and F6 there keep 404 for a missing
+The deleted-Session 404 message is not adopted; the write semantics batch adopts
+the conflict and size-limit messages. The Claude SDK adapter directory reader, used
+only when a daemon has no local workspace binding, is unchanged: F5 and F6 there keep 404 for a missing
 path and 503 for a regular file or symlink. A Runtime image built before this batch
 keeps the same 404/503 results until it is rebuilt.
 
@@ -246,3 +247,82 @@ links and a replaced root. The TS client and Web unit tests cover the envelope a
 201. The opt-in official scripts replay the list and create rows through raw HTTP
 and the pinned SDK. Live acceptance, the server gate and independent review are
 recorded separately by the coordinator.
+
+## Write semantics — September 23, 2026
+
+The pin is unchanged: SDK 3.13.0, commit `d7c41ef`, `agents=v1`. This batch starts
+from main `1eb60c27` and aligns Files.create writes with the hosted-environment
+campaign scan, recorded privately in
+`~/.parsar/remediation/20260923/campaign-scan-2/hosted-env/` (`findings.json`
+HE-11, 12, 13 and 15; raw records under `official/` labelled
+`fc02-nested-missing-parents`, `fc03-overwrite`, `fc06-5mib-plus-1`,
+`fc15-onto-directory`, `fc20-overwrite-untracked`, `fc21-through-symlink-dir` and
+`fc22-symlink-outside`), and with the "File limits" of the official Environment
+files guide saved beside them. The batch plan is
+`~/.parsar/remediation/20260923/workspace-file-writes/PLAN.md`.
+
+| Row | Case | Core behavior | Evidence (finding: request ID) |
+| --- | --- | --- | --- |
+| FW1 | Missing parent directories | 201. Each missing component is created with mode 0700, the initial-file installer's convention, below the held no-follow walk | HE-11: `req_69a44a96866a4b52b637a5a5530dcd3c` |
+| FW2 | The destination is a file that an earlier Files.create wrote | 400 `invalid_request_error`, param null, `environment.files paths must not traverse symlinks or overwrite existing files` (official: `file path conflicts with an existing environment file`). No bytes change | HE-12: `req_f661f17c5c714d829364e13da32db6b1` |
+| FW3 | The destination is another existing file, such as one created by setup, a native tool or the model, or any other non-directory entry | 400 with the FW2 message. No bytes change | HE-12 `fc20`: `req_1242efc5adaa4ac5a854d2973ec81cd2` |
+| FW4 | The destination is an existing directory | 400 `invalid_request_error`, param null, `file path conflicts with an existing environment file` | HE-12 `fc15`: `req_c835a06aa7d949e0ae7883ef83c3145b` |
+| FW5 | A symlink anywhere in the parent chain or as the destination, or a non-directory parent component | 400 with the FW2 message. No link is followed | HE-13: `req_0c2c3cbf9e9947d79921cd198f42e9a6`, `req_02f00ab8a6c348aca0bfe47ac3704b18` |
+| FW6 | Inline data above 5 MiB decoded | 400 `invalid_request_error`, param null, `environment.files[0].data exceeds the 5 MiB decoded limit`, before any Runtime work. Exactly 5 MiB is accepted; a `file_id` copy keeps the 50 MiB bound | HE-15: `req_088ba87e6e3e4436a7713015e37615b5`; guide file limits |
+| FW7 | The destination or a link appears between the checks and the install | Never replaced or followed; the FW2 message | Rust race tests; not sampled officially |
+| FW8 | Unknown outcome | The durable mutation gate and unknown handling are unchanged | — |
+| FW9 | `self_hosted` | The daemon's local workspace writer serves Files.create for Core-managed Docker and user-managed Runtimes alike, so the same rules apply | — |
+| FW10 | Initial Session files, Skills, Plugins and cold resume | Unchanged | — |
+| FW11 | Tenant isolation, missing or foreign Environment | Unchanged 404 | — |
+
+Decisions:
+
+- The shared `agents-api-codex-write` helper takes an explicit per-call mode. Only
+  the daemon's local workspace writer, which serves only Files.create, passes
+  `create`. Core's initial Session file installer and the Skill installer keep the
+  four-argument replace mode, which older Runtime images also understand. Plugins
+  use the separate capability installer, and completed recovery, including cold
+  resume, never reinstalls files. Their semantics are unchanged.
+- Parents are created only after the complete body is verified, so incomplete or
+  corrupt input creates nothing. Each new directory is reopened without following
+  links. The install itself never replaces: `renameat2(RENAME_NOREPLACE)`, or
+  `linkat` where the filesystem lacks that flag. A parent created before a late
+  rejection (a concurrent change or an I/O failure) remains as an empty directory.
+- Core cannot tell a file that an earlier Files.create wrote from any other file.
+  Its durable write intent stores a digest of the path, size and content, not a
+  path ledger, and a tool can remove and recreate a file afterwards; no cheap,
+  race-safe lookup exists. FW2 therefore uses the untracked-file message, a
+  message-only difference. A directory destination always uses the conflict
+  message; the official sample was a directory created as a parent by an earlier
+  write, and other directories are unsampled. Non-directory parent components and
+  non-regular destinations are unsampled and use the FW2 message.
+- The installer reports a fixed code, the daemon sends `write_rejected` with an
+  optional `reason`, and Core settles the durable intent as `rejected`. A rejected
+  write therefore leaves no committed receipt, releases the mutation owner,
+  changes no bytes and reads but does not consume a Source File.
+- The inline bound is checked after path validation and Base64 decoding, before
+  the F9 provisioning check, Source File lookup and execution. The JSON body limit
+  still admits Base64 for up to 50 MiB, so larger inline bodies up to that size get
+  the official message; beyond it the local 413 remains.
+- A Runtime image built before this batch keeps replacement and the existing-parent
+  requirement, with the generic local 400, until it is rebuilt. An older Core
+  ignores the new `reason` and keeps the generic 400. A new daemon with an older
+  helper is refused as invalid input, without mutation.
+- The TypeScript client and Core Web reject inline data above 5 MiB before sending.
+  The client's strict Base64 check now scans linearly, because the previous pattern
+  overflowed the regular-expression stack on inputs near 4 MiB and blocked an exact
+  5 MiB upload.
+
+Rust tests cover parent creation, existing files, directories, hard-link aliases,
+FIFOs, symlink leaves and parents, dangling and inside links, non-directory parents,
+races for the destination and a missing parent, a replaced held ancestor, the
+`linkat` fallback and the explicit mode selection. Daemon tests run the built helper
+through the local workspace writer, and dispatch and gateway tests cover the
+rejection reason. Go handler tests cover FW6 and the error mapping. A real-PostgreSQL
+HTTP and Worker test covers the conflict messages, settled `rejected` intents with no
+committed receipt, an unconsumed Source File, the inline bound before any intent,
+tenant B isolation and an admitted successor. The opt-in
+`official_environment_files_create.py` adds the nested, repeated, directory and
+5 MiB + 1 rows, with an exact 5 MiB inline case while source copies keep 50 MiB.
+Live acceptance, the server gate and independent review are recorded separately by
+the coordinator.

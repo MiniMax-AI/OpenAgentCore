@@ -1088,7 +1088,11 @@ qualify this layout. The read-only deployment needs neither writer setting.
 
 Transfer a complete bounded body in acknowledged 64 KiB frames before invoking
 the existing installer, verify the declared digest, and run no model for upload.
-Keep the existing private 50 MiB bound distinct from upstream protocol limits.
+Keep the private 50 MiB transfer bound distinct from the official 5 MiB decoded
+inline bound, which the API checks before any Runtime work. Files.create uses the
+installer's explicit create mode: parents are created without following links and
+an existing path is never replaced. Initial Session files and Skills keep its
+replace mode; do not change one caller's mode for another.
 The dedicated Runtime excludes execution while receiving or applying a write;
 malformed, incomplete or expired transfers cannot reach the installer. Exact
 commit/rejection receipts release the mutation owner. Missing or ambiguous

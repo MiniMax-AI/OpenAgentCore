@@ -394,7 +394,8 @@ the following existing Linux Runtime packaging requirements through Provider
 - `/workspace` is the public workspace. `/environment/workspace` names the same
   storage for trusted initialization; `/environment/staging` is private staging.
 - `/usr/bin/python3 -I -S` runs the trusted, fd-anchored initial-file installer.
-  It invokes the existing `/usr/local/bin/agents-api-codex-write` atomic writer.
+  It invokes the existing `/usr/local/bin/agents-api-codex-write` atomic writer in
+  its four-argument replace mode; only public Files.create uses the create mode.
   That executable is a shared filesystem helper packaged for every harness; its
   historical name does not select Codex or invoke native Codex tools.
 - Confidential content travels on bounded stdin. Successful initialization needs

@@ -52,6 +52,9 @@ credential values belong in the repository or task board.
   The error mapping above must not be extrapolated to every status or resource.
 - Template references with inline installation overrides, optional Skill version
   semantics and the other active board entries remain outstanding.
+- Files.create cannot tell a file written by an earlier Files.create from any other
+  existing file, so both report the untracked-file message; see the
+  [write semantics](environment-files.md#write-semantics--september-23-2026).
 - Native model defaults, tool combinations and unavailable usage counters retain
   their documented multi-harness differences. Core does not reconstruct model
   output, guess counters or introduce a second tool loop to manufacture equality.

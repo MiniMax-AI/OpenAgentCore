@@ -89,24 +89,43 @@ when their backing filesystem matches; the helper must reject that layout.
 It does not authorize callers or enable Files.create.
 
 Arguments are the authorized absolute root, a nonempty relative file path,
-its declared byte count (0–50 MiB), and an existing absolute staging directory.
-The staging directory must be outside the workspace, not its ancestor, and on
-the destination filesystem. Symlink traversal and cross-filesystem replacement
-are rejected; there is no copy fallback. The former three-argument private CLI
-is no longer accepted. Stream those bytes in bounded native stdin
+its declared byte count (0–50 MiB), and an existing absolute staging directory,
+optionally followed by the mode `create`. The staging directory must be outside
+the workspace, not its ancestor, and on the destination filesystem. Symlink
+traversal and cross-filesystem replacement are rejected; there is no copy
+fallback. The former three-argument private CLI is no longer accepted. Stream those bytes in bounded native stdin
 chunks, followed by their 32-byte binary SHA-256 digest. This is one private frame;
 there is no second request on that process. The digest terminates the private frame without waiting for EOF.
 Extra bytes after the frame are not consumed. A process/write accepted receipt
 means queued input, not committed file contents.
 
-The helper reuses held-directory no-follow traversal, rejects existing nonregular
-targets and requires an existing parent. It writes a fresh mode-0600 temporary
-file in the held staging directory with existing rustix openat/renameat operations,
-checks the declared byte count and digest, syncs the file, then replaces the
-destination directory entry and syncs both directories. Existing hard links retain
-their original inode and contents. This
-private replacement policy does not preserve destination mode/ownership metadata
-or establish official overwrite semantics. The operator must protect staging and
+Each caller selects its mode explicitly. The four-argument form is the replace
+mode of trusted initialization: Core's initial Session file installer and the
+Skill installer use it, and older Runtime images understand only this form.
+Only the daemon's public Files.create writer passes `create`.
+
+The helper reuses held-directory no-follow traversal. It writes a fresh mode-0600
+temporary file in the held staging directory, checks the declared byte count and
+digest and syncs the file. In replace mode it requires an existing parent,
+rejects existing nonregular targets, then replaces the destination directory
+entry with renameat and syncs both directories. Existing hard links retain their
+original inode and contents; destination mode/ownership metadata is not preserved.
+
+Create mode never replaces anything. Before reading input it walks the existing
+parent components without following links and checks the destination when the
+parent exists. After the body is verified it creates each missing parent with
+mkdirat (mode 0700, as the initial-file installer does) relative to the held
+parent, syncs that parent and reopens the new directory without following links.
+It then installs with renameat2(RENAME_NOREPLACE); where the filesystem lacks that
+flag, linkat installs the staging inode without replacement and the staging name
+is unlinked as best-effort cleanup. An existing symlink or non-directory component,
+or an existing destination that is not a directory, reports `unsafe_destination`;
+an existing directory reports `destination_directory`. A destination or link that
+appears concurrently is never replaced or followed and reports
+`unsafe_destination`. Parents created before such a late rejection or an I/O
+failure remain as empty directories.
+
+The operator must protect staging and
 its ancestors from native tools and background processes. A dedicated staging
 directory per Environment, with native tool write access limited to the workspace
 and separate installer access, is the qualified mechanism. Directory naming or
@@ -118,8 +137,9 @@ to protected staging, but later writers can change the installed file. No snapsh
 or exactly-once guarantee is implied.
 
 One version-1 JSON response reports `outcome: completed` with `size_bytes`,
-`failed` before replacement, or `unknown` if either directory sync fails after replacement.
-Errors contain only a fixed safe code. Require a complete response plus observed
+`failed` before installation, or `unknown` if either directory sync fails after installation.
+Errors contain only a fixed safe code: `invalid_input` or `write_failed`, and in
+create mode also `destination_directory` or `unsafe_destination`. Require a complete response plus observed
 native exit/output close; exit zero alone is insufficient. Input errors preserve
 the old destination provided staging remains protected; independent workspace
 writers can still change that destination themselves. Temporary-file cleanup
