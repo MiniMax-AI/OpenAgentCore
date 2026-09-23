@@ -22,7 +22,6 @@ interface TrendSeries {
   label: string;
   tone: "orange" | "green" | "blue" | "purple";
   points: TrendPoint[];
-  fill?: boolean;
 }
 
 interface TrendBand {
@@ -60,6 +59,51 @@ const toneColors: Record<TrendSeries["tone"], string> = {
 function withAlpha(hex: string, alpha: number): string {
   const value = Number.parseInt(hex.slice(1), 16);
   return `rgba(${value >> 16}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+}
+
+export function runtimeChartShowsSparsePoints(values: readonly (number | null | undefined)[]): boolean {
+  let valid = 0;
+  let previousValid = false;
+  let connected = false;
+  for (const value of values) {
+    const currentValid = value !== null && value !== undefined && Number.isFinite(value);
+    if (currentValid) {
+      valid += 1;
+      connected ||= previousValid;
+    }
+    previousValid = currentValid;
+  }
+  return valid > 0 && (valid <= 12 || !connected);
+}
+
+export function runtimeChartCaption({
+  title,
+  source,
+  hasLine,
+  allSeriesHidden,
+  validPoints,
+  sampleCount,
+  emptyMessage,
+  emptyDetail,
+}: {
+  title: string;
+  source: RuntimeTrendSource;
+  hasLine: boolean;
+  allSeriesHidden: boolean;
+  validPoints: number;
+  sampleCount: number;
+  emptyMessage: string;
+  emptyDetail?: string;
+}): string {
+  if (allSeriesHidden) return `${title} all series hidden; use the legend to show a series`;
+  if (hasLine) return `${title} ${source} trend available`;
+  if (validPoints > 0) {
+    return `${title} ${source} trend has ${validPoints} sparse valid point${validPoints === 1 ? "" : "s"}; a line requires consecutive buckets`;
+  }
+  if (source === "live") {
+    return `${title} collecting live samples; ${validPoints} of 2 valid points from ${sampleCount} snapshots`;
+  }
+  return `${title} ${emptyMessage}; ${emptyDetail ?? `${validPoints} valid points from ${sampleCount} retained buckets`}`;
 }
 
 function TrendChart({
@@ -107,6 +151,7 @@ function TrendChart({
   hiddenSeriesRef.current = hiddenSeries;
   const [viewRange, setViewRange] = useState<TimeWindow>(domain);
   const visibleSeries = series.filter((entry) => !hiddenSeries.has(entry.id));
+  const allSeriesHidden = series.length > 0 && visibleSeries.length === 0;
   const hasLine = visibleSeries.some((entry) => entry.points.some((point, index) => (
     point.value !== null && Number.isFinite(point.value)
       && index > 0
@@ -130,7 +175,7 @@ function TrendChart({
   dataRef.current = chartData;
   formatRef.current = formatValue;
   maximumRef.current = maximum;
-  const seriesKey = series.map((entry) => `${entry.id}:${entry.label}:${entry.tone}:${entry.fill ? 1 : 0}`).join("|");
+  const seriesKey = series.map((entry) => `${entry.id}:${entry.label}:${entry.tone}`).join("|");
   const bandsKey = bands.map((band) => `${band.from}:${band.to}:${band.tone}`).join("|");
   const ticksKey = ticks.join(":");
   const selectedTimestamp = tooltip === null ? null : chartData[0][tooltip.idx];
@@ -204,10 +249,16 @@ function TrendChart({
           label: entry.label,
           show: !hiddenSeriesRef.current.has(entry.id),
           stroke: toneColors[entry.tone],
-          fill: entry.fill ? withAlpha(toneColors[entry.tone], .13) : undefined,
           width: 2,
           spanGaps: false,
-          points: { show: false },
+          points: {
+            show: (plot, seriesIndex, first, last) => runtimeChartShowsSparsePoints(
+              Array.from(plot.data[seriesIndex] ?? []).slice(first, last + 1),
+            ),
+            size: 6,
+            width: 2,
+            fill: surfaceColor,
+          },
         })),
       ],
       hooks: {
@@ -394,14 +445,19 @@ function TrendChart({
             ))}
           </div>
         )}
-        {!hasLine ? <div className="dashboard-runtime-chart-collecting"><strong>{visibleSeries.length === 0 ? "All series hidden" : emptyMessage}</strong><span>{visibleSeries.length === 0 ? "Use the legend to show a series" : emptyDetail ?? `${validPoints}/2 valid points · ${samples.length} snapshots · no history is synthesized`}</span></div> : null}
+        {!hasLine ? <div className="dashboard-runtime-chart-collecting"><strong>{allSeriesHidden ? "All series hidden" : validPoints > 0 ? "Sparse samples" : emptyMessage}</strong><span>{allSeriesHidden ? "Use the legend to show a series" : validPoints > 0 ? `${validPoints} valid point${validPoints === 1 ? "" : "s"} · a line requires consecutive buckets` : emptyDetail ?? `${validPoints}/2 valid points · ${samples.length} snapshots · no history is synthesized`}</span></div> : null}
       </div>
       <table className="dashboard-runtime-trend-accessible">
-        <caption>{hasLine
-          ? `${title} ${source} trend available`
-          : source === "live"
-            ? `${title} collecting live samples; ${validPoints} of 2 valid points from ${samples.length} snapshots`
-            : `${title} ${emptyMessage}; ${emptyDetail ?? `${validPoints} valid points from ${samples.length} retained buckets`}`}</caption>
+        <caption>{runtimeChartCaption({
+          title,
+          source,
+          hasLine,
+          allSeriesHidden,
+          validPoints,
+          sampleCount: samples.length,
+          emptyMessage,
+          emptyDetail,
+        })}</caption>
         <thead><tr><th>Series</th><th>Latest value</th><th>Missing samples</th></tr></thead>
         <tbody>
           {series.map((entry) => {
@@ -468,7 +524,7 @@ export function RuntimeTrendCharts({
     return {
       cpu,
       memory: [
-        { id: "used", label: "used", tone: "purple", points: memoryUsed, fill: true },
+        { id: "used", label: "used", tone: "purple", points: memoryUsed },
         { id: "limit", label: "configured limit", tone: "green", points: memoryLimit },
       ] satisfies TrendSeries[],
       uptime,
