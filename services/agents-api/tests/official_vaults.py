@@ -6,6 +6,8 @@ import uuid
 import httpx2
 from openai import AuthenticationError, BadRequestError, NotFoundError
 
+import official_body
+
 
 def verify_vault(body, name, metadata):
     assert set(body) == {"id", "object", "created_at", "name", "metadata"}
@@ -79,8 +81,9 @@ def verify_vaults(client, other, invalid, peer, binding, expect_error):
             response = raw.post(base, headers=headers, json=request)
             assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_request_error"
             assert response.json()["error"]["param"] == param
-        for content in ("null", "[]", "{} {}"):
-            assert raw.post(base, headers=headers, content=content).status_code == 400
+        # The shared body gate rejects before any write (HP-09..HP-15).
+        official_body.check(raw, base, headers, official_body.rejected('{"name":"gate","metadata":{"k":"v"}}', "name", "name"))
+        official_body.check(raw, base, headers, [(official_body.JSON, b'{"metadata":{"k":"1","k":"2"}}', official_body.duplicate("k", "metadata.k"))])
 
         for resource_id in (str(uuid.uuid4()), "invalid-vault", str(uuid.UUID(int=0)), foreign.id):
             response = raw.get(base + "/" + resource_id, headers=headers)

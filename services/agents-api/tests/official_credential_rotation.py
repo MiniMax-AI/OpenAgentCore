@@ -1,9 +1,12 @@
 """Public token replacement without changing Credential or Session identity."""
 
+import json
 import uuid
 
 import httpx2
 from openai import AuthenticationError, BadRequestError, NotFoundError
+
+import official_body
 
 
 def verify_credential_rotation(client, other, invalid, peer, saved_vaults, saved_credentials, canary, expect_error):
@@ -73,8 +76,10 @@ def verify_credential_rotation(client, other, invalid, peer, saved_vaults, saved
         ]
         for body in invalid_bodies:
             safe(raw.post(endpoint, headers=headers, json=body), 400)
-        for body in ("null", "[]", "{} {}"):
-            safe(raw.post(endpoint, headers=headers, content=body), 400)
+        # The shared body gate rejects before any write (HP-09..HP-15); null is {}.
+        official_body.check(raw, endpoint, headers, official_body.rejected(
+            json.dumps({"auth": {"type": "static_bearer", "token": "gate"}}, separators=(",", ":")), "token", "auth.token"))
+        safe(raw.post(endpoint, headers={**headers, **official_body.JSON}, content="null"), 400)
         for override in ({"auth": None}, {"auth": {"type": "static_bearer", "token": None}}):
             error = expect_error(BadRequestError, lambda: credentials.update(
                 original.id, vault_id=vault.id, **replacement, extra_body=override))

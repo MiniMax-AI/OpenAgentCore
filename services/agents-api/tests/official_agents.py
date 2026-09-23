@@ -6,6 +6,8 @@ import uuid
 import httpx2
 from openai import AuthenticationError, BadRequestError, NotFoundError
 
+import official_body
+
 
 def verify_agents(client, other, invalid, expect_error):
     agents = client.beta.agents
@@ -139,11 +141,17 @@ def verify_agents(client, other, invalid, expect_error):
             assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_request_error"
             assert response.json()["error"]["param"] is None
         assert len(list(agents.list())) == count
-        for content in ("{}", "null", "[]", '{"model":"x"} {}'):
-            assert raw.post(base, headers=headers, content=content).status_code == 400
-        assert raw.post(base, headers=headers, content='{"model":"' + "x" * (1024 * 1024) + '"}').status_code == 413
+        # The shared body gate rejects before any write (HP-09..HP-15); a zero-length
+        # body or null is {} and reports the missing model (HP-13).
+        official_body.check(raw, base, headers, official_body.rejected('{"model":"resource-model","name":"gate"}', "name", "name"))
+        json_headers = {**headers, **official_body.JSON}
+        for content in ("", "{}", "null"):
+            response = raw.post(base, headers=json_headers, content=content)
+            assert response.status_code == 400 and response.json()["error"]["param"] == "model", response.text
+        assert raw.post(base, headers=json_headers, content='{"model":"' + "x" * (1024 * 1024) + '"}').status_code == 413
         # tenant_id is an ignored query key; it never selects another tenant.
-        assert raw.post(base, headers=headers, params={"tenant_id": "other"}, content="{}").status_code == 400
+        assert raw.post(base, headers=json_headers, params={"tenant_id": "other"}, content="{}").status_code == 400
+        assert len(list(agents.list())) == count
         plain = raw.get(base + "/" + saved[0].id, headers=headers)
         scoped = raw.get(base + "/" + saved[0].id, headers=headers, params={"tenant_id": "other"})
         assert plain.status_code == scoped.status_code == 200 and scoped.json() == plain.json()

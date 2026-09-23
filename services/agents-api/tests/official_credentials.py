@@ -1,10 +1,13 @@
 """Static-bearer Credential metadata through the pinned SDK and real HTTP."""
 
+import json
 import time
 import uuid
 
 import httpx2
 from openai import AuthenticationError, BadRequestError, InternalServerError, NotFoundError
+
+import official_body
 
 
 def verify_credential(body, vault_id, name, destination):
@@ -83,8 +86,10 @@ def verify_credentials(client, other, invalid, peer, saved_vaults, canary, expec
         for body in invalid_requests:
             response = raw.post(endpoint, headers=headers, json=body)
             assert safe_body(response, 400)["error"]["type"] == "invalid_request_error"
-        for body in ("null", "[]", "{} {}"):
-            safe_body(raw.post(endpoint, headers=headers, content=body), 400)
+        # The shared body gate rejects before any write (HP-09..HP-15); null is {}.
+        official_body.check(raw, endpoint, headers, official_body.rejected(
+            json.dumps({**request, "name": "gate"}, separators=(",", ":")), "name", "name"))
+        safe_body(raw.post(endpoint, headers={**headers, **official_body.JSON}, content="null"), 400)
         for override in ({"name": None}, {"auth": None}, {"auth": {**auth, "token": None}}):
             error = expect_error(BadRequestError, lambda: credentials.create(vault.id, **request, extra_body=override))
             safe_body(error.response, 400)

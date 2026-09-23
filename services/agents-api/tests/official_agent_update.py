@@ -7,6 +7,8 @@ import uuid
 import httpx2
 from openai import OpenAI
 
+import official_body
+
 
 def main():
     base, token, foreign, restarted = sys.argv[1:]
@@ -46,14 +48,27 @@ def main():
             k: v for k, v in updated.to_dict().items() if k != "updated_at"}
         assert sessions.retrieve(old.id) == old
         updated = touched
-        for body in (None, [], {"model": None}, {"model": 3}, {"name": "x" * 129},
+        for body in ([], {"model": None}, {"model": 3}, {"name": "x" * 129},
                      {"metadata": {"bad": None}}, {"text": {"unexpected": True}},
                      {"metadata": {"replace": "no"}, "instructions": False},
                      {"updated_at": 1}, {"tools": [{"type": "unknown"}]}):
-            response = http.post(endpoint, headers=headers, content="null" if body is None else None,
-                                 json=body if body is not None else None)
+            response = http.post(endpoint, headers=headers, json=body)
             assert response.status_code == 400, (body, response.status_code, response.text)
             assert agents.retrieve(original.id) == updated
+        # The shared body gate rejects before the lookup and any write (HP-09..HP-15),
+        # including a valid update sent without the JSON Content-Type.
+        for target, auth in ((original.id, headers), (original.id, headers | {"Authorization": "Bearer " + foreign})):
+            official_body.check(http, base + "/v1/agents/" + target, auth, official_body.rejected('{"name":"gate","metadata":{"k":"gate"}}', "name", "name")
+                                + official_body.rejected('{"name":"gate","metadata":{"k":"gate"}}', "k", "metadata.k"))
+        assert agents.retrieve(original.id) == updated
+        # A zero-length body or null is the documented empty update (HP-13).
+        for content in ("", "null"):
+            response = http.post(endpoint, headers=headers | official_body.JSON, content=content)
+            assert response.status_code == 200, response.text
+            touched = agents.retrieve(original.id)
+            assert {k: v for k, v in touched.to_dict().items() if k != "updated_at"} == {
+                k: v for k, v in updated.to_dict().items() if k != "updated_at"}
+        updated = touched
         # Configuration protocol errors (TV-01..03) use the official fields and precede
         # the Agent lookup, so owned, foreign and missing Agents get the same response.
         for body, param, message in [

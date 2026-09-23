@@ -6,6 +6,8 @@ import uuid
 import httpx2
 from openai import AuthenticationError, BadRequestError, ConflictError, NotFoundError
 
+import official_body
+
 
 def without_metadata(session):
     return {key: value for key, value in session.to_dict().items() if key != "metadata"}
@@ -76,11 +78,16 @@ def verify_session_metadata(client, other, invalid, spec, expect_error):
             error = expect_error(BadRequestError, lambda: sessions.update(first.id, metadata=metadata))
             assert error.body["param"] == param
             assert sessions.retrieve(first.id) == current
-        for body in ["", "null", "[]", "1", "{}{}", '{"metadata":']:
-            response = raw.post(url, headers=headers, content=body)
-            assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_request"
+        # The shared body gate (HP-09..HP-15); a zero-length body or null is an
+        # empty update, which still requires metadata (HP-13).
+        official_body.check(raw, url, headers, official_body.rejected('{"metadata":{"k":"gate"}}', "k", "metadata.k"))
+        json_headers = {**headers, **official_body.JSON}
+        for body in ["", "null"]:
+            response = raw.post(url, headers=json_headers, content=body)
+            assert response.status_code == 400 and response.json()["error"]["message"] == "At least one update field is required"
+        assert sessions.retrieve(first.id) == current
         oversized = json.dumps({"metadata": {"key": "x" * (1024 * 1024)}})
-        response = raw.post(url, headers=headers, content=oversized)
+        response = raw.post(url, headers=json_headers, content=oversized)
         assert response.status_code == 413 and response.json()["error"]["code"] == "request_too_large"
         assert raw.patch(url, headers=headers, json={"metadata": {}}).status_code == 405
         empty = raw.post(url, headers=headers, json={})
