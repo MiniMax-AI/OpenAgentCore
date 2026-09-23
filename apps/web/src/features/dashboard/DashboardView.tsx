@@ -384,7 +384,7 @@ export function DashboardView({
           <header>
             <div>
               <h2 id="dashboard-runtime-heading">Runtime monitoring</h2>
-              <p>Current provider samples · browser-local Live · ClickHouse History when configured</p>
+              <p>Current provider status · ClickHouse-backed metrics history when configured</p>
             </div>
             {runtimeModel ? (
               <span className="dashboard-runtime-freshness">

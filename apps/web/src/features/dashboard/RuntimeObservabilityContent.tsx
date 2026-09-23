@@ -40,7 +40,6 @@ import { RuntimeTrendCharts } from "./RuntimeTrendCharts";
 import type { RuntimeTrendSource } from "./RuntimeTrendCharts";
 import {
   RUNTIME_DURABLE_RANGES,
-  runtimeTrendSourceAfterHistoryUnavailable,
   type RuntimeDurableRange,
   type RuntimeDurableSnapshot,
 } from "./runtime-history";
@@ -312,7 +311,6 @@ export function RuntimeObservabilityContent({
   const [trendSamples, setTrendSamples] = useState<RuntimeTrendSample[]>(() => appendRuntimeTrendSample([], snapshot));
   const [selectedTrendRange, setSelectedTrendRange] = useState<RuntimeTrendRange>(RUNTIME_TREND_WINDOW_MS);
   const [selectedDurableRange, setSelectedDurableRange] = useState<RuntimeDurableRange>(RUNTIME_DURABLE_RANGES[0].milliseconds);
-  const [sourceSelection, setSourceSelection] = useState<"auto" | RuntimeTrendSource>("auto");
   const [durableSnapshot, setDurableSnapshot] = useState<RuntimeDurableSnapshot | null>(null);
   const [durableState, setDurableState] = useState<"connecting" | "ready" | "unavailable" | "failed">("connecting");
   const [durableError, setDurableError] = useState<string | null>(null);
@@ -320,11 +318,11 @@ export function RuntimeObservabilityContent({
     () => runtimeTrendRange(trendSamples, selectedTrendRange),
     [selectedTrendRange, trendSamples],
   );
-  const source: RuntimeTrendSource = sourceSelection === "auto"
-    ? durableSnapshot === null ? "live" : "durable"
-    : sourceSelection;
-  const selectedSamples = source === "durable" && durableSnapshot !== null
-    ? durableSnapshot.samples
+  const source: RuntimeTrendSource = durableState === "unavailable" && durableSnapshot === null
+    ? "live"
+    : "durable";
+  const selectedSamples = source === "durable"
+    ? durableSnapshot?.samples ?? []
     : visibleTrendSamples;
   const latestTrendSample = selectedSamples.at(-1);
   const selectedRange = source === "durable" ? selectedDurableRange : selectedTrendRange;
@@ -348,7 +346,6 @@ export function RuntimeObservabilityContent({
       if (result === null) {
         setDurableSnapshot(null);
         setDurableState("unavailable");
-        setSourceSelection(runtimeTrendSourceAfterHistoryUnavailable);
         return;
       }
       setDurableSnapshot(result);
@@ -389,19 +386,8 @@ export function RuntimeObservabilityContent({
             <p>{source === "durable" ? "ClickHouse-backed retained samples · explicit history source" : "Browser-local samples · reset on reload"}</p>
           </div>
           <div className="dashboard-runtime-live-controls">
-            <div className="dashboard-runtime-source" role="group" aria-label="Runtime trend source">
-              <button type="button" aria-pressed={source === "live"} onClick={() => setSourceSelection("live")}>Live</button>
-              <button
-                type="button"
-                aria-pressed={source === "durable"}
-                disabled={durableSnapshot === null}
-                onClick={() => setSourceSelection("durable")}
-              >
-                History
-              </button>
-            </div>
             <span
-              className={sourceStatusStale ? "dashboard-runtime-live-status dashboard-runtime-live-status-stale" : "dashboard-runtime-live-status"}
+              className={`${sourceStatusStale ? "dashboard-runtime-live-status dashboard-runtime-live-status-stale" : "dashboard-runtime-live-status"}${source === "durable" ? " dashboard-runtime-live-status-durable" : ""}`}
               aria-label={source === "durable"
                 ? `${sourceStatus}; ${durableSnapshot?.targetCount ?? 0} Runtime targets`
                 : stale

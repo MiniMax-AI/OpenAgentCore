@@ -29,28 +29,29 @@ function core(
 
 describe("Runtime Dashboard snapshot coordination", () => {
   it("publishes only exact Session and observation identity sets", async () => {
-    const value = await loadRuntimeDashboardSnapshot(core([session], [observation]), () => 4);
+    const value = await loadRuntimeDashboardSnapshot(core([session], [observation]));
     expect(value?.sessions).toEqual([session]);
     expect(value?.observations).toEqual([observation]);
 
-    await expect(loadRuntimeDashboardSnapshot(core([session], []), () => 4)).rejects.toBeInstanceOf(
+    await expect(loadRuntimeDashboardSnapshot(core([session], []))).rejects.toBeInstanceOf(
       RuntimeSnapshotIncompleteError,
     );
   });
 
-  it("discards a candidate when local Session state changes during collection", async () => {
-    let revision = 1;
+  it("does not discard a coherent API snapshot when unrelated local Session detail changes", async () => {
     const changing = core([session], [observation]);
     changing.listRuntimeObservations = async () => {
-      revision += 1;
       return { object: "list", data: [observation], has_more: false, first_id: session.id, last_id: session.id };
     };
 
-    await expect(loadRuntimeDashboardSnapshot(changing, () => revision)).resolves.toBeNull();
+    await expect(loadRuntimeDashboardSnapshot(changing)).resolves.toMatchObject({
+      sessions: [session],
+      observations: [observation],
+    });
   });
 
   it("fails closed when the target budget is exceeded", async () => {
-    await expect(loadRuntimeDashboardSnapshot(core([session], [observation]), () => 1, undefined, 0)).rejects.toThrow(
+    await expect(loadRuntimeDashboardSnapshot(core([session], [observation]), undefined, 0)).rejects.toThrow(
       "target budget",
     );
   });

@@ -319,6 +319,7 @@ export function App() {
   const sessionCollectionAbortRef = useRef<AbortController | null>(null);
   const runtimeCollectionAbortRef = useRef<AbortController | null>(null);
   const runtimeCollectionRequestRef = useRef(0);
+  const runtimeCollectionHasSnapshotRef = useRef(false);
   const filteredSessionCollectionAbortRef = useRef<AbortController | null>(null);
   const filteredSessionCollectionRequestRef = useRef(0);
   const sessionAgentFilterRef = useRef<string | null>(sessionAgentFilter);
@@ -541,12 +542,11 @@ export function App() {
       timedOut = true;
       controller.abort();
     }, RUNTIME_SNAPSHOT_TIMEOUT_MS);
-    setRuntimeCollectionState("connecting");
+    if (!runtimeCollectionHasSnapshotRef.current) setRuntimeCollectionState("connecting");
     setRuntimeCollectionError(null);
     try {
       const result = await settleCollection(() => loadRuntimeDashboardSnapshot(
         core,
-        () => sessionCollectionRevisionRef.current,
         controller.signal,
       ));
       if (
@@ -568,6 +568,7 @@ export function App() {
         return false;
       }
       setRuntimeSnapshot(result.value);
+      runtimeCollectionHasSnapshotRef.current = true;
       setRuntimeCollectionHasSnapshot(true);
       setRuntimeCollectionState("ready");
       return true;
@@ -913,10 +914,11 @@ export function App() {
 
   const refreshDashboard = useCallback(() => {
     void refreshAgents();
-    void refreshSessions();
     void refreshVaults();
     void refreshEnvironmentTemplates();
-    void refreshRuntimeSnapshot();
+    void (async () => {
+      if (await refreshSessions()) await refreshRuntimeSnapshot();
+    })();
     const filter = sessionAgentFilterRef.current;
     if (filter) void refreshFilteredSessions(filter);
   }, [refreshAgents, refreshEnvironmentTemplates, refreshFilteredSessions, refreshRuntimeSnapshot, refreshSessions, refreshVaults]);
@@ -963,6 +965,7 @@ export function App() {
     setAgentCollectionHasSnapshot(false);
     setSessionCollectionHasSnapshot(false);
     setRuntimeSnapshot(null);
+    runtimeCollectionHasSnapshotRef.current = false;
     setRuntimeCollectionState("connecting");
     setRuntimeCollectionError(null);
     setRuntimeCollectionHasSnapshot(false);
@@ -985,7 +988,9 @@ export function App() {
   useEffect(() => {
     if (view !== "dashboard") return;
     let timer: number | null = null;
-    void refreshRuntimeSnapshot();
+    void (async () => {
+      if (sessionCollectionState === "ready") await refreshRuntimeSnapshot();
+    })();
     const schedule = () => {
       const jitter = Math.floor(Math.random() * 5_000);
       timer = window.setTimeout(() => {
@@ -1002,7 +1007,7 @@ export function App() {
       if (timer !== null) window.clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [refreshRuntimeSnapshot, view]);
+  }, [refreshRuntimeSnapshot, sessionCollectionState, view]);
 
   useEffect(() => {
     filteredSessionCollectionAbortRef.current?.abort();
@@ -2085,6 +2090,7 @@ export function App() {
     setSessionCollectionError(null);
     setSessionCollectionHasSnapshot(false);
     setRuntimeSnapshot(null);
+    runtimeCollectionHasSnapshotRef.current = false;
     setRuntimeCollectionState("connecting");
     setRuntimeCollectionError(null);
     setRuntimeCollectionHasSnapshot(false);

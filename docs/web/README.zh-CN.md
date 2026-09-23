@@ -27,12 +27,13 @@ Core 部署提供完整的产品界面，同时让凭据和执行能力始终留
 
 ### Dashboard
 
-Dashboard 是默认首页，集中展示当前 Agent 和 Session 结果，加载完整的租户级 Runtime
-观测快照，并保留有界的浏览器本地 live window，展示 CPU、内存、compute uptime 和
-token throughput 趋势，不会把缺失值伪装成 0。支持搜索、状态/模式筛选、排序、分页的
-语义表格按需展开；页面也展示需要关注的 Session，并可直接进入创建 Agent 或启动
-Session 的流程。live window 从打开 Dashboard 后开始采集，可选择 15 分钟或 1 小时
-视图，但不是跨浏览器持久历史；持久保留仍需运维方配置独立 history 能力。若 provider
+Dashboard 是默认首页，集中展示当前 Agent 和 Session 结果，并加载完整的租户级 Runtime
+观测快照，不会把缺失值伪装成 0。支持搜索、状态/模式筛选、排序、分页的语义表格按需
+展开；页面也展示需要关注的 Session，并可直接进入创建 Agent 或启动 Session 的流程。
+运维方配置周期采样和 ClickHouse Reader 后，页面优先使用可跨刷新的 1 小时、6 小时和
+24 小时持久 History，不会先发布一个新的浏览器本地窗口再切换数据源。Web 只通过 Core
+读取，不接收 ClickHouse 凭据，也不会直接连接 ClickHouse。未配置 History 的部署仍回退
+到有界的浏览器本地 live window。若 provider
 只报告累计 CPU 时间，Web 仅在
 相邻样本属于同一已验证 Runtime incarnation 时计算区间利用率；重启或计数回退会形成
 数据缺口，不会制造峰值。

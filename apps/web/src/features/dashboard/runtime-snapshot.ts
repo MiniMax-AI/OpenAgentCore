@@ -35,18 +35,15 @@ function setsEqual(left: ReadonlySet<string>, right: ReadonlySet<string>): boole
 
 export async function loadRuntimeDashboardSnapshot(
   core: Pick<AgentCore, "listSessions" | "listRuntimeObservations">,
-  readSessionRevision: () => number,
   signal?: AbortSignal,
   targetLimit = RUNTIME_SNAPSHOT_TARGET_LIMIT,
 ): Promise<RuntimeDashboardSnapshot | null> {
-  const revision = readSessionRevision();
   const [sessions, observations] = await Promise.all([
     listAllCollectionPages((options) => core.listSessions(options), signal),
     listAllCollectionPages((options) => core.listRuntimeObservations(options), signal),
   ]);
   signal?.throwIfAborted();
 
-  if (revision !== readSessionRevision()) return null;
   if (sessions.length > targetLimit || observations.length > targetLimit) {
     throw new RuntimeSnapshotIncompleteError("Runtime snapshot exceeded the Web target budget.");
   }

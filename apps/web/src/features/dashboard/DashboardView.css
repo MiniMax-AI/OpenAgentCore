@@ -1045,6 +1045,10 @@
   animation: none;
 }
 
+.dashboard-runtime-live-status-durable i {
+  animation: none;
+}
+
 @keyframes dashboard-runtime-live-pulse {
   0%, 55% { box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 13%, transparent); }
   80%, 100% { box-shadow: 0 0 0 7px transparent; }

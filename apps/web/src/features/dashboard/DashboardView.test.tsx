@@ -246,24 +246,20 @@ describe("Dashboard loaded-result presentation", () => {
     expect(html).toContain("Cumulative CPU / capacity");
     expect(html).toContain("1m 13s / 2 cores");
     expect(html).toContain("512 MiB / 2.00 GiB");
-    expect(html).toContain('aria-label="Runtime live-window charts"');
+    expect(html).toContain('aria-label="Runtime durable-history charts"');
     expect(html).toContain("Resource trends");
-    expect(html).toContain("Browser-local samples · reset on reload");
-    expect(html).toContain('aria-label="Runtime trend source"');
-    expect(html).toContain('aria-pressed="true">Live</button>');
-    expect(html).toContain('aria-pressed="false" disabled="">History</button>');
-    expect(html).toContain("Live · 30s");
-    expect(html).toContain("1 sample");
-    expect(html).toContain('aria-label="Runtime live range"');
+    expect(html).toContain("ClickHouse-backed retained samples · explicit history source");
+    expect(html).not.toContain('aria-label="Runtime trend source"');
+    expect(html).toContain("History · loading");
+    expect(html).toContain("0 buckets");
+    expect(html).toContain('aria-label="Runtime durable range"');
     expect(html).toContain('aria-pressed="true">1h</button>');
     expect(html).toContain("CPU usage");
     expect(html).toContain("Memory usage");
     expect(html).toContain("Compute uptime");
     expect(html).toContain("Token throughput");
-    expect(html).toContain("150%");
-    expect(html).toContain("Collecting live samples");
-    expect(html).toContain("1/2 valid points · 1 snapshots · no history is synthesized");
-    expect(html).toContain("CPU usage collecting live samples; 1 of 2 valid points from 1 snapshots");
+    expect(html).toContain("No retained CPU samples");
+    expect(html).toContain("0/2 valid points · 0 snapshots · no history is synthesized");
     expect(html).toContain("Latest value");
     expect(html).toContain("Missing samples");
     expect(html).toContain("Runtime targets");
@@ -363,8 +359,8 @@ describe("Dashboard loaded-result presentation", () => {
       runtimeCollectionHasSnapshot: true,
     });
 
-    expect(html).toContain("Stale · retrying");
-    expect(html).toContain("Runtime sampling refresh failed; showing retained samples");
+    expect(html).toContain("Runtime: Runtime refresh failed");
+    expect(html).toContain("History · loading");
     expect(html).not.toContain("Live · 30s");
   });
 

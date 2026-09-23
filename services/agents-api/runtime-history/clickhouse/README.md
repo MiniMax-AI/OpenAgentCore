@@ -8,7 +8,9 @@ or lifecycle decisions.
 ## Security and ownership
 
 - The Collector writer may insert into the generic `metrics_gauge` and
-  `metrics_sum` tables.
+  `metrics_sum` tables. ClickHouse executes materialized-view queries under the
+  inserting identity, so that writer also needs `SELECT` on only the three
+  source columns consumed by each reference view.
 - The Agents API reader should receive `SELECT` on
   `runtime_history_metrics` only. It does not need access to generic telemetry,
   schema mutation, or another tenant selector.
@@ -32,6 +34,18 @@ or lifecycle decisions.
    The materialized views retain only the five values needed by the history API;
    provider receipts, native container identities, paths, and raw errors never
    enter the projection.
+   Grant the Collector identity the minimum source-column reads required when
+   those views run:
+
+   ```sql
+   GRANT SELECT(Attributes, MetricName, Value)
+   ON runtime_history.metrics_gauge TO agents_runtime_writer;
+   GRANT SELECT(Attributes, MetricName, Value)
+   ON runtime_history.metrics_sum TO agents_runtime_writer;
+   ```
+
+   Keep the existing `INSERT` grants on both generic tables. No broader table
+   read or projection read is required by the writer.
 3. Create a read-only ClickHouse account for Core:
 
    ```sql

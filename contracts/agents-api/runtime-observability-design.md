@@ -454,8 +454,9 @@ seams separate:
 3. A feature-local state model retains `last_complete`, current refresh status,
    local filters, and the selected time range. It aborts an overlapping refresh
    and marks old data stale after a failed or incomplete refresh.
-4. Presentational components render summary metrics, a browser-local live window,
-   the Runtime table, and an identity detail surface. The live window contains only
+4. Presentational components render summary metrics, the Runtime table, an identity
+   detail surface, and capability-selected trends. A qualified periodic Reader is
+   the primary trend source. Without one, the fallback live window contains only
    complete snapshots collected while this Dashboard instance is mounted; it is
    bounded, ephemeral, and never presented as durable operator history.
 
