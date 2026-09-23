@@ -190,8 +190,9 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	var request decodedSessionRequest
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	// A case variant of a member, such as Metadata, is an unknown member.
-	if caseVariantMember(raw, reflect.TypeOf(request)) || decoder.Decode(&request) != nil {
+	// An unknown member, including a case variant such as Metadata, is rejected
+	// before decoding; see inexactMember.
+	if inexactMember(raw, reflect.TypeOf(request)) || decoder.Decode(&request) != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "Request must be a JSON object containing supported fields.")
 		return
 	}

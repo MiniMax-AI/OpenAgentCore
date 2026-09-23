@@ -45,8 +45,9 @@ func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	// A case variant of events is an unknown member; events decode exactly too.
-	if caseVariantMember(raw, reflect.TypeOf(request)) || decoder.Decode(&request) != nil {
+	// An unknown member, including a case variant of events, is rejected before
+	// decoding; see inexactMember.
+	if inexactMember(raw, reflect.TypeOf(request)) || decoder.Decode(&request) != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid Session input event request.")
 		return
 	}

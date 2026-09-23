@@ -1,16 +1,19 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 )
 
-func TestCaseVariantMember(t *testing.T) {
+func TestInexactMember(t *testing.T) {
 	type inner struct {
 		Name string `json:"name"`
 	}
@@ -29,19 +32,23 @@ func TestCaseVariantMember(t *testing.T) {
 	}
 	typ := reflect.TypeFor[outer]()
 	for body, want := range map[string]bool{
-		`{"shared":"a","hidden":{"Name":1},"items":[{"name":"a"}],"named":{"K":{"name":"b"}},"Plain":"c","nested":{"name":"d"},"unknown":1}`: false,
+		`{"shared":"a","hidden":{"Name":1},"items":[{"name":"a"}],"named":{"K":{"name":"b"}},"Plain":"c","nested":{"name":"d"}}`: false,
+		` { "shared" : "a" , "items" : [ { "name" : "a\"}" } , null ] , "named" : { } } `:                                        false,
+		`{"sh\u0061red":"escaped exact name"}`:  false,
+		`{"unknown":1}`:                         true,
+		`{"items":[{"name":"a","other":1}]}`:    true,
 		`{"Shared":"a"}`:                        true,
 		`{"HIDDEN":{}}`:                         true,
 		`{"items":[{"name":"a"},{"NAME":"b"}]}`: true,
 		`{"named":{"k":{"Name":"b"}}}`:          true,
 		`{"nested":{"nAme":"d"}}`:               true,
 		`{"plain":"c"}`:                         true,
-		`{"Skipped":"x"}`:                       false,
+		`{"Skipped":"x"}`:                       true,
 		`{"sHaReD":1,"shared":2}`:               true,
 		`{"items":"not an array","named":null}`: false,
 		`{"ſhared":"long s folds to s"}`:        true,
 	} {
-		if got := caseVariantMember([]byte(body), typ); got != want {
+		if got := inexactMember([]byte(body), typ); got != want {
 			t.Errorf("%s: got %t, want %t", body, got, want)
 		}
 	}
@@ -64,11 +71,11 @@ func TestCaseVariantMembersAreUnknown(t *testing.T) {
 			t.Errorf("%s: %d %s", body, w.Code, w.Body)
 		}
 	}
-	// Nested members keep their existing unknown-member errors.
+	// A nested case variant that encoding/json alone would accept as the field;
+	// without the check this creates a Session.
 	for _, body := range []string{
-		session + `,"x_agents_core":{"Model_Provider":null}}`,
-		`{"agent":{"model":"m"},"environment":{"type":"none","Type":"self_hosted"},"input":"hi"}`,
 		`{"agent":{"model":"m"},"environment":{"type":"none"},"input":[{"role":"assistant","Role":"user","content":[{"type":"input_text","text":"hi"}]}]}`,
+		`{"agent":{"model":"m"},"environment":{"type":"none"},"input":[{"role":"user","content":[{"type":"input_text","text":"hi"}],"TYPE":"message"}]}`,
 	} {
 		if w := bodyGateRequest(h, "/v1/agents/sessions", "application/json", []byte(body)); w.Code != http.StatusBadRequest {
 			t.Errorf("%s: %d %s", body, w.Code, w.Body)
@@ -109,5 +116,44 @@ func TestCredentialCaseVariantsAreUnknown(t *testing.T) {
 	}
 	if w := credentialRequest(h, http.MethodPost, path, auth+`}}}`); w.Code != http.StatusCreated || f.calls != 1 {
 		t.Fatalf("exact names: %d %s", w.Code, w.Body)
+	}
+}
+
+// A route rejects a body of unknown keys at the first one, before decoding:
+// reading the body, the gate and the member check allocate a small multiple of
+// the body in total. Before this batch, Session create allocated about 30 times
+// such a body, decoding every member and formatting an error for each key.
+func TestUnknownMembersRejectWithLinearAllocation(t *testing.T) {
+	h, s := validationHandler(t)
+	unknownKeys := func(prefix string, size int) []byte {
+		var body bytes.Buffer
+		body.WriteString(prefix)
+		for i := 0; body.Len() < size; i++ {
+			fmt.Fprintf(&body, `"k%07d":0,`, i)
+		}
+		body.WriteString(`"z":0}`)
+		return body.Bytes()
+	}
+	for _, tc := range []struct {
+		path, message string
+		body          []byte
+	}{
+		{"/v1/agents/sessions", "Request must be a JSON object containing supported fields.", unknownKeys(`{"agent":{"model":"m"},"environment":{"type":"none"},"input":"hi","metadata":{"k":"v"},`, 16<<20-64)},
+		{"/v1/agents/sessions/" + uuid.NewString() + "/events", "Invalid Session input event request.", unknownKeys(`{"events":[],`, 1<<20-64)},
+	} {
+		runtime.GC()
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		w := bodyGateRequest(h, tc.path, "application/json", tc.body)
+		runtime.ReadMemStats(&after)
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), tc.message) {
+			t.Fatalf("%s: %d %s", tc.path, w.Code, w.Body)
+		}
+		if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 8*uint64(len(tc.body)) {
+			t.Errorf("%s allocated %d MiB for a %d MiB body", tc.path, allocated>>20, len(tc.body)>>20)
+		}
+	}
+	if s.writes != 0 {
+		t.Fatal("rejected body reached storage")
 	}
 }

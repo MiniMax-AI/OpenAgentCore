@@ -72,11 +72,7 @@ func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 // can reject it. Other body and metadata shapes keep their existing errors.
 // The shared body gate has already rejected repeated keys.
 func metadataTypeError(body []byte) error {
-	var fields map[string]json.RawMessage
-	if json.Unmarshal(body, &fields) != nil {
-		return nil
-	}
-	decoder := json.NewDecoder(bytes.NewReader(fields["metadata"]))
+	decoder := json.NewDecoder(bytes.NewReader(objectMember(body, "metadata")))
 	if token, err := decoder.Token(); err != nil || token != json.Delim('{') {
 		return nil
 	}

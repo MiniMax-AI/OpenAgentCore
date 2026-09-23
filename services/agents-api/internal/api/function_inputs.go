@@ -63,8 +63,9 @@ func decodeInputObject(raw json.RawMessage, value any, allowed ...string) error 
 			return store.ErrInvalidInput
 		}
 	}
-	// Nested members match exactly too; see caseVariantMember.
-	if caseVariantMember(raw, reflect.TypeOf(value)) {
+	// Nested members match exactly too; see inexactMember. The raw value is
+	// valid JSON here, as Unmarshal accepted it.
+	if inexactMember(raw, reflect.TypeOf(value)) {
 		return store.ErrInvalidInput
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
