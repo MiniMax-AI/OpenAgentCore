@@ -1484,6 +1484,29 @@ html[data-theme="dark"] .brand-mark-dark {
   display: none;
 }
 
+.session-metrics-panel {
+  overflow: auto;
+  background: color-mix(in srgb, var(--surface-subtle) 68%, var(--surface));
+}
+
+.session-metrics-panel .dashboard-runtime-live {
+  width: 100%;
+  min-height: 100%;
+  border-bottom: 0;
+}
+
+.session-metrics-loading {
+  display: grid;
+  padding: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.session-metrics-loading > * {
+  min-height: 220px;
+  border-radius: 9px;
+}
+
 .trace-workbench {
   display: flex;
   min-width: 0;

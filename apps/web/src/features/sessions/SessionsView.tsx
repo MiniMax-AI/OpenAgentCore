@@ -11,7 +11,7 @@ import {
   RefreshCw,
   Square,
 } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 
 import type {
   AgentCore,
@@ -34,6 +34,8 @@ import { StatusIcon, type StatusKind } from "../../components/StatusIcon";
 import type { CoreConnectionState } from "../../lib/connection";
 import { useThreadScroll } from "../../lib/use-thread-scroll";
 import type { VaultCatalog } from "../vaults/vault-catalog";
+import type { RuntimeDashboardSnapshot } from "../dashboard/runtime-snapshot";
+import { RuntimeTrendPanel, type RuntimeHistoryLoader } from "../dashboard/RuntimeTrendPanel";
 import {
   SessionStartDialog,
   type SessionStartInput,
@@ -59,7 +61,7 @@ import { SessionActionsDialog } from "./actions/SessionActionsDialog";
 
 export type StreamState = "idle" | "connecting" | "listening" | "recovering" | "failed";
 export type SessionDetailState = "idle" | "loading" | "ready" | "failed";
-type SessionView = "conversation" | "trace";
+type SessionView = "conversation" | "trace" | "metrics";
 
 export interface SessionCreateRequest {
   agentId: string | null;
@@ -83,6 +85,10 @@ interface SessionsViewProps {
   turnError?: string | null;
   turnState?: TurnTimelineLoadState;
   environmentObservation?: EnvironmentObservation | null;
+  runtimeSnapshot?: RuntimeDashboardSnapshot | null;
+  runtimeError?: string | null;
+  runtimeStale?: boolean;
+  loadRuntimeHistory?: RuntimeHistoryLoader;
   sendError?: FailedPendingSend | null;
   streamError: string | null;
   streamState: StreamState;
@@ -282,6 +288,10 @@ export function SessionsView({
   turnError = null,
   turnState = "idle",
   environmentObservation = null,
+  runtimeSnapshot = null,
+  runtimeError = null,
+  runtimeStale = false,
+  loadRuntimeHistory,
   sendError = null,
   streamError,
   streamState,
@@ -406,6 +416,13 @@ export function SessionsView({
     environmentPresentation?.visible &&
     (environmentPresentation.status === "failed" || environmentPresentation.status === "expired"),
   );
+  const sessionRuntimeSnapshot = useMemo((): RuntimeDashboardSnapshot | null => {
+    if (!selected || !runtimeSnapshot) return null;
+    const runtimeSession = runtimeSnapshot.sessions.find((session) => session.id === selected.id);
+    const observation = runtimeSnapshot.observations.find((candidate) => candidate.session_id === selected.id);
+    if (!runtimeSession || !observation) return null;
+    return { sessions: [runtimeSession], observations: [observation], loadedAt: runtimeSnapshot.loadedAt };
+  }, [runtimeSnapshot, selected]);
 
   const send = async (event?: FormEvent) => {
     event?.preventDefault();
@@ -688,6 +705,18 @@ export function SessionsView({
             >
               Trace
             </button>
+            <button
+              id="session-metrics-tab"
+              type="button"
+              role="tab"
+              aria-controls="session-metrics-panel"
+              aria-selected={sessionView === "metrics"}
+              tabIndex={sessionView === "metrics" ? 0 : -1}
+              onClick={() => setSessionView("metrics")}
+              onKeyDown={onViewTabKeyDown}
+            >
+              Metrics
+            </button>
           </div>
 
           <div
@@ -877,6 +906,46 @@ export function SessionsView({
               id="session-trace-panel"
               role="tabpanel"
               aria-labelledby="session-trace-tab"
+              hidden
+            />
+          )}
+          {sessionView === "metrics" ? (
+            <div
+              className="session-view-panel session-metrics-panel"
+              id="session-metrics-panel"
+              role="tabpanel"
+              aria-labelledby="session-metrics-tab"
+            >
+              {sessionRuntimeSnapshot && loadRuntimeHistory ? (
+                <RuntimeTrendPanel
+                  key={selected.id}
+                  snapshot={sessionRuntimeSnapshot}
+                  stale={runtimeStale ?? false}
+                  loadRuntimeHistory={loadRuntimeHistory}
+                  headingId="session-runtime-trends-heading"
+                  title="Session resource trends"
+                />
+              ) : runtimeError ? (
+                <ErrorState
+                  title="Couldn’t load Session metrics"
+                  description="The latest Runtime observation is unavailable."
+                  detail={runtimeError}
+                  onRetry={onRefresh}
+                />
+              ) : (
+                <div className="session-metrics-loading" aria-busy="true" aria-label="Loading Session metrics">
+                  <Skeleton />
+                  <Skeleton />
+                  <Skeleton />
+                  <Skeleton />
+                </div>
+              )}
+            </div>
+          ) : (
+            <div
+              id="session-metrics-panel"
+              role="tabpanel"
+              aria-labelledby="session-metrics-tab"
               hidden
             />
           )}

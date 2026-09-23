@@ -949,6 +949,7 @@ export function App() {
     void (async () => {
       const generation = coreGeneration;
       void refreshAgents();
+      void refreshRuntimeSnapshot();
       const refreshed = await refreshSessions();
       if (!refreshed || generation !== connectionGenerationRef.current) return;
       const filter = sessionAgentFilterRef.current;
@@ -957,7 +958,7 @@ export function App() {
       const sessionId = selectedIdRef.current;
       if (sessionId) await refreshSelectedSession(sessionId);
     })();
-  }, [coreGeneration, refreshAgents, refreshFilteredSessions, refreshSelectedSession, refreshSessions]);
+  }, [coreGeneration, refreshAgents, refreshFilteredSessions, refreshRuntimeSnapshot, refreshSelectedSession, refreshSessions]);
 
   const refreshDashboard = useCallback(() => {
     if (dashboardRefreshInFlightRef.current) return;
@@ -1047,7 +1048,7 @@ export function App() {
   }, [refreshAgents, refreshEnvironmentTemplates, refreshSessions, refreshStartupConfiguration, refreshVaults]);
 
   useEffect(() => {
-    if (view !== "dashboard") return;
+    if (view !== "dashboard" && view !== "sessions") return;
     let timer: number | null = null;
     void (async () => {
       if (
@@ -2346,6 +2347,10 @@ export function App() {
               turnError={turnError}
               turnState={turnState}
               environmentObservation={environmentObservation}
+              runtimeSnapshot={runtimeSnapshot}
+              runtimeError={runtimeCollectionError}
+              runtimeStale={runtimeCollectionState === "failed"}
+              loadRuntimeHistory={loadDashboardRuntimeHistory}
               sendError={sendError}
               streamError={streamError}
               streamState={streamState}
