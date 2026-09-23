@@ -80,6 +80,7 @@ def verify_credential_rotation(client, other, invalid, peer, saved_vaults, saved
         official_body.check(raw, endpoint, headers, official_body.rejected(
             json.dumps({"auth": {"type": "static_bearer", "token": "gate"}}, separators=(",", ":")), "token", "auth.token"))
         safe(raw.post(endpoint, headers={**headers, **official_body.JSON}, content="null"), 400)
+        assert credentials.retrieve(original.id, vault_id=vault.id) == current
         for override in ({"auth": None}, {"auth": {"type": "static_bearer", "token": None}}):
             error = expect_error(BadRequestError, lambda: credentials.update(
                 original.id, vault_id=vault.id, **replacement, extra_body=override))

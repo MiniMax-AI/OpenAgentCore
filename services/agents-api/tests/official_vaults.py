@@ -82,8 +82,10 @@ def verify_vaults(client, other, invalid, peer, binding, expect_error):
             assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_request_error"
             assert response.json()["error"]["param"] == param
         # The shared body gate rejects before any write (HP-09..HP-15).
+        count = len(list(vaults.list()))
         official_body.check(raw, base, headers, official_body.rejected('{"name":"gate","metadata":{"k":"v"}}', "name", "name"))
         official_body.check(raw, base, headers, [(official_body.JSON, b'{"metadata":{"k":"1","k":"2"}}', official_body.duplicate("k", "metadata.k"))])
+        assert len(list(vaults.list())) == count
 
         for resource_id in (str(uuid.uuid4()), "invalid-vault", str(uuid.UUID(int=0)), foreign.id):
             response = raw.get(base + "/" + resource_id, headers=headers)

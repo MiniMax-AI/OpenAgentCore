@@ -3,6 +3,7 @@ package store_test
 import (
 	"bytes"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -159,3 +160,86 @@ func TestRequestBodyGateRejectsWithoutWritesPostgres(t *testing.T) {
 	}
 }
 
+// DELETE routes, the multipart Files and Skills uploads, Skills update and the
+// Core extension routes keep their own body handling, without the Content-Type
+// rule or the official body messages.
+func TestRequestBodyGateExcludedRoutesPostgres(t *testing.T) {
+	_, pool := store.NewTestStore(t)
+	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{65}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := store.NewWithCredentialCipher(pool, cipher)
+	token, tenant := uuid.NewString(), uuid.NewString()
+	auth, err := api.NewAuthenticator([]api.APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "excluded-owner", TokenSHA256: device.HashCredential(token), TenantID: tenant}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := api.NewHandler(s, auth, "codex", api.WithExecution(s), api.WithSkills(s), api.WithSourceFiles(s))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(h)
+	defer server.Close()
+	client := pathIDClient{t: t, server: server}
+	gated := func(body string) bool {
+		return strings.Contains(body, "expected request with Content-Type") || strings.Contains(body, "Invalid body") || strings.Contains(body, "Invalid type")
+	}
+	upload := func(field, name string, content []byte, extra ...string) (string, []byte) {
+		var buffer bytes.Buffer
+		form := multipart.NewWriter(&buffer)
+		for i := 0; i+1 < len(extra); i += 2 {
+			if err := form.WriteField(extra[i], extra[i+1]); err != nil {
+				t.Fatal(err)
+			}
+		}
+		part, err := form.CreateFormFile(field, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write(content); err != nil {
+			t.Fatal(err)
+		}
+		if err := form.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return form.FormDataContentType(), buffer.Bytes()
+	}
+	contentType, body := upload("file", "excluded.txt", []byte("excluded"), "purpose", "user_data")
+	if status, response := client.do(token, http.MethodPost, "/v1/files", contentType, body); status != http.StatusOK || gated(response) {
+		t.Fatalf("Files upload: %d %s", status, response)
+	}
+	contentType, body = upload("files", "proof.zip", store.SkillArchive(t, "excluded-skill"))
+	status, response := client.do(token, http.MethodPost, "/v1/skills", contentType, body)
+	var skill struct{ ID string }
+	if status != http.StatusOK || json.Unmarshal([]byte(response), &skill) != nil || skill.ID == "" {
+		t.Fatalf("Skills upload: %d %s", status, response)
+	}
+	if status, response := client.do(token, http.MethodPost, "/v1/skills/"+skill.ID, "", []byte(`{"default_version":"1"}`)); status != http.StatusOK || gated(response) {
+		t.Fatalf("Skills update without Content-Type: %d %s", status, response)
+	}
+	if status, response := client.do(token, http.MethodPost, "/v1/skills/"+skill.ID, "text/plain", []byte(`{"default_version":`)); status != http.StatusBadRequest || gated(response) {
+		t.Fatalf("malformed Skills update: %d %s", status, response)
+	}
+	// Executor credential issuance keeps its own reader and errors.
+	environment := "/core/v1/environments/" + uuid.NewString() + "/executor-credentials"
+	for _, request := range []struct {
+		contentType, body string
+		status            int
+	}{{"", `{"key_id":"` + uuid.NewString() + `"}`, http.StatusNotFound}, {"text/plain", `{"key_id":`, http.StatusBadRequest}, {"", "", http.StatusBadRequest}} {
+		if status, response := client.do(token, http.MethodPost, environment, request.contentType, []byte(request.body)); status != request.status || gated(response) || !strings.Contains(response, `"error"`) {
+			t.Errorf("executor credential %q: %d %s", request.body, status, response)
+		}
+	}
+	// DELETE keeps its empty-body rule and needs no Content-Type.
+	agent := client.created(token, "/v1/agents", `{"model":"excluded-model"}`)
+	vault := client.created(token, "/v1/vaults", `{"name":"excluded"}`)
+	if status, response := client.do(token, http.MethodDelete, "/v1/vaults/"+vault, "text/plain", []byte(`{"name":`)); status != http.StatusBadRequest || gated(response) {
+		t.Fatalf("Vault delete with a body: %d %s", status, response)
+	}
+	for _, path := range []string{"/v1/agents/" + agent, "/v1/vaults/" + vault} {
+		if status, response := client.do(token, http.MethodDelete, path, "", nil); status != http.StatusOK || gated(response) {
+			t.Fatalf("DELETE %s: %d %s", path, status, response)
+		}
+	}
+}
