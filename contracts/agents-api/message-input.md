@@ -45,23 +45,29 @@ empty `input` array keep the existing 400 `invalid_request` response. A message
 whose parts are `["", "text"]` is still accepted; its official behavior is
 unobserved (SES-08). String `content` and string event `input` remain type errors,
 as observed officially. The shared daemon validator, daemon dispatch and the
-TypeScript client apply the same rule. Core Web keeps its local nonblank rule for
-the composer and the Start Session form ([Web architecture](../../docs/web/architecture.md)).
+TypeScript client apply the same rule. Core Web keeps local UI rules: its
+composer trims leading and trailing whitespace from every message it sends and
+does not send blank text, and its Start Session form omits whitespace-only simple
+text ([Web architecture](../../docs/web/architecture.md)). Other clients' text is
+never trimmed.
 
 Harness profiles declare whether whitespace-only text is qualified, through the
 same engine profile that declares image placements. Codex and MiniMax Code are
 qualified and deliver such text unchanged; MiniMax public input, as for all text,
 carries its extra empty text block, which native ACP joins with a blank line.
 Claude SDK is not qualified: the bridge and Anthropic-compatible providers reject
-text without a non-whitespace character. For Claude SDK Sessions, a message
-without an image or any non-whitespace text is rejected at Session creation and
+text without a non-whitespace character. Whitespace here is one explicit set, the
+union of Go `unicode.IsSpace` and ECMAScript `String.prototype.trim` (for example
+U+0085 and U+FEFF), shared by Core admission and the bridge. For Claude SDK
+Sessions, a message without an image or any non-whitespace text is rejected at Session creation and
 `events.create` with 400 `unsupported_or_invalid_configuration`, before any write,
 input reservation or promotion, so no Turn starts and a running Turn is never
 disturbed. Whitespace beside non-whitespace text in the same message is admitted
-unchanged. Core never trims or pads model input to fit a harness. If such a
-message still reaches the Claude bridge while steering, the bridge rejects that
-input and the active Turn continues; initial and prepared input still end with
-`invalid_request`, which admission makes unreachable.
+unchanged. Core never trims or pads model input to fit a harness. Admission makes
+the bridge's own check unreachable. If such a message still reached the bridge,
+initial and prepared input would end with `invalid_request`, and a steering
+message would be reported as `input_rejected`, which ends the running Turn as
+before.
 
 ## Runtime boundary
 

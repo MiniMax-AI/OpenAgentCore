@@ -484,17 +484,28 @@ Decisions:
   bridge and Anthropic-compatible providers reject text blocks without
   non-whitespace characters, so Core declares the combination instead of failing
   the Turn or rewriting input. Whitespace beside non-whitespace text in one
-  message stays admitted for every harness. As a fallback, the bridge now
-  rejects such a steering input without aborting the active Turn.
+  message stays admitted for every harness. Whitespace is one explicit set, the
+  union of Go `unicode.IsSpace` and ECMAScript `String.prototype.trim`, used by
+  both Core admission and the bridge; a shared table test keeps them equal.
+  Admission makes the bridge's own check unreachable. If such a steering message
+  still reached the bridge it would report `input_rejected`, and Core would end
+  the running Turn as before; the delivery lifetime is unchanged.
 - The TypeScript client mirrored the old rule for event batches; it now rejects
   only messages whose text is empty. Core Web keeps its local nonblank composer
   and Start Session rules; they are a UI choice, not protocol validation.
 - No schema, model output or image rule changes.
 
-Follow-up: Codex omits the `text` field of an empty text part (`omitempty` on
-its native input), so a W5 message `["", "text"]` may be rejected natively. It is
-recorded rather than changed here, because removing the tag would also add empty
-text to image parts.
+Follow-ups:
+
+- Codex omits the `text` field of an empty text part (`omitempty` on its native
+  input), so a W5 message `["", "text"]` may be rejected natively. It is recorded
+  rather than changed here, because removing the tag would also add empty text to
+  image parts.
+- On Claude SDK, a mixed message such as `["   ", "text"]` is admitted and sends
+  a whitespace-only native text block, and `["", "text"]` sends an empty block;
+  the provider's behavior for such blocks is unverified.
+- The Core Web composer trims leading and trailing whitespace from all sent text,
+  not only blank sends. This is a UI choice; other clients' text is unchanged.
 
 Go proto, dispatch, Codex and API handler tests cover W1–W5. Profile, error
 mapping and real-PostgreSQL Worker tests cover W6 admission: Codex and MiniMax
