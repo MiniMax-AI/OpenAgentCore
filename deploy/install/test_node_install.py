@@ -180,7 +180,7 @@ class NodePrerequisiteTests(unittest.TestCase):
                 installer.preflight("docker")
             fetch.assert_not_called()
             with mock.patch.object(installer, "checked", return_value="yes"), mock.patch.object(installer.os, "access", return_value=False):
-                with self.assertRaisesRegex(installer.InstallError, "KVM"):
+                with self.assertRaisesRegex(installer.InstallError, "/dev/kvm"):
                     installer.preflight("microsandbox")
 
     def test_microsandbox_short_home_is_stable_and_rejects_long_user_home(self):
