@@ -1224,7 +1224,7 @@ test("keeps managed Environment resource and terminal event states fail-closed",
   });
   await page.reload();
   await expect(page.getByText("Session cannot continue", { exact: true })).toBeVisible();
-  await expect(page.getByText("The environment is no longer available for this input.", { exact: true })).toBeVisible();
+  await expect(page.getByText('Failed to provision environment: script "setup_commands[0]" failed with exit code 3', { exact: true })).toBeVisible();
   await expect(page.getByLabel("Message the Agent")).toBeDisabled();
   opened = await openEnvironmentDialog(page);
   await expect(opened.panel).toContainText("Managed Environment failed");

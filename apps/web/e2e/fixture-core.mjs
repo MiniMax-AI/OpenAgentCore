@@ -511,7 +511,8 @@ function applyEnvironmentScenario(value) {
       skills: [],
     };
     session.status = "failed";
-    session.error = "The environment is no longer available for this input.";
+    // A hosted provisioning failure reports the failed step and exit status only.
+    session.error = 'Failed to provision environment: script "setup_commands[0]" failed with exit code 3';
     session.required_actions = [];
     return;
   }
