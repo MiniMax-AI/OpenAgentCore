@@ -288,8 +288,10 @@ the Core key binding. Agents Core Web's local proxy owns the bearer server-side.
   Workspace, `limit=20`, the selected `asc` or `desc` order, and Core's opaque
   `page` token for continuation while preserving the applied directory, order,
   and limit.
-- The client accepts only HTTP 200 and the recorded Core page projection
-  `{data,next}`. Every entry must have the matching Environment ID,
+- The client accepts only HTTP 200 and the official page envelope
+  `{object:"page",data,next,has_more}`, where `has_more` is true exactly when
+  `next` is set. A directory typed with a trailing separator is sent in cleaned
+  form, which Core requires. Every entry must have the matching Environment ID,
   `object:"agent.environment.file"`, a safe absolute path, and a non-negative
   safe-integer `size_bytes`. A malformed success rejects the complete page; no
   partial result is accepted or retried automatically.
@@ -316,8 +318,8 @@ the Core key binding. Agents Core Web's local proxy owns the bearer server-side.
   GET to distinguish currently present from absent, never a second DELETE.
 - Environment Files.create is a single-attempt exact union: strict standard Base64
   `inline` bytes or a project-owned Source `file_id`, plus one canonical file path
-  beneath `/workspace/`. Source upload is bounded at 512 MiB while destination copy
-  is bounded at 50 MiB. The Web's primary flow is upload → returned Source ID →
+  beneath `/workspace/`. The client accepts only HTTP 201 Created. Source upload is
+  bounded at 512 MiB while destination copy is bounded at 50 MiB. The Web's primary flow is upload → returned Source ID →
   `file_id` copy; it never substitutes a local filename or path for that ID.
   A missing response can outlive caller cancellation. Web performs at most one
   read-only directory list as a clue; matching path and size cannot prove byte

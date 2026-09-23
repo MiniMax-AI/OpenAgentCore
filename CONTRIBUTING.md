@@ -65,16 +65,16 @@ to recover a lost creation response. Session metadata updates require a supplied
 metadata field, with null/empty clearing it. Validate an empty update before any
 resource lookup, after authentication.
 
-List order parsing distinguishes omission from an explicit empty value. Lists read by
-the shared list parser and single-resource routes ignore unknown query keys; a
-repeated supported list key still rejects. The Environment Files list keeps its own
-strict key parser and still rejects unknown keys; that difference is deferred. Reuse the shared parser and error serializer, preserving the observed
-Beta, Files and Skills error fields and per-family limit bounds rather than applying
-one policy to every resource. Change page bounds, cursor ownership or parent lookup
-order only with owned evidence for that family. Record uncertain range/lookup
-behavior separately; do not reproduce observed upstream server failures as
-compatibility behavior. See `contracts/agents-api/list-query-semantics.md` for the
-bounded evidence.
+List order parsing distinguishes omission from an explicit empty value. Lists and
+single-resource routes ignore unknown query keys; a repeated supported list key
+still rejects. The Environment Files list keeps its own path and cursor parsing but
+uses the same unknown-key and duplicate-key rules. Reuse the shared parser and
+error serializer, preserving the observed Beta, Files and Skills error fields and
+per-family limit bounds rather than applying one policy to every resource. Change
+page bounds, cursor ownership or parent lookup order only with owned evidence for
+that family. Record uncertain range/lookup behavior separately; do not reproduce
+observed upstream server failures as compatibility behavior. See
+`contracts/agents-api/list-query-semantics.md` for the bounded evidence.
 
 Report validation failures with official evidence through the typed field error,
 which emits `invalid_request_error` with the observed param and message; keep
@@ -824,8 +824,11 @@ Revoke the scoped read transport credential on
 completion or failure. Runtime retains uncertain cleanup ownership and capacity;
 this does not require a second durable Core owner registry or establish remote
 write retirement. Public Files.list delegates workspace access to this reader;
-the API owns tenant authorization, path validation and protocol pagination. Keep
-partial directory coverage and unverified defaults explicit in the Files contract.
+the API owns tenant authorization, path validation and protocol pagination. Only
+the reader's distinct `not_directory` result (a missing path, a regular file or an
+unfollowed symlink) becomes an empty page; root, permission, transport and
+uncertain failures keep their errors. Keep partial directory coverage and
+unverified defaults explicit in the Files contract.
 
 Source Files belong to the execution project and have an independent lifecycle
 from copied workspace files. Store immutable source metadata and PostgreSQL large

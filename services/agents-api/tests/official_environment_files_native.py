@@ -14,13 +14,13 @@ sys.dont_write_bytecode = True
 
 import httpx2
 from openai import OpenAI
-from official_environment_files import verify_environment_files, verify_file_tenant_isolation
+from official_environment_files import verify_environment_files, verify_file_list_rows, verify_file_tenant_isolation
 
 
 UNVERIFIED = [
-    "Recursive traversal, directory entries, symlinks and missing paths are unspecified by the pinned SDK.",
+    "Recursive traversal and directory entries are unspecified by the pinned SDK; symlinked directories are not generated here.",
     "The scope when path is omitted is not asserted.",
-    "Default limit, changed-filter cursors and exact invalid-parameter errors are not asserted.",
+    "Default limit and changed-filter cursors are not asserted.",
     "The operator must qualify the real provider, native engine and isolated placement separately.",
     "This fixture uses existing Sessions; it does not qualify Session creation or executor installation.",
     "Generated fixture directories remain in the caller-owned workspaces for independent inspection.",
@@ -99,6 +99,9 @@ def main():
                 client, http, fixture["environment_id"], fixture["directory"], fixture["expected"])
             fixture["sibling_checks"], _ = verify_environment_files(
                 client, http, fixture["environment_id"], fixture["sibling_directory"], fixture["sibling_expected"])
+            fixture["wire_rows"] = verify_file_list_rows(client, http, fixture["environment_id"], {
+                "directory": fixture["directory"], "missing": fixture["directory"] + "-missing",
+                "file": next(iter(fixture["expected"]))})
             verify_file_tenant_isolation(client, clients[1 - index], http, fixture["environment_id"],
                                         fixture["directory"], page, fixture["expected"] | fixture["sibling_expected"])
             assert [turn.to_dict() for turn in client.beta.agents.sessions.turns.list(fixture["session_id"])] == before, "Files.list changed Turns"
