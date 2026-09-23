@@ -60,6 +60,17 @@ describe("durable Turn loading", () => {
     await expect(listAllTurns(foreign, "session-1")).rejects.toThrow("outside the selected Session");
   });
 
+  it("keeps the timeline root-only when an earlier Core lists Subagent Turns", async () => {
+    const child = { ...turn("child-turn", "completed"), subagent_id: "subagent-1" };
+    const root = { ...turn("root-turn", "completed"), subagent_id: null };
+    const listTurns = vi.fn(async (_sessionId: string, options?: { after?: string }) => options?.after
+      ? { data: [turn("turn-2")], has_more: false }
+      : { data: [root, child], has_more: true, last_id: "child-turn" });
+
+    await expect(listAllTurns({ listTurns } as unknown as AgentCore, "session-1")).resolves.toEqual([root, turn("turn-2")]);
+    expect(listTurns).toHaveBeenNthCalledWith(2, "session-1", { after: "child-turn", limit: 100, order: "asc", signal: undefined });
+  });
+
   it("deduplicates overlapping pages without regressing a terminal Turn", async () => {
     const listTurns = vi.fn(async (_sessionId: string, options?: { after?: string }) => options?.after
       ? { data: [turn("turn-1", "in_progress"), turn("turn-2")], has_more: false }
@@ -118,6 +129,23 @@ describe("Turn live reconciliation", () => {
       turn_id: "item-turn",
       turn: turn("item-turn", "completed"),
     } as SessionEvent, "session-1")).toBeNull();
+    for (const type of ["agent.session.turn.created", "agent.session.turn.completed"]) {
+      expect(matchingTurnSnapshot({
+        type,
+        event_id: `child-${type}`,
+        session_id: "session-1",
+        turn_id: "child-turn",
+        turn: { ...turn("child-turn", "completed"), subagent_id: "subagent-1" },
+      } as SessionEvent, "session-1")).toBeNull();
+    }
+    const root = { ...turn("root-turn", "completed"), subagent_id: null };
+    expect(matchingTurnSnapshot({
+      type: "agent.session.turn.completed",
+      event_id: "root",
+      session_id: "session-1",
+      turn_id: "root-turn",
+      turn: root,
+    } as SessionEvent, "session-1")).toEqual(root);
     expect(matchingTurnSnapshot({
       type: "agent.session.turn.completed",
       event_id: "mismatched-status",

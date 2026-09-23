@@ -48,7 +48,15 @@ function isTurnForSession(value: unknown, sessionId: string): value is AgentTurn
     typeof turn.status === "string" && turnStatuses.has(turn.status as AgentTurn["status"]);
 }
 
-/** Reads the complete durable Turn collection in server creation order. */
+/**
+ * Session timelines show root work. Subagent Turns belong to the Subagent routes;
+ * Core no longer returns or streams them for a Session, but earlier releases did.
+ */
+function isRootTurn(turn: AgentTurn): boolean {
+  return turn.subagent_id === undefined || turn.subagent_id === null;
+}
+
+/** Reads the complete durable root Turn collection in server creation order. */
 export async function listAllTurns(
   core: AgentCore,
   sessionId: string,
@@ -68,6 +76,7 @@ export async function listAllTurns(
       if (!isTurnForSession(value, sessionId)) {
         throw new Error("The Agent core returned a Turn outside the selected Session.");
       }
+      if (!isRootTurn(value)) continue;
       const index = indexes.get(value.id);
       if (index === undefined) {
         indexes.set(value.id, turns.length);
@@ -109,11 +118,12 @@ export function mergeDurableAndLiveTurns(durable: AgentTurn[], live: AgentTurn[]
   return live.reduce(upsertTurn, durable);
 }
 
-/** Accepts only a scoped, known Turn snapshot carried by a Turn event. */
+/** Accepts only a scoped, known root Turn snapshot carried by a Turn event. */
 export function matchingTurnSnapshot(event: SessionEvent, sessionId: string): AgentTurn | null {
   const type = typeof event.type === "string" ? event.type : "";
   const expectedStatus = lifecycleEventStatus.get(type);
   if (!expectedStatus || !isTurnForSession(event.turn, sessionId) || event.turn.status !== expectedStatus) return null;
+  if (!isRootTurn(event.turn)) return null;
   if (event.session_id && event.session_id !== sessionId) return null;
   if (event.turn_id && event.turn_id !== event.turn.id) return null;
   return event.turn;
