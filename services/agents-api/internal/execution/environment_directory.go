@@ -141,6 +141,12 @@ func readEnvironmentDirectory(ctx context.Context, peer *gateway.Session, reques
 	if err == nil && result.Outcome == "completed" && result.Directory != nil && !result.Directory.Truncated && proto.ValidWorkspaceDirectory(result.Directory, request.MaxEntries) {
 		return directoryReadResult{directory: *result.Directory}
 	}
+	// The requested path is missing, a regular file or a symbolic link, which the
+	// native reader never follows: like the official service, list nothing.
+	// Root, permission, transport and uncertain failures keep their errors.
+	if err == nil && result.Outcome == "rejected" && result.ErrorCode == proto.WorkspaceReadNotDirectory {
+		return directoryReadResult{directory: proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{}}}
+	}
 	if err == nil && result.Outcome == "rejected" && result.ErrorCode == "not_found" {
 		return directoryReadResult{err: store.ErrNotFound}
 	}

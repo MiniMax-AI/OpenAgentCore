@@ -128,6 +128,7 @@ func workspaceReadResult(read agent.WorkspaceReadResult, err error, limit int) p
 		{agent.ErrWorkspaceReadUnavailable, "resource_unavailable"},
 		{agent.ErrWorkspaceReadBusy, "read_capacity"},
 		{agent.ErrWorkspaceReadInvalid, "invalid_request"},
+		{agent.ErrWorkspaceNotDirectory, proto.WorkspaceReadNotDirectory},
 		{fs.ErrNotExist, "not_found"},
 		{fs.ErrPermission, "permission_denied"},
 	} {

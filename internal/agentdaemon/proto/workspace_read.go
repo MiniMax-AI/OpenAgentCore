@@ -6,6 +6,9 @@ const (
 	WorkspaceReadMaxBytes        = 1 << 20
 	WorkspaceReadMaxRequestBytes = 8 << 10
 	WorkspaceReadMaxIDBytes      = 128
+	// WorkspaceReadNotDirectory rejects a directory read whose own path is
+	// missing, a regular file or a symbolic link. The link is never followed.
+	WorkspaceReadNotDirectory = "not_directory"
 )
 
 // WorkspaceReadPayload targets one existing resource on the current daemon connection.
