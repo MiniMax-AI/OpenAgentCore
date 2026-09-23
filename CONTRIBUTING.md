@@ -1483,6 +1483,9 @@ Compose in either case; native Core
 and its Web proxy use loopback, with a private PostgreSQL port. This packaging
 choice does not change either Provider's execution contract.
 The basic distroless API image and binary builds remain independent artifacts.
+The standalone API release and Core distribution both include the Hosted Sandbox
+Manager guide at the relative path used by their packaged README. Include the
+guide in each artifact checksum list so extracted documentation matches its build.
 The distribution includes the sandbox-node binary. An enabled local node uses a
 persistent private state directory, explicitly separate from read-only configuration.
 Docker grants Core write access only to that node-state mount; native Core uses the

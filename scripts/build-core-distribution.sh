@@ -80,6 +80,8 @@ done
 mkdir -p "$bundle/docs"
 cp -R docs/getting-started "$bundle/docs/"
 cp README.md "$bundle/"
+mkdir -p "$bundle/services/agents-api"
+cp services/agents-api/HOSTED-SANDBOX-MANAGER.md "$bundle/services/agents-api/"
 mkdir -p "$bundle/runtime"
 cp services/agents-api/deploy/codex/seccomp.json "$bundle/runtime/"
 cp LICENSE "$bundle/"
