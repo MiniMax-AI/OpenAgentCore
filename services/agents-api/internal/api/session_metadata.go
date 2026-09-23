@@ -1,17 +1,20 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
-	"errors"
+	"fmt"
+	"maps"
 	"net/http"
+	"slices"
+	"strings"
 	"unicode/utf8"
 
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
 // @Summary Update execution Session metadata
-// @Description The metadata field is required in an update body. Send null or {} to clear it, or supply an object to replace all pairs. Up to 16 string pairs, with keys at most 64 characters and values at most 512 characters. Execution configuration and activity are unchanged. Returns the same safe Environment and pending-input activity projection as Session retrieval.
+// @Description The metadata field is required in an update body. Send null or {} to clear it, or supply an object to replace all pairs. Up to 16 string pairs, with keys at most 64 characters and values at most 512 characters; violations and non-string values return invalid_request_error with a metadata or metadata.<key> param. U+0000 is rejected as a local storage limit. Malformed, missing and foreign Session IDs share the not-found response. Execution configuration and activity are unchanged. Returns the same safe Environment and pending-input activity projection as Session retrieval.
 // @Tags Sessions
 // @Accept json
 // @Produce json
@@ -27,6 +30,9 @@ func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if writeFieldError(w, metadataTypeError(raw)) {
+		return
+	}
 	var request struct {
 		Metadata json.RawMessage `json:"metadata"`
 	}
@@ -34,29 +40,26 @@ func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", "Request must be a JSON object containing supported fields.")
 		return
 	}
-	var session store.Session
-	var err error
 	if len(request.Metadata) == 0 {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "At least one update field is required")
 		return
-	} else {
-		var values map[string]*string
-		if err := json.Unmarshal(request.Metadata, &values); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "metadata must be null or an object with string values.")
-			return
-		}
-		var metadata map[string]string
-		metadata, err = stringMetadata(values)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "metadata values must be strings.")
-			return
-		}
-		if err := validateMetadata(metadata); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-			return
-		}
-		session, err = h.store.UpdateSessionMetadata(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), metadata)
 	}
+	var values map[string]*string
+	if err := json.Unmarshal(request.Metadata, &values); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "metadata must be null or an object with string values.")
+		return
+	}
+	metadata, err := stringMetadata(values)
+	if err == nil {
+		err = validateMetadata(metadata)
+	}
+	if err != nil {
+		if !writeFieldError(w, err) {
+			writeError(w, http.StatusBadRequest, "invalid_request", "metadata must be null or an object with string values.")
+		}
+		return
+	}
+	session, err := h.store.UpdateSessionMetadata(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), metadata)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -64,24 +67,101 @@ func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 	h.respondSession(w, r, session)
 }
 
+// metadataTypeError reports the first non-string value of a request body's
+// top-level metadata object in document order, before generic body decoding
+// can reject it. Other body and metadata shapes keep their existing errors.
+func metadataTypeError(body []byte) error {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(body, &fields) != nil {
+		return nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(fields["metadata"]))
+	if token, err := decoder.Token(); err != nil || token != json.Delim('{') {
+		return nil
+	}
+	// Duplicate keys keep their first position and last value, like decoding.
+	var keys []string
+	values := map[string]json.RawMessage{}
+	for decoder.More() {
+		token, err := decoder.Token()
+		key, isKey := token.(string)
+		var value json.RawMessage
+		if err != nil || !isKey || decoder.Decode(&value) != nil {
+			return nil
+		}
+		if _, seen := values[key]; !seen {
+			keys = append(keys, key)
+		}
+		values[key] = value
+	}
+	for _, key := range keys {
+		if kind := jsonValueKind(values[key]); kind != "a string" {
+			return &fieldError{param: "metadata." + key, message: fmt.Sprintf("Invalid type for 'metadata.%s': expected a string, but got %s instead.", key, kind)}
+		}
+	}
+	return nil
+}
+
+func jsonValueKind(value json.RawMessage) string {
+	value = bytes.TrimSpace(value)
+	if len(value) == 0 {
+		return "null"
+	}
+	switch value[0] {
+	case '"':
+		return "a string"
+	case '{':
+		return "an object"
+	case '[':
+		return "an array"
+	case 't', 'f':
+		return "a boolean"
+	case 'n':
+		return "null"
+	}
+	if bytes.ContainsAny(value, ".eE") {
+		return "a number"
+	}
+	return "an integer"
+}
+
 func stringMetadata(values map[string]*string) (map[string]string, error) {
 	metadata := make(map[string]string, len(values))
-	for key, value := range values {
-		if value == nil {
-			return nil, store.ErrInvalidInput
+	for _, key := range slices.Sorted(maps.Keys(values)) {
+		if values[key] == nil {
+			return nil, &fieldError{param: "metadata." + key, message: fmt.Sprintf("Invalid type for 'metadata.%s': expected a string, but got null instead.", key)}
 		}
-		metadata[key] = *value
+		metadata[key] = *values[key]
 	}
 	return metadata, nil
 }
 
+// validateMetadata applies the pinned pair and character limits, then the
+// local U+0000 storage limit. Sorted keys keep repeated errors stable.
 func validateMetadata(metadata map[string]string) error {
 	if len(metadata) > 16 {
-		return errors.New("metadata supports at most 16 pairs.")
+		return &fieldError{param: "metadata", message: fmt.Sprintf("Invalid 'metadata': too many properties. Expected an object with at most 16 properties, but got an object with %d properties instead.", len(metadata))}
 	}
-	for key, value := range metadata {
-		if utf8.RuneCountInString(key) > 64 || utf8.RuneCountInString(value) > 512 {
-			return errors.New("metadata keys must be at most 64 characters and values at most 512 characters.")
+	for _, key := range slices.Sorted(maps.Keys(metadata)) {
+		if length := utf8.RuneCountInString(key); length > 64 {
+			return &fieldError{param: "metadata." + key, message: fmt.Sprintf("Invalid property name in 'metadata': '%s' is too long. Expected a string with maximum length 64, but got a string with length %d instead.", key, length)}
+		}
+		if length := utf8.RuneCountInString(metadata[key]); length > 512 {
+			return &fieldError{param: "metadata." + key, message: fmt.Sprintf("Invalid 'metadata.%s': string too long. Expected a string with maximum length 512, but got a string with length %d instead.", key, length)}
+		}
+	}
+	return metadataCharacterError(metadata)
+}
+
+// metadataCharacterError rejects U+0000, which PostgreSQL text and jsonb cannot
+// store. The official service accepts it; this is a documented local limit.
+func metadataCharacterError(metadata map[string]string) error {
+	for _, key := range slices.Sorted(maps.Keys(metadata)) {
+		if strings.ContainsRune(key, 0) {
+			return &fieldError{param: "metadata." + key, message: fmt.Sprintf("Invalid property name in 'metadata': '%s' contains U+0000, which this service cannot store.", key)}
+		}
+		if strings.ContainsRune(metadata[key], 0) {
+			return &fieldError{param: "metadata." + key, message: fmt.Sprintf("Invalid 'metadata.%s': string contains U+0000, which this service cannot store.", key)}
 		}
 	}
 	return nil

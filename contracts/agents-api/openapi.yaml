@@ -2196,7 +2196,10 @@ paths:
     post:
       consumes:
       - application/json
-      description: 'Persists configuration independently of execution. Supports model/name/instructions/metadata,
+      description: 'Persists configuration independently of execution. Names over
+        128 characters and metadata outside 16 string pairs with 64-character keys
+        and 512-character values return invalid_request_error with the official param;
+        U+0000 in stored strings is rejected as a local storage limit. Supports model/name/instructions/metadata,
         explicit reasoning and service tiers, multi_agent, text/json_schema, function/tool_search/programmatic_tool_calling
         and HTTP MCP with nullable credential_id and explicit service origin and boolean
         required defaulting to false. Saving credential_id grants no access: Session
@@ -2343,8 +2346,9 @@ paths:
       - application/json
       description: Preserves omitted fields and replaces supplied fields using shared
         saved-configuration validation. Null name/instructions clear; null or empty
-        metadata clears all pairs. Existing Session snapshots are unchanged. Empty
-        updates advance updated_at without changing saved fields. Nested replacement/null
+        metadata clears all pairs. Name and metadata validation errors return invalid_request_error
+        with the official param. Existing Session snapshots are unchanged. Empty updates
+        advance updated_at without changing saved fields. Nested replacement/null
         defaults, model-derived reasoning and exact hosted error behavior remain incompletely
         verified.
       parameters:
@@ -2699,7 +2703,8 @@ paths:
         inline/referenced Skill ZIPs, Plugin ZIPs and workspace-contained capability
         directories. Omitted/null network defaults to enabled. Restricted network
         requires 1–100 exact ASCII hostnames; other host forms and populated unsupported
-        installations are rejected before persistence without echoing input. No compute
+        installations are rejected before persistence without echoing input. Network
+        policy rejections return invalid_request_error with a null param. No compute
         is allocated. Exact hosted error/retry semantics remain unverified.
       parameters:
       - description: agents=v1
@@ -2839,7 +2844,8 @@ paths:
         are encrypted and omitted from responses. Capability directories are snapshotted
         after setup. Environment MCP execution requires a qualified native transport
         and runtime network policy. Empty updates advance updated_at without changing
-        saved fields or confidential contents.
+        saved fields or confidential contents. Network policy rejections return invalid_request_error
+        with a null param.
       parameters:
       - description: agents=v1
         in: header
@@ -2986,7 +2992,9 @@ paths:
         An attached Vault with no matching credential may remain anonymous; missing
         keys or failed credential lookup/decryption never fall back to anonymous execution.
         Omitted stream defaults to false; stream and agent_id cannot be null. Metadata
-        may be null, but its values must be strings. Initial input accepts a string
+        may be null; non-string values and limit violations return invalid_request_error
+        with a metadata or metadata.<key> param. Hosted network policy rejections
+        return invalid_request_error with a null param. Initial input accepts a string
         or ordered user-message array. Codex and Claude SDK on none and qualified
         openai_hosted also accept inline PNG/JPEG image content; other image combinations
         and remote URLs are unsupported. None initial input atomically starts a Turn;
@@ -3199,9 +3207,12 @@ paths:
       - application/json
       description: The metadata field is required in an update body. Send null or
         {} to clear it, or supply an object to replace all pairs. Up to 16 string
-        pairs, with keys at most 64 characters and values at most 512 characters.
-        Execution configuration and activity are unchanged. Returns the same safe
-        Environment and pending-input activity projection as Session retrieval.
+        pairs, with keys at most 64 characters and values at most 512 characters;
+        violations and non-string values return invalid_request_error with a metadata
+        or metadata.<key> param. U+0000 is rejected as a local storage limit. Malformed,
+        missing and foreign Session IDs share the not-found response. Execution configuration
+        and activity are unchanged. Returns the same safe Environment and pending-input
+        activity projection as Session retrieval.
       parameters:
       - description: agents=v1
         in: header
@@ -4824,8 +4835,10 @@ paths:
       description: Creates a project-owned Vault independently of execution. Omitted
         name stays null; a supplied string is trimmed and must contain 1–256 UTF-8
         bytes. Explicit null name is invalid. Omitted/null metadata becomes an empty
-        object; values must be strings. Metadata has a local 64 KiB encoded storage
-        bound. Credentials, Session binding and hosted error/retry parity remain incomplete.
+        object; non-string values return invalid_request_error with a metadata.<key>
+        param. Metadata has a local 64 KiB encoded storage bound. U+0000 in stored
+        strings is rejected as a local storage limit. Credentials, Session binding
+        and hosted error/retry parity remain incomplete.
       parameters:
       - description: agents=v1
         in: header

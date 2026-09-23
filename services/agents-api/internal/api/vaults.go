@@ -21,7 +21,7 @@ type VaultStore interface {
 }
 
 // @Summary Create a Vault
-// @Description Creates a project-owned Vault independently of execution. Omitted name stays null; a supplied string is trimmed and must contain 1–256 UTF-8 bytes. Explicit null name is invalid. Omitted/null metadata becomes an empty object; values must be strings. Metadata has a local 64 KiB encoded storage bound. Credentials, Session binding and hosted error/retry parity remain incomplete.
+// @Description Creates a project-owned Vault independently of execution. Omitted name stays null; a supplied string is trimmed and must contain 1–256 UTF-8 bytes. Explicit null name is invalid. Omitted/null metadata becomes an empty object; non-string values return invalid_request_error with a metadata.<key> param. Metadata has a local 64 KiB encoded storage bound. U+0000 in stored strings is rejected as a local storage limit. Credentials, Session binding and hosted error/retry parity remain incomplete.
 // @Tags Vaults
 // @Accept json
 // @Produce json
@@ -34,6 +34,9 @@ type VaultStore interface {
 func (h *Handler) createVault(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONBody(w, r)
 	if !ok {
+		return
+	}
+	if writeFieldError(w, metadataTypeError(raw)) {
 		return
 	}
 	var request struct {
@@ -58,10 +61,16 @@ func (h *Handler) createVault(w http.ResponseWriter, r *http.Request) {
 		}
 		input.Name = &trimmed
 	}
+	// Vault metadata has no pair or character limits, only the storage limits.
 	var err error
 	input.Metadata, err = stringMetadata(request.Metadata)
+	if err == nil {
+		err = metadataCharacterError(input.Metadata)
+	}
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "metadata values must be strings.")
+		if !writeFieldError(w, err) {
+			writeError(w, http.StatusBadRequest, "invalid_request", "metadata values must be strings.")
+		}
 		return
 	}
 	vault, err := h.store.CreateVault(r.Context(), tenantID(r), input)

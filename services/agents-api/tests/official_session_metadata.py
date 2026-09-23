@@ -50,10 +50,6 @@ def verify_session_metadata(client, other, invalid, spec, expect_error):
 
         invalid_fields = [
             {"metadata": []}, {"metadata": "value"}, {"metadata": False},
-            {"metadata": {"key": None}}, {"metadata": {"key": 1}},
-            {"metadata": {"key": []}}, {"metadata": {"key": {}}},
-            {"metadata": {str(i): "value" for i in range(17)}},
-            {"metadata": {"界" * 65: "value"}}, {"metadata": {"key": "🧪" * 513}},
             {"agent": spec["agent"]}, {"environment": spec["environment"]},
             {"tenant_id": str(uuid.uuid4())}, {"Metadata": {}},
         ]
@@ -61,6 +57,24 @@ def verify_session_metadata(client, other, invalid, spec, expect_error):
             response = raw.post(url, headers=headers, json=fields)
             assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_request"
             expect_error(BadRequestError, lambda: sessions.update(first.id, extra_body=fields))
+            assert sessions.retrieve(first.id) == current
+        # Metadata values and limits report the official code, param and message.
+        field_errors = [
+            ({"key": None}, "metadata.key", "Invalid type for 'metadata.key': expected a string, but got null instead."),
+            ({"key": 1}, "metadata.key", "Invalid type for 'metadata.key': expected a string, but got an integer instead."),
+            ({"key": []}, "metadata.key", "Invalid type for 'metadata.key': expected a string, but got an array instead."),
+            ({"key": {}}, "metadata.key", "Invalid type for 'metadata.key': expected a string, but got an object instead."),
+            ({str(i): "value" for i in range(17)}, "metadata", "Invalid 'metadata': too many properties. Expected an object with at most 16 properties, but got an object with 17 properties instead."),
+            ({"界" * 65: "value"}, "metadata." + "界" * 65, "Invalid property name in 'metadata': '" + "界" * 65 + "' is too long. Expected a string with maximum length 64, but got a string with length 65 instead."),
+            ({"key": "🧪" * 513}, "metadata.key", "Invalid 'metadata.key': string too long. Expected a string with maximum length 512, but got a string with length 513 instead."),
+            ({"key": "a\x00b"}, "metadata.key", "Invalid 'metadata.key': string contains U+0000, which this service cannot store."),
+        ]
+        for metadata, param, message in field_errors:
+            response = raw.post(url, headers=headers, json={"metadata": metadata})
+            assert response.status_code == 400 and response.json()["error"] == {
+                "type": "invalid_request_error", "code": "invalid_request_error", "param": param, "message": message}
+            error = expect_error(BadRequestError, lambda: sessions.update(first.id, metadata=metadata))
+            assert error.body["param"] == param
             assert sessions.retrieve(first.id) == current
         for body in ["", "null", "[]", "1", "{}{}", '{"metadata":']:
             response = raw.post(url, headers=headers, content=body)
@@ -82,7 +96,11 @@ def verify_session_metadata(client, other, invalid, spec, expect_error):
         expect_error(BadRequestError, lambda: sessions.update(str(uuid.uuid4())))
         expect_error(BadRequestError, lambda: other.beta.agents.sessions.update(first.id))
         expect_error(AuthenticationError, lambda: invalid.beta.agents.sessions.update(first.id))
-        expect_error(BadRequestError, lambda: sessions.update("invalid-id", metadata={}))
+        for malformed in ("invalid-id", "sess_" + uuid.uuid4().hex, str(uuid.UUID(int=0))):
+            missing = raw.post(str(client.base_url).rstrip("/") + "/agents/sessions/" + str(uuid.uuid4()), headers=headers, json={"metadata": {}})
+            response = raw.post(str(client.base_url).rstrip("/") + "/agents/sessions/" + malformed, headers=headers, json={"metadata": {}})
+            assert missing.status_code == response.status_code == 404 and response.json() == missing.json()
+            expect_error(NotFoundError, lambda: sessions.update(malformed, metadata={}))
         expect_error(BadRequestError, lambda: sessions.update(first.id, extra_headers={"OpenAI-Beta": ""}))
         assert sessions.retrieve(first.id) == current
     print("Session metadata: pinned SDK and raw HTTP replacement, clearing, omission, limits, authentication, tenant isolation, unchanged configuration and creation retry identity passed.")

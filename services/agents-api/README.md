@@ -123,7 +123,10 @@ native continuity and same-tenant device bindings. The public API applies schema
 validation/defaults before storage. Internal bounds are 64 KiB for metadata and
 512 KiB for configuration. Keep credentials out of both. Public metadata permits
 at most 16 string pairs, 64-character keys and 512-character values; storage bounds
-do not replace those rules. Tenant identity comes from authenticated credentials,
+do not replace those rules. Violations and non-string values return
+`invalid_request_error` with a `metadata` or `metadata.<key>` param. PostgreSQL
+cannot store U+0000, so requests containing it in any stored string return 400
+before anything is written; this is a local limit, not hosted parity. Tenant identity comes from authenticated credentials,
 never metadata or a caller-supplied business identity.
 
 ## Internal Turn persistence

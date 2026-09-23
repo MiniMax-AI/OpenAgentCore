@@ -71,6 +71,14 @@ def verify_vaults(client, other, invalid, peer, binding, expect_error):
             assert response.status_code == 400
             assert response.json()["error"]["type"] == "invalid_request_error"
             expect_error(BadRequestError, lambda: vaults.create(extra_body=request))
+        # Metadata value types use the official code and param. U+0000 is a local
+        # storage limit: metadata reports its key, while other strings have no param.
+        for request, param in (({"metadata": {"bad": 1}}, "metadata.bad"), ({"metadata": {"bad": None}}, "metadata.bad"),
+                               ({"metadata": {"k": "a\x00b"}}, "metadata.k"), ({"metadata": {"a\x00b": "v"}}, "metadata.a\x00b"),
+                               ({"name": "a\x00b"}, None)):
+            response = raw.post(base, headers=headers, json=request)
+            assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_request_error"
+            assert response.json()["error"]["param"] == param
         for content in ("null", "[]", "{} {}"):
             assert raw.post(base, headers=headers, content=content).status_code == 400
 

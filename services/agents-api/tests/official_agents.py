@@ -100,6 +100,27 @@ def verify_agents(client, other, invalid, expect_error):
             assert response.status_code == 400, (fields, response.status_code)
             assert response.json()["error"]["type"] == "invalid_request_error"
             expect_error(BadRequestError, lambda: agents.create(model="resource-model", extra_body=fields))
+        # Rejections with official evidence report its code, param and message.
+        field_errors = [
+            ({"name": "x" * 129}, "name", "Invalid 'name': string too long. Expected a string with maximum length 128, but got a string with length 129 instead."),
+            ({"metadata": {"k": 1}}, "metadata.k", "Invalid type for 'metadata.k': expected a string, but got an integer instead."),
+            ({"metadata": {"k": None}}, "metadata.k", "Invalid type for 'metadata.k': expected a string, but got null instead."),
+            ({"metadata": {str(i): "v" for i in range(17)}}, "metadata", "Invalid 'metadata': too many properties. Expected an object with at most 16 properties, but got an object with 17 properties instead."),
+            ({"metadata": {"x" * 65: "v"}}, "metadata." + "x" * 65, "Invalid property name in 'metadata': '" + "x" * 65 + "' is too long. Expected a string with maximum length 64, but got a string with length 65 instead."),
+            ({"metadata": {"k": "v" * 513}}, "metadata.k", "Invalid 'metadata.k': string too long. Expected a string with maximum length 512, but got a string with length 513 instead."),
+            ({"metadata": {"k": "a\x00b"}}, "metadata.k", "Invalid 'metadata.k': string contains U+0000, which this service cannot store."),
+        ]
+        count = len(list(agents.list()))
+        for fields, param, message in field_errors:
+            response = raw.post(base, headers=headers, json={"model": "resource-model", **fields})
+            assert response.status_code == 400 and response.json()["error"] == {
+                "type": "invalid_request_error", "code": "invalid_request_error", "param": param, "message": message}, response.text
+        # PostgreSQL cannot store U+0000 in other strings either; this local limit has no field param.
+        for fields in ({"name": "a\x00b"}, {"instructions": "a\x00b"}, {"model": "a\x00b"}):
+            response = raw.post(base, headers=headers, json={"model": "resource-model", **fields})
+            assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_request_error"
+            assert response.json()["error"]["param"] is None
+        assert len(list(agents.list())) == count
         for content in ("{}", "null", "[]", '{"model":"x"} {}'):
             assert raw.post(base, headers=headers, content=content).status_code == 400
         assert raw.post(base, headers=headers, content='{"model":"' + "x" * (1024 * 1024) + '"}').status_code == 413

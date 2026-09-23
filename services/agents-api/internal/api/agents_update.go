@@ -11,7 +11,7 @@ import (
 )
 
 // @Summary Update a reusable Agent
-// @Description Preserves omitted fields and replaces supplied fields using shared saved-configuration validation. Null name/instructions clear; null or empty metadata clears all pairs. Existing Session snapshots are unchanged. Empty updates advance updated_at without changing saved fields. Nested replacement/null defaults, model-derived reasoning and exact hosted error behavior remain incompletely verified.
+// @Description Preserves omitted fields and replaces supplied fields using shared saved-configuration validation. Null name/instructions clear; null or empty metadata clears all pairs. Name and metadata validation errors return invalid_request_error with the official param. Existing Session snapshots are unchanged. Empty updates advance updated_at without changing saved fields. Nested replacement/null defaults, model-derived reasoning and exact hosted error behavior remain incompletely verified.
 // @Tags Agents
 // @Accept json
 // @Produce json
@@ -29,7 +29,9 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	input, err := resolveAgentUpdate(raw)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())
+		if !writeFieldError(w, err) {
+			writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())
+		}
 		return
 	}
 	id := chi.URLParam(r, "agent_id")
@@ -46,6 +48,9 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 }
 
 func resolveAgentUpdate(raw []byte) (store.UpdateAgentInput, error) {
+	if err := metadataTypeError(raw); err != nil {
+		return store.UpdateAgentInput{}, err
+	}
 	var request v1.UpdateAgentRequest
 	if decodeInputObject(raw, &request, "model", "name", "instructions", "metadata", "multi_agent", "reasoning", "service_tier", "text", "tools", "x_agents_core") != nil {
 		return store.UpdateAgentInput{}, errors.New("Request must be a JSON object containing supported fields.")
