@@ -18,6 +18,36 @@ Official Session capability-directory responses can include automatically derive
 
 ## Evidence and limits
 
-Owned official probes and Core acceptance records are under `~/.parsar/remediation/20260923/template-null-selection/`. The network probe distinguishes disabled and populated restricted policies, narrowing, inline defaults and Template resets. The capability probe uses distinct nonempty lists, avoiding an ambiguous empty-default comparison. Final request counts, real execution and required-check results are recorded after completion; this file does not yet claim batch acceptance.
+Owned official probes and Core acceptance records are under
+`~/.parsar/remediation/20260923/template-null-selection/`. Together they made
+82 HTTP requests and created six Templates and eleven Sessions. All seventeen
+owned resources have successful public DELETE receipts; physical upstream
+destruction was not independently observed. Credential scans passed.
+
+- `official-network/REPORT.md`: 46 requests, four Templates, six Sessions, zero
+  Turns. Disabled and populated restricted policies distinguish inheritance from
+  an enabled default. Narrowing succeeds; broadening rejects. Inline null and
+  Template create/update null produce enabled policy. Existing Sessions preserve
+  their policies after Template reset. Four provisioning-time DELETE conflicts
+  each succeeded on one later bounded cleanup attempt. This does not requalify
+  native network enforcement.
+- `official-capabilities/REPORT.md`: 36 requests, two Templates, five Sessions,
+  one real official `gpt-6-astra` Turn. Four distinct request cases establish
+  list selection. The null case additionally has three completed, exit-zero
+  native commands reading unknown markers from inherited Skill, Plugin Skill
+  and caller directory contents. Empty/replacement native bytes were not newly
+  qualified against the official service.
+
+The first capability attempt stopped before any model call because its test
+incorrectly equated caller directories with the entire official Session projection.
+Its original script, raw results and cleanup remain. The bounded continuation
+separated caller-selected paths from observed derived paths; it did not change
+the requests or hide a model failure. Official Environment reads contain Skill
+and Plugin metadata but no capability-directory field; do not equate them with
+the richer Session environment projection. Mixed individual-field official null
+cases and all native/provider combinations remain unqualified.
+
+Core implementation checks and real execution results are recorded after completion;
+this record does not yet claim batch acceptance.
 
 This batch does not widen hostname syntax, change native capability support, requalify every harness/Provider combination, or claim full protocol compatibility. Provisioning-delete retries and private test assertion failures remain in the evidence rather than being counted as successful first attempts.
