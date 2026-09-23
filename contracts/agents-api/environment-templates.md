@@ -906,5 +906,6 @@ published protocol maxima. [File resource qualification](file-resource-semantics
 records default-selected unversioned content and descriptive metadata, default
 deletion rejection with multiple versions, and nondefault latest pointer fallback.
 Core updates the default pointer and top-level name/description atomically, while
-concrete version bytes and previously frozen Sessions remain immutable. Last-version
-deletion, version-number reuse and complete errors/visibility timing remain gaps.
+concrete version bytes and previously frozen Sessions remain immutable. Deleting the
+last version deletes the Skill; version numbers are intentionally never reused.
+Complete errors and visibility timing remain gaps.
