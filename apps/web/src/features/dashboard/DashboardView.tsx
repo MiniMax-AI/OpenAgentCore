@@ -14,12 +14,15 @@ import { StatusIcon, type StatusKind } from "../../components/StatusIcon";
 import { backendFailureStatus } from "../../lib/core-readiness";
 import {
   buildDashboardSnapshot,
+  buildRuntimeDashboardModel,
   dashboardEnvironmentLabel,
   dashboardStatusLabel,
   formatDashboardTimestamp,
   type DashboardCollectionState,
   type DashboardSessionRow,
 } from "./dashboard-model";
+import { RuntimeObservabilityContent, type RuntimeHistoryLoader } from "./RuntimeObservabilityContent";
+import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";
 import "./DashboardView.css";
 
 export interface DashboardViewProps {
@@ -31,6 +34,11 @@ export interface DashboardViewProps {
   sessionCollectionState: DashboardCollectionState;
   sessionCollectionError: string | null;
   sessionCollectionHasSnapshot: boolean;
+  runtimeSnapshot: RuntimeDashboardSnapshot | null;
+  runtimeCollectionState: DashboardCollectionState;
+  runtimeCollectionError: string | null;
+  runtimeCollectionHasSnapshot: boolean;
+  loadRuntimeHistory: RuntimeHistoryLoader;
   onRefresh: () => void;
   onCreateAgent: () => void;
   onStartSession: () => void;
@@ -232,6 +240,11 @@ export function DashboardView({
   sessionCollectionState,
   sessionCollectionError,
   sessionCollectionHasSnapshot,
+  runtimeSnapshot,
+  runtimeCollectionState,
+  runtimeCollectionError,
+  runtimeCollectionHasSnapshot,
+  loadRuntimeHistory,
   onRefresh,
   onCreateAgent,
   onStartSession,
@@ -241,21 +254,28 @@ export function DashboardView({
   onOpenSession,
 }: DashboardViewProps) {
   const snapshot = useMemo(() => buildDashboardSnapshot(agents, sessions, 6, 5), [agents, sessions]);
+  const runtimeModel = useMemo(() => runtimeSnapshot
+    ? buildRuntimeDashboardModel(runtimeSnapshot.sessions, runtimeSnapshot.observations)
+    : null, [runtimeSnapshot]);
   const agentsAvailable = collectionHasSnapshot(agentCollectionState, agentCollectionHasSnapshot);
   const sessionsAvailable = collectionHasSnapshot(sessionCollectionState, sessionCollectionHasSnapshot);
-  const refreshing = agentCollectionState === "connecting" || sessionCollectionState === "connecting";
+  const runtimeAvailable = runtimeCollectionState === "ready" || runtimeCollectionHasSnapshot;
+  const refreshing = agentCollectionState === "connecting" || sessionCollectionState === "connecting" || runtimeCollectionState === "connecting";
   const hasStaleSnapshot = (
     (agentCollectionState === "failed" && agentCollectionHasSnapshot) ||
-    (sessionCollectionState === "failed" && sessionCollectionHasSnapshot)
+    (sessionCollectionState === "failed" && sessionCollectionHasSnapshot) ||
+    (runtimeCollectionState === "failed" && runtimeCollectionHasSnapshot)
   );
-  const hasUnavailableSource = !agentsAvailable || !sessionsAvailable;
+  const hasUnavailableSource = !agentsAvailable || !sessionsAvailable || !runtimeAvailable;
   const attentionCount = snapshot.statusCounts.requires_action + snapshot.statusCounts.failed;
-  const sourceErrors: Array<readonly ["Agents" | "Sessions", string | null]> = [
+  const sourceErrors: Array<readonly ["Agents" | "Sessions" | "Runtime", string | null]> = [
     agentCollectionState === "failed" ? ["Agents", agentCollectionError] as const : null,
     sessionCollectionState === "failed" ? ["Sessions", sessionCollectionError] as const : null,
-  ].filter((entry): entry is readonly ["Agents" | "Sessions", string | null] => entry !== null);
-  const backendFailureStatuses = sourceErrors.map(([, error]) => backendFailureStatus(error));
-  const backendUnavailable = sourceErrors.length > 0 && backendFailureStatuses.every(Boolean);
+    runtimeCollectionState === "failed" ? ["Runtime", runtimeCollectionError] as const : null,
+  ].filter((entry): entry is readonly ["Agents" | "Sessions" | "Runtime", string | null] => entry !== null);
+  const coreSourceErrors = sourceErrors.filter(([label]) => label !== "Runtime");
+  const backendFailureStatuses = coreSourceErrors.map(([, error]) => backendFailureStatus(error));
+  const backendUnavailable = coreSourceErrors.length > 0 && backendFailureStatuses.every(Boolean);
   const backendFailureDetail = Array.from(new Set(backendFailureStatuses.filter(Boolean))).map((status) => (
     status === "network" ? "network failure" : `HTTP ${status}`
   )).join(" / ");
@@ -304,6 +324,7 @@ export function DashboardView({
             <div className="dashboard-source-badges" aria-label="Dashboard data sources">
               <CollectionStateBadge label="Agents" state={agentCollectionState} hasSnapshot={agentCollectionHasSnapshot} />
               <CollectionStateBadge label="Sessions" state={sessionCollectionState} hasSnapshot={sessionCollectionHasSnapshot} />
+              <CollectionStateBadge label="Runtime" state={runtimeCollectionState} hasSnapshot={runtimeCollectionHasSnapshot} />
             </div>
           </div>
 
@@ -357,6 +378,46 @@ export function DashboardView({
               emphasis={sessionsAvailable && attentionCount > 0}
             />
           </dl>
+        </section>
+
+        <section className="dashboard-panel dashboard-runtime-panel" aria-labelledby="dashboard-runtime-heading">
+          <header>
+            <div>
+              <h2 id="dashboard-runtime-heading">Runtime monitoring</h2>
+              <p>Current provider status · retained metrics history</p>
+            </div>
+            {runtimeModel ? (
+              <span className="dashboard-runtime-freshness">
+                {runtimeModel.summary.observedRuntimeCount}/{runtimeModel.summary.managedRuntimeCount} managed observed
+                {runtimeModel.summary.newestResolvedAt === null ? "" : ` · ${formatDashboardTimestamp(runtimeModel.summary.newestResolvedAt)}`}
+              </span>
+            ) : null}
+          </header>
+          {!runtimeAvailable || !runtimeSnapshot || !runtimeModel ? (
+            <p className="dashboard-empty">
+              <AlertTriangle size={14} aria-hidden="true" />
+              {runtimeCollectionState === "connecting"
+                ? "Loading Runtime observations…"
+                : backendUnavailable
+                  ? "Runtime observations unavailable while the Core backend is offline."
+                  : runtimeCollectionError
+                    ? `Runtime observations unavailable: ${runtimeCollectionError}`
+                    : "Runtime observations unavailable."}
+            </p>
+          ) : (
+            <>
+              {runtimeModel.rows.length ? (
+                <RuntimeObservabilityContent
+                  snapshot={runtimeSnapshot}
+                  stale={runtimeCollectionState === "failed" && runtimeCollectionHasSnapshot}
+                  loadRuntimeHistory={loadRuntimeHistory}
+                  onOpenSession={onOpenSession}
+                />
+              ) : (
+                <p className="dashboard-empty dashboard-empty-positive">No Session-owned Runtime contexts in this snapshot.</p>
+              )}
+            </>
+          )}
         </section>
 
         <div className="dashboard-primary-grid">

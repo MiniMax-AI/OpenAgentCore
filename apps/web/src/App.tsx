@@ -37,6 +37,13 @@ import {
   requestAgentUpdate,
 } from "./features/agents/agent-actions";
 import { DashboardView } from "./features/dashboard/DashboardView";
+import { loadRuntimeDurableSnapshot } from "./features/dashboard/runtime-history";
+import {
+  loadRuntimeDashboardSnapshot,
+  RUNTIME_SNAPSHOT_REFRESH_MS,
+  RUNTIME_SNAPSHOT_TIMEOUT_MS,
+  type RuntimeDashboardSnapshot,
+} from "./features/dashboard/runtime-snapshot";
 import { EnvironmentTemplatesView } from "./features/environment-templates/EnvironmentTemplatesView";
 import {
   SessionsView,
@@ -280,6 +287,10 @@ export function App() {
   const [sessionCollectionState, setSessionCollectionState] = useState<CoreConnectionState>("connecting");
   const [sessionCollectionError, setSessionCollectionError] = useState<string | null>(null);
   const [sessionCollectionHasSnapshot, setSessionCollectionHasSnapshot] = useState(false);
+  const [runtimeSnapshot, setRuntimeSnapshot] = useState<RuntimeDashboardSnapshot | null>(null);
+  const [runtimeCollectionState, setRuntimeCollectionState] = useState<CoreConnectionState>("connecting");
+  const [runtimeCollectionError, setRuntimeCollectionError] = useState<string | null>(null);
+  const [runtimeCollectionHasSnapshot, setRuntimeCollectionHasSnapshot] = useState(false);
   const [sessionAgentFilter, setSessionAgentFilter] = useState<string | null>(null);
   const [filteredSessions, setFilteredSessions] = useState<AgentSession[]>([]);
   const [filteredSessionCollectionState, setFilteredSessionCollectionState] = useState<CoreConnectionState>("connecting");
@@ -315,6 +326,10 @@ export function App() {
   const sessionCollectionRequestRef = useRef(0);
   const agentCollectionAbortRef = useRef<AbortController | null>(null);
   const sessionCollectionAbortRef = useRef<AbortController | null>(null);
+  const runtimeCollectionAbortRef = useRef<AbortController | null>(null);
+  const runtimeCollectionRequestRef = useRef(0);
+  const runtimeCollectionHasSnapshotRef = useRef(false);
+  const dashboardRefreshInFlightRef = useRef(false);
   const filteredSessionCollectionAbortRef = useRef<AbortController | null>(null);
   const filteredSessionCollectionRequestRef = useRef(0);
   const sessionAgentFilterRef = useRef<string | null>(sessionAgentFilter);
@@ -526,6 +541,54 @@ export function App() {
       if (sessionCollectionAbortRef.current === controller) sessionCollectionAbortRef.current = null;
     }
   }, [core, coreGeneration, notify]);
+
+  const refreshRuntimeSnapshot = useCallback(async () => {
+    if (coreGeneration !== connectionGenerationRef.current) return false;
+    runtimeCollectionAbortRef.current?.abort();
+    const controller = new AbortController();
+    runtimeCollectionAbortRef.current = controller;
+    const request = runtimeCollectionRequestRef.current + 1;
+    runtimeCollectionRequestRef.current = request;
+    let timedOut = false;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, RUNTIME_SNAPSHOT_TIMEOUT_MS);
+    if (!runtimeCollectionHasSnapshotRef.current) setRuntimeCollectionState("connecting");
+    setRuntimeCollectionError(null);
+    try {
+      const result = await settleCollection(() => loadRuntimeDashboardSnapshot(
+        core,
+        controller.signal,
+      ));
+      if (
+        coreGeneration !== connectionGenerationRef.current ||
+        request !== runtimeCollectionRequestRef.current
+      ) return false;
+      if (result.status === "rejected") {
+        if (isAbort(result.reason) && !timedOut) return false;
+        const message = timedOut
+          ? "Runtime snapshot exceeded the 15 second Web refresh budget."
+          : errorMessage(result.reason);
+        setRuntimeCollectionState("failed");
+        setRuntimeCollectionError(message);
+        return false;
+      }
+      if (result.value === null) {
+        setRuntimeCollectionState("failed");
+        setRuntimeCollectionError("Session data changed while Runtime observations were loading. The previous complete snapshot was retained.");
+        return false;
+      }
+      setRuntimeSnapshot(result.value);
+      runtimeCollectionHasSnapshotRef.current = true;
+      setRuntimeCollectionHasSnapshot(true);
+      setRuntimeCollectionState("ready");
+      return true;
+    } finally {
+      window.clearTimeout(timeout);
+      if (runtimeCollectionAbortRef.current === controller) runtimeCollectionAbortRef.current = null;
+    }
+  }, [core, coreGeneration]);
 
   const refreshFilteredSessions = useCallback(async (agentId: string) => {
     if (
@@ -900,13 +963,27 @@ export function App() {
   }, [coreGeneration, refreshAgents, refreshFilteredSessions, refreshSelectedSession, refreshSessions]);
 
   const refreshDashboard = useCallback(() => {
+    if (dashboardRefreshInFlightRef.current) return;
+    dashboardRefreshInFlightRef.current = true;
     void refreshAgents();
-    void refreshSessions();
     void refreshVaults();
     void refreshEnvironmentTemplates();
+    void (async () => {
+      try {
+        if (await refreshSessions()) await refreshRuntimeSnapshot();
+      } finally {
+        dashboardRefreshInFlightRef.current = false;
+      }
+    })();
     const filter = sessionAgentFilterRef.current;
     if (filter) void refreshFilteredSessions(filter);
-  }, [refreshAgents, refreshEnvironmentTemplates, refreshFilteredSessions, refreshSessions, refreshVaults]);
+  }, [refreshAgents, refreshEnvironmentTemplates, refreshFilteredSessions, refreshRuntimeSnapshot, refreshSessions, refreshVaults]);
+
+  const loadDashboardRuntimeHistory = useCallback((
+    snapshot: RuntimeDashboardSnapshot,
+    range: Parameters<typeof loadRuntimeDurableSnapshot>[2],
+    signal: AbortSignal,
+  ) => loadRuntimeDurableSnapshot(core, snapshot, range, signal), [core]);
 
   const refreshSystem = useCallback(() => {
     void refreshStartupConfiguration();
@@ -950,6 +1027,11 @@ export function App() {
     setSessions([]);
     setAgentCollectionHasSnapshot(false);
     setSessionCollectionHasSnapshot(false);
+    setRuntimeSnapshot(null);
+    runtimeCollectionHasSnapshotRef.current = false;
+    setRuntimeCollectionState("connecting");
+    setRuntimeCollectionError(null);
+    setRuntimeCollectionHasSnapshot(false);
     setItems([]);
     setTurns([]);
     setEnvironmentObservations(new Map());
@@ -966,6 +1048,40 @@ export function App() {
     void refreshEnvironmentTemplates();
     void refreshStartupConfiguration();
   }, [refreshAgents, refreshEnvironmentTemplates, refreshSessions, refreshStartupConfiguration, refreshVaults]);
+
+  useEffect(() => {
+    if (view !== "dashboard") return;
+    let timer: number | null = null;
+    void (async () => {
+      if (
+        sessionCollectionState === "ready" &&
+        !runtimeCollectionHasSnapshotRef.current &&
+        !dashboardRefreshInFlightRef.current
+      ) {
+        await refreshRuntimeSnapshot();
+      }
+    })();
+    const schedule = () => {
+      const jitter = Math.floor(Math.random() * 5_000);
+      timer = window.setTimeout(() => {
+        if (!document.hidden && !dashboardRefreshInFlightRef.current) {
+          void refreshRuntimeSnapshot();
+        }
+        schedule();
+      }, RUNTIME_SNAPSHOT_REFRESH_MS + jitter);
+    };
+    const onVisibilityChange = () => {
+      if (!document.hidden && !dashboardRefreshInFlightRef.current) {
+        void refreshRuntimeSnapshot();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    schedule();
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [refreshRuntimeSnapshot, sessionCollectionState, view]);
 
   useEffect(() => {
     filteredSessionCollectionAbortRef.current?.abort();
@@ -2007,6 +2123,7 @@ export function App() {
     connectionGenerationRef.current += 1;
     agentCollectionRequestRef.current += 1;
     sessionCollectionRequestRef.current += 1;
+    runtimeCollectionRequestRef.current += 1;
     filteredSessionCollectionRequestRef.current += 1;
     vaultCollectionRequestRef.current += 1;
     startupConfigurationRequestRef.current += 1;
@@ -2031,6 +2148,8 @@ export function App() {
     agentCollectionAbortRef.current = null;
     sessionCollectionAbortRef.current?.abort();
     sessionCollectionAbortRef.current = null;
+    runtimeCollectionAbortRef.current?.abort();
+    runtimeCollectionAbortRef.current = null;
     filteredSessionCollectionAbortRef.current?.abort();
     filteredSessionCollectionAbortRef.current = null;
     vaultCollectionAbortRef.current?.abort();
@@ -2048,6 +2167,11 @@ export function App() {
     setSessionCollectionState("connecting");
     setSessionCollectionError(null);
     setSessionCollectionHasSnapshot(false);
+    setRuntimeSnapshot(null);
+    runtimeCollectionHasSnapshotRef.current = false;
+    setRuntimeCollectionState("connecting");
+    setRuntimeCollectionError(null);
+    setRuntimeCollectionHasSnapshot(false);
     sessionAgentFilterRef.current = null;
     filteredSessionsRef.current = [];
     setSessionAgentFilter(null);
@@ -2176,6 +2300,11 @@ export function App() {
               sessionCollectionState={sessionCollectionState}
               sessionCollectionError={sessionCollectionError}
               sessionCollectionHasSnapshot={sessionCollectionHasSnapshot}
+              runtimeSnapshot={runtimeSnapshot}
+              runtimeCollectionState={runtimeCollectionState}
+              runtimeCollectionError={runtimeCollectionError}
+              runtimeCollectionHasSnapshot={runtimeCollectionHasSnapshot}
+              loadRuntimeHistory={loadDashboardRuntimeHistory}
               onRefresh={refreshDashboard}
               onCreateAgent={openAgentSetup}
               onStartSession={() => openSessionSetup()}

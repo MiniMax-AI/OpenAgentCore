@@ -21,13 +21,23 @@ type EnvironmentInputActivity struct {
 }
 
 func environmentInputActivity(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) (*EnvironmentInputActivity, error) {
+	activity, _, err := environmentInputState(ctx, q, session)
+	return activity, err
+}
+
+// environmentInputState also reports whether the latest reservation is still
+// pending and can start a Turn, including a provisioning hosted initial input
+// that has no public activity. While a Turn is active or newer than it, the
+// reservation is not reported.
+func environmentInputState(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) (*EnvironmentInputActivity, bool, error) {
 	row, err := q.GetEnvironmentInputActivity(ctx, session)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return nil, false, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
+	pending := row.State == EnvironmentInputPending
 	activity := &EnvironmentInputActivity{Status: "idle", LastActiveAt: row.CreatedAt.Time}
 	if row.SettledAt.Valid {
 		activity.LastActiveAt = row.SettledAt.Time
@@ -43,13 +53,13 @@ func environmentInputActivity(ctx context.Context, q *sqlc.Queries, session pgty
 		// No Turn has started. The pinned Session contract permits idle while a
 		// hosted Environment provisions; neither a caller action nor an invented
 		// in-progress/idle transition is appropriate here.
-		return nil, nil
+		return nil, pending, nil
 	}
-	if row.State == EnvironmentInputPending && row.EnvironmentType != "openai_hosted" && row.ConnectionStatus != "connected" {
+	if pending && row.EnvironmentType != "openai_hosted" && row.ConnectionStatus != "connected" {
 		activity.Status = "requires_action"
 		activity.EnvironmentID = uuid.UUID(row.EnvironmentID.Bytes).String()
 	}
-	return activity, nil
+	return activity, pending, nil
 }
 
 func withEnvironmentInputActivity(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, apply func() error) error {
@@ -60,7 +70,7 @@ func withEnvironmentInputActivity(ctx context.Context, q *sqlc.Queries, session 
 	if err := apply(); err != nil {
 		return err
 	}
-	after, err := environmentInputActivity(ctx, q, session)
+	after, pending, err := environmentInputState(ctx, q, session)
 	if err != nil || after == nil {
 		// Admitted input is represented by the normal Turn and Session events.
 		return err
@@ -74,7 +84,7 @@ func withEnvironmentInputActivity(ctx context.Context, q *sqlc.Queries, session 
 	}
 	return recordSessionChange(ctx, q, session, SessionChange{
 		Event:                    v1.SessionEvent{Type: "agent.session." + after.Status},
-		EnvironmentInputActivity: after, SessionUsage: usage,
+		EnvironmentInputActivity: after, SessionUsage: usage, Settled: !pending,
 	})
 }
 

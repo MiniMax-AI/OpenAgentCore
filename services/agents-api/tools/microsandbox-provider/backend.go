@@ -23,6 +23,9 @@ func (b backend) run(ctx context.Context) (wire.Response, error) {
 	case "inspect":
 		_, s, e := b.inspect(ctx, b.q.Compute)
 		return wire.Response{State: &s}, e
+	case "metrics":
+		m, e := b.metrics(ctx, b.q.Compute)
+		return wire.Response{Metrics: m}, e
 	case "kill":
 		return wire.Response{}, b.kill(ctx, b.q.Compute)
 	case "resume_compute":
@@ -60,6 +63,7 @@ func (b backend) run(ctx context.Context) (wire.Response, error) {
 	}
 	return wire.Response{}, sandbox.ErrInvalid
 }
+
 func (b backend) inspect(ctx context.Context, c wire.Compute) (*sdk.SandboxHandle, wire.State, error) {
 	state := wire.State{Compute: c}
 	h, e := sdk.GetSandbox(ctx, c.Name)

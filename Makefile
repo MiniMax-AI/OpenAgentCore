@@ -27,6 +27,7 @@ openapi:
 	    -g cmd/server/main.go --dir ./services/agents-api,./contracts/agents-api/v1 \
 	    --output "$$output" \
 	    --outputTypes yaml --parseInternal; \
+	python3 scripts/patch-agents-openapi.py "$$output/swagger.yaml"; \
 	go run ./scripts/openapi-split "$$output/swagger.yaml" contracts/agents-api/openapi.yaml contracts/agents-api/sandbox-manager.openapi.yaml
 
 check-sqlc:

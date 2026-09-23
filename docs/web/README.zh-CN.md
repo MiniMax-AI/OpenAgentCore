@@ -10,8 +10,8 @@ Core 部署提供完整的产品界面，同时让凭据和执行能力始终留
 
 ## 可以做什么
 
-- **通过 Dashboard 统一管理**：查看 Agent、活跃 Session、需要关注的工作、最近活动
-  和常用创建入口。
+- **通过 Dashboard 统一管理**：查看 Agent、活跃 Session、Runtime 当前 CPU/内存
+  证据、计算运行时长、Token 覆盖率、需要关注的工作、最近活动和常用创建入口。
 - **创建可复用 Agent**：从空白配置或实用模板开始，设置模型、指令、文本行为、
   Function 和 HTTP MCP 服务。
 - **运行持久化对话**：创建 Session、发送消息、查看实时事件、重新打开历史工作、
@@ -27,8 +27,16 @@ Core 部署提供完整的产品界面，同时让凭据和执行能力始终留
 
 ### Dashboard
 
-Dashboard 是默认首页，集中展示当前 Agent 和 Session 结果、需要关注的 Session，
-并可直接进入创建 Agent 或启动 Session 的流程。
+Dashboard 是默认首页，集中展示当前 Agent 和 Session 结果，并加载完整的租户级 Runtime
+观测快照，不会把缺失值伪装成 0。支持搜索、状态/模式筛选、排序、分页的语义表格按需
+展开；页面也展示需要关注的 Session，并可直接进入创建 Agent 或启动 Session 的流程。
+Core 默认将周期采样存入现有 PostgreSQL，无需额外监控服务。页面通过 Core 查询
+1 小时、6 小时和 24 小时历史，刷新后仍可读取。未启用执行 worker 的部署保留
+浏览器本地 Live 视图。Token 速率来自 Session 的实际用量快照，缺失数据不按零计算。
+Web 不直接访问数据库，也不接收监控凭据。运行时长只在当前/Live 视图展示；
+历史图表保留 CPU、内存和 Token。
+
+![Runtime 监控实时趋势](images/runtime-dashboard.png)
 
 ### Agents
 
@@ -57,7 +65,7 @@ self-hosted、managed sandbox 和 LLM endpoint 是否存在。页面不聚合 Ru
 
 | 区域 | 用户可以完成的工作 |
 | --- | --- |
-| Dashboard | 查看 Agent/Session 概览、关注队列、最近活动和快捷入口 |
+| Dashboard | 查看 Agent/Session 概览、Runtime 当前 CPU/内存/运行时长与 Token 覆盖率、关注队列、最近活动和快捷入口 |
 | Agents | 创建、搜索、查看、编辑、删除、使用模板并启动 Session |
 | Sessions | 持久化对话、按 Agent 筛选、实时事件、取消、重试和继续执行 |
 | Trace | 查看 Turn 历史、Core 报告的 Usage、命令输出、Function 和 Patch 活动 |

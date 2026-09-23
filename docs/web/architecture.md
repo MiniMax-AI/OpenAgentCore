@@ -80,7 +80,7 @@ that is a separate product layer.
 | Layer | Owns | Does not own |
 | --- | --- | --- |
 | Agents Core Web | navigation, Agent forms, Vault/Credential metadata controls, Session timeline, live-state projection, reconnect recovery, function-result UI | durable truth, Credential decryption, engine selection, sandbox or provider credentials |
-| `@agents-core-web/agents-client` | `/v1/agents/**`, `/v1/vaults/**`, and Source `/v1/files**` wire types; route-specific beta/auth headers; pagination; strict Environment/File/Vault metadata projection; write-only Credential create/replace; fetch-based SSE parsing | uncertain-write retries, secret readback, native protocol translation |
+| `@agents-core-web/agents-client` | `/v1/agents/**`, `/v1/vaults/**`, and Source `/v1/files**` wire types; route-specific beta/auth headers; pagination; strict Environment/File/Vault and Runtime current/history projection; write-only Credential create/replace; fetch-based SSE parsing | uncertain-write retries, secret readback, native protocol translation, Runtime persistence |
 | Agent Core | principal authentication, validation, idempotency, durable Agent/Session/Turn/Item and Vault/Credential truth, server-side Credential encryption/use, live events, scheduling | product organization UI or Web user sessions |
 | `parsar-daemon` | device connection, host capability advertisement, native process lifecycle and translation | public Agents HTTP semantics or product policy |
 | Native adapter | Codex app-server or Claude Agent SDK integration | public API and Web deployment policy |

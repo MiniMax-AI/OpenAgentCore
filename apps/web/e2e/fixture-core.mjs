@@ -593,6 +593,7 @@ function emitTurnLifecycle(status) {
     session_id: "session_snapshot",
     turn_id: terminal.id,
     turn: terminal,
+    usage: terminal.usage,
   })}\n\n`;
   for (const stream of streamResponses.keys()) stream.write(event);
   return true;
@@ -1030,6 +1031,15 @@ const server = http.createServer(async (request, response) => {
       return sendJson(response, created, 201);
     }
 
+    // The legacy Web fixture uses human-readable Session IDs for interaction
+    // assertions. Runtime observation resources require canonical UUIDs, so this
+    // fixture advertises an empty, valid collection instead of inventing a false
+    // identity join. Positive Runtime rendering is covered by the typed component
+    // and coordinator tests with canonical identities.
+    if (request.method === "GET" && url.pathname === "/v1/agents/runtime-observations") {
+      return sendJson(response, page([]));
+    }
+
     if (request.method === "GET" && url.pathname === "/v1/agents/sessions") {
       trackAbort(response, "sessionListReads");
       const control = consumeControl("sessionList");
@@ -1069,8 +1079,9 @@ const server = http.createServer(async (request, response) => {
             "cache-control": "no-cache, no-transform",
             connection: "keep-alive",
           });
-          response.write(": fixture creation retry observes only future events\n\n");
-          setTimeout(() => response.end(), state.controls.sessionCreateStreamCloseDelayMs);
+          // Like Core, a same-key stream retry sends no events and ends at once;
+          // clients recover the Session with stream=false.
+          response.end(": connected\n\n");
           return;
         }
         return sendJson(response, receipt.session, 201);
@@ -1125,7 +1136,6 @@ const server = http.createServer(async (request, response) => {
         created_at: baseline + state.sequence,
         last_active_at: baseline + state.sequence,
       };
-      const createdSnapshot = structuredClone(created);
       let initialTurn = null;
       let initialItems = [];
       if (hasInitialInput && initialInputMessages) {
@@ -1157,6 +1167,11 @@ const server = http.createServer(async (request, response) => {
         created.status = "in_progress";
         created.last_active_at = baseline + state.sequence;
       }
+      // As in Core, the created event repeats this fixture's JSON 201 body. The
+      // fixture queues a Turn for any initial input, so both show in_progress;
+      // Core instead shows requires_action for self_hosted and idle while an
+      // openai_hosted Environment provisions.
+      const createdSnapshot = structuredClone(created);
       state.sessions.unshift(created);
       if (typeof idempotencyKey === "string") {
         state.sessionCreateReceipts.set(idempotencyKey, { fingerprint, session: created });
@@ -1192,12 +1207,6 @@ const server = http.createServer(async (request, response) => {
             turn_id: turn.id,
             turn,
           })}\n\n`);
-          response.write(`event: agent.session.in_progress\nid: progress_${state.sequence}\ndata: ${JSON.stringify({
-            type: "agent.session.in_progress",
-            event_id: `progress_${state.sequence}`,
-            session_id: created.id,
-            session: created,
-          })}\n\n`);
           for (const [index, item] of items.entries()) {
             response.write(`event: agent.session.turn.item.added\nid: item_${state.sequence}_${index + 1}\ndata: ${JSON.stringify({
               type: "agent.session.turn.item.added",
@@ -1207,6 +1216,12 @@ const server = http.createServer(async (request, response) => {
               item,
             })}\n\n`);
           }
+          response.write(`event: agent.session.in_progress\nid: progress_${state.sequence}\ndata: ${JSON.stringify({
+            type: "agent.session.in_progress",
+            event_id: `progress_${state.sequence}`,
+            session_id: created.id,
+            session: created,
+          })}\n\n`);
         }
         setTimeout(() => response.end(), state.controls.sessionCreateStreamCloseDelayMs);
         return;
@@ -1498,7 +1513,7 @@ const server = http.createServer(async (request, response) => {
         response.destroy();
         return;
       }
-      return sendJson(response, result);
+      return sendJson(response, result, 201);
     }
     if (request.method === "GET" && environmentFilesMatch) {
       trackAbort(response, "environmentFileReads");
@@ -1527,7 +1542,7 @@ const server = http.createServer(async (request, response) => {
           .filter((file) => file.path.slice(0, file.path.lastIndexOf("/")) === directory)
           .sort((left, right) => left.path.localeCompare(right.path));
         if (order === "desc") files.reverse();
-        return sendJson(response, { data: files.slice(0, limit), next: null });
+        return sendJson(response, { object: "page", data: files.slice(0, limit), next: null, has_more: false });
       }
       const sessionEnvironment = state.sessions[0]?.environment;
       const expectedId = sessionEnvironment?.type === "self_hosted" ? sessionEnvironment.id : null;
@@ -1551,9 +1566,12 @@ const server = http.createServer(async (request, response) => {
       }));
       if (order === "desc") allFiles.reverse();
       const start = cursor === "fixture-page-2" ? 20 : 0;
+      const next = start + limit < allFiles.length ? "fixture-page-2" : null;
       return sendJson(response, {
+        object: "page",
         data: allFiles.slice(start, start + limit),
-        next: start + limit < allFiles.length ? "fixture-page-2" : null,
+        next,
+        has_more: next !== null,
       });
     }
 

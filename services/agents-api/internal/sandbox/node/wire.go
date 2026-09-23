@@ -10,6 +10,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -66,15 +67,16 @@ type request struct {
 	Operation     string `json:"operation"`
 	TimeoutMillis int64  `json:"timeout_ms"`
 	// deadline is anchored to the receiving host and never crosses the wire.
-	deadline   time.Time
-	Reference  sandbox.Reference         `json:"reference"`
-	Bootstrap  *sandbox.Bootstrap        `json:"bootstrap,omitempty"`
-	Compute    *sandbox.Compute          `json:"compute,omitempty"`
-	Generation uint64                    `json:"generation,omitempty"`
-	Command    *sandbox.Command          `json:"command,omitempty"`
-	Suspend    *sandbox.SuspendRequest   `json:"suspend,omitempty"`
-	Resume     *sandbox.ResumeRequest    `json:"resume,omitempty"`
-	Snapshot   *sandbox.SnapshotIdentity `json:"snapshot,omitempty"`
+	deadline    time.Time
+	Reference   sandbox.Reference         `json:"reference"`
+	Bootstrap   *sandbox.Bootstrap        `json:"bootstrap,omitempty"`
+	Compute     *sandbox.Compute          `json:"compute,omitempty"`
+	Generation  uint64                    `json:"generation,omitempty"`
+	Command     *sandbox.Command          `json:"command,omitempty"`
+	Suspend     *sandbox.SuspendRequest   `json:"suspend,omitempty"`
+	Resume      *sandbox.ResumeRequest    `json:"resume,omitempty"`
+	Snapshot    *sandbox.SnapshotIdentity `json:"snapshot,omitempty"`
+	Observation *runtimeobs.Target        `json:"observation,omitempty"`
 }
 
 type response struct {
@@ -85,6 +87,7 @@ type response struct {
 	Compute      *sandbox.Compute       `json:"compute,omitempty"`
 	State        *sandbox.ComputeState  `json:"state,omitempty"`
 	Command      *sandbox.CommandResult `json:"command,omitempty"`
+	Sample       *runtimeobs.Sample     `json:"sample,omitempty"`
 }
 
 type frame struct {
@@ -136,6 +139,10 @@ func errorCode(err error) string {
 	switch {
 	case err == nil:
 		return ""
+	case errors.Is(err, runtimeobs.ErrUnavailable):
+		return "observation_unavailable"
+	case errors.Is(err, runtimeobs.ErrNotRunning):
+		return "runtime_not_running"
 	case errors.Is(err, sandbox.ErrInvalid):
 		return "invalid"
 	case errors.Is(err, sandbox.ErrOwnership):
@@ -154,6 +161,10 @@ func responseError(code string) error {
 	switch code {
 	case "":
 		return nil
+	case "observation_unavailable":
+		return runtimeobs.ErrUnavailable
+	case "runtime_not_running":
+		return runtimeobs.ErrNotRunning
 	case "invalid":
 		return sandbox.ErrInvalid
 	case "ownership":
@@ -179,12 +190,16 @@ func (q request) validate() error {
 		return sandbox.ErrInvalid
 	}
 	count := 0
-	for _, ok := range []bool{q.Bootstrap != nil, q.Compute != nil, q.Command != nil, q.Suspend != nil, q.Resume != nil, q.Snapshot != nil} {
+	for _, ok := range []bool{q.Bootstrap != nil, q.Compute != nil, q.Command != nil, q.Suspend != nil, q.Resume != nil, q.Snapshot != nil, q.Observation != nil} {
 		if ok {
 			count++
 		}
 	}
 	switch q.Operation {
+	case "observe":
+		if count == 1 && q.Observation != nil && validObservation(*q.Observation, q.Reference) {
+			return nil
+		}
 	case "create":
 		if count == 1 && q.Bootstrap != nil && q.Bootstrap.Reference == q.Reference {
 			return nil
@@ -234,6 +249,10 @@ func execute(ctx context.Context, p sandbox.Provider, q request) response {
 	var info sandbox.Info
 	var command sandbox.CommandResult
 	switch q.Operation {
+	case "observe":
+		var sample runtimeobs.Sample
+		sample, err = observeProvider(ctx, p, *q.Observation)
+		out.Sample = &sample
 	case "create":
 		info, err = p.Create(ctx, *q.Bootstrap)
 		out.Info = &info
@@ -288,6 +307,7 @@ func execute(ctx context.Context, p sandbox.Provider, q request) response {
 	}
 	out.ErrorCode = errorCode(err)
 	if err != nil {
+		out.Sample = nil
 		out.Info = nil
 		out.State = nil
 		out.Command = nil

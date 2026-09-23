@@ -146,6 +146,27 @@ The outward Core URL must be reachable from the guest. `localhost` inside the
 microVM refers to the guest. Model provider settings continue to use the existing
 private `AGENTS_API_EXECUTION_OPTIONS_FILE` contract.
 
+## Runtime observations
+
+The configured microsandbox provider uses the same public Runtime observation rows
+and Core Web Dashboard as Docker. Each request resolves Session, Environment,
+allocation, installation and the persisted current compute generation before
+invoking the helper. The helper performs one read-only `SandboxHandle.Metrics`
+call; it does not wake suspended compute or extend retention.
+
+The current projection includes cumulative vCPU seconds, configured vCPU capacity,
+guest memory usage/limit and compute uptime. Suspended or otherwise non-running
+compute reports `unavailable` with `runtime_not_running`; metrics that are disabled
+or have no current SDK sample report `sample_unavailable`. The SDK's instantaneous
+CPU percentage, host RSS, disk, network and overlay measurements are not yet
+exposed. Token usage continues to come from Session/Turn usage, not this provider.
+An allocation without a persisted exact compute receipt also reports
+`sample_unavailable`; the deterministic sandbox name is not sufficient to identify
+one compute incarnation safely.
+
+Observation is operational evidence only. The idle suspension state machine uses
+its durable activity and compute-phase records and never consults Dashboard samples.
+
 ## Park, restore and verification
 
 Core first reserves the idle allocation. The daemon rejects suspension while

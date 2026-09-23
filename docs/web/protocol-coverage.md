@@ -86,6 +86,8 @@ the Core key binding. Agents Core Web's local proxy owns the bearer server-side.
 | Environment Templates retrieve/update/delete | Yes | Basic management | Templates supports partial name/network updates and confirmed deletion, followed by a Core catalog refresh. It neither creates Runtime instances nor edits existing Session snapshots. Advanced profiles outside the current strict client projection remain unsupported; no hidden fields are erased |
 | Environment keys | No public browser API | Hidden | Operator-issued executor credentials stay on executor compute and never enter browser state, request previews, navigation, or Create actions |
 | Vaults and static-bearer Credentials | Yes | Yes, when discovered | Web traverses the Vault and per-Vault Credential page chains to their Core end markers before publishing one loaded metadata result, provides safe lifecycle controls and write-only token create/replace, and deterministically attaches each selected Credential's owning Vault to Session creation. The reads are non-atomic and not a current Core total. Tokens are never returned; catalog success is not runtime proof |
+| Runtime observations | Core extension | Yes, read-only | Dashboard traverses the complete tenant-scoped current-observation page chain, requires an exact Session identity join, and publishes only complete snapshots. Docker and microsandbox values remain provider evidence; unsupported, unavailable, stale, and unknown are distinct. Browser-local trends are explicitly Live and ephemeral |
+| Runtime history | Optional Core extension | Client implemented; Dashboard pending | Capability discovery and bounded Session history are strictly projected through `packages/agents-client`. Durable UI must remain disabled until capability discovery reports qualified periodic collection and a production Reader; token throughput is not synthesized into history |
 | Protocol Subagents / enabled multi-agent | Later | No | Distinct from storing multiple Agent configurations |
 | Usage/observability | Response types | Yes, scoped | Session aggregate and per-Turn token Usage are labelled separately; unavailable measurements remain unknown, not zero |
 
@@ -288,8 +290,10 @@ the Core key binding. Agents Core Web's local proxy owns the bearer server-side.
   Workspace, `limit=20`, the selected `asc` or `desc` order, and Core's opaque
   `page` token for continuation while preserving the applied directory, order,
   and limit.
-- The client accepts only HTTP 200 and the recorded Core page projection
-  `{data,next}`. Every entry must have the matching Environment ID,
+- The client accepts only HTTP 200 and the official page envelope
+  `{object:"page",data,next,has_more}`, where `has_more` is true exactly when
+  `next` is set. A directory typed with a trailing separator is sent in cleaned
+  form, which Core requires. Every entry must have the matching Environment ID,
   `object:"agent.environment.file"`, a safe absolute path, and a non-negative
   safe-integer `size_bytes`. A malformed success rejects the complete page; no
   partial result is accepted or retried automatically.
@@ -316,8 +320,8 @@ the Core key binding. Agents Core Web's local proxy owns the bearer server-side.
   GET to distinguish currently present from absent, never a second DELETE.
 - Environment Files.create is a single-attempt exact union: strict standard Base64
   `inline` bytes or a project-owned Source `file_id`, plus one canonical file path
-  beneath `/workspace/`. Source upload is bounded at 512 MiB while destination copy
-  is bounded at 50 MiB. The Web's primary flow is upload → returned Source ID →
+  beneath `/workspace/`. The client accepts only HTTP 201 Created. Source upload is
+  bounded at 512 MiB while destination copy is bounded at 50 MiB. The Web's primary flow is upload → returned Source ID →
   `file_id` copy; it never substitutes a local filename or path for that ID.
   A missing response can outlive caller cancellation. Web performs at most one
   read-only directory list as a clue; matching path and size cannot prove byte
@@ -400,13 +404,16 @@ upstream.
 
 ## Dashboard and System boundary
 
-- Dashboard is a Web-derived view over the last successfully traversed Agent and
-  Session page-chain results for the configured Core access scope. Web follows every
+- Dashboard is a Web-derived view over the last successfully traversed Agent,
+  Session, and Runtime-observation page-chain results for the configured Core
+  access scope. Web follows every
   continuation with `limit=100&order=desc`, rejects duplicate identities and
   invalid or cyclic cursors, and allows at most 100 pages per collection. If Core
   reports that page 101 is required, the refresh fails closed and does not publish
-  the partial result. Dashboard performs no additional Turn, Item, Environment,
-  or execution-readiness requests and makes no writes.
+  the partial result. The Runtime collection must complete and have exactly the
+  same Session ID set before it replaces the prior snapshot. Dashboard performs
+  no Turn, Item, Environment, lifecycle, or execution-readiness requests and makes
+  no writes.
 - When both top-level collection reads fail through a gateway/network condition,
   Dashboard labels the local Agent Core backend as not ready and links the whole
   notice to connection recovery. An explicitly configured local Docker guide may
@@ -431,6 +438,16 @@ upstream.
   at most eight rows ordered by valid Core-reported `last_active_at`. A
   `self_hosted` label identifies only the Session profile, not an executor
   connection. Row actions navigate to the exact loaded Session.
+- Runtime charts prefer bounded durable History reads when capability discovery
+  proves a periodic Reader. They do not publish a transient browser-local chart
+  first and then switch sources after reload.
+  CPU rate is derived only from ordered cumulative counters for the same allocation
+  and compute incarnation; memory remains point-in-time; gaps are not interpolated.
+  History performs bounded Session-scoped reads and exposes 1-hour, 6-hour, and
+  24-hour retained ranges. An unconfigured deployment falls back to the bounded
+  browser-local Live window. The sources remain explicitly labelled, and any incomplete or failed
+  multi-Session History refresh retains the previous result rather than publishing
+  a partial replacement. Token throughput remains Live-only.
 - Agent and Session collection states remain independent. A failed refresh may
   leave an explicitly labelled prior loaded result visible, including a previously
   confirmed empty result. An initial failed empty collection is unavailable

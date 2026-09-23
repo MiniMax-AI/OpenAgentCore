@@ -30,6 +30,8 @@ import type {
   OpenAIHostedAgentEnvironmentInput,
   OpenAIHostedAgentEnvironmentResource,
   RequiredAction,
+  RuntimeObservation,
+  RuntimeUnavailableReason,
   SelfHostedAgentEnvironment,
   SavedAgentToolInput,
   SourceFile,
@@ -48,6 +50,25 @@ import type {
   Vault,
   VaultCredential,
 } from "./types";
+
+describe("Runtime Observation discriminated contract", () => {
+  it("narrows status, reason, mode, instance, and sample presence together", () => {
+    type Observed = Extract<RuntimeObservation, { status: "observed" }>;
+    type Unavailable = Extract<RuntimeObservation, { status: "unavailable" }>;
+    type NoneMode = Extract<RuntimeObservation, { mode: "none" }>;
+    type SelfHosted = Extract<RuntimeObservation, { mode: "self_hosted" }>;
+
+    expectTypeOf<Observed["mode"]>().toEqualTypeOf<"openai_hosted">();
+    expectTypeOf<Observed["reason"]>().toEqualTypeOf<null>();
+    expectTypeOf<Observed["observed_at"]>().toEqualTypeOf<number>();
+    expectTypeOf<Observed["instance"]["allocation_id"]>().toEqualTypeOf<string>();
+    expectTypeOf<Unavailable["reason"]>().toEqualTypeOf<RuntimeUnavailableReason>();
+    expectTypeOf<Unavailable["observed_at"]>().toEqualTypeOf<null>();
+    expectTypeOf<NoneMode["environment_id"]>().toEqualTypeOf<null>();
+    expectTypeOf<NoneMode["instance"]["kind"]>().toEqualTypeOf<"none">();
+    expectTypeOf<SelfHosted["instance"]["kind"]>().toEqualTypeOf<"self_hosted_connection">();
+  });
+});
 
 describe("Parsar dadf64a7 basic managed Environment profile", () => {
   it("pins omitted/default, explicit-enabled, and explicit-disabled network input", () => {

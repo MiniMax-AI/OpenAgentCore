@@ -571,11 +571,19 @@ definitions:
         items:
           $ref: '#/definitions/v1.EnvironmentFile'
         type: array
+      has_more:
+        type: boolean
       next:
         type: string
         x-nullable: true
+      object:
+        enum:
+        - page
+        type: string
     required:
     - data
+    - has_more
+    - object
     type: object
   v1.EnvironmentInfo:
     properties:
@@ -1179,6 +1187,543 @@ definitions:
     required:
     - type
     type: object
+  v1.RuntimeCPUObservation:
+    properties:
+      capacity_cores:
+        minimum: 5e-324
+        type: number
+        x-nullable: true
+      usage_cores:
+        minimum: 0
+        type: number
+        x-nullable: true
+      usage_seconds_total:
+        minimum: 0
+        type: number
+        x-nullable: true
+      utilization_ratio:
+        minimum: 0
+        type: number
+        x-nullable: true
+    required:
+    - capacity_cores
+    - usage_cores
+    - usage_seconds_total
+    - utilization_ratio
+    type: object
+  v1.RuntimeHistory:
+    properties:
+      coverage:
+        $ref: '#/definitions/v1.RuntimeHistoryCoverage'
+      generated_at:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      object:
+        enum:
+        - agent.runtime_history
+        type: string
+      requested_range:
+        $ref: '#/definitions/v1.RuntimeHistoryRange'
+      resolution_seconds:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+      series:
+        items:
+          $ref: '#/definitions/v1.RuntimeHistorySeries'
+        maxItems: 1000
+        type: array
+      session_id:
+        format: uuid
+        type: string
+      source:
+        enum:
+        - durable
+        type: string
+      token_usage:
+        items:
+          $ref: '#/definitions/v1.RuntimeHistoryTokenUsagePoint'
+        maxItems: 10000
+        type: array
+    required:
+    - coverage
+    - generated_at
+    - object
+    - requested_range
+    - resolution_seconds
+    - series
+    - session_id
+    - source
+    - token_usage
+    type: object
+  v1.RuntimeHistoryCPU:
+    properties:
+      capacity_cores:
+        minimum: 5e-324
+        type: number
+        x-nullable: true
+      contributor_count:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+      utilization_ratio:
+        minimum: 0
+        type: number
+        x-nullable: true
+    required:
+    - capacity_cores
+    - contributor_count
+    - utilization_ratio
+    type: object
+  v1.RuntimeHistoryCapabilities:
+    properties:
+      available:
+        type: boolean
+      collection_mode:
+        enum:
+        - on_read
+        - periodic
+        type: string
+        x-nullable: true
+      maximum_points:
+        maximum: 10000
+        minimum: 2
+        type: integer
+        x-nullable: true
+      maximum_range_seconds:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+        x-nullable: true
+      metrics:
+        items:
+          enum:
+          - cpu
+          - memory
+          - tokens
+          type: string
+        maxItems: 3
+        type: array
+      minimum_step_seconds:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+        x-nullable: true
+      object:
+        enum:
+        - agent.runtime_history_capabilities
+        type: string
+      reason:
+        enum:
+        - not_configured
+        - periodic_collection_required
+        type: string
+        x-nullable: true
+      retention_seconds:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+        x-nullable: true
+      sample_interval_seconds:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+        x-nullable: true
+    required:
+    - available
+    - collection_mode
+    - maximum_points
+    - maximum_range_seconds
+    - metrics
+    - minimum_step_seconds
+    - object
+    - reason
+    - retention_seconds
+    - sample_interval_seconds
+    type: object
+  v1.RuntimeHistoryCoverage:
+    properties:
+      buckets:
+        items:
+          $ref: '#/definitions/v1.RuntimeHistoryCoveragePoint'
+        maxItems: 10000
+        type: array
+      expected_sample_count:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      first_sample_at:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+        x-nullable: true
+      last_sample_at:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+        x-nullable: true
+      retained_start:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      sample_count:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+    required:
+    - buckets
+    - expected_sample_count
+    - first_sample_at
+    - last_sample_at
+    - retained_start
+    - sample_count
+    type: object
+  v1.RuntimeHistoryCoveragePoint:
+    properties:
+      end:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+      first_observed_at:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+        x-nullable: true
+      last_observed_at:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+        x-nullable: true
+      observation_count:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      observed_count:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      start:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      unavailable_count:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+    required:
+    - end
+    - first_observed_at
+    - last_observed_at
+    - observation_count
+    - observed_count
+    - start
+    - unavailable_count
+    type: object
+  v1.RuntimeHistoryMemory:
+    properties:
+      contributor_count:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+      limit_bytes:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+        x-nullable: true
+      usage_bytes:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+        x-nullable: true
+    required:
+    - contributor_count
+    - limit_bytes
+    - usage_bytes
+    type: object
+  v1.RuntimeHistoryPoint:
+    properties:
+      cpu:
+        allOf:
+        - $ref: '#/definitions/v1.RuntimeHistoryCPU'
+        x-nullable: true
+      end:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+      first_observed_at:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+        x-nullable: true
+      last_observed_at:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+        x-nullable: true
+      memory:
+        allOf:
+        - $ref: '#/definitions/v1.RuntimeHistoryMemory'
+        x-nullable: true
+      observation_count:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      observed_count:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      start:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      unavailable_count:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+    required:
+    - cpu
+    - end
+    - first_observed_at
+    - last_observed_at
+    - memory
+    - observation_count
+    - observed_count
+    - start
+    - unavailable_count
+    type: object
+  v1.RuntimeHistoryRange:
+    properties:
+      end:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+      start:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+    required:
+    - end
+    - start
+    type: object
+  v1.RuntimeHistorySeries:
+    properties:
+      allocation_id:
+        format: uuid
+        type: string
+      environment_id:
+        format: uuid
+        type: string
+      points:
+        items:
+          $ref: '#/definitions/v1.RuntimeHistoryPoint'
+        maxItems: 10000
+        type: array
+      provider_type:
+        pattern: '^[a-z][a-z0-9_]{0,31}$'
+        type: string
+      started_at:
+        $ref: '#/definitions/v1.RuntimeHistoryTime'
+    required:
+    - allocation_id
+    - environment_id
+    - points
+    - provider_type
+    - started_at
+    type: object
+  v1.RuntimeHistoryTime:
+    properties:
+      nanoseconds:
+        maximum: 999999999
+        minimum: 0
+        type: integer
+      seconds:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+    required:
+    - nanoseconds
+    - seconds
+    type: object
+  v1.RuntimeHistoryTokenUsagePoint:
+    properties:
+      end:
+        maximum: 9007199254740991
+        minimum: 1
+        type: integer
+      input_tokens:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      output_tokens:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      sampled_at:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+      start:
+        maximum: 9007199254740991
+        minimum: 0
+        type: integer
+    required:
+    - end
+    - input_tokens
+    - output_tokens
+    - sampled_at
+    - start
+    type: object
+  v1.RuntimeInstance:
+    properties:
+      allocation_id:
+        format: uuid
+        type: string
+        x-nullable: true
+      connection_generation:
+        format: uuid
+        type: string
+        x-nullable: true
+      device_id:
+        format: uuid
+        type: string
+        x-nullable: true
+      kind:
+        enum:
+        - managed_allocation
+        - self_hosted_connection
+        - none
+        type: string
+    required:
+    - allocation_id
+    - connection_generation
+    - device_id
+    - kind
+    type: object
+  v1.RuntimeMemoryObservation:
+    properties:
+      limit_bytes:
+        minimum: 1
+        type: integer
+        x-nullable: true
+      usage_bytes:
+        minimum: 0
+        type: integer
+        x-nullable: true
+    required:
+    - limit_bytes
+    - usage_bytes
+    type: object
+  v1.RuntimeObservation:
+    properties:
+      allocation_created_at:
+        minimum: 0
+        type: integer
+        x-nullable: true
+      cpu:
+        allOf:
+        - $ref: '#/definitions/v1.RuntimeCPUObservation'
+        x-nullable: true
+      environment_id:
+        format: uuid
+        type: string
+        x-nullable: true
+      id:
+        format: uuid
+        type: string
+      instance:
+        $ref: '#/definitions/v1.RuntimeInstance'
+      memory:
+        allOf:
+        - $ref: '#/definitions/v1.RuntimeMemoryObservation'
+        x-nullable: true
+      mode:
+        enum:
+        - none
+        - self_hosted
+        - openai_hosted
+        type: string
+      object:
+        enum:
+        - agent.runtime_observation
+        type: string
+      observed_at:
+        minimum: 0
+        type: integer
+        x-nullable: true
+      provider_type:
+        type: string
+        x-nullable: true
+      reason:
+        enum:
+        - runtime_mode_not_observable
+        - allocation_pending
+        - runtime_not_running
+        - source_not_configured
+        - sample_timeout
+        - sample_unavailable
+        type: string
+        x-nullable: true
+      resolved_at:
+        minimum: 0
+        type: integer
+      session_id:
+        format: uuid
+        type: string
+      started_at:
+        minimum: 0
+        type: integer
+        x-nullable: true
+      status:
+        enum:
+        - observed
+        - unsupported
+        - unavailable
+        type: string
+    required:
+    - allocation_created_at
+    - cpu
+    - environment_id
+    - id
+    - instance
+    - memory
+    - mode
+    - object
+    - observed_at
+    - provider_type
+    - reason
+    - resolved_at
+    - session_id
+    - started_at
+    - status
+    type: object
+  v1.RuntimeObservationList:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/v1.RuntimeObservation'
+        type: array
+      first_id:
+        format: uuid
+        type: string
+        x-nullable: true
+      has_more:
+        type: boolean
+      last_id:
+        format: uuid
+        type: string
+        x-nullable: true
+      object:
+        enum:
+        - list
+        type: string
+    required:
+    - data
+    - first_id
+    - has_more
+    - last_id
+    - object
+    type: object
   v1.SavedAgent:
     properties:
       created_at:
@@ -1531,6 +2076,13 @@ definitions:
         type: string
       type:
         type: string
+      usage:
+        allOf:
+        - $ref: '#/definitions/v1.TokenUsage'
+        description: |-
+          Usage is present only on terminal Turn events, where it mirrors the Turn
+          snapshot and is null when unknown. Other events omit it.
+        x-nullable: true
     required:
     - event_id
     - type
@@ -2534,16 +3086,21 @@ paths:
   /agents/environments/{environment_id}/files:
     get:
       description: Lists direct regular files in one authorized self_hosted or qualified
-        local workspace directory. Local paths use the public /workspace root. This
-        partial implementation defaults to the workspace root and limit 20; recursive
-        scope, directory/symlink treatment and these defaults are not verified upstream
-        semantics. Sorts by case-sensitive path components, descending by default.
-        Keep the same path, order and limit when using page. Each page rereads the
-        complete bounded directory; changed file paths/sizes invalidate continuation
-        locally with 400. There is no snapshot guarantee. Truncated or uncertain native
-        results fail with 503 without returning a partial page. This read never starts
-        a Turn or admits model input. Actual transport disconnect/reconnect events
-        remain observable.
+        local workspace directory. Local paths use the public /workspace root and
+        must be in cleaned form. This partial implementation defaults to the workspace
+        root and limit 20; recursive scope and these defaults are not verified upstream
+        semantics. A missing path, a regular file or a symbolic link returns an empty
+        page; links are never followed. Daemons without a local workspace binding
+        use the Claude SDK adapter reader, which keeps 404 for a missing path and
+        503 for a regular file or symbolic link. Well-formed unknown query keys are
+        ignored; malformed query encoding and a repeated supported key are rejected.
+        Sorts by case-sensitive path components, descending by default. Keep the same
+        path, order and limit when using page. Each page rereads the complete bounded
+        directory; changed file paths/sizes invalidate continuation locally with 400.
+        There is no snapshot guarantee. An openai_hosted Environment that has not
+        connected yet returns 400. Truncated or uncertain native results fail with
+        503 without returning a partial page. This read never starts a Turn or admits
+        model input. Actual transport disconnect/reconnect events remain observable.
       parameters:
       - description: agents=v1
         in: header
@@ -2555,7 +3112,7 @@ paths:
         name: environment_id
         required: true
         type: string
-      - description: Absolute directory inside the Environment workspace
+      - description: Absolute directory in cleaned form inside /workspace
         in: query
         name: path
         type: string
@@ -2614,14 +3171,15 @@ paths:
       consumes:
       - application/json
       description: Uploads standard Base64 bytes to a file beneath /workspace in a
-        qualified local Environment. Accepts inline bytes or a project-owned source
-        file_id through the same write path. Basic public hosted creation requires
-        explicit managed Runtime configuration. A private 50 MiB decoded-content limit
-        applies. The parent directory must exist. Replacement installs a new mode-0600
-        inode; upstream overwrite metadata semantics remain unverified. Idle writes
-        exclude execution. Missing receipts return unavailable and retain a durable
-        mutation gate without automatic replay. Error/timing parity with upstream
-        remains unverified.
+        qualified local Environment and returns 201. Accepts inline bytes or a project-owned
+        source file_id through the same write path. Unknown body fields are rejected
+        with their name as param. Basic public hosted creation requires explicit managed
+        Runtime configuration; an openai_hosted Environment that has not connected
+        yet returns 400. A private 50 MiB decoded-content limit applies. The parent
+        directory must exist. Replacement installs a new mode-0600 inode; upstream
+        overwrite metadata semantics remain unverified. Idle writes exclude execution.
+        Missing receipts return unavailable and retain a durable mutation gate without
+        automatic replay. Error/timing parity with upstream remains unverified.
       parameters:
       - description: agents=v1
         in: header
@@ -2642,8 +3200,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/v1.EnvironmentFile'
         "400":
@@ -2939,6 +3497,99 @@ paths:
       summary: Update an Environment Template
       tags:
       - Environment Templates
+  /agents/runtime-history/capabilities:
+    get:
+      description: Core extension advertising only safe backend-neutral Durable history
+        availability and bounds. Available is true only when a query Reader and qualified
+        periodic collection are both configured.
+      parameters:
+      - description: agents=v1
+        in: header
+        name: OpenAI-Beta
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.RuntimeHistoryCapabilities'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Retrieve Runtime history capabilities
+      tags:
+      - Runtime history
+  /agents/runtime-observations:
+    get:
+      description: Core extension listing one current Runtime context per tenant-owned
+        Session in Session creation order. Each row has an independent resolved_at
+        and optional provider observed_at; the page is not an atomic telemetry snapshot.
+      parameters:
+      - description: agents=v1
+        in: header
+        name: OpenAI-Beta
+        required: true
+        type: string
+      - description: Last observation ID from the previous page
+        in: query
+        name: after
+        type: string
+      - default: 20
+        description: Page size
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      - default: desc
+        description: Session creation order
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.RuntimeObservationList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List current Runtime observations
+      tags:
+      - Runtime observations
   /agents/sessions:
     get:
       description: Cursor and results are scoped to the authenticated execution tenant.
@@ -3047,54 +3698,60 @@ paths:
         initial timeout. Initial input is required for none and for streamed creation
         outside self_hosted. Omitted/null input remains valid for non-streaming hosted
         and self_hosted creation. With stream=true, returns live Session events starting
-        at creation; disconnect does not cancel execution. New Sessions retain their
-        authenticated creator; all creation retries require the same typed subject,
-        including across key rotation. Saved-Agent retries and inline requests using
-        Vault attachments or credential references retain caller intent independently
-        of later resource changes; unrelated inline retries preserve resolved/default
-        equivalences. Unknown historical creators reject retries; known creators without
-        recorded intent retain resolved-snapshot retry rules. These conflict policies
-        are local and not verified hosted parity. Creation retries observe future
-        events without replay; retry with stream=false to retrieve the Session. Claude
-        SDK on none and Core-managed Docker openai_hosted supports qualified object-root
-        json_schema output with medium verbosity, single-Agent execution and ordinary
-        functions. Hosted execution reuses native workspace tools and Files/Artifacts;
-        Skills, Plugins, capability directories, HTTP MCP, Subagent and tool_search
-        combinations remain unqualified, including inherited template contents. Other
-        non-text initial input remains unsupported. Basic Codex and Claude SDK openai_hosted
-        creation requires an explicitly configured managed provider. The Claude workspace
-        profile supports non-deferred function tools with text or successful inline
-        PNG/JPEG results alongside native workspace tools; HTTP MCP remains unsupported.
-        Idle Sessions provision automatically; initial provisioning has no caller
-        connection action. Network defaults to enabled; disabled and restricted exact
-        ASCII hostnames are supported. Restricted policy requires 1–100 allowed domains.
-        Unsupported hostname forms and startup installations are rejected. Confidential
-        env, system/npm/Python packages and ordered setup commands use the shared
-        initialization lifecycle; requested network applies after setup. Initial inline
-        and tenant-owned file_id files freeze encrypted bytes before provisioning,
-        then install through the common Core lifecycle before native execution or
-        live Files access. With a template reference, omitted/null files, env, packages
-        and setup_commands inherit. Non-null files and command lists replace; env
-        overlays by key; each package manager inherits on omission/null and otherwise
-        replaces its list. Empty lists clear their selected field. Tenant-owned environment_template_id
-        references inherit omitted/null network and allow only narrowing overrides.
-        Inline hosted network:null retains the enabled default; updating a Template
-        with network:null resets its saved policy to enabled. Core freezes effective
-        configuration; template updates/deletion do not alter Session snapshots or
-        same-intent creation retries. Inline or tenant-owned skill_reference Skills
-        share initialization. Templates preserve default/latest/explicit selectors;
-        Session creation freezes concrete metadata and encrypted content atomically.
-        Skill, Plugin and capability-directory list omission/null inherit; a non-null
-        list replaces, including empty-list clearing. Omitted/null Skill version selectors
-        resolve the default version. Source deletion/default updates cannot change
-        committed Session Skill contents. Deferred function discovery uses type-only
-        tool_search and per-function defer_loading in the qualified single-agent Claude
-        environment:none function profile, including qualified inline image messages
-        and text results. Explicit web_search mode disabled and programmatic_tool_calling
-        enabled false use frozen common Runtime controls. Enabled forms remain unqualified.
-        Omitted programmatic configuration preserves native behavior, a documented
-        difference from the official default-on behavior. Other combinations remain
-        unqualified; see the operation coverage.
+        with the committed creation snapshot and closes right after the first agent.session.idle
+        recorded when a Turn ends or an input reservation stops being pending, or
+        any agent.session.failed, without sending later events. A creation that admitted
+        nothing closes after the snapshot; a settlement that records no event closes
+        after events up to the cursor read with a settled Session projection. Required
+        actions keep it open; disconnect does not cancel execution. The GET events
+        stream remains live-only. New Sessions retain their authenticated creator;
+        all creation retries require the same typed subject, including across key
+        rotation. Saved-Agent retries and inline requests using Vault attachments
+        or credential references retain caller intent independently of later resource
+        changes; unrelated inline retries preserve resolved/default equivalences.
+        Unknown historical creators reject retries; known creators without recorded
+        intent retain resolved-snapshot retry rules. These conflict policies are local
+        and not verified hosted parity. A same-key stream=true retry of an existing
+        creation returns 201 with no events and closes at once; retry with stream=false
+        or use the GET events stream to recover. Claude SDK on none and Core-managed
+        Docker openai_hosted supports qualified object-root json_schema output with
+        medium verbosity, single-Agent execution and ordinary functions. Hosted execution
+        reuses native workspace tools and Files/Artifacts; Skills, Plugins, capability
+        directories, HTTP MCP, Subagent and tool_search combinations remain unqualified,
+        including inherited template contents. Other non-text initial input remains
+        unsupported. Basic Codex and Claude SDK openai_hosted creation requires an
+        explicitly configured managed provider. The Claude workspace profile supports
+        non-deferred function tools with text or successful inline PNG/JPEG results
+        alongside native workspace tools; HTTP MCP remains unsupported. Idle Sessions
+        provision automatically; initial provisioning has no caller connection action.
+        Network defaults to enabled; disabled and restricted exact ASCII hostnames
+        are supported. Restricted policy requires 1–100 allowed domains. Unsupported
+        hostname forms and startup installations are rejected. Confidential env, system/npm/Python
+        packages and ordered setup commands use the shared initialization lifecycle;
+        requested network applies after setup. Initial inline and tenant-owned file_id
+        files freeze encrypted bytes before provisioning, then install through the
+        common Core lifecycle before native execution or live Files access. With a
+        template reference, omitted/null files, env, packages and setup_commands inherit.
+        Non-null files and command lists replace; env overlays by key; each package
+        manager inherits on omission/null and otherwise replaces its list. Empty lists
+        clear their selected field. Tenant-owned environment_template_id references
+        inherit omitted/null network and allow only narrowing overrides. Inline hosted
+        network:null retains the enabled default; updating a Template with network:null
+        resets its saved policy to enabled. Core freezes effective configuration;
+        template updates/deletion do not alter Session snapshots or same-intent creation
+        retries. Inline or tenant-owned skill_reference Skills share initialization.
+        Templates preserve default/latest/explicit selectors; Session creation freezes
+        concrete metadata and encrypted content atomically. Skill, Plugin and capability-directory
+        list omission/null inherit; a non-null list replaces, including empty-list
+        clearing. Omitted/null Skill version selectors resolve the default version.
+        Source deletion/default updates cannot change committed Session Skill contents.
+        Deferred function discovery uses type-only tool_search and per-function defer_loading
+        in the qualified single-agent Claude environment:none function profile, including
+        qualified inline image messages and text results. Explicit web_search mode
+        disabled and programmatic_tool_calling enabled false use frozen common Runtime
+        controls. Enabled forms remain unqualified. Omitted programmatic configuration
+        preserves native behavior, a documented difference from the official default-on
+        behavior. Other combinations remain unqualified; see the operation coverage.
       parameters:
       - description: agents=v1
         in: header
@@ -3741,6 +4398,124 @@ paths:
       summary: List persisted execution Items
       tags:
       - Items
+  /agents/sessions/{session_id}/runtime-history:
+    get:
+      description: Core extension returning tenant-scoped stored Runtime observations
+        for one Session. End is exclusive; the server selects a bounded resolution.
+        Responses contain at most 1,000 series, 10,000 points per coverage/series
+        array, and 100,000 total coverage plus series points. It never reads or changes
+        live compute.
+      parameters:
+      - description: agents=v1
+        in: header
+        name: OpenAI-Beta
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: session_id
+        required: true
+        type: string
+      - description: Inclusive Unix-second start
+        in: query
+        maximum: 9007199254740991
+        minimum: 0
+        name: start
+        required: true
+        type: integer
+      - description: Exclusive Unix-second end
+        in: query
+        maximum: 9007199254740991
+        minimum: 1
+        name: end
+        required: true
+        type: integer
+      - description: Maximum points per series; defaults to the lower of 120 and the
+          advertised service maximum
+        in: query
+        maximum: 10000
+        minimum: 2
+        name: max_points
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.RuntimeHistory'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Retrieve Session Runtime history
+      tags:
+      - Runtime history
+  /agents/sessions/{session_id}/runtime-observation:
+    get:
+      description: Core extension returning one tenant-scoped, read-only current Runtime
+        observation. It never provisions, renews, restarts, pauses or stops compute.
+      parameters:
+      - description: agents=v1
+        in: header
+        name: OpenAI-Beta
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: session_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.RuntimeObservation'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Retrieve a Session Runtime observation
+      tags:
+      - Runtime observations
   /agents/sessions/{session_id}/sandbox-placement:
     get:
       description: Core extension. Reads the caller-owned Session's fixed sandbox

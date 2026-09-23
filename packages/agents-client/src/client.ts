@@ -1,6 +1,7 @@
 import { exactFields, onlyFields, isRecord, hasOwn, canonicalUuid, isNonnegativeInteger, sameResourceId } from "./response-projection";
 import { projectTokenUsage } from "./usage-projection";
 import { projectAgentTurn, projectSessionItem, projectItemContent, projectHistoryPage, validateHistoryPageOptions } from "./history-projection";
+import { projectRuntimeHistory, projectRuntimeHistoryCapabilities } from "./runtime-history-projection";
 import { createSSEDecoder } from "./sse";
 import { projectVaultCredentialAuth, validCredentialURL } from "./vault-credential-auth";
 import type {
@@ -49,6 +50,11 @@ import type {
   StreamError,
   UpdateAgentInput,
   ReplaceVaultCredentialTokenInput,
+  RuntimeObservation,
+  RuntimeObservationList,
+  RuntimeHistory,
+  RuntimeHistoryCapabilities,
+  RuntimeHistoryQuery,
   Vault,
   VaultCredential,
   VaultCredentialDeleted,
@@ -93,6 +99,22 @@ export class AgentCoreError extends Error {
     this.code = code;
     this.param = param;
     this.errorType = errorType;
+  }
+}
+
+/**
+ * A creation stream ended without events. Core sends no events on a same-key
+ * retry of an existing creation; repeat the same request and Idempotency-Key
+ * with `stream=false` to retrieve the Session.
+ */
+export class CreationStreamRetryError extends AgentCoreError {
+  constructor() {
+    super(
+      "Agent Core already recorded this Session creation, so its stream sends no events. Repeat the same request and Idempotency-Key with stream=false to retrieve the Session.",
+      409,
+      "creation_stream_retry",
+    );
+    this.name = "CreationStreamRetryError";
   }
 }
 
@@ -229,7 +251,7 @@ function withQuery(path: string, params: URLSearchParams): string {
 
 const environmentResourceFields = new Set(["id", "object", "type", "status", "files", "plugins", "skills"]);
 const environmentFileFields = new Set(["environment_id", "object", "path", "size_bytes"]);
-const environmentFileListFields = new Set(["data", "next"]);
+const environmentFileListFields = new Set(["object", "data", "next", "has_more"]);
 const sourceFileFields = new Set([
   "id", "object", "bytes", "created_at", "filename", "purpose", "status", "expires_at", "status_details",
 ]);
@@ -282,6 +304,11 @@ const streamErrorFields = new Set(["code", "type", "message"]);
 const environmentStateFields = new Set(["id", "type", "status", "error"]);
 const snapshotEventFields = new Set(["type", "event_id", "session_id", "session"]);
 const turnEventFields = new Set(["type", "event_id", "session_id", "turn_id", "turn"]);
+// Terminal Turn events also carry top-level usage mirroring the Turn snapshot.
+const terminalTurnEventFields = new Set([...turnEventFields, "usage"]);
+const terminalTurnEventTypes = new Set([
+  "agent.session.turn.completed", "agent.session.turn.failed", "agent.session.turn.cancelled",
+]);
 const itemEventFields = new Set(["type", "event_id", "session_id", "turn_id", "item_id", "output_index", "item"]);
 const contentPartEventFields = new Set([
   "type", "event_id", "session_id", "turn_id", "item_id", "output_index", "content_index", "part",
@@ -297,6 +324,18 @@ const errorEventFields = new Set(["type", "event_id", "session_id", "error"]);
 const unsafeUnknownEventFields = new Set([
   "session", "turn", "turn_id", "item", "item_id", "output_index", "content_index", "part", "delta", "text", "error", "environment",
 ]);
+const runtimeObservationFields = new Set([
+  "id", "object", "session_id", "environment_id", "mode", "provider_type", "instance", "status", "reason",
+  "allocation_created_at", "resolved_at", "observed_at", "started_at", "cpu", "memory",
+]);
+const runtimeInstanceFields = new Set(["kind", "allocation_id", "device_id", "connection_generation"]);
+const runtimeCPUFields = new Set(["usage_seconds_total", "capacity_cores", "usage_cores", "utilization_ratio"]);
+const runtimeMemoryFields = new Set(["usage_bytes", "limit_bytes"]);
+const runtimeObservationReasons = new Set([
+  "runtime_mode_not_observable", "allocation_pending", "runtime_not_running",
+  "source_not_configured", "sample_timeout", "sample_unavailable",
+]);
+const runtimeProviderTypePattern = /^[a-z][a-z0-9_]{0,31}$/;
 function utf8Length(value: string): number {
   return new TextEncoder().encode(value).length;
 }
@@ -998,6 +1037,172 @@ function projectAgentSession(
   return session;
 }
 
+function invalidRuntimeObservation(message = "Agent Core returned an invalid Runtime observation."): never {
+  throw new AgentCoreError(message, 502, "invalid_runtime_observation");
+}
+
+function invalidRuntimeHistoryCapabilities(message = "Agent Core returned invalid Runtime history capabilities."): never {
+  throw new AgentCoreError(message, 502, "invalid_runtime_history_capabilities");
+}
+
+function invalidRuntimeHistory(message = "Agent Core returned invalid Runtime history."): never {
+  throw new AgentCoreError(message, 502, "invalid_runtime_history");
+}
+
+function nullableRuntimeNumber(value: unknown): number | null {
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return invalidRuntimeObservation();
+  }
+  return value;
+}
+
+function nullableRuntimeInteger(value: unknown): number | null {
+  const projected = nullableRuntimeNumber(value);
+  if (projected !== null && !Number.isSafeInteger(projected)) return invalidRuntimeObservation();
+  return projected;
+}
+
+function projectRuntimeObservation(value: unknown, expectedSessionId?: string): RuntimeObservation {
+  if (!isRecord(value) || !exactFields(value, runtimeObservationFields)) {
+    return invalidRuntimeObservation();
+  }
+  const id = canonicalUuid(value.id);
+  const sessionId = canonicalUuid(value.session_id);
+  const environmentId = value.environment_id === null ? null : canonicalUuid(value.environment_id);
+  if (
+    id === null || sessionId === null || id !== sessionId ||
+    (expectedSessionId !== undefined && !sameUuid(sessionId, expectedSessionId)) ||
+    value.object !== "agent.runtime_observation" ||
+    (value.mode !== "none" && value.mode !== "self_hosted" && value.mode !== "openai_hosted") ||
+    !(value.provider_type === null || (
+      typeof value.provider_type === "string" && runtimeProviderTypePattern.test(value.provider_type)
+    )) ||
+    !isRecord(value.instance) || !exactFields(value.instance, runtimeInstanceFields) ||
+    (value.status !== "observed" && value.status !== "unsupported" && value.status !== "unavailable") ||
+    !(value.reason === null || (
+      typeof value.reason === "string" && runtimeObservationReasons.has(value.reason)
+    )) ||
+    !isNonnegativeInteger(value.resolved_at)
+  ) return invalidRuntimeObservation();
+
+  const allocationId = value.instance.allocation_id === null ? null : canonicalUuid(value.instance.allocation_id);
+  const deviceId = value.instance.device_id === null ? null : canonicalUuid(value.instance.device_id);
+  const connectionGeneration = value.instance.connection_generation === null
+    ? null
+    : canonicalUuid(value.instance.connection_generation);
+  if (
+    (value.instance.allocation_id !== null && allocationId === null) ||
+    (value.instance.device_id !== null && deviceId === null) ||
+    (value.instance.connection_generation !== null && connectionGeneration === null)
+  ) return invalidRuntimeObservation();
+
+  const allocationCreatedAt = nullableRuntimeInteger(value.allocation_created_at);
+  const observedAt = nullableRuntimeInteger(value.observed_at);
+  const startedAt = nullableRuntimeInteger(value.started_at);
+  const isNone = value.mode === "none";
+  const isSelfHosted = value.mode === "self_hosted";
+  const isManaged = value.mode === "openai_hosted";
+  if (
+    (isNone && (
+      value.instance.kind !== "none" || environmentId !== null || value.provider_type !== null ||
+      allocationId !== null || deviceId !== null || connectionGeneration !== null || allocationCreatedAt !== null
+    )) ||
+    (isSelfHosted && (
+      value.instance.kind !== "self_hosted_connection" || environmentId === null ||
+      allocationId !== null || allocationCreatedAt !== null
+    )) ||
+    (isManaged && (
+      value.instance.kind !== "managed_allocation" || environmentId === null || connectionGeneration !== null ||
+      (allocationId === null && (deviceId !== null || allocationCreatedAt !== null))
+    ))
+  ) return invalidRuntimeObservation();
+
+  const observed = value.status === "observed";
+  if (
+    (observed && (
+      !isManaged || allocationId === null || value.reason !== null || observedAt === null ||
+      observedAt > value.resolved_at
+    )) ||
+    (!observed && (
+      observedAt !== null || startedAt !== null || value.cpu !== null || value.memory !== null
+    )) ||
+    (value.status === "unsupported" && (
+      (!isNone && !isSelfHosted) || value.reason !== "runtime_mode_not_observable"
+    )) ||
+    (value.status === "unavailable" && (
+      !isManaged || value.reason === null || value.reason === "runtime_mode_not_observable"
+    )) ||
+    (startedAt !== null && observedAt !== null && startedAt > observedAt) ||
+    (allocationCreatedAt !== null && allocationCreatedAt > value.resolved_at)
+  ) return invalidRuntimeObservation();
+
+  let cpu: RuntimeObservation["cpu"] = null;
+  if (value.cpu !== null) {
+    if (!observed || !isRecord(value.cpu) || !exactFields(value.cpu, runtimeCPUFields)) {
+      return invalidRuntimeObservation();
+    }
+    cpu = {
+      usage_seconds_total: nullableRuntimeNumber(value.cpu.usage_seconds_total),
+      capacity_cores: nullableRuntimeNumber(value.cpu.capacity_cores),
+      usage_cores: nullableRuntimeNumber(value.cpu.usage_cores),
+      utilization_ratio: nullableRuntimeNumber(value.cpu.utilization_ratio),
+    };
+    if (
+      Object.values(cpu).every((entry) => entry === null) ||
+      (cpu.capacity_cores !== null && cpu.capacity_cores === 0)
+    ) return invalidRuntimeObservation();
+  }
+
+  let memory: RuntimeObservation["memory"] = null;
+  if (value.memory !== null) {
+    if (!observed || !isRecord(value.memory) || !exactFields(value.memory, runtimeMemoryFields)) {
+      return invalidRuntimeObservation();
+    }
+    memory = {
+      usage_bytes: nullableRuntimeInteger(value.memory.usage_bytes),
+      limit_bytes: nullableRuntimeInteger(value.memory.limit_bytes),
+    };
+    if (
+      (memory.usage_bytes === null && memory.limit_bytes === null) ||
+      memory.limit_bytes === 0
+    ) return invalidRuntimeObservation();
+  }
+
+  return {
+    id, object: "agent.runtime_observation", session_id: sessionId, environment_id: environmentId,
+    mode: value.mode, provider_type: value.provider_type, instance: {
+      kind: value.instance.kind as RuntimeObservation["instance"]["kind"],
+      allocation_id: allocationId, device_id: deviceId, connection_generation: connectionGeneration,
+    },
+    status: value.status, reason: value.reason as RuntimeObservation["reason"],
+    allocation_created_at: allocationCreatedAt, resolved_at: value.resolved_at,
+    observed_at: observedAt, started_at: startedAt, cpu, memory,
+  } as RuntimeObservation;
+}
+
+function projectRuntimeObservationList(value: unknown, options?: PageOptions): RuntimeObservationList {
+  if (
+    !isRecord(value) || !exactFields(value, vaultListFields) || value.object !== "list" ||
+    !Array.isArray(value.data) || typeof value.has_more !== "boolean"
+  ) return invalidRuntimeObservation("Agent Core returned an invalid Runtime observation list.");
+  const limit = options?.limit ?? 20;
+  if (
+    !Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
+    (options?.order !== undefined && options.order !== "asc" && options.order !== "desc") ||
+    value.data.length > limit
+  ) return invalidRuntimeObservation("Agent Core returned an invalid Runtime observation list.");
+  const data = value.data.map((entry) => projectRuntimeObservation(entry));
+  const firstId = data[0]?.id ?? null;
+  const lastId = data[data.length - 1]?.id ?? null;
+  if (
+    new Set(data.map((entry) => entry.id)).size !== data.length ||
+    value.first_id !== firstId || value.last_id !== lastId ||
+    (value.has_more && data.length === 0)
+  ) return invalidRuntimeObservation("Agent Core returned an invalid Runtime observation list.");
+  return { object: "list", data, has_more: value.has_more, first_id: firstId, last_id: lastId };
+}
+
 function projectStreamError(value: unknown): StreamError {
   if (
     !isRecord(value) || !exactFields(value, streamErrorFields) ||
@@ -1127,17 +1332,22 @@ function projectStreamEventSession(
     "agent.session.turn.cancelled": "cancelled",
   };
   if (hasOwn(turnStatusByEvent, event.type)) {
-    if (!exactFields(value, turnEventFields) || event.turn === undefined) return invalidStreamEvent();
+    // Older Core releases omit terminal usage; no other Turn event may carry it.
+    const withUsage = terminalTurnEventTypes.has(event.type) && hasOwn(value, "usage");
+    if (!exactFields(value, withUsage ? terminalTurnEventFields : turnEventFields) || event.turn === undefined) {
+      return invalidStreamEvent();
+    }
     const sessionId = eventSessionId(value, expectedSessionId, true)!;
     const turnId = requiredEventString(value, "turn_id");
     const turn = projectAgentTurn(event.turn, expectedSessionId, invalidStreamEvent);
+    const usage = withUsage ? { usage: projectTokenUsage(value.usage, invalidStreamEvent) } : {};
     if (
       !sameResourceId(turn.id, turnId) ||
       // Native child history can first appear as a completed created snapshot.
       (!(event.type === "agent.session.turn.created" && turn.subagent_id != null) && turn.status !== turnStatusByEvent[event.type]) ||
       (immutable !== undefined && turn.subagent_id == null && !sameResourceId(turn.agent_id, immutable.agent.id))
     ) return invalidStreamEvent();
-    return { ...base, session_id: sessionId, turn_id: turnId, turn } as SessionEvent;
+    return { ...base, session_id: sessionId, turn_id: turnId, turn, ...usage } as SessionEvent;
   }
 
   if (event.type === "agent.session.turn.item.added" || event.type === "agent.session.turn.item.done") {
@@ -1249,6 +1459,8 @@ function projectUnknownStreamEvent(
 interface EventStreamConsumerOptions extends StreamOptions {
   onParsedEvent: (event: SessionEvent) => void;
   expectedSessionId?: () => string | undefined;
+  /** Replaces the generic error when a present stream body ends without events. */
+  emptyStreamError?: () => AgentCoreError;
 }
 
 async function consumeEventStream(
@@ -1303,7 +1515,7 @@ async function consumeEventStream(
     decoder.finish();
     options.signal?.throwIfAborted();
     if (!sawEvent) {
-      throw new AgentCoreError("Agent core returned an empty event stream.", 502, "empty_stream");
+      throw options.emptyStreamError?.() ?? new AgentCoreError("Agent core returned an empty event stream.", 502, "empty_stream");
     }
   } catch (error) {
     await reader.cancel(error).catch(() => undefined);
@@ -1568,6 +1780,8 @@ function projectEnvironmentFileList(
   if (
     fields.length !== environmentFileListFields.size ||
     fields.some((field) => !environmentFileListFields.has(field)) ||
+    page.object !== "page" ||
+    page.has_more !== (page.next !== null) ||
     !Array.isArray(page.data) ||
     !Number.isSafeInteger(limit) ||
     limit < 1 ||
@@ -1624,7 +1838,7 @@ function projectEnvironmentFileList(
     };
   });
 
-  return { data: files, next: page.next as string | null };
+  return { object: "page", data: files, next: page.next as string | null, has_more: page.has_more as boolean };
 }
 
 export class OpenAIAgentsClient implements AgentCore {
@@ -1879,6 +2093,58 @@ export class OpenAIAgentsClient implements AgentCore {
     return { ...page, data: page.data.map((session) => projectAgentSession(session)) };
   }
 
+  async listRuntimeObservations(options?: PageOptions): Promise<RuntimeObservationList> {
+    if (
+      (options?.after !== undefined && canonicalUuid(options.after) === null) ||
+      (options?.limit !== undefined && (
+        !Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 100
+      )) ||
+      (options?.order !== undefined && options.order !== "asc" && options.order !== "desc")
+    ) throw new TypeError("Runtime observation pagination options are invalid.");
+    const params = new URLSearchParams();
+    addPageOptions(params, options);
+    const value = await this.request<unknown>(
+      withQuery("/agents/runtime-observations", params),
+      { signal: options?.signal },
+    );
+    return projectRuntimeObservationList(value, options);
+  }
+
+  async retrieveRuntimeObservation(sessionId: string, options?: ReadOptions): Promise<RuntimeObservation> {
+    const value = await this.request<unknown>(
+      `/agents/sessions/${encodeURIComponent(sessionId)}/runtime-observation`,
+      { signal: options?.signal },
+    );
+    return projectRuntimeObservation(value, sessionId);
+  }
+
+  async getRuntimeHistoryCapabilities(options?: ReadOptions): Promise<RuntimeHistoryCapabilities> {
+    const value = await this.request<unknown>(
+      "/agents/runtime-history/capabilities",
+      { signal: options?.signal },
+    );
+    return projectRuntimeHistoryCapabilities(value, invalidRuntimeHistoryCapabilities);
+  }
+
+  async retrieveRuntimeHistory(sessionId: string, query: RuntimeHistoryQuery): Promise<RuntimeHistory> {
+    const canonicalSessionId = canonicalUuid(sessionId);
+    if (
+      query == null || canonicalSessionId === null || !isNonnegativeInteger(query.start) || !isNonnegativeInteger(query.end) ||
+      query.end <= query.start || (query.maxPoints !== undefined && (
+        !Number.isSafeInteger(query.maxPoints) || query.maxPoints < 2 || query.maxPoints > 10_000
+      ))
+    ) throw new TypeError("Runtime history query is invalid.");
+    const params = new URLSearchParams();
+    params.set("start", String(query.start));
+    params.set("end", String(query.end));
+    if (query.maxPoints !== undefined) params.set("max_points", String(query.maxPoints));
+    const value = await this.request<unknown>(
+      withQuery(`/agents/sessions/${encodeURIComponent(canonicalSessionId)}/runtime-history`, params),
+      { signal: query.signal },
+    );
+    return projectRuntimeHistory(value, canonicalSessionId, query, invalidRuntimeHistory);
+  }
+
   async createSession(input: CreateSessionInput, idempotencyKey = createIdempotencyKey()): Promise<AgentSession> {
     if ((input as { stream?: boolean }).stream === true) {
       throw new TypeError("createSession only supports the JSON response; connect streamEvents after creation.");
@@ -1930,6 +2196,7 @@ export class OpenAIAgentsClient implements AgentCore {
     let immutableSession: ImmutableSessionProjection | undefined;
     await consumeEventStream(response.body, {
       ...options,
+      emptyStreamError: () => new CreationStreamRetryError(),
       expectedSessionId: () => createdSessionId,
       onParsedEvent: (event) => {
         if (createdSessionId === undefined) {
@@ -2100,7 +2367,7 @@ export class OpenAIAgentsClient implements AgentCore {
     const value = await this.request<unknown>(
       `/agents/environments/${encodeURIComponent(environmentId)}/files`,
       { method: "POST", body: JSON.stringify(input), signal: options?.signal },
-      200,
+      201,
     );
     return projectEnvironmentFile(value, environmentId, input.path, expectedSize);
   }

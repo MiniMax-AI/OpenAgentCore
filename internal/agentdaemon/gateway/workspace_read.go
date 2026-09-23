@@ -73,6 +73,10 @@ func validWorkspaceOperationResult(result proto.WorkspaceReadResultPayload, requ
 	if request.Operation == "directory" && result.Outcome == "completed" {
 		return result.CloseAcknowledged && result.ErrorCode == "" && len(result.Data) == 0 && !result.Truncated && proto.ValidWorkspaceDirectory(result.Directory, request.MaxEntries)
 	}
+	// Only a directory request can report that its path names no directory.
+	if request.Operation == "directory" && result.Outcome == "rejected" && result.ErrorCode == proto.WorkspaceReadNotDirectory {
+		return result.Directory == nil && len(result.Data) == 0 && !result.Truncated && !result.CloseAcknowledged
+	}
 	return validWorkspaceReadResult(result, request.MaxBytes)
 }
 

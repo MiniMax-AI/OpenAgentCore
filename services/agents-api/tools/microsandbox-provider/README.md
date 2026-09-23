@@ -128,6 +128,28 @@ successful stdin completion and an explicit guest exit before returning a result
 Timeouts, output overflow and missing receipts return ErrCommandUnconfirmed.
 Closing an SDK exec handle alone does not prove the guest process exited.
 
+The read-only metrics operation holds the allocation lock and verifies the exact
+compute ID through the SDK before and after `msb metrics NAME --format json`.
+The CLI is the same checksum/version-pinned runtime binary. Its registry report
+preserves the native sample timestamp and fractional-second uptime; parsing both
+at native millisecond precision reconstructs the real run start consistently
+across polls and Core restarts, while new runs have a new start. The Go SDK v0.7.2
+projection drops that timestamp and truncates uptime to whole seconds, so it
+cannot supply this fence. Sandbox creation time is not a run start time.
+
+The helper returns only the native observation time, exact uptime, cumulative
+vCPU time and guest memory usage/limit. It rejects stale/exited reports and
+malformed or missing fields. CLI output is bounded; command failures expose only
+an unavailable code, never native diagnostics. Observation does not connect to
+the guest, renew activity, resume paused compute or mutate lifecycle state.
+
+The pinned source evidence is tag `v0.7.2`, commit
+`1c59b8dbf0ad47dda2f807c0214b529aceb81c74`: `crates/metrics/lib/registry.rs`
+reads `sampled_at_unix_ms` and `started_at_unix_ms` coherently and subtracts them
+for uptime; `crates/cli/lib/commands/metrics.rs` serializes the timestamp and
+`uptime.as_secs_f64()`. The private native fields and identifiers do not cross
+the helper boundary.
+
 ## Acceptance boundary
 
 The feature is idle-only: Core must reserve a terminal Session with no pending

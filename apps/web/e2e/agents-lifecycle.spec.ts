@@ -2399,15 +2399,36 @@ test("presents Dashboard page-chain results and System boundaries without extra 
     "/v1/agents/sessions/session_snapshot/items",
     "/v1/agents/sessions/session_snapshot/turns",
   ];
+  let delayNextSessionList = true;
+  let releaseSessionList: (() => void) | null = null;
+  let markSessionListStarted: (() => void) | null = null;
+  const sessionListStarted = new Promise<void>((resolve) => {
+    markSessionListStarted = resolve;
+  });
+  await page.route("**/v1/agents/sessions*", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/v1/agents/sessions" || !delayNextSessionList) {
+      return route.continue();
+    }
+    delayNextSessionList = false;
+    markSessionListStarted?.();
+    await new Promise<void>((resolve) => {
+      releaseSessionList = resolve;
+    });
+    await route.continue();
+  });
   const refresh = dashboard.getByRole("button", { name: "Refresh Dashboard snapshot" });
   await refresh.click();
+  await sessionListStarted;
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  releaseSessionList?.();
   await expect.poll(async () => {
     const entries = await fixtureRequests(request);
     return [count(entries, "/v1/agents"), count(entries, "/v1/agents/sessions")];
-  }).toEqual([count(before, "/v1/agents") + 1, count(before, "/v1/agents/sessions") + 1]);
+  }).toEqual([count(before, "/v1/agents") + 1, count(before, "/v1/agents/sessions") + 2]);
   const after = await fixtureRequests(request);
   expect(count(after, "/v1/agents")).toBe(count(before, "/v1/agents") + 1);
-  expect(count(after, "/v1/agents/sessions")).toBe(count(before, "/v1/agents/sessions") + 1);
+  expect(count(after, "/v1/agents/sessions")).toBe(count(before, "/v1/agents/sessions") + 2);
+  expect(count(after, "/v1/agents/runtime-observations")).toBe(count(before, "/v1/agents/runtime-observations") + 1);
   for (const path of detailPaths) expect(count(after, path)).toBe(count(before, path));
   await attachScreenshot(page, testInfo, "desktop-dashboard-loaded-snapshot");
 
@@ -2536,6 +2557,417 @@ test("presents Dashboard page-chain results and System boundaries without extra 
   await attachScreenshot(page, testInfo, "narrow-system-contract-boundary");
 });
 
+test("renders Runtime telemetry as visual snapshot panels with details on demand", async ({ page }, testInfo) => {
+  const baseline = 1_789_438_800;
+  const sessionId = "11111111-1111-4111-8111-111111111111";
+  const environmentId = "22222222-2222-4222-8222-222222222222";
+  const allocationId = "33333333-3333-4333-8333-333333333333";
+  const runtimeSession = {
+    id: sessionId,
+    object: "agent.session",
+    agent: {
+      id: "agent_b",
+      model: "fixture/model",
+      name: "Runtime analyst",
+      instructions: null,
+      multi_agent: { enabled: false, max_concurrent_subagents: null },
+      reasoning: {},
+      service_tier: "auto",
+      text: { format: { type: "text" }, verbosity: "medium" },
+      tools: [],
+    },
+    environment: {
+      type: "openai_hosted",
+      id: environmentId,
+      capability_directories: [],
+      network: { access: "enabled", allowed_domains: [] },
+      packages: { npm: [], python: [], system: [] },
+      files: [],
+      plugins: [],
+      skills: [],
+    },
+    status: "in_progress",
+    error: null,
+    metadata: { title: "Repository migration" },
+    required_actions: [],
+    vault_ids: [],
+    usage: {
+      input_tokens: 420_000,
+      output_tokens: 66_000,
+      total_tokens: 486_000,
+      input_tokens_details: { cached_tokens: 180_000 },
+      output_tokens_details: { reasoning_tokens: 22_000 },
+    },
+    created_at: baseline - 9_000,
+    last_active_at: baseline - 20,
+  };
+  const runtimeSessions = Array.from({ length: 12 }, (_, index) => ({
+    ...runtimeSession,
+    id: index === 0 ? sessionId : `11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
+    metadata: { title: `Repository migration ${index + 1}` },
+    usage: { ...runtimeSession.usage, input_tokens: 420_000 + index, total_tokens: 486_000 + index },
+  }));
+  const list = (data: Array<{ id: string }>) => ({
+    object: "list",
+    data,
+    has_more: false,
+    first_id: data[0]?.id ?? null,
+    last_id: data.at(-1)?.id ?? null,
+  });
+
+  await page.route("**/v1/agents/runtime-history/capabilities", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      object: "agent.runtime_history_capabilities",
+      available: false,
+      reason: "not_configured",
+      collection_mode: null,
+      sample_interval_seconds: null,
+      retention_seconds: null,
+      minimum_step_seconds: null,
+      maximum_range_seconds: null,
+      maximum_points: null,
+      metrics: [],
+    }),
+  }));
+  await page.route("**/v1/agents/sessions*", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/v1/agents/sessions") return route.fallback();
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(list(runtimeSessions)) });
+  });
+  let runtimeObservationReads = 0;
+  await page.route("**/v1/agents/runtime-observations*", async (route) => {
+    const sampleIndex = runtimeObservationReads;
+    runtimeObservationReads += 1;
+    const observedAt = baseline - 1 + sampleIndex * 30;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(list(runtimeSessions.map((runtime, index) => ({
+        id: runtime.id,
+        object: "agent.runtime_observation",
+        session_id: runtime.id,
+        environment_id: environmentId,
+        mode: "openai_hosted",
+        provider_type: "docker",
+        instance: {
+          kind: "managed_allocation",
+          allocation_id: index === 0 ? allocationId : `33333333-3333-4333-8333-${String(index + 1).padStart(12, "0")}`,
+          device_id: null,
+          connection_generation: null,
+        },
+        status: "observed",
+        reason: null,
+        allocation_created_at: baseline - 8_500,
+        resolved_at: observedAt + 1,
+        observed_at: observedAt,
+        started_at: baseline - 8_100,
+        cpu: {
+          usage_seconds_total: 7_350 + index + sampleIndex * 30,
+          capacity_cores: 2,
+          usage_cores: null,
+          utilization_ratio: null,
+        },
+        memory: { usage_bytes: 1_288_490_188, limit_bytes: 2_147_483_648 },
+      })))),
+    });
+  });
+
+  await page.goto("/");
+  const dashboard = page.locator(".dashboard-page");
+  await expect(dashboard.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+  const refresh = dashboard.getByRole("button", { name: "Refresh Dashboard snapshot" });
+  await expect(dashboard.locator(".dashboard-runtime-sample-count")).toContainText("1 sample ·");
+  await expect(dashboard.getByRole("heading", { name: "CPU usage" })).toBeVisible();
+  await expect(dashboard.getByRole("heading", { name: "Memory usage" })).toBeVisible();
+  await expect(dashboard.getByRole("heading", { name: "Compute uptime" })).toBeVisible();
+  await expect(dashboard.getByRole("heading", { name: "Token throughput" })).toBeVisible();
+  await expect(dashboard.getByLabel("Live Runtime sampling every 30 seconds")).toBeVisible();
+  const liveRange = dashboard.getByRole("group", { name: "Runtime live range" });
+  await expect(liveRange.getByRole("button", { name: "1h" })).toHaveAttribute("aria-pressed", "true");
+  await liveRange.getByRole("button", { name: "15m" }).click();
+  await expect(liveRange.getByRole("button", { name: "15m" })).toHaveAttribute("aria-pressed", "true");
+  await refresh.click();
+  await expect(dashboard.getByLabel("CPU usage: 2 live samples")).toBeVisible();
+  await refresh.click();
+  await expect(dashboard.getByLabel("CPU usage: 3 live samples")).toBeVisible();
+  await expect(dashboard.getByLabel("Memory usage: 3 live samples")).toBeVisible();
+  await expect(dashboard.getByLabel("Compute uptime: 3 live samples")).toBeVisible();
+  await expect(dashboard.getByLabel("Token throughput: 3 live samples")).toBeVisible();
+  await expect(dashboard.locator(".dashboard-runtime-sample-count")).toContainText("3 samples");
+  await expect(dashboard.getByText("CPU usage live trend available")).toBeAttached();
+  await expect(dashboard).not.toContainText("Collecting live samples");
+  const memoryCard = dashboard.getByRole("region", { name: "Memory usage live chart" });
+  const memoryStrokePixelCount = () => memoryCard.locator("canvas").evaluate((canvas: HTMLCanvasElement) => {
+    const context = canvas.getContext("2d");
+    if (!context) return 0;
+    const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
+    let pixels = 0;
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const offset = (y * width + x) * 4;
+        const red = data[offset] ?? 0;
+        const green = data[offset + 1] ?? 0;
+        const blue = data[offset + 2] ?? 0;
+        const alpha = data[offset + 3] ?? 0;
+        if (alpha > 128 && Math.abs(red - 185) < 20 && Math.abs(green - 152) < 20 && Math.abs(blue - 244) < 20) {
+          pixels += 1;
+        }
+      }
+    }
+    return pixels;
+  });
+  expect(await memoryStrokePixelCount()).toBeGreaterThan(0);
+  const cpuChart = dashboard.getByLabel("CPU usage: 3 live samples");
+  const cpuCard = cpuChart.locator("xpath=ancestor::section[contains(@class, 'dashboard-runtime-trend-card')]");
+  await cpuChart.focus();
+  await cpuChart.press("Enter");
+  await expect(cpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Pinned");
+  await cpuChart.press("Escape");
+  await cpuChart.hover({ position: { x: 260, y: 90 } });
+  await expect(cpuCard.locator(".dashboard-runtime-trend-tooltip")).toBeVisible();
+  await cpuChart.click({ position: { x: 260, y: 90 } });
+  await expect(cpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Pinned");
+  await expect(cpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Unavailable");
+  await cpuChart.focus();
+  await cpuChart.press("ArrowRight");
+  await expect(cpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Pinned");
+  await expect(cpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("50%");
+  const cpuSeriesToggle = cpuCard.locator(".dashboard-runtime-trend-legend button").first();
+  await cpuSeriesToggle.click();
+  await expect(cpuSeriesToggle).toHaveAttribute("aria-pressed", "false");
+  await cpuSeriesToggle.click();
+  await expect(cpuSeriesToggle).toHaveAttribute("aria-pressed", "true");
+
+  await expect(dashboard.locator('[data-chart-engine="uplot"]')).toHaveCount(4);
+  await expect(dashboard.locator(".dashboard-runtime-timeline")).toHaveCount(0);
+  const initialViewStart = Number(await cpuChart.getAttribute("data-view-start"));
+  const initialViewEnd = Number(await cpuChart.getAttribute("data-view-end"));
+  const plot = cpuCard.locator(".u-over");
+  const plotBox = await plot.boundingBox();
+  expect(plotBox).not.toBeNull();
+  await page.mouse.move(plotBox!.x + plotBox!.width * .55, plotBox!.y + plotBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(plotBox!.x + plotBox!.width, plotBox!.y + plotBox!.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => Number(await cpuChart.getAttribute("data-view-start"))).toBeGreaterThan(initialViewStart);
+  await expect.poll(async () => Number(await cpuChart.getAttribute("data-view-end"))).toBeLessThanOrEqual(initialViewEnd);
+  const zoomedViewStart = Number(await cpuChart.getAttribute("data-view-start"));
+  const zoomedViewEnd = Number(await cpuChart.getAttribute("data-view-end"));
+  await cpuChart.focus();
+  await cpuChart.press("Escape");
+  await cpuChart.press("ArrowRight");
+  const keyboardSelectedAt = Number(await cpuChart.getAttribute("data-selected-at"));
+  expect(keyboardSelectedAt).toBeGreaterThanOrEqual(zoomedViewStart);
+  expect(keyboardSelectedAt).toBeLessThanOrEqual(zoomedViewEnd);
+  for (const chartName of ["Memory usage", "Compute uptime", "Token throughput"]) {
+    await expect(dashboard.getByLabel(`${chartName}: 3 live samples`)).toHaveAttribute("data-view-start", String(initialViewStart));
+    await expect(dashboard.getByLabel(`${chartName}: 3 live samples`)).toHaveAttribute("data-view-end", String(initialViewEnd));
+  }
+  const resetZoom = cpuCard.getByRole("button", { name: "Reset zoom" });
+  await expect(resetZoom).toBeEnabled();
+  await resetZoom.click();
+  await expect(cpuChart).toHaveAttribute("data-view-start", String(initialViewStart));
+  await expect(cpuChart).toHaveAttribute("data-view-end", String(initialViewEnd));
+  await expect(dashboard.getByRole("table", { name: "Runtime targets" })).not.toBeVisible();
+  for (const close of await page.getByRole("button", { name: "Close notification" }).all()) await close.click();
+  await expect(page.getByRole("button", { name: "Close notification" })).toHaveCount(0);
+  await attachElementScreenshot(dashboard.locator(".dashboard-runtime-panel"), testInfo, "runtime-visual-dashboard");
+
+  await dashboard.getByText("Runtime targets", { exact: true }).click();
+  await expect(dashboard.getByRole("table", { name: "Runtime targets" })).toBeVisible();
+  await expect(dashboard.getByText("Page 1 of 2")).toBeVisible();
+  const runtimeSearch = dashboard.getByPlaceholder("Search Session, provider, or identity");
+  await runtimeSearch.fill("Repository migration 12");
+  await expect(dashboard.getByText("1 visible")).toBeVisible();
+  await expect(dashboard.getByRole("table", { name: "Runtime targets" }).getByRole("row", { name: /Repository migration 12/ })).toBeVisible();
+  await runtimeSearch.fill("");
+  await dashboard.getByRole("button", { name: "Tokens" }).click();
+  await expect(dashboard.getByRole("columnheader", { name: "Tokens" })).toHaveAttribute("aria-sort", "descending");
+  await dashboard.getByRole("button", { name: "Next" }).click();
+  await expect(dashboard.getByText("Page 2 of 2")).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dashboard.getByRole("heading", { name: "Memory usage" })).toBeVisible();
+  await expect.poll(() => cpuChart.evaluate((element) => getComputedStyle(element).touchAction)).toBe("pan-y");
+  for (const close of await page.getByRole("button", { name: "Close notification" }).all()) await close.click();
+  const widths = await dashboard.locator(".dashboard-runtime-panel").evaluate((element) => ({
+    viewport: innerWidth,
+    document: document.documentElement.scrollWidth,
+    panel: element.getBoundingClientRect().width,
+  }));
+  expect(widths.document).toBeLessThanOrEqual(widths.viewport);
+  expect(widths.panel).toBeLessThanOrEqual(widths.viewport);
+  await attachElementScreenshot(dashboard.locator(".dashboard-runtime-panel"), testInfo, "runtime-visual-dashboard-narrow");
+});
+
+test("restores retained Runtime history after a Dashboard reload", async ({ page }) => {
+  const sessionId = "11111111-1111-4111-8111-111111111111";
+  const environmentId = "22222222-2222-4222-8222-222222222222";
+  const allocationId = "33333333-3333-4333-8333-333333333333";
+  const runtimeSession = {
+    id: sessionId,
+    object: "agent.session",
+    agent: {
+      id: "agent_history", model: "fixture/model", name: "History worker", instructions: null,
+      multi_agent: { enabled: false, max_concurrent_subagents: null }, reasoning: {}, service_tier: "auto",
+      text: { format: { type: "text" }, verbosity: "medium" }, tools: [],
+    },
+    environment: {
+      type: "openai_hosted", id: environmentId, capability_directories: [],
+      network: { access: "enabled", allowed_domains: [] }, packages: { npm: [], python: [], system: [] },
+      files: [], plugins: [], skills: [],
+    },
+    status: "idle", error: null, metadata: { title: "Persisted runtime" }, required_actions: [], vault_ids: [],
+    usage: null, created_at: 1_789_430_000, last_active_at: 1_789_438_000,
+  };
+  const list = (data: Array<{ id: string }>) => ({
+    object: "list", data, has_more: false, first_id: data[0]?.id ?? null, last_id: data.at(-1)?.id ?? null,
+  });
+
+  await page.route("**/v1/agents/sessions*", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/v1/agents/sessions") return route.fallback();
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(list([runtimeSession])) });
+  });
+  await page.route("**/v1/agents/runtime-observations*", async (route) => {
+    const now = Math.floor(Date.now() / 1_000);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(list([{
+        id: sessionId, object: "agent.runtime_observation", session_id: sessionId, environment_id: environmentId,
+        mode: "openai_hosted", provider_type: "docker",
+        instance: { kind: "managed_allocation", allocation_id: allocationId, device_id: null, connection_generation: null },
+        status: "observed", reason: null, allocation_created_at: now - 600, resolved_at: now,
+        observed_at: now - 1, started_at: now - 600,
+        cpu: { usage_seconds_total: 120, capacity_cores: 2, usage_cores: null, utilization_ratio: null },
+        memory: { usage_bytes: 536_870_912, limit_bytes: 2_147_483_648 },
+      }])),
+    });
+  });
+  await page.route("**/v1/agents/runtime-history/capabilities", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      object: "agent.runtime_history_capabilities", available: true, reason: null, collection_mode: "periodic",
+      sample_interval_seconds: 30, retention_seconds: 604_800, minimum_step_seconds: 30,
+      maximum_range_seconds: 86_400, maximum_points: 1_000, metrics: ["cpu", "memory", "tokens"],
+    }),
+  }));
+  await page.route(`**/v1/agents/sessions/${sessionId}/runtime-history*`, async (route) => {
+    const url = new URL(route.request().url());
+    const start = Number(url.searchParams.get("start"));
+    const end = Number(url.searchParams.get("end"));
+    const firstStart = start;
+    const gapStart = end - 60;
+    const lastStart = end - 30;
+    const startedAt = start;
+    const point = (pointStart: number, ratio: number, memory: number) => ({
+      start: pointStart, end: pointStart + 30, first_observed_at: pointStart + 10, last_observed_at: pointStart + 20,
+      observation_count: 1, observed_count: 1, unavailable_count: 0,
+      cpu: { contributor_count: 1, utilization_ratio: ratio, capacity_cores: 2 },
+      memory: { contributor_count: 1, usage_bytes: memory, limit_bytes: 2_147_483_648 },
+    });
+    const gap = {
+      start: gapStart, end: gapStart + 30, first_observed_at: gapStart + 10, last_observed_at: gapStart + 20,
+      observation_count: 1, observed_count: 0, unavailable_count: 1, cpu: null, memory: null,
+    };
+    const points = Array.from({ length: Math.floor((end - start) / 30) }, (_, index) => {
+      const pointStart = start + index * 30;
+      return pointStart === gapStart
+        ? gap
+        : point(pointStart, .25 + index / 1_000, 536_870_912 + index * 1_048_576);
+    }).filter((point) => point.start !== end - 90);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        object: "agent.runtime_history", source: "durable", session_id: sessionId,
+        requested_range: { start, end }, resolution_seconds: 30, generated_at: end,
+        coverage: {
+          retained_start: start, first_sample_at: firstStart + 10, last_sample_at: lastStart + 20,
+          sample_count: points.length, expected_sample_count: Math.floor((end - start) / 30),
+          buckets: points.map(({ cpu: _cpu, memory: _memory, ...coverage }) => coverage),
+        },
+        series: [{
+          environment_id: environmentId, allocation_id: allocationId,
+          started_at: { seconds: startedAt, nanoseconds: 123_456_789 }, provider_type: "docker", points,
+        }],
+        token_usage: points.map((point) => ({
+          start: point.start,
+          end: point.end,
+          sampled_at: point.start + 20,
+          input_tokens: 10_000 + (point.start - start) * 10,
+          output_tokens: 2_000 + (point.start - start) * 2,
+        })),
+      }),
+    });
+  });
+
+  await page.goto("/");
+  const dashboard = page.locator(".dashboard-runtime-panel");
+  await expect(dashboard.getByRole("group", { name: "Runtime trend source" })).toHaveCount(0);
+  await expect(dashboard.getByLabel(/Durable · 30s; 1 Runtime targets/)).toBeVisible();
+  await expect(dashboard.getByLabel("Runtime durable-history charts")).toBeVisible();
+  await expect(dashboard.getByRole("heading", { name: "Compute uptime", exact: true })).toHaveCount(0);
+  await expect(dashboard.locator('[data-chart-engine="uplot"]')).toHaveCount(3);
+  await expect(dashboard.getByText("CPU usage durable trend available")).toBeAttached();
+  await expect(dashboard).toContainText("120 buckets");
+  await expect(dashboard).toContainText("119/120 observations");
+  await expect(dashboard.getByText("Token throughput durable trend available")).toBeAttached();
+  const durableCpuChart = dashboard.getByLabel("CPU usage: 120 retained buckets");
+  await expect(dashboard.getByRole("region", { name: "CPU usage durable history chart" })).toBeVisible();
+  const durableCpuCard = durableCpuChart.locator("xpath=ancestor::section[contains(@class, 'dashboard-runtime-trend-card')]");
+  await durableCpuChart.focus();
+  await durableCpuChart.press("ArrowLeft");
+  await expect(durableCpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Unavailable");
+  await durableCpuChart.press("ArrowLeft");
+  await expect(durableCpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Unavailable");
+  const durableMemoryCard = dashboard.getByRole("region", { name: "Memory usage durable history chart" });
+  const durableMemorySpan = await durableMemoryCard.locator("canvas").evaluate((canvas: HTMLCanvasElement) => {
+    const context = canvas.getContext("2d");
+    if (!context) return 0;
+    const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
+    let minimumX = width;
+    let maximumX = -1;
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const offset = (y * width + x) * 4;
+        const red = data[offset] ?? 0;
+        const green = data[offset + 1] ?? 0;
+        const blue = data[offset + 2] ?? 0;
+        const alpha = data[offset + 3] ?? 0;
+        if (alpha > 128 && Math.abs(red - 185) < 20 && Math.abs(green - 152) < 20 && Math.abs(blue - 244) < 20) {
+          minimumX = Math.min(minimumX, x);
+          maximumX = Math.max(maximumX, x);
+        }
+      }
+    }
+    return maximumX < minimumX ? 0 : maximumX - minimumX;
+  });
+  expect(durableMemorySpan).toBeGreaterThan(100);
+  const durableInitialStart = Number(await durableCpuChart.getAttribute("data-view-start"));
+  const durablePlotBox = await durableCpuCard.locator(".u-over").boundingBox();
+  expect(durablePlotBox).not.toBeNull();
+  await page.mouse.move(durablePlotBox!.x + durablePlotBox!.width * .2, durablePlotBox!.y + durablePlotBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(durablePlotBox!.x + durablePlotBox!.width * .8, durablePlotBox!.y + durablePlotBox!.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => Number(await durableCpuChart.getAttribute("data-view-start"))).toBeGreaterThan(durableInitialStart);
+  const durableZoomStart = Number(await durableCpuChart.getAttribute("data-view-start"));
+  const durableZoomEnd = Number(await durableCpuChart.getAttribute("data-view-end"));
+  await expect(durableCpuCard.getByRole("button", { name: "Reset zoom" })).toBeVisible();
+  await page.getByRole("button", { name: "Refresh Dashboard snapshot" }).click();
+  const refreshedDurableCpuChart = dashboard.getByLabel("CPU usage: 120 retained buckets");
+  await expect(refreshedDurableCpuChart).toHaveAttribute("data-view-start", String(durableZoomStart));
+  await expect(refreshedDurableCpuChart).toHaveAttribute("data-view-end", String(durableZoomEnd));
+
+  await page.reload();
+  await expect(dashboard.getByRole("group", { name: "Runtime trend source" })).toHaveCount(0);
+  await expect(dashboard.getByLabel(/Durable · 30s; 1 Runtime targets/)).toBeVisible();
+  await expect(dashboard.getByText("CPU usage durable trend available")).toBeAttached();
+});
+
 test("publishes Dashboard counts only after every top-level Agent and Session page loads", async ({ page, request }) => {
   await resetFixture(request);
   const agentAfters: Array<string | null> = [];
@@ -2604,7 +3036,11 @@ test("publishes Dashboard counts only after every top-level Agent and Session pa
   await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Agents" })).toContainText("3");
   await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Sessions" })).toContainText("2");
   expect(agentAfters).toEqual([null, "agent_b"]);
-  expect(sessionAfters).toEqual([null, "session_snapshot"]);
+  // Session collection loads once for the page and once per Runtime snapshot.
+  // Returning to Dashboard refreshes Runtime immediately instead of waiting 30 seconds.
+  await expect.poll(() => sessionAfters.length).toBe(6);
+  expect(sessionAfters.filter((after) => after === null)).toHaveLength(3);
+  expect(sessionAfters.filter((after) => after === "session_snapshot")).toHaveLength(3);
 });
 
 test("keeps the previous Dashboard result when pagination exceeds the safety limit", async ({ page, request }) => {
@@ -2647,8 +3083,9 @@ test("keeps the previous Dashboard result when pagination exceeds the safety lim
   await refresh.click();
   await expect.poll(() => reads).toBe(100);
   await expect(refresh).toBeEnabled();
-  await expect(dashboard).toContainText("Using the last successful snapshot");
+  await expect(dashboard).toContainText("Snapshot incomplete");
   await expect(dashboard).toContainText("collection pagination exceeded the Web safety limit");
+  await expect(dashboard).toContainText("Sessions changed while Runtime observations were loading");
   await expect(loadedAgents).toContainText("3");
   await dashboard.getByRole("button", { name: "Connection settings" }).click();
   const connectionDialog = page.getByRole("dialog", { name: "Connect an Agent Core" });

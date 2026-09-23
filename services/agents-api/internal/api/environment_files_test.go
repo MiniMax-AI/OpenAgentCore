@@ -112,7 +112,8 @@ func decodeEnvironmentFiles(t *testing.T, w *httptest.ResponseRecorder) v1.Envir
 	}
 	var fields map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &fields)
-	if len(fields) != 2 || fields["data"] == nil || !strings.HasPrefix(w.Header().Get("Content-Type"), "application/json") || w.Header().Get("Cache-Control") != "no-store" {
+	if len(fields) != 4 || fields["object"] != "page" || fields["data"] == nil || fields["has_more"] != (page.Next != nil) || page.HasMore != (page.Next != nil) ||
+		!strings.HasPrefix(w.Header().Get("Content-Type"), "application/json") || w.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("unexpected wire page", w.Header(), fields)
 	}
 	return page
@@ -126,7 +127,7 @@ func TestEnvironmentFilesOrderingPaginationAndProjection(t *testing.T) {
 				environmentFileEntry("a.txt", 14), environmentFileEntry("z.txt", 5), environmentFileEntry("A.txt", 0), environmentFileEntry("a-b.txt", 6),
 				{Name: "directory", Kind: "directory"}, {Name: "symlink", Kind: "symlink"}, {Name: "socket", Kind: "other"},
 			}
-			q := url.Values{"path": {"/workspace/sub/.//"}, "limit": {"2"}}
+			q := url.Values{"path": {"/workspace/sub"}, "limit": {"2"}}
 			if order != "" {
 				q.Set("order", order)
 			}
@@ -201,7 +202,7 @@ func TestEnvironmentFilesAuthorizationPrecedesInspection(t *testing.T) {
 
 func TestEnvironmentFilesRejectsInvalidRequestsBeforeRead(t *testing.T) {
 	for _, query := range []string{
-		"limit=0", "limit=101", "limit=no", "limit=", "limit=1&limit=2", "order=ASC", "order=", "after=x", "unknown=x", "path=", "path=relative", "path=/workspace-sibling", "path=/workspace/../workspace", "path=/workspace/a/../../workspace", "path=/workspace/%00", "path=/workspace/%5C", "path=/workspace/%0A", "path=/workspace/%FF", "path=x&path=y", "path=" + strings.Repeat("a", 4097), "page=", "page=not-json", "page=" + strings.Repeat("a", 1025), "bad=%GG",
+		"limit=0", "limit=101", "limit=no", "limit=", "limit=1&limit=2", "order=ASC", "order=", "path=", "path=relative", "path=/workspace-sibling", "path=/workspace/../workspace", "path=/workspace/a/../../workspace", "path=/workspace/%00", "path=/workspace/%5C", "path=/workspace/%0A", "path=/workspace/%FF", "path=x&path=y", "path=" + strings.Repeat("a", 4097), "page=", "page=not-json", "page=" + strings.Repeat("a", 1025), "bad=%GG", "foo=1;bar=2",
 	} {
 		t.Run(query[:min(len(query), 70)], func(t *testing.T) {
 			h, f := environmentFilesHandler(t, true)

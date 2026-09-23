@@ -116,3 +116,94 @@ Sources: [Sessions](https://developers.openai.com/api/docs/guides/agents-api/ses
 Sanitized request evidence is retained privately under
 `~/.parsar/remediation/20260922/history-events-usage/official/`; credentials are
 excluded from source and evidence.
+
+## Creation stream settlement, 2026-09-23
+
+Evidence: the second official-semantics campaign scan compared four owned
+`environment:none` official Sessions with Core (private
+`~/.parsar/remediation/20260923/campaign-scan-2/events-tools/`, `findings.json`
+EVT-01..24 with raw frames under `official/`). All 1091 official events passed
+strict validation against the pinned types. Two independent official creation
+streams (structured output, and a function call with its result) were closed by
+the server; they, a third creation stream that the client closed while a call
+was pending, and the 2026-09-22 probe above agree on the snapshot, order and
+terminal-event observations below. This batch changes only the four Core-owned
+stream differences EVT-01..04; the plan is
+`~/.parsar/remediation/20260923/creation-stream-settlement/PLAN.md`.
+
+- **Creation stream lifetime (EVT-01).** The official service closed both creation
+  streams right after the first `agent.session.idle`, without `[DONE]` or an error
+  frame, and kept the function stream open through `requires_action` and the
+  result. A fresh Core creation stream ends right after the first
+  `agent.session.idle` recorded when a Turn ends or an input reservation stops
+  being pending (expired, cancelled or failed), or any `agent.session.failed`,
+  and never sends the events after it. A self-hosted connection that clears
+  pending input to idle does not end it. A creation that admitted nothing ends
+  right after `created`. Settlements that record no event, such as a reservation
+  cancelled while its Session is already idle, use a fallback: after an empty
+  drain the stream reads the JSON-path projection and the event cursor in one
+  database snapshot and, if settled, sends only events up to that cursor, then
+  ends. The settled marker and pending-input flag are Store-internal and add no
+  events. A same-key `stream=true` retry of an existing creation returns 201 with
+  only the connection comment and ends at once; official same-key requests create
+  distinct Sessions, so there is no retry stream to follow, and recovery uses
+  `stream=false` or GET. The TypeScript client reports that empty creation stream
+  as `CreationStreamRetryError`. Accepted follow-ups: another client's work
+  drained before the fallback read can still be sent after a silent settlement;
+  idles recorded by an older binary during a rolling deploy carry no settled
+  marker and rely on the fallback; and an input reservation made while the ending
+  Turn captured Artifacts can start a later Turn that the stream does not follow.
+  Four review rounds replaced event-only, projection-only and retry-following
+  designs before merge. GET event streams are unchanged: live-only, no replay,
+  and they never end on their own. Session deletion still ends both.
+- **Created snapshot (EVT-02).** Official `agent.session.created` carried the
+  post-admission Session (`in_progress`, no actions, null usage), like the JSON
+  201 body. Core now sends the committed projection that JSON 201 returns, read
+  after the creation commit, while the stream still starts at the creation
+  upsert cursor, so every initial Turn and Item event follows exactly once. The
+  snapshot is read after the commit, so it can already show a later state than
+  the events that follow it; the JSON 201 body has the same race. For
+  self-hosted input the snapshot already requests the Environment connection and
+  the committed `requires_action` event follows. Hosted initial input remains
+  `idle` while it provisions.
+- **Terminal usage (EVT-03).** Official `agent.session.turn.completed` and
+  `.cancelled` (8/8) carried a top-level `usage`, null at emission even when later
+  reads were measured. Core terminal Turn events (`completed`, `failed`,
+  `cancelled`), root and child, now carry `usage` copied from the rendered Turn
+  snapshot, with explicit null when unknown. Other events omit it. Codex can
+  therefore publish measured counters at settlement, while Claude and MiniMax
+  stay null; no counter is derived or summed. The TypeScript client accepts the
+  field on terminal Turn events only and still accepts older events without it.
+- **Turn start order (EVT-04).** Official new Turns published `turn.created`, the
+  user `item.added` (`output_index` null), `agent.session.in_progress`, then
+  `turn.in_progress`. Core now records the Session activity after the admitting
+  input's Items in the same transaction, for creation, events.create and
+  reservation promotion. When one batch holds several message events, later
+  messages follow that activity; their official order was not observed.
+
+Deferred, with evidence retained in `findings.json`:
+
+- EVT-05: Core emits `turn.in_progress` when a function result resumes a waiting
+  Turn and publishes the result Item at native application; the latter is the
+  known INTERACTION-PUBLICATION-001 receipt boundary.
+- EVT-06: Core emits an interim `agent.session.in_progress` when cancelling a
+  Turn that waits on a function result. Statuses match.
+- EVT-07: official mid-Turn attach sent catch-up Item snapshots, but not
+  deterministically; one more official sample is needed before designing.
+- EVT-08: official Items omit in-progress and incomplete output Items; Core keeps
+  them under native history ownership.
+- EVT-09 and EVT-10: null-valued `output_index`, `phase` and `error` fields and
+  the initial assistant content belong to a separate serialization batch.
+- EVT-11 and EVT-12: unknown call/Turn result and conflict error codes belong to
+  ERROR-PROTOCOL-001.
+- EVT-13: official Session usage became null when any root Turn usage was
+  unknown; Core sums the known Turns. The in-progress case is unverified.
+- EVT-19: the Core terminal sequence for a Turn cancelled mid-text is recorded by
+  this batch's live acceptance, not changed by it.
+
+Batch validation used targeted Go API, store and contract tests on a dedicated
+PostgreSQL database, including the pinned Python SDK 3.13.0 creation-stream,
+initial-input, self-hosted and initial-failure scripts, plus the TypeScript
+client and Core Web unit tests. Resource-level replay, live model acceptance and
+the full gate are recorded separately; retry, self-hosted, hosted and no-input
+creation stream lifetimes have no official observation.

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { AgentSession, SavedAgent } from "@agents-core-web/agents-client";
+import type { AgentSession, RuntimeObservation, SavedAgent } from "@agents-core-web/agents-client";
 
 import { DashboardView, type DashboardViewProps } from "./DashboardView";
 
@@ -54,6 +54,7 @@ function session(id: string, overrides: Partial<AgentSession> = {}): AgentSessio
 }
 
 const callbacks = {
+  loadRuntimeHistory: async () => null,
   onRefresh: () => undefined,
   onCreateAgent: () => undefined,
   onStartSession: () => undefined,
@@ -74,6 +75,10 @@ function render(overrides: Partial<DashboardViewProps> = {}): string {
       sessionCollectionState="ready"
       sessionCollectionError={null}
       sessionCollectionHasSnapshot
+      runtimeSnapshot={{ sessions: [], observations: [], loadedAt: 1_700_000_000_000 }}
+      runtimeCollectionState="ready"
+      runtimeCollectionError={null}
+      runtimeCollectionHasSnapshot
       {...callbacks}
       {...overrides}
     />,
@@ -119,6 +124,21 @@ describe("Dashboard loaded-result presentation", () => {
     expect(html).toContain('aria-label="Agent Core backend is not ready. Open Docker startup guide"');
     expect(html).not.toContain("Agents: Agent core request failed (502)");
     expect(html).not.toContain("Sessions: Agent core request failed (502)");
+  });
+
+  it("keeps a Runtime-only 503 scoped to the optional observation feature", () => {
+    const html = render({
+      runtimeSnapshot: null,
+      runtimeCollectionState: "failed",
+      runtimeCollectionError: "Agent core request failed (503).",
+      runtimeCollectionHasSnapshot: false,
+    });
+
+    expect(html).toContain("Runtime: Agent core request failed (503).");
+    expect(html).toContain("Runtime observations unavailable");
+    expect(html).not.toContain("Agent Core backend is not ready");
+    expect(html).not.toContain("Core backend is offline");
+    expect(html).not.toContain("Open startup guide");
   });
 
   it("renders a compact actionable overview while preserving Environment qualifications", () => {
@@ -174,6 +194,89 @@ describe("Dashboard loaded-result presentation", () => {
     expect(html).not.toContain("Execution ready");
   });
 
+  it("renders current Docker resources without inventing a CPU percentage or history", () => {
+    const hosted = session("11111111-1111-4111-8111-111111111111", {
+      metadata: { title: "Managed research" },
+      environment: {
+        type: "openai_hosted",
+        id: "22222222-2222-4222-8222-222222222222",
+        capability_directories: [],
+        network: { access: "enabled", allowed_domains: [] },
+        packages: { npm: [], python: [], system: [] },
+        files: [],
+        plugins: [],
+        skills: [],
+      },
+      usage: {
+        input_tokens: 30,
+        output_tokens: 12,
+        total_tokens: 42,
+        input_tokens_details: { cached_tokens: 7 },
+        output_tokens_details: { reasoning_tokens: 3 },
+      },
+    });
+    const observation: RuntimeObservation = {
+      id: hosted.id,
+      object: "agent.runtime_observation",
+      session_id: hosted.id,
+      environment_id: "22222222-2222-4222-8222-222222222222",
+      mode: "openai_hosted",
+      provider_type: "docker",
+      instance: {
+        kind: "managed_allocation",
+        allocation_id: "33333333-3333-4333-8333-333333333333",
+        device_id: null,
+        connection_generation: null,
+      },
+      status: "observed",
+      reason: null,
+      allocation_created_at: 1_700_000_000,
+      resolved_at: 1_700_000_100,
+      observed_at: 1_700_000_090,
+      started_at: 1_700_000_010,
+      cpu: { usage_seconds_total: 73.5, capacity_cores: 2, usage_cores: 3, utilization_ratio: 1.5 },
+      memory: { usage_bytes: 536_870_912, limit_bytes: 2_147_483_648 },
+    };
+    const html = render({
+      runtimeSnapshot: { sessions: [hosted], observations: [observation], loadedAt: 1_700_000_100_000 },
+    });
+
+    expect(html).toContain("Runtime monitoring");
+    expect(html).toContain("1/1 managed observed");
+    expect(html).toContain("Cumulative CPU / capacity");
+    expect(html).toContain("1m 13s / 2 cores");
+    expect(html).toContain("512 MiB / 2.00 GiB");
+    expect(html).toContain('aria-label="Runtime durable-history charts"');
+    expect(html).toContain("Resource trends");
+    expect(html).toContain("Retained samples · durable history");
+    expect(html).not.toContain('aria-label="Runtime trend source"');
+    expect(html).toContain("History · loading");
+    expect(html).toContain("0 buckets");
+    expect(html).toContain('aria-label="Runtime durable range"');
+    expect(html).toContain('aria-pressed="true">1h</button>');
+    expect(html).toContain("CPU usage");
+    expect(html).toContain("Memory usage");
+    expect(html).not.toContain("Compute uptime");
+    expect(html).toContain("Token throughput");
+    expect(html).toContain("No retained CPU samples");
+    expect(html).toContain("0/2 valid points · 0 snapshots · no history is synthesized");
+    expect(html).toContain("Latest value");
+    expect(html).toContain("Missing samples");
+    expect(html).toContain("Runtime targets");
+    expect(html).toContain('<details class="dashboard-runtime-explorer">');
+    expect(html).toContain("Search Runtime targets");
+    expect(html).toContain("All statuses");
+    expect(html).toContain("All modes");
+    expect(html).toContain('<table class="dashboard-runtime-table" aria-label="Runtime targets">');
+    expect(html).toContain("CPU time");
+    expect(html).toContain("Managed research");
+    expect(html).toContain("Identity");
+    expect(html).toContain("unknown remains unknown, never zero");
+    expect(html).not.toContain("CPU %");
+    expect(html).not.toContain("CPU now");
+    expect(html).not.toContain("historical chart");
+  });
+
   it("keeps partial Usage out of the primary overview", () => {
     const html = render({ sessions: [session("usage-unknown")] });
 
@@ -217,6 +320,48 @@ describe("Dashboard loaded-result presentation", () => {
     expect(html).toContain("Last loaded");
     expect(html).toContain("Saved definitions");
     expect(html).toContain("In this snapshot");
+  });
+
+  it("does not present retained Runtime samples as live after a refresh failure", () => {
+    const runtimeSession = session("runtime-stale", {
+      environment: {
+        type: "openai_hosted",
+        id: "22222222-2222-4222-8222-222222222222",
+        capability_directories: [],
+        network: { access: "enabled", allowed_domains: [] },
+        packages: { npm: [], python: [], system: [] },
+        files: [],
+        plugins: [],
+        skills: [],
+      },
+    });
+    const observation: RuntimeObservation = {
+      id: runtimeSession.id,
+      object: "agent.runtime_observation",
+      session_id: runtimeSession.id,
+      environment_id: "22222222-2222-4222-8222-222222222222",
+      mode: "openai_hosted",
+      provider_type: "docker",
+      instance: { kind: "managed_allocation", allocation_id: "33333333-3333-4333-8333-333333333333", device_id: null, connection_generation: null },
+      status: "observed",
+      reason: null,
+      allocation_created_at: 1_700_000_000,
+      resolved_at: 1_700_000_100,
+      observed_at: 1_700_000_090,
+      started_at: 1_700_000_010,
+      cpu: null,
+      memory: null,
+    };
+    const html = render({
+      runtimeSnapshot: { sessions: [runtimeSession], observations: [observation], loadedAt: 1_700_000_100_000 },
+      runtimeCollectionState: "failed",
+      runtimeCollectionError: "Runtime refresh failed",
+      runtimeCollectionHasSnapshot: true,
+    });
+
+    expect(html).toContain("Runtime: Runtime refresh failed");
+    expect(html).toContain("History · loading");
+    expect(html).not.toContain("Live · 30s");
   });
 
   it("keeps an existing snapshot visible during a refresh and disables duplicate refresh", () => {

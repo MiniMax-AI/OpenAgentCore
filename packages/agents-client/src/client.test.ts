@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AgentCoreError, createIdempotencyKey, OpenAIAgentsClient } from "./client";
+import { AgentCoreError, CreationStreamRetryError, createIdempotencyKey, OpenAIAgentsClient } from "./client";
 import hostedDadf64 from "./fixtures/parsar-dadf64a7/openai-hosted.json";
 import eventBatchDadf64 from "./fixtures/parsar-dadf64a7/session-event-batch.json";
 import type {
@@ -99,6 +99,42 @@ function messageItem(overrides: Record<string, unknown> = {}): Record<string, un
     status: "in_progress",
     role: "assistant",
     content: [{ type: "output_text", text: "" }],
+    ...overrides,
+  };
+}
+
+const runtimeSessionId = "11111111-1111-4111-8111-111111111111";
+const runtimeEnvironmentId = "22222222-2222-4222-8222-222222222222";
+const runtimeAllocationId = "33333333-3333-4333-8333-333333333333";
+const runtimeDeviceId = "44444444-4444-4444-8444-444444444444";
+
+function runtimeObservation(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: runtimeSessionId,
+    object: "agent.runtime_observation",
+    session_id: runtimeSessionId,
+    environment_id: runtimeEnvironmentId,
+    mode: "openai_hosted",
+    provider_type: "docker",
+    instance: {
+      kind: "managed_allocation",
+      allocation_id: runtimeAllocationId,
+      device_id: runtimeDeviceId,
+      connection_generation: null,
+    },
+    status: "observed",
+    reason: null,
+    allocation_created_at: 10,
+    resolved_at: 30,
+    observed_at: 20,
+    started_at: 10,
+    cpu: {
+      usage_seconds_total: 0,
+      capacity_cores: 2,
+      usage_cores: null,
+      utilization_ratio: null,
+    },
+    memory: { usage_bytes: 0, limit_bytes: 1024 },
     ...overrides,
   };
 }
@@ -328,6 +364,36 @@ describe("OpenAIAgentsClient", () => {
       "event:agent.session.created",
       "event:agent.session.future_event",
     ]);
+  });
+
+  it("completes a creation stream that ends right after its initial Turn settles", async () => {
+    const admitted = { ...sessionResource(), status: "in_progress", last_active_at: 2 };
+    const cancelled = turnResource({ status: "cancelled", completed_at: 3 });
+    const frames = [
+      { type: "agent.session.created", event_id: "created", session: admitted },
+      { type: "agent.session.turn.created", event_id: "turn", session_id: "session", turn_id: "turn_1", turn: turnResource() },
+      {
+        type: "agent.session.turn.item.added", event_id: "input", session_id: "session", turn_id: "turn_1",
+        item: messageItem({ status: "completed", role: "user", content: [{ type: "input_text", text: "First" }] }),
+      },
+      { type: "agent.session.in_progress", event_id: "progress", session: admitted },
+      { type: "agent.session.turn.cancelled", event_id: "done", session_id: "session", turn_id: "turn_1", turn: cancelled, usage: null },
+      { type: "agent.session.idle", event_id: "idle", session: { ...sessionResource(), last_active_at: 3 } },
+    ];
+    const onSession = vi.fn();
+    const onEvent = vi.fn();
+    const client = new OpenAIAgentsClient({
+      fetch: recordingFetch(streamResponse([
+        ": connected\n\n",
+        ...frames.map((frame) => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`),
+      ], 201), []),
+    });
+
+    await client.createSessionStream({ environment: { type: "none" }, input: "First" }, "create-key", { onSession, onEvent });
+
+    expect(onSession).toHaveBeenCalledWith(expect.objectContaining({ id: "session", status: "in_progress" }));
+    expect(onEvent.mock.calls.map((call) => call[0]?.type)).toEqual(frames.map((frame) => frame.type));
+    expect(onEvent.mock.calls[4]?.[0]).toMatchObject({ usage: null, turn: { status: "cancelled", usage: null } });
   });
 
   it.each([
@@ -774,20 +840,45 @@ describe("OpenAIAgentsClient", () => {
     expect(cancelled).toBe(true);
   });
 
-  it.each([
-    ["null body", () => new Response(null), 0],
-    ["comments only", () => streamResponse([": connected\n\n: keepalive\n\n"]), 1],
-    ["DONE only", () => streamResponse(["data: [DONE]\n\n"]), 1],
-  ])("turns a creation stream with %s into empty_stream", async (_label, response, openCalls) => {
+  it("turns a creation response without a stream body into empty_stream", async () => {
     const onOpen = vi.fn();
-    const client = new OpenAIAgentsClient({ fetch: recordingFetch(response(), []) });
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 201 }), []) });
 
     await expect(client.createSessionStream(
       { environment: { type: "none" } },
       "create-key",
       { onOpen, onSession: vi.fn(), onEvent: vi.fn() },
     )).rejects.toMatchObject({ status: 502, code: "empty_stream" });
-    expect(onOpen).toHaveBeenCalledTimes(openCalls);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["the connection comment only", [": connected\n\n"]],
+    ["comments only", [": connected\n\n: keepalive\n\n"]],
+    ["DONE only", ["data: [DONE]\n\n"]],
+  ])("reports a creation stream with %s as a same-key retry to recover with stream=false", async (_label, chunks) => {
+    const onOpen = vi.fn();
+    const onSession = vi.fn();
+    const onEvent = vi.fn();
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(streamResponse(chunks, 201), []) });
+
+    const failure = client.createSessionStream(
+      { environment: { type: "none" }, input: "First" },
+      "create-key",
+      { onOpen, onSession, onEvent },
+    );
+    await expect(failure).rejects.toBeInstanceOf(CreationStreamRetryError);
+    await expect(failure).rejects.toMatchObject({ status: 409, code: "creation_stream_retry", message: expect.stringContaining("stream=false") });
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onSession).not.toHaveBeenCalled();
+    expect(onEvent).not.toHaveBeenCalled();
+  });
+
+  it("keeps empty_stream for a live events stream that ends without events", async () => {
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(streamResponse([": connected\n\n"]), []) });
+
+    await expect(client.streamEvents("session", { onEvent: vi.fn() }))
+      .rejects.toMatchObject({ status: 502, code: "empty_stream" });
   });
 
   it.each([
@@ -930,6 +1021,80 @@ describe("OpenAIAgentsClient", () => {
     expect(onEvent).toHaveBeenCalledTimes(events.length);
     expect(onEvent.mock.calls.map((call) => call[0]?.type)).toEqual(events.map((event) => event.type));
     expect(onEvent.mock.calls[2]?.[0]).toMatchObject({ item_id: "item_1", item: { id: "item_1", turn_id: "turn_1" } });
+  });
+
+  const measuredUsage = {
+    input_tokens: 7,
+    input_tokens_details: { cached_tokens: 2 },
+    output_tokens: 3,
+    output_tokens_details: { reasoning_tokens: 1 },
+    total_tokens: 10,
+  };
+
+  function terminalTurnEvent(status: string, fields: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      type: `agent.session.turn.${status}`,
+      event_id: `turn-${status}`,
+      session_id: "session",
+      turn_id: "turn_1",
+      turn: turnResource({
+        status,
+        started_at: 1,
+        completed_at: 2,
+        error: status === "failed" ? { code: "internal_error", message: "The execution could not complete." } : null,
+      }),
+      ...fields,
+    };
+  }
+
+  it.each([
+    ["measured", "completed", measuredUsage],
+    ["unknown", "cancelled", null],
+    ["unknown failed", "failed", null],
+  ])("preserves %s top-level usage on a terminal Turn event", async (_label, status, usage) => {
+    const event = terminalTurnEvent(status, { turn: { ...terminalTurnEvent(status).turn as object, usage }, usage });
+    const onEvent = vi.fn();
+    const client = new OpenAIAgentsClient({
+      fetch: recordingFetch(streamResponse([`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`]), []),
+    });
+
+    await client.streamEvents("session", { onEvent });
+
+    expect(onEvent).toHaveBeenCalledTimes(1);
+    const projected = onEvent.mock.calls[0]?.[0] as SessionEvent;
+    expect(projected).toMatchObject({ type: event.type, turn_id: "turn_1", turn: { status, usage } });
+    expect(Object.prototype.hasOwnProperty.call(projected, "usage")).toBe(true);
+    expect(projected.usage).toEqual(usage);
+  });
+
+  it("accepts a terminal Turn event without top-level usage", async () => {
+    const onEvent = vi.fn();
+    const client = new OpenAIAgentsClient({
+      fetch: recordingFetch(streamResponse([`data: ${JSON.stringify(terminalTurnEvent("completed"))}\n\n`]), []),
+    });
+
+    await client.streamEvents("session", { onEvent });
+
+    expect(onEvent).toHaveBeenCalledTimes(1);
+    expect(Object.prototype.hasOwnProperty.call(onEvent.mock.calls[0]?.[0], "usage")).toBe(false);
+  });
+
+  it.each([
+    ["a non-terminal Turn event", {
+      type: "agent.session.turn.in_progress", event_id: "event", session_id: "session", turn_id: "turn_1",
+      turn: turnResource({ status: "in_progress", started_at: 1 }), usage: null,
+    }],
+    ["a malformed terminal value", terminalTurnEvent("completed", { usage: { input_tokens: 1 } })],
+    ["an estimated terminal value", terminalTurnEvent("completed", { usage: 0 })],
+  ])("rejects top-level usage on %s", async (_label, event) => {
+    const onEvent = vi.fn();
+    const client = new OpenAIAgentsClient({
+      fetch: recordingFetch(streamResponse([`data: ${JSON.stringify(event)}\n\n`]), []),
+    });
+
+    await expect(client.streamEvents("session", { onEvent }))
+      .rejects.toMatchObject({ status: 502, code: "invalid_stream_event" });
+    expect(onEvent).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -1172,6 +1337,7 @@ describe("OpenAIAgentsClient", () => {
     const calls: FetchCall[] = [];
     const controller = new AbortController();
     const page = {
+      object: "page",
       data: [
         {
           environment_id: "environment/one",
@@ -1181,6 +1347,7 @@ describe("OpenAIAgentsClient", () => {
         },
       ],
       next: null,
+      has_more: false,
     } as const;
     const client = new OpenAIAgentsClient({
       baseUrl: "https://core.example/v1/",
@@ -1205,12 +1372,12 @@ describe("OpenAIAgentsClient", () => {
 
   it("uses the fixed public /workspace root when path is omitted and validates direct children", async () => {
     const calls: FetchCall[] = [];
-    const page = { data: [{
+    const page = { object: "page", data: [{
       environment_id: "environment",
       object: "agent.environment.file",
       path: "/workspace/report.json",
       size_bytes: 3,
-    }], next: null };
+    }], next: null, has_more: false };
     const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(page), calls) });
 
     await expect(client.listEnvironmentFiles("environment", { order: "asc" }))
@@ -1218,7 +1385,7 @@ describe("OpenAIAgentsClient", () => {
     expect(new URL(String(calls[0]?.input), "https://web.example").searchParams.has("path")).toBe(false);
 
     const nested = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse({
-      data: [{ ...page.data[0], path: "/workspace/nested/report.json" }], next: null,
+      ...page, data: [{ ...page.data[0], path: "/workspace/nested/report.json" }],
     }), []) });
     await expect(nested.listEnvironmentFiles("environment", { order: "asc" }))
       .rejects.toMatchObject({ status: 502, code: "invalid_environment_files" });
@@ -1226,12 +1393,12 @@ describe("OpenAIAgentsClient", () => {
 
   it("accepts an explicit self-hosted Workspace root and validates direct children there", async () => {
     const calls: FetchCall[] = [];
-    const page = { data: [{
+    const page = { object: "page", data: [{
       environment_id: "environment",
       object: "agent.environment.file",
       path: "/test/report.json",
       size_bytes: 3,
-    }], next: null };
+    }], next: null, has_more: false };
     const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(page), calls) });
 
     await expect(client.listEnvironmentFiles("environment", { path: "/test", order: "asc" }))
@@ -1260,18 +1427,24 @@ describe("OpenAIAgentsClient", () => {
   it.each([
     null,
     {},
-    { data: [], next: null, extra: true },
-    { data: [], next: "" },
-    { data: [], next: "opaque-next" },
-    { data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/file", size_bytes: 1 }], next: "opaque-next" },
-    { data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/file", size_bytes: 1 }], next: "x".repeat(1025) },
-    { data: null, next: null },
-    { data: [{ environment_id: "other", object: "agent.environment.file", path: "/workspace/file", size_bytes: 1 }], next: null },
-    { data: [{ environment_id: "environment", object: "file", path: "/workspace/file", size_bytes: 1 }], next: null },
-    { data: [{ environment_id: "environment", object: "agent.environment.file", path: "relative", size_bytes: 1 }], next: null },
-    { data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/../secret", size_bytes: 1 }], next: null },
-    { data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/file", size_bytes: -1 }], next: null },
-    { data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/file", size_bytes: 1, extra: true }], next: null },
+    { data: [], next: null },
+    { object: "list", data: [], next: null, has_more: false },
+    { data: [], next: null, has_more: false },
+    { object: "page", data: [], next: null },
+    { object: "page", data: [], next: null, has_more: true },
+    { object: "page", data: [], next: null, has_more: "false" },
+    { object: "page", data: [], next: null, has_more: false, extra: true },
+    { object: "page", data: [], next: "", has_more: true },
+    { object: "page", data: [], next: "opaque-next", has_more: true },
+    { object: "page", data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/file", size_bytes: 1 }], next: "opaque-next", has_more: true },
+    { object: "page", data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/file", size_bytes: 1 }], next: "x".repeat(1025), has_more: true },
+    { object: "page", data: null, next: null, has_more: false },
+    { object: "page", data: [{ environment_id: "other", object: "agent.environment.file", path: "/workspace/file", size_bytes: 1 }], next: null, has_more: false },
+    { object: "page", data: [{ environment_id: "environment", object: "file", path: "/workspace/file", size_bytes: 1 }], next: null, has_more: false },
+    { object: "page", data: [{ environment_id: "environment", object: "agent.environment.file", path: "relative", size_bytes: 1 }], next: null, has_more: false },
+    { object: "page", data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/../secret", size_bytes: 1 }], next: null, has_more: false },
+    { object: "page", data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/file", size_bytes: -1 }], next: null, has_more: false },
+    { object: "page", data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/file", size_bytes: 1, extra: true }], next: null, has_more: false },
   ])("rejects a malformed Environment files page without retrying", async (page) => {
     const calls: FetchCall[] = [];
     const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(page), calls) });
@@ -1291,13 +1464,14 @@ describe("OpenAIAgentsClient", () => {
       path,
       size_bytes: 1,
     });
+    const final = (data: unknown[]) => ({ object: "page", data, next: null, has_more: false });
     const cases: Array<{ page: unknown; options: EnvironmentFileListOptions }> = [
-      { page: { data: [file("/other/file")], next: null }, options: { path: "/workspace", order: "asc" } },
-      { page: { data: [file("/workspace/nested/file")], next: null }, options: { path: "/workspace", order: "asc" } },
-      { page: { data: [file("/workspace//file")], next: null }, options: { path: "/workspace", order: "asc" } },
-      { page: { data: [file("/workspace/a"), file("/workspace/a")], next: null }, options: { path: "/workspace", order: "asc" } },
-      { page: { data: [file("/workspace/b"), file("/workspace/a")], next: null }, options: { path: "/workspace", order: "asc" } },
-      { page: { data: [file("/workspace/a"), file("/workspace/b")], next: null }, options: { path: "/workspace", order: "asc", limit: 1 } },
+      { page: final([file("/other/file")]), options: { path: "/workspace", order: "asc" } },
+      { page: final([file("/workspace/nested/file")]), options: { path: "/workspace", order: "asc" } },
+      { page: final([file("/workspace//file")]), options: { path: "/workspace", order: "asc" } },
+      { page: final([file("/workspace/a"), file("/workspace/a")]), options: { path: "/workspace", order: "asc" } },
+      { page: final([file("/workspace/b"), file("/workspace/a")]), options: { path: "/workspace", order: "asc" } },
+      { page: final([file("/workspace/a"), file("/workspace/b")]), options: { path: "/workspace", order: "asc", limit: 1 } },
     ];
 
     for (const entry of cases) {
@@ -1562,7 +1736,7 @@ describe("OpenAIAgentsClient", () => {
     } as const;
     const client = new OpenAIAgentsClient({
       baseUrl: "https://core.example/v1/",
-      fetch: recordingFetch(jsonResponse(result), calls),
+      fetch: recordingFetch(jsonResponse(result, 201), calls),
     });
 
     await expect(client.createEnvironmentFile("environment/one", {
@@ -1582,6 +1756,37 @@ describe("OpenAIAgentsClient", () => {
     const headers = new Headers(calls[0]?.init?.headers);
     expect(headers.get("OpenAI-Beta")).toBe("agents=v1");
     expect(headers.get("Content-Type")).toBe("application/json");
+  });
+
+  it("lists a continued Environment files page and requires the official has_more flag", async () => {
+    const file = (name: string) => ({
+      environment_id: "environment",
+      object: "agent.environment.file",
+      path: `/workspace/${name}`,
+      size_bytes: 1,
+    });
+    const page = { object: "page", data: [file("a"), file("b")], next: "opaque-next", has_more: true } as const;
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(page), []) });
+    await expect(client.listEnvironmentFiles("environment", { order: "asc", limit: 2 })).resolves.toEqual(page);
+
+    const empty = { object: "page", data: [], next: null, has_more: false } as const;
+    const missing = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(empty), []) });
+    await expect(missing.listEnvironmentFiles("environment", { path: "/workspace/missing" })).resolves.toEqual(empty);
+  });
+
+  it("requires 201 Created for an Environment file and never retries another success status", async () => {
+    const calls: FetchCall[] = [];
+    const result = {
+      environment_id: "environment",
+      object: "agent.environment.file",
+      path: "/workspace/notes.txt",
+      size_bytes: 1,
+    };
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(result, 200), calls) });
+
+    await expect(client.createEnvironmentFile("environment", { type: "inline", data: "YQ==", path: result.path }))
+      .rejects.toMatchObject({ status: 200 });
+    expect(calls).toHaveLength(1);
   });
 
   it("rejects invalid Source and Environment file inputs before making a request", async () => {
@@ -2416,6 +2621,123 @@ describe("OpenAIAgentsClient", () => {
     await expect(
       client.createSession({ environment: { type: "none" }, stream: true } as never),
     ).rejects.toThrow("createSession only supports the JSON response");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("retrieves a Runtime observation, preserves observed zeroes, and encodes the Session ID", async () => {
+    const calls: FetchCall[] = [];
+    const client = new OpenAIAgentsClient({
+      baseUrl: "https://core.example/v1",
+      fetch: recordingFetch(jsonResponse(runtimeObservation()), calls),
+    });
+
+    await expect(client.retrieveRuntimeObservation(runtimeSessionId)).resolves.toMatchObject({
+      id: runtimeSessionId,
+      cpu: { usage_seconds_total: 0 },
+      memory: { usage_bytes: 0 },
+    });
+    expect(String(calls[0]?.input)).toBe(
+      `https://core.example/v1/agents/sessions/${runtimeSessionId}/runtime-observation`,
+    );
+  });
+
+  it("lists Runtime observations with stable pagination metadata and query serialization", async () => {
+    const calls: FetchCall[] = [];
+    const body = {
+      object: "list",
+      data: [runtimeObservation()],
+      has_more: true,
+      first_id: runtimeSessionId,
+      last_id: runtimeSessionId,
+    };
+    const client = new OpenAIAgentsClient({
+      baseUrl: "https://core.example/v1/",
+      fetch: recordingFetch(jsonResponse(body), calls),
+    });
+
+    await expect(client.listRuntimeObservations({
+      after: runtimeSessionId, limit: 1, order: "asc",
+    })).resolves.toMatchObject(body);
+    expect(String(calls[0]?.input)).toBe(
+      `https://core.example/v1/agents/runtime-observations?after=${runtimeSessionId}&limit=1&order=asc`,
+    );
+  });
+
+  it("accepts an unsupported none-mode Runtime observation with explicit nulls", async () => {
+    const value = runtimeObservation({
+      environment_id: null,
+      mode: "none",
+      provider_type: null,
+      instance: { kind: "none", allocation_id: null, device_id: null, connection_generation: null },
+      status: "unsupported",
+      reason: "runtime_mode_not_observable",
+      allocation_created_at: null,
+      observed_at: null,
+      started_at: null,
+      cpu: null,
+      memory: null,
+    });
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(value), []) });
+    await expect(client.retrieveRuntimeObservation(runtimeSessionId)).resolves.toMatchObject(value);
+  });
+
+  it.each([
+    ["unknown field", () => ({ ...runtimeObservation(), provider_native_id: "hidden" })],
+    ["foreign Session", () => ({ ...runtimeObservation(), session_id: "55555555-5555-4555-8555-555555555555" })],
+    ["invalid status/reason", () => ({ ...runtimeObservation(), status: "observed", reason: "sample_timeout" })],
+    ["invalid mode/instance", () => ({ ...runtimeObservation(), mode: "none" })],
+    ["negative CPU", () => ({ ...runtimeObservation(), cpu: {
+      usage_seconds_total: -1, capacity_cores: 2, usage_cores: null, utilization_ratio: null,
+    } })],
+    ["non-numeric CPU", () => ({ ...runtimeObservation(), cpu: {
+      usage_seconds_total: "NaN", capacity_cores: 2, usage_cores: null, utilization_ratio: null,
+    } })],
+    ["zero CPU capacity", () => ({ ...runtimeObservation(), cpu: {
+      usage_seconds_total: 1, capacity_cores: 0, usage_cores: null, utilization_ratio: null,
+    } })],
+    ["unsafe memory", () => ({ ...runtimeObservation(), memory: {
+      usage_bytes: Number.MAX_SAFE_INTEGER + 1, limit_bytes: 1024,
+    } })],
+    ["zero memory limit", () => ({ ...runtimeObservation(), memory: {
+      usage_bytes: 1, limit_bytes: 0,
+    } })],
+  ])("rejects a Runtime observation with %s", async (_label, build) => {
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(build()), []) });
+    await expect(client.retrieveRuntimeObservation(runtimeSessionId)).rejects.toMatchObject({
+      status: 502,
+      code: "invalid_runtime_observation",
+    });
+  });
+
+  it.each([
+    ["mismatched first_id", {
+      object: "list", data: [runtimeObservation()], has_more: false,
+      first_id: runtimeEnvironmentId, last_id: runtimeSessionId,
+    }],
+    ["duplicate IDs", {
+      object: "list", data: [runtimeObservation(), runtimeObservation()], has_more: false,
+      first_id: runtimeSessionId, last_id: runtimeSessionId,
+    }],
+    ["empty continuation", {
+      object: "list", data: [], has_more: true, first_id: null, last_id: null,
+    }],
+  ])("rejects a Runtime observation list with %s", async (_label, body) => {
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(body), []) });
+    await expect(client.listRuntimeObservations()).rejects.toMatchObject({
+      status: 502,
+      code: "invalid_runtime_observation",
+    });
+  });
+
+  it.each([
+    { after: "not-a-uuid" },
+    { limit: 0 },
+    { limit: 101 },
+    { order: "sideways" },
+  ])("rejects invalid Runtime observation pagination before fetch", async (options) => {
+    const calls: FetchCall[] = [];
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse({}), calls) });
+    await expect(client.listRuntimeObservations(options as never)).rejects.toThrow(TypeError);
     expect(calls).toHaveLength(0);
   });
 });

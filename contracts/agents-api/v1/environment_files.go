@@ -15,7 +15,11 @@ type EnvironmentFile struct {
 	SizeBytes     int64  `json:"size_bytes" binding:"required" minimum:"0"`
 }
 
+// EnvironmentFileList is the official token page: has_more is true exactly
+// when next carries a continuation token.
 type EnvironmentFileList struct {
-	Data []EnvironmentFile `json:"data" binding:"required"`
-	Next *string           `json:"next" extensions:"x-nullable"`
+	Object  string            `json:"object" binding:"required" enums:"page"`
+	Data    []EnvironmentFile `json:"data" binding:"required"`
+	Next    *string           `json:"next" extensions:"x-nullable"`
+	HasMore bool              `json:"has_more" binding:"required"`
 }

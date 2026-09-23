@@ -47,6 +47,10 @@ type Session struct {
 	RequiredActions          []v1.FunctionCallAction
 	Environment              *Environment
 	EnvironmentInputActivity *EnvironmentInputActivity
+	// PendingInput reports that the latest input reservation, read once no Turn
+	// is active or newer, can still start a Turn. It only supports settlement
+	// checks and is never rendered.
+	PendingInput bool
 }
 
 type CreateSessionInput struct {

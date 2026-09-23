@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import type { AgentSession, SavedAgent, TokenUsage } from "@agents-core-web/agents-client";
+import type { AgentSession, RuntimeObservation, SavedAgent, TokenUsage } from "@agents-core-web/agents-client";
 
 import {
   buildDashboardSnapshot,
+  buildRuntimeDashboardModel,
   dashboardEnvironmentLabel,
   dashboardEnvironmentProfile,
   dashboardStatusLabel,
   formatDashboardTimestamp,
+  formatDashboardBytes,
+  formatDashboardDuration,
+  runtimeObservationStatusLabel,
 } from "./dashboard-model";
 
 function agent(id: string, overrides: Partial<SavedAgent> = {}): SavedAgent {
@@ -226,6 +230,142 @@ describe("Dashboard loaded-snapshot model", () => {
       title: "Untitled Session",
       agentLabel: "fixture/fallback",
       model: "fixture/fallback",
+    });
+  });
+
+  it("aggregates only present Runtime measurements and preserves coverage", () => {
+    const managed = session("11111111-1111-4111-8111-111111111111", { usage: usage(21) });
+    const unsupported = session("22222222-2222-4222-8222-222222222222");
+    const observations: RuntimeObservation[] = [{
+      id: managed.id,
+      object: "agent.runtime_observation",
+      session_id: managed.id,
+      environment_id: "33333333-3333-4333-8333-333333333333",
+      mode: "openai_hosted",
+      provider_type: "docker",
+      instance: { kind: "managed_allocation", allocation_id: "44444444-4444-4444-8444-444444444444", device_id: null, connection_generation: null },
+      status: "observed",
+      reason: null,
+      allocation_created_at: 100,
+      resolved_at: 220,
+      observed_at: 210,
+      started_at: 150,
+      cpu: { usage_seconds_total: 3.5, capacity_cores: 2, usage_cores: null, utilization_ratio: null },
+      memory: { usage_bytes: 512, limit_bytes: 2048 },
+    }, {
+      id: unsupported.id,
+      object: "agent.runtime_observation",
+      session_id: unsupported.id,
+      environment_id: null,
+      mode: "none",
+      provider_type: null,
+      instance: { kind: "none", allocation_id: null, device_id: null, connection_generation: null },
+      status: "unsupported",
+      reason: "runtime_mode_not_observable",
+      allocation_created_at: null,
+      resolved_at: 225,
+      observed_at: null,
+      started_at: null,
+      cpu: null,
+      memory: null,
+    }];
+    const model = buildRuntimeDashboardModel([managed, unsupported], observations);
+
+    expect(model.summary).toMatchObject({
+      sessionCount: 2,
+      managedRuntimeCount: 1,
+      observedRuntimeCount: 1,
+      unavailableRuntimeCount: 0,
+      unsupportedRuntimeCount: 1,
+      cpuUsageSecondsTotal: 3.5,
+      cpuCapacityCores: 2,
+      cpuCoverageCount: 1,
+      memoryUsageBytes: 512,
+      memoryLimitBytes: 2048,
+      memoryCoverageCount: 1,
+      totalTokens: 21,
+      tokenCoverageCount: 1,
+      oldestResolvedAt: 220,
+      newestResolvedAt: 225,
+    });
+    expect(model.rows[0]?.computeUptimeSeconds).toBe(60);
+    expect(model.rows[0]?.allocationAgeSeconds).toBe(120);
+    expect(runtimeObservationStatusLabel(observations[0]!)).toBe("Observed");
+    expect(formatDashboardBytes(2048)).toBe("2.00 KiB");
+    expect(formatDashboardDuration(90)).toBe("1m 30s");
+  });
+
+  it("does not infer a released allocation lifetime from the current resolution time", () => {
+    const stopped = session("11111111-1111-4111-8111-111111111111");
+    const observation: RuntimeObservation = {
+      id: stopped.id,
+      object: "agent.runtime_observation",
+      session_id: stopped.id,
+      environment_id: "33333333-3333-4333-8333-333333333333",
+      mode: "openai_hosted",
+      provider_type: "docker",
+      instance: {
+        kind: "managed_allocation",
+        allocation_id: "44444444-4444-4444-8444-444444444444",
+        device_id: null,
+        connection_generation: null,
+      },
+      status: "unavailable",
+      reason: "runtime_not_running",
+      allocation_created_at: 100,
+      resolved_at: 10_000,
+      observed_at: null,
+      started_at: null,
+      cpu: null,
+      memory: null,
+    };
+
+    expect(buildRuntimeDashboardModel([stopped], [observation]).rows[0]?.allocationAgeSeconds).toBeNull();
+  });
+
+  it("does not count capacity-only or limit-only samples as usage coverage", () => {
+    const managed = session("11111111-1111-4111-8111-111111111111", {
+      environment: {
+        type: "openai_hosted",
+        id: "33333333-3333-4333-8333-333333333333",
+        capability_directories: [],
+        network: { access: "disabled", allowed_domains: [] },
+        packages: { npm: [], python: [], system: [] },
+        files: [],
+        plugins: [],
+        skills: [],
+      },
+    });
+    const observation: RuntimeObservation = {
+      id: managed.id,
+      object: "agent.runtime_observation",
+      session_id: managed.id,
+      environment_id: "33333333-3333-4333-8333-333333333333",
+      mode: "openai_hosted",
+      provider_type: "docker",
+      instance: {
+        kind: "managed_allocation",
+        allocation_id: "44444444-4444-4444-8444-444444444444",
+        device_id: null,
+        connection_generation: null,
+      },
+      status: "observed",
+      reason: null,
+      allocation_created_at: null,
+      resolved_at: 220,
+      observed_at: 210,
+      started_at: null,
+      cpu: { usage_seconds_total: null, capacity_cores: 2, usage_cores: null, utilization_ratio: null },
+      memory: { usage_bytes: null, limit_bytes: 2048 },
+    };
+
+    expect(buildRuntimeDashboardModel([managed], [observation]).summary).toMatchObject({
+      cpuUsageSecondsTotal: null,
+      cpuCapacityCores: 2,
+      cpuCoverageCount: 0,
+      memoryUsageBytes: null,
+      memoryLimitBytes: 2048,
+      memoryCoverageCount: 0,
     });
   });
 });

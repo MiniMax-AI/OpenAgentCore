@@ -37,6 +37,10 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtime"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeenrollment"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimehistory"
+	historystoreresolver "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimehistory/storeresolver"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
+	observationstoreresolver "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs/storeresolver"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/node"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -118,9 +122,58 @@ func run() error {
 	if managedNodes != nil {
 		managed = managedNodes.runtime
 	}
-	options := []api.Option{api.WithSubagents(executionStore), api.WithSkills(executionStore), api.WithSourceFiles(executionStore), api.WithSessionArtifacts(executionStore)}
+	observationSources := map[string]runtimeobs.Source{}
+	if managed != nil {
+		if source, ok := managed.Provider.(runtimeobs.Source); ok {
+			observationSources[managed.InstallationID] = source
+		}
+	}
+	observationResolver, err := observationstoreresolver.NewResolver(executionStore)
+	if err != nil {
+		return err
+	}
+	history, err := runtimeHistory(ctx, executionStore, os.Getenv("AGENTS_API_DAEMON_WS_URL") != "")
+	if err != nil {
+		return err
+	}
+	observationService, err := runtimeobs.NewService(observationResolver, observationSources, history.Options...)
+	if err != nil {
+		if history.Exporter != nil {
+			closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			closeRuntimeHistory(closeCtx, history.Exporter)
+		}
+		return err
+	}
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = observationService.Close(closeCtx)
+		if history.Exporter != nil {
+			closeRuntimeHistory(closeCtx, history.Exporter)
+		}
+	}()
+	cleanupCtx, cancelCleanup := context.WithCancel(ctx)
+	cleanupDone := make(chan struct{})
+	go func() {
+		defer close(cleanupDone)
+		runHistoryCleanup(cleanupCtx, history.Prune)
+	}()
+	defer func() { cancelCleanup(); <-cleanupDone }()
+	options := []api.Option{api.WithSubagents(executionStore), api.WithSkills(executionStore), api.WithSourceFiles(executionStore), api.WithSessionArtifacts(executionStore), api.WithRuntimeObservations(observationService)}
 	if managedNodes != nil {
 		options = append(options, api.WithSandboxManager(executionStore, managedNodes.admin))
+	}
+	if history.Reader != nil {
+		historyResolver, resolverErr := historystoreresolver.NewResolver(executionStore)
+		if resolverErr != nil {
+			return resolverErr
+		}
+		historyService, serviceErr := runtimehistory.NewService(historyResolver, history.Reader)
+		if serviceErr != nil {
+			return serviceErr
+		}
+		options = append(options, api.WithRuntimeHistory(historyService))
 	}
 	var daemonHandler http.Handler
 	var registry *gateway.Registry
@@ -153,6 +206,32 @@ func run() error {
 		if managed != nil {
 			options = append(options, api.WithHostedEnvironments())
 		}
+	}
+	if history.SampleInterval > 0 {
+		if worker == nil {
+			return errors.New("Runtime history periodic sampling requires the execution worker")
+		}
+		sampler, err := runtimeobs.NewSampler(observationResolver, observationService, worker, runtimeobs.SamplerOptions{
+			Interval: history.SampleInterval,
+			Report: func(result runtimeobs.SweepResult) {
+				fields := []any{"listed", result.Listed, "observed", result.Observed, "failed", result.Failed, "complete", result.Complete}
+				if result.Complete {
+					log.Bg().Debug("Runtime history sampling sweep complete", fields...)
+				} else {
+					log.Bg().Warn("Runtime history sampling sweep incomplete", fields...)
+				}
+			},
+		})
+		if err != nil {
+			return err
+		}
+		samplerCtx, cancelSampler := context.WithCancel(ctx)
+		samplerDone := make(chan error, 1)
+		go func() { samplerDone <- sampler.Run(samplerCtx) }()
+		defer func() {
+			cancelSampler()
+			<-samplerDone
+		}()
 	}
 	options = append(options, api.WithStartupConfiguration(coreStartupConfiguration(engine, kinds, registry != nil, modelProviderEndpoints, managedRuntimeProviderKind(managed), managed)))
 	handler, err := api.NewHandler(executionStore, auth, engine, options...)

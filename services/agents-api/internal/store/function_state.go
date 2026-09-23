@@ -61,8 +61,10 @@ func recordSessionActivity(ctx context.Context, q *sqlc.Queries, row sqlc.Turn, 
 	if err != nil {
 		return err
 	}
+	// Mark the idle or failure of an ending Turn; a reservation made during its
+	// Artifact capture is newer work.
 	return recordSessionChange(ctx, q, row.SessionID, SessionChange{
 		Event: v1.SessionEvent{Type: "agent.session." + status}, Turn: &turn,
-		SessionUsage: usage, RequiredActions: actions,
+		SessionUsage: usage, RequiredActions: actions, Settled: terminalStatus(row.Status),
 	})
 }

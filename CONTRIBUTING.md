@@ -20,10 +20,13 @@ hashes. Do not automatically sync or delete the original repository's Core.
 
 Develop in an isolated worktree on a feature branch and submit a PR. Do not edit
 or commit implementation directly on main. An empty repository bootstrap commit
-is only the comparison base for the first import PR. After validation, conduct an
-independent blind review using only requirements, acceptance criteria, boundaries,
-repository path and comparison baseline. Fix in-scope blockers before delivery.
-Do not use `codex exec` as a substitute reviewer.
+is only the comparison base for the first import PR. Choose review depth by risk. Substantial changes and changes involving security,
+shared lifecycle ownership or uncertain cross-package behavior need an independent
+blind review after validation. Give the reviewer only requirements, acceptance
+criteria, boundaries, repository path and comparison baseline. Small, verified
+fixes may use self-review, including focused corrections after a blind review;
+repeat independent review when a correction materially changes the design or risk.
+Fix in-scope blockers before delivery. Do not use `codex exec` as a substitute reviewer.
 
 The Core Web is an administrator console for execution and resource operations;
 business collaboration remains in Parsar. Environment Template management shares
@@ -65,16 +68,17 @@ to recover a lost creation response. Session metadata updates require a supplied
 metadata field, with null/empty clearing it. Validate an empty update before any
 resource lookup, after authentication.
 
-List order parsing distinguishes omission from an explicit empty value. Lists read by
-the shared list parser and single-resource routes ignore unknown query keys; a
-repeated supported list key still rejects. The Environment Files list keeps its own
-strict key parser and still rejects unknown keys; that difference is deferred. Reuse the shared parser and error serializer, preserving the observed
-Beta, Files and Skills error fields and per-family limit bounds rather than applying
-one policy to every resource. Change page bounds, cursor ownership or parent lookup
-order only with owned evidence for that family. Record uncertain range/lookup
-behavior separately; do not reproduce observed upstream server failures as
-compatibility behavior. See `contracts/agents-api/list-query-semantics.md` for the
-bounded evidence.
+List order parsing distinguishes omission from an explicit empty value. Lists and
+single-resource routes ignore unknown query keys; a repeated supported list key
+still rejects. The Environment Files list keeps its own path and cursor parsing but
+uses the same unknown-key and duplicate-key rules, except that it still rejects
+malformed query encoding (such as `%GG` or `;` separators) that the shared lists
+drop. Reuse the shared parser and error serializer, preserving the observed Beta, Files and Skills error fields and
+per-family limit bounds rather than applying one policy to every resource. Change
+page bounds, cursor ownership or parent lookup order only with owned evidence for
+that family. Record uncertain range/lookup behavior separately; do not reproduce
+observed upstream server failures as compatibility behavior. See
+`contracts/agents-api/list-query-semantics.md` for the bounded evidence.
 
 Report validation failures with official evidence through the typed field error,
 which emits `invalid_request_error` with the observed param and message; keep
@@ -291,6 +295,35 @@ management, SandboxProvider creates and reclaims it. For user management, the us
 starts the Runtime and its daemon authenticates and initiates the Core connection;
 Core verifies principal ownership and the exact Environment binding. These are
 management responsibilities, not separate execution architectures.
+
+Runtime telemetry uses a separate read-only service boundary documented in
+[`contracts/agents-api/runtime-observability.md`](contracts/agents-api/runtime-observability.md).
+Resolve durable Session, Environment and Runtime-instance identity before selecting
+a provider source. Observation never extends a lease or changes compute lifecycle.
+Keep observed zero, unavailable data and unsupported Runtime modes distinct. Metrics
+may inform operators, but automatic suspension requires durable Core-owned activity
+state and must not use a monitoring backend as lifecycle authority.
+Managed Docker observes one non-streaming Inspect/Stats sample. Managed microsandbox
+observes the exact persisted compute generation through the existing one-shot helper
+and pinned native CLI metrics report, with SDK identity checks before and after
+observation. Derive compute start from the same native sample timestamp and precise
+uptime; never subtract rounded uptime from a new wall-clock timestamp. Preserve
+cumulative CPU seconds, memory usage/limit and
+compute uptime semantics across both. Do not use microsandbox's instantaneous CPU
+percent, wake suspended compute, or expose provider-native identifiers to fill a
+common field.
+
+Runtime history uses the existing Core PostgreSQL database: one sanitized row per
+periodic observation, seven-day retention and bounded reads. It is best-effort
+operational evidence, not execution or Usage authority. The execution owner samples
+by default every 30 seconds. Existing canonical Session Usage supplies token
+snapshots; never aggregate provider counters as model tokens. Preserve missing data
+and reset CPU derivation across compute incarnations or counter regressions.
+The bounded asynchronous database writer and optional OTLP exporter have independent
+queues; external telemetry outages must not stall local history or execution.
+Retention cleanup also runs without active Runtimes. The browser queries only Core,
+never storage or a Collector, and stays a lightweight administrator console.
+No additional metrics database or Collector is required for retained charts.
 
 In V1, our daemon fills the user-side executor role. Users deploy daemon, the
 selected harness, local tools and workspace together. Do not require Codex
@@ -616,6 +649,13 @@ still bounds its own response wait. Do not replay mutations after a timeout or
 lost response. Retain allocation
 and checkpoint operation receipts and observe the original operation instead.
 Disconnects and read timeouts are unavailable/uncertain, never resource absence.
+Runtime resource observation uses the same immutable node placement through one
+bounded read-only Provider operation. Preserve main's Runtime observation/history
+service and authorization boundaries. The node delegates only to a provider-owned
+observation source; absent capability or transport returns unavailable, never a
+Core-local fallback. Observation must not create, renew, restore, or touch Session
+activity. Preserve the durable compute receipt and provider timestamps; existing
+observation clock validation can reject skewed samples without changing idle policy.
 Online-state writes compare the handshake epoch atomically in PostgreSQL so a
 stale Core cannot publish readiness for a new owner. Node-managed allocations
 do not expire merely because the internal observation keepalive is an hour old;
@@ -935,8 +975,11 @@ Revoke the scoped read transport credential on
 completion or failure. Runtime retains uncertain cleanup ownership and capacity;
 this does not require a second durable Core owner registry or establish remote
 write retirement. Public Files.list delegates workspace access to this reader;
-the API owns tenant authorization, path validation and protocol pagination. Keep
-partial directory coverage and unverified defaults explicit in the Files contract.
+the API owns tenant authorization, path validation and protocol pagination. Only
+the reader's distinct `not_directory` result (a missing path, a regular file or an
+unfollowed symlink) becomes an empty page; root, permission, transport and
+uncertain failures keep their errors. Keep partial directory coverage and
+unverified defaults explicit in the Files contract.
 
 Source Files belong to the execution project and have an independent lifecycle
 from copied workspace files. Store immutable source metadata and PostgreSQL large
@@ -1080,10 +1123,11 @@ lock, and return terminal storage outcomes without rolling their transaction bac
 
 Initial messages for a newly created Environment-bearing Session use that same
 reservation in the creation transaction, including its connection-action event.
-The creation winner alone inserts it; the original pre-work snapshot and stream
-cursor remain unchanged. A durable initial/later flag defaults historical rows to
-later input without inferring origin. Initial expiry projects a failed Session and
-safe error before any Turn exists; later expiry retains idle semantics. Failure
+The creation winner alone inserts it; the stream cursor still precedes that
+event, and creation retries never re-insert it. A durable initial/later flag
+defaults historical rows to later input without inferring origin. Initial expiry
+projects a failed Session and safe error before any Turn exists; later expiry
+retains idle semantics. Failure
 events capture the settled activity and Usage atomically. Late connections and
 creation retries cannot reset or replay expired input, and newer work supersedes
 old activity without changing its event snapshots. The Environment itself is not
@@ -1094,8 +1138,9 @@ immediate Turn admission. Cancellation/deletion keep their existing semantics.
 Ordinary and streamed public self-hosted creation accept initial text through this
 transaction after configuration and new-work lease checks. They return the owned
 Environment ID and executor URL while offline, without waiting for admission.
-The creation stream sends its original pre-work `created` snapshot before the
-committed connection action. A disconnected observer leaves committed input intact;
+The creation stream's `created` snapshot is the committed JSON 201 projection,
+including the connection action; the committed action event then follows from the
+creation cursor. A disconnected observer leaves committed input intact;
 only the existing Worker prepares, promotes and starts it. Saved-Agent retries with recorded intent
 recover before fresh execution admission or source resolution; inline retries keep
 their existing resolved-snapshot validation.
@@ -2197,19 +2242,45 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   Missing sequence positions produce a safe stream error and close; recover via
   Session/Turn/Items queries. Socket writes have a five-second deadline and hold
   no database connection. Client disconnect releases the handler; comments keep
-  idle connections alive. SSE does not close merely because one Turn finishes.
+  idle connections alive. GET SSE does not close merely because one Turn finishes;
+  only creation responses end on settlement (below).
 
 - Session creation with `stream=true` reuses atomic input admission and the live
   event loop. The upsert returns its cursor under the Session lock, before initial
   inputs; never replace it with a post-commit cursor lookup. A new response emits
-  one request-local `agent.session.created` with the pre-input resource snapshot,
-  then committed changes from that cursor. The local creation retry key excludes
-  response mode: retries observe only later events and admit no work again. Retry
-  the same request/key with `stream=false` to recover a lost Session ID. GET event
-  streams retain their current live-only start. Disconnect never cancels admitted
-  work. Exact upstream created-snapshot timing, POST stream lifetime and creation
-  retry response semantics remain unverified; the separate SDK one-Turn helper
-  does not define this endpoint. Do not present local retry behavior as replay.
+  one request-local `agent.session.created` with the committed Session projection
+  that the JSON 201 response returns (read after the commit), then committed
+  changes from that cursor exactly once. A fresh creation stream ends right
+  after the first `agent.session.idle` recorded when a Turn ends or an input
+  reservation stops being pending (expired, cancelled or failed), or any
+  `agent.session.failed`, and never sends the events after it. A self-hosted
+  connection clearing pending input to idle, `requires_action`, function results
+  and resumed work keep it open. A creation that admitted nothing (no Turn or
+  reservation) ends right after `created`. Settlements that record no event use
+  a fallback: after an empty drain the stream reads the JSON-path projection and
+  the event cursor in one database snapshot and, if the Session is idle or failed
+  with no queued, running or waiting Turn and no pending reservation, sends only
+  events up to that cursor, then ends. Accepted follow-ups: another client's work
+  drained before that read can still be sent, and idles recorded by an older
+  binary during a rolling deploy carry no settled marker and rely on the
+  fallback. An input reservation made while the ending Turn captured Artifacts
+  can start a later Turn that the stream does not follow. The settled marker and
+  pending-input flag are Store-internal, never wire fields, and add no events.
+  Re-read the projection after a sent Session status event and otherwise at most
+  once a second. The local creation retry key excludes response mode; a same-key
+  `stream=true` retry of an existing creation returns 201 with only the
+  connection comment and ends at once, admitting nothing and following no work,
+  because official same-key requests create distinct Sessions. Retry the same
+  request/key with `stream=false`, or use the GET events stream, to recover. GET
+  event streams keep their live-only start and never end on settlement.
+  Disconnect never cancels admitted work. Official observations cover `none`
+  creation; self-hosted, hosted and no-input stream lifetimes and the retry
+  behavior are local choices, and the separate SDK one-Turn helper does not
+  define this endpoint. Do
+  not present local retry behavior as replay. A new Turn records `turn.created`,
+  its user input Items, then Session activity in one transaction. Terminal Turn
+  events carry top-level `usage` copied from their Turn snapshot, null when
+  unknown; never derive or sum it.
 
 - Public Turn retrieve/list project persisted execution state and the immutable
   Session Agent identity. Scope both resources and pagination cursors to the

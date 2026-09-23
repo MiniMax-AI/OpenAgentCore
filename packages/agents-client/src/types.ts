@@ -381,9 +381,12 @@ export interface EnvironmentFile {
   size_bytes: number;
 }
 
+/** Official token page: has_more is true exactly when next carries a token. */
 export interface EnvironmentFileList {
+  object: "page";
   data: EnvironmentFile[];
   next: string | null;
+  has_more: boolean;
 }
 
 export interface EnvironmentFileListOptions extends ReadOptions {
@@ -615,6 +618,11 @@ export interface SessionEventBase {
   delta?: string;
   text?: string;
   error?: StreamError;
+  /**
+   * Present on terminal Turn events only. It mirrors that Turn snapshot's usage
+   * and is null when unknown; a later Turn read can still report measured usage.
+   */
+  usage?: TokenUsage | null;
 }
 
 export type AgentSessionEnvironmentEvent = {
@@ -720,6 +728,220 @@ export interface CreateSessionStreamOptions extends StreamOptions {
   onSession: (session: AgentSession) => void;
 }
 
+export type RuntimeObservationStatus = "observed" | "unsupported" | "unavailable";
+export type RuntimeObservationReason =
+  | "runtime_mode_not_observable"
+  | "allocation_pending"
+  | "runtime_not_running"
+  | "source_not_configured"
+  | "sample_timeout"
+  | "sample_unavailable";
+
+export type RuntimeUnavailableReason = Exclude<RuntimeObservationReason, "runtime_mode_not_observable">;
+
+export interface RuntimeCPUObservation {
+  usage_seconds_total: number | null;
+  capacity_cores: number | null;
+  usage_cores: number | null;
+  utilization_ratio: number | null;
+}
+
+export interface RuntimeMemoryObservation {
+  usage_bytes: number | null;
+  limit_bytes: number | null;
+}
+
+interface RuntimeObservationBase {
+  id: string;
+  object: "agent.runtime_observation";
+  session_id: string;
+  resolved_at: number;
+}
+
+export interface RuntimeObservedObservation extends RuntimeObservationBase {
+  environment_id: string;
+  mode: "openai_hosted";
+  provider_type: string | null;
+  instance: {
+    kind: "managed_allocation";
+    allocation_id: string;
+    device_id: string | null;
+    connection_generation: null;
+  };
+  status: "observed";
+  reason: null;
+  allocation_created_at: number | null;
+  observed_at: number;
+  started_at: number | null;
+  cpu: RuntimeCPUObservation | null;
+  memory: RuntimeMemoryObservation | null;
+}
+
+export interface RuntimeUnavailableObservation extends RuntimeObservationBase {
+  environment_id: string;
+  mode: "openai_hosted";
+  provider_type: string | null;
+  instance: {
+    kind: "managed_allocation";
+    allocation_id: string | null;
+    device_id: string | null;
+    connection_generation: null;
+  };
+  status: "unavailable";
+  reason: RuntimeUnavailableReason;
+  allocation_created_at: number | null;
+  observed_at: null;
+  started_at: null;
+  cpu: null;
+  memory: null;
+}
+
+export interface RuntimeNoneObservation extends RuntimeObservationBase {
+  environment_id: null;
+  mode: "none";
+  provider_type: null;
+  instance: { kind: "none"; allocation_id: null; device_id: null; connection_generation: null };
+  status: "unsupported";
+  reason: "runtime_mode_not_observable";
+  allocation_created_at: null;
+  observed_at: null;
+  started_at: null;
+  cpu: null;
+  memory: null;
+}
+
+export interface RuntimeSelfHostedObservation extends RuntimeObservationBase {
+  environment_id: string;
+  mode: "self_hosted";
+  provider_type: string | null;
+  instance: {
+    kind: "self_hosted_connection";
+    allocation_id: null;
+    device_id: string | null;
+    connection_generation: string | null;
+  };
+  status: "unsupported";
+  reason: "runtime_mode_not_observable";
+  allocation_created_at: null;
+  observed_at: null;
+  started_at: null;
+  cpu: null;
+  memory: null;
+}
+
+export type RuntimeObservation =
+  | RuntimeObservedObservation
+  | RuntimeUnavailableObservation
+  | RuntimeNoneObservation
+  | RuntimeSelfHostedObservation;
+
+export interface RuntimeObservationList extends ListPage<RuntimeObservation> {
+  object: "list";
+  first_id: string | null;
+  last_id: string | null;
+}
+
+export type RuntimeHistoryCollectionMode = "on_read" | "periodic";
+export type RuntimeHistoryCapabilityReason = "not_configured" | "periodic_collection_required";
+export type RuntimeHistoryMetric = "cpu" | "memory" | "tokens";
+
+export interface RuntimeHistoryCapabilities {
+  object: "agent.runtime_history_capabilities";
+  available: boolean;
+  reason: RuntimeHistoryCapabilityReason | null;
+  collection_mode: RuntimeHistoryCollectionMode | null;
+  sample_interval_seconds: number | null;
+  retention_seconds: number | null;
+  minimum_step_seconds: number | null;
+  maximum_range_seconds: number | null;
+  maximum_points: number | null;
+  metrics: RuntimeHistoryMetric[];
+}
+
+export interface RuntimeHistoryQuery extends ReadOptions {
+  /** Inclusive Unix-second boundary. */
+  start: number;
+  /** Exclusive Unix-second boundary. */
+  end: number;
+  /** Requested maximum buckets per series. Core selects the effective resolution. */
+  maxPoints?: number;
+}
+
+export interface RuntimeHistoryRange {
+  start: number;
+  end: number;
+}
+
+export interface RuntimeHistoryCoveragePoint {
+  start: number;
+  end: number;
+  first_observed_at: number | null;
+  last_observed_at: number | null;
+  observation_count: number;
+  observed_count: number;
+  unavailable_count: number;
+}
+
+export interface RuntimeHistoryCPU {
+  contributor_count: number;
+  utilization_ratio: number | null;
+  capacity_cores: number | null;
+}
+
+export interface RuntimeHistoryMemory {
+  contributor_count: number;
+  usage_bytes: number | null;
+  limit_bytes: number | null;
+}
+
+export interface RuntimeHistoryPoint extends RuntimeHistoryCoveragePoint {
+  cpu: RuntimeHistoryCPU | null;
+  memory: RuntimeHistoryMemory | null;
+}
+
+export interface RuntimeHistorySeries {
+  environment_id: string;
+  allocation_id: string;
+  /** Earliest retained provider start estimate for compatible uptime display. */
+  started_at: RuntimeHistoryTime;
+  provider_type: string;
+  points: RuntimeHistoryPoint[];
+}
+
+export interface RuntimeHistoryTime {
+  seconds: number;
+  nanoseconds: number;
+}
+
+export interface RuntimeHistoryCoverage {
+  retained_start: number;
+  first_sample_at: number | null;
+  last_sample_at: number | null;
+  sample_count: number;
+  expected_sample_count: number;
+  buckets: RuntimeHistoryCoveragePoint[];
+}
+
+export interface RuntimeHistoryTokenUsagePoint {
+  start: number;
+  end: number;
+  sampled_at: number;
+  input_tokens: number;
+  output_tokens: number;
+}
+
+export interface RuntimeHistory {
+  object: "agent.runtime_history";
+  source: "durable";
+  session_id: string;
+  requested_range: RuntimeHistoryRange;
+  resolution_seconds: number;
+  generated_at: number;
+  coverage: RuntimeHistoryCoverage;
+  series: RuntimeHistorySeries[];
+  token_usage: RuntimeHistoryTokenUsagePoint[];
+}
+
 export type CoreHarnessKind = "claude_sdk" | "codex" | "mcode";
 export type CoreManagedSandboxProvider = "docker" | "microsandbox";
 
@@ -768,6 +990,10 @@ export interface AgentCore {
   replaceVaultCredentialToken(vaultId: string, credentialId: string, input: ReplaceVaultCredentialTokenInput): Promise<VaultCredential>;
   deleteVaultCredential(vaultId: string, credentialId: string): Promise<VaultCredentialDeleted>;
   listSessions(options?: PageOptions & { agentId?: string }): Promise<ListPage<AgentSession>>;
+  listRuntimeObservations(options?: PageOptions): Promise<RuntimeObservationList>;
+  retrieveRuntimeObservation(sessionId: string, options?: ReadOptions): Promise<RuntimeObservation>;
+  getRuntimeHistoryCapabilities(options?: ReadOptions): Promise<RuntimeHistoryCapabilities>;
+  retrieveRuntimeHistory(sessionId: string, query: RuntimeHistoryQuery): Promise<RuntimeHistory>;
   createSession(input: CreateSessionInput, idempotencyKey?: string): Promise<AgentSession>;
   createSessionStream(
     input: Omit<CreateSessionInput, "stream">,

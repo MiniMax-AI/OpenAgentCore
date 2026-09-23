@@ -8,6 +8,7 @@ import (
 type provider struct {
 	hub     *Hub
 	resolve Resolver
+	kind    string
 }
 type checkpointProvider struct{ *provider }
 
@@ -16,7 +17,7 @@ var _ sandbox.CheckpointProvider = (*checkpointProvider)(nil)
 
 // Provider advertises checkpoint support only for a deployment using microsandbox.
 func (h *Hub) Provider(kind string, resolve Resolver) sandbox.Provider {
-	p := &provider{h, resolve}
+	p := &provider{hub: h, resolve: resolve, kind: kind}
 	if kind == "microsandbox" {
 		return &checkpointProvider{p}
 	}

@@ -223,3 +223,12 @@ connection-state mutex, with cancellation and a five-second limit. Hub shutdown
 cancels opening and live connections without waiting for database callbacks.
 A node's connection reservation remains held until its fenced disconnect cleanup
 finishes; a slow database must not allow a competing connection to take its place.
+
+## Runtime observations
+
+The existing Runtime observation and history APIs route managed reads to the
+Session's original node. Reading metrics does not wake a suspended sandbox or
+reset its idle timer. An offline node or a provider without an observation source
+returns unavailable telemetry. Provider timestamps retain their existing
+validation, so excessive node/Core clock skew can also make a sample unavailable;
+suspension eligibility continues to use database time.

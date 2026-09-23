@@ -11,7 +11,8 @@ outside the browser.
 
 ## What you can do
 
-- **Operate from one Dashboard** — see loaded Agents, active Sessions, work that needs
+- **Operate from one Dashboard** — see loaded Agents, active Sessions, current Runtime
+  CPU/memory evidence, compute uptime, reported token coverage, work that needs
   attention, recent activity, and the two common create flows.
 - **Build reusable Agents** — start from a blank Agent or a practical template, then
   configure its model, instructions, text behavior, Functions, and HTTP MCP servers.
@@ -29,9 +30,22 @@ outside the browser.
 
 ### Dashboard
 
-Dashboard is the starting point. It summarizes the current Agent and Session results,
-highlights Sessions that need attention, and links directly to Agent creation or a new
-Session.
+Dashboard is the starting point. It summarizes the current Agent and Session results
+and loads complete tenant-scoped Runtime observation snapshots without inventing
+missing values. The searchable, filterable, sortable, paginated semantic table
+remains available on demand. Core stores periodic observations in its existing
+PostgreSQL database, with no separate monitoring stack. Web discovers periodic
+history and offers 1-hour, 6-hour and 24-hour ranges; reload restores data through
+Core. API-only deployments without a sampler retain the browser-local Live view.
+Token throughput uses snapshots of canonical Session Usage, preserving missing data.
+Web never connects to a database or receives telemetry credentials. Compute uptime
+is shown only in current/Live observations; History keeps CPU, memory and tokens.
+When a provider reports only
+cumulative CPU time, Web derives interval utilization only across adjacent samples
+from the same verified Runtime incarnation; restarts and counter regressions create
+gaps instead of false spikes.
+
+![Runtime monitoring live trends](images/runtime-dashboard.png)
 
 ### Agents
 
@@ -71,7 +85,7 @@ configuration is never presented as model execution readiness.
 
 | Area | User experience |
 | --- | --- |
-| Dashboard | Agent and Session overview, attention queue, recent activity, quick actions |
+| Dashboard | Agent and Session overview, current Runtime CPU/memory/uptime and token coverage, attention queue, recent activity, quick actions |
 | Agents | Create, search, inspect, edit, delete, use templates, and start Sessions |
 | Sessions | Durable conversation history, Agent filtering, live events, cancellation, retry and continuation |
 | Trace | Turn history, usage when reported by Core, command output, Function and patch activity |

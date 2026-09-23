@@ -90,3 +90,55 @@ func waitWorkspaceRead(t *testing.T, sender *recSender, id string) proto.Workspa
 	t.Fatal("read result missing", id)
 	return proto.WorkspaceReadResultPayload{}
 }
+
+func TestLocalDirectoryKeepsNotDirectorySeparateFromFailures(t *testing.T) {
+	workspace, helper := t.TempDir(), filepath.Join(t.TempDir(), "directory")
+	script := `#!/bin/sh
+case "$2" in
+  missing) printf '%s' '{"version":1,"error":"not_directory"}' ;;
+  invalid) printf '%s' '{"version":1,"error":"invalid_path"}' ;;
+  gone) printf '%s' '{"version":1,"error":"not_found"}' ;;
+  denied) printf '%s' '{"version":1,"error":"permission_denied"}' ;;
+  broken) printf '%s' '{"version":1,"error":"native_error"}' ;;
+esac
+`
+	if err := os.WriteFile(helper, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	environment, session := uuid.NewString(), uuid.NewString()
+	binding, err := localworkspace.New(environment, session, workspace, helper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg := agent.NewRegistry()
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: proto.AgentKindCapabilities{LocalEnvironment: true}}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+		return nil, errors.New("must not start a model")
+	})
+	reg.RegisterPreparation("native", true, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) {
+		return nil, errors.New("must not prepare a harness")
+	})
+	sender := &recSender{}
+	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, LocalWorkspace: binding})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = r.Shutdown(context.Background()) })
+	request := proto.PromptRequestPayload{AgentKind: "native", LocalEnvironment: &proto.LocalEnvironment{ID: environment}, AgentStateKey: "agents-api-" + session, StrictResume: true, ReleaseOnCompletion: true, WorkspaceReadOnly: true}
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "idle", proto.ExecutionPreparePayload{Configuration: request})); err != nil {
+		t.Fatal(err)
+	}
+	ready := waitPreparationStatus(t, sender, "idle", "ready", "")
+	for path, want := range map[string]proto.WorkspaceReadResultPayload{
+		"missing": {Outcome: "rejected", ErrorCode: proto.WorkspaceReadNotDirectory},
+		"invalid": {Outcome: "rejected", ErrorCode: "invalid_request"},
+		"gone":    {Outcome: "rejected", ErrorCode: "not_found"},
+		"denied":  {Outcome: "rejected", ErrorCode: "permission_denied"},
+		"broken":  {Outcome: "unknown", ErrorCode: "read_unconfirmed"},
+	} {
+		read := proto.WorkspaceReadPayload{EnvironmentID: environment, Handle: ready.Handle, Operation: "directory", Path: path, MaxEntries: 10}
+		_ = r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceRead, path, read))
+		if got := waitWorkspaceRead(t, sender, path); got.Outcome != want.Outcome || got.ErrorCode != want.ErrorCode || got.Directory != nil || got.CloseAcknowledged {
+			t.Fatal("native directory result changed", path, got)
+		}
+	}
+}

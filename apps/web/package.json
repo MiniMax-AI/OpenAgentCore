@@ -11,10 +11,12 @@
   },
   "dependencies": {
     "@agents-core-web/agents-client": "workspace:*",
+    "@tanstack/react-table": "^8.21.3",
     "lucide-react": "^1.22.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-markdown": "^10.1.0"
+    "react-markdown": "^10.1.0",
+    "uplot": "^1.6.32"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",

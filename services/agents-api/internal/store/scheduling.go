@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/google/uuid"
@@ -86,39 +87,81 @@ func (s *Store) sessionActivity(ctx context.Context, session Session, err error)
 	if err != nil {
 		return Session{}, err
 	}
-	id, _ := parseID(session.ID)
-	tenant, _ := parseID(session.TenantID)
 	err = pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
-		q := s.queries.WithTx(tx)
-		environment, err := q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: tenant, ID: id})
-		if err == nil {
-			value, err := environmentFromRow(environment.Environment, environment.TenantID, environment.Configuration, nil)
-			if err != nil {
-				return err
-			}
-			session.Environment = &value
-			session.EnvironmentInputActivity, err = environmentInputActivity(ctx, q, id)
-			if err != nil {
-				return err
-			}
-		} else if !errors.Is(err, pgx.ErrNoRows) {
-			return err
-		}
-		row, err := q.GetLatestSessionTurn(ctx, id)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		turn := turnFromRow(row)
-		session.LastTurn = &turn
-		session.RequiredActions, err = functionActions(ctx, q, row)
-		if err != nil {
-			return err
-		}
-		session.Usage, err = q.SessionTokenUsage(ctx, id)
+		var err error
+		session, err = readSessionActivity(ctx, s.queries.WithTx(tx), session)
 		return err
 	})
+	return session, err
+}
+
+// SessionStreamSnapshot reads the projection that GetSession returns and the
+// committed Session event cursor from one database snapshot.
+func (s *Store) SessionStreamSnapshot(ctx context.Context, tenantID, sessionID string) (Session, int64, error) {
+	tenant, err := parseID(tenantID)
+	if err != nil {
+		return Session{}, 0, err
+	}
+	id, err := parseID(sessionID)
+	if err != nil {
+		return Session{}, 0, err
+	}
+	var session Session
+	var cursor int64
+	err = pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+		q := s.queries.WithTx(tx)
+		row, err := q.GetSession(ctx, sqlc.GetSessionParams{TenantID: tenant, ID: id})
+		if err != nil {
+			return err
+		}
+		if session, err = sessionFromRow(row); err != nil {
+			return err
+		}
+		cursor = row.EventSequence
+		session, err = readSessionActivity(ctx, q, session)
+		return err
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Session{}, 0, ErrNotFound
+	}
+	if err != nil {
+		return Session{}, 0, fmt.Errorf("read session stream snapshot: %w", err)
+	}
+	return session, cursor, nil
+}
+
+// readSessionActivity adds the Environment, reservation activity and latest Turn
+// projection within the caller's snapshot.
+func readSessionActivity(ctx context.Context, q *sqlc.Queries, session Session) (Session, error) {
+	id, _ := parseID(session.ID)
+	tenant, _ := parseID(session.TenantID)
+	environment, err := q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: tenant, ID: id})
+	if err == nil {
+		value, err := environmentFromRow(environment.Environment, environment.TenantID, environment.Configuration, nil)
+		if err != nil {
+			return session, err
+		}
+		session.Environment = &value
+		session.EnvironmentInputActivity, session.PendingInput, err = environmentInputState(ctx, q, id)
+		if err != nil {
+			return session, err
+		}
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return session, err
+	}
+	row, err := q.GetLatestSessionTurn(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return session, nil
+	}
+	if err != nil {
+		return session, err
+	}
+	turn := turnFromRow(row)
+	session.LastTurn = &turn
+	session.RequiredActions, err = functionActions(ctx, q, row)
+	if err != nil {
+		return session, err
+	}
+	session.Usage, err = q.SessionTokenUsage(ctx, id)
 	return session, err
 }

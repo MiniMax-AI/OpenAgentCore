@@ -1,10 +1,13 @@
 package localworkspace
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/google/uuid"
 )
@@ -72,6 +75,20 @@ func TestLocalHelperCannotInheritCredentials(t *testing.T) {
 	for _, path := range []string{"/etc", "..", "a/../b", "a//b", ".", "a\\b"} {
 		if _, err := b.ListWorkspaceDirectory(t.Context(), path, 2); err == nil {
 			t.Fatalf("invalid path accepted: %q", path)
+		}
+	}
+}
+
+func TestDirectoryClassifiesNativeErrors(t *testing.T) {
+	for code, want := range map[string]error{
+		"not_directory":     agent.ErrWorkspaceNotDirectory,
+		"not_found":         fs.ErrNotExist,
+		"permission_denied": fs.ErrPermission,
+		"invalid_path":      agent.ErrWorkspaceReadInvalid,
+		"native_error":      agent.ErrWorkspaceReadUncertain,
+	} {
+		if _, err := decodeDirectory([]byte(`{"version":1,"error":"`+code+`"}`), 2); !errors.Is(err, want) {
+			t.Fatal("native error classification changed", code, err)
 		}
 	}
 }

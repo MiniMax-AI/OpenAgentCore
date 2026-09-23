@@ -69,6 +69,10 @@ func TestEnvironmentInputActivityWaitsBeforeTurnAndClearsOnConnection(t *testing
 	if !reflect.DeepEqual(first[0], changes[0]) || changes[2].Turn != nil || changes[2].EnvironmentInputActivity.Status != "idle" {
 		t.Fatal("activity snapshot changed or borrowed a Turn")
 	}
+	// A connection clears the action, but the input is still pending admission.
+	if !idle.PendingInput || changes[2].Settled || changes[0].Settled {
+		t.Fatal("pending input reported as settled")
+	}
 	if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 1, false); err != nil {
 		t.Fatal(err)
 	}
@@ -106,8 +110,12 @@ func TestEnvironmentInputActivitySettlementAndNewerWork(t *testing.T) {
 			}
 			reservation := reserveEnvironmentInput(t, s, tenant, session.ID, "waiting")
 			value, err := s.GetSession(t.Context(), tenant, session.ID)
-			if err != nil || value.LastTurn.Status != TurnFailed || value.EnvironmentInputActivity.Status != "requires_action" {
+			if err != nil || value.LastTurn.Status != TurnFailed || value.EnvironmentInputActivity.Status != "requires_action" || !value.PendingInput {
 				t.Fatal("prior failure hid waiting input", err)
+			}
+			waitingCursor, err := s.SessionEventCursor(t.Context(), tenant, session.ID)
+			if err != nil {
+				t.Fatal(err)
 			}
 			if state == EnvironmentInputCancelled {
 				_, err = s.CancelEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
@@ -130,7 +138,13 @@ func TestEnvironmentInputActivitySettlementAndNewerWork(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			requireEnvironmentInputActivity(t, s, tenant, session.ID, "idle", "")
+			// The settled later reservation no longer counts as pending input, so
+			// creation streams can end instead of waiting for work that cannot start.
+			settled := requireEnvironmentInputActivity(t, s, tenant, session.ID, "idle", "")
+			events, err := s.ListSessionEvents(t.Context(), tenant, session.ID, waitingCursor)
+			if err != nil || settled.PendingInput || len(events) != 1 || events[0].Event.Type != "agent.session.idle" || events[0].Turn != nil || !events[0].Settled {
+				t.Fatal("settled reservation remained pending", settled.EnvironmentInputActivity, events, err)
+			}
 			cursor, err := s.SessionEventCursor(t.Context(), tenant, session.ID)
 			if err != nil {
 				t.Fatal(err)
