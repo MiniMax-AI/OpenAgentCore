@@ -193,3 +193,25 @@ func TestRestartFencesCPUWithoutSplittingAllocation(t *testing.T) {
 		}
 	}
 }
+
+func TestUnavailableObservationBreaksCPUContinuity(t *testing.T) {
+	start := time.Now().UTC().Truncate(time.Second).Add(-time.Minute)
+	started := start.Add(-time.Hour)
+	unavailable := observedRecord(start.Add(20*time.Second), started, 0)
+	unavailable.Sample = nil
+	unavailable.Status = runtimeobs.StatusUnavailable
+	s := &fakeStore{records: []runtimeobs.ExportRecord{observedRecord(start.Add(5*time.Second), started, 1), unavailable, observedRecord(start.Add(35*time.Second), started, 100)}}
+	r := testReader(t, s, start.Add(time.Minute))
+	result, err := r.Query(t.Context(), testQuery(start))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Series) != 1 || len(result.Series[0].Points) != 2 || result.Series[0].Points[0].UnavailableCount != 1 {
+		t.Fatal("outage missing from allocation coverage", result)
+	}
+	for _, point := range result.Series[0].Points {
+		if point.CPUUtilizationRatio != nil {
+			t.Fatal("CPU bridged unavailable sample", point)
+		}
+	}
+}

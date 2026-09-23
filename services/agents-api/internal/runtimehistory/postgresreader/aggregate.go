@@ -118,6 +118,15 @@ func aggregate(query runtimehistory.Query, generatedAt time.Time, raw []*rawSamp
 		}
 		value.samples = append(value.samples, sample)
 	}
+	// Unavailable samples retain allocation identity even without a provider
+	// timestamp. Keep them in that allocation's coverage and rate sequence.
+	for _, sample := range raw {
+		if sample.startedAt == nil && sample.allocation != "" {
+			if value := series[sample.allocation]; value != nil && !sample.resolvedAt.Before(value.startedAt) {
+				value.samples = append(value.samples, sample)
+			}
+		}
+	}
 	result := runtimehistory.Result{GeneratedAt: generatedAt, Coverage: make([]runtimehistory.CoveragePoint, 0, len(coverage)), Series: make([]runtimehistory.Series, 0, len(series))}
 	for _, index := range sortedIndexes(coverage) {
 		value := coverage[index]
@@ -159,16 +168,17 @@ func aggregate(query runtimehistory.Query, generatedAt time.Time, raw []*rawSamp
 func aggregateSeries(query runtimehistory.Query, samples []*rawSample) ([]runtimehistory.Point, error) {
 	samples = append([]*rawSample(nil), samples...)
 	sort.SliceStable(samples, func(i, j int) bool {
-		if samples[i].observedAt == nil {
-			return samples[j].observedAt != nil
+		left, right := samples[i].resolvedAt, samples[j].resolvedAt
+		if samples[i].observedAt != nil {
+			left = *samples[i].observedAt
 		}
-		if samples[j].observedAt == nil {
-			return false
+		if samples[j].observedAt != nil {
+			right = *samples[j].observedAt
 		}
-		if samples[i].observedAt.Equal(*samples[j].observedAt) {
+		if left.Equal(right) {
 			return samples[i].resolvedAt.Before(samples[j].resolvedAt)
 		}
-		return samples[i].observedAt.Before(*samples[j].observedAt)
+		return left.Before(right)
 	})
 	points := map[int]*pointAggregate{}
 	var previousUsage, previousCapacity *float64
@@ -229,6 +239,10 @@ func aggregateSeries(query runtimehistory.Query, samples []*rawSample) ([]runtim
 					point.memoryContributors++
 				}
 			}
+		}
+		if !hasUsage || !hasCapacity {
+			previousUsage, previousCapacity = nil, nil
+			previousAt = time.Time{}
 		}
 		if hasUsage {
 			value := usage
