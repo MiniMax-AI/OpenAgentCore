@@ -121,8 +121,13 @@ def verify_file_tenant_isolation(client, other, http, environment_id, directory,
             raise AssertionError("Foreign tenant can access SDK Files.list")
 
 
-def verify_file_list_rows(client, http, environment_id, rows):
-    """Replays Files.list rows F3-F8. rows: absolute directory, missing, file and optional symlink paths."""
+def verify_file_list_rows(client, http, environment_id, rows, empty_pages=True):
+    """Replays Files.list rows F3-F8. rows: absolute directory, missing, file and optional symlink paths.
+
+    empty_pages=False selects the documented exception for daemons without a local
+    workspace binding: the Claude SDK adapter reader keeps 404 for a missing path
+    and 503 for a regular file or symlink.
+    """
     endpoint = str(client.base_url).rstrip("/") + "/agents/environments/" + environment_id + "/files"
     headers = {"Authorization": "Bearer " + client.api_key, "OpenAI-Beta": "agents=v1"}
     resource = client.beta.agents.environments.files
@@ -147,6 +152,11 @@ def verify_file_list_rows(client, http, environment_id, rows):
         if name not in rows:
             continue
         response = http.get(endpoint, headers=headers, params={"path": rows[name]})
+        if not empty_pages:
+            expected = 404 if name == "missing" else 503
+            assert response.status_code == expected and set(response.json()) == {"error"}, "Adapter reader result changed"
+            checked.append(name + "_adapter_" + str(expected))
+            continue
         assert response.status_code == 200 and response.json() == EMPTY_PAGE, "Non-directory path did not list empty"
         page = resource.list(environment_id, path=rows[name])
         assert page.data == [] and page.has_more is False and page.next is None and not page.has_next_page(), "SDK empty page"

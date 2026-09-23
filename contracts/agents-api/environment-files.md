@@ -36,6 +36,8 @@ final page) and `has_more`, which is true exactly when `next` is set.
   Omitted path selects the workspace root. Do not recurse or follow symlinks;
   directory, symlink and other non-regular entries are omitted. A path that is
   missing, a regular file or a symlink lists an empty page; the link is not followed.
+  Daemons without a local workspace binding use the Claude SDK adapter reader,
+  which keeps 404 for a missing path and 503 for a regular file or symlink.
 - Omitted limit uses 20. Unknown query keys are ignored, as on the shared lists; a
   repeated `path`, `limit`, `order` or `page` returns the Beta duplicate-field error.
   Empty values are rejected by their own rule and malformed query encoding remains
@@ -163,8 +165,8 @@ used three owned hosted Sessions, all deleted. The batch plan is
 | F2 | List envelope | `object: page`, `data`, `next`, `has_more`; `has_more` is true exactly when `next` is set. Paging and ordering are unchanged | HE-32: `req_c8c247cfd13145a2b92be5cad412508f`, `req_a311bf80ff0643db945aa5db0a78e95b` |
 | F3 | Unknown list query key | Ignored; the page equals the request without it | HE-34: `req_c4cd4618f7264840ad7454e80ac7f83c` |
 | F4 | Repeated `path`, `limit`, `order` or `page` | 400 `invalid_request_error`, param null, ``Failed to deserialize query string: duplicate field `<key>` `` | HE-35: `req_30b3c8bfced64383bf13c9d5bbc44a74` |
-| F5 | `path` names a missing directory | 200 `{object: page, data: [], next: null, has_more: false}` | HE-36: `req_a311bf80ff0643db945aa5db0a78e95b` |
-| F6 | `path` names a regular file or a symlink to a directory | The same empty page; the link is never followed | HE-37: `req_25fb0220fa7d4157a783711622b5d580`, `req_58b6784dc49640c194910c719d5c8102` |
+| F5 | `path` names a missing directory | 200 `{object: page, data: [], next: null, has_more: false}` with a local workspace reader (Claude SDK adapter exception below) | HE-36: `req_a311bf80ff0643db945aa5db0a78e95b` |
+| F6 | `path` names a regular file or a symlink to a directory | The same empty page with a local workspace reader; the link is never followed | HE-37: `req_25fb0220fa7d4157a783711622b5d580`, `req_58b6784dc49640c194910c719d5c8102` |
 | F7 | `path` not in cleaned form (trailing or repeated separator, `.` or `..`) | 400 `invalid_request_error`, param null, `path must identify a non-reserved directory inside /workspace` | HE-38: `req_a7ee5a49d1d24529b9de877c7ec5bc58` |
 | F8 | Other validation errors | Code `invalid_request_error`, param null: list relative or outside path `path must be an absolute directory inside /workspace`; malformed, foreign or stale page token `Invalid file page token for this request`; create relative, root, outside or NUL path `environment.files[0].path must be an absolute POSIX path inside /workspace`; create empty, `.` or `..` components `environment.files[0].path cannot contain empty, . or .. path components`; unknown create body field `Unknown parameter: '<field>'.` with param `<field>` | HE-16: `req_3fb9feef630c442ba1c136506458362d`, `req_a41eb84c48594daf8fb55b95d8b118bd`, `req_f592639cfe28416395187ae76ad18228`; HE-39: `req_cbfed6a0336e47a395f42b82b45b20d7`, `req_5c2494e082714500bccbadbf60c6195d` |
 | F9 | Files.create or list on an `openai_hosted` Environment still `pending` | 400 `invalid_request_error`, param null, `the hosted environment is still provisioning; wait until it is connected before accessing files` | HE-18: `req_938b99e48d3c4f4ab685dcf9b29baa6f`, `req_ff81d9155bb841618d5d1bbc1c987fdf` |
@@ -219,9 +221,10 @@ events (HE-02); the `self_hosted` status value (HE-04); `self_hosted` Files
 support, which the official service refuses and Core's daemon keeps; limit bounds,
 the default path and ordering. Malformed query encoding stays a local rejection.
 The official conflict and size-limit messages and the deleted-Session 404 message
-are not adopted. The Claude SDK TypeScript directory reader, used only when a daemon
-has no local workspace binding, is unchanged. A Runtime image built before this
-batch keeps its earlier 404/503 results for F5/F6 until it is rebuilt.
+are not adopted. The Claude SDK adapter directory reader, used only when a daemon has
+no local workspace binding, is unchanged: F5 and F6 there keep 404 for a missing
+path and 503 for a regular file or symlink. A Runtime image built before this batch
+keeps the same 404/503 results until it is rebuilt.
 
 Go handler tests cover F1–F9 with foreign-equals-missing checks; real-PostgreSQL
 Worker tests cover the `not_directory` mapping, its release confirmation and the
