@@ -24,7 +24,7 @@ def managed_config(root, state, manifest):
             "runtime_sha256": manifest["microsandbox"]["runtime_sha256"],
             "firmware_sha256": manifest["microsandbox"]["firmware_sha256"],
             "runtime_home": str(root / "state/msb"), "image": manifest["runtime_ref"],
-            "memory_mib": 4096, "cpus": 2, "root_disk_mib": 8192,
+            "memory_mib": 4096, "cpus": 2, "root_disk_mib": 8192, "environment_disk_mib": 8192,
             "idle_seconds": 300, "retention_seconds": 86400,
             "max_active": 4, "max_retained": 16,
             "network": {"default_egress": "deny", "default_ingress": "deny", "rules": [

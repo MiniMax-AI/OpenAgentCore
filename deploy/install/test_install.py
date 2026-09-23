@@ -137,6 +137,8 @@ class InstallerTests(unittest.TestCase):
         managed = self.document("config/managed-runtimes.json")
         self.assertNotIn("docker", managed)
         micro = managed["microsandbox"]
+        self.assertEqual(micro["root_disk_mib"], 8192)
+        self.assertEqual(micro["environment_disk_mib"], 8192)
         self.assertEqual(micro["network"]["default_ingress"], "deny")
         self.assertEqual(micro["network"]["default_egress"], "deny")
         self.assertEqual(micro["image"], self.manifest["runtime_ref"])

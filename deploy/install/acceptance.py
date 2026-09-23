@@ -157,6 +157,8 @@ class API:
         require(len(raw) <= MAX_RESPONSE, "response_limit_exceeded")
         if binary:
             return raw
+        if method == "POST" and path.endswith("/events") and entry["http_status"] == 202 and not raw:
+            return {}
         try:
             value = json.loads(raw)
         except (ValueError, UnicodeError):

@@ -598,6 +598,12 @@ pause does not release RAM. Suspension captures and verifies a full snapshot,
 stops the exact source, and removes its writable compute closure only after the
 artifact is durably identified. Explicit network policy applies on create and
 restore. Do not inherit undeclared host resources.
+The native SDK owns a dedicated ext4 disk mounted at `/environment`, separately
+bounded by `environment_disk_mib` alongside `root_disk_mib`. Workspace, staging
+and outputs must share that filesystem; do not weaken cross-device or link
+checks to accommodate the layered root. Creation uses `/` until bootstrap creates
+the workspace. Existing full snapshots and sandbox cleanup own the disk, with
+no external mount or separate storage lifecycle.
 
 Suspend only after at least one Turn is terminal, no queued/in-progress/waiting
 root or subagent Turn, pending input/file operation or initialization remains,

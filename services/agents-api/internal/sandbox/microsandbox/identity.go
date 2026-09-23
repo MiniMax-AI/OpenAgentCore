@@ -25,7 +25,7 @@ func validHash(s string) bool {
 	return e == nil && len(b) == 32 && strings.ToLower(s) == s
 }
 func (c Config) Validate() error {
-	if !validID(c.InstallationID) || !filepath.IsAbs(c.HelperPath) || !filepath.IsAbs(c.RuntimeHome) || !filepath.IsAbs(c.RuntimePath) || !filepath.IsAbs(c.FirmwarePath) || !validHash(c.RuntimeSHA256) || !validHash(c.FirmwareSHA256) || c.MemoryMiB == 0 || c.CPUs == 0 || c.RootDiskMiB == 0 {
+	if !validID(c.InstallationID) || !filepath.IsAbs(c.HelperPath) || !filepath.IsAbs(c.RuntimeHome) || !filepath.IsAbs(c.RuntimePath) || !filepath.IsAbs(c.FirmwarePath) || !validHash(c.RuntimeSHA256) || !validHash(c.FirmwareSHA256) || c.MemoryMiB == 0 || c.CPUs == 0 || c.RootDiskMiB == 0 || c.EnvironmentDiskMiB == 0 {
 		return sandbox.ErrInvalid
 	}
 	imageName, digest, pinned := strings.Cut(c.Image, "@sha256:")

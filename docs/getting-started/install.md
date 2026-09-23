@@ -19,7 +19,7 @@ The explicit Docker option runs Core in Compose and requires neither KVM nor
 systemd user services.
 
 Reserve capacity for the native Runtime: the initial microsandbox profile uses
-4 GiB RAM, 2 CPUs and an 8 GiB root disk per active sandbox, with at most 4 active
+4 GiB RAM, 2 CPUs, an 8 GiB root disk and an 8 GiB environment disk per active sandbox, with at most 4 active
 and 16 retained allocations. Limits are operator configuration, not model input.
 Use a trusted, single-operator host and durable local storage. The installer does
 not change host virtualization settings, install Docker, create an OS user or
