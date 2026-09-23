@@ -26,7 +26,7 @@ func (q *Queries) AdoptPendingRuntimePlacements(ctx context.Context, nodeID pgty
 
 const adoptRuntimePlacements = `-- name: AdoptRuntimePlacements :exec
 INSERT INTO runtime_placements(environment_id,node_id,released_at)
-SELECT a.environment_id,$1,a.released_at FROM runtime_allocations a WHERE a.provider_key=$2
+SELECT a.environment_id,$1,a.released_at FROM runtime_allocations a WHERE a.provider_key=$2 AND a.state<>'released' AND a.node_id IS NULL
 ON CONFLICT(environment_id) DO NOTHING
 `
 
@@ -42,7 +42,7 @@ func (q *Queries) AdoptRuntimePlacements(ctx context.Context, arg AdoptRuntimePl
 
 const bindLegacyRuntimeAllocations = `-- name: BindLegacyRuntimeAllocations :exec
 UPDATE runtime_allocations SET node_id=$1,compute_activity_at=clock_timestamp()
-WHERE provider_key=$2 AND node_id IS NULL
+WHERE provider_key=$2 AND node_id IS NULL AND state<>'released'
 `
 
 type BindLegacyRuntimeAllocationsParams struct {
@@ -321,6 +321,61 @@ func (q *Queries) InsertRuntimeNode(ctx context.Context, arg InsertRuntimeNodePa
 		&i.RemovedAt,
 	)
 	return i, err
+}
+
+const listLegacyRuntimeAllocations = `-- name: ListLegacyRuntimeAllocations :many
+SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.kept_at, a.released_at, a.initialization, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, e.session_id, s.tenant_id, s.deleted_at
+FROM runtime_allocations a JOIN environments e ON e.id=a.environment_id JOIN sessions s ON s.id=e.session_id
+WHERE a.node_id IS NULL AND a.state<>'released' AND a.id>$1 ORDER BY a.id LIMIT 32 FOR UPDATE OF a
+`
+
+type ListLegacyRuntimeAllocationsRow struct {
+	RuntimeAllocation RuntimeAllocation  `json:"runtime_allocation"`
+	SessionID         pgtype.UUID        `json:"session_id"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
+	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
+}
+
+func (q *Queries) ListLegacyRuntimeAllocations(ctx context.Context, id pgtype.UUID) ([]ListLegacyRuntimeAllocationsRow, error) {
+	rows, err := q.db.Query(ctx, listLegacyRuntimeAllocations, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLegacyRuntimeAllocationsRow{}
+	for rows.Next() {
+		var i ListLegacyRuntimeAllocationsRow
+		if err := rows.Scan(
+			&i.RuntimeAllocation.ID,
+			&i.RuntimeAllocation.EnvironmentID,
+			&i.RuntimeAllocation.DeviceID,
+			&i.RuntimeAllocation.ProviderKey,
+			&i.RuntimeAllocation.State,
+			&i.RuntimeAllocation.CreateSettled,
+			&i.RuntimeAllocation.CreatedAt,
+			&i.RuntimeAllocation.KeptAt,
+			&i.RuntimeAllocation.ReleasedAt,
+			&i.RuntimeAllocation.Initialization,
+			&i.RuntimeAllocation.ComputePhase,
+			&i.RuntimeAllocation.ComputeRevision,
+			&i.RuntimeAllocation.ComputeState,
+			&i.RuntimeAllocation.ComputeActivityAt,
+			&i.RuntimeAllocation.ComputeWakeRequested,
+			&i.RuntimeAllocation.ComputeRetainedUntil,
+			&i.RuntimeAllocation.NodeID,
+			&i.RuntimeAllocation.ObservationError,
+			&i.SessionID,
+			&i.TenantID,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listNodeRuntimeAllocations = `-- name: ListNodeRuntimeAllocations :many

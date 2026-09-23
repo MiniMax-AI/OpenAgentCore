@@ -19,7 +19,7 @@ func deploymentSelection() RuntimeDeployment {
 
 func deploymentConfigure(t *testing.T, w *Store, config *RuntimeDeployment) {
 	t.Helper()
-	if err := w.ConfigureRuntimeDeployment(t.Context(), config); err != nil {
+	if err := w.ConfigureRuntimeDeployment(t.Context(), config, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -29,7 +29,7 @@ func TestRuntimeDeploymentRequiresMaintenanceBeforeIdentityChange(t *testing.T) 
 	w := executionLease(t, s).Store()
 	old := deploymentSelection()
 	deploymentConfigure(t, w, &old)
-	if err := s.ConfigureRuntimeDeployment(t.Context(), &old); !errors.Is(err, ErrInvalidInput) {
+	if err := s.ConfigureRuntimeDeployment(t.Context(), &old, nil); !errors.Is(err, ErrInvalidInput) {
 		t.Fatal("unleased configuration accepted", err)
 	}
 	for _, changeID := range []bool{false, true} {
@@ -40,7 +40,7 @@ func TestRuntimeDeploymentRequiresMaintenanceBeforeIdentityChange(t *testing.T) 
 			next.BackendFingerprint = strings.Repeat("b", 64)
 		}
 		next.Maintenance = true
-		if err := w.ConfigureRuntimeDeployment(t.Context(), &next); err == nil || !strings.Contains(err.Error(), "maintenance") {
+		if err := w.ConfigureRuntimeDeployment(t.Context(), &next, nil); err == nil || !strings.Contains(err.Error(), "maintenance") {
 			t.Fatal("identity changed before prior maintenance", err)
 		}
 	}
@@ -49,7 +49,7 @@ func TestRuntimeDeploymentRequiresMaintenanceBeforeIdentityChange(t *testing.T) 
 	next := old
 	next.BackendFingerprint = strings.Repeat("b", 64)
 	next.Maintenance = false
-	if err := w.ConfigureRuntimeDeployment(t.Context(), &next); err == nil {
+	if err := w.ConfigureRuntimeDeployment(t.Context(), &next, nil); err == nil {
 		t.Fatal("switch reopened creation in same operation")
 	}
 	next.Maintenance = true
@@ -65,7 +65,7 @@ func TestRuntimeDeploymentRequiresMaintenanceBeforeIdentityChange(t *testing.T) 
 	deploymentConfigure(t, w, &next)
 	another := deploymentSelection()
 	another.Maintenance = true
-	if err := w.ConfigureRuntimeDeployment(t.Context(), &another); err == nil {
+	if err := w.ConfigureRuntimeDeployment(t.Context(), &another, nil); err == nil {
 		t.Fatal("nil selection erased the maintenance prerequisite")
 	}
 }
@@ -82,10 +82,10 @@ func TestRuntimeDeploymentPendingSessionsCannotMigrate(t *testing.T) {
 	deploymentConfigure(t, w, &old)
 	next := deploymentSelection()
 	next.Maintenance = true
-	if err := w.ConfigureRuntimeDeployment(t.Context(), &next); err == nil || !strings.Contains(err.Error(), "1 pending hosted") {
+	if err := w.ConfigureRuntimeDeployment(t.Context(), &next, nil); err == nil || !strings.Contains(err.Error(), "1 pending hosted") {
 		t.Fatal("pending Session migrated", err)
 	}
-	if err := w.ConfigureRuntimeDeployment(t.Context(), nil); err == nil {
+	if err := w.ConfigureRuntimeDeployment(t.Context(), nil, nil); err == nil {
 		t.Fatal("pending Session orphaned by removing provider")
 	}
 	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
@@ -104,7 +104,7 @@ func TestRuntimeDeploymentUnknownAllocationsBlockAdoptionAndSwitch(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := w.ConfigureRuntimeDeployment(t.Context(), &old); err == nil || !strings.Contains(err.Error(), "no verified backend identity") {
+	if err := w.ConfigureRuntimeDeployment(t.Context(), &old, nil); err == nil || !strings.Contains(err.Error(), "no verified backend identity") {
 		t.Fatal("legacy allocation silently adopted", err)
 	}
 	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
@@ -116,7 +116,7 @@ func TestRuntimeDeploymentUnknownAllocationsBlockAdoptionAndSwitch(t *testing.T)
 	if _, err := w.ReleaseRuntimeAllocation(t.Context(), owner); !errors.Is(err, ErrTurnConflict) {
 		t.Fatal("unknown creation lost cleanup ownership", err)
 	}
-	if err := w.ConfigureRuntimeDeployment(t.Context(), &old); err == nil {
+	if err := w.ConfigureRuntimeDeployment(t.Context(), &old, nil); err == nil {
 		t.Fatal("deleted unknown allocation did not block adoption")
 	}
 	if _, err := w.SettleRuntimeCreation(t.Context(), owner); err != nil {
@@ -135,10 +135,10 @@ func TestRuntimeDeploymentUnknownAllocationsBlockAdoptionAndSwitch(t *testing.T)
 	deploymentConfigure(t, w, &old)
 	next := deploymentSelection()
 	next.Maintenance = true
-	if err := w.ConfigureRuntimeDeployment(t.Context(), &next); err == nil || !strings.Contains(err.Error(), "1 unreleased allocations") {
+	if err := w.ConfigureRuntimeDeployment(t.Context(), &next, nil); err == nil || !strings.Contains(err.Error(), "1 unreleased allocations") {
 		t.Fatal("unknown creation did not block switch", err)
 	}
-	if err := w.ConfigureRuntimeDeployment(t.Context(), nil); err == nil {
+	if err := w.ConfigureRuntimeDeployment(t.Context(), nil, nil); err == nil {
 		t.Fatal("removing adapter orphaned unknown creation")
 	}
 	replay, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, old.InstallationID, device.HashCredential(uuid.NewString()))
@@ -265,7 +265,7 @@ func TestRuntimeDeploymentRetainedResourcesBlockSwitchWithoutMutation(t *testing
 			}
 			next := deploymentSelection()
 			next.Maintenance = true
-			if err := w.ConfigureRuntimeDeployment(t.Context(), &next); err == nil || !strings.Contains(err.Error(), "1 unreleased allocations") {
+			if err := w.ConfigureRuntimeDeployment(t.Context(), &next, nil); err == nil || !strings.Contains(err.Error(), "1 unreleased allocations") {
 				t.Fatal("retained resource allowed switch", state, err)
 			}
 			if err := pool.QueryRow(t.Context(), "SELECT to_jsonb(a)::text FROM runtime_allocations a WHERE id=$1", owner.ID).Scan(&after); err != nil {
@@ -308,7 +308,7 @@ func TestRuntimeDeploymentAllocationBeforeMaintenanceRetainsOwnership(t *testing
 	maintaining := make(chan error, 1)
 	maintenance := config
 	maintenance.Maintenance = true
-	go func() { maintaining <- w.ConfigureRuntimeDeployment(ctx, &maintenance) }()
+	go func() { maintaining <- w.ConfigureRuntimeDeployment(ctx, &maintenance, nil) }()
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +324,7 @@ func TestRuntimeDeploymentAllocationBeforeMaintenanceRetainsOwnership(t *testing
 	}
 	next := deploymentSelection()
 	next.Maintenance = true
-	if err := w.ConfigureRuntimeDeployment(ctx, &next); err == nil || !strings.Contains(err.Error(), "1 unreleased allocations") {
+	if err := w.ConfigureRuntimeDeployment(ctx, &next, nil); err == nil || !strings.Contains(err.Error(), "1 unreleased allocations") {
 		t.Fatal("earlier in-flight allocation omitted from switch guard", err)
 	}
 }

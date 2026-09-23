@@ -597,7 +597,12 @@ or a changed backend namespace. Reserve each NodeID before transport upgrade and
 retain that reservation through disconnect cleanup; a duplicate connection must
 not replace a live or opening connection. Keep one private state directory per
 node and never copy its identity to another host. This is connection exclusion,
-not host attestation. Heartbeats establish provider readiness and
+not host attestation. The Hub's global mutex protects only in-memory connection
+state. Authentication, ownership and Store callbacks run synchronously outside
+that mutex, respect cancellation and have a five-second limit; never detach
+database writes. Closing the Hub cancels opening and live connections without
+waiting for database callbacks. Keep each node reservation until its fenced
+disconnect cleanup finishes. Heartbeats establish provider readiness and
 last-observed host metrics, never Session activity. Transport reconnects use
 bounded backoff. Send relative operation budgets, anchored to the node clock at
 receipt and consumed while queued; clocks on different hosts need not agree. Core
@@ -620,12 +625,27 @@ model-provider extension remains independent. Existing retries keep their origin
 node even when it is offline. Node capacity counts pending reservations and
 unresolved resources; new placement and suspended-to-restoring admission share a
 database lock. Confirmed cleanup releases placement capacity. Under the existing
-execution lease, adopt old single-host resources only after the installation and
-backend fingerprint match, retaining them and pending Environments on the local
-node. First adoption initializes the idle activity anchor from the database clock
-in the same binding transaction. Later startups preserve that anchor and the
-existing snapshot retention deadline. Never infer a host from an identical socket
-path on another machine.
+execution lease, first adoption requires matching installation/configuration identity
+and positive Provider evidence for every unreleased allocation on the actual local
+backend. A socket or runtime path is not host identity. Before the Worker or
+listener starts, a startup-only verifier uses the local adapter's common GetInfo,
+GetCompute and ObserveOnly snapshot operations; it cannot create, restore, kill or
+replay resources. Normal operation continues exclusively through the node proxy.
+Verify each retained current, target and snapshot identity independently; absence
+alone never proves ownership. Unknown, unavailable, mismatched or corrupt resources
+reject the entire adoption. Volume-only Docker remnants and consumed-restore
+transitions without the original source receipt require resolution with the
+previous Core before upgrading; do not reconstruct missing ownership evidence.
+
+Read candidates in bounded pages without holding a transaction across Provider
+calls. Then lock the deployment and all candidate allocation rows in a short
+leased transaction, compare the complete receipt set to the verified snapshot,
+and commit node placement, binding and the database idle anchor together. Database
+reads and the final transaction have a five-second budget; each Provider check has
+its own thirty-second budget. A changed plan or lost lease commits no adoption.
+Pending Environments without allocations receive their first placement; released
+history remains unassigned and cannot be recreated. Later startups preserve the
+fixed node, idle anchor and existing snapshot retention deadline.
 
 Do not add node-level drain controls. Refuse node removal with pending allocations,
 instances, snapshots, unknown results or cleanup resources. Offline ownership is

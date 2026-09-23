@@ -38,11 +38,13 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher) (*Worker, error) {
 		return nil, err
 	}
 	var deployment *store.RuntimeDeployment
+	var verify store.RuntimeOwnershipVerifier
 	if worker.runtimes != nil {
 		config := worker.runtimes.config
+		verify = config.VerifyLegacyOwnership
 		deployment = &store.RuntimeDeployment{ProviderKind: config.ProviderKind, LocalNodeID: config.LocalNodeID, LocalCredentialSHA256: config.LocalCredentialSHA256, LocalMaxActive: config.LocalMaxActive, LocalMaxRetained: config.LocalMaxRetained, InstallationID: config.InstallationID, BackendFingerprint: config.BackendFingerprint, Maintenance: config.Maintenance}
 	}
-	if err := owned.Store.ConfigureRuntimeDeployment(ctx, deployment); err != nil {
+	if err := owned.Store.ConfigureRuntimeDeployment(ctx, deployment, verify); err != nil {
 		if worker.runtimes != nil {
 			worker.runtimes.stop()
 		}

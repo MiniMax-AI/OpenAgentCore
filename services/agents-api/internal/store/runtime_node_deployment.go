@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func configureRuntimeManager(ctx context.Context, q *sqlc.Queries, previous sqlc.RuntimeDeployment, selected *RuntimeDeployment) error {
+func configureRuntimeManager(ctx context.Context, q *sqlc.Queries, previous sqlc.RuntimeDeployment, selected *RuntimeDeployment, plan *runtimeAdoptionPlan) error {
 	if selected.ProviderKind == "" {
 		return nil
 	}
@@ -20,6 +20,11 @@ func configureRuntimeManager(ctx context.Context, q *sqlc.Queries, previous sqlc
 	installation, err := parseConnectionGeneration(selected.InstallationID)
 	if err != nil {
 		return err
+	}
+	if previous.ProviderKind == "" {
+		if err := checkLegacyRuntimeAdoption(ctx, q, previous, plan); err != nil {
+			return err
+		}
 	}
 	var localNode pgtype.UUID
 	if selected.LocalNodeID == "" {

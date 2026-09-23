@@ -26,9 +26,13 @@ type RuntimeDeployment struct {
 // ConfigureRuntimeDeployment runs before Worker startup under its execution lease.
 // Maintenance must be committed for the old installation before any switch.
 // A nil selection never forgets the previous identity or unresolved resources.
-func (s *Store) ConfigureRuntimeDeployment(ctx context.Context, selected *RuntimeDeployment) error {
+func (s *Store) ConfigureRuntimeDeployment(ctx context.Context, selected *RuntimeDeployment, verify RuntimeOwnershipVerifier) error {
 	if s.executionLease == nil {
 		return ErrInvalidInput
+	}
+	if selected != nil {
+		copy := *selected
+		selected = &copy
 	}
 	var update sqlc.SetRuntimeDeploymentParams
 	if selected != nil {
@@ -42,6 +46,12 @@ func (s *Store) ConfigureRuntimeDeployment(ctx context.Context, selected *Runtim
 		}
 		update = sqlc.SetRuntimeDeploymentParams{InstallationID: id, BackendFingerprint: selected.BackendFingerprint, Maintenance: selected.Maintenance}
 	}
+	plan, err := s.verifyLegacyRuntimeAdoption(ctx, selected, verify)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, executionTransactionTimeout)
+	defer cancel()
 	return s.executionLease.transaction(ctx, func(tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		previous, err := q.LockRuntimeDeployment(ctx)
@@ -52,7 +62,7 @@ func (s *Store) ConfigureRuntimeDeployment(ctx context.Context, selected *Runtim
 			if err := q.SetRuntimeDeployment(ctx, update); err != nil {
 				return err
 			}
-			return configureRuntimeManager(ctx, q, previous, selected)
+			return configureRuntimeManager(ctx, q, previous, selected, plan)
 		}
 		resources, err := q.CountRuntimeDeploymentResources(ctx)
 		if err != nil {
@@ -79,7 +89,7 @@ func (s *Store) ConfigureRuntimeDeployment(ctx context.Context, selected *Runtim
 		if err := q.SetRuntimeDeployment(ctx, update); err != nil {
 			return err
 		}
-		return configureRuntimeManager(ctx, q, previous, selected)
+		return configureRuntimeManager(ctx, q, previous, selected, plan)
 	})
 }
 

@@ -26,8 +26,10 @@ type Hub struct {
 	mu      sync.Mutex
 	peers   map[string]*peer
 	// reservations cover opening, live and closing connections for one identity.
-	reservations map[string]struct{}
+	reservations map[string]*connectionLifetime
 	closed       bool
+	ctx          context.Context
+	cancel       context.CancelFunc
 }
 
 type peer struct {
@@ -35,23 +37,25 @@ type peer struct {
 	id       string
 	epoch    uint64
 	conn     *websocket.Conn
-	send     sync.Mutex
+	send     chan struct{}
 	mu       sync.Mutex
 	sequence uint64
 	ready    bool
 	pending  map[string]chan response
 	done     chan struct{}
 	once     sync.Once
+	cancel   context.CancelFunc
 }
 
 func NewHub(options HubOptions) *Hub {
-	return &Hub{options: options, peers: map[string]*peer{}, reservations: map[string]struct{}{}}
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Hub{options: options, peers: map[string]*peer{}, reservations: map[string]*connectionLifetime{}, ctx: ctx, cancel: cancel}
 }
 func (h *Hub) Online(id string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	p := h.peers[id]
-	if p == nil {
+	if h.closed || p == nil {
 		return false
 	}
 	select {
@@ -63,20 +67,21 @@ func (h *Hub) Online(id string) bool {
 }
 func (h *Hub) Close() {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	h.closed = true
-	for _, p := range h.peers {
-		p.close()
-	}
+	h.mu.Unlock()
+	// Cancellation reaches authentication, opening sockets and live callbacks.
+	// It does not wait for a database callback or run socket I/O under h.mu.
+	h.cancel()
 }
 func (h *Hub) Disconnect(id string) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	if p := h.peers[id]; p != nil {
-		p.close()
+	lifetime := h.reservations[id]
+	h.mu.Unlock()
+	if lifetime != nil {
+		lifetime.cancel()
 	}
 }
-func (p *peer) close() { p.once.Do(func() { close(p.done); _ = p.conn.Close() }) }
+func (p *peer) close() { p.once.Do(func() { close(p.done); p.cancel(); _ = p.conn.Close() }) }
 
 func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet || h.options.Authenticate == nil || h.options.OwnerEpoch == nil {
@@ -89,7 +94,9 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	identity, err := h.options.Authenticate(r.Context(), id, auth[1])
+	ctx, cancel := h.lifetime(r.Context())
+	defer cancel()
+	identity, err := callbackValue(ctx, func(ctx context.Context) (Identity, error) { return h.options.Authenticate(ctx, id, auth[1]) })
 	if err != nil {
 		if errors.Is(err, ErrAuthentication) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -102,7 +109,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	epoch, err := h.options.OwnerEpoch(r.Context())
+	epoch, err := callbackValue(ctx, h.options.OwnerEpoch)
 	if err != nil || epoch == 0 {
 		http.Error(w, "owner unavailable", http.StatusServiceUnavailable)
 		return
@@ -119,16 +126,26 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "node identity already connected", http.StatusConflict)
 		return
 	}
-	h.reservations[id] = struct{}{}
+	lifetime := &connectionLifetime{cancel: cancel}
+	h.reservations[id] = lifetime
 	h.mu.Unlock()
 	// Registered first, this runs after peer removal and the fenced disconnect
 	// callback. A duplicate cannot replace a connection still being retired.
-	defer func() { h.mu.Lock(); delete(h.reservations, id); h.mu.Unlock() }()
+	defer func() {
+		h.mu.Lock()
+		if h.reservations[id] == lifetime {
+			delete(h.reservations, id)
+		}
+		h.mu.Unlock()
+	}()
 	upgrade := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return r.Header.Get("Origin") == "" }}
 	conn, err := upgrade.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}
+	stopClose := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stopClose()
+	defer conn.Close()
 	conn.SetReadLimit(MaxFrameBytes)
 	_ = conn.SetReadDeadline(time.Now().Add(15 * time.Second))
 	hello, err := readFrame(conn)
@@ -136,11 +153,10 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close()
 		return
 	}
-	p := &peer{identity: identity, id: uuid.NewString(), epoch: epoch, conn: conn, pending: map[string]chan response{}, ready: hello.Health.ProviderReady, done: make(chan struct{})}
-	if writeFrame(conn, frame{Type: "welcome", ConnectionID: p.id, OwnerEpoch: epoch}) != nil {
-		p.close()
-		return
-	}
+	p := &peer{identity: identity, id: uuid.NewString(), epoch: epoch, conn: conn, cancel: cancel, send: make(chan struct{}, 1), pending: map[string]chan response{}, ready: hello.Health.ProviderReady, done: make(chan struct{})}
+	stopPeerClose := context.AfterFunc(ctx, p.close)
+	defer stopPeerClose()
+	presenceAttempted := false
 	defer func() {
 		p.close()
 		h.mu.Lock()
@@ -148,33 +164,40 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			delete(h.peers, id)
 		}
 		h.mu.Unlock()
-		if h.options.Disconnected != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			h.options.Disconnected(ctx, identity, p.id, p.epoch)
+		if presenceAttempted && h.options.Disconnected != nil {
+			// Even an errored Connected may have committed. Cleanup must outlive
+			// connection/Hub cancellation, and retain the identity reservation.
+			_ = callback(context.Background(), func(ctx context.Context) error {
+				h.options.Disconnected(ctx, identity, p.id, p.epoch)
+				return nil
+			})
 		}
 	}()
-	h.mu.Lock()
-	if h.closed {
-		h.mu.Unlock()
-		p.close()
-		return
-	}
 	if h.options.Connected != nil {
-		err = h.options.Connected(r.Context(), identity, p.id, p.epoch)
-	}
-	if err != nil {
-		h.mu.Unlock()
-		p.close()
-		return
-	}
-	if h.options.Heartbeat != nil {
-		err = h.options.Heartbeat(r.Context(), identity, p.id, p.epoch, *hello.Health)
+		presenceAttempted = true
+		err = callback(ctx, func(ctx context.Context) error {
+			return h.options.Connected(ctx, identity, p.id, p.epoch)
+		})
 		if err != nil {
-			h.mu.Unlock()
-			p.close()
 			return
 		}
+	}
+	if h.options.Heartbeat != nil {
+		presenceAttempted = true
+		err = callback(ctx, func(ctx context.Context) error {
+			return h.options.Heartbeat(ctx, identity, p.id, p.epoch, *hello.Health)
+		})
+		if err != nil {
+			return
+		}
+	}
+	if ctx.Err() != nil || writeFrame(conn, frame{Type: "welcome", ConnectionID: p.id, OwnerEpoch: epoch}) != nil {
+		return
+	}
+	h.mu.Lock()
+	if h.closed || ctx.Err() != nil {
+		h.mu.Unlock()
+		return
 	}
 	h.peers[id] = p
 	h.mu.Unlock()
@@ -203,23 +226,25 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if f.ConnectionID != p.id || f.Health == nil {
 				return
 			}
-			fresh, e := h.options.Authenticate(r.Context(), id, auth[1])
+			fresh, e := callbackValue(ctx, func(ctx context.Context) (Identity, error) { return h.options.Authenticate(ctx, id, auth[1]) })
 			if e != nil || !sameBackend(fresh, identity) {
 				return
 			}
-			current, e := h.options.OwnerEpoch(r.Context())
+			current, e := callbackValue(ctx, h.options.OwnerEpoch)
 			if e != nil || current != epoch {
 				return
 			}
-			if h.options.Heartbeat != nil && h.options.Heartbeat(r.Context(), identity, p.id, p.epoch, *f.Health) != nil {
+			if h.options.Heartbeat != nil && callback(ctx, func(ctx context.Context) error { return h.options.Heartbeat(ctx, identity, p.id, p.epoch, *f.Health) }) != nil {
 				return
 			}
 			p.mu.Lock()
 			p.ready = f.Health.ProviderReady
 			p.mu.Unlock()
-			p.send.Lock()
+			if e = p.lockSend(ctx); e != nil {
+				return
+			}
 			e = writeFrame(conn, frame{Type: "heartbeat_ack", ConnectionID: p.id})
-			p.send.Unlock()
+			p.unlockSend()
 			if e != nil {
 				return
 			}
@@ -234,15 +259,25 @@ func sameBackend(a, b Identity) bool {
 }
 
 func (h *Hub) call(ctx context.Context, id string, q request) (response, error) {
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+	}
+	ctx, cancel := h.lifetime(ctx)
+	defer cancel()
 	if err := ctx.Err(); err != nil {
 		return response{}, uncertain(q.Operation, err)
 	}
-	epoch, err := h.options.OwnerEpoch(ctx)
+	epoch, err := callbackValue(ctx, h.options.OwnerEpoch)
 	if err != nil {
 		return response{}, uncertain(q.Operation, err)
 	}
 	h.mu.Lock()
 	p := h.peers[id]
+	if h.closed {
+		p = nil
+	}
 	h.mu.Unlock()
 	if p == nil || p.epoch != epoch {
 		return response{}, uncertain(q.Operation, ErrUnavailable)
@@ -253,10 +288,7 @@ func (h *Hub) call(ctx context.Context, id string, q request) (response, error) 
 	if requiresReady(q) && !ready {
 		return response{}, uncertain(q.Operation, ErrUnavailable)
 	}
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		deadline = time.Now().Add(30 * time.Second)
-	}
+	deadline, _ := ctx.Deadline()
 	q.ID, q.ConnectionID, q.OwnerEpoch = uuid.NewString(), p.id, p.epoch
 	if err = q.setTimeout(deadline); err != nil {
 		return response{}, err
@@ -270,7 +302,9 @@ func (h *Hub) call(ctx context.Context, id string, q request) (response, error) 
 	p.pending[q.ID] = ch
 	p.mu.Unlock()
 	defer func() { p.mu.Lock(); delete(p.pending, q.ID); p.mu.Unlock() }()
-	p.send.Lock()
+	if err = p.lockSend(ctx); err != nil {
+		return response{}, uncertain(q.Operation, err)
+	}
 	select {
 	case <-p.done:
 		err = ErrUnavailable
@@ -283,7 +317,7 @@ func (h *Hub) call(ctx context.Context, id string, q request) (response, error) 
 			err = writeFrame(p.conn, frame{Type: "request", Request: &q})
 		}
 	}
-	p.send.Unlock()
+	p.unlockSend()
 	if err != nil {
 		p.close()
 		return response{}, uncertain(q.Operation, err)

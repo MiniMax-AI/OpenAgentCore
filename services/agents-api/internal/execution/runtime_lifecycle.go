@@ -20,6 +20,7 @@ import (
 // RuntimeProvider binds one deployment to one sandbox installation.
 // BackendFingerprint identifies its namespace independently of mutable sizing.
 type RuntimeProvider struct {
+	VerifyLegacyOwnership            store.RuntimeOwnershipVerifier
 	ProviderKind                     string
 	LocalNodeID                      string
 	LocalCredentialSHA256            string

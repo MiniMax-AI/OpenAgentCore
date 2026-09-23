@@ -65,6 +65,26 @@ The embedded node connects to Core's loopback listener. If Core listens only on
 a non-loopback address, set `AGENTS_API_SANDBOX_NODE_CORE_URL` to its HTTPS origin.
 Do not expose a plaintext remote node connection.
 
+## Upgrade an existing single-host deployment
+
+Keep the original backend and configuration when upgrading. Matching installation
+IDs and socket/runtime paths alone do not prove that resources are on this host.
+Before admitting work, Core verifies each unreleased allocation against its actual
+container, exact compute instance or verified full snapshot. Stopped resources can
+provide ownership evidence; missing resources cannot. One failed or uncertain
+check rejects the complete adoption without assigning nodes or deleting resources.
+Errors identify the allocation and a safe reason such as missing resources,
+incorrect ownership or an unconfirmed snapshot.
+
+Restore access to the original backend before retrying. Docker volume-only remnants
+and unfinished transitions that have already consumed a restore lack sufficient
+read-only evidence for this upgrade; use the previous Core to finish or resolve
+that lifecycle first. There is no force-adopt or cross-host migration switch.
+Pending Environments with no allocation receive their first local placement.
+Released historical allocations remain unassigned. Successful first adoption starts
+the idle interval from Core's database clock; subsequent restarts preserve it and
+do not extend snapshot retention.
+
 ## Register a host
 
 Build/install `parsar-sandbox-node` from the same Core release. On the host,
@@ -172,3 +192,9 @@ network failures remain retryable; invalid credentials and identity mismatches
 require operator intervention. Old connection and execution epochs cannot
 authorize new work after replacement. These controls do not recover lost disks
 or migrate a Session to another host.
+
+Core runs node authentication, ownership and storage callbacks outside the Hub's
+connection-state mutex, with cancellation and a five-second limit. Hub shutdown
+cancels opening and live connections without waiting for database callbacks.
+A node's connection reservation remains held until its fenced disconnect cleanup
+finishes; a slow database must not allow a competing connection to take its place.

@@ -71,7 +71,7 @@ AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=runtim
 
 -- name: AdoptRuntimePlacements :exec
 INSERT INTO runtime_placements(environment_id,node_id,released_at)
-SELECT a.environment_id,$1,a.released_at FROM runtime_allocations a WHERE a.provider_key=$2
+SELECT a.environment_id,$1,a.released_at FROM runtime_allocations a WHERE a.provider_key=$2 AND a.state<>'released' AND a.node_id IS NULL
 ON CONFLICT(environment_id) DO NOTHING;
 
 -- name: AdoptPendingRuntimePlacements :exec
@@ -83,7 +83,7 @@ ON CONFLICT(environment_id) DO NOTHING;
 
 -- name: BindLegacyRuntimeAllocations :exec
 UPDATE runtime_allocations SET node_id=$1,compute_activity_at=clock_timestamp()
-WHERE provider_key=$2 AND node_id IS NULL;
+WHERE provider_key=$2 AND node_id IS NULL AND state<>'released';
 
 -- name: ListNodeRuntimeAllocations :many
 SELECT a.id,a.node_id,a.observation_error,a.state,a.compute_phase,a.initialization,a.created_at,a.environment_id,e.session_id,s.tenant_id
@@ -96,3 +96,8 @@ SELECT id,$2 FROM environments WHERE session_id=$1;
 
 -- name: SetRuntimeObservation :exec
 UPDATE runtime_allocations SET observation_error=$4 WHERE id=$1 AND compute_revision=$2 AND state=$3 AND state<>'released';
+
+-- name: ListLegacyRuntimeAllocations :many
+SELECT sqlc.embed(a), e.session_id, s.tenant_id, s.deleted_at
+FROM runtime_allocations a JOIN environments e ON e.id=a.environment_id JOIN sessions s ON s.id=e.session_id
+WHERE a.node_id IS NULL AND a.state<>'released' AND a.id>$1 ORDER BY a.id LIMIT 32 FOR UPDATE OF a;

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -191,10 +192,12 @@ func TestRuntimeNodesLegacyAdoptionAndRetention(t *testing.T) {
 	next.LocalMaxRetained = 1
 	wrong := next
 	wrong.BackendFingerprint = strings.Repeat("c", 64)
-	if err := w.ConfigureRuntimeDeployment(t.Context(), &wrong); err == nil {
+	if err := w.ConfigureRuntimeDeployment(t.Context(), &wrong, nil); err == nil {
 		t.Fatal("adopted wrong backend")
 	}
-	deploymentConfigure(t, w, &next)
+	if err := w.ConfigureRuntimeDeployment(t.Context(), &next, func(context.Context, RuntimeAllocation) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
 	retained, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
 	if err != nil || retained.NodeID != next.LocalNodeID || retained.ProviderKey != d.InstallationID || retained.ID != owner.ID {
 		t.Fatal("adoption lost identity", retained, err)
@@ -334,7 +337,7 @@ func TestRuntimeNodesLongOfflineRetainsExactAllocation(t *testing.T) {
 	}
 	changed := d
 	changed.LocalNodeID = uuid.NewString()
-	if err := w.ConfigureRuntimeDeployment(t.Context(), &changed); err == nil {
+	if err := w.ConfigureRuntimeDeployment(t.Context(), &changed, nil); err == nil {
 		t.Fatal("lost local state created replacement identity")
 	}
 	onlineManagerNode(t, s, d.LocalNodeID)

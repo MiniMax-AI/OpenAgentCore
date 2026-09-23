@@ -185,7 +185,9 @@ func TestManagedIdleClockLegacyAdoptionStartsIdleOnce(t *testing.T) {
 			d.LocalCredentialSHA256 = device.HashCredential("node")
 			d.LocalMaxActive, d.LocalMaxRetained = 1, 1
 			before := runtimeDatabaseTime(t, s)
-			deploymentConfigure(t, w, &d)
+			if err := w.ConfigureRuntimeDeployment(t.Context(), &d, func(context.Context, RuntimeAllocation) error { return nil }); err != nil {
+				t.Fatal(err)
+			}
 			after := runtimeDatabaseTime(t, s)
 			adopted, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
 			if err != nil || adopted.ID != owner.ID || adopted.NodeID != d.LocalNodeID || adopted.ComputeRevision != owner.ComputeRevision || string(adopted.ComputeState) != string(owner.ComputeState) || adopted.ComputeRetainedUntil == nil || !adopted.ComputeRetainedUntil.Equal(until) {

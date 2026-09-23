@@ -79,6 +79,9 @@ func configureManagedNodes(s *store.Store, owner func(context.Context) error) (*
 		return s.ResolveRuntimeNode(ctx, r.TenantID, r.EnvironmentID)
 	})
 	if built.Provider != nil {
+		result.runtime.VerifyLegacyOwnership = func(ctx context.Context, allocation store.RuntimeAllocation) error {
+			return execution.VerifyLegacyRuntimeOwnership(ctx, built.Provider, allocation)
+		}
 		dir := os.Getenv("AGENTS_API_SANDBOX_NODE_STATE_DIR")
 		if dir == "" {
 			file, err := filepath.Abs(os.Getenv("AGENTS_API_MANAGED_RUNTIMES_FILE"))
