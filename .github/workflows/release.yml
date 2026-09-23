@@ -31,6 +31,7 @@ jobs:
     timeout-minutes: 120
     outputs:
       revision: ${{ steps.source.outputs.revision }}
+      release_tag: ${{ steps.source.outputs.release_tag }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -48,6 +49,9 @@ jobs:
           revision="$(git rev-parse HEAD)"
           if [[ -n "$REQUESTED_REF" && "$REQUESTED_REF" != "$revision" ]]; then exit 1; fi
           echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          release_tag="build-$revision"
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then release_tag="$GITHUB_REF_NAME"; fi
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
       - name: Reserve disk space for distribution archives
         run: |
           # The hosted runner needs room for Docker images, tar exports and the
@@ -82,6 +86,7 @@ jobs:
       - name: Build matched artifacts
         env:
           RELEASE_REVISION: ${{ steps.source.outputs.revision }}
+          RELEASE_TAG: ${{ steps.source.outputs.release_tag }}
           RELEASE_REPOSITORY: ${{ github.repository }}
           CORE_DISTRIBUTION_OFFLINE: ${{ inputs.offline && '1' || '0' }}
         run: |
@@ -89,7 +94,7 @@ jobs:
           AGENTS_RUNTIME_CODEX_PACKAGE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
           MCODE_HARNESS_BUILD_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["mcode"])' "$inputs")"
           export AGENTS_RUNTIME_CODEX_PACKAGE MCODE_HARNESS_BUILD_DIR
-          export CORE_DISTRIBUTION_RELEASE_BASE_URL="https://github.com/$RELEASE_REPOSITORY/releases/download/$RELEASE_REVISION"
+          export CORE_DISTRIBUTION_RELEASE_BASE_URL="https://github.com/$RELEASE_REPOSITORY/releases/download/$RELEASE_TAG"
           bash scripts/build-core-distribution.sh
           mkdir -p "$HOME/.parsar/build/release-upload"
           for asset in "$HOME/.parsar/build/core-distribution/"*; do
@@ -118,7 +123,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_REVISION: ${{ needs.build.outputs.revision }}
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
         run: |
           printf 'Matched Linux amd64 artifacts from commit %s. Build output is not live execution qualification.\n' "$RELEASE_REVISION" > release-notes.md
-          gh release create "$RELEASE_REVISION" --draft --target "$RELEASE_REVISION" \
+          gh release create "$RELEASE_TAG" --draft --target "$RELEASE_REVISION" \
             --title "Parsar Core $RELEASE_REVISION" --notes-file release-notes.md release-upload/*
