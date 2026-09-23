@@ -235,7 +235,7 @@ describe("Runtime live-window trends", () => {
     expect(samples.at(-1)?.targets[0]?.cpuRatio ?? null).toBeNull();
   });
 
-  it("keeps a Session's last reported tokens while its public usage is null", () => {
+  it("leaves a gap while a Session's public usage is null and spreads the next report", () => {
     const pending = (at: number) => {
       const value = snapshot(at);
       value.sessions[0] = { ...value.sessions[0]!, status: "in_progress", usage: null };
@@ -243,16 +243,20 @@ describe("Runtime live-window trends", () => {
     };
     let samples = appendRuntimeTrendSample([], snapshot(60_000, { input: 100, output: 20 }));
     samples = appendRuntimeTrendSample(samples, pending(120_000));
+    // The held total keeps its report time and is never a zero-rate measurement.
     expect(samples.at(-1)?.tokenTotals).toEqual([{
-      sessionId: "11111111-1111-4111-8111-111111111111", sampledAt: 120_000, inputTokens: 100, outputTokens: 20,
+      sessionId: "11111111-1111-4111-8111-111111111111", sampledAt: 60_000, inputTokens: 100, outputTokens: 20, held: true,
     }]);
     samples = appendRuntimeTrendSample(samples, pending(180_000));
     samples = appendRuntimeTrendSample(samples, snapshot(240_000, { input: 400, output: 80 }));
+    samples = appendRuntimeTrendSample(samples, snapshot(300_000, { input: 460, output: 90 }));
     expect(tokenThroughput(samples)).toEqual([
       { sampledAt: 60_000, inputPerMinute: null, outputPerMinute: null },
-      { sampledAt: 120_000, inputPerMinute: 0, outputPerMinute: 0 },
-      { sampledAt: 180_000, inputPerMinute: 0, outputPerMinute: 0 },
-      { sampledAt: 240_000, inputPerMinute: 300, outputPerMinute: 60 },
+      { sampledAt: 120_000, inputPerMinute: null, outputPerMinute: null },
+      { sampledAt: 180_000, inputPerMinute: null, outputPerMinute: null },
+      // 300 input and 60 output tokens over the three minutes since the last report.
+      { sampledAt: 240_000, inputPerMinute: 100, outputPerMinute: 20 },
+      { sampledAt: 300_000, inputPerMinute: 60, outputPerMinute: 10 },
     ]);
   });
 

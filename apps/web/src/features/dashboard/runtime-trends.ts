@@ -45,6 +45,8 @@ export interface RuntimeTrendTokenTotal {
   sampledAt: number;
   inputTokens: number;
   outputTokens: number;
+  /** Kept from the report at sampledAt while public Session usage is null. */
+  held?: true;
 }
 
 export interface TokenThroughputSample {
@@ -105,12 +107,14 @@ function tokenTotals(sessions: readonly AgentSession[], sampledAt: number): Runt
   });
 }
 
-// Keep a listed Session's last reported totals while its public usage is null;
-// usage measured meanwhile appears in the interval where it is reported again.
+// Keep a listed Session's last reported totals, with their report time, while
+// its public usage is null. tokenRate treats a held total as unknown, so those
+// intervals are gaps; the next reported total is spread over the time since the
+// last report.
 function carryTokenTotals(previous: RuntimeTrendSample, next: RuntimeTrendSample, snapshot: RuntimeDashboardSnapshot): void {
   const reported = new Map<string, RuntimeTrendTokenTotal | null>(snapshot.sessions.map((session) => [session.id, null]));
   for (const total of next.tokenTotals) reported.set(total.sessionId, total);
-  const prior = new Map(previous.tokenTotals.map((total) => [total.sessionId, { ...total, sampledAt: next.sampledAt }]));
+  const prior = new Map(previous.tokenTotals.map((total) => [total.sessionId, { ...total, held: true as const }]));
   next.tokenTotals = [...holdLastReported(prior, reported).values()];
 }
 
@@ -254,15 +258,17 @@ function tokenRate(
     const prior = previousTotals.get(current.sessionId);
     return prior ? [[prior, current]] : [];
   });
+  // A total held from an earlier report is not a measurement at this sample.
+  const measured = (current: RuntimeTrendTokenTotal) => !current.held;
   const inputRates = pairs.map(([prior, current]) => {
     const elapsedMinutes = (current.sampledAt - prior.sampledAt) / 60_000;
     const delta = current.inputTokens - prior.inputTokens;
-    return elapsedMinutes > 0 && delta >= 0 ? delta / elapsedMinutes : null;
+    return measured(current) && elapsedMinutes > 0 && delta >= 0 ? delta / elapsedMinutes : null;
   });
   const outputRates = pairs.map(([prior, current]) => {
     const elapsedMinutes = (current.sampledAt - prior.sampledAt) / 60_000;
     const delta = current.outputTokens - prior.outputTokens;
-    return elapsedMinutes > 0 && delta >= 0 ? delta / elapsedMinutes : null;
+    return measured(current) && elapsedMinutes > 0 && delta >= 0 ? delta / elapsedMinutes : null;
   });
   const inputRate = inputRates.length > 0 && inputRates.every((rate) => rate !== null)
     ? inputRates.reduce<number>((total, rate) => total + (rate ?? 0), 0)
