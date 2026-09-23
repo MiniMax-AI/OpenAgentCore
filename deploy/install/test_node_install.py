@@ -111,6 +111,18 @@ class NodeInstallTests(unittest.TestCase):
         self.assertEqual(list(self.root.glob(".enrollment-*")), [])
         self.assertFalse(any("enable" in call for call, _ in self.calls))
 
+    def test_microsandbox_registration_retry_retains_original_dns_policy(self):
+        self.args.provider = "microsandbox"
+        self.fail_registration = True
+        with self.assertRaises(installer.InstallError):
+            self.install()
+        original = (self.root / "provider.json").read_bytes()
+        self.fail_registration = False
+        with mock.patch.object(installer.socket, "getaddrinfo", side_effect=OSError("DNS unavailable")):
+            self.install()
+        self.assertEqual((self.root / "provider.json").read_bytes(), original)
+        self.assertTrue((self.root / "registered.json").exists())
+
     def test_different_commit_provider_or_core_cannot_overwrite_retained_installation(self):
         self.install()
         original = (self.root / "provider.json").read_bytes()

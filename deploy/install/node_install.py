@@ -252,7 +252,9 @@ def install(args, token):
         for name in names:
             download(args.source_url, name, root, sums[name])
         safe_directory(root / "state/node")
-        write_once(root / "provider.json", json_text(provider_config(root, args, manifest)))
+        # Retain the original network policy when recovering a partial installation.
+        if not existing_file(root / "provider.json"):
+            write_once(root / "provider.json", json_text(provider_config(root, args, manifest)))
         unit = root / ("parsar-node-" + args.installation_id + ".service")
         write_once(unit, service_unit(root))
         marker = root / "registered.json"

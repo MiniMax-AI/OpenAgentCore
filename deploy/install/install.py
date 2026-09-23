@@ -13,6 +13,7 @@ import socket
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -269,8 +270,14 @@ def prepare_node_payload(root, state, bundle):
             if target.is_symlink() or not target.is_file() or digest(target) != digest(source):
                 raise InstallError("Installed node payload differs; preserve it and inspect the distribution")
         else:
-            shutil.copyfile(source, target)
-            target.chmod(0o600)
+            descriptor, temporary = tempfile.mkstemp(prefix=".payload-", dir=target.parent)
+            os.close(descriptor)
+            try:
+                shutil.copyfile(source, temporary)
+                os.replace(temporary, target)
+            finally:
+                if os.path.exists(temporary):
+                    os.unlink(temporary)
 
 
 def import_runtime(root, state, manifest, bundle):

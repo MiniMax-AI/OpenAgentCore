@@ -118,6 +118,20 @@ class InstallerTests(unittest.TestCase):
         with self.assertRaises(install.InstallError):
             install.prepare_node_payload(self.root, state, bundle)
 
+    def test_interrupted_payload_copy_can_be_retried(self):
+        state = self.initialize()
+        bundle = self.bundle()
+        def interrupted(source, target):
+            Path(target).write_bytes(b"partial")
+            raise OSError("copy interrupted")
+        with mock.patch.object(install.shutil, "copyfile", side_effect=interrupted):
+            with self.assertRaises(OSError):
+                install.prepare_node_payload(self.root, state, bundle)
+        self.assertFalse((self.root / "node-payload/node_install.py").exists())
+        install.prepare_node_payload(self.root, state, bundle)
+        self.assertEqual((self.root / "node-payload/node_install.py").read_bytes(),
+                         (bundle / "node_install.py").read_bytes())
+
     def test_repeat_installation_preserves_execution_identity_and_all_secrets(self):
         first = self.initialize()
         keys = self.document("config/keys.json")
