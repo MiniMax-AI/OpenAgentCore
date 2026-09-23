@@ -100,13 +100,17 @@ Exports distinguish `periodic` samples from `on_read` samples.
 
 The Collector, high-cardinality history backend, server-side history query
 adapter, retention policy, and durable Web ranges remain separate optional
-capabilities in the [full design](runtime-observability-design.md).
+capabilities in the [full design](runtime-observability-design.md). A ClickHouse
+Reader plus reference projection/Collector configuration is available under
+`services/agents-api/runtime-history/clickhouse`; it is disabled by default. When
+configured with qualified periodic sampling, Web advertises explicit 1h, 6h, and
+24h History ranges and reconstructs them after reload.
 
 The internal `runtimehistory` boundary is backend-neutral and validates Core
 scope, incarnation fences, bucket coverage, nullability, time bounds and total
 point limits. The public capability and Session history routes plus strict client
 projection are implemented, but they do not make history available by themselves:
-no production Reader is configured in this phase.
+an operator must configure the Reader and qualified periodic collection.
 
 ## First-phase boundary
 
@@ -118,6 +122,5 @@ attribution or the existing sandbox lifecycle interface.
 The current API and browser-local Web live window are documented in the
 [full design](runtime-observability-design.md) and the
 [current-snapshot extension](runtime-observability-api.md), and the optional
-[history extension](runtime-history-api.md). The production history Reader,
-additional providers, self-hosted telemetry, and idle-policy authority remain
-later phases.
+[history extension](runtime-history-api.md). Additional providers, self-hosted
+telemetry, exporter health counters, and idle-policy authority remain later phases.

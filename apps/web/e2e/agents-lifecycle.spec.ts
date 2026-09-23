@@ -2571,6 +2571,109 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
   await attachElementScreenshot(dashboard.locator(".dashboard-runtime-panel"), testInfo, "runtime-visual-dashboard-narrow");
 });
 
+test("restores ClickHouse Runtime history after a Dashboard reload", async ({ page }) => {
+  const sessionId = "11111111-1111-4111-8111-111111111111";
+  const environmentId = "22222222-2222-4222-8222-222222222222";
+  const allocationId = "33333333-3333-4333-8333-333333333333";
+  const runtimeSession = {
+    id: sessionId,
+    object: "agent.session",
+    agent: {
+      id: "agent_history", model: "fixture/model", name: "History worker", instructions: null,
+      multi_agent: { enabled: false, max_concurrent_subagents: null }, reasoning: {}, service_tier: "auto",
+      text: { format: { type: "text" }, verbosity: "medium" }, tools: [],
+    },
+    environment: {
+      type: "openai_hosted", id: environmentId, capability_directories: [],
+      network: { access: "enabled", allowed_domains: [] }, packages: { npm: [], python: [], system: [] },
+      files: [], plugins: [], skills: [],
+    },
+    status: "idle", error: null, metadata: { title: "Persisted runtime" }, required_actions: [], vault_ids: [],
+    usage: null, created_at: 1_789_430_000, last_active_at: 1_789_438_000,
+  };
+  const list = (data: Array<{ id: string }>) => ({
+    object: "list", data, has_more: false, first_id: data[0]?.id ?? null, last_id: data.at(-1)?.id ?? null,
+  });
+
+  await page.route("**/v1/agents/sessions*", async (route) => {
+    if (new URL(route.request().url()).pathname !== "/v1/agents/sessions") return route.fallback();
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(list([runtimeSession])) });
+  });
+  await page.route("**/v1/agents/runtime-observations*", async (route) => {
+    const now = Math.floor(Date.now() / 1_000);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(list([{
+        id: sessionId, object: "agent.runtime_observation", session_id: sessionId, environment_id: environmentId,
+        mode: "openai_hosted", provider_type: "docker",
+        instance: { kind: "managed_allocation", allocation_id: allocationId, device_id: null, connection_generation: null },
+        status: "observed", reason: null, allocation_created_at: now - 600, resolved_at: now,
+        observed_at: now - 1, started_at: now - 600,
+        cpu: { usage_seconds_total: 120, capacity_cores: 2, usage_cores: null, utilization_ratio: null },
+        memory: { usage_bytes: 536_870_912, limit_bytes: 2_147_483_648 },
+      }])),
+    });
+  });
+  await page.route("**/v1/agents/runtime-history/capabilities", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      object: "agent.runtime_history_capabilities", available: true, reason: null, collection_mode: "periodic",
+      sample_interval_seconds: 30, retention_seconds: 604_800, minimum_step_seconds: 30,
+      maximum_range_seconds: 86_400, maximum_points: 1_000, metrics: ["cpu", "memory"],
+    }),
+  }));
+  await page.route(`**/v1/agents/sessions/${sessionId}/runtime-history*`, async (route) => {
+    const url = new URL(route.request().url());
+    const start = Number(url.searchParams.get("start"));
+    const end = Number(url.searchParams.get("end"));
+    const firstStart = end - 60;
+    const secondStart = end - 30;
+    const startedAt = end - 600;
+    const point = (pointStart: number, ratio: number, memory: number) => ({
+      start: pointStart, end: pointStart + 30, first_observed_at: pointStart + 10, last_observed_at: pointStart + 20,
+      observation_count: 1, observed_count: 1, unavailable_count: 0,
+      cpu: { contributor_count: 1, utilization_ratio: ratio, capacity_cores: 2 },
+      memory: { contributor_count: 1, usage_bytes: memory, limit_bytes: 2_147_483_648 },
+    });
+    const points = [point(firstStart, .25, 536_870_912), point(secondStart, .5, 805_306_368)];
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        object: "agent.runtime_history", source: "durable", session_id: sessionId,
+        requested_range: { start, end }, resolution_seconds: 30, generated_at: end,
+        coverage: {
+          retained_start: start, first_sample_at: firstStart + 10, last_sample_at: secondStart + 20,
+          sample_count: 2, expected_sample_count: Math.floor((end - start) / 30),
+          buckets: points.map(({ cpu: _cpu, memory: _memory, ...coverage }) => coverage),
+        },
+        series: [{
+          environment_id: environmentId, allocation_id: allocationId,
+          started_at: { seconds: startedAt, nanoseconds: 123_456_789 }, provider_type: "docker", points,
+        }],
+      }),
+    });
+  });
+
+  await page.goto("/");
+  const dashboard = page.locator(".dashboard-runtime-panel");
+  const source = dashboard.getByRole("group", { name: "Runtime trend source" });
+  await expect(source.getByRole("button", { name: "History" })).toBeEnabled();
+  await expect(source.getByRole("button", { name: "History" })).toHaveAttribute("aria-pressed", "true");
+  await expect(dashboard.getByLabel("Runtime durable-history charts")).toBeVisible();
+  await expect(dashboard.getByText("CPU usage durable trend available")).toBeAttached();
+  await expect(dashboard).toContainText("2 buckets");
+  await expect(dashboard).toContainText("2/120 observations");
+  await expect(dashboard.getByText("Live-only metric", { exact: true })).toBeVisible();
+
+  await page.reload();
+  await expect(dashboard.getByRole("group", { name: "Runtime trend source" }).getByRole("button", { name: "History" }))
+    .toHaveAttribute("aria-pressed", "true");
+  await expect(dashboard.getByText("CPU usage durable trend available")).toBeAttached();
+});
+
 test("publishes Dashboard counts only after every top-level Agent and Session page loads", async ({ page, request }) => {
   await resetFixture(request);
   const agentAfters: Array<string | null> = [];

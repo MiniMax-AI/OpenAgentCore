@@ -33,6 +33,7 @@ import {
   requestAgentUpdate,
 } from "./features/agents/agent-actions";
 import { DashboardView } from "./features/dashboard/DashboardView";
+import { loadRuntimeDurableSnapshot } from "./features/dashboard/runtime-history";
 import {
   loadRuntimeDashboardSnapshot,
   RUNTIME_SNAPSHOT_REFRESH_MS,
@@ -919,6 +920,12 @@ export function App() {
     const filter = sessionAgentFilterRef.current;
     if (filter) void refreshFilteredSessions(filter);
   }, [refreshAgents, refreshEnvironmentTemplates, refreshFilteredSessions, refreshRuntimeSnapshot, refreshSessions, refreshVaults]);
+
+  const loadDashboardRuntimeHistory = useCallback((
+    snapshot: RuntimeDashboardSnapshot,
+    range: Parameters<typeof loadRuntimeDurableSnapshot>[2],
+    signal: AbortSignal,
+  ) => loadRuntimeDurableSnapshot(core, snapshot, range, signal), [core]);
 
   const changeSessionAgentFilter = useCallback((agentId: string | null) => {
     if (sessionAgentFilterRef.current === agentId) return;
@@ -2206,6 +2213,7 @@ export function App() {
               runtimeCollectionState={runtimeCollectionState}
               runtimeCollectionError={runtimeCollectionError}
               runtimeCollectionHasSnapshot={runtimeCollectionHasSnapshot}
+              loadRuntimeHistory={loadDashboardRuntimeHistory}
               onRefresh={refreshDashboard}
               onCreateAgent={openAgentSetup}
               onStartSession={() => openSessionSetup()}

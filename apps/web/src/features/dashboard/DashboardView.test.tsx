@@ -54,6 +54,7 @@ function session(id: string, overrides: Partial<AgentSession> = {}): AgentSessio
 }
 
 const callbacks = {
+  loadRuntimeHistory: async () => null,
   onRefresh: () => undefined,
   onCreateAgent: () => undefined,
   onStartSession: () => undefined,
@@ -246,8 +247,11 @@ describe("Dashboard loaded-result presentation", () => {
     expect(html).toContain("1m 13s / 2 cores");
     expect(html).toContain("512 MiB / 2.00 GiB");
     expect(html).toContain('aria-label="Runtime live-window charts"');
-    expect(html).toContain("Live resource trends");
-    expect(html).toContain("Browser-local samples · no durable history");
+    expect(html).toContain("Resource trends");
+    expect(html).toContain("Browser-local samples · reset on reload");
+    expect(html).toContain('aria-label="Runtime trend source"');
+    expect(html).toContain('aria-pressed="true">Live</button>');
+    expect(html).toContain('aria-pressed="false" disabled="">History</button>');
     expect(html).toContain("Live · 30s");
     expect(html).toContain("1 sample");
     expect(html).toContain('aria-label="Runtime live range"');

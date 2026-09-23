@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"strings"
@@ -13,38 +14,64 @@ import (
 
 	"golang.org/x/net/http/httpguts"
 
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimehistory"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimehistory/clickhousereader"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs/otlpexporter"
 )
 
 const (
-	defaultRuntimeHistoryQueueCapacity     = 256
-	defaultRuntimeHistoryTimeoutSeconds    = 2
-	maxRuntimeHistoryQueueCapacity         = 4096
-	maxRuntimeHistoryTimeoutSeconds        = 30
-	minRuntimeHistorySampleIntervalSeconds = 5
-	maxRuntimeHistorySampleIntervalSeconds = 300
+	defaultRuntimeHistoryQueueCapacity       = 256
+	defaultRuntimeHistoryTimeoutSeconds      = 2
+	maxRuntimeHistoryQueueCapacity           = 4096
+	maxRuntimeHistoryTimeoutSeconds          = 30
+	minRuntimeHistorySampleIntervalSeconds   = 5
+	maxRuntimeHistorySampleIntervalSeconds   = 300
+	defaultRuntimeHistoryDialTimeoutSeconds  = 5
+	defaultRuntimeHistoryQueryTimeoutSeconds = 10
 )
 
 type runtimeHistoryConfig struct {
-	Transport             string            `json:"transport"`
-	Endpoint              string            `json:"endpoint"`
-	Insecure              bool              `json:"insecure"`
-	Headers               map[string]string `json:"headers,omitempty"`
-	QueueCapacity         int               `json:"queue_capacity,omitempty"`
-	TimeoutSeconds        int               `json:"timeout_seconds,omitempty"`
-	SampleIntervalSeconds int               `json:"sample_interval_seconds,omitempty"`
+	Transport             string                          `json:"transport"`
+	Endpoint              string                          `json:"endpoint"`
+	Insecure              bool                            `json:"insecure"`
+	Headers               map[string]string               `json:"headers,omitempty"`
+	QueueCapacity         int                             `json:"queue_capacity,omitempty"`
+	TimeoutSeconds        int                             `json:"timeout_seconds,omitempty"`
+	SampleIntervalSeconds int                             `json:"sample_interval_seconds,omitempty"`
+	ClickHouse            *runtimeHistoryClickHouseConfig `json:"clickhouse,omitempty"`
+}
+
+type runtimeHistoryClickHouseConfig struct {
+	Address             string `json:"address"`
+	Database            string `json:"database"`
+	Username            string `json:"username"`
+	Password            string `json:"password,omitempty"`
+	Secure              bool   `json:"secure,omitempty"`
+	Insecure            bool   `json:"insecure,omitempty"`
+	DialTimeoutSeconds  int    `json:"dial_timeout_seconds,omitempty"`
+	QueryTimeoutSeconds int    `json:"query_timeout_seconds,omitempty"`
 }
 
 type runtimeHistorySetup struct {
 	Option         runtimeobs.ServiceOption
 	Exporter       runtimeHistoryExporter
+	Reader         runtimeHistoryReader
 	SampleInterval time.Duration
 }
 
 type runtimeHistoryExporter interface {
 	runtimeobs.Exporter
 	Close(context.Context) error
+}
+
+type runtimeHistoryReader interface {
+	runtimehistory.Reader
+	Close() error
+}
+
+var openRuntimeHistoryReader = func(ctx context.Context, config clickhousereader.Config) (runtimeHistoryReader, error) {
+	return clickhousereader.Open(ctx, config)
 }
 
 func runtimeHistory(ctx context.Context) (runtimeHistorySetup, error) {
@@ -78,9 +105,44 @@ func runtimeHistory(ctx context.Context) (runtimeHistorySetup, error) {
 	if err != nil {
 		return runtimeHistorySetup{}, err
 	}
+	var reader runtimeHistoryReader
+	if config.ClickHouse != nil {
+		clickhouse := *config.ClickHouse
+		if clickhouse.DialTimeoutSeconds == 0 {
+			clickhouse.DialTimeoutSeconds = defaultRuntimeHistoryDialTimeoutSeconds
+		}
+		if clickhouse.QueryTimeoutSeconds == 0 {
+			clickhouse.QueryTimeoutSeconds = defaultRuntimeHistoryQueryTimeoutSeconds
+		}
+		mode := runtimehistory.CollectionOnRead
+		interval := time.Duration(config.SampleIntervalSeconds) * time.Second
+		if interval > 0 {
+			mode = runtimehistory.CollectionPeriodic
+		}
+		minimumStep := 30 * time.Second
+		if interval > minimumStep {
+			minimumStep = interval
+		}
+		reader, err = openRuntimeHistoryReader(ctx, clickhousereader.Config{
+			Address: clickhouse.Address, Database: clickhouse.Database, Username: clickhouse.Username, Password: clickhouse.Password, Secure: clickhouse.Secure, Insecure: clickhouse.Insecure,
+			DialTimeout: time.Duration(clickhouse.DialTimeoutSeconds) * time.Second, QueryTimeout: time.Duration(clickhouse.QueryTimeoutSeconds) * time.Second,
+			Capabilities: runtimehistory.Capabilities{
+				CollectionMode: mode, SampleInterval: interval, Retention: 7 * 24 * time.Hour, MinimumStep: minimumStep, MaximumRange: 24 * time.Hour,
+				MaximumPoints: 1_000, MaximumSeries: 64, MaximumTotalPoints: 10_000,
+				Metrics: []runtimehistory.Metric{runtimehistory.MetricCPU, runtimehistory.MetricMemory},
+			},
+		})
+		if err != nil {
+			closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			closeRuntimeHistory(closeCtx, exporter)
+			return runtimeHistorySetup{}, err
+		}
+	}
 	return runtimeHistorySetup{
 		Option:         runtimeobs.WithExporter(exporter, runtimeobs.ExportOptions{QueueCapacity: config.QueueCapacity, Timeout: timeout}),
 		Exporter:       exporter,
+		Reader:         reader,
 		SampleInterval: time.Duration(config.SampleIntervalSeconds) * time.Second,
 	}, nil
 }
@@ -90,6 +152,13 @@ func closeRuntimeHistory(ctx context.Context, exporter runtimeHistoryExporter) {
 		_ = recover()
 	}()
 	_ = exporter.Close(ctx)
+}
+
+func closeRuntimeHistoryReader(reader runtimeHistoryReader) {
+	defer func() {
+		_ = recover()
+	}()
+	_ = reader.Close()
 }
 
 func validateRuntimeHistoryConfig(config runtimeHistoryConfig) error {
@@ -120,6 +189,16 @@ func validateRuntimeHistoryConfig(config runtimeHistoryConfig) error {
 	}
 	if config.SampleIntervalSeconds != 0 && (config.SampleIntervalSeconds < minRuntimeHistorySampleIntervalSeconds || config.SampleIntervalSeconds > maxRuntimeHistorySampleIntervalSeconds) {
 		return errors.New("Runtime history sample_interval_seconds is out of range")
+	}
+	if config.ClickHouse != nil {
+		clickhouse := config.ClickHouse
+		host, _, addressErr := net.SplitHostPort(clickhouse.Address)
+		if addressErr != nil || host == "" || clickhouse.Database == "" || clickhouse.Username == "" || clickhouse.Secure == clickhouse.Insecure || len(clickhouse.Database) > 128 || len(clickhouse.Username) > 128 || strings.ContainsAny(clickhouse.Database+clickhouse.Username, "\x00\r\n") {
+			return errors.New("Runtime history ClickHouse configuration is invalid")
+		}
+		if clickhouse.DialTimeoutSeconds < 0 || clickhouse.DialTimeoutSeconds > maxRuntimeHistoryTimeoutSeconds || clickhouse.QueryTimeoutSeconds < 0 || clickhouse.QueryTimeoutSeconds > maxRuntimeHistoryTimeoutSeconds {
+			return errors.New("Runtime history ClickHouse timeout is out of range")
+		}
 	}
 	for key, value := range config.Headers {
 		lower := strings.ToLower(key)

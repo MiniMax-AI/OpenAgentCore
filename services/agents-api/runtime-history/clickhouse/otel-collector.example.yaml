@@ -1,0 +1,44 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  filter/runtime_history:
+    metrics:
+      include:
+        match_type: regexp
+        metric_names:
+          - '^agents\.runtime\..*$'
+  batch/runtime_history:
+    timeout: 5s
+    send_batch_size: 5000
+
+exporters:
+  clickhouse/runtime_history:
+    endpoint: ${env:CLICKHOUSE_ENDPOINT}
+    database: ${env:CLICKHOUSE_DATABASE}
+    username: ${env:CLICKHOUSE_WRITER_USERNAME}
+    password: ${env:CLICKHOUSE_WRITER_PASSWORD}
+    async_insert: true
+    create_schema: true
+    metrics_tables:
+      gauge:
+        name: metrics_gauge
+      sum:
+        name: metrics_sum
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    metrics/runtime_history:
+      receivers: [otlp]
+      processors: [filter/runtime_history, batch/runtime_history]
+      exporters: [clickhouse/runtime_history]

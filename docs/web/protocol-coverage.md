@@ -433,13 +433,15 @@ upstream.
   at most eight rows ordered by valid Core-reported `last_active_at`. A
   `self_hosted` label identifies only the Session profile, not an executor
   connection. Row actions navigate to the exact loaded Session.
-- Runtime charts use bounded browser-local samples from complete joined snapshots.
+- Runtime Live charts use bounded browser-local samples from complete joined snapshots.
   CPU rate is derived only from ordered cumulative counters for the same allocation
   and compute incarnation; memory remains point-in-time; gaps are not interpolated.
   The 15-minute and one-hour ranges are labelled Live and reset across browser
-  lifecycle. Durable history capability and Session-query client methods exist,
-  but Web must not advertise Durable until the operator Reader and qualified
-  periodic sampling pass end-to-end acceptance. Token throughput remains Live-only.
+  lifecycle. After capability discovery proves a periodic Reader, History performs
+  bounded Session-scoped reads and exposes 1-hour, 6-hour, and 24-hour retained
+  ranges. The two sources remain separately labelled, and any incomplete or failed
+  multi-Session History refresh retains the previous result rather than publishing
+  a partial replacement. Token throughput remains Live-only.
 - Agent and Session collection states remain independent. A failed refresh may
   leave an explicitly labelled prior loaded result visible, including a previously
   confirmed empty result. An initial failed empty collection is unavailable

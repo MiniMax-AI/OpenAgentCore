@@ -31,12 +31,16 @@ credentials or execution into the browser.
 
 Dashboard is the starting point. It summarizes the current Agent and Session results,
 loads complete tenant-scoped Runtime observation snapshots, and retains a bounded
-browser-local live window for CPU, memory, compute-uptime, and token-throughput
+browser-local Live window for CPU, memory, compute-uptime, and token-throughput
 charts without inventing missing values. The searchable, filterable, sortable,
-paginated semantic table remains available on demand. This live window starts when
-the Dashboard opens, offers 15-minute and one-hour views, and is not durable
-history; cross-browser retention still requires a separate operator history
-capability. When a provider reports only
+paginated semantic table remains available on demand. Live starts when the
+Dashboard opens and offers 15-minute and one-hour views. When the operator enables
+qualified periodic sampling plus the ClickHouse Reader, Web automatically discovers
+the capability and adds a distinct retained History source with 1-hour, 6-hour, and
+24-hour ranges. A reload reconstructs History from Core; Web never queries
+ClickHouse directly or merges it silently with Live points. Token throughput stays
+Live-only because Runtime telemetry does not duplicate canonical Session Usage.
+When a provider reports only
 cumulative CPU time, Web derives interval utilization only across adjacent samples
 from the same verified Runtime incarnation; restarts and counter regressions create
 gaps instead of false spikes.

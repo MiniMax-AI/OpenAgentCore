@@ -1,7 +1,8 @@
 # Runtime history API
 
-Status: public contract and strict TypeScript client implemented; no production
-Reader is configured by default. The capability route therefore advertises
+Status: public contract, strict TypeScript client, optional ClickHouse reference
+Reader, and capability-gated Core Web History ranges implemented. No Reader is
+configured by default. The capability route therefore advertises
 `available=false` until an operator supplies both a validated Reader and qualified
 periodic collection.
 
@@ -102,11 +103,19 @@ Resource `series` are split by `allocation_id` plus the lossless compute
 The two integers are JSON-safe, nonnegative Unix seconds and a 0–999,999,999
 nanosecond remainder. They are identity, not merely a display timestamp. CPU
 utilization is derived only from ordered cumulative counters inside that fence;
-memory values are the last observed values in a bucket. Every point contains
+successive counter intervals are assigned to the bucket containing their right
+endpoint and combined by CPU-capacity time. Memory values are the last observed
+values in a bucket. Every point contains
 observation and contributor counts. Missing values are null and gaps remain gaps.
 Numeric zero is retained as an observed value. The endpoint does not return token
 history: token throughput remains sourced from canonical Session Usage and is
 Live-only until a separate durable usage contract exists.
+
+Core Web queries each current managed Session through this boundary with bounded
+concurrency and an all-or-nothing target budget. It offers 1h, 6h, and 24h History
+ranges only after capability discovery succeeds. Reloading Web reconstructs the
+charts from the backend; Live browser samples and Durable buckets remain explicit
+separate sources and are never silently merged.
 
 ## Errors and bounds
 

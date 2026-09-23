@@ -21,7 +21,7 @@ import {
   type DashboardCollectionState,
   type DashboardSessionRow,
 } from "./dashboard-model";
-import { RuntimeObservabilityContent } from "./RuntimeObservabilityContent";
+import { RuntimeObservabilityContent, type RuntimeHistoryLoader } from "./RuntimeObservabilityContent";
 import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";
 import "./DashboardView.css";
 
@@ -38,6 +38,7 @@ export interface DashboardViewProps {
   runtimeCollectionState: DashboardCollectionState;
   runtimeCollectionError: string | null;
   runtimeCollectionHasSnapshot: boolean;
+  loadRuntimeHistory: RuntimeHistoryLoader;
   onRefresh: () => void;
   onCreateAgent: () => void;
   onStartSession: () => void;
@@ -243,6 +244,7 @@ export function DashboardView({
   runtimeCollectionState,
   runtimeCollectionError,
   runtimeCollectionHasSnapshot,
+  loadRuntimeHistory,
   onRefresh,
   onCreateAgent,
   onStartSession,
@@ -382,7 +384,7 @@ export function DashboardView({
           <header>
             <div>
               <h2 id="dashboard-runtime-heading">Runtime monitoring</h2>
-              <p>Current provider samples · browser-local live window · no durable history</p>
+              <p>Current provider samples · browser-local Live · ClickHouse History when configured</p>
             </div>
             {runtimeModel ? (
               <span className="dashboard-runtime-freshness">
@@ -408,6 +410,7 @@ export function DashboardView({
                 <RuntimeObservabilityContent
                   snapshot={runtimeSnapshot}
                   stale={runtimeCollectionState === "failed" && runtimeCollectionHasSnapshot}
+                  loadRuntimeHistory={loadRuntimeHistory}
                   onOpenSession={onOpenSession}
                 />
               ) : (

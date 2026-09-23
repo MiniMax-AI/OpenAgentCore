@@ -28,8 +28,10 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtime"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeenrollment"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimehistory"
+	historystoreresolver "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimehistory/storeresolver"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs/storeresolver"
+	observationstoreresolver "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs/storeresolver"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -101,7 +103,7 @@ func run() error {
 			observationSources[managed.InstallationID] = source
 		}
 	}
-	resolver, err := storeresolver.NewResolver(executionStore)
+	observationResolver, err := observationstoreresolver.NewResolver(executionStore)
 	if err != nil {
 		return err
 	}
@@ -109,11 +111,14 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	if history.Reader != nil {
+		defer closeRuntimeHistoryReader(history.Reader)
+	}
 	observationOptions := []runtimeobs.ServiceOption{}
 	if history.Option != nil {
 		observationOptions = append(observationOptions, history.Option)
 	}
-	observationService, err := runtimeobs.NewService(resolver, observationSources, observationOptions...)
+	observationService, err := runtimeobs.NewService(observationResolver, observationSources, observationOptions...)
 	if err != nil {
 		if history.Exporter != nil {
 			closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -133,6 +138,17 @@ func run() error {
 	var workerDone chan error
 	var worker *execution.Worker
 	options := []api.Option{api.WithSubagents(executionStore), api.WithSkills(executionStore), api.WithSourceFiles(executionStore), api.WithSessionArtifacts(executionStore), api.WithRuntimeObservations(observationService)}
+	if history.Reader != nil {
+		historyResolver, resolverErr := historystoreresolver.NewResolver(executionStore)
+		if resolverErr != nil {
+			return resolverErr
+		}
+		historyService, serviceErr := runtimehistory.NewService(historyResolver, history.Reader)
+		if serviceErr != nil {
+			return serviceErr
+		}
+		options = append(options, api.WithRuntimeHistory(historyService))
+	}
 	var daemonHandler http.Handler
 	var registry *gateway.Registry
 	if wsURL := os.Getenv("AGENTS_API_DAEMON_WS_URL"); wsURL != "" {
@@ -173,7 +189,7 @@ func run() error {
 		if worker == nil {
 			return errors.New("Runtime history periodic sampling requires the execution worker")
 		}
-		sampler, err := runtimeobs.NewSampler(resolver, observationService, worker, runtimeobs.SamplerOptions{
+		sampler, err := runtimeobs.NewSampler(observationResolver, observationService, worker, runtimeobs.SamplerOptions{
 			Interval: history.SampleInterval,
 			Report: func(result runtimeobs.SweepResult) {
 				fields := []any{"listed", result.Listed, "observed", result.Observed, "failed", result.Failed, "complete", result.Complete}
