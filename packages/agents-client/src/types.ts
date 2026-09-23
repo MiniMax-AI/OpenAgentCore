@@ -986,7 +986,50 @@ export interface AgentsCoreSelection {
   harness: CoreHarnessKind;
 }
 
+export type ExecutionConfigurationSource = "session" | "agent" | "deployment" | "unknown";
+
+/** Immutable committed selections, not live execution health. */
+export interface SessionExecutionConfiguration {
+  object: "agent.session.execution_configuration";
+  schema_version: 1;
+  session_id: string;
+  model: { value: string | null; source: ExecutionConfigurationSource };
+  harness: { value: string | null; source: ExecutionConfigurationSource };
+  model_provider: {
+    source: ExecutionConfigurationSource;
+    status: "available" | "redacted" | "unavailable";
+    configuration: ModelProviderView | null;
+  };
+}
+
+export interface CoreConfigurationCapabilities {
+  schema_version: 1;
+  scope: "core_build_provider_configuration";
+  runtime_availability: "unknown";
+  admission: {
+    credential_environment_types: ["openai_hosted"];
+    base_url: { schemes: ["https"]; user_info: false; query: false; fragment: false };
+    token_limits: { minimum: 0; max_output_not_above_context: true };
+  };
+  harnesses: Array<{
+    harness: string;
+    support: "supported" | "unknown";
+    enabled: boolean;
+    default: boolean;
+    providers: Array<{
+      protocol: string;
+      required_fields: Array<"protocol" | "base_url" | "api_key" | "context_window" | "max_output_tokens">;
+      positive_fields: Array<"context_window" | "max_output_tokens">;
+    }>;
+  }>;
+}
+
+export interface StartupConfigurationReadOptions extends ReadOptions {
+  includeConfigurationCapabilities?: boolean;
+}
+
 export interface CoreStartupConfiguration {
+  configuration_capabilities?: CoreConfigurationCapabilities;
   object: "agents.core.startup_configuration";
   schema_version: 1;
   supported: {
@@ -1011,7 +1054,8 @@ export interface CoreStartupConfiguration {
 }
 
 export interface AgentCore {
-  retrieveStartupConfiguration(options?: ReadOptions): Promise<CoreStartupConfiguration>;
+  retrieveSessionExecutionConfiguration(sessionId: string, options?: ReadOptions): Promise<SessionExecutionConfiguration>;
+  retrieveStartupConfiguration(options?: StartupConfigurationReadOptions): Promise<CoreStartupConfiguration>;
   listAgents(options?: PageOptions): Promise<ListPage<SavedAgent>>;
   createAgent(input: CreateAgentInput): Promise<SavedAgent>;
   retrieveAgent(agentId: string): Promise<SavedAgent>;

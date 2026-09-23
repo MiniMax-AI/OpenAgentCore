@@ -1,3 +1,4 @@
+import { projectExecutionConfiguration, projectConfigurationCapabilities } from "./execution-configuration-projection";
 import { exactFields, onlyFields, isRecord, hasOwn, canonicalUuid, isNonnegativeInteger, sameResourceId } from "./response-projection";
 import { projectTokenUsage } from "./usage-projection";
 import { projectAgentTurn, projectSessionItem, projectItemContent, projectHistoryPage, validateHistoryPageOptions } from "./history-projection";
@@ -27,6 +28,8 @@ import type {
   CreateSessionInput,
   CreateSessionStreamOptions,
   CoreStartupConfiguration,
+  SessionExecutionConfiguration,
+  StartupConfigurationReadOptions,
   CoreHarnessKind,
   CoreManagedSandboxProvider,
   FunctionResultContent,
@@ -158,7 +161,7 @@ function invalidStartupConfiguration(): never {
 }
 
 function projectStartupConfiguration(value: unknown): CoreStartupConfiguration {
-  if (!isRecord(value) || !exactFields(value, startupConfigurationFields) || value.object !== "agents.core.startup_configuration" || value.schema_version !== 1 ||
+  if (!isRecord(value) || !onlyFields(value, new Set([...startupConfigurationFields, "configuration_capabilities"])) || value.object !== "agents.core.startup_configuration" || value.schema_version !== 1 ||
     !isRecord(value.supported) || !exactFields(value.supported, startupSupportedFields) ||
     !sortedUnique(value.supported.harnesses, isHarnessKind) || !sortedUnique(value.supported.managed_sandbox_providers, isSandboxProvider) ||
     !isRecord(value.configured) || !exactFields(value.configured, startupConfiguredFields) ||
@@ -193,9 +196,15 @@ function projectStartupConfiguration(value: unknown): CoreStartupConfiguration {
     return invalidStartupConfiguration();
   }
   const projectedProviders = modelProviders as Array<Record<string, unknown>>;
+  const capabilities = hasOwn(value, "configuration_capabilities")
+    ? projectConfigurationCapabilities(value.configuration_capabilities, invalidStartupConfiguration) : undefined;
+  if (capabilities && (supportedHarnesses.some((harness) => !capabilities.harnesses.some((entry) => entry.harness === harness)) || capabilities.harnesses.some((entry) =>
+    entry.enabled !== enabledHarnesses.includes(entry.harness as CoreHarnessKind) ||
+    entry.default !== (entry.harness === configured.default_harness)))) return invalidStartupConfiguration();
   return {
     object: "agents.core.startup_configuration",
     schema_version: 1,
+    ...(capabilities ? { configuration_capabilities: capabilities } : {}),
     supported: {
       harnesses: [...supportedHarnesses],
       managed_sandbox_providers: [...supportedSandboxProviders],
@@ -1854,8 +1863,8 @@ function projectEnvironmentFileList(
 }
 
 export class OpenAIAgentsClient implements AgentCore {
-  async retrieveStartupConfiguration(options?: ReadOptions): Promise<CoreStartupConfiguration> {
-    const value = await this.request<unknown>("/agents/core/startup-configuration", { signal: options?.signal }, 200);
+  async retrieveStartupConfiguration(options?: StartupConfigurationReadOptions): Promise<CoreStartupConfiguration> {
+    const value = await this.request<unknown>(`/agents/core/startup-configuration${options?.includeConfigurationCapabilities ? "?include=configuration_capabilities" : ""}`, { signal: options?.signal }, 200);
     return projectStartupConfiguration(value);
   }
 
@@ -2223,6 +2232,13 @@ export class OpenAIAgentsClient implements AgentCore {
 
         options.onEvent(projectStreamEventSession(event, createdSessionId, immutableSession));
       },
+    });
+  }
+
+  async retrieveSessionExecutionConfiguration(sessionId: string, options?: ReadOptions): Promise<SessionExecutionConfiguration> {
+    const value = await this.request<unknown>(`/agents/sessions/${encodeURIComponent(sessionId)}/execution-configuration`, { signal: options?.signal });
+    return projectExecutionConfiguration(value, sessionId, () => {
+      throw new AgentCoreError("Agent Core returned an invalid execution configuration.", 502, "invalid_execution_configuration");
     });
   }
 

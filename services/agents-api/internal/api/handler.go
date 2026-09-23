@@ -118,6 +118,7 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 		r.Post("/agents/sessions", h.createSession)
 		r.Get("/agents/sessions", h.listSessions)
 		r.Get("/agents/sessions/{session_id}", h.getSession)
+		r.Get("/agents/sessions/{session_id}/execution-configuration", h.getSessionExecutionConfiguration)
 		r.Get("/agents/sessions/{session_id}/runtime-observation", h.getRuntimeObservation)
 		r.Get("/agents/runtime-observations", h.listRuntimeObservations)
 		r.Get("/agents/runtime-history/capabilities", h.getRuntimeHistoryCapabilities)
@@ -259,10 +260,12 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Hosted execution is not configured on this service.")
 		return
 	}
+	executionConfiguration := sessionExecutionProjection(input, saved, inheritedProvider, provider, selectedEngine, configuration)
 	createInput := store.CreateSessionInput{
-		ModelProvider: provider,
-		ModelOptions:  providerOptions,
-		Creator:       sessionCreator(r), InitialFiles: input.initialFiles, Initialization: input.initialization,
+		ExecutionConfiguration: &executionConfiguration,
+		ModelProvider:          provider,
+		ModelOptions:           providerOptions,
+		Creator:                sessionCreator(r), InitialFiles: input.initialFiles, Initialization: input.initialization,
 		Engine: selectedEngine, IdempotencyKey: key, Metadata: input.Metadata, Configuration: configuration, InitialInputs: initialInputs, CreationRequest: creationRequest,
 	}
 	if input.XAgentsCore != nil && input.XAgentsCore.SandboxNodeID != nil {

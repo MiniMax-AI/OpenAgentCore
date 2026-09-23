@@ -282,6 +282,11 @@ type SessionEvent struct {
 	PayloadBytes pgtype.Int4 `json:"payload_bytes"`
 }
 
+type SessionExecutionConfiguration struct {
+	SessionID     pgtype.UUID `json:"session_id"`
+	Configuration []byte      `json:"configuration"`
+}
+
 type SessionItem struct {
 	ID          pgtype.UUID        `json:"id"`
 	SessionID   pgtype.UUID        `json:"session_id"`

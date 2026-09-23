@@ -294,10 +294,11 @@ type AgentKindCapabilities struct {
 // can report unavailable kinds with Available=false when the adapter
 // exists but the underlying CLI binary is missing.
 type SupportedAgentKind struct {
-	Kind         string                `json:"kind"`
-	Available    bool                  `json:"available"`
-	Version      string                `json:"version,omitempty"`
-	Capabilities AgentKindCapabilities `json:"capabilities,omitempty"`
+	Kind                  string                      `json:"kind"`
+	Available             bool                        `json:"available"`
+	Version               string                      `json:"version,omitempty"`
+	Capabilities          AgentKindCapabilities       `json:"capabilities,omitempty"`
+	ProviderConfiguration *AgentProviderConfiguration `json:"provider_configuration,omitempty"`
 }
 
 // HeartbeatPayload is the daemon's liveness ping. supported_agent_kinds

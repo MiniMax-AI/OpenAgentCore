@@ -82,6 +82,13 @@ func TestClaudeSDKDiscoveryAndRegistration(t *testing.T) {
 				t.Fatal(info)
 			}
 			for _, registered := range reg.SupportedAgentKinds() {
+				if registered.Kind == "claude_sdk" {
+					configuration := registered.ProviderConfiguration
+					if configuration == nil || configuration.SchemaVersion != 1 || len(configuration.Providers) != 1 || configuration.Providers[0].Protocol != "anthropic" || configuration.Providers[0].RequiresTokenLimits {
+						t.Fatal("SDK registration lost its provider declaration")
+					}
+					registered.ProviderConfiguration = nil
+				}
 				if registered.Kind == "claude_sdk" && registered != info {
 					t.Fatalf("SDK descriptor changed: %+v", registered)
 				}

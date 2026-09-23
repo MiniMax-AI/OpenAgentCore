@@ -128,6 +128,33 @@ definitions:
     required:
     - harness
     type: object
+  v1.CoreConfigurationCapabilities:
+    properties:
+      admission:
+        $ref: '#/definitions/v1.CoreModelProviderAdmission'
+      harnesses:
+        items:
+          $ref: '#/definitions/v1.CoreHarnessConfigurationSupport'
+        type: array
+      runtime_availability:
+        enum:
+        - unknown
+        type: string
+      schema_version:
+        enum:
+        - 1
+        type: integer
+      scope:
+        enum:
+        - core_build_provider_configuration
+        type: string
+    required:
+    - admission
+    - harnesses
+    - runtime_availability
+    - schema_version
+    - scope
+    type: object
   v1.CoreConfiguredStartupConfiguration:
     properties:
       daemon_gateway:
@@ -162,6 +189,30 @@ definitions:
     - model_providers
     - self_hosted
     type: object
+  v1.CoreHarnessConfigurationSupport:
+    properties:
+      default:
+        type: boolean
+      enabled:
+        type: boolean
+      harness:
+        type: string
+      providers:
+        items:
+          $ref: '#/definitions/v1.CoreProviderProtocolSupport'
+        type: array
+      support:
+        enum:
+        - supported
+        - unknown
+        type: string
+    required:
+    - default
+    - enabled
+    - harness
+    - providers
+    - support
+    type: object
   v1.CoreHarnessModelProviderConfiguration:
     properties:
       endpoint_configured:
@@ -193,8 +244,83 @@ definitions:
     - maintenance
     - provider
     type: object
+  v1.CoreModelProviderAdmission:
+    properties:
+      base_url:
+        $ref: '#/definitions/v1.CoreProviderEndpointRules'
+      credential_environment_types:
+        items:
+          enum:
+          - openai_hosted
+          type: string
+        type: array
+      token_limits:
+        $ref: '#/definitions/v1.CoreProviderTokenLimitRules'
+    required:
+    - base_url
+    - credential_environment_types
+    - token_limits
+    type: object
+  v1.CoreProviderEndpointRules:
+    properties:
+      fragment:
+        type: boolean
+      query:
+        type: boolean
+      schemes:
+        items:
+          enum:
+          - https
+          type: string
+        type: array
+      user_info:
+        type: boolean
+    required:
+    - fragment
+    - query
+    - schemes
+    - user_info
+    type: object
+  v1.CoreProviderProtocolSupport:
+    properties:
+      positive_fields:
+        items:
+          enum:
+          - context_window
+          - max_output_tokens
+          type: string
+        type: array
+      protocol:
+        type: string
+      required_fields:
+        items:
+          enum:
+          - protocol
+          - base_url
+          - api_key
+          - context_window
+          - max_output_tokens
+          type: string
+        type: array
+    required:
+    - positive_fields
+    - protocol
+    - required_fields
+    type: object
+  v1.CoreProviderTokenLimitRules:
+    properties:
+      max_output_not_above_context:
+        type: boolean
+      minimum:
+        type: integer
+    required:
+    - max_output_not_above_context
+    - minimum
+    type: object
   v1.CoreStartupConfiguration:
     properties:
+      configuration_capabilities:
+        $ref: '#/definitions/v1.CoreConfigurationCapabilities'
       configured:
         $ref: '#/definitions/v1.CoreConfiguredStartupConfiguration'
       object:
@@ -831,6 +957,46 @@ definitions:
         $ref: '#/definitions/v1.APIError'
     required:
     - error
+    type: object
+  v1.ExecutionProviderSelection:
+    properties:
+      configuration:
+        allOf:
+        - $ref: '#/definitions/v1.ModelProviderView'
+        x-nullable: true
+      source:
+        enum:
+        - session
+        - agent
+        - deployment
+        - unknown
+        type: string
+      status:
+        enum:
+        - available
+        - redacted
+        - unavailable
+        type: string
+    required:
+    - configuration
+    - source
+    - status
+    type: object
+  v1.ExecutionSelection:
+    properties:
+      source:
+        enum:
+        - session
+        - agent
+        - deployment
+        - unknown
+        type: string
+      value:
+        type: string
+        x-nullable: true
+    required:
+    - source
+    - value
     type: object
   v1.InlineAgent:
     properties:
@@ -2135,6 +2301,32 @@ definitions:
     - event_id
     - type
     type: object
+  v1.SessionExecutionConfiguration:
+    properties:
+      harness:
+        $ref: '#/definitions/v1.ExecutionSelection'
+      model:
+        $ref: '#/definitions/v1.ExecutionSelection'
+      model_provider:
+        $ref: '#/definitions/v1.ExecutionProviderSelection'
+      object:
+        enum:
+        - agent.session.execution_configuration
+        type: string
+      schema_version:
+        enum:
+        - 1
+        type: integer
+      session_id:
+        type: string
+    required:
+    - harness
+    - model
+    - model_provider
+    - object
+    - schema_version
+    - session_id
+    type: object
   v1.SessionExecutionInput:
     properties:
       model_provider:
@@ -3073,6 +3265,12 @@ paths:
         in: header
         name: OpenAI-Beta
         required: true
+        type: string
+      - description: Opt in to versioned provider configuration capabilities
+        enum:
+        - configuration_capabilities
+        in: query
+        name: include
         type: string
       produces:
       - application/json
@@ -4418,6 +4616,56 @@ paths:
       summary: Submit Session input events
       tags:
       - Sessions
+  /agents/sessions/{session_id}/execution-configuration:
+    get:
+      description: Returns the committed model, harness and safe provider selection
+        with recorded sources. This read never decrypts credentials, resolves current
+        defaults or probes execution health. Deployment provider details remain redacted
+        for project callers. Historical provenance and missing provider projections
+        are explicitly unknown/unavailable.
+      parameters:
+      - description: agents=v1
+        in: header
+        name: OpenAI-Beta
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: session_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SessionExecutionConfiguration'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Retrieve frozen Session execution configuration
+      tags:
+      - Core extensions
   /agents/sessions/{session_id}/items:
     get:
       description: Returns supported message and tool Items in first-observation order.

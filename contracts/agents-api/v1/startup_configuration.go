@@ -3,10 +3,11 @@ package v1
 // CoreStartupConfiguration is a secret-free snapshot of the validated process
 // configuration. It never describes a Session, Environment or live Runtime.
 type CoreStartupConfiguration struct {
-	Object        string                             `json:"object" binding:"required" enums:"agents.core.startup_configuration"`
-	SchemaVersion int                                `json:"schema_version" binding:"required" enums:"1"`
-	Supported     CoreSupportedConfiguration         `json:"supported" binding:"required"`
-	Configured    CoreConfiguredStartupConfiguration `json:"configured" binding:"required"`
+	Object                    string                             `json:"object" binding:"required" enums:"agents.core.startup_configuration"`
+	SchemaVersion             int                                `json:"schema_version" binding:"required" enums:"1"`
+	Supported                 CoreSupportedConfiguration         `json:"supported" binding:"required"`
+	Configured                CoreConfiguredStartupConfiguration `json:"configured" binding:"required"`
+	ConfigurationCapabilities *CoreConfigurationCapabilities     `json:"configuration_capabilities,omitempty"`
 }
 
 type CoreSupportedConfiguration struct {

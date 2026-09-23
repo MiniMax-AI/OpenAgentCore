@@ -83,7 +83,7 @@ func (h *Handler) resolveSessionExecution(ctx context.Context, input sessionRequ
 		}
 	}
 	if provider != nil {
-		if input.Environment.Type != "openai_hosted" {
+		if !v1.ModelProviderEnvironmentSupported(input.Environment.Type) {
 			return "", nil, nil, errors.New("caller model credentials currently require a hosted environment")
 		}
 		if err := provider.ValidateHarness(engine); err != nil {

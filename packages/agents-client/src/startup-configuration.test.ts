@@ -50,6 +50,31 @@ describe("Core startup configuration", () => {
     expect(result.configured.managed_sandbox).toEqual({ enabled: true, provider: "docker", maintenance: false });
   });
 
+  it("opts into versioned capabilities while retaining the legacy default", async () => {
+    const body = fixture() as any;
+    body.configuration_capabilities = {
+      schema_version: 1, scope: "core_build_provider_configuration", runtime_availability: "unknown",
+      admission: { credential_environment_types: ["openai_hosted"], base_url: { schemes: ["https"], user_info: false, query: false, fragment: false }, token_limits: { minimum: 0, max_output_not_above_context: true } },
+      harnesses: body.supported.harnesses.map((harness: string) => ({
+        harness, support: "supported", enabled: body.configured.enabled_harnesses.includes(harness), default: harness === body.configured.default_harness,
+        providers: [{ protocol: harness === "codex" ? "responses" : "anthropic", required_fields: ["protocol", "base_url", "api_key"], positive_fields: [] }],
+      })),
+    };
+    body.configuration_capabilities.harnesses.push({
+      harness: "zz_extra_adapter", support: "supported", enabled: false, default: false,
+      providers: [{ protocol: "anthropic", required_fields: ["protocol", "base_url", "api_key"], positive_fields: [] }],
+    });
+    const urls: string[] = [];
+    const client = new OpenAIAgentsClient({ fetch: (async (url: RequestInfo | URL) => {
+      urls.push(String(url)); return response(body);
+    }) as typeof fetch });
+    const result = await client.retrieveStartupConfiguration({ includeConfigurationCapabilities: true });
+    expect(urls[0]).toContain("?include=configuration_capabilities");
+    expect(result.configuration_capabilities).toEqual(body.configuration_capabilities);
+    body.configuration_capabilities.harnesses[0].enabled = false;
+    await expect(client.retrieveStartupConfiguration({ includeConfigurationCapabilities: true })).rejects.toMatchObject({ code: "invalid_startup_configuration" });
+  });
+
   it.each([
     ["unknown field", (value: any) => { value.secret = "private"; }],
     ["unknown harness", (value: any) => { value.supported.harnesses[0] = "future"; }],
