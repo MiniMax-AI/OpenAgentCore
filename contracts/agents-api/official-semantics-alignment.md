@@ -149,7 +149,7 @@ observation that `{"metadata":{"a":null}}` returns param `metadata.a`.
 | Row | Case | Core behavior |
 | --- | --- | --- |
 | M1–M3 | More than 16 metadata pairs, a key over 64 characters, a value over 512 characters (Agent create/update, Session create/update) | 400 with type and code `invalid_request_error`, param `metadata` or `metadata.<key>`, and the observed official message with the actual count or length. Pairs are checked before keys and values, and keys in sorted order. |
-| M4 | A non-string metadata value: integer, number, boolean, object, array or null (Agent, Session and Vault create/update) | 400 `invalid_request_error`, param `metadata.<key>`, message `Invalid type for 'metadata.<key>': expected a string, but got <kind> instead.` The first such value in document order is reported before the generic whole-body error. Templates accept no metadata. |
+| M4 | A non-string metadata value: integer, number, boolean, object, array or null (Agent create/update, Session create/update and Vault create; neither Core nor the pinned SDK has a Vault update) | 400 `invalid_request_error`, param `metadata.<key>`, message `Invalid type for 'metadata.<key>': expected a string, but got <kind> instead.` The first such value in document order is reported before the generic whole-body error. Templates accept no metadata. |
 | M5 | Vault metadata size | Unchanged: no pair or length limits, only the local 64 KiB storage bound. |
 | N1 | Agent `name` over 128 characters | 400 `invalid_request_error`, param `name`, observed message. Empty and untrimmed names stay accepted. |
 | U1 | U+0000 in a stored string | Never 500 and nothing is written. Metadata keys and values report `metadata.<key>`; other strings return 400 `invalid_request_error` with a null param. This is a local limit: PostgreSQL text and jsonb cannot store U+0000, while the official service accepts and echoes it. |
@@ -180,6 +180,10 @@ Decisions:
   still return 400 `invalid_request`, and Template cursors keep their existing
   not-found response.
 - Network messages are Core wording; the official prose is not copied.
+- Documented message difference for M2: the official message abbreviated a
+  65-character key as `'KKK...KKK'`. That single sample of identical characters
+  cannot reveal the abbreviation rule, so Core quotes the full key. Status, type,
+  code and param match.
 
 Deferred and unchanged: accepting and storing U+0000; hostname forms accepted
 officially (SFT-21) and `disabled` with domains, which the official service

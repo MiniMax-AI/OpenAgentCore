@@ -79,7 +79,9 @@ func metadataTypeError(body []byte) error {
 	if token, err := decoder.Token(); err != nil || token != json.Delim('{') {
 		return nil
 	}
-	// Duplicate keys keep their first position and last value, like decoding.
+	// A duplicate key keeps its first position and is checked with its last value
+	// only. Typed decoding rejects a non-string at any occurrence, so a body whose
+	// earlier duplicate is not a string falls back to the generic decoding error.
 	var keys []string
 	values := map[string]json.RawMessage{}
 	for decoder.More() {
