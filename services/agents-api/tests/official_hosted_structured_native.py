@@ -5,6 +5,8 @@ from pathlib import Path
 import time
 import uuid
 
+from session_cleanup import delete_session
+
 
 def verify_hosted_structured(client, foreign, http, model, kind, restart, evidence):
     pin = json.loads((Path(__file__).resolve().parents[3] / "contracts/agents-api/upstream.json").read_text())
@@ -203,6 +205,6 @@ def verify_hosted_structured(client, foreign, http, model, kind, restart, eviden
     finally:
         save()
         for sid in reversed(owned):
-            sessions.delete(sid)
+            delete_session(sessions, sid)
         if saved:
             client.beta.agents.delete(saved.id)
