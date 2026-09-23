@@ -1,17 +1,20 @@
 package store_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,6 +28,29 @@ import (
 )
 
 const hostedFailureCanary = "CANARY-hosted-init-7c21"
+
+// leakyReceipt is a failed receipt that also carries canary output in fields
+// Core must never read, as a leaking or newer Runtime could send.
+func leakyReceipt(fields string) sandbox.CommandResult {
+	return sandbox.CommandResult{ExitCode: 1, Stdout: `{"version":1,"outcome":"failed",` + fields + `"output":"` + hostedFailureCanary + `","stderr":"` + hostedFailureCanary + `"}`}
+}
+
+func hostedFailureSkill(t *testing.T) store.EnvironmentSkill {
+	t.Helper()
+	var archive bytes.Buffer
+	writer := zip.NewWriter(&archive)
+	file, err := writer.CreateHeader(&zip.FileHeader{Name: "proof/SKILL.md", Method: zip.Store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.Write([]byte("---\nname: proof\ndescription: A proof.\n---\n" + hostedFailureCanary)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return store.EnvironmentSkill{Metadata: store.EnvironmentSkillMetadata{Type: "inline", Name: "proof", Description: "A proof."}, Archive: archive.Bytes()}
+}
 
 // hostedFailureProvider fails one initialization step with a controlled result.
 // Every failure it reports is produced next to canary output, which the
@@ -110,7 +136,6 @@ func failHostedInitialization(t *testing.T, s *store.Store, tenant string, envir
 // with the safe reason and agent.session.failed; reads and events agree, and a
 // confirmed step names only its label and exit status.
 func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
-	failed := func(stdout string) sandbox.CommandResult { return sandbox.CommandResult{ExitCode: 1, Stdout: stdout} }
 	commands := []store.SetupCommand{{Command: "echo " + hostedFailureCanary + "; exit 0"}, {Command: "echo " + hostedFailureCanary + "; exit 3"}, {Command: "touch never"}}
 	type failure struct {
 		fail   string
@@ -126,16 +151,16 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 		steps  []string
 	}{
 		{"setup exit status", store.CreateSessionInput{Initialization: store.EnvironmentSetup{Commands: commands[1:]}},
-			failure{fail: "setup", result: failed(`{"version":1,"outcome":"failed","exit_code":3}`)},
+			failure{fail: "setup", result: leakyReceipt(`"exit_code":3,`)},
 			`Failed to provision environment: script "setup_commands[0]" failed with exit code 3`, []string{"configure", "setup"}},
 		{"later setup command", store.CreateSessionInput{Initialization: store.EnvironmentSetup{Commands: commands}},
-			failure{fail: "setup", skip: 1, result: failed(`{"version":1,"outcome":"failed","exit_code":3}` + "\n")},
+			failure{fail: "setup", skip: 1, result: sandbox.CommandResult{ExitCode: 1, Stdout: `{"version":1,"outcome":"failed","exit_code":3}` + "\n"}},
 			`Failed to provision environment: script "setup_commands[1]" failed with exit code 3`, []string{"configure", "setup", "setup"}},
 		{"python package", store.CreateSessionInput{Initialization: store.EnvironmentSetup{Packages: v1.EnvironmentPackages{Python: []string{"parsar-nonexistent-zz"}}, Commands: commands[2:]}},
-			failure{fail: "python", result: failed(`{"version":1,"outcome":"failed","exit_code":1}`)},
+			failure{fail: "python", result: leakyReceipt(`"exit_code":1,`)},
 			`Failed to provision environment: script "Python package installation" failed with exit code 1`, []string{"configure", "python"}},
 		{"old image without exit status", store.CreateSessionInput{Initialization: store.EnvironmentSetup{Commands: commands[1:]}},
-			failure{fail: "setup", result: failed(`{"version":1,"outcome":"failed"}`)},
+			failure{fail: "setup", result: leakyReceipt("")},
 			"Failed to provision environment: initialization did not complete", []string{"configure", "setup"}},
 		{"unknown effect", store.CreateSessionInput{Initialization: store.EnvironmentSetup{Commands: commands[1:]}},
 			failure{fail: "setup", err: sandbox.ErrCommandUnconfirmed},
@@ -144,8 +169,11 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 			failure{fail: "setup", result: sandbox.CommandResult{ExitCode: 3, Stdout: hostedFailureCanary, Stderr: hostedFailureCanary}},
 			"Failed to provision environment: initialization did not complete", []string{"configure", "setup"}},
 		{"initial file", store.CreateSessionInput{InitialFiles: []store.InitialFile{{Type: "inline", Path: "/workspace/a", Data: []byte(hostedFailureCanary)}}},
-			failure{fail: "file", result: sandbox.CommandResult{Stdout: `{"version":1,"outcome":"failed","error":"write_failed"}`}},
+			failure{fail: "file", result: sandbox.CommandResult{Stdout: `{"version":1,"outcome":"failed","error":"write_failed","detail":"` + hostedFailureCanary + `"}`}},
 			"Failed to provision environment: initial file installation failed", []string{"file"}},
+		{"Skill", store.CreateSessionInput{Initialization: store.EnvironmentSetup{Skills: []store.EnvironmentSkill{hostedFailureSkill(t)}, Commands: commands[2:]}},
+			failure{fail: "skill", result: leakyReceipt("")},
+			"Failed to provision environment: Skill installation failed", []string{"configure", "skill"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			s := hostedFailureStore(t)
@@ -249,8 +277,12 @@ func TestHostedInitializationFailurePublicHTTP(t *testing.T) {
 		Metadata:       map[string]string{"case": "setup-exit3"},
 	})
 	key := uuid.NewString()
-	p := &hostedFailureProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, fail: "setup",
-		result: sandbox.CommandResult{ExitCode: 1, Stdout: `{"version":1,"outcome":"failed","exit_code":3}`}}
+	// The failed receipt carries canary output in fields Core must never read.
+	p := &hostedFailureProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, fail: "setup", result: leakyReceipt(`"exit_code":3,`)}
+	logs := &lockedBuffer{}
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
 	w, _ := managedWorker(t, s, key, p)
 	auth, err := api.NewAuthenticator([]api.APIKey{
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: device.HashCredential(token), TenantID: tenant},
@@ -381,4 +413,25 @@ func TestHostedInitializationFailurePublicHTTP(t *testing.T) {
 			t.Fatal("initialization output reached a response", body)
 		}
 	}
+	// Logs were captured (the failed step is logged) and hold no output either.
+	if logged := logs.String(); !strings.Contains(logged, "managed Runtime file initialization incomplete") || strings.Contains(logged, hostedFailureCanary) {
+		t.Fatal("log capture", logged)
+	}
+}
+
+type lockedBuffer struct {
+	mu     sync.Mutex
+	buffer bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(data []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buffer.Write(data)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buffer.String()
 }
