@@ -317,6 +317,47 @@ func TestMalformedPathIDsMatchMissingPostgres(t *testing.T) {
 	} {
 		compare(r, owner, contentType(r.body), []byte(r.body))
 	}
+	// Skill version creation validates the multipart archive before the Skill lookup.
+	versionRoute := route{method: http.MethodPost, segments: []string{"/v1/skills/", skill.ID, "/versions"}}
+	for _, upload := range []struct {
+		archive []byte
+		fields  map[string]string
+	}{
+		{store.SkillArchive(t, "path-version"), nil},
+		{store.SkillArchive(t, "path-version-default"), map[string]string{"default": "true"}},
+		{[]byte("not a ZIP archive"), nil},
+		{store.SkillArchive(t, "path-version-invalid-default"), map[string]string{"default": "maybe"}},
+	} {
+		var body bytes.Buffer
+		form := multipart.NewWriter(&body)
+		for name, value := range upload.fields {
+			if err := form.WriteField(name, value); err != nil {
+				t.Fatal(err)
+			}
+		}
+		part, err := form.CreateFormFile("files", "proof.zip")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write(upload.archive); err != nil {
+			t.Fatal(err)
+		}
+		if err := form.Close(); err != nil {
+			t.Fatal(err)
+		}
+		compare(versionRoute, owner, form.FormDataContentType(), body.Bytes())
+		missingPath := "/v1/skills/skill_" + uuid.NewString() + "/versions"
+		wantStatus, wantBody := client.do(foreign, http.MethodPost, missingPath, form.FormDataContentType(), body.Bytes())
+		for _, target := range []string{strings.Join(versionRoute.segments, ""), "/v1/skills/not-a-skill/versions"} {
+			if status, got := client.do(foreign, http.MethodPost, target, form.FormDataContentType(), body.Bytes()); status != wantStatus || got != wantBody {
+				t.Errorf("foreign Skill version %s = %d %s; missing %d %s", target, status, got, wantStatus, wantBody)
+			}
+		}
+		if upload.fields == nil && string(upload.archive) != "not a ZIP archive" && wantStatus != http.StatusNotFound {
+			t.Errorf("valid Skill version upload to a missing Skill = %d %s", wantStatus, wantBody)
+		}
+		checked++
+	}
 	if checked < 600 {
 		t.Fatalf("route matrix checked only %d cases", checked)
 	}
