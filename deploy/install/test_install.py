@@ -20,6 +20,7 @@ import unittest
 from unittest import mock
 
 import install
+import distribution
 
 
 class InstallerTests(unittest.TestCase):
@@ -34,9 +35,15 @@ class InstallerTests(unittest.TestCase):
             "source_commit": "a" * 40,
             "images": {name: "sha256:" + digit * 64 for name, digit in (
                 ("core", "1"), ("runtime", "2"), ("database", "3"), ("web", "4"))},
+            "image_manifest_digests": {name: "sha256:" + digit * 64 for name, digit in (
+                ("core", "a"), ("runtime", "b"), ("database", "c"), ("web", "d"))},
             "runtime_ref": "localhost/parsar-runtime:test-install",
             "microsandbox": {"runtime_sha256": "5" * 64, "firmware_sha256": "6" * 64},
         }
+        self.loaded_images = set()
+        self.containerd = False
+        self.invalid_image = None
+        self.patched(mock.patch.object(distribution, "docker_command", side_effect=self.docker_command))
         self.ports = self.patched(mock.patch.object(install, "free_port"))
         self.device_probes = []
         original_stat = os.stat
@@ -50,6 +57,19 @@ class InstallerTests(unittest.TestCase):
         self.patched(mock.patch.object(install.os, "stat", side_effect=controlled_device_stat))
         self.patched(mock.patch.object(install.os, "getuid", return_value=1000))
         self.patched(mock.patch.object(install.os, "getgid", return_value=1000))
+
+    def docker_command(self, arguments, **kwargs):
+        if 'load' in arguments:
+            self.loaded_images.add(Path(arguments[-1]).stem)
+            install.run(arguments)
+            return SimpleNamespace(returncode=0, stdout='')
+        identity = arguments[3]
+        name = next(name for name in self.manifest['images'] if identity in distribution.image_identities(self.manifest, name))
+        if name not in self.loaded_images:
+            return SimpleNamespace(returncode=1, stdout='')
+        if self.containerd and identity == self.manifest['images'][name]:
+            return SimpleNamespace(returncode=1, stdout='')
+        return SimpleNamespace(returncode=0, stdout=self.invalid_image or identity + ' linux/amd64')
 
     def patched(self, patcher):
         result = patcher.start()
@@ -172,6 +192,20 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(before, self.snapshot())
         self.assertEqual(keys, self.document("config/keys.json"))
+
+    def test_retained_config_cannot_launch_an_unresolved_image(self):
+        self.initialize('--sandbox-provider', 'true', '--provider', 'docker')
+        for path, select in (('compose.json', lambda value: value['services']['web']),
+                             ('config/managed-runtimes.json', lambda value: value['docker'])):
+            original = (self.root / path).read_bytes()
+            config = self.document(path)
+            select(config)['image'] = 'sha256:' + 'f' * 64
+            (self.root / path).write_text(json.dumps(config))
+            before = self.snapshot()
+            with self.subTest(path=path), self.assertRaisesRegex(install.InstallError, 'image differs'):
+                self.initialize('--sandbox-provider', 'true', '--provider', 'docker')
+            self.assertEqual(before, self.snapshot())
+            (self.root / path).write_bytes(original)
 
     def test_configuration_changes_refuse_without_mutating_existing_deployment(self):
         self.initialize()
@@ -532,6 +566,53 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual([call.args[0] for call in health.call_args_list], ["http://127.0.0.1:8080/v1/agents"])
         for path in (self.root / "config").iterdir():
             self.assertNotIn(path.read_text(), output.getvalue())
+
+    def test_containerd_core_configuration_uses_local_ids_and_keeps_published_manifest(self):
+        self.containerd = True
+        self.loaded_images.update(self.manifest['images'])
+        for provider in (None, 'docker'):
+            with self.subTest(provider=provider):
+                bundle = self.bundle()
+                (bundle / 'images/runtime.tar').unlink()
+                self.write_checksums(bundle)
+                published = (bundle / 'manifest.json').read_bytes()
+                with mock.patch.object(install, '__file__', str(bundle / 'install.py')), \
+                        mock.patch.object(install.platform, 'system', return_value='Linux'), \
+                        mock.patch.object(install.platform, 'machine', return_value='x86_64'), \
+                        mock.patch.object(install, 'run'), mock.patch.object(install, 'wait_http', return_value=True), \
+                        mock.patch.object(install, 'runtime_archive', side_effect=AssertionError('cache must avoid Runtime download')), \
+                        contextlib.redirect_stdout(io.StringIO()):
+                    flags = ['--sandbox-provider', 'true', '--provider', provider] if provider else []
+                    install.main(['--install-dir', str(self.root), *flags])
+                    before = self.snapshot()
+                    install.main(['--install-dir', str(self.root), *flags])
+                    self.assertEqual(self.snapshot(), before)
+                for service, config in self.document('compose.json')['services'].items():
+                    self.assertEqual(config['image'], self.manifest['image_manifest_digests']['core' if service == 'migrate' else service])
+                if provider:
+                    self.assertEqual(self.document('config/managed-runtimes.json')['docker']['image'],
+                                     self.manifest['image_manifest_digests']['runtime'])
+                else:
+                    self.assertFalse((self.root / 'state').exists())
+                self.assertEqual((self.root / 'node-payload/manifest.json').read_bytes(), published)
+                self.assertEqual((bundle / 'manifest.json').read_bytes(), published)
+                shutil.rmtree(bundle)
+                shutil.rmtree(self.root)
+
+    def test_postload_wrong_identity_or_platform_cannot_create_deployment(self):
+        bundle = self.bundle()
+        for observed in ('sha256:' + 'f' * 64 + ' linux/amd64', self.manifest['images']['core'] + ' linux/arm64'):
+            self.invalid_image = observed
+            self.loaded_images.clear()
+            with self.subTest(observed=observed), \
+                    mock.patch.object(install, '__file__', str(bundle / 'install.py')), \
+                    mock.patch.object(install.platform, 'system', return_value='Linux'), \
+                    mock.patch.object(install.platform, 'machine', return_value='x86_64'), \
+                    mock.patch.object(install, 'run') as command, \
+                    self.assertRaisesRegex(distribution.DistributionError, 'identity or platform'):
+                install.main(['--install-dir', str(self.root)])
+            self.assertFalse(self.root.exists())
+            self.assertFalse(any('up' in call.args[0] for call in command.call_args_list))
 
     def test_cli_failure_does_not_print_external_command_secrets(self):
         secret = "synthetic-sensitive-command-value"

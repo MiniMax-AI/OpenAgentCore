@@ -19,7 +19,7 @@ import urllib.request
 from urllib.parse import urlencode, urlsplit
 import uuid
 
-from distribution import DistributionError, load_manifest, obtain_artifact, runtime_archive
+from distribution import DistributionError, load_manifest, obtain_artifact, runtime_archive, image_identities, ensure_docker_image
 
 
 class InstallError(Exception):
@@ -202,8 +202,8 @@ def inspect_prior_launch(root, state):
         raise InstallError('Invalid retained Runtime startup receipt.' + guidance)
     try:
         raw = checked(['docker', '--host', 'unix:///var/run/docker.sock', 'container', 'inspect', name,
-                       '--format', '{{json .Config.Labels}} {{.State.Status}}'], 'Cannot inspect retained Runtime')
-        labels, status = raw.strip().rsplit(' ', 1)
+                       '--format', '{{json .Config.Labels}} {{.State.Status}} {{.Image}}'], 'Cannot inspect retained Runtime')
+        labels, status, image = raw.strip().rsplit(' ', 2)
         labels = json.loads(labels)
     except (InstallError, ValueError):
         raise InstallError('The prior Runtime cannot be confirmed.' + guidance) from None
@@ -212,6 +212,8 @@ def inspect_prior_launch(root, state):
                 'io.parsar.agents-api.user-owned': 'true'}
     if not isinstance(labels, dict) or any(labels.get(key) != value for key, value in expected.items()):
         raise InstallError('The retained container does not match this installation and Environment.' + guidance)
+    if image not in (state['runtime_image'], state['runtime_manifest']):
+        raise InstallError('The retained container image does not match this distribution.' + guidance)
     if status == 'running':
         print('Runtime already running: ' + name)
         return name
@@ -225,11 +227,11 @@ def install(args, root):
     target = identity(args.environment_id, args.remote)
     manifest = load_manifest(source_url=args.source_url, offline_root=args.offline_root)
     revision = manifest.get('source_commit', '')
-    runtime_image = manifest.get('images', {}).get('runtime', '')
+    runtime_image, runtime_manifest = image_identities(manifest, 'runtime')
     if (manifest.get('platform') != 'linux/amd64' or not re.fullmatch(r'[0-9a-f]{40}', revision)
             or not re.fullmatch(r'sha256:[0-9a-f]{64}', runtime_image)):
         raise InstallError('The distribution does not contain a matched Linux amd64 Runtime')
-    target.update(source_commit=revision, runtime_image=runtime_image)
+    target.update(source_commit=revision, runtime_image=runtime_image, runtime_manifest=runtime_manifest)
     state_file = root / 'installation.json'
     if state_file.exists():
         state = json.loads(private_read(state_file))
@@ -260,19 +262,9 @@ def install(args, root):
         write_private(key_file, key)
     launcher = obtain_artifact(manifest, 'native/bin/parsar-runtime', root / 'native/bin/parsar-runtime', args.offline_root)
     seccomp = obtain_artifact(manifest, 'runtime/seccomp.json', root / 'runtime/seccomp.json', args.offline_root)
-    inspect = ['docker', '--host', 'unix:///var/run/docker.sock', 'image', 'inspect', runtime_image,
-               '--format', '{{.Id}} {{.Os}}/{{.Architecture}}']
-    try:
-        image = checked(inspect, 'Runtime image is not installed').strip()
-    except InstallError:
-        image = None
-    if image != runtime_image + ' linux/amd64':
-        archive = runtime_archive(manifest, root, args.offline_root)
-        checked(['docker', '--host', 'unix:///var/run/docker.sock', 'image', 'load', '--input', str(archive)],
-                'Cannot load the matched Runtime image; retry after checking Docker', timeout=600)
-        image = checked(inspect, 'Cannot verify the loaded Runtime image').strip()
-    if image != runtime_image + ' linux/amd64':
-        raise InstallError('Loaded Runtime image does not match the distribution')
+    runtime_image = ensure_docker_image(
+        manifest, 'runtime', lambda: runtime_archive(manifest, root, args.offline_root),
+        ('docker', '--host', 'unix:///var/run/docker.sock'))
     command = [str(launcher), '--installation-id', state['installation_id'],
                '--environment-id', args.environment_id, '--remote', args.remote,
                '--image', runtime_image, '--seccomp-file', str(seccomp), '--credential-file', str(key_file)]

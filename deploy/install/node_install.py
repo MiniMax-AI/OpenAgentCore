@@ -124,6 +124,7 @@ def metadata(source):
     if (manifest.get("platform") != "linux/amd64" or not re.fullmatch(r"[0-9a-f]{40}", manifest.get("source_commit", ""))
             or not re.fullmatch(r"sha256:[0-9a-f]{64}", manifest.get("images", {}).get("runtime", ""))):
         raise InstallError("Unsupported node distribution")
+    distribution.image_identities(manifest, "runtime")
     for name in (COMMON[0], "images/runtime.tar.gz") + MICRO:
         distribution.artifact(manifest, name)
     if not manifest.get("artifact_base_url"):
@@ -199,10 +200,10 @@ def micro_home(installation_id):
     return directory
 
 
-def provider_config(root, args, manifest):
+def provider_config(root, args, manifest, runtime_image):
     result = {"installation_id": args.installation_id, "provider": args.provider, "core_url": args.core_url + "/api/v1"}
     if args.provider == "docker":
-        result["docker"] = {"host": "unix:///var/run/docker.sock", "image": manifest["images"]["runtime"],
+        result["docker"] = {"host": "unix:///var/run/docker.sock", "image": runtime_image,
                             "network": "parsar-node-" + args.installation_id,
                             "seccomp_file": str(root / "runtime/seccomp.json"), "nested_sandbox": True}
     else:
@@ -228,21 +229,13 @@ def provider_config(root, args, manifest):
 def prepare_runtime(root, args, manifest):
     if args.provider == "docker":
         docker = ["docker", "--host", "unix:///var/run/docker.sock"]
-        inspect = docker + ["image", "inspect", "--format", "{{.Id}}", manifest["images"]["runtime"]]
-        try:
-            image = checked(inspect, "Runtime image is not installed")
-        except InstallError:
-            image = None
-        if image != manifest["images"]["runtime"]:
-            archive = distribution.runtime_archive(manifest, root)
-            checked(docker + ["load", "--input", str(archive)], "Cannot import the Docker runtime image; check Docker access and free disk space", timeout=1800)
-            image = checked(inspect, "Cannot verify the imported runtime image")
-        if image != manifest["images"]["runtime"]:
-            raise InstallError("Imported runtime image identity differs")
+        image = distribution.ensure_docker_image(
+            manifest, "runtime", lambda: distribution.runtime_archive(manifest, root), docker)
         network = "parsar-node-" + args.installation_id
         networks = checked(docker + ["network", "ls", "--format", "{{.Name}}"], "Cannot inspect Docker networks").splitlines()
         if network not in networks:
             checked(docker + ["network", "create", network], "Cannot create node Docker network")
+        return image
     else:
         for name in MICRO:
             result = subprocess.run(["ldd", str(root / name)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30)
@@ -312,14 +305,18 @@ def install(args, token):
                 distribution.obtain_artifact(manifest, name, target)
                 os.chmod(target, 0o700)
         safe_directory(root / "state/node")
+        print("Checking the sandbox runtime...", flush=True)
+        runtime_image = prepare_runtime(root, args, manifest)
         # Retain the original network policy when recovering a partial installation.
         if not existing_file(root / "provider.json"):
-            write_once(root / "provider.json", json_text(provider_config(root, args, manifest)))
+            write_once(root / "provider.json", json_text(provider_config(root, args, manifest, runtime_image)))
+        elif args.provider == "docker":
+            stored = json.loads((root / "provider.json").read_text())
+            if stored.get("docker", {}).get("image") != runtime_image:
+                raise InstallError("Retained Docker image differs; preserve the node and inspect its configuration")
         unit = root / ("parsar-node-" + args.installation_id + ".service")
         write_once(unit, service_unit(root))
         marker = root / "registered.json"
-        print("Checking the sandbox runtime...", flush=True)
-        prepare_runtime(root, args, manifest)
         if not existing_file(marker):
             # The one-time credential is never passed through process arguments or service environments.
             descriptor, secret_path = tempfile.mkstemp(prefix=".enrollment-", dir=root)

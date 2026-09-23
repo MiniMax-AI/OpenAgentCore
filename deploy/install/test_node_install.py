@@ -27,11 +27,14 @@ class NodeInstallTests(unittest.TestCase):
                                        provider="docker", installation_id="94be54a1-138c-4f30-bc87-b13686272dbe")
         self.root = self.home / ".parsar/nodes" / self.args.installation_id
         self.manifest = {"platform": "linux/amd64", "source_commit": "a" * 40, "images": {"runtime": "sha256:" + "b" * 64},
+                         "image_manifest_digests": {"runtime": "sha256:" + "c" * 64},
                          "runtime_ref": "parsar-core-runtime@sha256:" + "c" * 64,
                          "microsandbox": {"runtime_sha256": "d" * 64, "firmware_sha256": "e" * 64}}
         self.payloads = {name: b"fixture-payload-" + name.encode() for name in installer.COMMON + installer.MICRO}
         self.payloads["images/runtime.tar.gz"] = gzip.compress(b"runtime archive")
         self.refresh_manifest()
+        self.containerd = False
+        self.invalid_image = None
         self.image_present = False
         self.calls = []
         self.fail_service = False
@@ -43,6 +46,7 @@ class NodeInstallTests(unittest.TestCase):
                       mock.patch.object(installer, "micro_home", return_value=self.home / "m"),
                       mock.patch.object(installer, "fetch", side_effect=lambda source, name: io.BytesIO(self.payloads[name])),
                       mock.patch.object(installer, "checked", side_effect=self.checked),
+                      mock.patch.object(installer.distribution, "docker_command", side_effect=self.docker_command),
                       mock.patch.object(installer.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"statically linked", b""))):
             patch.start()
             self.addCleanup(patch.stop)
@@ -81,9 +85,18 @@ class NodeInstallTests(unittest.TestCase):
             if not self.image_present:
                 raise installer.InstallError(failure)
             if arguments[0] == "docker":
-                return self.manifest["images"]["runtime"]
+                if self.containerd and arguments[arguments.index("inspect") + 1] == self.manifest["images"]["runtime"]:
+                    raise installer.InstallError(failure)
+                identity = self.manifest["image_manifest_digests" if self.containerd else "images"]["runtime"]
+                return self.invalid_image or identity + " linux/amd64"
             return json.dumps({"digest": self.manifest["runtime_ref"].split("@", 1)[1], "os": "linux", "architecture": "amd64"})
         return ""
+
+    def docker_command(self, arguments, **kwargs):
+        try:
+            return subprocess.CompletedProcess(arguments, 0, self.checked(arguments, "image missing", **kwargs), "")
+        except installer.InstallError:
+            return subprocess.CompletedProcess(arguments, 1, "", "")
 
     def install(self):
         installer.install(self.args, "synthetic-once-token")
@@ -102,6 +115,35 @@ class NodeInstallTests(unittest.TestCase):
         self.assertEqual(list(self.root.glob(".enrollment-*")), [])
         self.assertTrue(any("register" in call for call, _ in self.calls))
         self.assertTrue(any("is-active" in call for call, _ in self.calls))
+
+    def test_containerd_node_persists_actual_id_and_warm_retry_avoids_archive(self):
+        self.containerd = True
+        self.install()
+        expected = self.manifest['image_manifest_digests']['runtime']
+        self.assertEqual(json.loads((self.root / 'provider.json').read_text())['docker']['image'], expected)
+        before = (self.root / 'provider.json').read_bytes()
+        with mock.patch.object(installer.distribution, 'runtime_archive', side_effect=AssertionError('warm Runtime download')):
+            self.install()
+        self.assertEqual((self.root / 'provider.json').read_bytes(), before)
+
+    def test_retained_provider_image_cannot_bypass_verified_selection(self):
+        self.install()
+        config = json.loads((self.root / 'provider.json').read_text())
+        config['docker']['image'] = 'sha256:' + 'f' * 64
+        (self.root / 'provider.json').write_text(json.dumps(config))
+        self.calls.clear()
+        with self.assertRaisesRegex(installer.InstallError, 'Retained Docker image differs'):
+            self.install()
+        self.assertFalse(any('register' in call or 'enable' in call for call, _ in self.calls))
+
+    def test_wrong_loaded_runtime_cannot_register_or_write_provider_config(self):
+        for observed in ('sha256:' + 'f' * 64 + ' linux/amd64', self.manifest['images']['runtime'] + ' linux/arm64'):
+            self.invalid_image = observed
+            self.image_present = False
+            with self.subTest(observed=observed), self.assertRaisesRegex(installer.distribution.DistributionError, 'identity or platform'):
+                self.install()
+            self.assertFalse((self.root / 'provider.json').exists())
+            self.assertFalse(any('register' in call or 'enable' in call for call, _ in self.calls))
 
     def test_microsandbox_imports_image_and_allows_only_explicit_private_core_endpoint(self):
         self.args.provider = "microsandbox"

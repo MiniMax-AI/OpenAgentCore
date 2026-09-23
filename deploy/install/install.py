@@ -22,7 +22,7 @@ import uuid
 
 from configuration import compose_config, core_environment, managed_config
 import native_service
-from distribution import DistributionError, artifact, obtain_artifact, runtime_archive
+from distribution import DistributionError, artifact, obtain_artifact, runtime_archive, image_identities, ensure_docker_image
 
 
 class InstallError(Exception):
@@ -70,9 +70,8 @@ def verify_bundle(bundle):
     if not required.issubset(covered):
         raise InstallError("Distribution checksum list is incomplete")
     manifest = json.loads((bundle / "manifest.json").read_text())
-    for image in manifest["images"].values():
-        if not image.startswith("sha256:") or len(image) != 71:
-            raise InstallError("Distribution must select immutable images")
+    for name in ("core", "web", "database", "runtime"):
+        image_identities(manifest, name)
     for name in ("images/runtime.tar.gz", "native/bin/parsar-sandbox-node",
                  "native/bin/agents-api-microsandbox-provider", "native/microsandbox/msb",
                  "native/microsandbox/libkrunfw.so.5.6.1"):
@@ -198,6 +197,15 @@ def initialize(root, args, manifest):
         actual = (state["mode"], state["provider"], state["core_port"], state["web_port"], state.get("core_url"), state.get("public_url"))
         if wanted != actual or state["source_commit"] != manifest["source_commit"]:
             raise InstallError("Existing installation differs; preserve it and follow the upgrade/provider-change guide")
+        services = json.loads((root / "compose.json").read_text())["services"]
+        for service, config in services.items():
+            name = "core" if service == "migrate" else service
+            if config.get("image") != manifest["images"].get(name):
+                raise InstallError("Retained Docker image differs; preserve the installation and inspect its configuration")
+        if state["provider"] == "docker":
+            managed = json.loads((root / "config/managed-runtimes.json").read_text())
+            if managed.get("docker", {}).get("image") != manifest["images"]["runtime"]:
+                raise InstallError("Retained Runtime image differs; preserve the installation and inspect its configuration")
         return state
     if root.exists() and any(root.iterdir()):
         raise InstallError("Installation directory is not empty; refusing to overwrite existing state")
@@ -327,30 +335,41 @@ def main(argv=None):
     manifest = verify_bundle(bundle)
     if args.provider and not args.web_only:
         print("Preparing the selected local sandbox provider...", flush=True)
-        runtime_archive(manifest, bundle, bundle)
         if args.provider == "microsandbox":
+            runtime_archive(manifest, bundle, bundle)
             for name in ("native/bin/agents-api-microsandbox-provider", "native/microsandbox/msb",
                          "native/microsandbox/libkrunfw.so.5.6.1"):
                 obtain_artifact(manifest, name, bundle / name, bundle)
             native_service.preflight(bundle)
-    state = initialize(root, args, manifest)
+    if args.web_only:
+        images = ["web"]
+    elif args.provider == "microsandbox":
+        images = ["database"]
+    else:
+        images = ["core", "database"]
+    if args.provider == "docker":
+        images.append("runtime")
+    if not args.core_only and not args.web_only:
+        images.append("web")
+    local_images = dict(manifest["images"])
+    for name in images:
+        if name == "runtime":
+            archive = lambda: runtime_archive(manifest, bundle, bundle)
+        else:
+            archive = lambda name=name: bundle / f"images/{name}.tar"
+        local_images[name] = ensure_docker_image(manifest, name, archive)
+    # Deployment configuration uses Docker's local IDs; published metadata is unchanged.
+    deployment = dict(manifest, images=local_images)
+    state = initialize(root, args, deployment)
     prepare_node_payload(root, state, bundle)
     if state["provider"] == "docker":
         seccomp = bundle / "runtime/seccomp.json"
         if not (root / "config/seccomp.json").exists():
             private_write(root / "config/seccomp.json", seccomp.read_text())
-    images = ["web"] if state["mode"] == "web-only" else ["core", "database"]
-    if state["provider"] == "docker":
-        images.append("runtime")
     if native_service.is_native(state):
-        images = ["database"]
         password = (root / "config/database.password").read_text()
         environment = core_environment(root, state, password)
         native_service.prepare(root, state, bundle, environment)
-    if state["mode"] == "all":
-        images.append("web")
-    for name in images:
-        run(["docker", "load", "--input", str(bundle / f"images/{name}.tar")], stdout=subprocess.DEVNULL)
     import_runtime(root, state, manifest, bundle)
     compose(root, "up", "--detach", "--wait")
     if native_service.is_native(state):

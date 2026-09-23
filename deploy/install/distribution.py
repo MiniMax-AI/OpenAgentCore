@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import socket
 import stat
+import subprocess
 import tempfile
 import time
 import urllib.error
@@ -18,6 +19,55 @@ from urllib.parse import urlsplit
 
 class DistributionError(Exception):
     pass
+
+
+def image_identities(manifest, name):
+    """Both immutable IDs describe the same archive, as proven by the builder."""
+    identities = []
+    for field in ('images', 'image_manifest_digests'):
+        mapping = manifest.get(field)
+        value = mapping.get(name) if isinstance(mapping, dict) else None
+        if not isinstance(value, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', value):
+            raise DistributionError('Missing or invalid immutable image identity: ' + name)
+        identities.append(value)
+    return tuple(identities)
+
+
+def docker_command(arguments, timeout=30):
+    try:
+        return subprocess.run(arguments, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, text=True, timeout=timeout, check=False)
+    except (OSError, subprocess.SubprocessError):
+        raise DistributionError('Cannot inspect or load the distribution image; check Docker access and disk space') from None
+
+
+def ensure_docker_image(manifest, name, archive, docker=('docker',)):
+    """Resolve a proven local ID; obtain a verified archive only on a cache miss."""
+    expected = image_identities(manifest, name)
+    docker = list(docker)
+
+    def inspect():
+        for identity in dict.fromkeys(expected):
+            result = docker_command(docker + ['image', 'inspect', identity, '--format',
+                                             '{{.Id}} {{.Os}}/{{.Architecture}}'])
+            if result.returncode:
+                continue
+            fields = result.stdout.strip().split()
+            if len(fields) != 2 or fields[0] not in expected or fields[1] != 'linux/amd64':
+                raise DistributionError('Docker image identity or platform differs from the distribution: ' + name)
+            return fields[0]
+        return None
+
+    identity = inspect()
+    if identity is not None:
+        return identity
+    result = docker_command(docker + ['load', '--input', str(archive())], timeout=1800)
+    if result.returncode:
+        raise DistributionError('Cannot load the distribution image; check Docker access and free disk space: ' + name)
+    identity = inspect()
+    if identity is None:
+        raise DistributionError('Cannot verify the loaded distribution image: ' + name)
+    return identity
 
 
 def digest(path):
