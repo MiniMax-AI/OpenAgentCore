@@ -61,6 +61,36 @@ func (q *Queries) DeleteSessionArtifacts(ctx context.Context, sessionID pgtype.U
 	return err
 }
 
+const deleteUnchangedTurnArtifacts = `-- name: DeleteUnchangedTurnArtifacts :exec
+WITH newest AS (
+    SELECT DISTINCT ON (published.path) published.path, published.sha256
+    FROM session_artifacts published
+    JOIN turns producer ON producer.session_id = published.session_id AND producer.id = published.turn_id
+    WHERE published.session_id = $1 AND published.created_at IS NOT NULL
+    ORDER BY published.path, producer.created_at DESC, producer.id DESC
+), removed AS (
+    DELETE FROM session_artifacts staged USING newest
+    WHERE staged.session_id = $1 AND staged.turn_id = $2 AND staged.created_at IS NULL
+      AND staged.path = newest.path AND staged.sha256 = newest.sha256
+    RETURNING staged.body_oid
+)
+SELECT lo_unlink(body_oid) FROM removed
+`
+
+type DeleteUnchangedTurnArtifactsParams struct {
+	SessionID pgtype.UUID `json:"session_id"`
+	TurnID    pgtype.UUID `json:"turn_id"`
+}
+
+// A staged path is not republished while the newest remaining published
+// Artifact for that path in the Session has the same bytes. Newest follows the
+// producing Turn's database creation time: Turns in a Session are serialized,
+// while publication time may come from the Runtime's reported completion.
+func (q *Queries) DeleteUnchangedTurnArtifacts(ctx context.Context, arg DeleteUnchangedTurnArtifactsParams) error {
+	_, err := q.db.Exec(ctx, deleteUnchangedTurnArtifacts, arg.SessionID, arg.TurnID)
+	return err
+}
+
 const deleteUnpublishedTurnArtifacts = `-- name: DeleteUnpublishedTurnArtifacts :exec
 WITH removed AS (
     DELETE FROM session_artifacts WHERE session_id = $1 AND turn_id = $2 AND created_at IS NULL RETURNING body_oid

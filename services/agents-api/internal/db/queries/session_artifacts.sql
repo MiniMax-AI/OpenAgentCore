@@ -6,6 +6,25 @@ WHERE session_id = $1 AND id = $2 AND NOT artifact_capture_started;
 INSERT INTO session_artifacts (id, session_id, turn_id, environment_id, path, size_bytes, body_oid, sha256)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 
+-- name: DeleteUnchangedTurnArtifacts :exec
+-- A staged path is not republished while the newest remaining published
+-- Artifact for that path in the Session has the same bytes. Newest follows the
+-- producing Turn's database creation time: Turns in a Session are serialized,
+-- while publication time may come from the Runtime's reported completion.
+WITH newest AS (
+    SELECT DISTINCT ON (published.path) published.path, published.sha256
+    FROM session_artifacts published
+    JOIN turns producer ON producer.session_id = published.session_id AND producer.id = published.turn_id
+    WHERE published.session_id = $1 AND published.created_at IS NOT NULL
+    ORDER BY published.path, producer.created_at DESC, producer.id DESC
+), removed AS (
+    DELETE FROM session_artifacts staged USING newest
+    WHERE staged.session_id = $1 AND staged.turn_id = $2 AND staged.created_at IS NULL
+      AND staged.path = newest.path AND staged.sha256 = newest.sha256
+    RETURNING staged.body_oid
+)
+SELECT lo_unlink(body_oid) FROM removed;
+
 -- name: PublishTurnArtifacts :exec
 UPDATE session_artifacts SET created_at = $3
 WHERE session_id = $1 AND turn_id = $2 AND created_at IS NULL;

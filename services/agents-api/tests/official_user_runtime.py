@@ -312,7 +312,7 @@ def run_acceptance(client, foreign, http, session, runtime, evidence_path, secre
         isolation_proof("recovered")
         assert memory in answer(items), "Cold continuation lost native conversation history"
         assert runtime.read(prefix + "-published") == b"published\n", "Cold continuation repeated side effects"
-        artifacts[second.id] = outputs
+        # Unchanged outputs keep their first-Turn Artifacts; later Turns publish nothing new.
         check_artifacts()
         report["checks"].append("runtime_and_core_restart_preserve_history_and_outputs")
         third, items = run_turn("Use your native shell tool to run exactly `python3 " + prefix + "-hold.py` once and wait in the foreground. "
@@ -332,7 +332,6 @@ def run_acceptance(client, foreign, http, session, runtime, evidence_path, secre
         assert memory in answer(items) and runtime.read(prefix + "-resumed") == b"resumed\n", "Post-cancel continuation failed"
         assert runtime.read(starts) == b"started\n" and runtime.read(ticks) == stopped, "Continuation repeated cancelled effects"
         assert runtime.read(prefix + "-published") == b"published\n", "Continuation repeated publication"
-        artifacts[fourth.id] = outputs
         check_artifacts()
         report["checks"].append("public_cancel_stops_ticks_duplicate_cancel_and_continuation_preserve_effect_counts")
         report.update(passed=True, memory_sha256=hashlib.sha256(memory.encode()).hexdigest(),
