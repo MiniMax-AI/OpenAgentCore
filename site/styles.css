@@ -91,7 +91,7 @@ h1 > span { color: var(--accent); }
 .harnesses { display: grid; gap: 11px; }
 .harnesses > div { display: flex; align-items: center; gap: 12px; padding: 20px; border: 1px solid #dcdbe7; border-radius: 7px; background: #fafafd; font-size: 15px; font-weight: 550; }
 .harness-dot { width: 6px; height: 6px; background: #b5adc9; border-radius: 2px; flex-shrink: 0; }
-.native-label { font: 9px var(--mono); color: #797582; margin-left: auto; }
+.native-label { font: 9px var(--mono); color: #666171; margin-left: auto; }
 .architecture-notes { display: flex; justify-content: space-between; gap: 24px; margin-top: 25px; }
 .architecture-notes p { font-size: 12px; margin: 0; }
 .architecture-notes p > span { color: #9a8bbb; margin-right: 9px; }
@@ -105,6 +105,7 @@ h1 > span { color: var(--accent); }
 .note-label { font-size: 9px; letter-spacing: .09em; color: #747180; }
 .install-prerequisites p { font-size: 12px; margin: 15px 0 0; }
 .install-prerequisites a { color: var(--accent); }
+.code-footnote a, .install-prerequisites a, .setup-footnote a { text-decoration: underline; text-decoration-color: #a79acd; text-underline-offset: 3px; }
 .setup-path { min-width: 0; }
 .setup-steps { list-style: none; margin: 0; padding: 0; }
 .setup-step { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 20px; padding-bottom: 28px; position: relative; }
