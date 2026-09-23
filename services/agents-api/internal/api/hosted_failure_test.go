@@ -137,6 +137,10 @@ func TestGetStreamEndsAfterHostedProvisioningFailure(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer response.Body.Close()
+			// The stream that ends on the failure carries the request headers (HP-23/24).
+			if !requestIDPattern.MatchString(response.Header.Get("X-Request-Id")) || response.Header.Get("Openai-Processing-Ms") == "" {
+				t.Fatal("stream headers", response.Header)
+			}
 			lines := make(chan string, 32)
 			go func() {
 				defer close(lines)
