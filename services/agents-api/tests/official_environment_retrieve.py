@@ -82,8 +82,11 @@ def main():
                 pass
             else:
                 raise AssertionError("absent Environment was exposed through the SDK")
-        for malformed in ("invalid", str(uuid.UUID(int=0))):
-            rejected(base + "/v1/agents/environments/" + malformed, 400, "invalid_request")
+        # Malformed identifiers cannot be distinguished from missing Environments.
+        missing = http.get(base + "/v1/agents/environments/" + str(uuid.uuid4()), headers=headers)
+        for malformed in ("invalid", str(uuid.UUID(int=0)), "env_" + uuid.uuid4().hex):
+            rejected(base + "/v1/agents/environments/" + malformed, 404, "not_found_error")
+            assert http.get(base + "/v1/agents/environments/" + malformed, headers=headers).content == missing.content
         rejected(endpoint, 404, "not_found_error", headers | {"Authorization": "Bearer " + settings["foreign_token"]})
         for authorization in (None, "Bearer invalid", "Bearer " + settings["executor_token"]):
             request_headers = {"OpenAI-Beta": "agents=v1"}
@@ -95,7 +98,12 @@ def main():
             if beta is not None:
                 request_headers["OpenAI-Beta"] = beta
             rejected(endpoint, 400, "invalid_beta", request_headers)
-        rejected(endpoint + "?include=files", 400, "unsupported_parameter")
+        # include is not a pinned retrieval parameter; unknown keys are ignored.
+        for query in ("?include=files", "?tenant_id=" + result["foreign_environment_id"]):
+            response = http.get(endpoint + query, headers=headers)
+            assert response.status_code == 200 and response.json() == expected
+            rejected(base + "/v1/agents/environments/" + result["foreign_environment_id"] + query, 404, "not_found_error")
+        assert api.beta.agents.environments.retrieve(environment_id, extra_query={"include": "files"}).to_dict() == expected
         for method in ("POST", "PATCH", "DELETE"):
             rejected(endpoint, 405, "unsupported_operation", method=method)
         assert api.beta.agents.environments.retrieve(environment_id).to_dict() == expected

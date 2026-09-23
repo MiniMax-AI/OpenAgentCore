@@ -19,10 +19,6 @@ import (
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/subagents/{subagent_id}/turns/{turn_id} [get]
 func (h *Handler) getSubagentTurn(w http.ResponseWriter, r *http.Request) {
-	if r.URL.RawQuery != "" {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Subagent Turn retrieval does not accept query parameters.")
-		return
-	}
 	if !h.subagentsReady(w) {
 		return
 	}

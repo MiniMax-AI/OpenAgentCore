@@ -11,7 +11,7 @@ import (
 )
 
 // @Summary Update a reusable Agent
-// @Description Preserves omitted fields and replaces supplied fields using shared saved-configuration validation. Null name/instructions clear; null or empty metadata clears all pairs. Existing Session snapshots are unchanged. Empty updates advance updated_at without changing saved fields. Nested replacement/null defaults, model-derived reasoning and exact hosted error behavior remain incompletely verified.
+// @Description Preserves omitted fields and replaces supplied fields using shared saved-configuration validation. Null name/instructions clear; null or empty metadata clears all pairs. Name and metadata validation errors return invalid_request_error with the official param. Existing Session snapshots are unchanged. Empty updates advance updated_at without changing saved fields. Nested replacement/null defaults, model-derived reasoning and exact hosted error behavior remain incompletely verified.
 // @Tags Agents
 // @Accept json
 // @Produce json
@@ -23,23 +23,21 @@ import (
 // @Failure 400,401,404,413,500 {object} v1.ErrorResponse
 // @Router /agents/{agent_id} [post]
 func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Agent updates do not accept query parameters.")
-		return
-	}
 	raw, ok := readJSONBody(w, r)
 	if !ok {
 		return
 	}
 	input, err := resolveAgentUpdate(raw)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())
+		if !writeFieldError(w, err) {
+			writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())
+		}
 		return
 	}
 	id := chi.URLParam(r, "agent_id")
 	if !validAgentID(id) {
-		writeStoreError(w, r, store.ErrNotFound)
-		return
+		// Storage validation precedes the lookup; follow the missing-Agent path.
+		id = store.UnknownResourceID
 	}
 	updated, err := h.store.UpdateAgent(r.Context(), tenantID(r), id, input)
 	if err != nil {
@@ -50,6 +48,9 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 }
 
 func resolveAgentUpdate(raw []byte) (store.UpdateAgentInput, error) {
+	if err := metadataTypeError(raw); err != nil {
+		return store.UpdateAgentInput{}, err
+	}
 	var request v1.UpdateAgentRequest
 	if decodeInputObject(raw, &request, "model", "name", "instructions", "metadata", "multi_agent", "reasoning", "service_tier", "text", "tools", "x_agents_core") != nil {
 		return store.UpdateAgentInput{}, errors.New("Request must be a JSON object containing supported fields.")

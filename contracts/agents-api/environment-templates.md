@@ -19,7 +19,8 @@ and five-operation SandboxProvider path as inline configuration.
 - Empty/null installation fields retain empty defaults. Responses contain safe
   metadata and never `env`, `setup_commands` or inline file data. Initial files are
   supported as described below, together with inline/referenced Skills, env, ordered setup and system/npm/Python packages; remaining populated installations reject explicitly.
-- Listing uses `after`, `limit` (1–100, default 20), and `order` (default `desc`).
+- Listing uses `after`, `limit` (default 20; 0 is treated as 1 and larger values as
+  100), and `order` (default `desc`).
   Creation timestamp plus ID supplies stable local ordering. Missing/foreign IDs
   and cursors return the same not-found result. No compute is allocated by CRUD.
 - Session `environment_template_id` resolves under the caller's tenant. Omitted

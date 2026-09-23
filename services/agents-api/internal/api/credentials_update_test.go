@@ -24,7 +24,12 @@ func TestCredentialUpdatePreservesOpaqueInputAndSafeProjection(t *testing.T) {
 		h, f, tenant := credentialHandler(t)
 		f.credential.Name, f.credential.MCPServerURL = "Retained name", "https://example.invalid/mcp?q=x"
 		body, _ := json.Marshal(map[string]any{"auth": map[string]string{"type": "static_bearer", "token": token}})
-		w := credentialRequest(h, "POST", "/v1/vaults/"+f.credential.VaultID+"/credentials/"+f.credential.ID, string(body))
+		query := ""
+		if token == "credential-canary" {
+			// Unknown query keys are ignored and never select another tenant.
+			query = "?tenant_id=untrusted&unknown=1"
+		}
+		w := credentialRequest(h, "POST", "/v1/vaults/"+f.credential.VaultID+"/credentials/"+f.credential.ID+query, string(body))
 		var got map[string]any
 		if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &got) != nil {
 			t.Fatal("update failed", w.Code)
@@ -60,15 +65,21 @@ func TestCredentialUpdateRejectsInvalidBodiesBeforeStorage(t *testing.T) {
 
 func TestCredentialUpdateUsesExistingBoundariesAndSafeErrors(t *testing.T) {
 	const body = `{"auth":{"type":"static_bearer","token":"credential-canary"}}`
-	for _, mode := range []string{"missing auth", "missing beta", "method", "query", "invalid Vault", "invalid Credential", "zero ID"} {
+	for _, mode := range []string{"missing auth", "missing beta", "method", "invalid Vault", "invalid Credential", "zero ID", "zero ID with query"} {
 		h, f, _ := credentialHandler(t)
 		path := "/v1/vaults/" + f.credential.VaultID + "/credentials/" + f.credential.ID
 		method, status := "POST", http.StatusBadRequest
+		// Malformed identifiers reach storage only as the never-assigned ID,
+		// after body validation, exactly like a well-formed missing identifier.
+		malformed := strings.Contains(mode, "invalid") || strings.Contains(mode, "zero")
+		if malformed {
+			f.err = store.ErrNotFound
+		}
 		switch mode {
 		case "method":
 			method, status = "PATCH", http.StatusMethodNotAllowed
-		case "query":
-			path += "?unknown=1"
+		case "zero ID with query":
+			path, status = strings.Replace(path, f.credential.ID, uuid.Nil.String(), 1)+"?unknown=1", http.StatusNotFound
 		case "invalid Vault":
 			path, status = strings.Replace(path, f.credential.VaultID, "invalid", 1), http.StatusNotFound
 		case "invalid Credential":
@@ -87,8 +98,8 @@ func TestCredentialUpdateUsesExistingBoundariesAndSafeErrors(t *testing.T) {
 		}
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
-		if w.Code != status || f.calls != 0 {
-			t.Fatal("update boundary changed", mode, w.Code)
+		if w.Code != status || !malformed && f.calls != 0 || malformed && (f.calls != 1 || f.vault != store.UnknownResourceID && f.id != store.UnknownResourceID) {
+			t.Fatal("update boundary changed", mode, w.Code, f.vault, f.id)
 		}
 	}
 	for _, tc := range []struct {

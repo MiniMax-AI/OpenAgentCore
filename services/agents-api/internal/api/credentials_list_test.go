@@ -25,6 +25,8 @@ func TestCredentialListScopeProjectionAndParameters(t *testing.T) {
 		{"", 20, nil}, {"?limit=0", 1, nil}, {"?limit=101", 100, nil},
 		{"?status=archived", 20, []string{"archived"}},
 		{"?status[]=active&status[]=archived", 20, []string{"active", "archived"}},
+		{"?status=active&status[]=archived", 20, []string{"active", "archived"}},
+		{"?limit=-3&tenant_id=foreign&unknown=1", 1, nil},
 	} {
 		h, f, tenant := credentialHandler(t)
 		f.page = store.CredentialPage{Credentials: []store.Credential{f.credential}, NextCursor: f.credential.ID}
@@ -54,15 +56,17 @@ func TestCredentialListScopeProjectionAndParameters(t *testing.T) {
 }
 
 func TestCredentialListRejectsInvalidInputBeforeStorage(t *testing.T) {
-	for _, suffix := range []string{"?status=deleted", "?status=active&status[]=archived", "?limit=1.5", "?limit=1&limit=2", "?tenant_id=foreign"} {
+	for _, suffix := range []string{"?status=deleted", "?status=active&status=archived", "?status=active&status[]=deleted", "?limit=1.5", "?limit=1&limit=2"} {
 		h, f, _ := credentialHandler(t)
 		w := credentialRequest(h, "GET", "/v1/vaults/"+f.credential.VaultID+"/credentials"+suffix, "")
 		if w.Code != 400 || f.calls != 0 {
 			t.Fatal("invalid query reached storage", suffix, w.Code)
 		}
 	}
+	// A malformed parent follows the missing-Vault path, after query validation.
 	h, f, _ := credentialHandler(t)
-	if w := credentialRequest(h, "GET", "/v1/vaults/invalid/credentials", ""); w.Code != 404 || f.calls != 0 {
-		t.Fatal("invalid parent reached storage")
+	f.err = store.ErrNotFound
+	if w := credentialRequest(h, "GET", "/v1/vaults/invalid/credentials", ""); w.Code != 404 || f.vault != store.UnknownResourceID {
+		t.Fatal("invalid parent was not resolved as a missing Vault", w.Code, f.vault)
 	}
 }

@@ -51,10 +51,7 @@ func (s *Store) GetEnvironment(ctx context.Context, tenantID, environmentID stri
 	if err != nil {
 		return Environment{}, err
 	}
-	id, err := parseID(environmentID)
-	if err != nil {
-		return Environment{}, err
-	}
+	id := parsePathID(environmentID)
 	row, err := s.queries.GetEnvironment(ctx, sqlc.GetEnvironmentParams{TenantID: tenant, ID: id})
 	return environmentFromRow(row.Environment, row.TenantID, row.Configuration, err)
 }

@@ -28,8 +28,8 @@ The qualified list values are `user_data`, `assistants`, `batch`, `fine-tune`,
 `vision`, `evals`, `assistants_output`, `batch_output` and `fine-tune-results`.
 These observations establish validation before a missing cursor, not successful
 filtering for every purpose. Omitted and explicitly empty purpose also reached
-cursor lookup. Core retains its existing exact empty filter; successful upstream
-empty-filter semantics remain unverified. Accepting a list filter does not enable
+cursor lookup. Core then retained its exact empty filter; the later [list query tolerance](list-query-semantics.md#list-query-tolerance--september-23-2026)
+batch treats an explicit empty purpose as omitted, as a successful official page showed. Accepting a list filter does not enable
 uploads, processing or jobs for that purpose. Core still uploads user_data only.
 The fixed request/response `evals` union discrepancy is unchanged.
 

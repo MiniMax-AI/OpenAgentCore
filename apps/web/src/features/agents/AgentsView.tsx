@@ -1,7 +1,7 @@
 import { RefreshCw, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import type { CreateAgentInput, SavedAgent, UpdateAgentInput } from "@agents-core-web/agents-client";
+import type { CoreStartupConfiguration, CreateAgentInput, SavedAgent, UpdateAgentInput } from "@agents-core-web/agents-client";
 
 import { ErrorState } from "../../components/ErrorState";
 import { Skeleton } from "../../components/Skeleton";
@@ -20,6 +20,7 @@ interface AgentsViewProps {
   coreBaseUrl?: string;
   coreError: string | null;
   coreState: CoreConnectionState;
+  startupConfiguration?: CoreStartupConfiguration | null;
   vaultCatalog?: VaultCatalog | null;
   createRequest?: number;
   onCreateRequestConsumed?: (request: number) => void;
@@ -137,6 +138,7 @@ export function AgentsView({
   coreBaseUrl = "/v1",
   coreError,
   coreState,
+  startupConfiguration = null,
   vaultCatalog = null,
   createRequest = 0,
   onCreateRequestConsumed,
@@ -323,6 +325,8 @@ export function AgentsView({
           agent={mode !== "create" ? selectedAgent ?? undefined : undefined}
           baseUrl={coreBaseUrl}
           busy={busy}
+          defaultHarness={startupConfiguration?.configured.default_harness}
+          enabledHarnesses={startupConfiguration?.configured.enabled_harnesses ?? null}
           initialValues={mode === "create" && selectedTemplate ? valuesFromAgentTemplate(selectedTemplate) : undefined}
           knownModels={knownModels}
           vaultCatalog={vaultCatalog}

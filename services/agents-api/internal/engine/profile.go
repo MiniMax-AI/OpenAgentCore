@@ -2,6 +2,7 @@ package engine
 
 import (
 	"errors"
+	"maps"
 	"slices"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
@@ -51,6 +52,16 @@ func (c Catalog) Lookup(kind string) (Profile, bool) {
 	profile.Placements = slices.Clone(profile.Placements)
 	profile.MessageImagePlacements = slices.Clone(profile.MessageImagePlacements)
 	return profile, ok
+}
+
+// Kinds returns a stable snapshot of harnesses qualified by this build.
+func (c Catalog) Kinds() []string {
+	if c.profiles == nil {
+		c = qualified
+	}
+	kinds := slices.Collect(maps.Keys(c.profiles))
+	slices.Sort(kinds)
+	return kinds
 }
 
 var qualified = NewCatalog(map[string]Profile{

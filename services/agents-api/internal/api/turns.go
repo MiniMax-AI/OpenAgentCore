@@ -22,10 +22,6 @@ import (
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/turns/{turn_id} [get]
 func (h *Handler) getTurn(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Turn retrieval does not accept query parameters.")
-		return
-	}
 	sessionID := chi.URLParam(r, "session_id")
 	turn, err := h.store.GetTurn(r.Context(), tenantID(r), sessionID, chi.URLParam(r, "turn_id"))
 	if err != nil {

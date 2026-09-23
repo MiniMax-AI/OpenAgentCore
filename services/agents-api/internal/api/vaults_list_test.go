@@ -28,6 +28,8 @@ func TestVaultListParameters(t *testing.T) {
 		{"?limit=-9999999999999999999999999", 1, nil},
 		{"?status=active", 20, []string{"active"}}, {"?status=archived", 20, []string{"archived"}},
 		{"?status[]=archived&status[]=active", 20, []string{"archived", "active"}},
+		{"?status=archived&status[]=active", 20, []string{"archived", "active"}},
+		{"?tenant_id=foreign&unknown=1&limit=2", 2, nil},
 	} {
 		t.Run(tc.query, func(t *testing.T) {
 			h, f := vaultResourceHandler(t)
@@ -45,7 +47,7 @@ func TestVaultListParameters(t *testing.T) {
 			}
 		})
 	}
-	for _, query := range []string{"limit=", "limit=null", "limit=1.5", "limit=1&limit=2", "order=invalid", "status=", "status=deleted", "status[]=active&status[]=invalid", "status=active&status=archived", "status=active&status[]=archived", "tenant_id=foreign", "after=a&after=b"} {
+	for _, query := range []string{"limit=", "limit=null", "limit=1.5", "limit=1&limit=2", "order=invalid", "status=", "status=deleted", "status[]=active&status[]=invalid", "status=active&status=archived", "status=active&status[]=deleted", "after=a&after=b"} {
 		h, f := vaultResourceHandler(t)
 		w := vaultRequest(h, http.MethodGet, "/v1/vaults?"+query, "")
 		if w.Code != 400 || f.calls != 0 {

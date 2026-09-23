@@ -34,6 +34,18 @@ describe("Agent request preview", () => {
     expect(JSON.parse(preview.json)).toMatchObject({ reasoning: { effort: "high" } });
   });
 
+  it("shows the selected Core harness in the request body", () => {
+    const preview = buildAgentRequestPreview({
+      ...valuesFromAgent(),
+      harness: "claude_sdk",
+      model: "provider/model",
+    }, "/v1");
+
+    expect(JSON.parse(preview.json)).toMatchObject({
+      x_agents_core: { harness: "claude_sdk" },
+    });
+  });
+
   it("previews an existing Agent update at the exact resource path", () => {
     const preview = buildAgentRequestPreview({
       ...valuesFromAgent(),

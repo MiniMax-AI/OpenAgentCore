@@ -22,13 +22,9 @@ func WithSessionArtifacts(s SessionArtifactStore) Option {
 	return func(h *Handler) { h.artifacts = s }
 }
 
-func (h *Handler) artifactsReady(w http.ResponseWriter, r *http.Request, list bool) bool {
+func (h *Handler) artifactsReady(w http.ResponseWriter) bool {
 	if h.artifacts == nil {
 		writeError(w, http.StatusServiceUnavailable, "artifact_storage_unavailable", "Artifact storage is unavailable.")
-		return false
-	}
-	if !list && r.URL.RawQuery != "" {
-		writeStoreError(w, r, store.ErrInvalidInput)
 		return false
 	}
 	return true
@@ -49,7 +45,7 @@ func (h *Handler) artifactsReady(w http.ResponseWriter, r *http.Request, list bo
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts [get]
 func (h *Handler) listSessionArtifacts(w http.ResponseWriter, r *http.Request) {
-	if !h.artifactsReady(w, r, true) {
+	if !h.artifactsReady(w) {
 		return
 	}
 	options, ok := readPage(w, r, "environment_id")
@@ -79,7 +75,7 @@ func (h *Handler) listSessionArtifacts(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts/{artifact_id} [get]
 func (h *Handler) getSessionArtifact(w http.ResponseWriter, r *http.Request) {
-	if !h.artifactsReady(w, r, false) {
+	if !h.artifactsReady(w) {
 		return
 	}
 	artifact, err := h.artifacts.GetSessionArtifact(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"))
@@ -102,7 +98,7 @@ func (h *Handler) getSessionArtifact(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts/{artifact_id} [delete]
 func (h *Handler) deleteSessionArtifact(w http.ResponseWriter, r *http.Request) {
-	if !h.artifactsReady(w, r, false) {
+	if !h.artifactsReady(w) {
 		return
 	}
 	id := chi.URLParam(r, "artifact_id")
@@ -125,7 +121,7 @@ func (h *Handler) deleteSessionArtifact(w http.ResponseWriter, r *http.Request) 
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts/{artifact_id}/content [get]
 func (h *Handler) sessionArtifactContent(w http.ResponseWriter, r *http.Request) {
-	if !h.artifactsReady(w, r, false) {
+	if !h.artifactsReady(w) {
 		return
 	}
 	serveStoredContent(w, r, func(ctx context.Context, consume func(string, int64, io.Reader) error) error {

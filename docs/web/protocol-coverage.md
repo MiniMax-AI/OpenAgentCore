@@ -14,7 +14,8 @@ OpenAI-hosted service compatibility.
   both supported Environment resource projections, and Environment Files.create
   for that qualified managed placement. `OpenAI-Beta: agents=v1` plus the
   `/v1/agents/**` resources and Session events endpoint remain the versioned Web/Core
-  contract. Core exposes no public execution-readiness, capability-discovery, or
+  contract. The Core startup extension exposes a safe build-support and process-
+  configuration snapshot, but no execution-readiness, live Runtime capability, or
   build-version resource. It exposes Codex-only, Session-scoped `self_hosted`
   creation; basic Codex/Docker `openai_hosted` creation when Core is explicitly
   configured with a qualified managed provider; Environment retrieval; bounded
@@ -30,8 +31,9 @@ OpenAI-hosted service compatibility.
   three harnesses, alongside the earlier Docker qualification. E2B is a Core-side
   provider behind the unchanged `openai_hosted` discriminator: the public contract
   exposes no provider field, no image or sandbox template selector, and no
-  provider-discovery route, so Web cannot select, name, or verify which provider
-  backs a managed Runtime. A Core build without the Template resource rejects that
+  provider configuration route. The startup extension can name the selected
+  provider kind without exposing provider identity or proving Runtime readiness;
+  Web still cannot select or configure it. A Core build without the Template resource rejects that
   collection path, and Web reports the absent capability instead of an empty
   configuration list.
 - Upstream resource source: `openai-python` 3.13.0 beta Agents resources at
@@ -54,6 +56,7 @@ the Core key binding. Agents Core Web's local proxy owns the bearer server-side.
 
 | Resource / behavior | TypeScript client | Initial UI | Notes |
 | --- | --- | --- | --- |
+| Core startup configuration extension | Yes | Yes, System | Strictly projects build-supported harness/provider kinds and validated process selections. Operator endpoint reporting is boolean; URLs, credentials, paths, daemon/Runtime identity and Session/Environment observations are excluded. Unsupported older Core versions remain explicit |
 | Saved Agents create/list | Yes | Yes | Dedicated setup covers model, name, instructions, bounded metadata, the Session-safe text/medium/implicit-reasoning/auto-tier profile, and the strictly bounded Function/service-origin HTTP MCP form profiles; the broader Saved Agent contract is not execution proof |
 | Saved Agents retrieve/update/delete | Yes | Yes | Agent details support viewing, editing, and deleting saved Agents; unsupported or saved-only Tool values remain read-only and are omitted from unrelated updates |
 | Function form profile | Yes | Yes | Web validates at most 64 non-deferred definitions, unique non-whitespace names of at most 512 UTF-8 bytes, descriptions, and object JSON-Schema parameters before writing |
@@ -79,8 +82,8 @@ the Core key binding. Agents Core Web's local proxy owns the bearer server-side.
 | Environment lifecycle events | Yes | Read-only | UI projects pinned pending, ready, connected, disconnected, and failed live snapshots; unknown/malformed status events clear prior live claims and render as unavailable |
 | Environment retrieve | Yes | Yes, read-only | Strictly recognizes `self_hosted` and `openai_hosted` resource types. Session UI automatically reads the valid current Environment ID for either supported type; hosted write eligibility additionally requires the exact basic hosted projection and same-ID durable resource; there is no standalone Environment create/list/update/delete resource |
 | Environment overview | No public list API | No top-level UI | Web does not turn loaded Session projections into a catalog; a selected Session may still show its exact Environment data |
-| Environment Templates create/list | Yes | Managed-hosted-gated | Client covers the five pinned operations with strict safe-metadata projection; Session creation exposes list and create only, inside the managed Environment choice. Selection is disabled with an explicit reason when the connected Core rejects the collection path, and a Template that Core no longer lists cannot be referenced |
-| Environment Templates retrieve/update/delete | Yes | No | Reusable client methods only; no Web management surface, so a Template is never edited or deleted from the browser |
+| Environment Templates create/list | Yes | Managed-hosted-gated | The Templates navigation entry lists all pages and creates basic name/network configurations. It shares the catalog with Session creation. An unsupported or failed read is explicit, never an empty catalog |
+| Environment Templates retrieve/update/delete | Yes | Basic management | Templates supports partial name/network updates and confirmed deletion, followed by a Core catalog refresh. It neither creates Runtime instances nor edits existing Session snapshots. Advanced profiles outside the current strict client projection remain unsupported; no hidden fields are erased |
 | Environment keys | No public browser API | Hidden | Operator-issued executor credentials stay on executor compute and never enter browser state, request previews, navigation, or Create actions |
 | Vaults and static-bearer Credentials | Yes | Yes, when discovered | Web traverses the Vault and per-Vault Credential page chains to their Core end markers before publishing one loaded metadata result, provides safe lifecycle controls and write-only token create/replace, and deterministically attaches each selected Credential's owning Vault to Session creation. The reads are non-atomic and not a current Core total. Tokens are never returned; catalog success is not runtime proof |
 | Protocol Subagents / enabled multi-agent | Later | No | Distinct from storing multiple Agent configurations |

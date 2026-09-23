@@ -60,7 +60,7 @@ func (s *Store) CreateSkill(ctx context.Context, tenantID string, archive []byte
 }
 
 func (s *Store) GetSkill(ctx context.Context, tenantID, skillID string) (Skill, error) {
-	tenant, id, err := skillIDs(tenantID, skillID)
+	tenant, id, err := skillPathIDs(tenantID, skillID)
 	if err != nil {
 		return Skill{}, err
 	}
@@ -72,7 +72,7 @@ func (s *Store) GetSkill(ctx context.Context, tenantID, skillID string) (Skill, 
 }
 
 func (s *Store) UpdateSkillDefault(ctx context.Context, tenantID, skillID, version string) (Skill, error) {
-	tenant, id, err := skillIDs(tenantID, skillID)
+	tenant, id, err := skillPathIDs(tenantID, skillID)
 	if err != nil {
 		return Skill{}, err
 	}
@@ -101,7 +101,7 @@ func (s *Store) UpdateSkillDefault(ctx context.Context, tenantID, skillID, versi
 }
 
 func (s *Store) DeleteSkill(ctx context.Context, tenantID, skillID string) error {
-	tenant, id, err := skillIDs(tenantID, skillID)
+	tenant, id, err := skillPathIDs(tenantID, skillID)
 	if err != nil {
 		return err
 	}
@@ -149,6 +149,28 @@ func skillVersionNumber(value string) (int64, error) {
 		return 0, ErrInvalidInput
 	}
 	return number, nil
+}
+
+// skillPathIDs resolves a Skill path identifier. Like parsePathID, a malformed
+// value resolves to an identifier that never exists, so the request follows the
+// missing-Skill path. Request-body references keep skillIDs.
+func skillPathIDs(tenantID, skillID string) (pgtype.UUID, pgtype.UUID, error) {
+	tenant, id, err := skillIDs(tenantID, skillID)
+	if errors.Is(err, ErrNotFound) {
+		return tenant, pgtype.UUID{Bytes: uuid.Max, Valid: true}, nil
+	}
+	return tenant, id, err
+}
+
+// skillPathVersion resolves a version path segment. Versions start at 1, so a
+// malformed segment resolves to the never-assigned version 0 and follows the
+// missing-version path. Request-body selectors keep skillVersionNumber.
+func skillPathVersion(value string) int64 {
+	number, err := skillVersionNumber(value)
+	if err != nil {
+		return 0
+	}
+	return number
 }
 
 func skillFromRow(row sqlc.Skill) Skill {

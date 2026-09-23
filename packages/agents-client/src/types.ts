@@ -173,6 +173,7 @@ export interface VaultCredentialDeleted {
 export interface SavedAgent {
   id: string;
   object: "agent";
+  x_agents_core?: AgentsCoreSelection | null;
   model: string;
   name: string | null;
   instructions: string | null;
@@ -190,6 +191,7 @@ export interface SavedAgent {
 }
 
 export interface CreateAgentInput {
+  x_agents_core?: AgentsCoreSelection | null;
   model: string;
   name?: string | null;
   instructions?: string | null;
@@ -204,6 +206,7 @@ export interface CreateAgentInput {
 export type UpdateAgentInput = Partial<CreateAgentInput>;
 
 export interface InlineAgentInput {
+  x_agents_core?: AgentsCoreSelection | null;
   model?: string;
   instructions?: string | null;
   tools?: ConfigurableAgentToolInput[] | null;
@@ -716,7 +719,39 @@ export interface CreateSessionStreamOptions extends StreamOptions {
   onSession: (session: AgentSession) => void;
 }
 
+export type CoreHarnessKind = "claude_sdk" | "codex" | "mcode";
+export type CoreManagedSandboxProvider = "docker" | "microsandbox";
+
+export interface AgentsCoreSelection {
+  harness: CoreHarnessKind;
+}
+
+export interface CoreStartupConfiguration {
+  object: "agents.core.startup_configuration";
+  schema_version: 1;
+  supported: {
+    harnesses: CoreHarnessKind[];
+    managed_sandbox_providers: CoreManagedSandboxProvider[];
+  };
+  configured: {
+    default_harness: CoreHarnessKind;
+    enabled_harnesses: CoreHarnessKind[];
+    daemon_gateway: boolean;
+    self_hosted: boolean;
+    managed_sandbox: {
+      enabled: boolean;
+      provider: CoreManagedSandboxProvider | null;
+      maintenance: boolean;
+    };
+    model_providers: Array<{
+      harness: CoreHarnessKind;
+      endpoint_configured: boolean;
+    }>;
+  };
+}
+
 export interface AgentCore {
+  retrieveStartupConfiguration(options?: ReadOptions): Promise<CoreStartupConfiguration>;
   listAgents(options?: PageOptions): Promise<ListPage<SavedAgent>>;
   createAgent(input: CreateAgentInput): Promise<SavedAgent>;
   retrieveAgent(agentId: string): Promise<SavedAgent>;

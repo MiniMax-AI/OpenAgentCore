@@ -136,3 +136,65 @@ checks passed independently. Rebase onto main `6a3131e` preserved every batch pa
 The combined tree at `4981580` passed API, execution, contract and dedicated-PostgreSQL
 Environment scheduling/initial-input/creation-stream regressions. No new E2B,
 OAuth provider or native capability combination was qualified.
+
+## Validation error fields — September 23
+
+This batch aligns validation failures that Core already rejected with the
+official `code` and `param` fields. It does not change any limit. Evidence comes
+from the campaign scan at main `284cbcf`, recorded privately in
+`~/.parsar/remediation/20260923/campaign-scan-1/{vaults-agents,sessions,skills-files-templates}/findings.json`
+(VA-07, VA-08, VA-09, VA-10, SES-28 and SFT-20), plus the September 22 Session
+observation that `{"metadata":{"a":null}}` returns param `metadata.a`.
+
+| Row | Case | Core behavior |
+| --- | --- | --- |
+| M1–M3 | More than 16 metadata pairs, a key over 64 characters, a value over 512 characters (Agent create/update, Session create/update) | 400 with type and code `invalid_request_error`, param `metadata` or `metadata.<key>`, and the observed official message with the actual count or length. Pairs are checked before keys and values, and keys in sorted order. |
+| M4 | A non-string metadata value: integer, number, boolean, object, array or null (Agent create/update, Session create/update and Vault create; neither Core nor the pinned SDK has a Vault update) | 400 `invalid_request_error`, param `metadata.<key>`, message `Invalid type for 'metadata.<key>': expected a string, but got <kind> instead.` The first such value in document order is reported before the generic whole-body error. Templates accept no metadata. |
+| M5 | Vault metadata size | Unchanged: no pair or length limits, only the local 64 KiB storage bound. |
+| N1 | Agent `name` over 128 characters | 400 `invalid_request_error`, param `name`, observed message. Empty and untrimmed names stay accepted. |
+| U1 | U+0000 in a stored string | Never 500 and nothing is written. Metadata keys and values report `metadata.<key>`; other strings return 400 `invalid_request_error` with a null param. This is a local limit: PostgreSQL text and jsonb cannot store U+0000, while the official service accepts and echoes it. |
+| I1/I2 | A malformed path identifier on any Beta resource route, and on Files, Skills and Skill versions | Byte-for-byte the response of a well-formed missing identifier on that route, including invalid bodies and queries, and a deployment without credential encryption. Foreign, missing and malformed identifiers stay indistinguishable. |
+| T1 | Template network rejections (wildcard, port, scheme, IPv6, empty host, empty/null/omitted list with `restricted`, more than 100 domains, domains with another access) and the shared inline Session network | 400 `invalid_request_error` with a null param. Accepted hostname forms are unchanged; other unsupported installation fields keep `unsupported_or_invalid_configuration`. |
+
+Decisions:
+
+- A typed field error carries the param and message through the existing error
+  writer. Metadata type errors are found by reading the metadata object in
+  document order before generic decoding; limit checks keep their previous
+  position, so validation order relative to lookups (SES-33) is unchanged.
+- U+0000 is checked explicitly in metadata, so the param is exact. All other
+  stored strings rely on mapping PostgreSQL `22021` (U+0000 or invalid UTF-8 in
+  a text parameter) and `22P05` (`\u0000` in jsonb) to 400 with the generic
+  message "Request text contains characters this service cannot store or compare,
+  such as U+0000 or invalid UTF-8." The same mapping covers query filters, for
+  example `agent_id=%ff` on the Session list. The persisted string fields are too
+  many to check one by one, and the database is the single place that knows which
+  strings are stored. The failing statement aborts its transaction; real-PostgreSQL
+  tests compare every public table before and after the rejected requests.
+- A malformed path identifier resolves to the maximum UUID, which Core never
+  assigns because it only generates version 4 and 5 UUIDs. The request then
+  follows exactly the missing-identifier path, including body, query and storage
+  checks. Routes whose lookup is the next check keep their direct not-found
+  response. Malformed list cursors and request-body references are unchanged:
+  Session, Turn, Item, Subagent, Artifact, Agent, Vault and Credential cursors
+  still return 400 `invalid_request`, and Template cursors keep their existing
+  not-found response.
+- Network messages are Core wording; the official prose is not copied.
+- Documented message difference for M2: the official message abbreviated a
+  65-character key as `'KKK...KKK'`. That single sample of identical characters
+  cannot reveal the abbreviation rule, so Core quotes the full key. Status, type,
+  code and param match.
+
+Deferred and unchanged: accepting and storing U+0000; hostname forms accepted
+officially (SFT-21) and `disabled` with domains, which the official service
+accepts (SFT-22); non-canonical UUID spellings such as uppercase, braces or
+`urn:uuid:` still resolve to the same resource; Skill sole-version deletion and
+number reuse; Session deletion lifecycle; whitespace input; response defaults;
+the Environment Files list query parser; and the Files `limit=abc` code.
+
+Go handler tests cover every row. Real-PostgreSQL tests replay every path-ID
+route for malformed, missing and foreign identifiers (tenant B), with valid and
+invalid bodies and queries, and replay U+0000 on every create/update family with
+a database digest proving no writes. The pinned-SDK acceptance scripts assert the
+new codes, params and messages. Independent real-Core acceptance is recorded
+separately by the coordinator.

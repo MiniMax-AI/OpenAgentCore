@@ -1,6 +1,9 @@
 package engine
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestCatalogOwnsQualification(t *testing.T) {
 	placements := []string{"none"}
@@ -24,6 +27,18 @@ func TestCatalogOwnsQualification(t *testing.T) {
 	}
 	if _, ok := (Catalog{}).Lookup("fixture"); ok {
 		t.Fatal("fixture widened the service catalog")
+	}
+}
+
+func TestCatalogKindsAreStableAndDefensive(t *testing.T) {
+	catalog := NewCatalog(map[string]Profile{"zeta": {}, "alpha": {}})
+	got := catalog.Kinds()
+	if !reflect.DeepEqual(got, []string{"alpha", "zeta"}) {
+		t.Fatalf("Kinds = %#v", got)
+	}
+	got[0] = "changed"
+	if again := catalog.Kinds(); !reflect.DeepEqual(again, []string{"alpha", "zeta"}) {
+		t.Fatalf("caller mutated catalog kinds: %#v", again)
 	}
 }
 

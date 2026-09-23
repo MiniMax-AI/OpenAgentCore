@@ -139,7 +139,7 @@ is an inventory, not a replacement schema.
 | [Files](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents/environments/files.py) | `POST`, `GET /agents/environments/{id}/files` | Create accepts `file_id` or inline base64 data with an absolute path inside `/workspace`. List uses opaque `page`, not `after`, with stable path/order/limit across pages. |
 
 These are eight operations, separate from Session creation and live events.
-Templates use an `after` cursor and limit 1–100, default 20; file listing has nullable
+Templates use an `after` cursor and limit default 20, clamped to 1–100; file listing has nullable
 limit/path, non-null order/page when supplied, and case-sensitive path-component
 ordering. Both default to descending order. Do not reuse cursor decoding merely
 because both endpoints paginate.

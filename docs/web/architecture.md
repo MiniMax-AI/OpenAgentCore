@@ -98,7 +98,7 @@ capability and its lifecycle behavior is verified.
 | Boundary | Wire protocol | Authentication | Contract owner |
 | --- | --- | --- | --- |
 | Browser → proxy/BFF | Same-origin HTTP under `/v1` | Web deployment policy; local proxy holds a Core bearer | Agents Core Web deployment |
-| Proxy/BFF → Core | HTTP JSON/SSE under `/v1/agents/**`; HTTP JSON under `/v1/vaults/**`; multipart/JSON/binary under `/v1/files**` | `Authorization: Bearer …`; route-specific `OpenAI-Beta: agents=v1` | Pinned Agents, Vault/Credential, and Source Files subset |
+| Proxy/BFF → Core | HTTP JSON/SSE under `/v1/agents/**`, including the read-only startup configuration extension; HTTP JSON under `/v1/vaults/**`; multipart/JSON/binary under `/v1/files**` | `Authorization: Bearer …`; route-specific `OpenAI-Beta: agents=v1` | Pinned Agents, Core extensions, Vault/Credential, and Source Files subset |
 | Core ↔ daemon | Private reverse WebSocket, Parsar JSON envelope protocol | Separate device credential | Parsar internal protocol |
 | Core ↔ self-hosted executor | Native registration plus opaque relay outside `/v1/agents/**` | Operator-issued executor principal credential | Parsar native executor contract |
 | Daemon ↔ Codex | `codex app-server --stdio`; JSON-RPC 2.0 over newline-delimited JSON | Native host configuration | Codex adapter |
@@ -111,6 +111,8 @@ These interfaces are not interchangeable. In particular:
 - the daemon WebSocket URL is not an Agents API base URL;
 - OpenAI Agents API is not the same thing as OpenAI Agents SDK or Responses API;
 - saving a model ID does not select an executor or prove provider availability;
+- startup support/configuration does not report daemon or Runtime observations and
+  does not prove model endpoint reachability, credentials or sandbox readiness;
 - a Session Environment ID, connection state, or copied launcher command does not
   prove native readiness, isolation, or completed execution;
 - multiple saved Agents do not imply protocol multi-agent/Subagent support.
@@ -265,7 +267,14 @@ not executor, native-runtime, model, provider, or Turn readiness. The operator-i
 key stays outside Web, and the Linux launcher—not the browser, Web server, or daemon
 container—owns access to the Workspace. This profile is not a top-level Environment
 catalog or standalone CRUD API, and it is distinct from the managed hosted profile.
-Environment templates and automatic E2B/AWS Bedrock AgentCore provisioning stay hidden.
+Automatic provider provisioning controls stay outside the browser. The separate
+Templates navigation entry manages reusable basic Environment configuration through
+the public Template API; it is not an inventory of running Environments. It shares
+the complete catalog with Session creation, patches only edited name/network fields,
+and refreshes Core after each successful mutation. Deletion requires confirmation.
+Unknown write outcomes are never automatically replayed. Switching Core remounts
+the view and discards pending reads, forms and notices from the old connection.
+Advanced configurations outside the client projection remain explicitly unsupported.
 
 Workspace file controls require the independent default-off
 `AGENTS_CORE_WEB_ENVIRONMENT_FILES=1` flag because Core has no runtime capability

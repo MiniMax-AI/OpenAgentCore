@@ -25,6 +25,14 @@ independent blind review using only requirements, acceptance criteria, boundarie
 repository path and comparison baseline. Fix in-scope blockers before delivery.
 Do not use `codex exec` as a substitute reviewer.
 
+The Core Web is an administrator console for execution and resource operations;
+business collaboration remains in Parsar. Environment Template management shares
+the Session creation catalog and uses the existing public client operations. Patch
+only edited fields, confirm deletion, and never automatically retry an uncertain
+write. A Core connection change must discard the previous connection's forms,
+pending results and notices. Saving a Template must not allocate a Runtime, call a
+model or imply execution readiness. Keep unsupported advanced profiles explicit.
+
 For subsequent alignment and milestone closure batches, the main thread coordinates
 design, shared interface agreements, file ownership, integration and merge. First
 reconcile main and the boards, then list remaining mandatory milestone work,
@@ -57,13 +65,28 @@ to recover a lost creation response. Session metadata updates require a supplied
 metadata field, with null/empty clearing it. Validate an empty update before any
 resource lookup, after authentication.
 
-List order parsing distinguishes omission from an explicit empty value. Reuse the
-shared parser and error serializer, preserving the observed Beta, Files and Skills
-error fields rather than applying one error code to every resource. Qualification
-of one query error does not authorize changing page bounds, cursor ownership or
-parent lookup order. Record uncertain range/lookup behavior separately; do not
-reproduce observed upstream server failures as compatibility behavior. See
-`contracts/agents-api/list-query-semantics.md` for the bounded evidence.
+List order parsing distinguishes omission from an explicit empty value. Lists read by
+the shared list parser and single-resource routes ignore unknown query keys; a
+repeated supported list key still rejects. The Environment Files list keeps its own
+strict key parser and still rejects unknown keys; that difference is deferred. Reuse the shared parser and error serializer, preserving the observed
+Beta, Files and Skills error fields and per-family limit bounds rather than applying
+one policy to every resource. Change page bounds, cursor ownership or parent lookup
+order only with owned evidence for that family. Record uncertain range/lookup
+behavior separately; do not reproduce observed upstream server failures as
+compatibility behavior. See `contracts/agents-api/list-query-semantics.md` for the
+bounded evidence.
+
+Report validation failures with official evidence through the typed field error,
+which emits `invalid_request_error` with the observed param and message; keep
+other local codes until their official fields are sampled. A malformed path
+identifier must produce exactly the response of a well-formed missing one on that
+route, including invalid bodies, queries and storage availability: resolve it to
+the never-assigned maximum UUID and let the missing path run, or reject it
+directly only where the lookup is the next check. Malformed list cursors and
+request-body references keep their own errors. Reject U+0000 in metadata
+explicitly with its `metadata.<key>` param; other stored strings rely on the
+PostgreSQL error mapping, so keep each request's writes in one transaction. See
+`contracts/agents-api/official-semantics-alignment.md`.
 
 Keep runtime state, test artifacts and build output under `~/.parsar/`. Require
 absolute user-supplied working directories. Keep credentials out of source and
@@ -1426,8 +1449,9 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   Status accepts `active`/`archived` as a scalar or SDK `status[]` array, with both
   included by default. Private stored classification defaults existing/new rows
   to active; it is never exposed in the Vault response. Listing reads no Credentials
-  and needs no encryption key or execution service connection. Mixed status encodings
-  and repeated scalar parameters are rejected locally. Exact hosted errors, equal-time
+  and needs no encryption key or execution service connection. A scalar status
+  combined with `status[]` filters by their union; a repeated scalar parameter is
+  rejected. Exact hosted errors, equal-time
   ordering and changes between pages remain unverified. Private archived fixtures
   prove filtering only: there is no public archive writer, archive timestamp or
   inferred delete-to-archive behavior. Retrieval, Session binding and dispatch retain
@@ -1626,13 +1650,17 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   accepted Session; new references cannot resolve an absent source. Historical
   identities retain their documented limitation. Exact hosted errors and ordering
   of overlapping source creation/deletion remain unverified; no tombstone or
-  successful result is fabricated for an absent resource. Reject query/body data.
+  successful result is fabricated for an absent resource. Reject body data; unknown
+  query keys are ignored.
 - Reusable Agent listing uses the same tenant/Beta-header and response mapping as
   create/retrieve. Page by `(created_at, id)` with a same-tenant saved-Agent cursor;
   listing never resolves Sessions, product objects or execution capabilities.
-  Reuse shared list-query parsing. Agent requests accept positive int64 limits and
-  return at most 100 records per page with accurate continuation; other resources
-  retain their current 1..100 request rule. The local default is 20. Return the
+  Reuse shared list-query parsing and its per-family limit policy. Agent, Session,
+  Item and Template lists treat limit 0 as 1 and larger limits as 100; Vault and
+  Credential lists also clamp negative limits; Turn, Subagent and Artifact lists
+  reject limits outside 1–100; Skill lists accept 0–100, where 0 returns an empty
+  page; Files accept 1–10000. Pages hold at most 100 records (Files 10000) with
+  accurate continuation. The local default is 20 (Files 10000). Return the
   list envelope with data/has_more and first/last IDs (null for empty pages).
   Exact pinned upstream default/cap, empty-envelope and error semantics remain
   unverified; do not present local limits or generic SDK parsing as full conformance.

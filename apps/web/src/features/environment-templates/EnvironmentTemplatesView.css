@@ -1,0 +1,40 @@
+.templates-page .page-header { align-items: center; flex-wrap: wrap; gap: 12px; }
+.templates-page .page-header p, .templates-boundary { color: var(--fg-muted); font-size: 12px; line-height: 1.6; }
+.templates-content { padding: 0 24px 24px; }
+.templates-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 24px 0 14px; }
+.templates-toolbar > span { color: var(--fg-muted); font-size: 12px; }
+.templates-search { display: flex; align-items: center; gap: 8px; width: 360px; max-width: 100%; color: var(--fg-muted); }
+.templates-search input, .template-form input, .template-form select { min-width: 0; width: 100%; border: 1px solid var(--line-strong); background: var(--surface); color: var(--fg); border-radius: 5px; padding: 9px 10px; font: inherit; }
+.templates-list { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.template-row { display: flex; align-items: center; gap: 24px; padding: 18px; background: var(--surface); }
+.template-row + .template-row { border-top: 1px solid var(--line); }
+.template-identity { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+.template-identity h2 { margin: 0; font-size: 14px; font-weight: 550; overflow-wrap: anywhere; }
+.template-identity code, .template-delete code { overflow-wrap: anywhere; font-size: 11px; }
+.template-identity small { color: var(--fg-muted); font-size: 11px; }
+.template-summary { display: flex; gap: 24px; margin: 0; font-size: 12px; }
+.template-summary dt { color: var(--fg-muted); font-size: 11px; margin-bottom: 6px; }
+.template-summary dd { margin: 0; }
+.template-row-actions, .template-form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.template-form-actions { justify-content: flex-end; margin-top: 12px; }
+.templates-empty { padding: 36px 16px; border: 1px dashed var(--line-strong); border-radius: 8px; text-align: center; }
+.templates-empty h2 { font-size: 15px; font-weight: 550; }
+.templates-empty p, .template-form p, .template-delete p { color: var(--fg-muted); font-size: 12px; line-height: 1.6; }
+.template-form { display: flex; flex-direction: column; gap: 10px; }
+.template-form label { font-size: 12px; font-weight: 550; }
+.template-form label span { color: var(--fg-muted); font-weight: 400; margin-left: 6px; }
+.template-form p { margin: 0; }
+.template-delete .button.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); background: color-mix(in srgb, var(--danger) 7%, var(--surface)); }
+.template-delete .button.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 13%, var(--surface)); }
+.template-form :is(input, select):focus-visible, .templates-search input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 1000px) {
+  .templates-content { padding: 0 16px 20px; }
+  .template-row { flex-wrap: wrap; gap: 16px; }
+  .template-identity { flex-basis: 100%; }
+  .template-summary { flex: 1; }
+  .templates-page .page-actions { flex-wrap: wrap; }
+  .templates-page .button, .template-form-actions .button { min-height: 40px; }
+}
+.templates-page { overflow-y: auto; }
+
+.templates-search > .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }

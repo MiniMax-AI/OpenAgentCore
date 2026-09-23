@@ -35,7 +35,9 @@ returns `data` and `next` (null on the final page), with no additional page fiel
   Omitted path selects the workspace root. Do not recurse or follow symlinks;
   directory, symlink and other non-regular entries are omitted.
 - Omitted limit uses 20. Query keys may occur once; empty values, unknown keys and
-  malformed query encoding are rejected. The pinned SDK's
+  malformed query encoding are rejected. This list keeps its own key parser; unlike
+  the shared list parser it still rejects unknown keys, a deferred difference. Its
+  limit range errors use the Beta `invalid_request_error` code. The pinned SDK's
   [query serializer](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/_qs.py)
   omits scalar `None` values, so nullable limit/path follow omission behavior.
   Literal `null` and empty scalar query values are not accepted.
@@ -73,8 +75,8 @@ The pinned create union requires `type: inline`, standard Base64 `data` and an
 absolute destination `path` under `/workspace`, or `type: file_id`, `file_id` and
 that path. Source IDs resolve only within the authenticated execution project;
 filenames, URLs and filesystem paths cannot substitute for an ID. Both members
-use the same destination writer. Required null/omitted fields, extra fields,
-query parameters and invalid Base64 are rejected. Empty bytes are valid. Inline
+use the same destination writer. Required null/omitted fields, extra fields and
+invalid Base64 are rejected; unknown query keys are ignored. Empty bytes are valid. Inline
 paths must be canonical and cannot name the workspace root; the parent must exist.
 The current destination limit is 50 MiB for either source, with bounded JSON and 64 KiB daemon
 frames. These are local limits and policies, not verified upstream restrictions.

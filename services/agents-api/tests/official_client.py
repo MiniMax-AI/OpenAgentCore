@@ -204,7 +204,7 @@ def main():
                     assert list(sessions.list(agent_id="unknown-agent")) == []
                     assert list(sessions.list(agent_id=first.agent.id)) == [first]
                     assert list(b.beta.agents.sessions.list(agent_id=first.agent.id)) == []
-                    expect_error(BadRequestError, lambda: sessions.list(limit=0))
+                    assert sessions.list(limit=0).data == sessions.list(limit=1).data
                     assert {item.id for item in sessions.list()} == expected
                     metadata = {str(i): "🧪" * 512 for i in range(16)}
                     large = sessions.create(**spec, metadata=metadata)
@@ -241,6 +241,14 @@ def main():
                     expect_error(NotFoundError, lambda: turns.retrieve(turn_ids[0], session_id=first.id))
                     expect_error(NotFoundError, lambda: turns.list(first.id, after=turn_ids[0]))
                     expect_error(BadRequestError, lambda: turns.list(turn_session.id, limit=101))
+                    # Unparsable identifiers share the missing-resource response;
+                    # malformed list cursors remain invalid requests.
+                    for malformed in ("sess_" + uuid.uuid4().hex, "invalid"):
+                        expect_error(NotFoundError, lambda: sessions.retrieve(malformed))
+                        expect_error(NotFoundError, lambda: turns.list(malformed))
+                        expect_error(NotFoundError, lambda: sessions.items.list(malformed))
+                    expect_error(NotFoundError, lambda: turns.retrieve("turn_" + uuid.uuid4().hex, session_id=turn_session.id))
+                    expect_error(BadRequestError, lambda: turns.list(turn_session.id, after="invalid"))
                     saved_items = verify_items(a, b, invalid, turn_session.id, first.id, turn_ids, expect_error)
                     request_sessions.append(verify_active_session_metadata(a, turn_session.id))
                     referenced, reference_retry = verify_agent_references(a, b, expect_error)

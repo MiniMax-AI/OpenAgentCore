@@ -31,10 +31,6 @@ type eventStore interface {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/events [get]
 func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Live streams do not accept query parameters.")
-		return
-	}
 	events, ok := h.store.(eventStore)
 	if !ok {
 		writeError(w, http.StatusServiceUnavailable, "stream_unavailable", "Live events are unavailable.")

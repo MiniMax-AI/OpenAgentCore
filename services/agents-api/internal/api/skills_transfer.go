@@ -39,7 +39,7 @@ func (h *Handler) createSkillVersion(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) uploadSkill(w http.ResponseWriter, r *http.Request, version bool) {
-	if !h.skillsReady(w, r, false) {
+	if !h.skillsReady(w) {
 		return
 	}
 	deadline := time.Now().Add(sourceTransferTimeout)
@@ -87,7 +87,7 @@ func (h *Handler) uploadSkill(w http.ResponseWriter, r *http.Request, version bo
 // @Success 200 {file} binary
 // @Router /skills/{skill_id}/content [get]
 func (h *Handler) skillContent(w http.ResponseWriter, r *http.Request) {
-	if !h.skillsReady(w, r, false) {
+	if !h.skillsReady(w) {
 		return
 	}
 	serveStoredContent(w, r, func(ctx context.Context, consume func(string, int64, io.Reader) error) error {

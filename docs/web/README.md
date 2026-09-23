@@ -2,10 +2,10 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-Agents Core Web is an open-source workspace for creating AI Agents, starting durable
-Sessions, following live work, and managing the resources used by a compatible Agent
-Core. It gives teams a product UI for their own Core deployment without moving
-credentials or execution into the browser.
+Agents Core Web is the administrator console for a self-deployed Agent Core. It
+shows execution records and manages Agents, Sessions and reusable resources through
+Core APIs. Business collaboration belongs in Parsar; credentials and execution stay
+outside the browser.
 
 ![Agents Core Web Dashboard](images/dashboard.png)
 
@@ -21,8 +21,9 @@ credentials or execution into the browser.
   inspect command and patch activity, and attach write-only MCP credentials through Vaults.
 - **Choose an Environment** — use Core's default execution path, connect a caller-managed
   self-hosted executor, or use an operator-enabled managed Runtime.
-- **Understand the connection** — view Core reachability and exposed product capabilities,
-  and get actionable local Docker recovery guidance when the backend is not ready.
+- **Understand the connection** — view Core reachability, build-supported harnesses,
+  safe process startup selections, and whether operator model endpoints are configured,
+  without exposing their addresses or credentials.
 
 ## Product tour
 
@@ -49,11 +50,20 @@ and follow-up input without losing the durable record.
 
 ![Durable Session conversation](images/sessions.png)
 
+### Environment Templates
+
+In managed-Environment builds, open **Templates** to view reusable configuration,
+create a basic name/network template, edit those fields, or confirm deletion. The
+Session creation picker uses the same refreshed catalog. Saving a template does
+not start a Runtime or a model request, and edits do not change existing Sessions.
+Advanced template profiles remain outside the current Web client coverage.
+
 ### System and connection status
 
-System shows what the connected Core exposes to this Web build. It separates API access,
-Vault availability, self-hosted presentation, and runtime readiness so a healthy HTTP
-service is not mistaken for a ready model execution path.
+System shows what the connected Core build supports and what this process configured at
+startup: harnesses, daemon gateway, self-hosted execution, managed sandbox provider and
+operator model endpoint presence. It does not aggregate Runtime/daemon observations, so
+configuration is never presented as model execution readiness.
 
 ![Core connection and capability status](images/system.png)
 
@@ -69,7 +79,8 @@ service is not mistaken for a ready model execution path.
 | Vaults | Create project Vaults and manage write-only MCP bearer credentials without reading tokens back |
 | Environments | Default execution, optional self-hosted executor connection, and optional managed Runtime views |
 | Workspace and Files | Inspect supported Environment files and manage project Source Files when enabled by Core |
-| System | Connection status, surfaced capabilities, Core ownership boundaries, and local recovery guidance |
+| Templates | Basic name/network configuration, full catalog reads, partial updates and confirmed deletion |
+| System | Connection status plus safe build support and process startup configuration, clearly separated from Session/Environment runtime state |
 
 Capabilities appear only when the connected Core and the Web operator configuration expose
 them. Saving an Agent proves that its definition was stored; actual execution still depends

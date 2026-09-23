@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -86,10 +87,16 @@ func TestSessionArtifactRoutesAndPublicProjection(t *testing.T) {
 	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &deleted) != nil || !deleted.Deleted || deleted.ID != "artifact" || deleted.Object != "agent.session.artifact.deleted" {
 		t.Fatalf("delete: %d %s", w.Code, w.Body)
 	}
-	for _, suffix := range []string{"?limit=0", "?limit=101", "?order=random", "?environment_id=a&environment_id=b", "?limit=1&limit=2", "?unknown=x", "/artifact?unknown=x", "/artifact/content?unknown=x"} {
+	for _, suffix := range []string{"?limit=0", "?limit=101", "?limit=-1", "?order=random", "?environment_id=a&environment_id=b", "?limit=1&limit=2"} {
 		before := f.calls
-		if w := request("GET", suffix, "agents=v1"); w.Code != 400 || f.calls != before {
+		if w := request("GET", suffix, "agents=v1"); w.Code != 400 || f.calls != before || !strings.Contains(w.Body.String(), `"code":"invalid_request_error"`) {
 			t.Fatalf("invalid query reached storage: %s %d", suffix, w.Code)
+		}
+	}
+	for _, suffix := range []string{"?unknown=x&tenant_id=other", "/artifact?unknown=x", "/artifact/content?unknown=x"} {
+		before := f.calls
+		if w := request("GET", suffix, "agents=v1"); w.Code != 200 || f.calls != before+1 || f.tenant != tenant {
+			t.Fatalf("unknown query was not ignored: %s %d", suffix, w.Code)
 		}
 	}
 	for _, route := range []struct{ method, suffix string }{{"GET", ""}, {"GET", "/artifact"}, {"GET", "/artifact/content"}, {"DELETE", "/artifact"}} {

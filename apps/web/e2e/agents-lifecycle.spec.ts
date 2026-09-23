@@ -341,6 +341,7 @@ test("creates, previews, edits, and removes bounded Function and anonymous HTTP 
   await page.getByRole("button", { name: /^Create agent/ }).click();
   await page.getByLabel("Name").fill("Tool Agent");
   await page.getByLabel("Instructions").fill("Use only the configured tools.");
+  await page.getByLabel("Harness").selectOption("claude_sdk");
   await page.getByLabel("Model").selectOption({ label: "Custom model ID…" });
   await page.getByLabel("Custom model ID").fill("fixture/tool-model");
 
@@ -366,6 +367,7 @@ test("creates, previews, edits, and removes bounded Function and anonymous HTTP 
   await expect(previewBody).toContainText('"name": "lookup_customer"');
   await expect(previewBody).toContainText('"type": "mcp"');
   await expect(previewBody).toContainText('"required": true');
+  await expect(previewBody).toContainText('"harness": "claude_sdk"');
 
   await page.getByRole("button", { name: "Save Agent definition" }).click();
   await expect(page.getByRole("status")).toContainText("Agent definition saved as");
@@ -373,6 +375,7 @@ test("creates, previews, edits, and removes bounded Function and anonymous HTTP 
   const creates = requests.filter((entry) => entry.method === "POST" && entry.path === "/v1/agents");
   expect(creates).toHaveLength(1);
   expect(creates[0]?.body).toEqual({
+    x_agents_core: { harness: "claude_sdk" },
     model: "fixture/tool-model",
     name: "Tool Agent",
     instructions: "Use only the configured tools.",
@@ -403,6 +406,7 @@ test("creates, previews, edits, and removes bounded Function and anonymous HTTP 
   const setup = page.locator(".agent-setup-page");
   await expect(setup.getByRole("heading", { name: "Saved definition" })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(setup.getByLabel("Harness")).toHaveValue("claude_sdk");
   const editFunction = setup.locator(".agent-tool-card").filter({ hasText: "Function" }).first();
   await editFunction.getByLabel("Name", { exact: true }).fill("lookup_customer_v2");
   const editMcp = setup.locator(".agent-tool-card").filter({ hasText: "Anonymous HTTP MCP" }).first();
@@ -422,7 +426,9 @@ test("creates, previews, edits, and removes bounded Function and anonymous HTTP 
       defer_loading: false,
     },
   ]);
+  expect(updates[0]?.body).not.toHaveProperty("x_agents_core");
 
+  await setup.getByLabel("Harness").selectOption("codex");
   await setup.locator(".agent-tool-card").filter({ hasText: "Function" }).first().getByRole("button", { name: "Remove" }).click();
   await setup.getByRole("button", { name: "Save changes" }).click();
   await expect(setup.getByRole("status")).toContainText("Agent definition updated");
@@ -431,6 +437,7 @@ test("creates, previews, edits, and removes bounded Function and anonymous HTTP 
   updates = requests.filter((entry) => entry.method === "POST" && entry.path.startsWith("/v1/agents/agent_created_"));
   expect(updates).toHaveLength(2);
   expect(updates[1]?.body?.tools).toEqual([]);
+  expect(updates[1]?.body?.x_agents_core).toEqual({ harness: "codex" });
 });
 
 test("keeps Source Files controls out of the System status page", async ({ page, request }) => {
@@ -2439,44 +2446,93 @@ test("presents Dashboard page-chain results and System boundaries without extra 
 
   await page.getByRole("button", { name: "System", exact: true }).click();
   const system = page.locator(".system-page");
-  await expect(system.getByRole("listitem").filter({ hasText: "Core API" })).toContainText("Available");
-  await expect(system.getByRole("listitem").filter({ hasText: "Vaults" })).toContainText("Available");
-  await expect(system.getByRole("listitem").filter({ hasText: "Self-hosted" })).toContainText("Enabled");
-  await expect(system.getByRole("listitem").filter({ hasText: "Runtime status" })).toContainText("Cannot be pre-checked");
-  await expect(system.getByRole("listitem")).toHaveCount(4);
+  await expect(system.getByRole("listitem").filter({ hasText: "Daemon gateway" })).toContainText("Enabled");
+  await expect(system.getByRole("listitem").filter({ hasText: "Managed sandbox" })).toContainText("Docker");
+  await expect(system.getByRole("listitem").filter({ hasText: "Endpoint overrides" })).toContainText("Configured");
+  await expect(system.getByRole("listitem")).toHaveCount(3);
+  await expect(system).not.toContainText("Configured for this process");
+  await expect(system).not.toContainText("Managed execution");
+  await expect(system).not.toContainText("Self-hosted execution");
+  await expect(system).not.toContainText("Default harness");
+  await expect(system).toContainText("Agent create and edit forms can select any adapter enabled for this Core process");
+  await expect(system).not.toContainText("Enabled · default");
+  await expect(system).toContainText("Operator endpoint override: configured");
+  await expect(system).toContainText("Compiled into this build, but not enabled when this Core process started");
+  await expect(system).toContainText("Runtime connection, native binary availability, sandbox health, and model execution belong to the relevant Session or Environment");
   await expect(system).not.toContainText("Source Files");
   await expect(system).not.toContainText("Public capability surface");
+  await expect(system).not.toContainText("Cannot be pre-checked");
 
   const beforeSystemRefresh = await fixtureRequests(request);
   const systemRefresh = system.getByRole("button", { name: "Refresh System status" });
   await systemRefresh.click();
-  await expect.poll(async () => {
-    const entries = await fixtureRequests(request);
-    return [count(entries, "/v1/agents"), count(entries, "/v1/agents/sessions")];
-  }).toEqual([
-    count(beforeSystemRefresh, "/v1/agents") + 1,
-    count(beforeSystemRefresh, "/v1/agents/sessions") + 1,
-  ]);
+  await expect.poll(async () => count(await fixtureRequests(request), "/v1/agents/core/startup-configuration")).toBe(
+    count(beforeSystemRefresh, "/v1/agents/core/startup-configuration") + 1,
+  );
   const afterSystemRefresh = await fixtureRequests(request);
-  expect(count(afterSystemRefresh, "/v1/agents")).toBe(count(beforeSystemRefresh, "/v1/agents") + 1);
-  expect(count(afterSystemRefresh, "/v1/agents/sessions")).toBe(count(beforeSystemRefresh, "/v1/agents/sessions") + 1);
+  expect(count(afterSystemRefresh, "/v1/agents")).toBe(count(beforeSystemRefresh, "/v1/agents"));
+  expect(count(afterSystemRefresh, "/v1/agents/sessions")).toBe(count(beforeSystemRefresh, "/v1/agents/sessions"));
+  expect(count(afterSystemRefresh, "/v1/vaults")).toBe(count(beforeSystemRefresh, "/v1/vaults"));
+  expect(count(afterSystemRefresh, "/v1/agents/core/startup-configuration")).toBe(
+    count(beforeSystemRefresh, "/v1/agents/core/startup-configuration") + 1,
+  );
   for (const path of detailPaths) expect(count(afterSystemRefresh, path)).toBe(count(beforeSystemRefresh, path));
   await attachScreenshot(page, testInfo, "desktop-system-contract-boundary");
 
+  await page.setViewportSize({ width: 778, height: 844 });
+  const compactSystemBounds = await system.evaluate((element) => ({
+    viewportWidth: innerWidth,
+    documentWidth: document.documentElement.scrollWidth,
+    bodyWidth: document.body.scrollWidth,
+    right: element.getBoundingClientRect().right,
+    sectionInset: element.querySelector(".system-config-section")!.getBoundingClientRect().left - element.getBoundingClientRect().left,
+    sectionEdges: [...element.querySelectorAll(".system-config-section")].map((section) => ({
+      left: section.getBoundingClientRect().left - element.getBoundingClientRect().left,
+      right: element.getBoundingClientRect().right - section.getBoundingClientRect().right,
+      header: section.querySelector("header")!.getBoundingClientRect().left,
+      content: section.querySelector(".system-harness-grid")!.getBoundingClientRect().left,
+      explanation: section.querySelector(".system-config-explanation")?.getBoundingClientRect().left ?? null,
+    })),
+    boundaryInset: element.querySelector(".system-boundary-note")!.getBoundingClientRect().left - element.getBoundingClientRect().left,
+  }));
+  expect(compactSystemBounds.documentWidth).toBeLessThanOrEqual(compactSystemBounds.viewportWidth);
+  expect(compactSystemBounds.bodyWidth).toBeLessThanOrEqual(compactSystemBounds.viewportWidth);
+  expect(compactSystemBounds.right).toBeLessThanOrEqual(compactSystemBounds.viewportWidth);
+  expect(compactSystemBounds.sectionInset).toBe(24);
+  expect(compactSystemBounds.boundaryInset).toBe(24);
+  for (const edge of compactSystemBounds.sectionEdges) {
+    expect({ left: edge.left, right: edge.right }).toEqual({ left: 24, right: 24 });
+    expect(edge.header).toBe(edge.content);
+    if (edge.explanation !== null) expect(edge.explanation).toBe(edge.header);
+  }
+
   await page.setViewportSize({ width: 390, height: 844 });
   const systemBounds = await system.evaluate((element) => {
-    const rows = [...element.querySelectorAll(".system-summary-cell")].map((row) => row.getBoundingClientRect());
+    const rows = [...element.querySelectorAll(".system-summary-cell")];
     return {
       viewportWidth: innerWidth,
       documentWidth: document.documentElement.scrollWidth,
-      rowBounds: rows.map((row) => ({ top: row.top, bottom: row.bottom, height: row.height })),
+      sectionInset: element.querySelector(".system-config-section")!.getBoundingClientRect().left - element.getBoundingClientRect().left,
+      sectionRightInset: element.getBoundingClientRect().right - element.querySelector(".system-config-section")!.getBoundingClientRect().right,
+      boundaryInset: element.querySelector(".system-boundary-note")!.getBoundingClientRect().left - element.getBoundingClientRect().left,
+      rowBounds: rows.map((row) => ({
+        top: row.getBoundingClientRect().top,
+        bottom: row.getBoundingClientRect().bottom,
+        height: row.getBoundingClientRect().height,
+        borderBottomWidth: getComputedStyle(row).borderBottomWidth,
+      })),
     };
   });
   expect(systemBounds.documentWidth).toBeLessThanOrEqual(systemBounds.viewportWidth);
+  expect(systemBounds.sectionInset).toBe(12);
+  expect(systemBounds.sectionRightInset).toBe(12);
+  expect(systemBounds.boundaryInset).toBe(12);
   for (let index = 1; index < systemBounds.rowBounds.length; index += 1) {
     expect(systemBounds.rowBounds[index]!.top).toBeGreaterThanOrEqual(systemBounds.rowBounds[index - 1]!.bottom);
   }
   expect(systemBounds.rowBounds.every((row) => row.height >= 36)).toBe(true);
+  expect(systemBounds.rowBounds.slice(0, -1).every((row) => row.borderBottomWidth !== "0px")).toBe(true);
+  expect(systemBounds.rowBounds.at(-1)?.borderBottomWidth).toBe("0px");
   await attachScreenshot(page, testInfo, "narrow-system-contract-boundary");
 });
 

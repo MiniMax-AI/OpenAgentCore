@@ -65,13 +65,16 @@ func TestTurnRoutesUseAuthenticatedScopeAndSafeProjection(t *testing.T) {
 	if w := request("/v1/agents/sessions/session/turns"); w.Code != 200 || s.limit != 20 || s.ascending {
 		t.Fatalf("bad defaults: %d", w.Code)
 	}
-	for _, query := range []string{"limit=0", "limit=101", "limit=2&limit=3", "order=random", "agent_id=other"} {
-		if w := request("/v1/agents/sessions/session/turns?" + query); w.Code != 400 {
-			t.Fatalf("accepted %s: %d", query, w.Code)
+	for _, query := range []string{"limit=0", "limit=101", "limit=-1", "limit=2&limit=3", "order=random"} {
+		if w := request("/v1/agents/sessions/session/turns?" + query); w.Code != 400 || !strings.Contains(w.Body.String(), `"code":"invalid_request_error"`) {
+			t.Fatalf("accepted %s: %d %s", query, w.Code, w.Body)
 		}
 	}
-	if w := request("/v1/agents/sessions/session/turns/turn?unknown=1"); w.Code != 400 {
-		t.Fatalf("accepted retrieve query: %d", w.Code)
+	if w := request("/v1/agents/sessions/session/turns?agent_id=other&tenant_id=other&limit=3"); w.Code != 200 || s.tenant != tenant || s.limit != 3 {
+		t.Fatalf("unknown list keys changed the page: %d %s", w.Code, s.tenant)
+	}
+	if w := request("/v1/agents/sessions/session/turns/turn?unknown=1&tenant_id=other"); w.Code != 200 || s.tenant != tenant || s.turnID != "turn" {
+		t.Fatalf("retrieve query was not ignored: %d", w.Code)
 	}
 	s.session.Configuration = json.RawMessage(`{}`)
 	if w := request("/v1/agents/sessions/session/turns/turn"); w.Code != 500 || strings.Contains(w.Body.String(), "snapshot") {

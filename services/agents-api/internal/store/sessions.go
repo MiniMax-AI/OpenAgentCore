@@ -184,10 +184,7 @@ func (s *Store) GetSession(ctx context.Context, tenantID, sessionID string) (Ses
 	if err != nil {
 		return Session{}, err
 	}
-	id, err := parseID(sessionID)
-	if err != nil {
-		return Session{}, err
-	}
+	id := parsePathID(sessionID)
 	row, err := s.queries.GetSession(ctx, sqlc.GetSessionParams{TenantID: tenant, ID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Session{}, ErrNotFound
@@ -214,6 +211,10 @@ func (s *Store) ListSessions(ctx context.Context, tenantID, cursor string, limit
 		params.AgentID = pgtype.Text{String: *agentID, Valid: true}
 	}
 	if cursor != "" {
+		// A malformed cursor remains an invalid request, unlike a path identifier.
+		if _, err := parseID(cursor); err != nil {
+			return SessionPage{}, err
+		}
 		after, err := s.GetSession(ctx, tenantID, cursor)
 		if err != nil {
 			return SessionPage{}, err
@@ -247,6 +248,22 @@ func parseID(value string) (pgtype.UUID, error) {
 		return pgtype.UUID{}, fmt.Errorf("%w: nonzero UUID required", ErrInvalidInput)
 	}
 	return pgtype.UUID{Bytes: id, Valid: true}, nil
+}
+
+// UnknownResourceID never names a stored resource: Core assigns version 4 or 5
+// UUIDs, and the maximum UUID is neither.
+var UnknownResourceID = uuid.Max.String()
+
+// parsePathID parses a caller-supplied resource path identifier. A value that
+// cannot name a resource resolves to UnknownResourceID, so the request follows
+// exactly the path of a well-formed missing identifier, including validation
+// order. List cursors and request-body references keep parseID.
+func parsePathID(value string) pgtype.UUID {
+	id, err := parseID(value)
+	if err != nil {
+		return pgtype.UUID{Bytes: uuid.Max, Valid: true}
+	}
+	return id
 }
 
 func sessionFromRow(row sqlc.Session) (Session, error) {
