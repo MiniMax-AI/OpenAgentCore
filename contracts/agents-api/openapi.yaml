@@ -2795,8 +2795,13 @@ paths:
       description: 'Persists configuration independently of execution. Names over
         128 characters and metadata outside 16 string pairs with 64-character keys
         and 512-character values return invalid_request_error with the official param;
-        U+0000 in stored strings is rejected as a local storage limit. Supports model/name/instructions/metadata,
-        explicit reasoning and service tiers, multi_agent, text/json_schema, function/tool_search/programmatic_tool_calling
+        U+0000 in stored strings is rejected as a local storage limit. Missing, unknown,
+        wrongly typed or unsupported enum members of the pinned configuration shapes
+        (tools, text, reasoning, service_tier, multi_agent) return invalid_request_error
+        with the JSON path as param; duplicate function names, repeated web_search
+        or tool_search and non-object schema root types return it with a null param.
+        Supports model/name/instructions/metadata, explicit reasoning and service
+        tiers, multi_agent, text/json_schema, function/tool_search/programmatic_tool_calling
         and HTTP MCP with nullable credential_id and explicit service origin and boolean
         required defaulting to false. Saving credential_id grants no access: Session
         admission checks attached Vault ownership and destination. MCP allowed_tools
@@ -2942,9 +2947,10 @@ paths:
       - application/json
       description: Preserves omitted fields and replaces supplied fields using shared
         saved-configuration validation. Null name/instructions clear; null or empty
-        metadata clears all pairs. Name and metadata validation errors return invalid_request_error
-        with the official param. Existing Session snapshots are unchanged. Empty updates
-        advance updated_at without changing saved fields. Nested replacement/null
+        metadata clears all pairs. Name, metadata and configuration validation errors
+        return invalid_request_error with the official param, using the Agent create
+        rules before the Agent lookup. Existing Session snapshots are unchanged. Empty
+        updates advance updated_at without changing saved fields. Nested replacement/null
         defaults, model-derived reasoning and exact hosted error behavior remain incompletely
         verified.
       parameters:
@@ -3688,7 +3694,11 @@ paths:
         keys or failed credential lookup/decryption never fall back to anonymous execution.
         Omitted stream defaults to false; stream and agent_id cannot be null. Metadata
         may be null; non-string values and limit violations return invalid_request_error
-        with a metadata or metadata.<key> param. Hosted network policy rejections
+        with a metadata or metadata.<key> param. The inline agent uses the Agent create
+        configuration validation with agent.-prefixed params, reported before the
+        input requirement and saved-Agent lookup; saved configurations with conflicting
+        tools or schema roots reject admission with the same errors, and execution
+        limits keep unsupported_or_invalid_configuration. Hosted network policy rejections
         return invalid_request_error with a null param. Initial input accepts a string
         or ordered user-message array. Codex and Claude SDK on none and qualified
         openai_hosted also accept inline PNG/JPEG image content; other image combinations
