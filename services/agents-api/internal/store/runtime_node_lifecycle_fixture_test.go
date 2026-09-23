@@ -117,7 +117,9 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 		server.Close()
 	})
 	f := &nodeIsolationFixture{t: t, store: s, pool: pool, provider: p, key: uuid.NewString(), nodeA: uuid.NewString(), nodeB: uuid.NewString()}
-	policy := &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Second, Retention: time.Hour, MaxActive: 100, MaxRetained: 100}
+	// Keep restored compute awake throughout the isolation assertions.
+	// The suspension setup explicitly dates its activity two minutes in the past.
+	policy := &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Minute, Retention: time.Hour, MaxActive: 100, MaxRetained: 100}
 	f.worker, err = execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: strings.Repeat("a", 64), Provider: p, ProviderKind: "microsandbox", LocalNodeID: f.nodeA, LocalCredentialSHA256: device.HashCredential("local-credential"), LocalMaxActive: 100, LocalMaxRetained: 100, Suspension: policy}})
 	if err != nil {
 		t.Fatal(err)
@@ -222,16 +224,20 @@ func (f *nodeIsolationFixture) stop() {
 		}
 	})
 }
-func waitNodeIsolation(t *testing.T, within time.Duration, ready func() bool) {
+func waitNodeIsolation(t *testing.T, within time.Duration, ready func() (bool, string)) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), within)
 	defer cancel()
 	tick := time.NewTicker(20 * time.Millisecond)
 	defer tick.Stop()
-	for !ready() {
+	for {
+		ok, state := ready()
+		if ok {
+			return
+		}
 		select {
 		case <-ctx.Done():
-			t.Fatal("healthy node did not progress while another node was blocked")
+			t.Fatalf("healthy node did not progress while another node was blocked: %s", state)
 		case <-tick.C:
 		}
 	}

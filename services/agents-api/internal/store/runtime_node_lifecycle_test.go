@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -103,11 +104,15 @@ func TestManagedNodesIsolateBlockedProviderAndInitialization(t *testing.T) {
 
 			// Only independent normal five-second loops drive these transitions.
 			// No manual reconciliation or wake hint accelerates healthy nodes.
-			waitNodeIsolation(t, 18*time.Second, func() bool {
+			waitNodeIsolation(t, 18*time.Second, func() (bool, string) {
 				wake, e1 := f.store.GetRuntimeAllocation(t.Context(), wakeTenant, wakeEnv.ID)
 				deleted, e2 := f.store.GetRuntimeAllocation(t.Context(), deleteTenant, deleteEnv.ID)
 				initialized, e3 := f.store.GetRuntimeAllocation(t.Context(), tenant, env.ID)
-				return e1 == nil && e2 == nil && e3 == nil && wake.ComputePhase == "running" && deleted.State == "released" && initialized.Initialization == "complete" && initialized.ComputePhase == "running"
+				f.provider.mu.Lock()
+				restores := f.provider.restores
+				f.provider.mu.Unlock()
+				state := fmt.Sprintf("wake=%s/%s err=%v; deleted=%s/%s err=%v; initialized=%s/%s/%s err=%v; restores=%d writes=%d blocked_returns=%d", wake.State, wake.ComputePhase, e1, deleted.State, deleted.ComputePhase, e2, initialized.State, initialized.Initialization, initialized.ComputePhase, e3, restores, f.provider.writes.Load(), f.provider.returned.Load())
+				return e1 == nil && e2 == nil && e3 == nil && wake.ComputePhase == "running" && deleted.State == "released" && initialized.Initialization == "complete" && initialized.ComputePhase == "running", state
 			})
 			if f.provider.returned.Load() != 0 || f.provider.writes.Load() != 1 {
 				t.Fatalf("A returned early or initialization replayed: returned=%d writes=%d", f.provider.returned.Load(), f.provider.writes.Load())
@@ -128,9 +133,9 @@ func TestManagedNodesIsolateBlockedProviderAndInitialization(t *testing.T) {
 			if err := f.store.DeleteSession(t.Context(), ct, cs.ID); err != nil {
 				t.Fatal(err)
 			}
-			waitNodeIsolation(t, 7*time.Second, func() bool {
+			waitNodeIsolation(t, 7*time.Second, func() (bool, string) {
 				owner, err := f.store.GetRuntimeAllocation(t.Context(), ct, ce.ID)
-				return err == nil && owner.State == "released"
+				return err == nil && owner.State == "released", fmt.Sprintf("new node allocation=%s/%s err=%v", owner.State, owner.ComputePhase, err)
 			})
 			if err := f.store.RemoveRuntimeNode(t.Context(), nodeC); err != nil {
 				t.Fatal(err)
