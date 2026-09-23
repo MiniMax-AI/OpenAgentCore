@@ -1984,8 +1984,10 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   snapshots; per-Session tools replace the whole field. The initial profile admits
   HTTP(S), boolean `required` (default false), empty/null metadata and empty/null headers.
   Static and OAuth bearer authentication require HTTPS and the attached-Vault rules below.
-  Inline authorization, URL userinfo/query/fragment,
-  other origins and stdio remain explicitly unsupported.
+  An omitted/null `connection_origin` on HTTP transport is stored as `service`
+  before the other checks, identical to an explicit declaration, as observed
+  officially. Inline authorization, URL userinfo/query/fragment, the `environment`
+  origin and stdio remain explicitly unsupported.
 - Codex required MCP initialization additionally needs `mcp_http_required`, advertised
   only for the verified native pin and checked during selection, final preclaim
   and daemon dispatch/preparation. Preserve the boolean through typed messages,
@@ -2025,22 +2027,28 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   storage. Core-managed OAuth uses this same access-token path; native OAuth
   login/refresh and hosted redirect/error equivalence remain separate work.
 - Session `vault_ids` omission/null/empty means `[]`; nonempty attachments must all
-  belong to the authenticated tenant. Preserve caller order and public MCP
+  belong to the authenticated tenant. Preserve caller order and the stored caller
   `credential_id`. Saved Agents may store a nullable/nonempty credential reference
   without authorizing its use. Session admission resolves an explicit credential
   only inside attached Vaults for the exact declared URL, or selects the unique
   matching static or OAuth credential when the ID is omitted/null. No match remains
-  anonymous; ambiguity is a local 400 and unavailable references use the same 404.
-  Resolve before any Session, initial input or event write. Freeze safe bindings,
-  including anonymous decisions, in private Session configuration; never populate
-  the public credential field from implicit resolution. At actual dispatch, recheck
+  anonymous. Selection errors use the observed official messages with a null param:
+  a reference without attachments, one outside the attached Vaults and one for
+  another URL are 400 `invalid_request_error`; several implicit matches are 409
+  `conflict_error`. Missing, foreign-tenant, unattached and malformed references
+  share one message; echo caller values only within `internal/echotext`. Unknown
+  or foreign Vaults keep the same 404. Resolve after the input requirement and
+  before any Session, initial input or event write. Freeze safe bindings,
+  including anonymous decisions, in private Session configuration. Session
+  projections, never the stored configuration, show an implicitly selected ID in a
+  null/omitted public `credential_id`, also after deletion. At actual dispatch, recheck
   tenant, attached Vault, selected ID, frozen auth type and exact URL before scoped
   decryption. Metadata queries select no ciphertext; tokens enter only the existing
   transient daemon request. Selected authentication requires `mcp_http_bearer_auth`
   during device selection and the final preclaim check. Missing/wrong keys or
   binding failures never fall back to anonymous execution. Exact URL equality,
-  immutable selection timing, implicit response population and hosted error/redirect
-  semantics remain local decisions or unverified gaps. No new MCP loop is permitted.
+  immutable selection timing and hosted redirect semantics remain local decisions
+  or unverified gaps. No new MCP loop is permitted.
 - Saved Agent execution defaults use separate input and safe-output Core extensions.
   Keep model-provider bundles whole at every replacement boundary: endpoint, key,
   protocol and limits must never be independently inherited. Ordinary Agent JSON

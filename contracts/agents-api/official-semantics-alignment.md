@@ -664,3 +664,64 @@ The pinned-SDK scripts `official_agents.py` and `official_agent_update.py` asser
 the saved projections and the admission rejection, and `official_tool_policy.py`
 adds saved enabled search to its live rejection cases. Real Core acceptance is
 recorded separately by the coordinator.
+
+## MCP origin and credential selection — September 23
+
+The minimal pinned-SDK MCP tool `{type, server_label, transport}` now works on
+Core, and Session MCP credential selection projects and reports errors as the
+official service does. Evidence is MV-01..03 in the campaign scan recorded
+privately in `~/.parsar/remediation/20260923/campaign-scan-6/mcp-vaults/`
+(`findings.json`, `REPORT.txt`, `official-ledger.jsonl`): owned Agents, three
+owned Sessions and two Vaults with four static-bearer Credentials, all deleted
+and read back 404. The error records are `ERR-UNATTACHED`
+(`req_b687ac760c03451caa5973be8d65a3ae`), `ERR-URL-MISMATCH`
+(`req_90009e0ba2e548ad88a30516faeec852`), `ERR-AMBIGUOUS`
+(`req_18b4777d35844be9a5549c8e58fc8747`), `ERR-CREDENTIAL-BOGUS`
+(`req_5ba08377d4a841c98849cd4649e6fcaa`) and `ERR-VAULT-BOGUS`
+(`req_0274192656b549739951de213e16514a`); the origin default is
+`req_4a99a59eba2445c4b9ae22e74667f2b8` and `req_108ecc7c779240528efccd5ad55eebed`.
+
+| Row | Case | Core behavior |
+| --- | --- | --- |
+| M1 | HTTP MCP tool with omitted or null `connection_origin`, on a saved Agent, an inline Session agent or a per-Session replacement | Saved and projected as `"service"`. The stored and frozen configuration equals an explicit `service` declaration, so execution is unchanged. Explicit `"environment"` and other transports keep their rejection. |
+| M2 | Session tool without an explicit `credential_id` whose attached credential was selected | Retrieve, list and the created, in-progress and idle event snapshots show the selected credential ID, also after that credential is deleted. Anonymous and unmatched tools stay null; explicit IDs are echoed as sent. |
+| M3 | `credential_id` with omitted, null or empty `vault_ids` | 400 `invalid_request_error`, null param: "MCP credential_id requires an attached vault". |
+| M4 | `credential_id` not in an attached Vault: missing, foreign tenant, another Vault of the tenant, or malformed | 400 `invalid_request_error`, null param: "MCP credential_id `<id>` was not found in an attached vault". Byte-identical for one ID across the missing, foreign and unattached cases. |
+| M5 | Credential in an attached Vault for another URL | 400 `invalid_request_error`, null param: "MCP credential_id `<id>` does not match server_url `<url>`". |
+| M6 | Several attached credentials match implicitly | 409 `conflict_error`, null param: "multiple attached vault credentials match MCP server_url `<url>`; specify credential_id". |
+| M7 | Unknown or foreign Vault in `vault_ids` | Unchanged 404 `not_found_error`, "Resource not found." (the official message names the ID). |
+| M8 | Order and writes | Inline agent protocol errors and the input requirement come first; selection precedes any write, and a rejection writes nothing. |
+| M9 | Dispatch | Unchanged: frozen bindings, scoped recheck before decryption, fail-closed on missing keys or decryption, no anonymous fallback. |
+
+Decisions:
+
+- `<id>` and `<url>` are the request's values, repeated only under the shared
+  bounded-echo rule (`internal/echotext`: at most 256 bytes of printable UTF-8);
+  otherwise the message leaves the value out.
+- Selection searches only attached Vaults, which must all belong to the caller.
+  An explicit ID is found there by ID alone, so a missing, foreign or unattached
+  ID yields one response, and only a credential of an attached Vault can report
+  a server_url mismatch. The mismatch message repeats the tool's URL, not the
+  credential's.
+- The projection reads the frozen private binding of the tool's label and URL,
+  and shows it only while the binding's Vault is among the Session's
+  attachments. It exposes a credential ID only, never tokens or ciphertext.
+  Stored configuration keeps the caller's null, so creation retries, recorded
+  caller intent and dispatch are unchanged. Retries recover the original
+  projection, also after deletion; a new creation can no longer select a deleted
+  credential.
+- A same-key retry that omits the origin recovers a Session created with the
+  explicit form when the request has no recorded caller intent; with recorded
+  intent (attached Vaults or credential references) it remains the local
+  `idempotency_conflict`, as for any changed request.
+- A deleted, previously selected credential is still admitted at later input and
+  fails at dispatch (MV-04); that remains a separate batch.
+
+Go tests cover the origin default, the projection and its private-binding
+checks, and the typed store errors. A real-PostgreSQL HTTP test with tenants A
+and B covers M1–M8, the byte-identical M4 responses with headers, a
+whole-database digest over every rejection, M2 across creation, retrieve, list,
+creation-stream and live events, deletion and retries. The pinned-SDK scripts
+`official_mcp.py` and `official_mcp_credentials.py` assert the omitted origin,
+the projection and the error fields. Real Core acceptance is recorded separately
+by the coordinator.

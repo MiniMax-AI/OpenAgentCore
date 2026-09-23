@@ -129,20 +129,36 @@ supports the documented `self_hosted` combination. The daemon must advertise bot
 `mcp_http_tools` and `mcp_http_bearer_auth`. The usual
 [MCP profile limits](README.md#http-mcp-execution) still apply. Without an explicit
 `credential_id`, one exact-URL static or OAuth credential among attached Vaults is selected;
-zero matches remains anonymous and multiple matches fail. A foreign, missing,
-unattached or wrong-destination reference returns the same local 404 before Session
-creation. Saving a reference on an Agent does not authorize it for a Session.
+zero matches remains anonymous. `connection_origin` may be omitted or null; it is
+saved as `"service"`. Saving a reference on an Agent does not authorize it for a
+Session. Selection failures use the official messages, with a null `param`, after
+the input requirement and before anything is written:
+
+| Case | Response |
+| --- | --- |
+| `credential_id` without `vault_ids` | 400 `invalid_request_error`: `MCP credential_id requires an attached vault` |
+| Missing, foreign-tenant, unattached or malformed reference | 400 `invalid_request_error`: `MCP credential_id <id> was not found in an attached vault` |
+| Credential in an attached Vault for another URL | 400 `invalid_request_error`: `MCP credential_id <id> does not match server_url <url>` |
+| Several implicit matches | 409 `conflict_error`: `multiple attached vault credentials match MCP server_url <url>; specify credential_id` |
+| Unknown or foreign Vault in `vault_ids` | 404 `not_found_error` |
+
+`<id>` and `<url>` repeat the request's values only when they are at most 256 bytes
+of printable UTF-8; otherwise the message leaves them out. Missing, foreign-tenant
+and unattached references return identical responses for the same ID, so a
+reference reveals nothing about Vaults the caller has not attached.
 
 The Session freezes its attachment list and private selection, including anonymous
-decisions. Public tools retain the caller's `credential_id` value, including null.
+decisions. Session reads, lists and event snapshots show an implicitly selected
+credential ID in a null or omitted `credential_id`, also after that credential is
+deleted. Anonymous tools stay null and explicit values are echoed as sent. The
+stored request keeps the caller's field, so creation retries compare the original intent.
 Identical creation retries recover the accepted Session before selecting again;
 adding another credential does not change an existing binding. Each dispatch
 rechecks the complete scope before decryption. The token goes only through the
 private daemon request and a fresh native child environment variable, never public
 configuration, history, arguments or logs. Native execution requires nonempty RFC
 6750 b64token bytes and rejects other opaque stored strings without trimming them.
-Exact hosted matching, response population, selection timing and error/redirect
-semantics remain unverified.
+Exact hosted matching, selection timing and redirect semantics remain unverified.
 
 ## Replace a stored token
 

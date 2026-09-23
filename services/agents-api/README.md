@@ -551,8 +551,9 @@ cancellation, restart/history and credential lifecycle evidence.
 
 ### HTTP MCP execution
 
-This section covers `agent.tools` with `connection_origin: "service"`.
-Environment-origin Plugin declarations use the separate
+This section covers `agent.tools` with `connection_origin: "service"`. An omitted
+or null origin on HTTP transport is saved as `"service"`, exactly like the explicit
+form. Environment-origin Plugin declarations use the separate
 [initialization and transport contract](../../contracts/agents-api/environment-templates.md#environment-origin-mcp-plugins).
 
 Service-origin MCP runs on trusted service-side compute. Codex supports `environment:{"type":"none"}`; Claude SDK supports HTTP MCP with
@@ -588,8 +589,10 @@ service-origin MCP in V1, including anonymous requests.
 An explicit
 `credential_id` selects an attached credential for the exact HTTPS URL; omission/null
 selects a unique matching credential, or stays anonymous if none matches. Ambiguity
-fails before Session creation. Selection is frozen privately; the public tool keeps
-the caller's original credential field. See [credential setup and limits](credentials.md).
+fails before Session creation with 409 `conflict_error`. Selection is frozen
+privately; Session reads and events show an implicitly selected credential ID in the
+public tool, while the stored request keeps the caller's field. See
+[credential setup and limits](credentials.md).
 Authenticated execution additionally requires `mcp_http_bearer_auth`; missing keys
 or failed authorization/decryption never fall back to anonymous execution.
 
@@ -614,7 +617,7 @@ gaps. Items retain the observed native JSON, which may differ from the original
 MCP envelope. See the [Claude SDK profile](../../CONTRIBUTING.md#claude-sdk-adapter-foundation).
 
 The current subset rejects native OAuth login, inline authorization, nonempty headers or
-request metadata, URL userinfo/query/fragment, implicit/other origins, stdio
+request metadata, URL userinfo/query/fragment, the `environment` origin, stdio
 and engines other than Codex/Claude SDK. The Codex adapter also
 rejects reserved native labels and stored native MCP credentials. It verifies
 exact effective MCP configuration before starting/resuming a native thread,

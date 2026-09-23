@@ -2930,15 +2930,16 @@ paths:
         or tool_search and non-object schema root types return it with a null param.
         Supports model/name/instructions/metadata, explicit reasoning and service
         tiers, multi_agent, text/json_schema, function/tool_search/programmatic_tool_calling/web_search
-        and HTTP MCP with nullable credential_id and explicit service origin and boolean
-        required defaulting to false. Saving credential_id grants no access: Session
-        admission checks attached Vault ownership and destination. MCP allowed_tools
-        preserves null versus empty; saved HTTP transport includes empty headers.
-        Model-derived reasoning defaults, other MCP variants and public retry conformance
-        remain incomplete. web_search saves every pinned mode: omitted or null mode
-        is saved as live and omitted or null context_size as medium; allowed_domains
-        preserves null versus empty and a present location, including {}, includes
-        all four keys with null for omitted ones, as observed officially (req_db41d2f6261b4abfb69465eafe719ab5,
+        and HTTP MCP with nullable credential_id, service origin (omitted or null
+        on HTTP transport is saved as service) and boolean required defaulting to
+        false. Saving credential_id grants no access: Session admission checks attached
+        Vault ownership and destination. MCP allowed_tools preserves null versus empty;
+        saved HTTP transport includes empty headers. Model-derived reasoning defaults,
+        other MCP variants and public retry conformance remain incomplete. web_search
+        saves every pinned mode: omitted or null mode is saved as live and omitted
+        or null context_size as medium; allowed_domains preserves null versus empty
+        and a present location, including {}, includes all four keys with null for
+        omitted ones, as observed officially (req_db41d2f6261b4abfb69465eafe719ab5,
         req_165d53b88445490b9146d8272c54134d). Session execution accepts only explicit
         disabled web_search and disabled programmatic_tool_calling through qualified
         Runtime controls; saved enabled forms reject at Session admission. Session
@@ -3807,19 +3808,25 @@ paths:
         supports model/instructions, text verbosity, non-deferred function tools,
         adapter-qualified multi_agent with persisted Subagent reads, implicit reasoning,
         service tier auto and environment type none, subject to the configured engine.
-        Codex additionally supports HTTP MCP with explicit service origin, native
-        allowed_tools and boolean required defaulting to false. Session vault_ids
-        attach only project-owned Vaults; credential_id selects an attached static
-        bearer credential for the exact HTTPS URL, while null/omission selects a unique
-        match or remains anonymous. Ambiguous selection rejects creation. Frozen private
-        selections never populate an omitted public credential_id; missing decryption
+        Codex additionally supports HTTP MCP with service origin (omitted or null
+        on HTTP transport is saved as service), native allowed_tools and boolean required
+        defaulting to false. Session vault_ids attach only project-owned Vaults; credential_id
+        selects an attached static bearer or OAuth credential for the exact HTTPS
+        URL, while null/omission selects a unique match or remains anonymous. Session
+        reads, lists and event snapshots show that implicitly selected credential
+        ID in a null or omitted credential_id, also after the credential is deleted;
+        anonymous selections stay null and the stored caller intent is unchanged.
+        After the input requirement and before any write, a credential_id without
+        vault_ids, one outside the attached Vaults (one message for missing, foreign
+        and unattached IDs) or one for another server_url returns 400 invalid_request_error,
+        and several implicit matches return 409 conflict_error. Missing decryption
         configuration fails dispatch without anonymous fallback. Required initialization
         uses native startup before the first native Turn, including cold resume, and
         requires a separately advertised capability; exact hosted creation timing
-        and error parity remain unverified. Other MCP origins and OAuth remain unsupported.
-        The self_hosted profile requires Codex, an absolute workspace_directory and
-        empty capability_directories, with optional non-deferred function tools and
-        HTTP MCP using explicit service origin, optionally authenticated by the attached
+        and error parity remain unverified. Other MCP origins and native OAuth login
+        remain unsupported. The self_hosted profile requires Codex, an absolute workspace_directory
+        and empty capability_directories, with optional non-deferred function tools
+        and HTTP MCP using service origin, optionally authenticated by the attached
         Vault rules. Remote MCP and remote Bearer authentication each require separately
         advertised combination support; old peers cannot receive unsupported work.
         Omitted/null capability_directories use the empty-list default; self_hosted

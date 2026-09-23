@@ -337,7 +337,8 @@ upgrade the protocol.
   stays unresolved rather than being populated from a guessed model default. An
   explicit effort/summary is retained. Omitted/null service tier currently follows
   the service's `auto` policy; complete upstream-default/error/retry conformance is
-  unverified. HTTP MCP with explicit `service` origin and
+  unverified. HTTP MCP with `service` origin (omitted or null on HTTP transport is
+  saved as `service`) and
   boolean `required` (default false) supports saved configuration and Codex `none` execution,
   with Claude SDK
   also supporting its qualified `none` subset. V1 `self_hosted` explicitly rejects
@@ -351,11 +352,14 @@ upgrade the protocol.
   headers. Omitted/null `allowed_tools` is unrestricted; `[]` denies all tools.
   Session `vault_ids` attaches tenant-owned Vaults. Explicit `credential_id` must
   belong to an attached Vault and match the exact HTTPS URL; omission/null selects
-  one matching static or OAuth credential, zero stays anonymous and ambiguity fails. Private
-  immutable selections do not populate the public credential field. Scope is
+  one matching static or OAuth credential, zero stays anonymous and ambiguity is a
+  409 `conflict_error`. Selection errors use the observed official messages, with
+  one message for missing, foreign and unattached references. Session projections
+  show an implicitly selected credential ID in the public field; the immutable
+  stored selection and caller intent are unchanged. Scope is
   rechecked before dispatch-only decryption; authenticated execution requires the
   separate bearer capability and never downgrades on failure. Exact URL/selection
-  timing, implicit response population and hosted errors remain local or unverified.
+  timing and hosted redirect behavior remain local or unverified.
   Other MCP variants and enabled web-search execution remain gaps, not changes to the pinned target
   or claims of complete resource coverage.
 
