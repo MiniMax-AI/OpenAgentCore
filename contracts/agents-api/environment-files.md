@@ -286,8 +286,10 @@ Decisions:
 - Parents are created only after the complete body is verified, so incomplete or
   corrupt input creates nothing. Each new directory is reopened without following
   links. The install itself never replaces: `renameat2(RENAME_NOREPLACE)`, or
-  `linkat` where the filesystem lacks that flag. A parent created before a late
-  rejection (a concurrent change or an I/O failure) remains as an empty directory.
+  `linkat` where the filesystem lacks that flag (best effort; no test forces that
+  trigger). A normal rejection happens before anything is created and leaves
+  nothing behind. Only a concurrent change, an I/O error or a device mismatch
+  after the parents were created can leave them as empty mode-0700 directories.
 - Core cannot tell a file that an earlier Files.create wrote from any other file.
   Its durable write intent stores a digest of the path, size and content, not a
   path ledger, and a tool can remove and recreate a file afterwards; no cheap,
@@ -316,9 +318,11 @@ Decisions:
 Rust tests cover parent creation, existing files, directories, hard-link aliases,
 FIFOs, symlink leaves and parents, dangling and inside links, non-directory parents,
 races for the destination and a missing parent, a replaced held ancestor, the
-`linkat` fallback and the explicit mode selection. Daemon tests run the built helper
-through the local workspace writer, and dispatch and gateway tests cover the
-rejection reason. Go handler tests cover FW6 and the error mapping. A real-PostgreSQL
+`linkat` fallback and the explicit mode selection. Daemon tests cover the local
+workspace writer's create mode and codes with a scripted helper; its native-helper
+case runs only when `PARSAR_TEST_LOCAL_WRITE_HELPER` names a built helper, so it is
+opt-in and was run for this batch by hand and through live Docker acceptance.
+Dispatch and gateway tests cover the rejection reason. Go handler tests cover FW6 and the error mapping. A real-PostgreSQL
 HTTP and Worker test covers the conflict messages, settled `rejected` intents with no
 committed receipt, an unconsumed Source File, the inline bound before any intent,
 tenant B isolation and an admitted successor. The opt-in

@@ -122,8 +122,9 @@ is unlinked as best-effort cleanup. An existing symlink or non-directory compone
 or an existing destination that is not a directory, reports `unsafe_destination`;
 an existing directory reports `destination_directory`. A destination or link that
 appears concurrently is never replaced or followed and reports
-`unsafe_destination`. Parents created before such a late rejection or an I/O
-failure remain as empty directories.
+`unsafe_destination`. A normal rejection happens before anything is created and
+leaves nothing behind; only such a race, an I/O error or a device mismatch after
+parent creation can leave empty mode-0700 directories.
 
 The operator must protect staging and
 its ancestors from native tools and background processes. A dedicated staging
