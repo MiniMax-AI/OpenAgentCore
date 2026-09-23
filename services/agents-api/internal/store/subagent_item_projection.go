@@ -79,11 +79,11 @@ func putChildItem(ctx context.Context, q *sqlc.Queries, session, childID pgtype.
 	if terminalStatus(turn.Status) {
 		return ErrTurnConflict
 	}
-	index, err := q.PutChildItem(ctx, sqlc.PutChildItemParams{ID: id, SessionID: session, SubagentID: childID, TurnID: turn.ID, Position: position, Payload: payload, IsOutput: item.Role != "user" && item.Type != "function_call_output"})
-	if err != nil {
-		return err
-	}
-	return recordItemChange(ctx, q, session, index, previous, item, nil)
+	// Child Items publish no Session events: the Session stream carries root work,
+	// and child history is read through the Subagent routes. The stored output
+	// index keeps its existing meaning.
+	_, err = q.PutChildItem(ctx, sqlc.PutChildItemParams{ID: id, SessionID: session, SubagentID: childID, TurnID: turn.ID, Position: position, Payload: payload, IsOutput: item.Role != "user" && item.Type != "function_call_output"})
+	return err
 }
 
 func childItems(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, turn string, p proto.SubagentItemPayload) ([]v1.Item, error) {

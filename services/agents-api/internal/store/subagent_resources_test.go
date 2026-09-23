@@ -158,9 +158,12 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 		if change.Event.Subagent != nil && change.Event.Subagent.ID == child.ID {
 			counts[change.Event.Type]++
 		}
-		// Child Turns publish no Session Turn lifecycle events.
+		// Child Turns and their Items publish no Session events.
 		if strings.HasPrefix(change.Event.Type, "agent.session.turn.") && change.Event.Turn != nil && change.Event.Turn.SubagentID != nil {
 			t.Fatal("child Turn on the Session stream", change.Event.Type)
+		}
+		if (change.Event.TurnID != "" && change.Event.TurnID != root.TurnID) || (change.Event.Item != nil && change.Event.Item.TurnID != root.TurnID) {
+			t.Fatal("child work on the Session stream", change.Event.Type)
 		}
 		if change.Turn != nil && change.Turn.ID != root.TurnID {
 			t.Fatal("child Turn snapshot on the Session stream", change.Event.Type)
