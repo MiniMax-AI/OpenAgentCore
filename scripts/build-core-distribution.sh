@@ -25,6 +25,21 @@ fi
 for command in docker go node pnpm python3 curl tar sha256sum; do
   command -v "$command" >/dev/null
 done
+build_network="${CORE_DISTRIBUTION_BUILD_NETWORK:-default}"
+case "$build_network" in
+  default|host|none) ;;
+  *) printf 'CORE_DISTRIBUTION_BUILD_NETWORK must be default, host, or none\n' >&2; exit 1 ;;
+esac
+build_image() {
+  # Docker's predefined proxy arguments are build-only; no Dockerfile ARG or ENV
+  # declaration persists the operator's network configuration in the images.
+  docker build --network "$build_network" \
+    --build-arg HTTP_PROXY --build-arg HTTPS_PROXY --build-arg ALL_PROXY --build-arg NO_PROXY \
+    --build-arg "http_proxy=${http_proxy:-${HTTP_PROXY:-}}" \
+    --build-arg "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" \
+    --build-arg "all_proxy=${all_proxy:-${ALL_PROXY:-}}" \
+    --build-arg "no_proxy=${no_proxy:-${NO_PROXY:-}}" "$@"
+}
 
 require_clean_source() {
   if [[ -n "$(git -C "$repo_root" status --porcelain --untracked-files=all)" ]]; then
@@ -85,7 +100,7 @@ else
   python3 scripts/core-distribution-manifest.py extract-runtime "$msb_archive" "$stage/core/microsandbox"
 fi
 cp deploy/distribution/Dockerfile "$stage/core/Dockerfile"
-docker build --platform linux/amd64 --iidfile "$stage/core.id" \
+build_image --platform linux/amd64 --iidfile "$stage/core.id" \
   --label "org.opencontainers.image.revision=$revision" "$stage/core"
 core_image="$(cat "$stage/core.id")"
 # Fail at packaging time if the helper or runtime requires unavailable host libraries.
@@ -97,7 +112,7 @@ pnpm install --frozen-lockfile
 AGENTS_CORE_WEB_OPENAI_HOSTED_SESSIONS=1 AGENTS_CORE_WEB_ENVIRONMENT_FILES=1 pnpm build:web
 cp -R apps/web/dist "$stage/web/dist"
 cp services/core-console/Dockerfile "$stage/web/Dockerfile"
-docker build --platform linux/amd64 --iidfile "$stage/web.id" \
+build_image --platform linux/amd64 --iidfile "$stage/web.id" \
   --label "org.opencontainers.image.revision=$revision" "$stage/web"
 
 export AGENTS_EXECUTOR_BUILD_DIR="$stage/helpers"
@@ -120,7 +135,7 @@ else
     script="scripts/build-$harness-runtime.sh"
     if [[ "$harness" == codex ]]; then script=scripts/build-agents-runtime.sh; fi
     AGENTS_RUNTIME_BUILD_DIR="$stage/$harness" bash "$script"
-    docker build --platform linux/amd64 --iidfile "$stage/$harness.id" \
+    build_image --platform linux/amd64 --iidfile "$stage/$harness.id" \
       --label "org.opencontainers.image.revision=$revision" "$stage/$harness"
   done
   codex_image="$(cat "$stage/codex.id")"
@@ -139,7 +154,7 @@ for harness in codex claude mcode; do
 done
 mkdir "$stage/combined"
 cp deploy/distribution/Runtime.Dockerfile "$stage/combined/Dockerfile"
-docker build --platform linux/amd64 --iidfile "$stage/runtime.id" \
+build_image --platform linux/amd64 --iidfile "$stage/runtime.id" \
   --label "org.opencontainers.image.revision=$revision" \
   --build-arg "CODEX_IMAGE=${image_tags[0]}" --build-arg "CLAUDE_IMAGE=${image_tags[1]}" \
   --build-arg "MCODE_IMAGE=${image_tags[2]}" "$stage/combined"
