@@ -12,6 +12,15 @@ nodes, or list another project's allocations. The administrator credential is
 kept only in the page's memory. Re-enter it after a reload. Do not put it in the
 normal project connection settings or a URL.
 
+The distribution installer creates a separate administrator key under the private
+installation `admin/` directory when a local provider is enabled. It gives Core
+only the digest configuration; the console does not receive that key. Enter the
+key on this page after the ordinary console login. The production console forwards
+only sandbox administration requests with this explicit credential. Remote nodes
+must use the Core API origin for enrollment and connection, not the console URL.
+Default zero-node installation leaves sandbox administration unconfigured; use the
+explicit Core configuration below for an advanced remote-only deployment.
+
 ## Configure Core
 
 Keep the existing `AGENTS_API_MANAGED_RUNTIMES_FILE` JSON. Existing Docker and

@@ -48,6 +48,15 @@ complete host network policy. This adapter does not install registry credentials
 
 ## Bootstrap and network
 
+The SDK creates a private owned ext4 disk at `/environment`, with explicit
+`environment_disk_mib` capacity. Workspace, staging and generated outputs share
+that filesystem, preserving the existing cross-device and link checks. The
+layered root filesystem can report different device IDs for directories and
+upper-layer files and is not used for workspace storage. Native full snapshots
+and sandbox removal capture, restore and reclaim the owned disk; no host path or
+external volume lifecycle is introduced. Creation starts in `/` until bootstrap
+creates the workspace directories.
+
 VM creation does not implicitly run the OCI ENTRYPOINT. Before admitting native
 work, the helper uses confidential stdin to install the existing private
 `auth.json` format, create Runtime directories, bind the same workspace at

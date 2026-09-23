@@ -14,6 +14,7 @@
     "memory_mib": 4096,
     "cpus": 2,
     "root_disk_mib": 8192,
+    "environment_disk_mib": 8192,
     "network": {
       "default_egress": "deny",
       "default_ingress": "deny",

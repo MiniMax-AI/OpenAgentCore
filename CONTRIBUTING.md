@@ -563,8 +563,8 @@ does not qualify its isolation or enable public creation.
 
 ### Hosted sandbox nodes and optional suspension
 
-Each Core deployment enables exactly one sandbox provider, selected at setup:
-Docker or microsandbox. Keep both adapters but reject multiple provider entries,
+A Core deployment may run without a sandbox provider. When enabled, exactly one
+sandbox provider is selected at setup: Docker or microsandbox. Keep both adapters but reject multiple provider entries,
 legacy default-provider maps and engine-based placement. Harness selection is
 independent. The configuration has one installation UUID and one provider kind.
 A local node has one explicit backend object; a remote-only Core has none. No mixed-provider or engine-based provider route is supported.
@@ -695,6 +695,12 @@ pause does not release RAM. Suspension captures and verifies a full snapshot,
 stops the exact source, and removes its writable compute closure only after the
 artifact is durably identified. Explicit network policy applies on create and
 restore. Do not inherit undeclared host resources.
+The native SDK owns a dedicated ext4 disk mounted at `/environment`, separately
+bounded by `environment_disk_mib` alongside `root_disk_mib`. Workspace, staging
+and outputs must share that filesystem; do not weaken cross-device or link
+checks to accommodate the layered root. Creation uses `/` until bootstrap creates
+the workspace. Existing full snapshots and sandbox cleanup own the disk, with
+no external mount or separate storage lifecycle.
 
 Suspend only after at least one Turn is terminal, no queued/in-progress/waiting
 root or subagent Turn, pending input/file operation or initialization remains,
@@ -1435,6 +1441,101 @@ prove compatibility between unrelated Core/Runtime versions: accept the exact
 package with a fresh database, extracted binaries, loaded image and real public
 workflow. Keep model/operator credentials external and Provider ownership stable
 across upgrades. This is the same managed Runtime, not user-managed enrollment.
+
+#### Matched Core and console distribution
+
+The installer packages Core and the Web console together,
+with independent `--core-only` and `--web-only` modes. `site/` is the public static
+landing, separate from `apps/web`; it must not create an onboarding prerequisite,
+call a model, or claim complete protocol compatibility. Operator installation,
+optional API examples and service diagnostics live in `docs/getting-started/`.
+
+`make build-core-distribution` builds from clean committed source and reuses the
+existing API, Runtime, SDK, helper and Web builders. Artifacts record source and
+immutable image identities, the actual Runtime manifest digest, checksums and
+microsandbox runtime/firmware hashes and executable native payloads. Release generation is not publication or
+qualification. A release must be tested from fresh extraction with real models;
+no synthetic result may substitute for native execution acceptance.
+
+The distribution build sets umask 022 for non-root-readable payloads; installation
+credentials and state retain their explicit private permissions.
+
+The first installer targets a trusted Linux amd64 Docker host. It installs a
+private dedicated PostgreSQL service and separate Core and console services in
+Compose by default, with zero execution nodes. The default requires neither KVM
+nor systemd user services, imports no Runtime image, mounts neither the Docker
+socket nor host devices into Core, and generates no managed Provider configuration.
+Local sandbox placement is opt-in: `--sandbox-provider true --provider microsandbox`
+or `--sandbox-provider true --provider docker`. Enabling the option without naming
+a provider selects microsandbox; `--provider` without enabling the option is an
+error. Web-only mode cannot enable a sandbox provider. Core-only mode retains the
+same opt-in rule. Missing KVM fails when microsandbox is selected without changing
+that choice.
+The distribution supplies native Core/helper binaries and pinned msb runtime and
+firmware. For microsandbox, Core is a native systemd user service with direct
+`ExecStart` and `KillMode=process`: its restart must preserve the Provider's resident
+microVM/helper processes. Never package those processes inside Core's container
+PID namespace, kill their process group on Core stop, or add recovery mechanisms to
+compensate for that packaging. User KVM access, the Linux runtime libraries and
+linger are prerequisites only for the microsandbox option. With the Docker sandbox
+option, Core runs in Compose with the canonical Docker socket. PostgreSQL/Web use
+Compose in either case; native Core
+and its Web proxy use loopback, with a private PostgreSQL port. This packaging
+choice does not change either Provider's execution contract.
+The basic distroless API image and binary builds remain independent artifacts.
+The distribution includes the sandbox-node binary. An enabled local node uses a
+persistent private state directory, explicitly separate from read-only configuration.
+Docker grants Core write access only to that node-state mount; native Core uses the
+same installation-owned directory. Zero-node installs create neither node identity
+state nor sandbox administrator credentials.
+
+One Runtime image contains the existing daemon, shared helpers and three native
+harness packages. Their differences remain in the adapters. Core keeps exclusive
+ownership of Session allocation, initialization, cancellation, snapshots and
+cleanup. When a sandbox provider is enabled, the installer imports its Runtime
+image and prepares running conditions; it never creates an execution Session or
+supplies a model credential. Applications use the
+existing write-only model execution extension, with the installation's persistent
+credential encryption key. Provider identity/backend namespace and native history
+must not change on a repeated install.
+
+`services/core-console` serves the production Web build and forwards public `/v1`
+requests to one configured Core using its project bearer, after console Basic
+authentication. Its explicit sandbox administration routes instead require a
+unique browser-supplied Bearer credential and forward it unchanged for Core to
+verify; console Basic access does not confer deployment administration. Never
+substitute the project bearer on those routes or give the console a shared admin
+credential. The installer keeps the administrator key and digests separate from
+project configuration and exposes only the digest file to Core. The Web keeps an
+entered administrator credential in memory. Node registration, identity and
+WebSocket transport are not console routes; nodes connect directly to Core.
+Both proxy paths retain fixed-origin, cross-site, safe-path, redirect and Upgrade
+restrictions through the standard Go reverse proxy with streaming/cancellation.
+The console implements no product identity, resource semantics, Runtime discovery
+or execution loop.
+The console has neither KVM nor Docker authority; its static root contains no
+secrets. Installation exposes only loopback API/console ports. Remote exposure
+requires an operator-configured HTTPS/access boundary. Web-only mode can connect
+to a loopback existing Core on the same Linux host or a remote HTTPS Core.
+
+Installation state and secrets live in a private directory under `~/.parsar/` by
+default. No credential enters build arguments, image layers, browser bundles or
+diagnostic output. Compose configuration is confidential. The generated database,
+caller/tenant/provider identities and encryption key survive reruns; automatic
+revision replacement and provider migration are outside this initial installer.
+Reruns also refuse enabling or disabling a sandbox provider on an existing
+installation, including adding one to the default zero-node installation.
+Stopping control-plane services does not stop all Provider resources; use Core's
+existing release operations for full cleanup. No native restart promise covers
+host reboot or a lost running microVM. Do not delete data or issue broad
+container/volume pruning as recovery.
+
+`make check-distribution` covers the production proxy, installation rules and
+release metadata. Real bundle validation covers default/provider selection,
+component modes, existing Web connection, public native execution and restart
+retention. Diagnostics report observed service health, not fabricated model or
+complete environment readiness. Runtime observations are Core-owned; do not add
+a duplicate monitoring/lifecycle framework to installation or the public landing.
 
 #### Current implementation
 
