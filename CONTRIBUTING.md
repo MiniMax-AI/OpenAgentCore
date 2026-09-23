@@ -2554,7 +2554,10 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   connection comment and ends at once, admitting nothing and following no work,
   because official same-key requests create distinct Sessions. Retry the same
   request/key with `stream=false`, or use the GET events stream, to recover. GET
-  event streams keep their live-only start and never end on settlement.
+  event streams keep their live-only start and never end on settlement or a Turn
+  failure; the only server-side end is the terminal `agent.session.failed` of a
+  hosted provisioning failure (and Session deletion), since that Session can
+  never run again.
   Disconnect never cancels admitted work. Official observations cover `none`
   creation; self-hosted, hosted and no-input stream lifetimes and the retry
   behavior are local choices, and the separate SDK one-Turn helper does not

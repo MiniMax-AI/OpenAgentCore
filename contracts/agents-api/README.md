@@ -821,7 +821,10 @@ reservation expires or fails. A creation that admitted nothing ends right after
 `created`. A settlement that records no event ends the stream after the events
 up to the cursor read with a settled projection in one snapshot; another client's
 work drained before that read can still be sent. Observe later Turns with the GET
-event stream, which never ends on its own. Terminal Turn events carry the Turn
+event stream, which does not end on settlement or a Turn failure; it ends only
+after the terminal `agent.session.failed` of a hosted provisioning failure, as
+officially observed ([initialization failure](environment-templates.md#initialization-failure--september-23)),
+or when the Session is deleted. Terminal Turn events carry the Turn
 snapshot's `usage` at the top level, null when unknown.
 
 The local `Idempotency-Key` creation extension shares identity across response
