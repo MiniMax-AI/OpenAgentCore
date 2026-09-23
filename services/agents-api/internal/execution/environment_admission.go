@@ -86,6 +86,9 @@ func (w *Worker) submitEnvironmentInputs(ctx context.Context, session store.Sess
 	if err != nil {
 		return nil, err
 	}
+	if reservation.State == store.EnvironmentInputPending && !reservation.IsInitial {
+		w.hintRuntimeWake(ctx, session)
+	}
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 	for {

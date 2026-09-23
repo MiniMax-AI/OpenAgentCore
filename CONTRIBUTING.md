@@ -344,8 +344,22 @@ settlement distinct. Advance at most one bounded initialization operation per fu
 maintenance scan. At allocation EOF, begin the next page in the same call rather
 than consume an observation interval on an empty page. Refill at most once, retain
 the 32-allocation per-call bound and the five-second ticker, and never loop on an
-empty store. Use process-local progress and the existing lifecycle gate. A recovered or uncertain
-running installation fails and uses existing cleanup, without replaying writes.
+empty store. Use process-local progress and the existing lifecycle gate.
+
+After a next-Turn input is durably pending, a completed managed allocation in a
+suspension/recovery phase may hint this loop. Initial inputs, cold creation,
+running/disabled compute, terminal receipts, cancellation/tool-result events,
+history and file operations do not use this hint. Eligibility lookup and delivery
+are best effort; persisted work and the normal ticker remain authoritative.
+Coalesce hints without blocking, and allow at most one extra scan per normal
+five-second cycle. Keep the ticker independent of requests. A normal tick consumes
+already queued hints before scanning; simultaneous tick/hint readiness is one
+normal scan. Preserve hints arriving during a scan, the allocation cursor and all
+ownership checks. Never close the hint channel while handlers may still send.
+This bounds extra maintenance work but does not bypass capacity, a busy lifecycle
+gate or multi-page scheduling, and does not guarantee a resume deadline.
+
+A recovered or uncertain running installation fails and uses existing cleanup, without replaying writes.
 Completed environments never reinstall initial files on reconnect or native recovery.
 Provider RunCommand carries bounded stdin, not confidential argv. Only fixed trusted
 initializers may run with Runtime authority. User setup and package install hooks
