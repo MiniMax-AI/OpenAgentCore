@@ -138,7 +138,7 @@ describe("Runtime history client", () => {
   });
 
   for (const [name, body] of [
-    ["unknown field", capabilities({ backend: "clickhouse" })],
+    ["unknown field", capabilities({ backend: "postgres" })],
     ["inconsistent availability", capabilities({ available: false })],
     ["duplicate metrics", capabilities({ metrics: ["cpu", "cpu"] })],
     ["invalid retention", capabilities({ retention_seconds: 60, maximum_range_seconds: 120 })],

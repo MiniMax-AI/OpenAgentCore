@@ -383,7 +383,7 @@ export function RuntimeObservabilityContent({
         <header className="dashboard-runtime-live-toolbar">
           <div>
             <h3 id="dashboard-runtime-live-heading">Resource trends</h3>
-            <p>{source === "durable" ? "ClickHouse-backed retained samples · explicit history source" : "Browser-local samples · reset on reload"}</p>
+            <p>{source === "durable" ? "Retained samples · durable history" : "Browser-local samples · reset on reload"}</p>
           </div>
           <div className="dashboard-runtime-live-controls">
             <span

@@ -101,6 +101,10 @@ export function runtimeDurableTrendSamples(
   };
 
   for (const history of histories) {
+    const { start, end } = history.requested_range;
+    for (let bucketStart = start; bucketStart < end; bucketStart += history.resolution_seconds) {
+      bucket(Math.min(bucketStart + history.resolution_seconds, end) * 1_000);
+    }
     for (const coverage of history.coverage.buckets) bucket(coverage.end * 1_000);
     for (const usage of history.token_usage) {
       bucket(usage.end * 1_000).tokens.set(history.session_id, {

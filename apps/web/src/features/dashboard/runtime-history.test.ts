@@ -146,6 +146,76 @@ describe("Runtime Durable Dashboard history", () => {
     expect(samples.every((sample) => sample.memoryUsageBytes === null && sample.memoryLimitBytes === null)).toBe(true);
   });
 
+  it("keeps omitted buckets between distant observations as gaps", () => {
+    const source = history();
+    const secondPoint = {
+      ...source.series[0]!.points[1]!,
+      start: 400, end: 430, first_observed_at: 410, last_observed_at: 410,
+    };
+    const sparse = history({
+      requested_range: { start: 100, end: 430 },
+      generated_at: 431,
+      coverage: {
+        ...source.coverage,
+        last_sample_at: 410,
+        expected_sample_count: 11,
+        buckets: [source.coverage.buckets[0]!, {
+          ...source.coverage.buckets[1]!,
+          start: 400, end: 430, first_observed_at: 410, last_observed_at: 410,
+        }],
+      },
+      series: [{ ...source.series[0]!, points: [source.series[0]!.points[0]!, secondPoint] }],
+      token_usage: [
+        source.token_usage[0]!,
+        { ...source.token_usage[1]!, start: 400, end: 430, sampled_at: 410 },
+      ],
+    });
+    const samples = runtimeDurableTrendSamples([session], [sparse]);
+    expect(samples.map((sample) => sample.sampledAt)).toEqual(
+      Array.from({ length: 11 }, (_, index) => (130 + index * 30) * 1_000),
+    );
+    expect(samples[0]?.targets[0]?.cpuRatio).toBe(.25);
+    expect(samples[10]?.targets[0]?.cpuRatio).toBe(.5);
+    expect(samples[10]?.inputTokensPerMinute).toBeNull();
+    expect(samples[10]?.outputTokensPerMinute).toBeNull();
+    for (const sample of samples.slice(1, -1)) {
+      expect(sample).toMatchObject({
+        targets: [], memoryUsageBytes: null, memoryLimitBytes: null,
+        inputTokensPerMinute: null, outputTokensPerMinute: null,
+      });
+    }
+  });
+
+  it("includes leading and trailing gaps with a shortened final bucket", () => {
+    const samples = runtimeDurableTrendSamples([session], [history({
+      requested_range: { start: 70, end: 205 },
+      generated_at: 206,
+    })]);
+    expect(samples.map((sample) => sample.sampledAt)).toEqual([100_000, 130_000, 160_000, 190_000, 205_000]);
+    expect(samples.map((sample) => sample.memoryUsageBytes)).toEqual([null, 512, 768, null, null]);
+    expect(samples.map((sample) => sample.targets.length)).toEqual([0, 1, 1, 0, 0]);
+  });
+
+  it("represents an entirely missing range without fabricating zero measurements", () => {
+    const samples = runtimeDurableTrendSamples([session], [history({
+      requested_range: { start: 100, end: 175 },
+      generated_at: 176,
+      coverage: {
+        retained_start: 100, first_sample_at: null, last_sample_at: null,
+        sample_count: 0, expected_sample_count: 3, buckets: [],
+      },
+      series: [],
+      token_usage: [],
+    })]);
+    expect(samples.map((sample) => sample.sampledAt)).toEqual([130_000, 160_000, 175_000]);
+    for (const sample of samples) {
+      expect(sample).toMatchObject({
+        targets: [], memoryUsageBytes: null, memoryLimitBytes: null,
+        inputTokensPerMinute: null, outputTokensPerMinute: null,
+      });
+    }
+  });
+
   it("keeps aggregate token throughput absent when any queried Session lacks usage", () => {
     const second = { ...session, id: "44444444-4444-4444-8444-444444444444" } as AgentSession;
     const secondHistory = history({ session_id: second.id, token_usage: [] });
