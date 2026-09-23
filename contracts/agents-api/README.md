@@ -786,10 +786,10 @@ configured engine must support admission before any initial work is persisted.
 
 Fixed SDK/raw HTTP and PostgreSQL tests cover the accepted forms, saved and inline
 configuration, ordering, tenant isolation, retries, rollback and persistence.
-Image support is bounded as documented above. Empty arrays and blank text
-fail the shared message validator. Official probes also rejected empty arrays
-and empty strings, but accepted whitespace-only strings; the latter is a queued
-difference. Full local size-limit and error-detail parity remains unverified. Swagger 2 cannot
+Image support is bounded as documented above. Empty arrays, empty content and
+empty text fail the shared message validator, as official probes also did.
+Whitespace-only text is admitted and stored verbatim, as officially observed
+([text content](message-input.md#text-content)). Full local size-limit and error-detail parity remains unverified. Swagger 2 cannot
 express the string/array union, so input is unconstrained with a type description.
 
 ### Session creation streaming

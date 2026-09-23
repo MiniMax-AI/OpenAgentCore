@@ -34,6 +34,28 @@ Query Session/Turn/Items to recover results. SSE remains live-only; reconnecting
 does not replay inputs or recreate completed Turns. The request contains no
 image `detail` or file-ID extension.
 
+## Text content
+
+Text is never trimmed. A message is valid when it contains an image or at least
+one non-empty `input_text` part, so whitespace-only text such as `"   "` or
+`"\n\t"` is admitted at Session creation (string or message input) and by
+`events.create`, then stored and projected in Items verbatim, as the official
+service does (SES-01..04). The empty string, an empty `content` array and an
+empty `input` array keep the existing 400 `invalid_request` response. A message
+whose parts are `["", "text"]` is still accepted; its official behavior is
+unobserved (SES-08). String `content` and string event `input` remain type errors,
+as observed officially. The shared daemon validator, daemon dispatch and the
+TypeScript client apply the same rule. Core Web keeps its local nonblank rule for
+the composer and the Start Session form ([Web architecture](../../docs/web/architecture.md)).
+
+Codex and MiniMax Code adapters deliver whitespace-only text unchanged; MiniMax
+public input, as for all text, carries its extra empty text block, which native
+ACP joins with a blank line. The separately packaged Claude bridge still rejects
+a message without non-whitespace text: initial and prepared input end the run with
+`invalid_request`, and active steering aborts the running Turn. Native acceptance
+of whitespace-only Turns on every harness is pending live evidence, which decides
+between a declared admission limitation and adapter alignment.
+
 ## Runtime boundary
 
 Private wire 0.5.0 uses `MessageInput` for initial requests, prepared start and
@@ -136,6 +158,7 @@ MiniMax's fixed ACP advertises `image:false`; its adapter rejects images. These 
 implementation gaps, not changes to the official protocol. JPEG parsing/conversion
 has deterministic coverage; the original `none` message fixtures are PNG, and
 the hosted workflow also exercises JPEG. Empty
-messages, local payload limits and native batch-size parity need upstream evidence.
+parts beside text (SES-08), local payload limits and native batch-size parity need
+upstream evidence.
 Function-result image support has its own [coverage record](function-result-images.md). No full protocol
 compatibility or support for arbitrary vision-model/provider combinations is claimed.

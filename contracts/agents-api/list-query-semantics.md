@@ -172,7 +172,8 @@ deletion and number reuse (SFT-01/02, since resolved or recorded in
 [file resource semantics](file-resource-semantics.md#sole-version-deletion--september-23-2026));
 Session deletion lifecycle (SES-29/30, since addressed by the
 [deletion batch](official-semantics-alignment.md#session-deletion-lifecycle--september-23));
-whitespace input (SES-01..04); Template network forms (SFT-21/22); and response
+whitespace input (SES-01..04, since addressed by the
+[whitespace batch](official-semantics-alignment.md#whitespace-only-message-text--september-23)); Template network forms (SFT-21/22); and response
 defaults (VA-11, SES-23/25). Malformed path IDs (SES-28), metadata and name error
 fields (VA-07/08/09), U+0000 (VA-10) and Template network codes (SFT-20) are
 addressed by the [validation error batch](official-semantics-alignment.md#validation-error-fields--september-23).
