@@ -41,17 +41,17 @@ type fakeCheckpointProvider struct {
 	beforeQuiesce                                                func()
 }
 
-func (p *fakeCheckpointProvider) Initial(r sandbox.Reference) sandbox.Compute {
-	return sandbox.Compute{Name: r.AllocationID + "-g0"}
+func (p *fakeCheckpointProvider) Initial(_ context.Context, r sandbox.Reference) (sandbox.Compute, error) {
+	return sandbox.Compute{Name: r.AllocationID + "-g0"}, nil
 }
-func (p *fakeCheckpointProvider) NewCompute(r sandbox.Reference, generation uint64, parent *sandbox.SnapshotIdentity) (sandbox.Compute, error) {
+func (p *fakeCheckpointProvider) NewCompute(_ context.Context, r sandbox.Reference, generation uint64, parent *sandbox.SnapshotIdentity) (sandbox.Compute, error) {
 	return sandbox.Compute{Generation: generation, Name: fmt.Sprintf("%s-g%d", r.AllocationID, generation), RestoredFrom: parent}, nil
 }
 func (p *fakeCheckpointProvider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
 	info, err := p.lifecycleProvider.Create(ctx, b)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	current := p.Initial(b.Reference)
+	current, _ := p.Initial(ctx, b.Reference)
 	current.ID = uuid.NewString()
 	p.computes[current.Name] = sandbox.ComputeState{Compute: current, Status: "running", BootstrapComplete: true}
 	p.bootstraps[b.AllocationID] = b

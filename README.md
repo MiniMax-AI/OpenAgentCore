@@ -8,12 +8,12 @@ The source repository retains both its product and its existing Core copy.
 This repository contains the API service, PostgreSQL migrations, pinned public
 protocol, execution daemon, the Docker provider, native Harness adapters,
 runtime image builders, Go and TypeScript client libraries, the standalone Core
-Web console, tests and operator documentation. It does not contain the Parsar
+Web console, node service, tests and operator documentation. It does not contain the Parsar
 product application, product backend, product database, business CLI or product
 deployment stack.
 
 V1 user-managed deployments colocate our daemon, selected harness, tools and
-`/workspace`. Core manages Docker only; users provision, renew and destroy E2B
+`/workspace`. Core manages one selected Docker or microsandbox provider across its registered nodes; users provision, renew and destroy E2B
 through the official SDK. The returned `remote_url` uses our private daemon
 transport, not stock `exec-server`. See the
 [Runtime enrollment guide](services/agents-api/README.md#user-managed-runtime-enrollment)
@@ -24,6 +24,7 @@ for tested deployments and remaining limits.
 
 - [API setup, authentication and execution](services/agents-api/README.md)
 - [Standalone containers](services/agents-api/CONTAINER.md)
+- [Hosted Sandbox Manager](services/agents-api/HOSTED-SANDBOX-MANAGER.md)
 - [Docker Runtime](services/agents-api/deploy/codex/README.md)
 - [Protocol coverage and known gaps](contracts/agents-api/README.md)
 - [Harness selection](contracts/agents-api/harness-selection.md)
@@ -45,8 +46,8 @@ Provision a dedicated Core PostgreSQL database and caller credentials using the
 operator guide before starting the service. Native execution also needs the
 appropriate Runtime image and provider configuration.
 
-Core Web lives in `apps/web` and talks only to the public `/v1/agents/**`
-HTTP/SSE contract through the TypeScript implementation in
+Core Web lives in `apps/web` and uses the public `/v1/agents/**` HTTP/SSE contract
+and explicit Core sandbox-management extensions through the TypeScript implementation in
 `packages/agents-client`. The Go client remains in
 `packages/agents-client/v1`; both clients live next to the contract they consume
 without coupling browser state to Core execution internals.

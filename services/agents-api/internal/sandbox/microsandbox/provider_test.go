@@ -117,7 +117,11 @@ func TestNoDeadlineOrForeignAllocationNeverCallsHelper(t *testing.T) {
 	r := testRef()
 	foreign := r
 	foreign.EnvironmentID = "77777777-7777-4777-8777-777777777777"
-	_, e = p.GetCompute(deadline(t), foreign, p.Initial(r))
+	initial, initialErr := p.Initial(deadline(t), r)
+	if initialErr != nil {
+		t.Fatal(initialErr)
+	}
+	_, e = p.GetCompute(deadline(t), foreign, initial)
 	if !errors.Is(e, sandbox.ErrInvalid) || calls != 0 {
 		t.Fatalf("e=%v calls=%d", e, calls)
 	}

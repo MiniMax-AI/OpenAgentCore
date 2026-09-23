@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import type { AgentSession } from "@agents-core-web/agents-client";
 
+import { SessionPlacement } from "../../sandbox/SessionPlacement";
 import { Modal } from "../../../components/Modal";
 import {
   SessionActionError,
@@ -57,6 +58,7 @@ export function SessionDetails({ session }: { session: AgentSession }) {
         <div><dt>Created</dt><dd><time dateTime={new Date(session.created_at * 1000).toISOString()}>{formatTimestamp(session.created_at)}</time></dd></div>
         <div><dt>Last active</dt><dd><time dateTime={new Date(session.last_active_at * 1000).toISOString()}>{formatTimestamp(session.last_active_at)}</time></dd></div>
         <div><dt>Agent</dt><dd>{session.agent.name || <span className="agent-null-value">Untitled Agent</span>}</dd></div>
+        <SessionPlacement key={session.id} sessionId={session.id} />
         <div><dt>Model</dt><dd><code>{session.agent.model}</code></dd></div>
         <div><dt>Metadata</dt><dd><StructuredMetadata metadata={session.metadata} /></dd></div>
       </dl>

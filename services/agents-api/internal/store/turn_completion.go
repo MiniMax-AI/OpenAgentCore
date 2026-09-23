@@ -58,8 +58,17 @@ func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turn
 			}
 			if snapshot.Done != nil && snapshot.Done.SourceCompletedAtMS != nil {
 				ms := *snapshot.Done.SourceCompletedAtMS
-				if ms <= 0 || ms/1000 < current.CreatedAt.Time.Unix() {
+				if ms <= 0 {
 					return ErrInvalidInput
+				}
+				if ms/1000 < current.CreatedAt.Time.Unix() {
+					managed, err := q.SessionHasRuntimeNode(ctx, session)
+					if err != nil {
+						return err
+					}
+					if !managed {
+						return ErrInvalidInput
+					}
 				}
 				sourceCompleted = pgtype.Timestamptz{Time: time.UnixMilli(ms), Valid: true}
 			}

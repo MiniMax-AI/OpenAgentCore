@@ -75,7 +75,7 @@ import tarfile
 root = pathlib.Path(sys.argv[1])
 revision, tree, epoch, go_version, archive_name, runtime_image = sys.argv[2:]
 source, package = root / "source", root / "package"
-binaries = ["agents-api", "agents-api-migrate", "agents-api-device", "agents-api-environment-key"]
+binaries = ["agents-api", "agents-api-migrate", "agents-api-device", "agents-api-environment-key", "parsar-sandbox-node"]
 
 
 def sha256(path):

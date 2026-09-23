@@ -67,7 +67,11 @@ func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner store.Runtim
 	if !ok {
 		return sandbox.ErrInvalid
 	}
-	state, err := p.GetCompute(ctx, runtimeReference(owner), p.Initial(runtimeReference(owner)))
+	initial, err := p.Initial(ctx, runtimeReference(owner))
+	if err != nil {
+		return err
+	}
+	state, err := p.GetCompute(ctx, runtimeReference(owner), initial)
 	if err != nil {
 		return err
 	}
@@ -226,13 +230,13 @@ func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.Che
 	if !activity.Busy && !activity.WakeRequested {
 		return nil
 	}
-	if err := r.computeCapacity(ctx, owner.ProviderKey); err != nil {
+	if err := r.computeCapacityForAllocation(ctx, owner); err != nil {
 		return err
 	}
 	if state.Snapshot == nil || state.Target != nil {
 		return sandbox.ErrOwnership
 	}
-	target, err := p.NewCompute(runtimeReference(owner), state.Current.Generation+1, state.Snapshot)
+	target, err := p.NewCompute(ctx, runtimeReference(owner), state.Current.Generation+1, state.Snapshot)
 	if err != nil {
 		return err
 	}
@@ -269,4 +273,12 @@ func ignoreComputeAbsent(err error) error {
 		return nil
 	}
 	return err
+}
+
+// Node-backed restores reserve capacity atomically in SetRuntimeCompute.
+func (r *runtimeLifecycle) computeCapacityForAllocation(ctx context.Context, owner store.RuntimeAllocation) error {
+	if owner.NodeID != "" {
+		return nil
+	}
+	return r.computeCapacity(ctx, owner.ProviderKey)
 }

@@ -159,6 +159,8 @@ type RuntimeAllocation struct {
 	ComputeActivityAt    pgtype.Timestamptz `json:"compute_activity_at"`
 	ComputeWakeRequested bool               `json:"compute_wake_requested"`
 	ComputeRetainedUntil pgtype.Timestamptz `json:"compute_retained_until"`
+	NodeID               pgtype.UUID        `json:"node_id"`
+	ObservationError     string             `json:"observation_error"`
 }
 
 type RuntimeDeployment struct {
@@ -167,6 +169,9 @@ type RuntimeDeployment struct {
 	BackendFingerprint string             `json:"backend_fingerprint"`
 	Maintenance        bool               `json:"maintenance"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	ProviderKind       string             `json:"provider_kind"`
+	LocalNodeID        pgtype.UUID        `json:"local_node_id"`
+	OwnerEpoch         int64              `json:"owner_epoch"`
 }
 
 type RuntimeDeviceAuthority struct {
@@ -175,6 +180,38 @@ type RuntimeDeviceAuthority struct {
 	Name           string      `json:"name"`
 	EnvironmentID  pgtype.UUID `json:"environment_id"`
 	CredentialHash string      `json:"credential_hash"`
+}
+
+type RuntimeNode struct {
+	ID                 pgtype.UUID        `json:"id"`
+	InstallationID     pgtype.UUID        `json:"installation_id"`
+	Name               string             `json:"name"`
+	BackendFingerprint string             `json:"backend_fingerprint"`
+	CredentialSha256   string             `json:"credential_sha256"`
+	MaxActive          int32              `json:"max_active"`
+	MaxRetained        int32              `json:"max_retained"`
+	ConnectionID       pgtype.UUID        `json:"connection_id"`
+	ProviderReady      bool               `json:"provider_ready"`
+	Health             []byte             `json:"health"`
+	ConnectedEpoch     int64              `json:"connected_epoch"`
+	LastSeenAt         pgtype.Timestamptz `json:"last_seen_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	RemovedAt          pgtype.Timestamptz `json:"removed_at"`
+}
+
+type RuntimeNodeEnrollment struct {
+	TokenSha256    string             `json:"token_sha256"`
+	InstallationID pgtype.UUID        `json:"installation_id"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt     pgtype.Timestamptz `json:"consumed_at"`
+	NodeID         pgtype.UUID        `json:"node_id"`
+}
+
+type RuntimePlacement struct {
+	EnvironmentID pgtype.UUID        `json:"environment_id"`
+	NodeID        pgtype.UUID        `json:"node_id"`
+	ReservedAt    pgtype.Timestamptz `json:"reserved_at"`
+	ReleasedAt    pgtype.Timestamptz `json:"released_at"`
 }
 
 type Session struct {

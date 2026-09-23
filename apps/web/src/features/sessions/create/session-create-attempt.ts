@@ -9,6 +9,7 @@ import { createIdempotencyKey } from "../../../lib/pending-send";
 
 export interface SessionCreateDraft {
   agentId?: string;
+  sandboxNodeId?: string;
   agent?: InlineAgentInput;
   environment: AgentEnvironmentInput;
   input?: string | InputMessage[];
@@ -39,6 +40,7 @@ export function sessionCreateRequestPayload(
     ...(draft.agentId === undefined ? {} : { agent_id: draft.agentId }),
     ...(draft.agent === undefined ? {} : { agent: draft.agent }),
     environment: draft.environment,
+    ...(draft.sandboxNodeId ? { x_agents_core: { sandbox_node_id: draft.sandboxNodeId } } : {}),
     ...(draft.input === undefined ? {} : { input: draft.input }),
     metadata: draft.metadata,
     vault_ids: [...(draft.vaultIds ?? [])].sort(),

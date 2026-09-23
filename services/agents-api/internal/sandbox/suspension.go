@@ -61,8 +61,8 @@ type ResumeRequest struct {
 // exact-incarnation operations; Worker and Store remain the lifecycle owner.
 type CheckpointProvider interface {
 	Provider
-	Initial(Reference) Compute
-	NewCompute(Reference, uint64, *SnapshotIdentity) (Compute, error)
+	Initial(context.Context, Reference) (Compute, error)
+	NewCompute(context.Context, Reference, uint64, *SnapshotIdentity) (Compute, error)
 	GetCompute(context.Context, Reference, Compute) (ComputeState, error)
 	Suspend(context.Context, SuspendRequest) (ComputeState, error)
 	Resume(context.Context, ResumeRequest) (ComputeState, error)

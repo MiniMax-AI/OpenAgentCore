@@ -14,9 +14,13 @@ import (
 // RuntimeDeployment identifies the one operator-selected installation for this database.
 // Its fingerprint describes the backend namespace, never credentials or image contents.
 type RuntimeDeployment struct {
-	InstallationID     string
-	BackendFingerprint string
-	Maintenance        bool
+	ProviderKind                     string
+	LocalNodeID                      string
+	LocalCredentialSHA256            string
+	LocalMaxActive, LocalMaxRetained int
+	InstallationID                   string
+	BackendFingerprint               string
+	Maintenance                      bool
 }
 
 // ConfigureRuntimeDeployment runs before Worker startup under its execution lease.
@@ -44,8 +48,11 @@ func (s *Store) ConfigureRuntimeDeployment(ctx context.Context, selected *Runtim
 		if err != nil {
 			return err
 		}
-		if selected != nil && previous.InstallationID == update.InstallationID && previous.BackendFingerprint == update.BackendFingerprint {
-			return q.SetRuntimeDeployment(ctx, update)
+		if selected != nil && previous.InstallationID == update.InstallationID && previous.BackendFingerprint == update.BackendFingerprint && (previous.ProviderKind == "" || selected.ProviderKind == previous.ProviderKind) {
+			if err := q.SetRuntimeDeployment(ctx, update); err != nil {
+				return err
+			}
+			return configureRuntimeManager(ctx, q, previous, selected)
 		}
 		resources, err := q.CountRuntimeDeploymentResources(ctx)
 		if err != nil {
@@ -69,7 +76,10 @@ func (s *Store) ConfigureRuntimeDeployment(ctx context.Context, selected *Runtim
 				return fmt.Errorf("cannot switch sandbox installation: %d unreleased allocations (instances, retained snapshots, uncertain operations or pending cleanup) and %d pending hosted environments remain", resources.Allocations, resources.Pending)
 			}
 		}
-		return q.SetRuntimeDeployment(ctx, update)
+		if err := q.SetRuntimeDeployment(ctx, update); err != nil {
+			return err
+		}
+		return configureRuntimeManager(ctx, q, previous, selected)
 	})
 }
 

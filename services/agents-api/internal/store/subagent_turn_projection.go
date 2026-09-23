@@ -84,6 +84,12 @@ func projectSubagentTurn(ctx context.Context, q *sqlc.Queries, session pgtype.UU
 	if err != nil {
 		return err
 	}
+	// Terminal replays returned above; they must not restart the managed idle timer.
+	if terminalStatus(row.Status) {
+		if err := q.RecordRuntimeTerminalActivity(ctx, session); err != nil {
+			return err
+		}
+	}
 	value := publicChildTurn(row)
 	emit := func(kind string) error {
 		return recordSessionChange(ctx, q, session, SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn." + kind, TurnID: value.ID, Turn: &value}})

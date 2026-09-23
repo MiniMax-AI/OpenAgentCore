@@ -36,6 +36,8 @@ type ResourceStore interface {
 }
 
 type Handler struct {
+	sandboxStore       *store.Store
+	deploymentAuth     *DeploymentAuthenticator
 	policy             execution.Policy
 	store              ResourceStore
 	auth               *Authenticator
@@ -61,6 +63,13 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 	for _, option := range options {
 		option(h)
 	}
+	if h.deploymentAuth != nil {
+		for digest := range h.deploymentAuth.digests {
+			if _, exists := auth.principals[digest]; exists {
+				return nil, errors.New("deployment administrator credentials must be separate from project credentials")
+			}
+		}
+	}
 	router := chi.NewRouter()
 	router.Use(log.HTTPMiddleware)
 	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -75,8 +84,10 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 		r.Get("/v1/files/{file_id}/content", h.sourceFileContent)
 		r.Delete("/v1/files/{file_id}", h.deleteSourceFile)
 	})
+	h.registerSandboxManagerRoutes(router)
 	router.Route("/v1", func(r chi.Router) {
 		r.Use(h.authenticate)
+		h.registerSandboxProjectRoutes(r)
 		r.Post("/vaults", h.createVault)
 		r.Get("/vaults", h.listVaults)
 		r.Get("/vaults/{vault_id}", h.getVault)
@@ -225,10 +236,22 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		selectedEngine, err = h.sessionHarness(configuration)
 	}
-	if err == nil && input.XAgentsCore != nil {
+	if err == nil && input.XAgentsCore != nil && input.XAgentsCore.ModelProvider != nil {
 		err = input.XAgentsCore.ModelProvider.ValidateHarness(selectedEngine)
 		if err == nil && input.Environment.Type != "openai_hosted" {
 			err = fmt.Errorf("caller model credentials currently require a hosted environment")
+		}
+	}
+	if err == nil && input.XAgentsCore != nil {
+		extension := input.XAgentsCore
+		if extension.ModelProvider == nil && extension.SandboxNodeID == nil {
+			err = fmt.Errorf("x_agents_core requires an execution option")
+		}
+		if extension.SandboxNodeID != nil {
+			id, parseErr := uuid.Parse(*extension.SandboxNodeID)
+			if parseErr != nil || id == uuid.Nil || id.String() != *extension.SandboxNodeID || input.Environment.Type != "openai_hosted" {
+				err = fmt.Errorf("sandbox_node_id requires a canonical UUID and hosted environment")
+			}
 		}
 	}
 	if err == nil {
@@ -261,6 +284,9 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		ModelProvider: provider,
 		Creator:       sessionCreator(r), InitialFiles: input.initialFiles, Initialization: input.initialization,
 		Engine: selectedEngine, IdempotencyKey: key, Metadata: input.Metadata, Configuration: configuration, InitialInputs: initialInputs, CreationRequest: creationRequest,
+	}
+	if input.XAgentsCore != nil && input.XAgentsCore.SandboxNodeID != nil {
+		createInput.SandboxNodeID = *input.XAgentsCore.SandboxNodeID
 	}
 	if input.Stream {
 		h.createSessionStream(w, r, createInput)

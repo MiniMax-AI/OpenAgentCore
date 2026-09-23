@@ -78,7 +78,14 @@ func (s *Store) ReleaseRuntimeAllocation(ctx context.Context, owner RuntimeAlloc
 		if row.State == "released" {
 			return row, nil
 		}
-		return q.ReleaseRuntimeAllocation(ctx, row.ID)
+		released, err := q.ReleaseRuntimeAllocation(ctx, row.ID)
+		if err != nil {
+			return released, err
+		}
+		if err := q.ReleaseRuntimePlacement(ctx, row.EnvironmentID); err != nil {
+			return sqlc.RuntimeAllocation{}, err
+		}
+		return released, nil
 	})
 }
 
@@ -90,7 +97,7 @@ func (s *Store) mutateRuntimeAllocation(ctx context.Context, owner RuntimeAlloca
 	if err != nil {
 		return RuntimeAllocation{}, err
 	}
-	if previous.ID != owner.ID || previous.DeviceID != owner.DeviceID || previous.ProviderKey != owner.ProviderKey {
+	if previous.ID != owner.ID || previous.DeviceID != owner.DeviceID || previous.ProviderKey != owner.ProviderKey || previous.NodeID != owner.NodeID {
 		return RuntimeAllocation{}, ErrIdempotencyConflict
 	}
 	lookup, _ := deviceLookup(owner.TenantID, owner.EnvironmentID)

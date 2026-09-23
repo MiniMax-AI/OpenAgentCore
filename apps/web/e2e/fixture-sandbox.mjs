@@ -1,0 +1,43 @@
+const now = "2026-09-23T08:00:00Z";
+const node = (id, name, online = true) => ({ id, name, provider: "docker", online, provider_ready: online, diagnostic: "",
+  last_seen_at: now, max_active: 4, max_retained: 16, active: id === "node-local" ? 1 : 0, reserved: 0,
+  retained: 0, cleanup_pending: 0, created_at: now, running: id === "node-local" ? 1 : 0, snapshots: 0,
+  cpu_count: online ? 8 : null, available_memory_bytes: online ? 8589934592 : null, available_disk_bytes: online ? 34359738368 : null,
+});
+let nodes = [];
+let calls = [];
+let provider = "docker";
+let diagnostic = "";
+export function resetSandboxFixture() {
+  nodes = [node("node-local", "Core server"), node("node-offline", "Offline host", false)]; calls = []; provider = "docker"; diagnostic = "";
+}
+resetSandboxFixture();
+export function handleSandboxFixture(request, response, url, sendJson, sendError) {
+  const path = url.pathname;
+  if (path === "/__fixture/sandbox-diagnostic") {
+    const value = url.searchParams.get("value") ?? "";
+    if (!["", "node_unavailable", "resource_missing", "compute_unconfirmed", "ownership_mismatch", "provider_unavailable"].includes(value)) { sendError(response, 400, "Unknown diagnostic"); return true; }
+    diagnostic = value;
+    nodes = nodes.map((entry) => entry.id === "node-local" ? { ...entry, online: value !== "node_unavailable", provider_ready: value !== "provider_unavailable", diagnostic: value === "provider_unavailable" ? value : "" } : entry);
+    sendJson(response, {}); return true;
+  }
+  if (path === "/__fixture/sandbox") { sendJson(response, { nodes, calls }); return true; }
+  if (path === "/__fixture/sandbox-microsandbox") { provider = "microsandbox"; sendJson(response, {}); return true; }
+  if (path === "/v1/sandbox/nodes") { sendJson(response, { data: nodes.map(({ id, name, online }) => ({ id, name, available: online })) }); return true; }
+  if (/^\/v1\/agents\/sessions\/[^/]+\/sandbox-placement$/.test(path)) {
+    sendJson(response, { node_id: "node-local", node_name: "Core server", available: !diagnostic, state: "active", compute_phase: "running", diagnostic }); return true;
+  }
+  if (!path.startsWith("/core/v1/sandbox/")) return false;
+  calls.push({ path, method: request.method, authorized: request.headers.authorization === "Bearer fixture-admin-key" });
+  if (request.headers.authorization !== "Bearer fixture-admin-key") { sendError(response, 401, "A deployment admin key is required.", "invalid_admin_key"); return true; }
+  if (path.endsWith("/deployment")) sendJson(response, { installation_id: "fixture-installation", provider, maintenance: false, owner_epoch: 1 });
+  else if (path.endsWith("/enrollment-tokens")) sendJson(response, { token: "fixture-once-token", expires_at: "2026-09-23T09:00:00Z" });
+  else if (path.endsWith("/allocations")) sendJson(response, { data: path.includes("node-local") ? [{ id: "allocation-1", node_id: "node-local", session_id: "session_snapshot", tenant_id: "fixture-project", environment_id: "environment-1", state: "active", compute_phase: "running", initialization: "ready", diagnostic, created_at: now }] : [] });
+  else if (request.method === "DELETE") {
+    const id = path.split("/").at(-1);
+    if (id === "node-local") sendError(response, 409, "Node has active allocations or retained resources.", "runtime_node_in_use");
+    else { nodes = nodes.filter((entry) => entry.id !== id); sendJson(response, { id, deleted: true }); }
+  } else if (path.endsWith("/nodes")) sendJson(response, { data: nodes });
+  else sendError(response, 404, "Unknown sandbox fixture route.");
+  return true;
+}

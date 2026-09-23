@@ -156,3 +156,9 @@ For key rotation, executor-key revocation, existing-database upgrades and other 
 profiles, use the [versioned service guide](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/services/agents-api/README.md).
 This package does not install PostgreSQL, daemons, harnesses, TLS or a supervisor,
 and it does not switch Parsar's product execution path.
+
+## Hosted sandbox nodes
+
+The release includes `parsar-sandbox-node` for local and remote hosts. See the
+[Hosted Sandbox Manager guide](HOSTED-SANDBOX-MANAGER.md) for provider selection,
+registration, administrator credentials, fixed Session placement and maintenance.

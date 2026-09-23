@@ -10,6 +10,15 @@
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
+// @securityDefinitions.apikey DeploymentAdminAuth
+// @in header
+// @name Authorization
+// @securityDefinitions.apikey NodeEnrollmentAuth
+// @in header
+// @name Authorization
+// @securityDefinitions.apikey NodeAuth
+// @in header
+// @name Authorization
 package main
 
 import (
@@ -28,6 +37,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtime"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeenrollment"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/node"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -80,11 +90,6 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	managed, closeManaged, err := managedRuntimes()
-	if err != nil {
-		return err
-	}
-	defer closeManaged()
 	transientOptions, modelProviderEndpoints, err := executionOptionsConfiguration()
 	if err != nil {
 		return err
@@ -99,7 +104,24 @@ func run() error {
 	}
 	var workerDone chan error
 	var worker *execution.Worker
+	managedNodes, err := configureManagedNodes(executionStore, func(ctx context.Context) error {
+		if worker == nil {
+			return errors.New("sandbox execution owner is unavailable")
+		}
+		return worker.CheckOwnership(ctx)
+	})
+	if err != nil {
+		return err
+	}
+	defer managedNodes.close()
+	var managed *execution.RuntimeProvider
+	if managedNodes != nil {
+		managed = managedNodes.runtime
+	}
 	options := []api.Option{api.WithSubagents(executionStore), api.WithSkills(executionStore), api.WithSourceFiles(executionStore), api.WithSessionArtifacts(executionStore)}
+	if managedNodes != nil {
+		options = append(options, api.WithSandboxManager(executionStore, managedNodes.admin))
+	}
 	var daemonHandler http.Handler
 	var registry *gateway.Registry
 	if wsURL := os.Getenv("AGENTS_API_DAEMON_WS_URL"); wsURL != "" {
@@ -142,18 +164,36 @@ func run() error {
 		mux.Handle("/api/v1/agent-daemon/", daemonHandler)
 		mux.Handle("/api/v1/agent-daemon/enroll", runtimeenrollment.EnrollmentHandler(executionStore))
 
+		if managedNodes != nil {
+			mux.Handle("/core/v1/sandbox/node/connect", managedNodes.hub)
+		}
 		mux.Handle("/", handler)
 		handler = mux
 	}
-	addr := os.Getenv("AGENTS_API_ADDR")
-	if addr == "" {
-		addr = "127.0.0.1:8091"
-	}
+	addr := serverAddress()
 	server := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	done := make(chan error, 1)
 	go func() { done <- server.ListenAndServe() }()
+	var localDone chan error
+	if managedNodes != nil && managedNodes.local != nil {
+		localDone = make(chan error, 1)
+		go func() { localDone <- node.Run(ctx, *managedNodes.local) }()
+		defer func() {
+			stop()
+			if localDone != nil {
+				<-localDone
+			}
+		}()
+	}
 	select {
 	case err := <-done:
+		return err
+	case err := <-localDone:
+		localDone = nil
+		stop()
+		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdown)
 		return err
 	case err := <-workerDone:
 		workerDone = nil

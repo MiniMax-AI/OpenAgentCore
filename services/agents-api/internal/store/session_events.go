@@ -41,6 +41,10 @@ func recordTurnChange(ctx context.Context, q *sqlc.Queries, row sqlc.Turn, creat
 		return nil
 	}
 	if terminalStatus(row.Status) {
+		// Managed idle time starts when Core commits completion, not on a remote clock.
+		if err := q.RecordRuntimeTerminalActivity(ctx, row.SessionID); err != nil {
+			return err
+		}
 		if err := settleTurnArtifacts(ctx, q, row); err != nil {
 			return err
 		}

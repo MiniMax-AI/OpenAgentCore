@@ -25,7 +25,15 @@ func NewWithCaller(c Config, caller Caller) (*Provider, error) {
 	c.Network.Rules = append([]NetworkRule(nil), c.Network.Rules...)
 	return &Provider{config: c, caller: caller}, nil
 }
-func (p *Provider) Initial(r sandbox.Reference) Compute { return Compute{Name: Name(p.config, r, 0)} }
+func (p *Provider) Initial(ctx context.Context, r sandbox.Reference) (Compute, error) {
+	if err := ctx.Err(); err != nil {
+		return Compute{}, err
+	}
+	if !ValidReference(r) {
+		return Compute{}, sandbox.ErrInvalid
+	}
+	return Compute{Name: Name(p.config, r, 0)}, nil
+}
 func (p *Provider) call(ctx context.Context, q Request) (Response, error) {
 	deadline, ok := ctx.Deadline()
 	if !ok {
@@ -72,7 +80,10 @@ func (p *Provider) state(ctx context.Context, q Request) (State, error) {
 	}
 	want := q.Compute
 	if q.Operation == "create" {
-		want = p.Initial(q.Reference)
+		want, e = p.Initial(ctx, q.Reference)
+		if e != nil {
+			return State{}, e
+		}
 	}
 	if q.Operation == "suspend" {
 		want = q.Suspend.Source
@@ -106,17 +117,29 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 	return info(b.Reference, s), e
 }
 func (p *Provider) GetInfo(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {
-	s, e := p.GetCompute(ctx, r, p.Initial(r))
+	c, e := p.Initial(ctx, r)
+	if e != nil {
+		return sandbox.Info{}, e
+	}
+	s, e := p.GetCompute(ctx, r, c)
 	return info(r, s), e
 }
 func (p *Provider) Renew(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {
 	return p.GetInfo(ctx, r)
 }
 func (p *Provider) Kill(ctx context.Context, r sandbox.Reference) error {
-	return p.KillCompute(ctx, r, p.Initial(r))
+	c, e := p.Initial(ctx, r)
+	if e != nil {
+		return e
+	}
+	return p.KillCompute(ctx, r, c)
 }
 func (p *Provider) RunCommand(ctx context.Context, r sandbox.Reference, c sandbox.Command) (sandbox.CommandResult, error) {
-	return p.RunCommandCompute(ctx, r, p.Initial(r), c)
+	compute, e := p.Initial(ctx, r)
+	if e != nil {
+		return sandbox.CommandResult{}, e
+	}
+	return p.RunCommandCompute(ctx, r, compute, c)
 }
 func (p *Provider) GetCompute(ctx context.Context, r sandbox.Reference, c Compute) (State, error) {
 	return p.state(ctx, Request{Operation: "inspect", Reference: r, Compute: c})
@@ -152,7 +175,10 @@ func (p *Provider) ResumeCompute(ctx context.Context, r sandbox.Reference, c Com
 	return p.state(ctx, Request{Operation: "resume_compute", Reference: r, Compute: c})
 }
 
-func (p *Provider) NewCompute(r sandbox.Reference, generation uint64, snapshot *SnapshotIdentity) (Compute, error) {
+func (p *Provider) NewCompute(ctx context.Context, r sandbox.Reference, generation uint64, snapshot *SnapshotIdentity) (Compute, error) {
+	if err := ctx.Err(); err != nil {
+		return Compute{}, err
+	}
 	c := Compute{Generation: generation, Name: Name(p.config, r, generation)}
 	if snapshot != nil {
 		value := *snapshot

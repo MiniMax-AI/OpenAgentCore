@@ -66,6 +66,15 @@ func writeFieldError(w http.ResponseWriter, err error) bool {
 
 func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFoundParam ...string) {
 	switch {
+	case errors.Is(err, store.ErrRuntimeNodeCredential):
+		writeError(w, http.StatusUnauthorized, "invalid_node_credential", "A valid sandbox node enrollment or node credential is required.")
+	case errors.Is(err, store.ErrRuntimeNodeInUse):
+		writeError(w, http.StatusConflict, "runtime_node_in_use", "The sandbox node retains allocations, snapshots, reservations or pending cleanup.")
+	case errors.Is(err, store.ErrRuntimeLocalNodeConfigured):
+		writeError(w, http.StatusConflict, "runtime_local_node_configured", "The local sandbox node is enabled in deployment configuration. Disable it through provider maintenance and restart Core before removing it.")
+	case errors.Is(err, store.ErrRuntimeNodeUnavailable):
+		writeError(w, http.StatusServiceUnavailable, "runtime_node_unavailable", "The selected sandbox node is unavailable or has no capacity.")
+
 	case errors.Is(err, store.ErrDefaultSkillVersion):
 		writeError(w, http.StatusBadRequest, "invalid_value", "Cannot delete the default skill version.", "version")
 	case errors.Is(err, store.ErrSourceFileTooLarge):

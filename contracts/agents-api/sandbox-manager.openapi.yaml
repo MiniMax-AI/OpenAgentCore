@@ -1,0 +1,558 @@
+basePath: /
+definitions:
+  api.SandboxAllocationList:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/store.RuntimeNodeAllocation'
+        type: array
+    type: object
+  api.SandboxEnrollmentToken:
+    properties:
+      expires_at:
+        type: string
+      token:
+        type: string
+    type: object
+  api.SandboxEnrollmentTokenRequest:
+    type: object
+  api.SandboxMutationResponse:
+    properties:
+      deleted:
+        type: boolean
+      id:
+        type: string
+      updated:
+        type: boolean
+    type: object
+  api.SandboxNodeList:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/store.RuntimeNode'
+        type: array
+    type: object
+  store.RuntimeDeploymentView:
+    properties:
+      installation_id:
+        type: string
+      maintenance:
+        type: boolean
+      owner_epoch:
+        type: integer
+      provider:
+        type: string
+    type: object
+  store.RuntimeNode:
+    properties:
+      active:
+        type: integer
+      available_disk_bytes:
+        type: integer
+      available_memory_bytes:
+        type: integer
+      cleanup_pending:
+        type: integer
+      cpu_count:
+        type: integer
+      created_at:
+        type: string
+      diagnostic:
+        type: string
+      id:
+        type: string
+      last_seen_at:
+        type: string
+      max_active:
+        type: integer
+      max_retained:
+        type: integer
+      name:
+        type: string
+      online:
+        type: boolean
+      provider:
+        type: string
+      provider_ready:
+        type: boolean
+      reserved:
+        type: integer
+      retained:
+        type: integer
+      running:
+        type: integer
+      snapshots:
+        type: integer
+    type: object
+  store.RuntimeNodeAllocation:
+    properties:
+      compute_phase:
+        type: string
+      created_at:
+        type: string
+      diagnostic:
+        type: string
+      environment_id:
+        type: string
+      id:
+        type: string
+      initialization:
+        type: string
+      node_id:
+        type: string
+      session_id:
+        type: string
+      state:
+        type: string
+      tenant_id:
+        type: string
+    type: object
+  store.RuntimeNodeEnrollment:
+    properties:
+      backend_fingerprint:
+        type: string
+      credential:
+        type: string
+      max_active:
+        type: integer
+      max_retained:
+        type: integer
+      name:
+        type: string
+      node_id:
+        type: string
+      provider:
+        type: string
+    type: object
+  store.RuntimeNodeIdentity:
+    properties:
+      installation_id:
+        type: string
+      node_id:
+        type: string
+      provider:
+        type: string
+    type: object
+  store.RuntimeNodeUpdate:
+    properties:
+      max_active:
+        type: integer
+      max_retained:
+        type: integer
+      name:
+        type: string
+    type: object
+  v1.APIError:
+    properties:
+      code:
+        type: string
+        x-nullable: true
+      message:
+        type: string
+      param:
+        type: string
+        x-nullable: true
+      type:
+        type: string
+    required:
+      - message
+      - type
+    type: object
+  v1.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/v1.APIError'
+    required:
+      - error
+    type: object
+info:
+  contact: {}
+  description: Deployment administration and node enrollment. Uses separate administrator and node credentials; project API keys do not authorize these operations.
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+  title: Core Sandbox Manager
+  version: "1"
+paths:
+  /core/v1/sandbox/deployment:
+    get:
+      description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.RuntimeDeploymentView'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve sandbox deployment
+      tags:
+        - Sandbox Manager
+  /core/v1/sandbox/enroll:
+    post:
+      consumes:
+        - application/json
+      description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+      parameters:
+        - description: Request
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/store.RuntimeNodeEnrollment'
+      produces:
+        - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/store.RuntimeNodeIdentity'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - NodeEnrollmentAuth: []
+      summary: Enroll a sandbox node
+      tags:
+        - Sandbox Manager
+  /core/v1/sandbox/enrollment-tokens:
+    post:
+      consumes:
+        - application/json
+      description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+      parameters:
+        - description: Request
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/api.SandboxEnrollmentTokenRequest'
+      produces:
+        - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.SandboxEnrollmentToken'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Create a ten-minute one-use node enrollment token
+      tags:
+        - Sandbox Manager
+  /core/v1/sandbox/node/identity:
+    get:
+      description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+      parameters:
+        - description: Sandbox node UUID
+          in: query
+          name: node_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.RuntimeNodeIdentity'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - NodeAuth: []
+      summary: Recover an enrolled sandbox node identity
+      tags:
+        - Sandbox Manager
+  /core/v1/sandbox/nodes:
+    get:
+      description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SandboxNodeList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List deployment sandbox nodes
+      tags:
+        - Sandbox Manager
+  /core/v1/sandbox/nodes/{node_id}:
+    delete:
+      description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+      parameters:
+        - description: Sandbox node UUID
+          in: path
+          name: node_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SandboxMutationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Remove a sandbox node with no retained resources
+      tags:
+        - Sandbox Manager
+    patch:
+      consumes:
+        - application/json
+      description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+      parameters:
+        - description: Sandbox node UUID
+          in: path
+          name: node_id
+          required: true
+          type: string
+        - description: Request
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/store.RuntimeNodeUpdate'
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SandboxMutationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Update sandbox node name and capacity
+      tags:
+        - Sandbox Manager
+  /core/v1/sandbox/nodes/{node_id}/allocations:
+    get:
+      description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+      parameters:
+        - description: Sandbox node UUID
+          in: path
+          name: node_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SandboxAllocationList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List retained allocations on a sandbox node
+      tags:
+        - Sandbox Manager
+schemes:
+  - http
+  - https
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+  DeploymentAdminAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+  NodeAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+  NodeEnrollmentAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

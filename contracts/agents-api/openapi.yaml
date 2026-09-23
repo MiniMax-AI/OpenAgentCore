@@ -1,5 +1,36 @@
 basePath: /v1
 definitions:
+  api.SandboxNodeDirectory:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/api.SandboxNodeDirectoryEntry'
+        type: array
+    type: object
+  api.SandboxNodeDirectoryEntry:
+    properties:
+      available:
+        type: boolean
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  api.SandboxSessionPlacement:
+    properties:
+      available:
+        type: boolean
+      compute_phase:
+        type: string
+      diagnostic:
+        type: string
+      node_id:
+        type: string
+      node_name:
+        type: string
+      state:
+        type: string
+    type: object
   v1.APIError:
     properties:
       code:
@@ -1497,6 +1528,8 @@ definitions:
     properties:
       model_provider:
         $ref: '#/definitions/v1.ModelProviderInput'
+      sandbox_node_id:
+        type: string
     type: object
   v1.SessionInput:
     properties:
@@ -3694,6 +3727,45 @@ paths:
       summary: List persisted execution Items
       tags:
       - Items
+  /agents/sessions/{session_id}/sandbox-placement:
+    get:
+      description: Core extension. Reads the caller-owned Session's fixed sandbox
+        node, independently of node connectivity.
+      parameters:
+      - description: agents=v1
+        in: header
+        name: OpenAI-Beta
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: session_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SandboxSessionPlacement'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Retrieve a Session sandbox placement
+      tags:
+      - Core
   /agents/sessions/{session_id}/subagents:
     get:
       description: Includes nested and closed Subagents. Cursors belong to the same
@@ -4448,6 +4520,36 @@ paths:
       summary: Download source file bytes
       tags:
       - Files
+  /sandbox/nodes:
+    get:
+      description: Core extension. Returns only selector identity, label and admission
+        availability for project clients.
+      parameters:
+      - description: agents=v1
+        in: header
+        name: OpenAI-Beta
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SandboxNodeDirectory'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List hosted sandbox node selectors
+      tags:
+      - Core
   /skills:
     get:
       description: Lists tenant-owned metadata in timestamp order. Default page size
@@ -5313,6 +5415,18 @@ schemes:
 - https
 securityDefinitions:
   BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+  DeploymentAdminAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+  NodeAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+  NodeEnrollmentAuth:
     in: header
     name: Authorization
     type: apiKey

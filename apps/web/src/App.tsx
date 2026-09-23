@@ -1,4 +1,4 @@
-import { Layers3, Settings2 } from "lucide-react";
+import { Settings2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AgentCoreError } from "@agents-core-web/agents-client";
@@ -16,6 +16,9 @@ import type {
   UpdateAgentInput,
 } from "@agents-core-web/agents-client";
 
+import { SandboxManagerView } from "./features/sandbox/SandboxManagerView";
+import { SandboxProvider } from "./features/sandbox/SandboxContext";
+import { SystemNavigation } from "./components/SystemNavigation";
 import { ConnectionModal } from "./components/ConnectionModal";
 import { CreateMenu } from "./components/CreateMenu";
 import { ProductNavigation, type ProductView } from "./components/ProductNavigation";
@@ -127,13 +130,13 @@ import {
   waitForStreamReconnect,
 } from "./lib/stream-reconnect";
 
-type View = ProductView | "system";
+type View = ProductView | "system" | "sandbox";
 
 function viewFromLocation(): View {
   if (typeof window === "undefined") return "dashboard";
   const candidate = window.location.hash.slice(1);
   if (candidate === "templates" && __AGENTS_CORE_WEB_OPENAI_HOSTED_SESSIONS__) return "templates";
-  return candidate === "agents" || candidate === "sessions" || candidate === "vaults" || candidate === "system"
+  return candidate === "agents" || candidate === "sessions" || candidate === "vaults" || candidate === "system" || candidate === "sandbox"
     ? candidate
     : "dashboard";
 }
@@ -1555,6 +1558,7 @@ export function App() {
       metadata: input.metadata,
       stream: input.stream,
       vaultIds: vaultPlan.vaultIds,
+      sandboxNodeId: input.sandboxNodeId,
     });
 
     const openSession = (session: AgentSession) => {
@@ -2102,7 +2106,7 @@ export function App() {
   }, []);
 
   return (
-    <div className="app-shell">
+    <SandboxProvider connection={connection}><div className="app-shell">
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <aside className="app-sidebar">
         <div className="brand-lockup">
@@ -2114,25 +2118,13 @@ export function App() {
         </div>
 
         <ProductNavigation
-          active={view === "system" ? null : view}
+          active={view === "system" || view === "sandbox" ? null : view}
           onSelect={(nextView) => setView(nextView)}
           showVaults={vaultSupported === true}
           showTemplates={__AGENTS_CORE_WEB_OPENAI_HOSTED_SESSIONS__}
         />
 
-        <nav className="main-nav" aria-label="System navigation">
-          <p className="nav-label">System</p>
-          <button
-            type="button"
-            className={view === "system" ? "active" : ""}
-            onClick={() => setView("system")}
-            aria-label="System"
-            aria-current={view === "system" ? "page" : undefined}
-          >
-            <Layers3 size={15} strokeWidth={1.5} />
-            <span>System</span>
-          </button>
-        </nav>
+        <SystemNavigation active={view === "system" || view === "sandbox" ? view : null} onSelect={setView} />
 
         <div className="sidebar-footer">
           <button
@@ -2273,6 +2265,7 @@ export function App() {
               operations={vaultOperations}
             />
           ) : null}
+          {view === "sandbox" ? <SandboxManagerView key={`sandbox:${coreGeneration}`} coreBaseUrl={connection.baseUrl} /> : null}
           {view === "system" ? (
             <SystemView
               key={`system:${coreGeneration}`}
@@ -2294,6 +2287,6 @@ export function App() {
         onClose={() => setConnectionOpen(false)}
         onSave={applyConnection}
       />
-    </div>
+    </div></SandboxProvider>
   );
 }

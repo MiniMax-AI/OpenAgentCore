@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
+	sandboxconfig "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/config"
 )
 
 func TestCoreStartupConfigurationSeparatesSupportAndConfiguration(t *testing.T) {
@@ -40,5 +41,15 @@ func TestCoreStartupConfigurationReportsMicrosandboxSelection(t *testing.T) {
 	}
 	if len(got.Configured.ModelProviders) != 1 || !got.Configured.ModelProviders[0].EndpointConfigured {
 		t.Fatalf("unexpected model endpoint projection: %#v", got.Configured.ModelProviders)
+	}
+}
+
+func TestCoreStartupConfigurationReportsRemoteOnlyProvider(t *testing.T) {
+	for _, kind := range []string{"docker", "microsandbox"} {
+		managed := runtimeFromConfig(sandboxconfig.Config{Provider: kind, Maintenance: true}, &sandboxconfig.Built{})
+		got := coreStartupConfiguration("codex", []string{"codex"}, true, nil, managedRuntimeProviderKind(managed), managed)
+		if got.Configured.ManagedSandbox.Provider == nil || *got.Configured.ManagedSandbox.Provider != kind || !got.Configured.ManagedSandbox.Enabled || !got.Configured.ManagedSandbox.Maintenance {
+			t.Fatalf("remote-only provider configuration lost: %#v", got.Configured.ManagedSandbox)
+		}
 	}
 }

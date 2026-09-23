@@ -50,6 +50,7 @@ type Session struct {
 }
 
 type CreateSessionInput struct {
+	SandboxNodeID   string
 	ModelProvider   *v1.ModelProviderInput
 	Initialization  EnvironmentSetup
 	InitialFiles    []InitialFile
@@ -144,6 +145,7 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 	}
 	// JSON map keys are sorted by encoding/json, so key order does not affect retries.
 	canonical, err := json.Marshal(struct {
+		SandboxNodeID  string                 `json:",omitempty"`
 		ModelProvider  *v1.ModelProviderInput `json:",omitempty"`
 		Engine         string
 		Metadata       map[string]string
@@ -151,7 +153,7 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 		InitialInputs  json.RawMessage   `json:",omitempty"`
 		InitialFiles   []InitialFile     `json:",omitempty"`
 		Initialization *EnvironmentSetup `json:",omitempty"`
-	}{input.ModelProvider, input.Engine, input.Metadata, configuration, encodedInput, input.InitialFiles, initialization})
+	}{input.SandboxNodeID, input.ModelProvider, input.Engine, input.Metadata, configuration, encodedInput, input.InitialFiles, initialization})
 	if err != nil {
 		return SessionCreation{}, fmt.Errorf("%w: input: %v", ErrInvalidInput, err)
 	}
@@ -166,7 +168,7 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 		Configuration: configuration, CreationRequestHash: creationHash,
 		CreatorKind: pgtype.Text{String: input.Creator.Kind, Valid: true}, CreatorID: pgtype.Text{String: input.Creator.ID, Valid: true},
 	}
-	row, environment, err := s.createSessionResources(ctx, tenantID, params, batch, encodedInput, input.InitialFiles, input.Initialization, input.ModelProvider)
+	row, environment, err := s.createSessionResources(ctx, tenantID, params, batch, encodedInput, input.InitialFiles, input.Initialization, input.ModelProvider, input.SandboxNodeID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SessionCreation{}, ErrIdempotencyConflict
 	}

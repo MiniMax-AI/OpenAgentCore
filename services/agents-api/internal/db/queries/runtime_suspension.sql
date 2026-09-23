@@ -6,7 +6,7 @@ SET compute_phase = sqlc.arg(phase), compute_state = sqlc.arg(state)::jsonb,
     kept_at = CASE WHEN sqlc.arg(phase)::text = 'running' THEN clock_timestamp() ELSE kept_at END
 WHERE id = sqlc.arg(id) AND compute_revision = sqlc.arg(revision)
     AND state = 'running' AND initialization = 'complete'
-    AND ((compute_phase IN ('disabled','running') AND kept_at > clock_timestamp() - interval '1 hour')
+    AND ((compute_phase IN ('disabled','running') AND (node_id IS NOT NULL OR kept_at > clock_timestamp() - interval '1 hour'))
       OR (compute_phase NOT IN ('disabled','running') AND compute_retained_until > clock_timestamp()))
 RETURNING *;
 
@@ -25,8 +25,8 @@ WHERE id = $1 AND compute_phase = 'running' AND compute_activity_at <= $2;
 
 -- name: GetRuntimeActivity :one
 SELECT GREATEST(a.compute_activity_at,
-    COALESCE((SELECT max(t.completed_at) FROM turns t WHERE t.session_id = e.session_id), a.created_at),
-    (SELECT max(t.completed_at) FROM subagent_turns t WHERE t.session_id = e.session_id),
+    CASE WHEN a.node_id IS NULL THEN COALESCE((SELECT max(t.completed_at) FROM turns t WHERE t.session_id = e.session_id), a.created_at) END,
+    CASE WHEN a.node_id IS NULL THEN (SELECT max(t.completed_at) FROM subagent_turns t WHERE t.session_id = e.session_id) END,
     (SELECT max(f.settled_at) FROM environment_file_writes f WHERE f.environment_id = e.id))::timestamptz AS last_activity,
     (EXISTS (SELECT 1 FROM turns t WHERE t.session_id = e.session_id AND t.status IN ('queued','in_progress','waiting'))
      OR EXISTS (SELECT 1 FROM subagent_turns t WHERE t.session_id = e.session_id AND t.status IN ('queued','in_progress','waiting'))
@@ -49,4 +49,16 @@ WHERE provider_key = $1 AND state <> 'released';
 SELECT EXISTS (
     SELECT 1 FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
     WHERE e.session_id = $1 AND a.compute_phase NOT IN ('disabled', 'running')
+)::boolean;
+
+-- name: RecordRuntimeTerminalActivity :exec
+UPDATE runtime_allocations a SET compute_activity_at = clock_timestamp()
+FROM environments e
+WHERE a.environment_id = e.id AND e.session_id = $1
+    AND a.node_id IS NOT NULL AND a.state = 'running';
+
+-- name: SessionHasRuntimeNode :one
+SELECT EXISTS (
+    SELECT 1 FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
+    WHERE e.session_id = $1 AND a.node_id IS NOT NULL
 )::boolean;

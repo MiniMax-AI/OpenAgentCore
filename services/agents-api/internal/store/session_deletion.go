@@ -18,6 +18,9 @@ func (s *Store) DeleteSession(ctx context.Context, tenantID, sessionID string) e
 		if err := q.DeleteSessionArtifacts(ctx, session); err != nil {
 			return err
 		}
+		if err := q.ReleaseUnallocatedRuntimePlacement(ctx, session); err != nil {
+			return err
+		}
 		return q.MarkSessionDeleted(ctx, session)
 	})
 }

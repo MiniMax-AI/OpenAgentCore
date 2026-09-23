@@ -46,6 +46,11 @@ func (s *Store) SetRuntimeCompute(ctx context.Context, owner RuntimeAllocation, 
 				return sqlc.RuntimeAllocation{}, ErrTurnConflict
 			}
 		}
+		if row.ComputePhase == "suspended" && phase == "restoring" {
+			if err := reserveRuntimeRestore(ctx, q, row.NodeID); err != nil {
+				return sqlc.RuntimeAllocation{}, err
+			}
+		}
 		until := pgtype.Timestamptz{}
 		if retainedUntil != nil {
 			until = pgtype.Timestamptz{Time: *retainedUntil, Valid: true}

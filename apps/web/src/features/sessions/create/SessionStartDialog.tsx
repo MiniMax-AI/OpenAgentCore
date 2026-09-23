@@ -11,6 +11,7 @@ import {
   type SavedAgent,
 } from "@agents-core-web/agents-client";
 
+import { SandboxNodeSelector } from "../../sandbox/SandboxNodeSelector";
 import { Modal } from "../../../components/Modal";
 import { sessionEnvironmentAdmissionBlocker } from "../../agents/session-admission";
 import {
@@ -46,6 +47,7 @@ import { SessionToolsEditor } from "./SessionToolsEditor";
 import "./SessionStartDialog.css";
 
 interface SessionStartCommonInput {
+  sandboxNodeId?: string;
   environment: AgentEnvironmentInput;
   idempotencyKey: string;
   input?: string | InputMessage[];
@@ -156,6 +158,7 @@ export function SessionStartDialog({
     sessionStartDetailsFromAgent(agents.find((agent) => agent.id === initialAgentId), vaultCatalog)
   ));
   const [manualVaultIds, setManualVaultIds] = useState<string[]>([]);
+  const [sandboxNodeId, setSandboxNodeId] = useState("");
   const [environmentType, setEnvironmentType] = useState<SessionEnvironmentType>("none");
   const [workspaceDirectory, setWorkspaceDirectory] = useState("");
   const [hostedNetwork, setHostedNetwork] = useState<HostedNetworkChoice>("default");
@@ -185,6 +188,7 @@ export function SessionStartDialog({
       ));
       setManualVaultIds([]);
       setEnvironmentType("none");
+      setSandboxNodeId("");
       setWorkspaceDirectory("");
       setHostedNetwork("default");
       setTemplateId("");
@@ -204,12 +208,14 @@ export function SessionStartDialog({
   useEffect(() => {
     if (!selfHostedEnabled && environmentType === "self_hosted") {
       setEnvironmentType("none");
+      setSandboxNodeId("");
     }
   }, [environmentType, selfHostedEnabled]);
 
   useEffect(() => {
     if (!openAIHostedEnabled && environmentType === "openai_hosted") {
       setEnvironmentType("none");
+      setSandboxNodeId("");
       setHostedNetwork("default");
       setTemplateId("");
     }
@@ -358,6 +364,7 @@ export function SessionStartDialog({
 
     const common = {
       environment: environment.input,
+      ...(environment.input.type === "openai_hosted" && sandboxNodeId ? { sandboxNodeId } : {}),
       metadata: validation.request.metadata,
       stream: validation.request.stream,
       vaultIds: submittedVaultPlan.vaultIds,
@@ -623,7 +630,7 @@ export function SessionStartDialog({
               <small>Disabled confines native tools while trusted model and Core connectivity remain operator-owned. Restricted domains are not supported.</small>
             </label>
             <p className="session-environment-note">
-              A managed Runtime is provisioned by the connected Core. Whether it is a local container or a remote sandbox is operator-owned deployment configuration that this Web cannot read, select, or verify. Provisioning success is not execution readiness, and a lost or expired Runtime destroys its Workspace without an automatic replacement.
+              A managed Runtime is provisioned by the connected Core. Core selects a sandbox node automatically, or you can choose an available node in Advanced settings. Local nodes run on the Core server. Provisioning success is not execution readiness, and a lost or expired Runtime destroys its Workspace without an automatic replacement.
             </p>
           </>
         ) : null}
@@ -650,6 +657,7 @@ export function SessionStartDialog({
 
           {advancedOpen ? (
             <section id={`${formId}-advanced-settings`} className="session-start-advanced-body form-stack" aria-label="Advanced Session settings">
+              {environmentType === "openai_hosted" ? <SandboxNodeSelector value={sandboxNodeId} onChange={setSandboxNodeId} disabled={formDisabled} /> : null}
               <fieldset className="session-agent-source-options" disabled={formDisabled}>
                 <legend>Agent source</legend>
                 <label>

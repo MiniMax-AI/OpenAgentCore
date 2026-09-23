@@ -616,3 +616,9 @@ excludes undeclared servers and disables native apps/plugins. This runs on trust
 service compute; it does not provide filesystem isolation or guard against
 concurrent operator configuration mutation. These limits are implementation gaps,
 not changes to the pinned official protocol.
+
+## Hosted sandbox nodes
+
+The release includes `parsar-sandbox-node` for local and remote hosts. See the
+[Hosted Sandbox Manager guide](HOSTED-SANDBOX-MANAGER.md) for provider selection,
+registration, administrator credentials, fixed Session placement and maintenance.

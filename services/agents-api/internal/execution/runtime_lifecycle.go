@@ -20,12 +20,16 @@ import (
 // RuntimeProvider binds one deployment to one sandbox installation.
 // BackendFingerprint identifies its namespace independently of mutable sizing.
 type RuntimeProvider struct {
-	CoreURL            string
-	InstallationID     string
-	BackendFingerprint string
-	Provider           sandbox.Provider
-	Maintenance        bool
-	Suspension         *RuntimeSuspensionPolicy
+	ProviderKind                     string
+	LocalNodeID                      string
+	LocalCredentialSHA256            string
+	LocalMaxActive, LocalMaxRetained int
+	CoreURL                          string
+	InstallationID                   string
+	BackendFingerprint               string
+	Provider                         sandbox.Provider
+	Maintenance                      bool
+	Suspension                       *RuntimeSuspensionPolicy
 }
 
 type runtimeLifecycle struct {
@@ -121,10 +125,10 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 		if r.config.Maintenance {
 			return store.RuntimeAllocation{}, ErrExecutionUnavailable
 		}
-		if err := r.computeCapacity(ctx, providerKey); err != nil {
+		if err := r.computeFreshCapacity(ctx, providerKey); err != nil {
 			return store.RuntimeAllocation{}, err
 		}
-		if policy := r.config.Suspension; policy != nil {
+		if policy := r.config.Suspension; policy != nil && r.config.ProviderKind == "" {
 			count, err := r.store.CountRuntimeRetainedAllocations(ctx, providerKey)
 			if err != nil {
 				return store.RuntimeAllocation{}, err
@@ -210,6 +214,7 @@ func (w *Worker) ReconcileManagedRuntimes(ctx context.Context) error {
 		r.cursor = owner.ID
 		operation, stop := context.WithTimeout(ctx, 30*time.Second)
 		err := r.observe(operation, owner)
+		r.recordObservation(ctx, owner, err)
 		stop()
 		if err != nil {
 			if ownership := r.store.CheckExecutionOwnership(ctx); ownership != nil {
@@ -291,6 +296,12 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAlloc
 	// A stopped or missing container does not authorize destroying retained
 	// workspace/history. Preserve it until explicit cleanup or actual expiry.
 	if !running || !info.BootstrapComplete {
+		if owner.NodeID != "" {
+			if errors.Is(err, sandbox.ErrNotFound) && owner.CreateSettled {
+				return sandbox.ErrNotFound
+			}
+			return sandbox.ErrComputeUnconfirmed
+		}
 		return nil
 	}
 	owner, err = r.store.ObserveRuntimeRunning(ctx, owner)
@@ -333,4 +344,12 @@ func (w *Worker) runManagedRuntimes(ctx context.Context) error {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	return runRuntimeMaintenance(ctx, ticker.C, w.runtimes.wakeHints, w.ReconcileManagedRuntimes)
+}
+
+// Manager deployments reserve capacity with Session placement before provisioning.
+func (r *runtimeLifecycle) computeFreshCapacity(ctx context.Context, key string) error {
+	if r.config.ProviderKind != "" {
+		return nil
+	}
+	return r.computeCapacity(ctx, key)
 }

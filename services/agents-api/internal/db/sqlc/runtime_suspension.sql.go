@@ -53,8 +53,8 @@ func (q *Queries) CountRuntimeRetainedAllocations(ctx context.Context, providerK
 
 const getRuntimeActivity = `-- name: GetRuntimeActivity :one
 SELECT GREATEST(a.compute_activity_at,
-    COALESCE((SELECT max(t.completed_at) FROM turns t WHERE t.session_id = e.session_id), a.created_at),
-    (SELECT max(t.completed_at) FROM subagent_turns t WHERE t.session_id = e.session_id),
+    CASE WHEN a.node_id IS NULL THEN COALESCE((SELECT max(t.completed_at) FROM turns t WHERE t.session_id = e.session_id), a.created_at) END,
+    CASE WHEN a.node_id IS NULL THEN (SELECT max(t.completed_at) FROM subagent_turns t WHERE t.session_id = e.session_id) END,
     (SELECT max(f.settled_at) FROM environment_file_writes f WHERE f.environment_id = e.id))::timestamptz AS last_activity,
     (EXISTS (SELECT 1 FROM turns t WHERE t.session_id = e.session_id AND t.status IN ('queued','in_progress','waiting'))
      OR EXISTS (SELECT 1 FROM subagent_turns t WHERE t.session_id = e.session_id AND t.status IN ('queued','in_progress','waiting'))
@@ -85,6 +85,18 @@ func (q *Queries) GetRuntimeActivity(ctx context.Context, id pgtype.UUID) (GetRu
 	return i, err
 }
 
+const recordRuntimeTerminalActivity = `-- name: RecordRuntimeTerminalActivity :exec
+UPDATE runtime_allocations a SET compute_activity_at = clock_timestamp()
+FROM environments e
+WHERE a.environment_id = e.id AND e.session_id = $1
+    AND a.node_id IS NOT NULL AND a.state = 'running'
+`
+
+func (q *Queries) RecordRuntimeTerminalActivity(ctx context.Context, sessionID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, recordRuntimeTerminalActivity, sessionID)
+	return err
+}
+
 const runtimeComputeBlocksAdmission = `-- name: RuntimeComputeBlocksAdmission :one
 SELECT EXISTS (
     SELECT 1 FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
@@ -99,6 +111,20 @@ func (q *Queries) RuntimeComputeBlocksAdmission(ctx context.Context, sessionID p
 	return column_1, err
 }
 
+const sessionHasRuntimeNode = `-- name: SessionHasRuntimeNode :one
+SELECT EXISTS (
+    SELECT 1 FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
+    WHERE e.session_id = $1 AND a.node_id IS NOT NULL
+)::boolean
+`
+
+func (q *Queries) SessionHasRuntimeNode(ctx context.Context, sessionID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, sessionHasRuntimeNode, sessionID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const setRuntimeCompute = `-- name: SetRuntimeCompute :one
 UPDATE runtime_allocations
 SET compute_phase = $1, compute_state = $2::jsonb,
@@ -107,9 +133,9 @@ SET compute_phase = $1, compute_state = $2::jsonb,
     kept_at = CASE WHEN $1::text = 'running' THEN clock_timestamp() ELSE kept_at END
 WHERE id = $4 AND compute_revision = $5
     AND state = 'running' AND initialization = 'complete'
-    AND ((compute_phase IN ('disabled','running') AND kept_at > clock_timestamp() - interval '1 hour')
+    AND ((compute_phase IN ('disabled','running') AND (node_id IS NOT NULL OR kept_at > clock_timestamp() - interval '1 hour'))
       OR (compute_phase NOT IN ('disabled','running') AND compute_retained_until > clock_timestamp()))
-RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, kept_at, released_at, initialization, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until
+RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, kept_at, released_at, initialization, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error
 `
 
 type SetRuntimeComputeParams struct {
@@ -146,6 +172,8 @@ func (q *Queries) SetRuntimeCompute(ctx context.Context, arg SetRuntimeComputePa
 		&i.ComputeActivityAt,
 		&i.ComputeWakeRequested,
 		&i.ComputeRetainedUntil,
+		&i.NodeID,
+		&i.ObservationError,
 	)
 	return i, err
 }

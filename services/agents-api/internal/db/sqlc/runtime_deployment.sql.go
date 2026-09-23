@@ -33,7 +33,7 @@ func (q *Queries) CountRuntimeDeploymentResources(ctx context.Context) (CountRun
 }
 
 const lockRuntimeDeployment = `-- name: LockRuntimeDeployment :one
-SELECT singleton, installation_id, backend_fingerprint, maintenance, updated_at FROM runtime_deployment WHERE singleton = true FOR UPDATE
+SELECT singleton, installation_id, backend_fingerprint, maintenance, updated_at, provider_kind, local_node_id, owner_epoch FROM runtime_deployment WHERE singleton = true FOR UPDATE
 `
 
 func (q *Queries) LockRuntimeDeployment(ctx context.Context) (RuntimeDeployment, error) {
@@ -45,6 +45,9 @@ func (q *Queries) LockRuntimeDeployment(ctx context.Context) (RuntimeDeployment,
 		&i.BackendFingerprint,
 		&i.Maintenance,
 		&i.UpdatedAt,
+		&i.ProviderKind,
+		&i.LocalNodeID,
+		&i.OwnerEpoch,
 	)
 	return i, err
 }

@@ -193,3 +193,13 @@ describe("Session create attempts", () => {
     expect(first.fingerprint).toContain('"vault_ids":["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"]');
   });
 });
+
+it("keeps explicit sandbox placement in both the request and creation retry identity", () => {
+  const automatic = { environment: { type: "openai_hosted" as const }, metadata: {}, stream: false };
+  expect(sessionCreateRequestPayload(automatic)).not.toHaveProperty("x_agents_core");
+  const explicit = { ...automatic, sandboxNodeId: "node-a" };
+  expect(sessionCreateRequestPayload(explicit).x_agents_core).toEqual({ sandbox_node_id: "node-a" });
+  const attempt = beginSessionCreateAttempt(explicit, null, () => "first");
+  expect(beginSessionCreateAttempt(explicit, attempt, () => "second").idempotencyKey).toBe("first");
+  expect(beginSessionCreateAttempt({ ...explicit, sandboxNodeId: "node-b" }, attempt, () => "second").idempotencyKey).toBe("second");
+});

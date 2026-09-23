@@ -44,6 +44,7 @@ export default defineConfig(({ command, mode }) => {
     },
     server: {
       proxy: {
+        "/core/v1/sandbox": { target, changeOrigin: true },
         "/v1": {
           target,
           changeOrigin: true,

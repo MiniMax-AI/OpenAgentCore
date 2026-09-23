@@ -473,6 +473,7 @@ export interface AgentSession {
 }
 
 export interface CreateSessionInput {
+  x_agents_core?: { sandbox_node_id?: string; model_provider?: { protocol: "anthropic" | "responses"; base_url: string; api_key: string; context_window?: number; max_output_tokens?: number } };
   agent_id?: string;
   agent?: InlineAgentInput;
   environment: AgentEnvironmentInput;
