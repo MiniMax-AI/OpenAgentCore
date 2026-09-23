@@ -54,6 +54,8 @@ type EnrollmentRequest struct {
 }
 
 type EnrollmentResponse struct {
+	Connected      bool   `json:"connected,omitempty"`
+	ProviderReady  bool   `json:"provider_ready,omitempty"`
 	NodeID         string `json:"node_id"`
 	InstallationID string `json:"installation_id"`
 	Provider       string `json:"provider"`

@@ -3,6 +3,8 @@
 import argparse
 import fcntl
 import hashlib
+import http.client
+import io
 import ipaddress
 import json
 import os
@@ -14,16 +16,20 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
 import urllib.request
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 import uuid
+
+import distribution
 
 
 class InstallError(Exception):
     pass
 
 
-COMMON = ("native/bin/parsar-sandbox-node", "images/runtime.tar", "runtime/seccomp.json")
+COMMON = ("native/bin/parsar-sandbox-node", "runtime/seccomp.json")
 MICRO = ("native/bin/agents-api-microsandbox-provider", "native/microsandbox/msb",
          "native/microsandbox/libkrunfw.so.5.6.1")
 
@@ -71,11 +77,32 @@ def preflight(provider):
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, request, fp, code, message, headers, url):
-        raise InstallError("Node payload redirects are not supported")
+        raise InstallError("Node bootstrap redirects are not supported")
+
+
+def open_request(request, timeout=15):
+    return urllib.request.build_opener(NoRedirect()).open(request, timeout=timeout)
+
+
+def transient(error):
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code in (408, 429, 500, 502, 503, 504)
+    return isinstance(error, (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead))
 
 
 def fetch(source, name):
-    return urllib.request.build_opener(NoRedirect()).open(source + "/node-install/" + name, timeout=30)
+    for attempt in range(3):
+        try:
+            with open_request(source + "/node-install/" + name) as response:
+                raw = response.read(1024 * 1024 + 1)
+            if len(raw) > 1024 * 1024:
+                raise InstallError("Node bootstrap metadata is too large: " + name)
+            return io.BytesIO(raw)
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead) as error:
+            if not transient(error) or attempt == 2:
+                status = " (HTTP " + str(error.code) + ")" if isinstance(error, urllib.error.HTTPError) else ""
+                raise InstallError("Cannot download node metadata " + name + status + "; check the console URL, TLS and network, then rerun") from None
+            time.sleep(attempt + 1)
 
 
 def metadata(source):
@@ -97,6 +124,10 @@ def metadata(source):
     if (manifest.get("platform") != "linux/amd64" or not re.fullmatch(r"[0-9a-f]{40}", manifest.get("source_commit", ""))
             or not re.fullmatch(r"sha256:[0-9a-f]{64}", manifest.get("images", {}).get("runtime", ""))):
         raise InstallError("Unsupported node distribution")
+    for name in (COMMON[0], "images/runtime.tar.gz") + MICRO:
+        distribution.artifact(manifest, name)
+    if not manifest.get("artifact_base_url"):
+        manifest["artifact_base_url"] = source + "/node-install/artifacts"
     return manifest, sums
 
 
@@ -197,8 +228,15 @@ def provider_config(root, args, manifest):
 def prepare_runtime(root, args, manifest):
     if args.provider == "docker":
         docker = ["docker", "--host", "unix:///var/run/docker.sock"]
-        checked(docker + ["load", "--input", str(root / "images/runtime.tar")], "Cannot import the Docker runtime image", timeout=1800)
-        image = checked(docker + ["image", "inspect", "--format", "{{.Id}}", manifest["images"]["runtime"]], "Cannot verify the runtime image")
+        inspect = docker + ["image", "inspect", "--format", "{{.Id}}", manifest["images"]["runtime"]]
+        try:
+            image = checked(inspect, "Runtime image is not installed")
+        except InstallError:
+            image = None
+        if image != manifest["images"]["runtime"]:
+            archive = distribution.runtime_archive(manifest, root)
+            checked(docker + ["load", "--input", str(archive)], "Cannot import the Docker runtime image; check Docker access and free disk space", timeout=1800)
+            image = checked(inspect, "Cannot verify the imported runtime image")
         if image != manifest["images"]["runtime"]:
             raise InstallError("Imported runtime image identity differs")
         network = "parsar-node-" + args.installation_id
@@ -211,9 +249,22 @@ def prepare_runtime(root, args, manifest):
             output = result.stdout.decode()
             if "not found" in output or (result.returncode and "statically linked" not in output and "not a dynamic executable" not in output):
                 raise InstallError("Install the microsandbox host shared-library prerequisites")
-        checked([str(root / MICRO[1]), "image", "load", "--input", str(root / "images/runtime.tar"), "--tag", manifest["runtime_ref"], "--quiet"],
-                "Cannot import the microsandbox runtime image", timeout=1800,
-                env=dict(os.environ, MSB_BACKEND="local", MSB_HOME=str(micro_home(args.installation_id)), MSB_PATH=str(root / MICRO[1]), MSB_LIBKRUNFW_PATH=str(root / MICRO[2])))
+        env = dict(os.environ, MSB_BACKEND="local", MSB_HOME=str(micro_home(args.installation_id)),
+                   MSB_PATH=str(root / MICRO[1]), MSB_LIBKRUNFW_PATH=str(root / MICRO[2]))
+        inspect = [str(root / MICRO[1]), "image", "inspect", manifest["runtime_ref"], "--format", "json"]
+        def matches():
+            try:
+                value = json.loads(checked(inspect, "Runtime image is not installed", env=env))
+                return (value.get("digest") == manifest["runtime_ref"].split("@", 1)[1]
+                        and value.get("architecture") == "amd64" and value.get("os") == "linux")
+            except (InstallError, ValueError, AttributeError):
+                return False
+        if not matches():
+            archive = distribution.runtime_archive(manifest, root)
+            checked([str(root / MICRO[1]), "image", "load", "--input", str(archive), "--tag", manifest["runtime_ref"], "--quiet"],
+                    "Cannot import the microsandbox runtime image; check free disk space and host libraries", timeout=1800, env=env)
+            if not matches():
+                raise InstallError("Imported microsandbox runtime image identity or platform differs")
 
 
 def service_unit(root):
@@ -246,13 +297,20 @@ def install(args, token):
         print("Downloading and verifying node files...", flush=True)
         manifest, sums = metadata(args.source_url)
         names = COMMON + (MICRO if args.provider == "microsandbox" else ())
-        if any(name not in sums for name in names):
+        if "runtime/seccomp.json" not in sums:
             raise InstallError("The distribution is missing required node checksums")
         state = {"installation_id": args.installation_id, "provider": args.provider, "core_url": args.core_url,
                  "source_commit": manifest["source_commit"]}
         write_once(root / "installation.json", json_text(state))
         for name in names:
-            download(args.source_url, name, root, sums[name])
+            if name == "runtime/seccomp.json":
+                download(args.source_url, name, root, sums[name])
+            else:
+                target = root / name
+                safe_directory(target.parent)
+                existing_file(target)
+                distribution.obtain_artifact(manifest, name, target)
+                os.chmod(target, 0o700)
         safe_directory(root / "state/node")
         # Retain the original network policy when recovering a partial installation.
         if not existing_file(root / "provider.json"):
@@ -260,9 +318,9 @@ def install(args, token):
         unit = root / ("parsar-node-" + args.installation_id + ".service")
         write_once(unit, service_unit(root))
         marker = root / "registered.json"
+        print("Checking the sandbox runtime...", flush=True)
+        prepare_runtime(root, args, manifest)
         if not existing_file(marker):
-            print("Preparing the sandbox runtime...", flush=True)
-            prepare_runtime(root, args, manifest)
             # The one-time credential is never passed through process arguments or service environments.
             descriptor, secret_path = tempfile.mkstemp(prefix=".enrollment-", dir=root)
             try:
@@ -271,7 +329,7 @@ def install(args, token):
                 print("Registering this node with Core...", flush=True)
                 checked([str(root / COMMON[0]), "register", "--config", str(root / "provider.json"), "--state-dir", str(root / "state/node"),
                          "--core-url", args.core_url, "--name", socket.gethostname(), "--max-active", "4", "--max-retained", "16",
-                         "--enrollment-token-file", secret_path], "Node enrollment was not confirmed. Keep its state and rerun the command to recover.")
+                         "--enrollment-token-file", secret_path], "Node enrollment was not confirmed. Check the Core URL, enrollment expiry and local provider prerequisites; keep its state and rerun the command to recover.")
                 write_once(marker, json_text(state))
             finally:
                 if os.path.exists(secret_path):
@@ -282,7 +340,55 @@ def install(args, token):
         checked(["systemctl", "--user", "daemon-reload"], "Cannot reload the systemd user manager")
         checked(["systemctl", "--user", "enable", "--now", str(unit)], "Cannot start the node service; retained identity is unchanged")
         checked(["systemctl", "--user", "is-active", "--quiet", unit.name], "Node service is unavailable; inspect its systemd user journal")
-    print("Node service started. The Web console will show connection and provider readiness. State: " + str(root))
+        print("Waiting for Core connection and provider readiness...", flush=True)
+        wait_ready(root, args)
+    print("Node connected to Core and provider ready. State: " + str(root))
+
+
+def wait_ready(root, args, timeout=60):
+    identity_file = root / "state/node/identity.json"
+    if not existing_file(identity_file) or stat.S_IMODE(identity_file.stat().st_mode) != 0o600:
+        raise InstallError("Retained node identity is missing or is not private (0600); preserve state and inspect enrollment")
+    with identity_file.open() as stream:
+        raw = stream.read(16385)
+    try:
+        stored = json.loads(raw)
+        identity = stored["identity"]
+        credential = stored["credential"]
+        if (len(raw) > 16384 or stored["core_url"] != args.core_url
+                or identity["installation_id"] != args.installation_id or identity["provider"] != args.provider
+                or str(uuid.UUID(identity["node_id"])) != identity["node_id"]
+                or not re.fullmatch(r"[0-9a-f]{64}", credential)):
+            raise ValueError()
+    except (ValueError, KeyError, TypeError, AttributeError):
+        raise InstallError("Retained node identity differs or is invalid; preserve state and inspect enrollment") from None
+    request = urllib.request.Request(args.core_url + "/core/v1/sandbox/node/identity?" + urlencode({"node_id": identity["node_id"]}),
+                                     headers={"Authorization": "Bearer " + credential})
+    deadline = time.monotonic() + timeout
+    detail = "Core has not confirmed the node connection"
+    while time.monotonic() < deadline:
+        try:
+            with open_request(request, timeout=min(10, max(0.1, deadline - time.monotonic()))) as response:
+                raw = response.read(16385)
+            if len(raw) > 16384:
+                raise ValueError()
+            data = json.loads(raw)
+            if any(data.get(key) != identity[key] for key in ("node_id", "installation_id", "provider")):
+                raise InstallError("Core returned a different node identity; preserve state and inspect the Core URL")
+            if data.get("connected") is True and data.get("provider_ready") is True:
+                return
+            detail = "Node is connected but its provider is not ready" if data.get("connected") is True else "Core has not confirmed the node connection"
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead) as error:
+            if not transient(error):
+                raise InstallError("Core rejected the node readiness request (HTTP " + str(error.code) + "); verify its retained credential and Core URL") from None
+            detail = "Core readiness endpoint is temporarily unreachable; check TLS and network access"
+        except (ValueError, AttributeError):
+            raise InstallError("Core returned invalid node readiness data; check the matched Core release") from None
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            time.sleep(min(2, remaining))
+    raise InstallError(detail + "; state and service are retained. Inspect journalctl --user -u parsar-node-"
+                       + args.installation_id + ".service, then rerun the installation command")
 
 
 def main(argv=None):
@@ -303,6 +409,6 @@ def main(argv=None):
 if __name__ == "__main__":
     try:
         main()
-    except (InstallError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
-        print(str(error) if isinstance(error, InstallError) else "Node installation failed; check host prerequisites and retained private files", file=sys.stderr)
+    except (InstallError, distribution.DistributionError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
+        print(str(error) if isinstance(error, (InstallError, distribution.DistributionError)) else "Node installation failed; check host prerequisites and retained private files", file=sys.stderr)
         sys.exit(1)

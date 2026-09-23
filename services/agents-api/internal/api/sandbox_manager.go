@@ -209,13 +209,13 @@ func (h *Handler) enrollSandboxNode(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, value)
 }
 
-// @Summary Recover an enrolled sandbox node identity
+// @Summary Recover an enrolled sandbox node identity and observe its readiness
 // @Description Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security NodeAuth
 // @Param node_id query string true "Sandbox node UUID"
-// @Success 200 {object} store.RuntimeNodeIdentity
+// @Success 200 {object} store.RuntimeNodeStatus
 // @Failure 400,401,404,409,500,503 {object} v1.ErrorResponse
 // @Router /core/v1/sandbox/node/identity [get]
 func (h *Handler) sandboxNodeIdentity(w http.ResponseWriter, r *http.Request) {
@@ -229,7 +229,7 @@ func (h *Handler) sandboxNodeIdentity(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
-	value, err := h.sandboxStore.AuthenticateRuntimeNode(r.Context(), ids[0], token)
+	value, err := h.sandboxStore.RuntimeNodeStatus(r.Context(), ids[0], token)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

@@ -1,6 +1,7 @@
 """Exercise node installation without running providers or changing user services."""
 import argparse
 import hashlib
+import gzip
 import io
 import json
 import os
@@ -9,6 +10,7 @@ import stat
 import subprocess
 import tempfile
 import unittest
+import urllib.error
 from unittest import mock
 
 import node_install as installer
@@ -28,12 +30,16 @@ class NodeInstallTests(unittest.TestCase):
                          "runtime_ref": "parsar-core-runtime@sha256:" + "c" * 64,
                          "microsandbox": {"runtime_sha256": "d" * 64, "firmware_sha256": "e" * 64}}
         self.payloads = {name: b"fixture-payload-" + name.encode() for name in installer.COMMON + installer.MICRO}
+        self.payloads["images/runtime.tar.gz"] = gzip.compress(b"runtime archive")
         self.refresh_manifest()
+        self.image_present = False
         self.calls = []
         self.fail_service = False
         self.fail_registration = False
         for patch in (mock.patch.object(installer.Path, "home", return_value=self.home),
                       mock.patch.object(installer, "preflight"),
+                      mock.patch.object(installer, "wait_ready"),
+                      mock.patch.object(installer.distribution.urllib.request, "build_opener", return_value=mock.Mock(open=self.artifact_response)),
                       mock.patch.object(installer, "micro_home", return_value=self.home / "m"),
                       mock.patch.object(installer, "fetch", side_effect=lambda source, name: io.BytesIO(self.payloads[name])),
                       mock.patch.object(installer, "checked", side_effect=self.checked),
@@ -41,7 +47,18 @@ class NodeInstallTests(unittest.TestCase):
             patch.start()
             self.addCleanup(patch.stop)
 
+    def artifact_response(self, url, **kwargs):
+        for name, item in self.manifest["artifacts"].items():
+            if url.endswith("/" + item["filename"]):
+                return io.BytesIO(self.payloads[name])
+        raise AssertionError("Unexpected artifact URL: " + url)
+
     def refresh_manifest(self):
+        self.manifest["artifact_base_url"] = "https://release.example/immutable"
+        self.manifest["artifacts"] = {name: {"filename": name.replace("/", "-") + "-" + self.manifest["source_commit"],
+                                             "size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
+                                      for name, raw in self.payloads.items() if name.startswith("native/") or name == "images/runtime.tar.gz"}
+        self.manifest["artifacts"]["images/runtime.tar.gz"].update(unpacked_sha256=hashlib.sha256(b"runtime archive").hexdigest(), unpacked_size=len(b"runtime archive"))
         self.payloads["manifest.json"] = json.dumps(self.manifest).encode()
         self.payloads["SHA256SUMS"] = "".join(hashlib.sha256(raw).hexdigest() + "  " + name + "\n"
                                                for name, raw in self.payloads.items() if name != "SHA256SUMS").encode()
@@ -58,7 +75,15 @@ class NodeInstallTests(unittest.TestCase):
                 raise installer.InstallError(failure)
         if "enable" in arguments and self.fail_service:
             raise installer.InstallError(failure)
-        return self.manifest["images"]["runtime"] if "inspect" in arguments else ""
+        if "load" in arguments:
+            self.image_present = True
+        if "inspect" in arguments:
+            if not self.image_present:
+                raise installer.InstallError(failure)
+            if arguments[0] == "docker":
+                return self.manifest["images"]["runtime"]
+            return json.dumps({"digest": self.manifest["runtime_ref"].split("@", 1)[1], "os": "linux", "architecture": "amd64"})
+        return ""
 
     def install(self):
         installer.install(self.args, "synthetic-once-token")
@@ -144,7 +169,7 @@ class NodeInstallTests(unittest.TestCase):
             self.install()
         self.refresh_manifest()
         self.payloads[installer.COMMON[0]] += b"corrupt"
-        with self.assertRaisesRegex(installer.InstallError, "payload checksum"):
+        with self.assertRaisesRegex(installer.distribution.DistributionError, "published size|checksum"):
             self.install()
         self.assertFalse(self.calls)
         self.assertFalse((self.root / installer.COMMON[0]).exists())
@@ -153,9 +178,37 @@ class NodeInstallTests(unittest.TestCase):
         self.install()
         target = self.root / installer.COMMON[0]
         target.write_bytes(b"existing-different-payload")
-        with self.assertRaisesRegex(installer.InstallError, "refusing to overwrite"):
+        with self.assertRaisesRegex(installer.distribution.DistributionError, "Cached artifact differs"):
             self.install()
         self.assertEqual(target.read_bytes(), b"existing-different-payload")
+
+    def test_warm_image_skips_archive_download_and_import_before_registration(self):
+        for provider in ("docker", "microsandbox"):
+            with self.subTest(provider=provider):
+                self.args.provider = provider
+                self.image_present = True
+                with mock.patch.object(installer.distribution, "runtime_archive") as archive:
+                    installer.prepare_runtime(self.root, self.args, self.manifest)
+                archive.assert_not_called()
+        self.assertFalse(any("load" in call for call, _ in self.calls))
+
+    def test_retry_after_unconfirmed_enrollment_preserves_imported_image(self):
+        self.args.provider = "microsandbox"
+        self.fail_registration = True
+        with self.assertRaises(installer.InstallError):
+            self.install()
+        self.calls.clear()
+        self.fail_registration = False
+        self.install()
+        self.assertFalse(any("load" in call for call, _ in self.calls))
+
+    def test_registered_node_reimports_deleted_image_without_reenrollment(self):
+        self.install()
+        self.image_present = False
+        self.calls.clear()
+        self.install()
+        self.assertTrue(any("load" in call for call, _ in self.calls))
+        self.assertFalse(any("register" in call for call, _ in self.calls))
 
     def test_symlink_installation_is_rejected(self):
         self.root.parent.mkdir(parents=True)
