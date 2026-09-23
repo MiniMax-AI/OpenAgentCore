@@ -709,6 +709,11 @@ allocations, record the first root or child terminal transition in the same
 transaction using Core's database clock and the existing compute activity field.
 Native completion timestamps remain unchanged in public history but cannot drive
 idle admission across hosts; repeated terminal projections never reset that timer.
+Read activity together with the database observation time. Candidate filtering and
+the Session-locked phase recheck compare elapsed database time with the configured
+idle duration; callers must not supply a Core-wall-clock cutoff. Anchor the initial
+snapshot retention deadline to that same database observation. Core and database
+host clocks need not be synchronized for these decisions.
 Heartbeats do not reset activity. The daemon must close admission and drain native
 cleanup, output receipts and file work before acknowledging planned suspension. Never change a
 harness or keep an agent process alive across Turns solely to meet this feature.

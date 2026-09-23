@@ -13,14 +13,24 @@ import (
 
 // RuntimeActivity separates real work from the connection keepalive.
 type RuntimeActivity struct {
-	LastActivity                          time.Time
+	LastActivity, ObservedAt              time.Time
 	Busy, WakeRequested, HasCompletedTurn bool
+}
+
+// ReadyToSuspend evaluates the idle policy using one database-clock observation.
+func (a RuntimeActivity) ReadyToSuspend(idleTimeout time.Duration) bool {
+	return idleTimeout > 0 && a.HasCompletedTurn && !a.Busy && !a.WakeRequested &&
+		a.ObservedAt.Sub(a.LastActivity) >= idleTimeout
+}
+
+func runtimeActivity(row sqlc.GetRuntimeActivityRow) RuntimeActivity {
+	return RuntimeActivity{LastActivity: row.LastActivity.Time, ObservedAt: row.ObservedAt.Time, Busy: row.Busy, WakeRequested: row.ComputeWakeRequested, HasCompletedTurn: row.HasCompletedTurn}
 }
 
 // SetRuntimeCompute commits an operation phase before its external effects.
 // Revision and the existing Session lock fence a stale lifecycle observation.
-func (s *Store) SetRuntimeCompute(ctx context.Context, owner RuntimeAllocation, phase string, state json.RawMessage, retainedUntil *time.Time, idleBefore time.Time) (RuntimeAllocation, error) {
-	if !runtimeComputeTransition(owner.ComputePhase, phase) || !json.Valid(state) || (owner.ComputePhase == "running" && phase == "quiescing" && idleBefore.IsZero()) {
+func (s *Store) SetRuntimeCompute(ctx context.Context, owner RuntimeAllocation, phase string, state json.RawMessage, retainedUntil *time.Time, idleTimeout time.Duration) (RuntimeAllocation, error) {
+	if !runtimeComputeTransition(owner.ComputePhase, phase) || !json.Valid(state) || (owner.ComputePhase == "running" && phase == "quiescing" && idleTimeout <= 0) {
 		return RuntimeAllocation{}, ErrInvalidInput
 	}
 	if phase != "running" && (retainedUntil == nil || retainedUntil.IsZero()) {
@@ -42,7 +52,7 @@ func (s *Store) SetRuntimeCompute(ctx context.Context, owner RuntimeAllocation, 
 			if activity.Busy || activity.ComputeWakeRequested {
 				return sqlc.RuntimeAllocation{}, ErrTurnConflict
 			}
-			if phase == "quiescing" && (!activity.HasCompletedTurn || activity.LastActivity.Time.After(idleBefore) || row.ComputeActivityAt.Time.After(owner.ComputeActivityAt)) {
+			if phase == "quiescing" && (!runtimeActivity(activity).ReadyToSuspend(idleTimeout) || row.ComputeActivityAt.Time.After(owner.ComputeActivityAt)) {
 				return sqlc.RuntimeAllocation{}, ErrTurnConflict
 			}
 		}
@@ -99,7 +109,7 @@ func (s *Store) RuntimeActivity(ctx context.Context, owner RuntimeAllocation) (R
 	if err != nil {
 		return RuntimeActivity{}, err
 	}
-	return RuntimeActivity{LastActivity: row.LastActivity.Time, Busy: row.Busy, WakeRequested: row.ComputeWakeRequested, HasCompletedTurn: row.HasCompletedTurn}, nil
+	return runtimeActivity(row), nil
 }
 
 // TouchRuntimeActivity is used only by operations requiring live compute.

@@ -33,7 +33,7 @@ func managedIdleClockFixture(t *testing.T) (*Store, *Store, RuntimeAllocation) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err = w.SetRuntimeCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"original"}`), nil, time.Time{})
+	owner, err = w.SetRuntimeCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"original"}`), nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,17 +50,26 @@ func runtimeDatabaseTime(t *testing.T, s *Store) time.Time {
 }
 func verifyManagedIdleClock(t *testing.T, s, w *Store, owner RuntimeAllocation, before, after time.Time) RuntimeActivity {
 	t.Helper()
+	const idleTimeout = time.Minute
+	// Refresh the owner so the idle policy, rather than the stale-activity fence,
+	// must reject the recent completion.
+	owner, err := s.GetRuntimeAllocation(t.Context(), owner.TenantID, owner.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observedBefore := runtimeDatabaseTime(t, s)
 	activity, err := w.RuntimeActivity(t.Context(), owner)
-	if err != nil || activity.LastActivity.Before(before) || activity.LastActivity.After(after) || activity.Busy || activity.WakeRequested || !activity.HasCompletedTurn {
+	observedAfter := runtimeDatabaseTime(t, s)
+	if err != nil || activity.ObservedAt.Before(observedBefore) || activity.ObservedAt.After(observedAfter) || activity.ReadyToSuspend(idleTimeout) || activity.LastActivity.Before(before) || activity.LastActivity.After(after) || activity.Busy || activity.WakeRequested || !activity.HasCompletedTurn {
 		t.Fatal("idle clock did not use committed terminal ingestion", activity, before, after, err)
 	}
 	until := runtimeDatabaseTime(t, s).Add(time.Hour)
-	if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, before.Add(-time.Second)); !errors.Is(err, ErrTurnConflict) {
+	if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); !errors.Is(err, ErrTurnConflict) {
 		t.Fatal("new completion admitted premature idle", err)
 	}
 	// Advance only the internal activity age; the remote public timestamp remains unchanged.
-	runtimeSuspensionSQL(t, s.pool, "UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 seconds' WHERE id=$1", owner.ID)
-	if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, runtimeDatabaseTime(t, s).Add(-time.Second)); err != nil {
+	runtimeSuspensionSQL(t, s.pool, "UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes' WHERE id=$1", owner.ID)
+	if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); err != nil {
 		t.Fatal("remote timestamp delayed elapsed idle timer", err)
 	}
 	return activity
@@ -171,7 +180,7 @@ func TestManagedIdleClockLegacyAdoptionStartsIdleOnce(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			owner, err = w.SetRuntimeCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"original"}`), nil, time.Time{})
+			owner, err = w.SetRuntimeCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"original"}`), nil, 0)
 			if err != nil {
 				t.Fatal(err)
 			}

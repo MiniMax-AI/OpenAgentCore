@@ -24,7 +24,8 @@ SET compute_wake_requested = false
 WHERE id = $1 AND compute_phase = 'running' AND compute_activity_at <= $2;
 
 -- name: GetRuntimeActivity :one
-SELECT GREATEST(a.compute_activity_at,
+SELECT clock_timestamp()::timestamptz AS observed_at,
+    GREATEST(a.compute_activity_at,
     CASE WHEN a.node_id IS NULL THEN COALESCE((SELECT max(t.completed_at) FROM turns t WHERE t.session_id = e.session_id), a.created_at) END,
     CASE WHEN a.node_id IS NULL THEN (SELECT max(t.completed_at) FROM subagent_turns t WHERE t.session_id = e.session_id) END,
     (SELECT max(f.settled_at) FROM environment_file_writes f WHERE f.environment_id = e.id))::timestamptz AS last_activity,

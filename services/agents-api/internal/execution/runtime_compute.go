@@ -52,15 +52,15 @@ func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner store.RuntimeA
 	if err != nil {
 		return owner, err
 	}
-	idleBefore := time.Time{}
+	idleTimeout := time.Duration(0)
 	if phase == "quiescing" {
 		policy := r.config.Suspension
 		if policy == nil {
 			return owner, sandbox.ErrInvalid
 		}
-		idleBefore = time.Now().Add(-policy.IdleTimeout)
+		idleTimeout = policy.IdleTimeout
 	}
-	return r.store.SetRuntimeCompute(ctx, owner, phase, raw, until, idleBefore)
+	return r.store.SetRuntimeCompute(ctx, owner, phase, raw, until, idleTimeout)
 }
 func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner store.RuntimeAllocation) error {
 	p, ok := r.config.Provider.(sandbox.CheckpointProvider)
@@ -146,11 +146,11 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.Checkpoint
 		return r.store.ClearRuntimeWake(ctx, owner, owner.ComputeActivityAt)
 	}
 	policy := r.config.Suspension
-	if policy == nil || activity.Busy || !activity.HasCompletedTurn || time.Since(activity.LastActivity) < policy.IdleTimeout {
+	if policy == nil || !activity.ReadyToSuspend(policy.IdleTimeout) {
 		return nil
 	}
 	state.SuspendID, state.RestoreID, state.Rollback = uuid.NewString(), "", false
-	until := time.Now().Add(policy.Retention)
+	until := activity.ObservedAt.Add(policy.Retention)
 	next, err := r.saveCompute(ctx, owner, "quiescing", state, &until)
 	if err != nil {
 		return err

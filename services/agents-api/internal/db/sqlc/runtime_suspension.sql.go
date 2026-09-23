@@ -52,7 +52,8 @@ func (q *Queries) CountRuntimeRetainedAllocations(ctx context.Context, providerK
 }
 
 const getRuntimeActivity = `-- name: GetRuntimeActivity :one
-SELECT GREATEST(a.compute_activity_at,
+SELECT clock_timestamp()::timestamptz AS observed_at,
+    GREATEST(a.compute_activity_at,
     CASE WHEN a.node_id IS NULL THEN COALESCE((SELECT max(t.completed_at) FROM turns t WHERE t.session_id = e.session_id), a.created_at) END,
     CASE WHEN a.node_id IS NULL THEN (SELECT max(t.completed_at) FROM subagent_turns t WHERE t.session_id = e.session_id) END,
     (SELECT max(f.settled_at) FROM environment_file_writes f WHERE f.environment_id = e.id))::timestamptz AS last_activity,
@@ -67,6 +68,7 @@ WHERE a.id = $1
 `
 
 type GetRuntimeActivityRow struct {
+	ObservedAt           pgtype.Timestamptz `json:"observed_at"`
 	LastActivity         pgtype.Timestamptz `json:"last_activity"`
 	Busy                 bool               `json:"busy"`
 	ComputeWakeRequested bool               `json:"compute_wake_requested"`
@@ -77,6 +79,7 @@ func (q *Queries) GetRuntimeActivity(ctx context.Context, id pgtype.UUID) (GetRu
 	row := q.db.QueryRow(ctx, getRuntimeActivity, id)
 	var i GetRuntimeActivityRow
 	err := row.Scan(
+		&i.ObservedAt,
 		&i.LastActivity,
 		&i.Busy,
 		&i.ComputeWakeRequested,

@@ -27,7 +27,7 @@ func runtimeSuspensionFixture(t *testing.T) (*Store, *Store, *pgxpool.Pool, Runt
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err = w.SetRuntimeCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"original"}`), nil, time.Time{})
+	owner, err = w.SetRuntimeCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"original"}`), nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,11 +50,11 @@ func runtimeSuspensionCompleted(t *testing.T, pool *pgxpool.Pool, owner RuntimeA
 
 func runtimeSuspensionStep(t *testing.T, w *Store, owner RuntimeAllocation, phase string, until *time.Time) RuntimeAllocation {
 	t.Helper()
-	idleBefore := time.Time{}
+	idleTimeout := time.Duration(0)
 	if owner.ComputePhase == "running" && phase == "quiescing" {
-		idleBefore = time.Now()
+		idleTimeout = time.Nanosecond
 	}
-	next, err := w.SetRuntimeCompute(t.Context(), owner, phase, json.RawMessage(`{"instance":"original","snapshot":"qualified"}`), until, idleBefore)
+	next, err := w.SetRuntimeCompute(t.Context(), owner, phase, json.RawMessage(`{"instance":"original","snapshot":"qualified"}`), until, idleTimeout)
 	if err != nil {
 		t.Fatalf("%s -> %s: %v", owner.ComputePhase, phase, err)
 	}
@@ -92,7 +92,7 @@ func TestRuntimeSuspensionRequiresCompletedIdleAndNoPendingWork(t *testing.T) {
 				t.Fatalf("activity lost pending work: %+v", activity)
 			}
 			until := time.Now().Add(time.Hour)
-			_, err = w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Now())
+			_, err = w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond)
 			if kind == "idle" {
 				if err != nil {
 					t.Fatal(err)
@@ -114,7 +114,7 @@ func TestRuntimeSuspensionCASAndActivityFence(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{"operation":"same-observation"}`), &until, time.Now())
+			_, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{"operation":"same-observation"}`), &until, time.Nanosecond)
 			results <- err
 		}()
 	}
@@ -140,7 +140,7 @@ func TestRuntimeSuspensionCASAndActivityFence(t *testing.T) {
 	if current.ComputeRevision != owner.ComputeRevision+1 || current.ComputePhase != "quiescing" {
 		t.Fatal("operation intent not durable", current)
 	}
-	if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{"stale":true}`), &until, time.Now()); !errors.Is(err, ErrTurnConflict) {
+	if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{"stale":true}`), &until, time.Nanosecond); !errors.Is(err, ErrTurnConflict) {
 		t.Fatal("stale phase overwrite", err)
 	}
 	current = runtimeSuspensionStep(t, w, current, "running", nil)
@@ -156,15 +156,15 @@ func TestRuntimeSuspensionCASAndActivityFence(t *testing.T) {
 	if err := w.ClearRuntimeWake(t.Context(), latest, latest.ComputeActivityAt); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.SetRuntimeCompute(t.Context(), observed, "quiescing", json.RawMessage(`{}`), &until, time.Now()); !errors.Is(err, ErrTurnConflict) {
+	if _, err := w.SetRuntimeCompute(t.Context(), observed, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond); !errors.Is(err, ErrTurnConflict) {
 		t.Fatal("newer activity was swallowed", err)
 	}
 	for _, invalid := range []json.RawMessage{json.RawMessage(`[]`), json.RawMessage(`null`), json.RawMessage(`false`), json.RawMessage(`{`)} {
-		if _, err := w.SetRuntimeCompute(t.Context(), latest, "running", invalid, nil, time.Time{}); !errors.Is(err, ErrInvalidInput) {
+		if _, err := w.SetRuntimeCompute(t.Context(), latest, "running", invalid, nil, 0); !errors.Is(err, ErrInvalidInput) {
 			t.Fatal("non-object compute state accepted", string(invalid), err)
 		}
 	}
-	if _, err := w.SetRuntimeCompute(t.Context(), latest, "suspended", json.RawMessage(`{}`), &until, time.Time{}); !errors.Is(err, ErrInvalidInput) {
+	if _, err := w.SetRuntimeCompute(t.Context(), latest, "suspended", json.RawMessage(`{}`), &until, 0); !errors.Is(err, ErrInvalidInput) {
 		t.Fatal("running skipped snapshot protocol", err)
 	}
 }
@@ -241,7 +241,7 @@ func TestRuntimeSuspensionRetentionAndDeletedSession(t *testing.T) {
 		t.Fatal("snapshot retention expiry not observed", expired, err)
 	}
 	// Use the earlier unexpired observation to exercise expiry at the database CAS.
-	if _, err := w.SetRuntimeCompute(t.Context(), retained, "restoring", json.RawMessage(`{}`), &until, time.Time{}); !errors.Is(err, ErrTurnConflict) {
+	if _, err := w.SetRuntimeCompute(t.Context(), retained, "restoring", json.RawMessage(`{}`), &until, 0); !errors.Is(err, ErrTurnConflict) {
 		t.Fatal("expired snapshot restored from stale observation", err)
 	}
 	if err := s.DeleteSession(t.Context(), owner.TenantID, owner.SessionID); err != nil {
@@ -254,7 +254,7 @@ func TestRuntimeSuspensionRetentionAndDeletedSession(t *testing.T) {
 	if err != nil || !deleted.SessionDeleted || deleted.ComputeWakeRequested {
 		t.Fatal("deleted session was woken", deleted, err)
 	}
-	if _, err := w.SetRuntimeCompute(t.Context(), deleted, "restoring", json.RawMessage(`{}`), &until, time.Time{}); !errors.Is(err, ErrNotFound) {
+	if _, err := w.SetRuntimeCompute(t.Context(), deleted, "restoring", json.RawMessage(`{}`), &until, 0); !errors.Is(err, ErrNotFound) {
 		t.Fatal("deleted session restored", err)
 	}
 }
@@ -356,7 +356,7 @@ func TestRuntimeSuspensionExpiredRunningAndLostWriterAreFenced(t *testing.T) {
 	runtimeSuspensionCompleted(t, pool, owner)
 	until := time.Now().Add(time.Hour)
 	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET kept_at=clock_timestamp()-interval '2 hours' WHERE id=$1`, owner.ID)
-	if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Now()); !errors.Is(err, ErrTurnConflict) {
+	if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond); !errors.Is(err, ErrTurnConflict) {
 		t.Fatal("expired running allocation entered checkpoint", err)
 	}
 	if err := w.executionLease.Close(t.Context()); err != nil {
@@ -376,7 +376,7 @@ func TestRuntimeSuspensionExpiredRunningAndLostWriterAreFenced(t *testing.T) {
 	}
 }
 
-func TestRuntimeSuspensionRechecksCompletionAgainstIdleCutoff(t *testing.T) {
+func TestRuntimeSuspensionRechecksCompletionAgainstIdleTimeout(t *testing.T) {
 	for _, kind := range []string{"root", "subagent", "file_committed", "file_rejected"} {
 		t.Run(kind, func(t *testing.T) {
 			s, w, pool, owner := runtimeSuspensionFixture(t)
@@ -387,9 +387,9 @@ func TestRuntimeSuspensionRechecksCompletionAgainstIdleCutoff(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			idleBefore := time.Now().Add(-time.Minute)
+			idleTimeout := time.Minute
 			observed, err := w.RuntimeActivity(t.Context(), owner)
-			if err != nil || observed.Busy || observed.LastActivity.After(idleBefore) {
+			if err != nil || !observed.ReadyToSuspend(idleTimeout) {
 				t.Fatal("fixture is not initially idle", observed, err)
 			}
 			// A completion can arrive after the lifecycle's idle observation without
@@ -406,18 +406,18 @@ func TestRuntimeSuspensionRechecksCompletionAgainstIdleCutoff(t *testing.T) {
 				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256,state,created_at,settled_at) VALUES($1,$2,$3,$4,$5,clock_timestamp()-interval '10 minutes',clock_timestamp())`, uuid.NewString(), owner.EnvironmentID, owner.DeviceID, strings.Repeat("a", 64), strings.TrimPrefix(kind, "file_"))
 			}
 			until := time.Now().Add(time.Hour)
-			if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleBefore); !errors.Is(err, ErrTurnConflict) {
+			if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); !errors.Is(err, ErrTurnConflict) {
 				t.Fatal("completion after idle observation did not fence quiesce", err)
 			}
 			activity, err := w.RuntimeActivity(t.Context(), owner)
-			if err != nil || activity.Busy || activity.WakeRequested || !activity.LastActivity.After(idleBefore) {
+			if err != nil || activity.Busy || activity.WakeRequested || activity.ReadyToSuspend(idleTimeout) {
 				t.Fatal("last completion did not restart idle interval", activity, err)
 			}
-			if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Time{}); !errors.Is(err, ErrInvalidInput) {
-				t.Fatal("missing idle cutoff accepted", err)
+			if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 0); !errors.Is(err, ErrInvalidInput) {
+				t.Fatal("missing idle timeout accepted", err)
 			}
-			if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, activity.LastActivity); err != nil {
-				t.Fatal("fully elapsed idle boundary rejected", err)
+			if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond); err != nil {
+				t.Fatal("elapsed idle timeout rejected", err)
 			}
 		})
 	}

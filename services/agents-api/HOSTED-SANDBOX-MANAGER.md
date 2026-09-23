@@ -152,6 +152,9 @@ idle interval has passed. Core measures terminal activity from its database's
 first committed completion observation, so clock differences between hosts do not
 shorten or extend that idle interval. Public native timestamps remain unchanged;
 repeated completion observations and heartbeats do not reset the idle timer.
+Idle eligibility and its final transaction check use the database observation
+clock, including when PostgreSQL runs on a different host from Core. Snapshot
+retention starts from the same clock.
 Its full snapshot preserves guest state, files and configuration; a completed
 Agent process is not recreated as a resident process.
 Docker remains supported without promising memory snapshots. Disconnecting a

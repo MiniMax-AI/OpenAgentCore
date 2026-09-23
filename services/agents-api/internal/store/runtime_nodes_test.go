@@ -272,7 +272,7 @@ func TestRuntimeNodesRestoreAndCreationShareCapacity(t *testing.T) {
 	results := make(chan error, 2)
 	go func() {
 		<-start
-		_, err := w.SetRuntimeCompute(t.Context(), allocation, "restoring", json.RawMessage(`{"target":{"id":"restore"}}`), &until, time.Time{})
+		_, err := w.SetRuntimeCompute(t.Context(), allocation, "restoring", json.RawMessage(`{"target":{"id":"restore"}}`), &until, 0)
 		results <- err
 	}()
 	go func() {
