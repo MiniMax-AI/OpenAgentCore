@@ -86,12 +86,16 @@ func TestSessionProjectionShowsSelectedMCPCredential(t *testing.T) {
 	cfg := configuration{Agent: v1.Agent{ID: "agent", Model: "model", Tools: []json.RawMessage{tool("implicit", ""), tool("anonymous", ""), tool("explicit", strings.ToUpper(explicit)), function}},
 		Environment: v1.Environment{Type: "none"}, VaultIDs: []string{strings.ToUpper(vault)},
 		MCPCredentials: []store.MCPCredentialBinding{binding("implicit", credential), binding("anonymous", ""), binding("explicit", explicit)}}
+	// The stored caller intent is checked against PostgreSQL by the storedNull
+	// guard in TestMCPCredentialSelectionPublicPostgres.
 	raw, _ := json.Marshal(cfg)
-	stored := string(raw)
 	response, err := sessionResponse(store.Session{Configuration: raw}, "")
-	if err != nil || !reflect.DeepEqual(response.VaultIDs, cfg.VaultIDs) || string(raw) != stored {
-		t.Fatal("public attachments lost or stored configuration changed", err)
+	if err != nil || !reflect.DeepEqual(response.VaultIDs, cfg.VaultIDs) {
+		t.Fatal("public attachments lost", err)
 	}
+	// The stored member order, here the struct order rather than alphabetical,
+	// is kept by the projection.
+	toolKeys := []string{"type", "server_label", "transport", "allowed_tools", "connection_origin", "credential_id", "request_metadata", "required"}
 	want := []any{credential, nil, strings.ToUpper(explicit)}
 	for index, expected := range want {
 		var projected map[string]any
@@ -103,6 +107,9 @@ func TestSessionProjectionShowsSelectedMCPCredential(t *testing.T) {
 		original["credential_id"] = expected
 		if !reflect.DeepEqual(projected, original) {
 			t.Fatalf("tool %d changed beyond credential_id: %s", index, response.Agent.Tools[index])
+		}
+		if keys, _ := orderedMembers(response.Agent.Tools[index]); !reflect.DeepEqual(keys, toolKeys) {
+			t.Fatalf("tool %d member order changed: %v; want %v", index, keys, toolKeys)
 		}
 	}
 	if string(response.Agent.Tools[3]) != string(function) {

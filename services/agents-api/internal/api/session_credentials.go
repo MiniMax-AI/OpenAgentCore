@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 
@@ -64,16 +65,28 @@ func projectedMCPCredential(raw json.RawMessage, cfg configuration) json.RawMess
 		if !attachedVault(cfg.VaultIDs, binding.VaultID) {
 			return raw
 		}
-		var fields map[string]json.RawMessage
-		if json.Unmarshal(raw, &fields) != nil {
+		// Keep the stored member order; only the credential_id value changes.
+		keys, fields := orderedMembers(raw)
+		if len(keys) == 0 || len(keys) != len(fields) {
 			return raw
+		}
+		if _, present := fields["credential_id"]; !present {
+			keys = append(keys, "credential_id")
 		}
 		fields["credential_id"], _ = json.Marshal(binding.CredentialID)
-		projected, err := json.Marshal(fields)
-		if err != nil {
-			return raw
+		var projected bytes.Buffer
+		projected.WriteByte('{')
+		for index, key := range keys {
+			if index > 0 {
+				projected.WriteByte(',')
+			}
+			name, _ := json.Marshal(key)
+			projected.Write(name)
+			projected.WriteByte(':')
+			projected.Write(fields[key])
 		}
-		return projected
+		projected.WriteByte('}')
+		return projected.Bytes()
 	}
 	return raw
 }
