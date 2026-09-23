@@ -10,7 +10,7 @@ describe("sandbox connection and enrollment", () => {
   it("creates a compact verified installer command with no credential argument or redirect following", () => {
     const command = nodeInstallCommand("secret'onetime", "https://core.example", "https://console.example", "docker", "installation", "a".repeat(64));
     expect(command).toContain("PARSAR_NODE_ENROLLMENT_TOKEN='secret'\\''onetime' python3");
-    expect(command).toContain("https://console.example/node-install/node_install.py");
+    expect(command).toContain("https://console.example/node-install/node-install.pyz");
     expect(command).toContain("sha256sum -c --status &&");
     expect(command).toContain("--max-time 30 --max-filesize 1048576");
     expect(command).not.toMatch(/--location| -L/);

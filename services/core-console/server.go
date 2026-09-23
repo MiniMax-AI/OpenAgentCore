@@ -64,7 +64,7 @@ func newConsole(c config) (*console, error) {
 			r.Out.Header.Del("Cookie")
 			r.Out.Header.Del("Origin")
 			r.Out.Header.Del("Referer")
-			if nodeTransportRequest(r.In) || (sandboxAdminRequest(r.In) && c.adminToken == "") {
+			if (projectExtensionRequest(r.In) && explicitBearer(r.In)) || nodeTransportRequest(r.In) || (sandboxAdminRequest(r.In) && c.adminToken == "") {
 				r.Out.Header.Set("Authorization", r.In.Header.Get("Authorization"))
 			} else if sandboxAdminRequest(r.In) {
 				r.Out.Header.Set("Authorization", "Bearer "+c.adminToken)
@@ -113,7 +113,7 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "ok\n")
 		return
 	}
-	if h.adminToken != "" && nodeTransportRequest(r) {
+	if (h.adminToken != "" && nodeTransportRequest(r)) || (projectExtensionRequest(r) && explicitBearer(r)) {
 		if r.Host != h.host || !safePath(r.URL.Path) || r.URL.IsAbs() || !explicitBearer(r) || (r.Header.Get("Origin") != "" && r.Header.Get("Origin") != h.origin) {
 			http.Error(w, "Invalid node transport request", http.StatusForbidden)
 			return
@@ -137,7 +137,7 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
-	if (r.URL.Path == "/core" || strings.HasPrefix(r.URL.Path, "/core/")) && h.adminToken == "" {
+	if (r.URL.Path == "/core" || strings.HasPrefix(r.URL.Path, "/core/")) && h.adminToken == "" && !projectExtensionRequest(r) {
 		if !sandboxAdminRequest(r) {
 			http.NotFound(w, r)
 			return
@@ -163,7 +163,7 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Path == "/core" || strings.HasPrefix(r.URL.Path, "/core/") {
-		if !sandboxAdminRequest(r) {
+		if !sandboxAdminRequest(r) && !projectExtensionRequest(r) {
 			http.NotFound(w, r)
 			return
 		}

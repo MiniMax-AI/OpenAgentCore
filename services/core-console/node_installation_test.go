@@ -32,7 +32,7 @@ func TestPairedConsoleKeepsAdminAndNodeCredentialsSeparated(t *testing.T) {
 	defer upstream.Close()
 	u, _ := url.Parse(upstream.URL)
 	dist, payload := t.TempDir(), t.TempDir()
-	for _, file := range []struct{ path, value string }{{filepath.Join(dist, "index.html"), "console"}, {filepath.Join(payload, "node_install.py"), "print('installer')"}, {filepath.Join(payload, "caller.key"), "must-not-be-served"}} {
+	for _, file := range []struct{ path, value string }{{filepath.Join(dist, "index.html"), "console"}, {filepath.Join(payload, "node-install.pyz"), "print('installer')"}, {filepath.Join(payload, "caller.key"), "must-not-be-served"}} {
 		if err := os.WriteFile(file.path, []byte(file.value), 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -58,9 +58,9 @@ func TestPairedConsoleKeepsAdminAndNodeCredentialsSeparated(t *testing.T) {
 		{"POST", "/api/v1/agent-daemon/unknown", "node", 403},
 		{"GET", "/console/config", "basic", 200},
 		{"GET", "/console/config", "none", 401},
-		{"GET", "/node-install/node_install.py", "none", 200},
+		{"GET", "/node-install/node-install.pyz", "none", 200},
 		{"GET", "/node-install/caller.key", "none", 404},
-		{"POST", "/node-install/node_install.py", "none", 405},
+		{"POST", "/node-install/node-install.pyz", "none", 405},
 	} {
 		r := consoleRequest(t, server, tc.method, tc.path)
 		if tc.auth == "none" {

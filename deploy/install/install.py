@@ -22,6 +22,7 @@ import uuid
 
 from configuration import compose_config, core_environment, managed_config
 import native_service
+from distribution import DistributionError, artifact, obtain_artifact, runtime_archive
 
 
 class InstallError(Exception):
@@ -63,16 +64,19 @@ def verify_bundle(bundle):
             raise InstallError("Invalid distribution path")
         if digest(path) != expected:
             raise InstallError("Distribution checksum mismatch: " + name)
-    required = {"manifest.json", "install.sh", "install.py", "configuration.py", "native_service.py", "node_install.py", "runtime/seccomp.json"}
-    required.update(f"images/{name}.tar" for name in ("core", "web", "runtime", "database"))
-    required.update("native/bin/" + name for name in ("agents-api", "agents-api-migrate", "agents-api-microsandbox-provider", "parsar-sandbox-node"))
-    required.update("native/microsandbox/" + name for name in ("msb", "libkrunfw.so.5.6.1"))
+    required = {"manifest.json", "install.sh", "install.py", "configuration.py", "native_service.py", "node-install.pyz", "self-hosted-install.pyz", "distribution.py", "runtime/seccomp.json"}
+    required.update(f"images/{name}.tar" for name in ("core", "web", "database"))
+    required.update("native/bin/" + name for name in ("agents-api", "agents-api-migrate"))
     if not required.issubset(covered):
         raise InstallError("Distribution checksum list is incomplete")
     manifest = json.loads((bundle / "manifest.json").read_text())
     for image in manifest["images"].values():
         if not image.startswith("sha256:") or len(image) != 71:
             raise InstallError("Distribution must select immutable images")
+    for name in ("images/runtime.tar.gz", "native/bin/parsar-sandbox-node",
+                 "native/bin/agents-api-microsandbox-provider", "native/microsandbox/msb",
+                 "native/microsandbox/libkrunfw.so.5.6.1"):
+        artifact(manifest, name)
     return manifest
 
 
@@ -259,10 +263,18 @@ def prepare_node_payload(root, state, bundle):
         return
     destination = root / "node-payload"
     # Public distribution files only. Never copy the private installation config.
-    names = ("node_install.py", "manifest.json", "SHA256SUMS", "images/runtime.tar",
-             "runtime/seccomp.json", "native/bin/parsar-sandbox-node",
-             "native/bin/agents-api-microsandbox-provider", "native/microsandbox/msb",
-             "native/microsandbox/libkrunfw.so.5.6.1")
+    names = ["node-install.pyz", "self-hosted-install.pyz", "manifest.json", "SHA256SUMS", "runtime/seccomp.json"]
+    manifest = json.loads((bundle / "manifest.json").read_text())
+    for logical in manifest.get("artifacts", {}):
+        entry = artifact(manifest, logical)
+        name = "artifacts/" + entry["filename"]
+        source = bundle / name
+        if source.exists():
+            if (source.is_symlink() or not source.is_file()
+                    or not source.resolve().is_relative_to(bundle.resolve())
+                    or source.stat().st_size != entry["size"] or digest(source) != entry["sha256"]):
+                raise InstallError("Offline artifact verification failed: " + logical)
+            names.append(name)
     for name in names:
         source, target = bundle / name, destination / name
         target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -313,8 +325,14 @@ def main(argv=None):
         raise InstallError("microsandbox requires host KVM; enable virtualization or explicitly choose --provider docker")
     bundle = Path(__file__).resolve().parent
     manifest = verify_bundle(bundle)
-    if args.provider == "microsandbox" and not args.web_only:
-        native_service.preflight(bundle)
+    if args.provider and not args.web_only:
+        print("Preparing the selected local sandbox provider...", flush=True)
+        runtime_archive(manifest, bundle, bundle)
+        if args.provider == "microsandbox":
+            for name in ("native/bin/agents-api-microsandbox-provider", "native/microsandbox/msb",
+                         "native/microsandbox/libkrunfw.so.5.6.1"):
+                obtain_artifact(manifest, name, bundle / name, bundle)
+            native_service.preflight(bundle)
     state = initialize(root, args, manifest)
     prepare_node_payload(root, state, bundle)
     if state["provider"] == "docker":
@@ -365,7 +383,7 @@ def main(argv=None):
 if __name__ == "__main__":
     try:
         main()
-    except (InstallError, RuntimeError, OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:
+    except (InstallError, DistributionError, RuntimeError, OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:
         # Errors never include generated configuration or external process output.
-        print(str(error) if isinstance(error, (InstallError, RuntimeError)) else "Installation failed; inspect prerequisites and private deployment files", file=sys.stderr)
+        print(str(error) if isinstance(error, (InstallError, DistributionError, RuntimeError)) else "Installation failed; inspect prerequisites and private deployment files", file=sys.stderr)
         sys.exit(1)

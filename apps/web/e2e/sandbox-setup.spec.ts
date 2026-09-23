@@ -32,7 +32,7 @@ test("bundled console needs no extra admin key and provides one install command 
   await page.getByRole("button", { name: "Add node", exact: true }).click();
   const command = page.getByLabel("One-time enrollment command");
   await expect(command).toHaveValue(/fixture-once-token/);
-  await expect(command).toHaveValue(/\/node-install\/node_install.py/);
+  await expect(command).toHaveValue(/\/node-install\/node-install.pyz/);
 
   await expect(page.getByRole("button", { name: "Copy node command" })).toBeVisible();
   await expect(page.getByRole("dialog").getByRole("status")).toContainText("Waiting for your node");
