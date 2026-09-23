@@ -54,6 +54,23 @@ def main():
                                  json=body if body is not None else None)
             assert response.status_code == 400, (body, response.status_code, response.text)
             assert agents.retrieve(original.id) == updated
+        # Configuration protocol errors (TV-01..03) use the official fields and precede
+        # the Agent lookup, so owned, foreign and missing Agents get the same response.
+        for body, param, message in [
+            ({"reasoning": {"effort": "extreme"}}, "reasoning.effort", "Invalid value: 'extreme'. Supported values are: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', and 'max'."),
+            ({"service_tier": "turbo"}, "service_tier", "Invalid value: 'turbo'. Supported values are: 'auto', 'default', 'flex', 'priority', and 'fast'."),
+            ({"text": {"format": {"type": "json_schema"}}}, "text.format.schema", "Missing required parameter: 'text.format.schema'."),
+            ({"tools": [{**tool, "strict": True}]}, "tools[0].strict", "Unknown parameter: 'tools[0].strict'."),
+            ({"tools": ["lookup"]}, "tools[0]", "Invalid type for 'tools[0]': expected an object, but got a string instead."),
+            ({"tools": [{"type": "web_search", "mode": "disabled"}] * 2}, None, "duplicate web_search tool"),
+            ({"text": {"format": {"type": "json_schema", "schema": {"type": "array"}}}}, None, 'agent.text.format.schema must have top-level type "object"; got "array"'),
+        ]:
+            expected = {"type": "invalid_request_error", "code": "invalid_request_error", "param": param, "message": message}
+            for target, auth in ((original.id, headers), (original.id, headers | {"Authorization": "Bearer " + foreign}),
+                                 (str(uuid.uuid4()), headers)):
+                response = http.post(base + "/v1/agents/" + target, headers=auth, json=body)
+                assert response.status_code == 400 and response.json()["error"] == expected, (body, response.text)
+            assert agents.retrieve(original.id) == updated
         for target in (original.id, str(uuid.uuid4()), "invalid", str(uuid.UUID(int=0))):
             response = http.post(base + "/v1/agents/" + target,
                                  headers=headers | {"Authorization": "Bearer " + foreign}, json={"name": "foreign"})
