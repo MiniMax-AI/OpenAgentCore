@@ -109,7 +109,8 @@ class InstallerTests(unittest.TestCase):
         encryption = (self.root / "config/credential.key").read_text()
         self.assertEqual(hashlib.sha256(caller).hexdigest(), keys[0]["token_sha256"])
         self.assertEqual(len(base64.b64decode(encryption, validate=True)), 32)
-        self.assertEqual(first["installation_id"], self.document("config/managed-runtimes.json")["installation_id"])
+        self.assertIsNone(first["provider"])
+        self.assertFalse((self.root / "config/managed-runtimes.json").exists())
         before = self.snapshot()
         self.ports.reset_mock()
         # Re-running against already listening services must not reserve their ports.
@@ -122,7 +123,7 @@ class InstallerTests(unittest.TestCase):
     def test_configuration_changes_refuse_without_mutating_existing_deployment(self):
         self.initialize()
         before = self.snapshot()
-        for flags in (("--core-only",), ("--provider", "docker"), ("--core-port", "8092"), ("--web-port", "8081")):
+        for flags in (("--core-only",), ("--sandbox-provider", "true", "--provider", "docker"), ("--core-port", "8092"), ("--web-port", "8081")):
             with self.subTest(flags=flags), self.assertRaises(install.InstallError):
                 self.initialize(*flags)
             self.assertEqual(before, self.snapshot())
@@ -131,8 +132,8 @@ class InstallerTests(unittest.TestCase):
             install.initialize(self.root, self.args(), changed)
         self.assertEqual(before, self.snapshot())
 
-    def test_default_microsandbox_keeps_core_and_vm_processes_outside_compose(self):
-        state = self.initialize()
+    def test_opt_in_microsandbox_keeps_core_and_vm_processes_outside_compose(self):
+        state = self.initialize("--sandbox-provider", "true")
         self.assertEqual(state["provider"], "microsandbox")
         managed = self.document("config/managed-runtimes.json")
         self.assertNotIn("docker", managed)
@@ -159,7 +160,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("no-new-privileges:true", web["security_opt"])
 
     def test_docker_provider_socket_and_runtime_network_belong_only_to_core(self):
-        state = self.initialize("--provider", "docker", "--core-only")
+        state = self.initialize("--sandbox-provider", "true", "--provider", "docker", "--core-only")
         managed = self.document("config/managed-runtimes.json")
         self.assertNotIn("microsandbox", managed)
         self.assertEqual(managed["docker"]["host"], "unix:///var/run/docker.sock")
@@ -270,6 +271,51 @@ class InstallerTests(unittest.TestCase):
         checksums.write_text(install.digest(outside) + "  ../existing-core.key\n")
         with self.assertRaises(install.InstallError):
             install.verify_bundle(bundle)
+
+    def test_default_has_no_provider_authority_or_runtime_configuration(self):
+        state = self.initialize()
+        self.assertIsNone(state["provider"])
+        self.assertEqual(self.device_probes, [])
+        self.assertNotIn("device_gid", state)
+        self.assertFalse((self.root / "state").exists())
+        self.assertFalse((self.root / "config/managed-runtimes.json").exists())
+        compose = self.document("compose.json")
+        self.assertEqual(set(compose["services"]), {"database", "migrate", "core", "web"})
+        self.assertNotIn("networks", compose)
+        for service in compose["services"].values():
+            self.assertNotIn("devices", service)
+            self.assertNotIn("group_add", service)
+            self.assertNotIn("docker.sock", json.dumps(service.get("volumes", [])))
+            self.assertNotIn("AGENTS_API_MANAGED_RUNTIMES_FILE", service.get("environment", {}))
+
+    def test_provider_requires_explicit_enablement_and_cannot_belong_to_web_only(self):
+        self.assertIsNone(self.args("--sandbox-provider", "false").provider)
+        self.assertEqual(self.args("--sandbox-provider").provider, "microsandbox")
+        for flags in (("--provider", "docker"), ("--provider", "microsandbox"),
+                      ("--sandbox-provider", "false", "--provider", "docker"),
+                      ("--web-only", "--sandbox-provider", "true")):
+            with self.subTest(flags=flags), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                self.args(*flags)
+
+    def test_default_main_skips_kvm_native_service_and_runtime_import(self):
+        bundle = self.bundle()
+        calls = []
+        output = io.StringIO()
+        with mock.patch.object(install, "__file__", str(bundle / "install.py")), \
+                mock.patch.object(install.platform, "system", return_value="Linux"), \
+                mock.patch.object(install.platform, "machine", return_value="x86_64"), \
+                mock.patch.object(install, "run", side_effect=lambda args, **kw: calls.append(args)), \
+                mock.patch.object(install, "wait_http", return_value=True), \
+                mock.patch.object(install.native_service, "preflight", side_effect=AssertionError("native preflight on default")), \
+                mock.patch.object(install.native_service, "prepare", side_effect=AssertionError("native install on default")), \
+                contextlib.redirect_stdout(output):
+            install.main(["--install-dir", str(self.root)])
+        self.assertEqual(self.device_probes, [])
+        self.assertEqual([call[-1] for call in calls if call[:2] == ["docker", "load"]],
+                         [str(bundle / ("images/" + name + ".tar")) for name in ("core", "database", "web")])
+        self.assertFalse((self.root / "native").exists())
+        self.assertFalse((self.root / "config/seccomp.json").exists())
+        self.assertIn("No execution node was installed", output.getvalue())
 
     def test_main_web_only_never_imports_runtime_or_leaks_caller_password(self):
         source = self.caller_file()

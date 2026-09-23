@@ -7,10 +7,11 @@ owns Sessions, environments, files, credentials and execution history; each
 native harness keeps its own model and tool loop. Core runs independently of the
 Parsar product.
 
-Core and its Web console ship together. The installer prepares microsandbox by
-default; use `--provider docker` for Docker. Core creates each required sandbox from the
-colocated Runtime image through its Provider, then initializes it. Model credentials are supplied through the
-existing write-only API extension, not during installation.
+Core and its Web console ship together. The default installation runs Core, Web
+and PostgreSQL with zero execution nodes. A local sandbox provider is optional:
+enable microsandbox or Docker explicitly when installing. With a provider enabled,
+Core creates each required sandbox from the colocated Runtime image. Model
+credentials are supplied through the existing write-only API extension.
 
 ## Start here
 
@@ -24,9 +25,10 @@ existing write-only API extension, not during installation.
 After verifying and extracting a matching Linux amd64 distribution:
 
 ```sh
-./install.sh                    # Core + Web, microsandbox
-./install.sh --provider docker  # Core + Web, Docker
-./install.sh --core-only        # Core without the console
+./install.sh                    # Core + Web + PostgreSQL, no sandbox provider
+./install.sh --core-only        # Core + PostgreSQL, no sandbox provider
+./install.sh --sandbox-provider true --provider microsandbox
+./install.sh --sandbox-provider true --provider docker
 ```
 
 Web-only installation connects the unchanged console to an existing Core; see the

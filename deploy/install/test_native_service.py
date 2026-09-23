@@ -50,7 +50,8 @@ class NativeServiceTests(unittest.TestCase):
         self.run.side_effect = result
 
     def test_only_core_microsandbox_uses_native_service(self):
-        for mode, provider, expected in (("all", "microsandbox", True),
+        for mode, provider, expected in (("all", None, False),
+                                         ("all", "microsandbox", True),
                                          ("core-only", "microsandbox", True),
                                          ("web-only", "microsandbox", False),
                                          ("all", "docker", False)):

@@ -103,7 +103,10 @@ def arguments(argv=None):
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--core-only", action="store_true")
     modes.add_argument("--web-only", action="store_true")
-    parser.add_argument("--provider", choices=("microsandbox", "docker"), default="microsandbox")
+    parser.add_argument("--sandbox-provider", choices=("true", "false"), nargs="?", const="true", default="false",
+                        help="Prepare a local sandbox provider (default: false)")
+    parser.add_argument("--provider", choices=("microsandbox", "docker"),
+                        help="Local sandbox provider when enabled (default: microsandbox)")
     parser.add_argument("--install-dir", type=Path, default=Path.home() / ".parsar/core")
     parser.add_argument("--core-port", type=int, default=8091)
     parser.add_argument("--web-port", type=int, default=8080)
@@ -112,6 +115,12 @@ def arguments(argv=None):
     parser.add_argument("--status", action="store_true", help="Read installation health; never invoke a model")
     parser.add_argument("--stop", action="store_true", help="Stop installed services; retain all data")
     args = parser.parse_args(argv)
+    args.sandbox_provider = args.sandbox_provider == "true"
+    if args.provider and not args.sandbox_provider:
+        parser.error("--provider requires --sandbox-provider true")
+    if args.web_only and args.sandbox_provider:
+        parser.error("--web-only cannot install a sandbox provider")
+    args.provider = (args.provider or "microsandbox") if args.sandbox_provider else None
     if args.status and args.stop:
         parser.error("Choose status or stop")
     if not args.install_dir.is_absolute():
@@ -194,7 +203,8 @@ def initialize(root, args, manifest):
         if not token or any(c.isspace() for c in token) or "\x00" in token:
             raise InstallError("Invalid Core token file")
     else:
-        device_gid = os.stat("/dev/kvm" if args.provider == "microsandbox" else "/var/run/docker.sock").st_gid
+        if args.provider:
+            device_gid = os.stat("/dev/kvm" if args.provider == "microsandbox" else "/var/run/docker.sock").st_gid
         token = secrets.token_hex(32)
     if mode != "web-only":
         free_port(args.core_port)
@@ -202,7 +212,10 @@ def initialize(root, args, manifest):
         free_port(args.web_port)
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(root, 0o700)
-    for name in ("config", "state", "state/msb"):
+    directories = ["config"]
+    if args.provider == "microsandbox":
+        directories.extend(("state", "state/msb"))
+    for name in directories:
         (root / name).mkdir(mode=0o700)
     state = {"version": 1, "source_commit": manifest["source_commit"], "mode": mode,
              "provider": args.provider, "installation_id": str(uuid.uuid4()),
@@ -212,13 +225,15 @@ def initialize(root, args, manifest):
         state["database_port"] = database_port()
     config = root / "config"
     if mode != "web-only":
-        state["device_gid"] = device_gid
+        if args.provider:
+            state["device_gid"] = device_gid
         write_json(config / "keys.json", [{"tenant_id": str(uuid.uuid4()), "organization_id": "installation",
             "project_id": "default", "subject_kind": "service_account", "subject_id": "operator",
             "token_sha256": hashlib.sha256(token.encode()).hexdigest()}])
         private_write(config / "credential.key", base64.b64encode(secrets.token_bytes(32)).decode())
         private_write(config / "database.password", secrets.token_hex(32))
-        write_json(config / "managed-runtimes.json", managed_config(root, state, manifest))
+        if args.provider:
+            write_json(config / "managed-runtimes.json", managed_config(root, state, manifest))
     private_write(config / "caller.key", token)
     if mode != "core-only":
         private_write(config / "console.password", secrets.token_hex(24))
@@ -264,11 +279,13 @@ def main(argv=None):
     if args.provider == "microsandbox" and not args.web_only:
         native_service.preflight(bundle)
     state = initialize(root, args, manifest)
-    if state["mode"] != "web-only":
+    if state["provider"] == "docker":
         seccomp = bundle / "runtime/seccomp.json"
         if not (root / "config/seccomp.json").exists():
             private_write(root / "config/seccomp.json", seccomp.read_text())
-    images = ["web"] if state["mode"] == "web-only" else ["core", "runtime", "database"]
+    images = ["web"] if state["mode"] == "web-only" else ["core", "database"]
+    if state["provider"] == "docker":
+        images.append("runtime")
     if native_service.is_native(state):
         images = ["database"]
         password = (root / "config/database.password").read_text()
@@ -296,7 +313,10 @@ def main(argv=None):
     if state["mode"] != "web-only":
         print(f'API: http://127.0.0.1:{state["core_port"]}/v1')
         print("Caller key file: " + str(root / "config/caller.key"))
-        print("Provider: " + state["provider"] + ". Runtime image prepared; Core provisions Sessions on demand.")
+        if state["provider"]:
+            print("Provider: " + state["provider"] + ". Runtime image prepared; Core provisions Sessions on demand.")
+        else:
+            print("No local sandbox provider configured. No execution node was installed.")
     print("Services installed. No model request was made. See docs/getting-started/quickstart.md.")
 
 

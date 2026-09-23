@@ -42,15 +42,17 @@ def core_environment(root, state, database_password):
     config = str(Path(root) / "config") if native else "/config"
     database = f'127.0.0.1:{state["database_port"]}' if native else "database:5432"
     daemon_host = f'host.microsandbox.internal:{state["core_port"]}' if native else "core:8091"
-    return {
+    result = {
         "AGENTS_API_DATABASE_URL": f"postgres://agents_api:{database_password}@{database}/agents_api?sslmode=disable",
         "AGENTS_API_KEYS_FILE": config + "/keys.json",
         "AGENTS_API_CREDENTIAL_KEY_FILE": config + "/credential.key",
         "AGENTS_API_ADDR": f'127.0.0.1:{state["core_port"]}' if native else ":8091",
         "AGENTS_API_ENGINE": "codex", "AGENTS_API_HARNESSES": "codex,claude_sdk,mcode",
-        "AGENTS_API_MANAGED_RUNTIMES_FILE": config + "/managed-runtimes.json",
         "AGENTS_API_DAEMON_WS_URL": f"ws://{daemon_host}/api/v1/agent-daemon/ws",
     }
+    if state["provider"]:
+        result["AGENTS_API_MANAGED_RUNTIMES_FILE"] = config + "/managed-runtimes.json"
+    return result
 
 
 def compose_config(root, state, manifest, database_password):
@@ -83,10 +85,11 @@ def compose_config(root, state, manifest, database_password):
             services["database"]["ports"] = [f'127.0.0.1:{state["database_port"]}:5432']
             services.pop("migrate")
         else:
-            core["volumes"].append(bind("/var/run/docker.sock", "/var/run/docker.sock", False))
-            core["group_add"] = [str(state["device_gid"])]
-            core["networks"] = ["default", "runtime"]
-            doc["networks"] = {"runtime": {"name": state["project"] + "-runtime"}}
+            if state["provider"] == "docker":
+                core["volumes"].append(bind("/var/run/docker.sock", "/var/run/docker.sock", False))
+                core["group_add"] = [str(state["device_gid"])]
+                core["networks"] = ["default", "runtime"]
+                doc["networks"] = {"runtime": {"name": state["project"] + "-runtime"}}
             services["core"] = core
         doc["volumes"] = {"database": {}}
     if state["mode"] != "core-only":

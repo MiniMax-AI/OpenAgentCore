@@ -65,10 +65,10 @@ client = OpenAI(
       </section>
 
       <section class="install-section wrap" id="install" aria-labelledby="install-title">
-        <div class="install-copy"><p class="eyebrow">02 / Installation</p><h2 id="install-title">Start with a<br> local bundle.</h2><p>Download or build a bundle for your host, extract it, then run the installer from that directory.</p><p>The default installs Core and the Web console, and prepares microsandbox and Runtime images. Core provisions the Runtime when you create an execution Session.</p><a class="text-link" href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/install.md">Installation guide <span aria-hidden="true">→</span></a></div>
+        <div class="install-copy"><p class="eyebrow">02 / Installation</p><h2 id="install-title">Start with a<br> local bundle.</h2><p>Download or build a bundle for your host, extract it, then run the installer from that directory.</p><p>The default runs Core, the Web console and PostgreSQL with zero execution nodes. A local sandbox provider is an explicit installation option.</p><a class="text-link" href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/install.md">Installation guide <span aria-hidden="true">→</span></a></div>
         <div class="install-options">
-          <div class="install-default"><div class="install-label"><h3>Core + Web</h3><span class="badge">DEFAULT</span></div><pre><code>./install.sh</code></pre><p>Uses microsandbox. No model provider key is needed at install time.</p></div>
-          <div class="install-option"><div><h3>Use Docker</h3><p>Choose the Docker sandbox provider.</p></div><code>./install.sh --provider docker</code></div>
+          <div class="install-default"><div class="install-label"><h3>Core + Web</h3><span class="badge">DEFAULT</span></div><pre><code>./install.sh</code></pre><p>Includes PostgreSQL. No sandbox provider, KVM or systemd user service required.</p></div>
+          <div class="install-option"><div><h3>Local sandbox</h3><p>Optional microsandbox. Add --provider docker to choose Docker.</p></div><code>./install.sh --sandbox-provider true</code></div>
           <div class="install-option"><div><h3>Core only</h3><p>Deploy the API without the Web console.</p></div><code>./install.sh --core-only</code></div>
           <div class="install-option"><div><h3>Web only</h3><p>Connect the console to an existing Core.</p></div><code>./install.sh --web-only</code></div>
           <p class="bundle-note">Bundle availability and supported hosts are documented in the installation guide. <a href="https://github.com/MiniMax-AI/parsar-core/releases">Browse releases ↗</a></p>

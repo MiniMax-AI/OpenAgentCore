@@ -32,6 +32,11 @@ environment. Installation has no mandatory sample task.
 
 ## Run a Session when you are ready
 
+This example requires an installation created with a local sandbox provider
+enabled. The default installation has zero execution nodes. Choose microsandbox
+or Docker using the [installation options](install.md#installation-choices);
+adding these flags to an existing default installation is not a supported migration.
+
 Core creates the sandbox through its Provider using the prepared Runtime image,
 then initializes the daemon, native harness and workspace inside it. You do not
 install or start a separate daemon for a Core-managed Session. The public discriminator remains

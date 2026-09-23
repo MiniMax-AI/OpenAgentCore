@@ -560,8 +560,8 @@ does not qualify its isolation or enable public creation.
 
 ### Optional single-host sandbox suspension
 
-Each Core deployment enables exactly one sandbox provider, selected at setup:
-Docker or microsandbox. Keep both adapters but reject multiple provider entries,
+A Core deployment may run without a sandbox provider. When enabled, exactly one
+sandbox provider is selected at setup: Docker or microsandbox. Keep both adapters but reject multiple provider entries,
 legacy default-provider maps and engine-based placement. Harness selection is
 independent. The configuration has one installation UUID, one provider kind and
 one backend object. No compatibility parser or parallel provider route remains.
@@ -1351,17 +1351,25 @@ qualification. A release must be tested from fresh extraction with real models;
 no synthetic result may substitute for native execution acceptance.
 
 The first installer targets a trusted Linux amd64 Docker host. It installs a
-private dedicated PostgreSQL service and separate Core and console services.
-Default sandbox placement is microsandbox; `--provider docker` selects the
-existing Docker provider. Missing KVM fails without changing that choice.
+private dedicated PostgreSQL service and separate Core and console services in
+Compose by default, with zero execution nodes. The default requires neither KVM
+nor systemd user services, imports no Runtime image, mounts neither the Docker
+socket nor host devices into Core, and generates no managed Provider configuration.
+Local sandbox placement is opt-in: `--sandbox-provider true --provider microsandbox`
+or `--sandbox-provider true --provider docker`. Enabling the option without naming
+a provider selects microsandbox; `--provider` without enabling the option is an
+error. Web-only mode cannot enable a sandbox provider. Core-only mode retains the
+same opt-in rule. Missing KVM fails when microsandbox is selected without changing
+that choice.
 The distribution supplies native Core/helper binaries and pinned msb runtime and
 firmware. For microsandbox, Core is a native systemd user service with direct
 `ExecStart` and `KillMode=process`: its restart must preserve the Provider's resident
 microVM/helper processes. Never package those processes inside Core's container
 PID namespace, kill their process group on Core stop, or add recovery mechanisms to
 compensate for that packaging. User KVM access, the Linux runtime libraries and
-linger are explicit prerequisites. For Docker, Core runs in Compose with the
-canonical Docker socket. PostgreSQL/Web use Compose in either case; native Core
+linger are prerequisites only for the microsandbox option. With the Docker sandbox
+option, Core runs in Compose with the canonical Docker socket. PostgreSQL/Web use
+Compose in either case; native Core
 and its Web proxy use loopback, with a private PostgreSQL port. This packaging
 choice does not change either Provider's execution contract.
 The basic distroless API image and binary builds remain independent artifacts.
@@ -1369,8 +1377,9 @@ The basic distroless API image and binary builds remain independent artifacts.
 One Runtime image contains the existing daemon, shared helpers and three native
 harness packages. Their differences remain in the adapters. Core keeps exclusive
 ownership of Session allocation, initialization, cancellation, snapshots and
-cleanup. The installer imports images and prepares running conditions; it never
-creates an execution Session or supplies a model credential. Applications use the
+cleanup. When a sandbox provider is enabled, the installer imports its Runtime
+image and prepares running conditions; it never creates an execution Session or
+supplies a model credential. Applications use the
 existing write-only model execution extension, with the installation's persistent
 credential encryption key. Provider identity/backend namespace and native history
 must not change on a repeated install.
@@ -1390,6 +1399,8 @@ default. No credential enters build arguments, image layers, browser bundles or
 diagnostic output. Compose configuration is confidential. The generated database,
 caller/tenant/provider identities and encryption key survive reruns; automatic
 revision replacement and provider migration are outside this initial installer.
+Reruns also refuse enabling or disabling a sandbox provider on an existing
+installation, including adding one to the default zero-node installation.
 Stopping control-plane services does not stop all Provider resources; use Core's
 existing release operations for full cleanup. No native restart promise covers
 host reboot or a lost running microVM. Do not delete data or issue broad

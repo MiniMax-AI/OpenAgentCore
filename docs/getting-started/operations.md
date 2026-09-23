@@ -1,9 +1,10 @@
 # Operate your Core
 
-The API abstracts execution environments for clients. The installation operator
-also owns the host, container or microVM provider, storage and service availability.
-Those are separate from a Session's public execution state. This guide adds that
-self-deployment view without adding a second Runtime controller.
+The installation operator owns the host, storage and service availability.
+The default installation has zero execution nodes. When a sandbox provider is
+enabled during installation, the operator also maintains its containers or
+microVMs. Provider operations below apply to that optional configuration. Service
+health and provider state are separate from a Session's public execution state.
 
 ## Read service health
 
@@ -86,8 +87,9 @@ apply the existing Core migration workflow and replace matched service/Runtime
 artifacts while retaining identities and backend paths. Qualify recovery before
 claiming the upgrade complete; there is no downgrade or history migration promise.
 
-Provider replacement is an operator operation, not a new `--provider` value on an
-existing install. Follow the [maintenance and provider-switch procedure](https://github.com/MiniMax-AI/parsar-core/blob/main/services/agents-api/deploy/microsandbox/README.md#change-the-deployment-provider).
+The installer refuses to enable, disable or replace a sandbox provider on an
+existing installation. Changing flags and rerunning is not a migration procedure.
+For an installation with a provider, follow the [maintenance and provider-switch procedure](https://github.com/MiniMax-AI/parsar-core/blob/main/services/agents-api/deploy/microsandbox/README.md#change-the-deployment-provider).
 The installer never migrates Sessions between providers or deletes old compute.
 
 ## Exposure and network policy
@@ -109,9 +111,12 @@ for the colocated Runtime, and denied inbound/private-network access. Private
 model/MCP endpoints require an explicit operator policy change. Native tool network
 policy remains the Session's separate public configuration.
 
-Docker uses the existing qualified nested-sandbox Runtime policy. Only Core can
-access the selected host Docker daemon. Install on a trusted service host and do
-not share its Docker authority with untrusted users.
+The optional Docker sandbox provider uses the existing qualified nested-sandbox
+Runtime policy. Only Core can access the selected host Docker daemon.
+Install on a trusted service host and do
+not share its Docker authority with untrusted users. The default installation
+does not mount the Docker socket or host devices into Core, import Runtime images
+or generate managed Provider configuration.
 
 Host virtualization, credentials, tenant isolation, durable state and actual
 execution are release acceptance requirements. Other missing operational screens
