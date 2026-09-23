@@ -17,6 +17,14 @@ func resolveMCPTool(raw json.RawMessage, saved bool) (json.RawMessage, error) {
 	if input.Type != "mcp" || input.ServerLabel == nil || strings.TrimSpace(*input.ServerLabel) == "" {
 		return nil, errors.New("MCP tools require type=mcp and a nonempty server_label.")
 	}
+	// The official service saves an omitted or null origin on an HTTP server as
+	// "service" (MV-01). Defaulting it here makes the stored and frozen
+	// configuration identical to an explicit declaration. Other transports keep
+	// the explicit requirement.
+	if input.ConnectionOrigin == nil && mcpHTTPTransport(input.Transport) {
+		service := "service"
+		input.ConnectionOrigin = &service
+	}
 	if input.ConnectionOrigin == nil || *input.ConnectionOrigin != "service" {
 		return nil, errors.New("MCP currently requires explicit connection_origin=service.")
 	}
@@ -70,6 +78,14 @@ func resolveMCPTool(raw json.RawMessage, saved bool) (json.RawMessage, error) {
 		tool.Transport.Headers = &headers
 	}
 	return json.Marshal(tool)
+}
+
+// mcpHTTPTransport reports a transport object whose exact "type" member is
+// "http". The complete transport is validated afterwards.
+func mcpHTTPTransport(raw json.RawMessage) bool {
+	var fields map[string]json.RawMessage
+	var kind string
+	return json.Unmarshal(raw, &fields) == nil && json.Unmarshal(fields["type"], &kind) == nil && kind == "http"
 }
 
 func emptyMCPObject(raw json.RawMessage) bool {

@@ -64,7 +64,8 @@ export interface ServiceHttpMcpToolInput {
   };
   /** null or omitted permits every advertised tool; [] permits none. */
   allowed_tools?: string[] | null;
-  connection_origin: "service";
+  /** null or omitted is saved as "service", as the official service does. */
+  connection_origin?: "service" | null;
   /** Saving a reference does not authorize it; Session vault_ids must attach its owner. */
   credential_id?: string | null;
   required?: boolean;

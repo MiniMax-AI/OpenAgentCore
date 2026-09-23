@@ -52,6 +52,27 @@ func TestMCPResourceTransportProjections(t *testing.T) {
 	}
 }
 
+// MV-01: an omitted or null origin on an HTTP server is stored exactly as an
+// explicit "service" declaration, in saved Agents and Session configuration.
+func TestMCPOmittedOriginIsService(t *testing.T) {
+	for _, saved := range []bool{false, true} {
+		explicit, err := resolveMCPTool(json.RawMessage(publicMCP), saved)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, origin := range []string{"", `,"connection_origin":null`} {
+			input := `{"type":"mcp","server_label":"records"` + origin + `,"transport":{"type":"http","server_url":"https://mcp.example.test/tools"}}`
+			resolved, err := resolveMCPTool(json.RawMessage(input), saved)
+			if err != nil || string(resolved) != string(explicit) {
+				t.Fatalf("saved=%v origin %q: %s, %v; want %s", saved, origin, resolved, err, explicit)
+			}
+		}
+	}
+	if _, err := resolveMCPTool(json.RawMessage(`{"type":"mcp","server_label":"records","transport":{"type":"stdio","command":"run"}}`), true); err == nil || err.Error() != "MCP currently requires explicit connection_origin=service." {
+		t.Fatal("stdio transport lost its explicit origin rule", err)
+	}
+}
+
 func TestMCPAllowedToolsAndOptionalFields(t *testing.T) {
 	for _, allowed := range []string{"null", "[]", `["lookup","fail"]`} {
 		var input map[string]json.RawMessage
@@ -74,9 +95,10 @@ func TestMCPAllowedToolsAndOptionalFields(t *testing.T) {
 
 func TestMCPUnsupportedInputsAreSecretSafe(t *testing.T) {
 	for name, replacement := range map[string]map[string]json.RawMessage{
-		"origin missing":       {"connection_origin": nil},
-		"origin null":          {"connection_origin": json.RawMessage("null")},
 		"environment origin":   {"connection_origin": json.RawMessage(`"environment"`)},
+		"stdio origin missing": {"connection_origin": nil, "transport": json.RawMessage(`{"type":"stdio","command":"private-marker"}`)},
+		"stdio origin null":    {"connection_origin": json.RawMessage("null"), "transport": json.RawMessage(`{"type":"stdio","command":"private-marker"}`)},
+		"origin missing, case": {"connection_origin": nil, "transport": json.RawMessage(`{"Type":"http","server_url":"https://mcp.example.test"}`)},
 		"required type":        {"required": json.RawMessage(`"true"`)},
 		"required null":        {"required": json.RawMessage("null")},
 		"empty credential":     {"credential_id": json.RawMessage(`""`)},

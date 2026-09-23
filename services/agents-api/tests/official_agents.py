@@ -154,9 +154,14 @@ def verify_agents(client, other, invalid, expect_error):
         expect_error(AuthenticationError, lambda: invalid.beta.agents.create(model="x"))
         expect_error(BadRequestError, lambda: agents.create(model="x", extra_headers={"OpenAI-Beta": ""}))
         assert raw.post(base, json={"model": "x"}).status_code == 401
-        # Unsupported families are explicit gaps, not schema-conformance evidence.
+        # The minimal pinned MCP tool saves its omitted origin as "service" (MV-01);
+        # the environment origin remains an explicit gap.
         mcp = {"type": "mcp", "server_label": "x", "transport": {"type": "http", "server_url": "https://example.invalid"}}
-        expect_error(BadRequestError, lambda: agents.create(model="x", tools=[mcp]))
+        minimal = agents.with_raw_response.create(model="x", tools=[mcp]).http_response.json()
+        assert minimal["tools"] == [{**mcp, "transport": {**mcp["transport"], "headers": {}}, "connection_origin": "service",
+                                     "allowed_tools": None, "credential_id": None, "request_metadata": {}, "required": False}]
+        assert agents.delete(minimal["id"]).deleted
+        expect_error(BadRequestError, lambda: agents.create(model="x", tools=[{**mcp, "connection_origin": "environment"}]))
         # Every pinned web_search mode is saved as the official service does (TV-05);
         # omitted or null mode is saved as live. A supplied location, including {},
         # has all four keys (req_db41d2f6261b4abfb69465eafe719ab5,

@@ -1,6 +1,5 @@
 """HTTP MCP resource semantics; execution requires the separate real-provider run."""
 
-from copy import deepcopy
 from itertools import product
 
 from openai import BadRequestError, NotFoundError
@@ -40,9 +39,28 @@ def verify_mcp_configuration(client, other, expect_error):
         recovered.extend([session, override])
         saved.append(changed)
 
+    # An omitted or null origin on HTTP transport is saved exactly as "service",
+    # the pinned SDK's minimal tool form (MV-01).
+    explicit = agents.with_raw_response.create(model="requested-model", tools=[tool]).http_response.json()
+    minimal = {key: value for key, value in tool.items() if key != "connection_origin"}
+    for declaration in (minimal, {**tool, "connection_origin": None}):
+        response = agents.with_raw_response.create(model="requested-model", tools=[declaration])
+        resource, body = response.parse(), response.http_response.json()
+        assert body["tools"] == explicit["tools"] and body["tools"][0]["connection_origin"] == "service"
+        updated = agents.update(resource.id, tools=[declaration])
+        assert updated.tools == resource.tools
+        inline = sessions.create(agent={"model": "requested-model", "tools": [declaration]},
+                                 input="Verify mcp fixture admission.", environment={"type": "none"})
+        assert inline.to_dict()["agent"]["tools"] == [{**explicit["tools"][0], "transport": transport}]
+        replaced = sessions.create(agent_id=resource.id, agent={"tools": [declaration]},
+                                   input="Verify mcp fixture admission.", environment={"type": "none"})
+        assert replaced.agent.tools == inline.agent.tools
+        recovered.extend([inline, replaced])
+        saved.append(updated)
+
     before = {item.id for item in sessions.list()}
     saved_before = {item.id for item in agents.list()}
-    invalid = [{**tool, "connection_origin": value} for value in (None, "environment")]
+    invalid = [{**tool, "connection_origin": "environment"}]
     invalid += [{**tool, "required": "true"}, {**tool, "required": None},
                 {**tool, "request_metadata": {"x": "y"}},
                 {**tool, "allowed_tools": [None]}]
@@ -50,9 +68,8 @@ def verify_mcp_configuration(client, other, expect_error):
                     {"authorization": "synthetic-private"},
                     {"server_url": "https://mcp.example.invalid/mcp?token=synthetic-private"}):
         invalid.append({**tool, "transport": {**transport, **changes}})
-    omitted = deepcopy(tool)
-    omitted.pop("connection_origin")
-    invalid.append(omitted)
+    # Transports other than HTTP keep the explicit-origin requirement.
+    invalid.append({**minimal, "transport": {"type": "stdio", "command": "synthetic-private"}})
     for declaration in invalid:
         for operation in (
             lambda: agents.create(model="requested-model", tools=[declaration]),
@@ -63,5 +80,5 @@ def verify_mcp_configuration(client, other, expect_error):
             assert "synthetic-private" not in str(error.body)
     assert {item.id for item in sessions.list()} == before
     assert {item.id for item in agents.list()} == saved_before
-    print("HTTP MCP: pinned saved/Session projections, null/empty allowlists, immutable snapshots and rejected writes passed; no native execution claimed.")
+    print("HTTP MCP: pinned saved/Session projections, omitted/null origins, null/empty allowlists, immutable snapshots and rejected writes passed; no native execution claimed.")
     return recovered, saved
