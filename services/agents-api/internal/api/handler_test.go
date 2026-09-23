@@ -59,7 +59,8 @@ func TestHTTPConfigurationAndTenantIdentity(t *testing.T) {
 	s := &recordingStore{}
 	h, _, tenant := testHandler(t, WithExecution(&inputRecorder{ResourceStore: s}))
 	body := `{"agent":{"model":"requested-model","instructions":"Keep this."},"environment":{"type":"none"},"metadata":{"tenant_id":"untrusted-tenant"},"input":"Follow the configured instructions."}`
-	request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
+	// Unknown query keys are ignored and never select the tenant.
+	request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions?tenant_id=untrusted-tenant", strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer test-api-key")
 	request.Header.Set("OpenAI-Beta", "agents=v1")
 	request.Header.Set("Idempotency-Key", "retry-key")
@@ -87,7 +88,6 @@ func TestHTTPRejectsUntrustedOrUnsupportedRequests(t *testing.T) {
 		{"missing auth", "", "agents=v1", "/v1/agents/sessions", valid, 401},
 		{"invalid auth", "Bearer wrong", "agents=v1", "/v1/agents/sessions", valid, 401},
 		{"missing beta", "Bearer test-api-key", "", "/v1/agents/sessions", valid, 400},
-		{"tenant query", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions?tenant_id=other", valid, 400},
 		{"tenant body", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"tenant_id":"other","agent":`, 1), 400},
 		{"hosted environment without managed deployment", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"none"`, `"openai_hosted"`, 1), 503},
 		{"self-hosted environment", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"none"`, `"self_hosted"`, 1), 400},

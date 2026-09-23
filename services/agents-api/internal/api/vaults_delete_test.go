@@ -19,28 +19,29 @@ func (f *vaultResourceFixture) DeleteVault(_ context.Context, tenant, id string)
 }
 
 func TestVaultDeletionConfirmationAndScope(t *testing.T) {
-	h, f := vaultResourceHandler(t)
-	w := vaultRequest(h, "DELETE", "/v1/vaults/"+f.vault.ID, "")
-	var got map[string]any
-	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &got) != nil {
-		t.Fatal("deletion failed", w.Code)
-	}
-	want := map[string]any{"id": f.vault.ID, "deleted": true, "object": "vault.deleted"}
-	if !reflect.DeepEqual(got, want) || f.tenant != f.vault.TenantID || f.id != f.vault.ID || f.calls != 1 {
-		t.Fatal("deletion changed authenticated scope or confirmation")
+	// Unknown query keys, including a tenant hint, are ignored.
+	for _, query := range []string{"", "?tenant_id=untrusted&unknown=1"} {
+		h, f := vaultResourceHandler(t)
+		w := vaultRequest(h, "DELETE", "/v1/vaults/"+f.vault.ID+query, "")
+		var got map[string]any
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &got) != nil {
+			t.Fatal("deletion failed", w.Code)
+		}
+		want := map[string]any{"id": f.vault.ID, "deleted": true, "object": "vault.deleted"}
+		if !reflect.DeepEqual(got, want) || f.tenant != f.vault.TenantID || f.id != f.vault.ID || f.calls != 1 {
+			t.Fatal("deletion changed authenticated scope or confirmation")
+		}
 	}
 }
 
 func TestVaultDeletionRejectsBeforeMutation(t *testing.T) {
-	for _, mode := range []string{"auth", "beta", "query", "body", "null", "invalid", "zero"} {
+	for _, mode := range []string{"auth", "beta", "body", "null", "invalid", "zero", "zero-query"} {
 		t.Run(mode, func(t *testing.T) {
 			h, f := vaultResourceHandler(t)
 			path, body, status := "/v1/vaults/"+f.vault.ID, "", 400
 			switch mode {
 			case "auth":
 				status = 401
-			case "query":
-				path += "?tenant_id=untrusted"
 			case "body":
 				body = `{"token":"vault-delete-canary"}`
 			case "null":
@@ -49,6 +50,8 @@ func TestVaultDeletionRejectsBeforeMutation(t *testing.T) {
 				path, status = "/v1/vaults/invalid", 404
 			case "zero":
 				path, status = "/v1/vaults/"+uuid.Nil.String(), 404
+			case "zero-query":
+				path, status = "/v1/vaults/"+uuid.Nil.String()+"?tenant_id=untrusted", 404
 			}
 			r := httptest.NewRequest("DELETE", path, strings.NewReader(body))
 			if mode != "auth" {

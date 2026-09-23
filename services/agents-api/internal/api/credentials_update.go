@@ -22,10 +22,6 @@ import (
 // @Failure 400,401,404,413,500,503 {object} v1.ErrorResponse
 // @Router /vaults/{vault_id}/credentials/{credential_id} [post]
 func (h *Handler) updateCredential(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Credential update does not accept query parameters.")
-		return
-	}
 	vaultID, ok := credentialResourceID(w, r, "vault_id")
 	if !ok {
 		return

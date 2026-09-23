@@ -158,9 +158,7 @@ func TestSubagentRoutesIgnoreUnknownQueryKeys(t *testing.T) {
 	s := &subagentReadStore{}
 	h, _, tenant := testHandler(t, WithSubagents(s))
 	for _, route := range subagentRoutes {
-		if !route.list {
-			continue
-		}
+		// Retrieval routes also ignore list keys, which carry no semantics there.
 		for _, query := range []string{"unknown=1", "tenant_id=foreign&unknown=1&unknown=2", "limit=1&after=a&order=asc"} {
 			if route.list && strings.Contains(query, "limit") {
 				continue

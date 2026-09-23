@@ -18,10 +18,6 @@ import (
 // @Failure 400,401,404,413,500 {object} v1.ErrorResponse
 // @Router /vaults/{vault_id} [delete]
 func (h *Handler) deleteVault(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Vault deletion does not accept query parameters.")
-		return
-	}
 	body, ok := readJSONBody(w, r)
 	if !ok {
 		return

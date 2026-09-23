@@ -93,6 +93,12 @@ func TestSessionArtifactRoutesAndPublicProjection(t *testing.T) {
 			t.Fatalf("invalid query reached storage: %s %d", suffix, w.Code)
 		}
 	}
+	for _, suffix := range []string{"?unknown=x&tenant_id=other", "/artifact?unknown=x", "/artifact/content?unknown=x"} {
+		before := f.calls
+		if w := request("GET", suffix, "agents=v1"); w.Code != 200 || f.calls != before+1 || f.tenant != tenant {
+			t.Fatalf("unknown query was not ignored: %s %d", suffix, w.Code)
+		}
+	}
 	for _, route := range []struct{ method, suffix string }{{"GET", ""}, {"GET", "/artifact"}, {"GET", "/artifact/content"}, {"DELETE", "/artifact"}} {
 		before := f.calls
 		if w := request(route.method, route.suffix, ""); w.Code != 400 || f.calls != before {

@@ -24,7 +24,12 @@ func TestCredentialUpdatePreservesOpaqueInputAndSafeProjection(t *testing.T) {
 		h, f, tenant := credentialHandler(t)
 		f.credential.Name, f.credential.MCPServerURL = "Retained name", "https://example.invalid/mcp?q=x"
 		body, _ := json.Marshal(map[string]any{"auth": map[string]string{"type": "static_bearer", "token": token}})
-		w := credentialRequest(h, "POST", "/v1/vaults/"+f.credential.VaultID+"/credentials/"+f.credential.ID, string(body))
+		query := ""
+		if token == "credential-canary" {
+			// Unknown query keys are ignored and never select another tenant.
+			query = "?tenant_id=untrusted&unknown=1"
+		}
+		w := credentialRequest(h, "POST", "/v1/vaults/"+f.credential.VaultID+"/credentials/"+f.credential.ID+query, string(body))
 		var got map[string]any
 		if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &got) != nil {
 			t.Fatal("update failed", w.Code)
@@ -60,15 +65,15 @@ func TestCredentialUpdateRejectsInvalidBodiesBeforeStorage(t *testing.T) {
 
 func TestCredentialUpdateUsesExistingBoundariesAndSafeErrors(t *testing.T) {
 	const body = `{"auth":{"type":"static_bearer","token":"credential-canary"}}`
-	for _, mode := range []string{"missing auth", "missing beta", "method", "query", "invalid Vault", "invalid Credential", "zero ID"} {
+	for _, mode := range []string{"missing auth", "missing beta", "method", "invalid Vault", "invalid Credential", "zero ID", "zero ID with query"} {
 		h, f, _ := credentialHandler(t)
 		path := "/v1/vaults/" + f.credential.VaultID + "/credentials/" + f.credential.ID
 		method, status := "POST", http.StatusBadRequest
 		switch mode {
 		case "method":
 			method, status = "PATCH", http.StatusMethodNotAllowed
-		case "query":
-			path += "?unknown=1"
+		case "zero ID with query":
+			path, status = strings.Replace(path, f.credential.ID, uuid.Nil.String(), 1)+"?unknown=1", http.StatusNotFound
 		case "invalid Vault":
 			path, status = strings.Replace(path, f.credential.VaultID, "invalid", 1), http.StatusNotFound
 		case "invalid Credential":

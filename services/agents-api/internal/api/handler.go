@@ -136,10 +136,6 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 // @Failure 400,401,404,409,413,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions [post]
 func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Session creation does not accept query parameters.")
-		return
-	}
 	var request decodedSessionRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024*1024))
 	decoder.DisallowUnknownFields()
@@ -288,10 +284,6 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id} [get]
 func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Session retrieval does not accept query parameters.")
-		return
-	}
 	session, err := h.store.GetSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id"))
 	if err != nil {
 		writeStoreError(w, r, err)

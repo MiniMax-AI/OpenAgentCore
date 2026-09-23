@@ -34,10 +34,6 @@ type CredentialStore interface {
 // @Failure 400,401,404,413,500,503 {object} v1.ErrorResponse
 // @Router /vaults/{vault_id}/credentials [post]
 func (h *Handler) createCredential(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Credential creation does not accept query parameters.")
-		return
-	}
 	vaultID, ok := credentialResourceID(w, r, "vault_id")
 	if !ok {
 		return
@@ -98,10 +94,6 @@ func (h *Handler) createCredential(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /vaults/{vault_id}/credentials/{credential_id} [get]
 func (h *Handler) getCredential(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Credential retrieval does not accept query parameters.")
-		return
-	}
 	vaultID, ok := credentialResourceID(w, r, "vault_id")
 	if !ok {
 		return

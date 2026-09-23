@@ -20,7 +20,7 @@ import (
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /files/{file_id}/content [get]
 func (h *Handler) sourceFileContent(w http.ResponseWriter, r *http.Request) {
-	if !h.sourceFilesReady(w, r) {
+	if !h.sourceFilesAvailable(w) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)

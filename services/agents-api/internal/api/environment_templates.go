@@ -69,18 +69,7 @@ func templateResponse(t store.EnvironmentTemplate) v1.EnvironmentTemplate {
 	return v1.EnvironmentTemplate{ID: t.ID, Object: "agent.environment.template", Name: t.Name, CreatedAt: t.CreatedAt.Unix(), UpdatedAt: t.UpdatedAt.Unix(), CapabilityDirectories: append([]string{}, t.CapabilityDirectories...), Network: v1.EnvironmentNetwork{Access: t.NetworkAccess, AllowedDomains: append([]string{}, t.AllowedDomains...)}, Packages: packageMetadata(&t.Packages), Files: templateFileResponse(t.Files), Plugins: pluginResponse(t.Plugins), Skills: skillResponse(t.Skills)}
 }
 
-func templateNoQuery(w http.ResponseWriter, r *http.Request) bool {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "This template operation does not accept query parameters.")
-		return false
-	}
-	return true
-}
-
 func readTemplateInput(w http.ResponseWriter, r *http.Request) (store.EnvironmentTemplateInput, bool) {
-	if !templateNoQuery(w, r) {
-		return store.EnvironmentTemplateInput{}, false
-	}
 	raw, ok := readJSONBodyLimit(w, r, 16*1024*1024, "Request exceeds 16 MiB.")
 	if !ok {
 		return store.EnvironmentTemplateInput{}, false
@@ -128,9 +117,6 @@ func (h *Handler) createEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/environments/templates/{environment_template_id} [get]
 func (h *Handler) getEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
-	if !templateNoQuery(w, r) {
-		return
-	}
 	value, err := h.store.GetEnvironmentTemplate(r.Context(), tenantID(r), chi.URLParam(r, "environment_template_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
@@ -175,9 +161,6 @@ func (h *Handler) updateEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/environments/templates/{environment_template_id} [delete]
 func (h *Handler) deleteEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
-	if !templateNoQuery(w, r) {
-		return
-	}
 	id, err := h.store.DeleteEnvironmentTemplate(r.Context(), tenantID(r), chi.URLParam(r, "environment_template_id"))
 	if err != nil {
 		writeStoreError(w, r, err)

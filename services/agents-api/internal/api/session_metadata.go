@@ -23,10 +23,6 @@ import (
 // @Failure 400,401,404,413,500 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id} [post]
 func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Session updates do not accept query parameters.")
-		return
-	}
 	raw, ok := readJSONBody(w, r)
 	if !ok {
 		return

@@ -18,7 +18,7 @@ import (
 // @Success 200 {object} v1.SkillList
 // @Router /skills [get]
 func (h *Handler) listSkills(w http.ResponseWriter, r *http.Request) {
-	if !h.skillsReady(w, r, true) {
+	if !h.skillsReady(w) {
 		return
 	}
 	options, ok := readPage(w, r)
@@ -53,7 +53,7 @@ func (h *Handler) listSkills(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.SkillVersionList
 // @Router /skills/{skill_id}/versions [get]
 func (h *Handler) listSkillVersions(w http.ResponseWriter, r *http.Request) {
-	if !h.skillsReady(w, r, true) {
+	if !h.skillsReady(w) {
 		return
 	}
 	options, ok := readPage(w, r)

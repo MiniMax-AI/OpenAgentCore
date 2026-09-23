@@ -73,8 +73,8 @@ func TestTurnRoutesUseAuthenticatedScopeAndSafeProjection(t *testing.T) {
 	if w := request("/v1/agents/sessions/session/turns?agent_id=other&tenant_id=other&limit=3"); w.Code != 200 || s.tenant != tenant || s.limit != 3 {
 		t.Fatalf("unknown list keys changed the page: %d %s", w.Code, s.tenant)
 	}
-	if w := request("/v1/agents/sessions/session/turns/turn?unknown=1"); w.Code != 400 {
-		t.Fatalf("accepted retrieve query: %d", w.Code)
+	if w := request("/v1/agents/sessions/session/turns/turn?unknown=1&tenant_id=other"); w.Code != 200 || s.tenant != tenant || s.turnID != "turn" {
+		t.Fatalf("retrieve query was not ignored: %d", w.Code)
 	}
 	s.session.Configuration = json.RawMessage(`{}`)
 	if w := request("/v1/agents/sessions/session/turns/turn"); w.Code != 500 || strings.Contains(w.Body.String(), "snapshot") {

@@ -31,10 +31,6 @@ type AgentStore interface {
 // @Failure 400,401,413,500 {object} v1.ErrorResponse
 // @Router /agents [post]
 func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Agent creation does not accept query parameters.")
-		return
-	}
 	raw, ok := readJSONBody(w, r)
 	if !ok {
 		return
@@ -68,10 +64,6 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/{agent_id} [get]
 func (h *Handler) getAgent(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Agent retrieval does not accept query parameters.")
-		return
-	}
 	agent, err := h.lookupAgent(r.Context(), tenantID(r), chi.URLParam(r, "agent_id"))
 	if err != nil {
 		writeStoreError(w, r, err)

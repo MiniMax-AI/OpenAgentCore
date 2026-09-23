@@ -32,10 +32,6 @@ type VaultStore interface {
 // @Failure 400,401,413,500 {object} v1.ErrorResponse
 // @Router /vaults [post]
 func (h *Handler) createVault(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Vault creation does not accept query parameters.")
-		return
-	}
 	raw, ok := readJSONBody(w, r)
 	if !ok {
 		return
@@ -87,10 +83,6 @@ func (h *Handler) createVault(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /vaults/{vault_id} [get]
 func (h *Handler) getVault(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) > 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Vault retrieval does not accept query parameters.")
-		return
-	}
 	id := chi.URLParam(r, "vault_id")
 	if parsed, err := uuid.Parse(id); err != nil || parsed == uuid.Nil {
 		writeStoreError(w, r, store.ErrNotFound)

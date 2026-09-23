@@ -129,7 +129,9 @@ func TestEnvironmentResourceRequestAndStoreErrors(t *testing.T) {
 		{"wrong auth", "GET", "", "Bearer unknown", "agents=v1", nil, 401, 0},
 		{"no beta", "GET", "", "Bearer resource-key", "", nil, 400, 0},
 		{"wrong beta", "GET", "", "Bearer resource-key", "agents=v2", nil, 400, 0},
-		{"query", "GET", "?tenant_id=foreign", "Bearer resource-key", "agents=v1", nil, 400, 0},
+		// Unknown keys, including include, are not pinned retrieval parameters.
+		{"ignored query", "GET", "?tenant_id=foreign&include=files", "Bearer resource-key", "agents=v1", nil, 200, 1},
+		{"not found with query", "GET", "?include=files", "Bearer resource-key", "agents=v1", store.ErrNotFound, 404, 1},
 		{"method", "POST", "", "Bearer resource-key", "agents=v1", nil, 405, 0},
 		{"not found", "GET", "", "Bearer resource-key", "agents=v1", store.ErrNotFound, 404, 1},
 		{"invalid id", "GET", "", "Bearer resource-key", "agents=v1", store.ErrInvalidInput, 400, 1},
@@ -145,6 +147,9 @@ func TestEnvironmentResourceRequestAndStoreErrors(t *testing.T) {
 			h.ServeHTTP(w, request)
 			if w.Code != test.status || f.calls != test.calls || strings.Contains(w.Body.String(), "private-backend-canary") {
 				t.Fatal("request or shared error handling changed", w.Code, w.Body, f.calls)
+			}
+			if test.calls > 0 && f.tenant != f.environment.TenantID {
+				t.Fatal("query changed the authenticated tenant", f.tenant)
 			}
 		})
 	}
