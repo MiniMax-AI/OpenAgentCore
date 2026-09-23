@@ -45,23 +45,24 @@ describe("SystemView", () => {
     const html = render();
 
     expect(html).toContain("Core startup configuration");
-    expect(html.match(/role="listitem"/g)).toHaveLength(3);
+    expect(html.match(/role="listitem"/g)).toHaveLength(4);
     expect(html).not.toContain("Core API");
     expect(html).not.toContain("Vault catalog loaded");
-    expect(html).toContain("Harnesses");
-    expect(html).toContain("Claude SDK, Codex");
+    expect(html).toContain("Default harness");
+    expect(html).toContain("Used by Agents created in this Web UI");
     expect(html).toContain("Managed sandbox");
     expect(html).toContain("Endpoint overrides");
     expect(html).toContain("<strong>Configured</strong>");
     expect(html).not.toContain("1 explicit");
     expect(html).toContain("Explicit operator overrides are shown per adapter below; others may use native defaults");
-    expect(html).toContain("Configured for this process");
     expect(html).toContain("Daemon gateway");
     expect(html).toContain("Supported by this build: Docker, Microsandbox");
     expect(html).toContain("Claude SDK");
     expect(html).toContain("MiniMax Code");
     expect(html).toContain("Execution adapters");
-    expect(html).toContain("Codex is used by Agents created in this Web UI");
+    expect(html).not.toContain("Configured for this process");
+    expect(html).not.toContain("Managed execution");
+    expect(html).not.toContain("Self-hosted execution");
     expect(html).toContain("This UI does not expose adapter selection. API requests can select any enabled adapter");
     expect(html).not.toContain("Enabled · default");
     expect(html).toContain("Operator endpoint override: configured");
@@ -108,7 +109,7 @@ describe("SystemView", () => {
     expect(html).toContain("<strong>Not configured</strong>");
     expect(html).not.toContain("0 explicit");
     expect(html).toContain("No execution adapters are enabled for this Core process");
-    expect(html).toContain("Codex is configured as the default, but no harness is active");
+    expect(html).toContain("Configured as the default, but no harness is active");
     expect(html).toContain("This Core process has no daemon gateway, so no execution adapters are active");
     expect(html.match(/Build only/g)).toHaveLength(3);
     expect(html).not.toContain("Enabled · default");

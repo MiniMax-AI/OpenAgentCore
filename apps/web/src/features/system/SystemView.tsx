@@ -64,7 +64,6 @@ export function SystemView({
     : null;
   const endpointOverrideConfigured = configuration?.configured.model_providers.some((provider) => provider.endpoint_configured) ?? false;
   const executionAdaptersEnabled = (configuration?.configured.enabled_harnesses.length ?? 0) > 0;
-  const enabledHarnessLabels = configuration?.configured.enabled_harnesses.map(harnessLabel).join(", ") ?? "";
   const startupUnavailable = startupConfigurationSupported === false;
 
   const startupValue = (value: string): string => {
@@ -85,21 +84,33 @@ export function SystemView({
       : "Reported by the safe Core startup configuration extension.";
   const cards: SystemStatusCard[] = [
     {
-      label: "Harnesses",
+      label: "Default harness",
       status: startupStatus,
-      value: startupValue(configuration ? executionAdaptersEnabled ? enabledHarnessLabels : "None enabled" : ""),
+      value: startupValue(configuration ? harnessLabel(configuration.configured.default_harness) : ""),
       detail: configuration
         ? executionAdaptersEnabled
-          ? `${harnessLabel(configuration.configured.default_harness)} is used by Agents created in this Web UI.`
-          : `${harnessLabel(configuration.configured.default_harness)} is configured as the default, but no harness is active.`
+          ? "Used by Agents created in this Web UI."
+          : "Configured as the default, but no harness is active."
+        : startupDetail,
+    },
+    {
+      label: "Daemon gateway",
+      status: startupStatus,
+      value: startupValue(configuration?.configured.daemon_gateway ? "Enabled" : "Not configured"),
+      detail: configuration
+        ? configuration.configured.daemon_gateway
+          ? `Accepts authenticated execution Runtime connections. ${selfHostedWebEnabled ? "This Web build can request self-hosted Sessions." : "This Web build cannot request self-hosted Sessions."}`
+          : "No execution Runtime gateway is enabled for this Core process."
         : startupDetail,
     },
     {
       label: "Managed sandbox",
       status: startupStatus,
-      value: startupValue(configuration ? providerLabel(configuration.configured.managed_sandbox.provider) : ""),
-      detail: configuration?.configured.managed_sandbox.maintenance
-        ? "Selected provider is in maintenance mode."
+      value: startupValue(configuration
+        ? `${providerLabel(configuration.configured.managed_sandbox.provider)}${configuration.configured.managed_sandbox.maintenance ? " · Maintenance" : ""}`
+        : ""),
+      detail: configuration
+        ? `${configuration.configured.managed_sandbox.maintenance ? "Selected provider is in maintenance mode. " : ""}Supported by this build: ${configuration.supported.managed_sandbox_providers.map(providerLabel).join(", ")}. ${managedWebEnabled ? "This Web build can request managed Sessions." : "This Web build cannot request managed Sessions."}`
         : startupDetail,
     },
     {
@@ -146,38 +157,6 @@ export function SystemView({
 
       {configuration ? (
         <>
-          <section className="system-config-section" aria-labelledby="configured-startup-heading">
-            <header>
-              <h2 id="configured-startup-heading">Configured for this process</h2>
-              <span>Validated or detected when Core started</span>
-            </header>
-            <div className="system-config-list">
-              <div className="system-config-row">
-                <strong>Daemon gateway</strong>
-                <StartupStatus enabled={configuration.configured.daemon_gateway} />
-                <small>Accepts authenticated execution Runtime connections when enabled.</small>
-              </div>
-              <div className="system-config-row">
-                <strong>Managed execution</strong>
-                <StartupStatus
-                  enabled={configuration.configured.managed_sandbox.enabled}
-                  label={configuration.configured.managed_sandbox.enabled
-                    ? `${providerLabel(configuration.configured.managed_sandbox.provider)}${configuration.configured.managed_sandbox.maintenance ? " · Maintenance" : ""}`
-                    : undefined}
-                />
-                <small>
-                  Supported by this build: {configuration.supported.managed_sandbox_providers.map(providerLabel).join(", ")}.
-                  {managedWebEnabled ? " This Web build can request managed Sessions." : " This Web build cannot request managed Sessions."}
-                </small>
-              </div>
-              <div className="system-config-row">
-                <strong>Self-hosted execution</strong>
-                <StartupStatus enabled={configuration.configured.self_hosted} />
-                <small>{selfHostedWebEnabled ? "This Web build can request self-hosted Sessions." : "This Web build cannot request self-hosted Sessions."}</small>
-              </div>
-            </div>
-          </section>
-
           <section className="system-config-section" aria-labelledby="configured-harnesses-heading">
             <header>
               <h2 id="configured-harnesses-heading">Execution adapters <span>(harnesses)</span></h2>

@@ -2371,13 +2371,15 @@ test("presents Dashboard page-chain results and System boundaries without extra 
 
   await page.getByRole("button", { name: "System", exact: true }).click();
   const system = page.locator(".system-page");
-  await expect(system.getByRole("listitem").filter({ hasText: "Harnesses" })).toContainText("Claude SDK, Codex");
+  await expect(system.getByRole("listitem").filter({ hasText: "Default harness" })).toContainText("Codex");
+  await expect(system.getByRole("listitem").filter({ hasText: "Daemon gateway" })).toContainText("Enabled");
   await expect(system.getByRole("listitem").filter({ hasText: "Managed sandbox" })).toContainText("Docker");
   await expect(system.getByRole("listitem").filter({ hasText: "Endpoint overrides" })).toContainText("Configured");
-  await expect(system.getByRole("listitem")).toHaveCount(3);
-  await expect(system).toContainText("Configured for this process");
-  await expect(system).toContainText("Daemon gateway");
-  await expect(system).toContainText("Codex is used by Agents created in this Web UI");
+  await expect(system.getByRole("listitem")).toHaveCount(4);
+  await expect(system).not.toContainText("Configured for this process");
+  await expect(system).not.toContainText("Managed execution");
+  await expect(system).not.toContainText("Self-hosted execution");
+  await expect(system).toContainText("Used by Agents created in this Web UI");
   await expect(system).toContainText("This UI does not expose adapter selection");
   await expect(system).not.toContainText("Enabled · default");
   await expect(system).toContainText("Operator endpoint override: configured");
@@ -2414,7 +2416,7 @@ test("presents Dashboard page-chain results and System boundaries without extra 
       left: section.getBoundingClientRect().left - element.getBoundingClientRect().left,
       right: element.getBoundingClientRect().right - section.getBoundingClientRect().right,
       header: section.querySelector("header")!.getBoundingClientRect().left,
-      content: section.querySelector(".system-config-list, .system-harness-grid")!.getBoundingClientRect().left,
+      content: section.querySelector(".system-harness-grid")!.getBoundingClientRect().left,
       explanation: section.querySelector(".system-config-explanation")?.getBoundingClientRect().left ?? null,
     })),
     boundaryInset: element.querySelector(".system-boundary-note")!.getBoundingClientRect().left - element.getBoundingClientRect().left,
@@ -2432,14 +2434,19 @@ test("presents Dashboard page-chain results and System boundaries without extra 
 
   await page.setViewportSize({ width: 390, height: 844 });
   const systemBounds = await system.evaluate((element) => {
-    const rows = [...element.querySelectorAll(".system-summary-cell")].map((row) => row.getBoundingClientRect());
+    const rows = [...element.querySelectorAll(".system-summary-cell")];
     return {
       viewportWidth: innerWidth,
       documentWidth: document.documentElement.scrollWidth,
       sectionInset: element.querySelector(".system-config-section")!.getBoundingClientRect().left - element.getBoundingClientRect().left,
       sectionRightInset: element.getBoundingClientRect().right - element.querySelector(".system-config-section")!.getBoundingClientRect().right,
       boundaryInset: element.querySelector(".system-boundary-note")!.getBoundingClientRect().left - element.getBoundingClientRect().left,
-      rowBounds: rows.map((row) => ({ top: row.top, bottom: row.bottom, height: row.height })),
+      rowBounds: rows.map((row) => ({
+        top: row.getBoundingClientRect().top,
+        bottom: row.getBoundingClientRect().bottom,
+        height: row.getBoundingClientRect().height,
+        borderBottomWidth: getComputedStyle(row).borderBottomWidth,
+      })),
     };
   });
   expect(systemBounds.documentWidth).toBeLessThanOrEqual(systemBounds.viewportWidth);
@@ -2450,6 +2457,8 @@ test("presents Dashboard page-chain results and System boundaries without extra 
     expect(systemBounds.rowBounds[index]!.top).toBeGreaterThanOrEqual(systemBounds.rowBounds[index - 1]!.bottom);
   }
   expect(systemBounds.rowBounds.every((row) => row.height >= 36)).toBe(true);
+  expect(systemBounds.rowBounds.slice(0, -1).every((row) => row.borderBottomWidth !== "0px")).toBe(true);
+  expect(systemBounds.rowBounds.at(-1)?.borderBottomWidth).toBe("0px");
   await attachScreenshot(page, testInfo, "narrow-system-contract-boundary");
 });
 
