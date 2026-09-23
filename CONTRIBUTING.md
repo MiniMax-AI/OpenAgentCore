@@ -20,10 +20,13 @@ hashes. Do not automatically sync or delete the original repository's Core.
 
 Develop in an isolated worktree on a feature branch and submit a PR. Do not edit
 or commit implementation directly on main. An empty repository bootstrap commit
-is only the comparison base for the first import PR. After validation, conduct an
-independent blind review using only requirements, acceptance criteria, boundaries,
-repository path and comparison baseline. Fix in-scope blockers before delivery.
-Do not use `codex exec` as a substitute reviewer.
+is only the comparison base for the first import PR. Choose review depth by risk. Substantial changes and changes involving security,
+shared lifecycle ownership or uncertain cross-package behavior need an independent
+blind review after validation. Give the reviewer only requirements, acceptance
+criteria, boundaries, repository path and comparison baseline. Small, verified
+fixes may use self-review, including focused corrections after a blind review;
+repeat independent review when a correction materially changes the design or risk.
+Fix in-scope blockers before delivery. Do not use `codex exec` as a substitute reviewer.
 
 The Core Web is an administrator console for execution and resource operations;
 business collaboration remains in Parsar. Environment Template management shares
