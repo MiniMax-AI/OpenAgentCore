@@ -2909,6 +2909,8 @@ test("restores retained Runtime history after a Dashboard reload", async ({ page
   await expect(dashboard.getByRole("group", { name: "Runtime trend source" })).toHaveCount(0);
   await expect(dashboard.getByLabel(/Durable · 30s; 1 Runtime targets/)).toBeVisible();
   await expect(dashboard.getByLabel("Runtime durable-history charts")).toBeVisible();
+  await expect(dashboard.getByRole("heading", { name: "Compute uptime", exact: true })).toHaveCount(0);
+  await expect(dashboard.locator('[data-chart-engine="uplot"]')).toHaveCount(3);
   await expect(dashboard.getByText("CPU usage durable trend available")).toBeAttached();
   await expect(dashboard).toContainText("120 buckets");
   await expect(dashboard).toContainText("119/120 observations");

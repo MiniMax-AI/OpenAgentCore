@@ -58,6 +58,7 @@ describe("Runtime live-window chart accessibility", () => {
 
     expect(html.match(/data-chart-engine="uplot"/g)).toHaveLength(4);
     expect(html).not.toContain("Collecting live samples");
+    expect(html).toContain("Compute uptime");
   });
 
   it("exposes interactive series, point selection, and Grafana-style in-plot range selection", () => {
@@ -81,6 +82,8 @@ describe("Runtime live-window chart accessibility", () => {
     );
 
     expect(html).toContain('aria-label="CPU usage durable history chart"');
+    expect(html.match(/data-chart-engine="uplot"/g)).toHaveLength(3);
+    expect(html).not.toContain("Compute uptime");
     expect(html).toContain('aria-label="CPU usage: 2 retained buckets"');
     expect(html).not.toContain('aria-label="CPU usage: 2 live samples"');
   });

@@ -19,7 +19,7 @@ function snapshot(at: number, options: {
   cpuUsageSecondsTotal?: number;
   cpuCapacity?: number;
   memory?: number;
-  startedAt?: number;
+  startedAt?: number | null;
   allocationId?: string;
   observedAt?: number;
 } = {}): RuntimeDashboardSnapshot {
@@ -75,7 +75,7 @@ function snapshot(at: number, options: {
     allocation_created_at: observedAt - 180,
     resolved_at: observedAt,
     observed_at: observedAt,
-    started_at: options.startedAt ?? observedAt - 120,
+    started_at: options.startedAt === undefined ? observedAt - 120 : options.startedAt,
     cpu: {
       utilization_ratio: Object.hasOwn(options, "cpuRatio") ? options.cpuRatio ?? null : .25,
       usage_cores: Object.hasOwn(options, "cpuUsageCores") ? options.cpuUsageCores ?? null : .5,
@@ -166,20 +166,39 @@ describe("Runtime live-window trends", () => {
     expect(replaced.targets[0]?.seriesId).not.toBe(first.targets[0]?.seriesId);
   });
 
-  it("keeps one allocation across start changes but resets CPU on allocation changes or counter regressions", () => {
+  it("resets cumulative CPU on start changes, allocation changes or counter regressions", () => {
     const base = snapshot(60_000, {
       cpuRatio: null, cpuUsageCores: null, cpuUsageSecondsTotal: 100, startedAt: 0,
     });
     const continued = appendRuntimeTrendSample(appendRuntimeTrendSample([], base), snapshot(120_000, {
       cpuRatio: null, cpuUsageCores: null, cpuUsageSecondsTotal: 160, startedAt: 1,
     }));
-    expect(continued.at(-1)?.targets[0]?.cpuRatio ?? null).toBe(.5);
+    expect(continued.at(-1)?.targets[0]?.cpuRatio ?? null).toBeNull();
+    expect(continued[1]?.targets[0]?.seriesId).toBe(continued[0]?.targets[0]?.seriesId);
     for (const next of [
       snapshot(120_000, { cpuRatio: null, cpuUsageCores: null, cpuUsageSecondsTotal: 160, startedAt: 0, allocationId: "44444444-4444-4444-8444-444444444444" }),
       snapshot(120_000, { cpuRatio: null, cpuUsageCores: null, cpuUsageSecondsTotal: 10, startedAt: 0 }),
     ]) {
       const samples = appendRuntimeTrendSample(appendRuntimeTrendSample([], base), next);
       expect(samples.at(-1)?.targets[0]?.cpuRatio ?? null).toBeNull();
+    }
+  });
+
+  it("starts a fresh CPU baseline after a same-allocation restart even when its counter is higher", () => {
+    const cumulative = (at: number, usage: number, startedAt: number | null) => snapshot(at, {
+      cpuRatio: null, cpuUsageCores: null, cpuUsageSecondsTotal: usage, startedAt,
+    });
+    let samples = appendRuntimeTrendSample([], cumulative(60_000, 1, 0));
+    samples = appendRuntimeTrendSample(samples, cumulative(90_000, 20, 65));
+    samples = appendRuntimeTrendSample(samples, cumulative(120_000, 50, 65));
+    expect(samples.map((sample) => sample.targets[0]?.cpuRatio ?? null)).toEqual([null, null, .5]);
+    expect(new Set(samples.map((sample) => sample.targets[0]?.seriesId)).size).toBe(1);
+    for (const [priorStart, nextStart] of [[null, 0], [0, null], [null, null]] as const) {
+      const missingFence = appendRuntimeTrendSample(
+        appendRuntimeTrendSample([], cumulative(60_000, 1, priorStart)),
+        cumulative(90_000, 20, nextStart),
+      );
+      expect(missingFence.at(-1)?.targets[0]?.cpuRatio ?? null).toBeNull();
     }
   });
 

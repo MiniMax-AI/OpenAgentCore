@@ -129,10 +129,19 @@ describe("Runtime Durable Dashboard history", () => {
       memoryLimitBytes: 1_024,
       inputTokensPerMinute: null,
       outputTokensPerMinute: null,
-      targets: [{ label: "Durable worker", cpuRatio: .25, uptimeSeconds: 99.5 }],
+      targets: [{ label: "Durable worker", cpuRatio: .25, uptimeSeconds: null }],
     });
-    expect(samples[1]?.targets[0]?.uptimeSeconds).toBe(129.5);
+    expect(samples[1]?.targets[0]?.uptimeSeconds).toBeNull();
     expect(samples[1]).toMatchObject({ inputTokensPerMinute: 60, outputTokensPerMinute: 20 });
+  });
+
+  it("does not derive compute uptime from retained allocation starts or unavailable observations", () => {
+    const source = history();
+    source.series[0]!.points[1] = {
+      ...source.series[0]!.points[1]!, observed_count: 0, unavailable_count: 1, cpu: null, memory: null,
+    };
+    const samples = runtimeDurableTrendSamples([session], [source]);
+    expect(samples.flatMap((sample) => sample.targets.map((target) => target.uptimeSeconds))).toEqual([null, null]);
   });
 
   it("keeps aggregate memory absent when any queried target has no memory value", () => {

@@ -21,6 +21,7 @@ export interface RuntimeTrendTarget {
 
 export interface RuntimeTrendCPUCandidate extends RuntimeTrendTarget {
   observedAt: number | null;
+  startedAt: number | null;
   allocationKey: string | null;
   usageSecondsTotal: number | null;
   capacityCores: number | null;
@@ -115,6 +116,7 @@ export function runtimeTrendSample(snapshot: RuntimeDashboardSnapshot): RuntimeT
       label: sessionTitle(session),
       cpuRatio: reportedCpuRatio(observation),
       observedAt: safeInteger(observation.observed_at),
+      startedAt: safeInteger(observation.started_at),
       allocationKey: allocationKey(observation),
       usageSecondsTotal: finiteNonNegative(observation.cpu?.usage_seconds_total),
       capacityCores: finiteNonNegative(observation.cpu?.capacity_cores),
@@ -156,6 +158,7 @@ export function runtimeTrendSample(snapshot: RuntimeDashboardSnapshot): RuntimeT
           cpuRatio: target.cpuRatio,
           uptimeSeconds: target.uptimeSeconds,
           observedAt: target.observedAt,
+          startedAt: target.startedAt,
           allocationKey: target.allocationKey,
           usageSecondsTotal: target.usageSecondsTotal,
           capacityCores: target.capacityCores,
@@ -193,6 +196,7 @@ function cpuRatios(previous: RuntimeTrendSample, next: RuntimeTrendSample): Map<
       continue;
     }
     if (
+      prior.startedAt === null || current.startedAt === null || prior.startedAt !== current.startedAt ||
       prior.usageSecondsTotal === null || current.usageSecondsTotal === null ||
       current.usageSecondsTotal < prior.usageSecondsTotal ||
       current.capacityCores === null || current.capacityCores <= 0
