@@ -577,7 +577,10 @@ export type TurnStatus = "queued" | "in_progress" | "waiting" | "completed" | "f
 
 export interface AgentTurn {
   id: string;
-  /** The Session's Agent ID, for root and Subagent Turns alike. */
+  /**
+   * The Session's Agent ID, for root and Subagent Turns alike. Older Core
+   * releases sent the Subagent's own ID here for Subagent Turns.
+   */
   agent_id: string;
   /** Set on Subagent Turns, which are read through the Subagent routes. */
   subagent_id?: string | null;

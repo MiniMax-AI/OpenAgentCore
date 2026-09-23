@@ -164,12 +164,13 @@ not established by these six resource reads.
 
 ## Subagent visibility — September 23, 2026
 
-The pin is unchanged: SDK 3.13.0, commit `d7c41ef`, `agents=v1`. This batch
-starts from main `b77249c`. Its plan is
+The pin is unchanged: SDK 3.13.0, commit `d7c41ef`, `agents=v1`. This batch is
+based on main `73ecc152`. Its plan is
 `~/.parsar/remediation/20260923/subagent-visibility/PLAN.md`. The first owned
 official Subagent evidence is
 `~/.parsar/remediation/20260923/campaign-scan-3/subagents-tools/findings.json`
-(SAT-01, 02, 07, 08, 09), with raw records under `official/`. It covers two owned
+(SAT-01, 02, 07, 08, 09, with SAT-03 for the kept rejections), with raw records
+under `official/`. It covers two owned
 Sessions and two child Turns, all deleted.
 
 | Row | Case | Core behavior | Evidence (finding: request ID) |
@@ -178,7 +179,7 @@ Sessions and two child Turns, all deleted.
 | A2 | GET events and the creation stream | No `agent.session.turn.*` event for a child Turn, including its Item and content events. `agent.session.subagent.*` events and root coordination Items stay. The creation stream still ends on the root's settled idle | SAT-09: `req_e0f7fb0ca13f4eb98b4d677be046e1da`, `req_7a68fa8c18e344cfa0ed202df92a875e` (S1 20 and S2 43 frames, no child Turn or Item event) |
 | A3 | Child Turn `agent_id` | The Session's Agent ID; `subagent_id` unchanged. Nested children follow the same rule (not observed) | SAT-08: `req_85e7eb58da8e402c8103379ff5bb11d2`, `req_fc10f0d1a2e84bd086f006c01aa7ee54` |
 | A4 | Subagent list envelope | `object`, `data`, `first_id`, `last_id`, `has_more`; null IDs on an empty page | SAT-01: `req_089f86e8088d441380a22de2723e6179`, `req_5f79af4eaea44cb7ab4e92920e0f88c8` |
-| A5 | `limit` 0 or above 100 | Subagent Item and Subagent Turn Item lists clamp to 1 and 100. The Subagent and Subagent Turn lists keep rejecting with `limit must be between 1 and 100` | SAT-02: `req_6179ae6c1d1640d899ee4798e7f9fa57`, `req_7436104afbae4e73a0eb43b00ec9e660`, `req_32899313414b4031849a22cd2927f0ad`; rejections `req_7df58d9579be4ee3ab7fdab55286aa05`, `req_b4321de4480c4a8e96b9ea285ff63a46`, `req_0f437ad4713d47a8af1f61a88636bf79`, `req_e9d476dd2a69472694cffc0851d0574c` |
+| A5 | `limit` 0 or above 100 | Subagent Item and Subagent Turn Item lists clamp to 1 and 100. The Subagent and Subagent Turn lists keep rejecting with `limit must be between 1 and 100` | SAT-02: `req_6179ae6c1d1640d899ee4798e7f9fa57`, `req_7436104afbae4e73a0eb43b00ec9e660`, `req_32899313414b4031849a22cd2927f0ad`; SAT-03 rejections: `req_7df58d9579be4ee3ab7fdab55286aa05`, `req_b4321de4480c4a8e96b9ea285ff63a46`, `req_0f437ad4713d47a8af1f61a88636bf79`, `req_e9d476dd2a69472694cffc0851d0574c` |
 
 ### Decisions
 
@@ -188,16 +189,22 @@ Sessions and two child Turns, all deleted.
   Creation-stream settlement reads the settled idle and the latest root Turn, and
   Session usage sums root Turns, so neither used child Turn events. The Core Web
   timeline had no Subagent view; it only showed child Turns as ordinary Turn rows
-  and now keeps its timeline root-only even against an earlier Core. Recovery
+  and now keeps its timeline root-only even against an earlier Core, hiding the
+  Items of Subagent Turns that Core listed or streamed. Recovery
   continues through Session, Turn and Item reads plus the Subagent routes. No
   internal signal had to be kept.
 - The scan recorded child Item events as already absent. They were not: every
   child Item recorded `turn.item.*` and content events with the child Turn ID.
   They are removed with the child Turn events, since the official parent stream
   carried neither.
-- The official Subagent list error message and the child Turn 404 message differ
-  from Core's local ones (`No managed agent resource found: …`). Only the status,
-  error fields and "same as missing" behavior are aligned here.
+- The official 404 message for a child Turn ID (`No managed agent resource found:
+  …`) and the Subagent 404 messages (SAT-06) differ from Core's local text. Only
+  the status, error fields and "same as missing" behavior are aligned here.
+- Core may expose documented extensions beyond the official API. This batch
+  removes only the mixed Session Turn pages and child Session events, which were
+  not documented extensions. Root-only extensions such as
+  `agent.output.command_execution_output.delta` and the Web's handling of older
+  Core releases are unchanged or additive.
 
 Unchanged: Subagent retrieve fields and statuses, child history contents (SAT-12
 remains unknown; Core keeps the child input Item), the hidden task text, the

@@ -174,10 +174,11 @@ stream differences EVT-01..04; the plan is
 - **Terminal usage (EVT-03).** Official `agent.session.turn.completed` and
   `.cancelled` (8/8) carried a top-level `usage`, null at emission even when later
   reads were measured. Core terminal Turn events (`completed`, `failed`,
-  `cancelled`), then root and child (child Turn events were later removed by the
-  [Subagent visibility batch](subagents.md#subagent-visibility--september-23-2026)),
-  now carry `usage` copied from the rendered Turn
-  snapshot, with explicit null when unknown. Other events omit it. Codex can
+  `cancelled`) now carry `usage` copied from the rendered Turn snapshot, with
+  explicit null when unknown; other events omit it. This batch applied it to
+  root and child Turn events; the
+  [Subagent visibility batch](subagents.md#subagent-visibility--september-23-2026)
+  later stopped publishing child Turn events on the Session stream. Codex can
   therefore publish measured counters at settlement, while Claude and MiniMax
   stay null; no counter is derived or summed. The TypeScript client accepts the
   field on terminal Turn events only and still accepts older events without it.
