@@ -104,6 +104,19 @@ function tokenTotals(sessions: readonly AgentSession[], sampledAt: number): Runt
   });
 }
 
+// Public Session usage is null while a root Turn runs and after a Turn ends
+// unmeasured. Keep a listed Session's last reported totals so its series neither
+// drops to zero nor breaks; usage measured meanwhile appears once reported.
+function carryTokenTotals(previous: RuntimeTrendSample, next: RuntimeTrendSample, snapshot: RuntimeDashboardSnapshot): void {
+  const listed = new Set(snapshot.sessions.map((session) => session.id));
+  const reported = new Set(next.tokenTotals.map((total) => total.sessionId));
+  for (const prior of previous.tokenTotals) {
+    if (listed.has(prior.sessionId) && !reported.has(prior.sessionId)) {
+      next.tokenTotals.push({ ...prior, sampledAt: next.sampledAt });
+    }
+  }
+}
+
 export function runtimeTrendSample(snapshot: RuntimeDashboardSnapshot): RuntimeTrendSample {
   const sessions = new Map(snapshot.sessions.map((session) => [session.id, session]));
   const observed = snapshot.observations.flatMap((observation) => {
@@ -289,6 +302,7 @@ export function appendRuntimeTrendSample(
     .slice(-(maximum - 1));
   const previous = retained.at(-1);
   if (previous) {
+    carryTokenTotals(previous, next, snapshot);
     Object.assign(next, tokenRate(previous, next));
     applyCPURatios(next, cpuRatios(previous, next));
   }
