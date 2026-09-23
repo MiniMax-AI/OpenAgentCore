@@ -52,7 +52,7 @@ func TestDisabledToolAdmissionPrecedesPersistence(t *testing.T) {
 		`[{"type":"web_search","mode":"disabled"},{"type":"web_search","mode":"disabled"}]`,
 	} {
 		h, store, _ := testHandler(t)
-		req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"model","tools":`+tools+`},"environment":{"type":"none"}}`))
+		req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"model","tools":`+tools+`},"environment":{"type":"none"},"input":"Use only the enabled tools."}`))
 		req.Header.Set("Authorization", "Bearer test-api-key")
 		req.Header.Set("OpenAI-Beta", "agents=v1")
 		response := httptest.NewRecorder()

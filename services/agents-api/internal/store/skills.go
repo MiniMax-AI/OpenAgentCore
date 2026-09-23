@@ -86,10 +86,11 @@ func (s *Store) UpdateSkillDefault(ctx context.Context, tenantID, skillID, versi
 		if _, err := q.LockSkill(ctx, sqlc.LockSkillParams{TenantID: tenant, ID: id}); err != nil {
 			return err
 		}
-		if _, err := q.GetSkillVersion(ctx, sqlc.GetSkillVersionParams{TenantID: tenant, SkillID: id, Version: number}); err != nil {
+		version, err := q.GetSkillVersion(ctx, sqlc.GetSkillVersionParams{TenantID: tenant, SkillID: id, Version: number})
+		if err != nil {
 			return err
 		}
-		row, err := q.SetDefaultSkillVersion(ctx, sqlc.SetDefaultSkillVersionParams{TenantID: tenant, ID: id, DefaultVersion: number})
+		row, err := q.SetDefaultSkillVersion(ctx, sqlc.SetDefaultSkillVersionParams{TenantID: tenant, ID: id, DefaultVersion: number, Name: version.Name, Description: version.Description})
 		result = skillFromRow(row)
 		return err
 	})

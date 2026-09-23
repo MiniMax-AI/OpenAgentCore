@@ -23,11 +23,14 @@ ORDER BY
 LIMIT sqlc.arg(page_limit);
 
 -- name: SetDefaultSkillVersion :one
-UPDATE skills SET default_version = $3 WHERE tenant_id = $1 AND id = $2 RETURNING *;
+UPDATE skills SET default_version = $3, name = $4, description = $5
+WHERE tenant_id = $1 AND id = $2 RETURNING *;
 
 -- name: AdvanceSkillVersion :exec
 UPDATE skills SET latest_version = next_version, next_version = next_version + 1,
- default_version = CASE WHEN sqlc.arg(make_default)::boolean THEN next_version ELSE default_version END
+ default_version = CASE WHEN sqlc.arg(make_default)::boolean THEN next_version ELSE default_version END,
+ name = CASE WHEN sqlc.arg(make_default)::boolean THEN sqlc.arg(name)::text ELSE name END,
+ description = CASE WHEN sqlc.arg(make_default)::boolean THEN sqlc.arg(description)::text ELSE description END
 WHERE tenant_id = sqlc.arg(tenant_id) AND id = sqlc.arg(id);
 
 -- name: DeleteSkill :one

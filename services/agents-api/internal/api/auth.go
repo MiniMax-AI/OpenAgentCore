@@ -82,7 +82,7 @@ type principalContextKey struct{}
 func (h *Handler) authenticate(next http.Handler) http.Handler {
 	return h.authenticateProject(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("OpenAI-Beta") != "agents=v1" {
-			writeError(w, http.StatusBadRequest, "invalid_beta_header", "OpenAI-Beta: agents=v1 is required.")
+			writeError(w, http.StatusBadRequest, "invalid_beta", "OpenAI-Beta: agents=v1 is required.")
 			return
 		}
 		next.ServeHTTP(w, r)

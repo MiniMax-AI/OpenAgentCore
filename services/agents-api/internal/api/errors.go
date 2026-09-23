@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
@@ -18,20 +19,30 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 
-func writeError(w http.ResponseWriter, status int, code, message string) {
+func writeError(w http.ResponseWriter, status int, code, message string, param ...string) {
 	kind := "invalid_request_error"
 	if status >= 500 {
 		kind = "server_error"
 	} else if status == http.StatusUnauthorized {
 		kind = "authentication_error"
+	} else if code == "not_found_error" || code == "invalid_beta" {
+		kind = code
 	}
-	writeJSON(w, status, v1.ErrorResponse{Error: v1.APIError{Message: message, Type: kind, Code: code}})
+	var errorCode *string
+	if code != "" {
+		errorCode = &code
+	}
+	var errorParam *string
+	if len(param) > 0 {
+		errorParam = &param[0]
+	}
+	writeJSON(w, status, v1.ErrorResponse{Error: v1.APIError{Message: message, Type: kind, Code: errorCode, Param: errorParam}})
 }
 
-func writeStoreError(w http.ResponseWriter, r *http.Request, err error) {
+func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFoundParam ...string) {
 	switch {
 	case errors.Is(err, store.ErrDefaultSkillVersion):
-		writeError(w, http.StatusBadRequest, "invalid_request", "Change the default version before deleting this Skill version.")
+		writeError(w, http.StatusBadRequest, "invalid_value", "Cannot delete the default skill version.", "version")
 	case errors.Is(err, store.ErrSourceFileTooLarge):
 		writeError(w, http.StatusRequestEntityTooLarge, "request_too_large", "File exceeds this operation's content limit.")
 	case errors.Is(err, store.ErrCredentialStorageUnavailable):
@@ -45,7 +56,12 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, execution.ErrExecutionUnavailable):
 		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Execution is not available on this service.")
 	case errors.Is(err, store.ErrNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "Resource not found.")
+		code := "not_found_error"
+		// Files and Skills retain their non-beta error envelope.
+		if strings.HasPrefix(r.URL.Path, "/v1/files/") || strings.HasPrefix(r.URL.Path, "/v1/skills/") || r.URL.Path == "/v1/files" || r.URL.Path == "/v1/skills" {
+			code = ""
+		}
+		writeError(w, http.StatusNotFound, code, "Resource not found.", notFoundParam...)
 	case errors.Is(err, store.ErrTurnConflict):
 		writeError(w, http.StatusConflict, "turn_conflict", "The Turn cannot accept this input in its current state.")
 	case errors.Is(err, store.ErrIdempotencyConflict):

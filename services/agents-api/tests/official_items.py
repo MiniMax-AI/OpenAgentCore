@@ -2,15 +2,18 @@
 from openai import AuthenticationError, BadRequestError, NotFoundError
 
 
-def verify_items(a, b, invalid, session, empty_session, turns, expect_error):
+def verify_items(a, b, invalid, session, peer_session, turns, expect_error):
     items = a.beta.agents.sessions.items
     recovered = list(items.list(session, limit=3, order="asc"))
-    assert len(recovered) == 32 and len({item.id for item in recovered}) == 32
+    assert len(recovered) == 33 and len({item.id for item in recovered}) == 33
+    assert recovered[0].type == "message" and recovered[0].role == "user"
+    assert recovered[0].turn_id not in turns
     assert list(items.list(session, limit=5)) == list(reversed(recovered))
     assert list(items.list(session, after=recovered[-1].id, order="asc")) == []
-    assert list(items.list(empty_session)) == []
+    peer_items = list(items.list(peer_session))
+    assert len(peer_items) == 1 and peer_items[0].role == "user"
     expect_error(NotFoundError, lambda: b.beta.agents.sessions.items.list(session))
-    expect_error(NotFoundError, lambda: items.list(empty_session, after=recovered[0].id))
+    expect_error(NotFoundError, lambda: items.list(peer_session, after=recovered[0].id))
     expect_error(AuthenticationError, lambda: invalid.beta.agents.sessions.items.list(session))
     expect_error(BadRequestError, lambda: items.list(session, limit=101))
     assert "PRIVATE" not in repr(recovered) and "SECRET" not in repr(recovered)

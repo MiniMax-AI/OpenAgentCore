@@ -38,6 +38,33 @@ Do not split an already active batch again just to adopt this workflow. Preserve
 confirmed native differences and queue nonblocking findings without expanding the
 milestone; stop after completing it when the user has set that boundary.
 
+For the continuous official-semantics alignment campaign, repeat owned-resource
+API/documentation comparisons, bounded implementation batches, acceptance and
+rescan until reasonably addressable discovered differences are removed. Maintain
+operation-level evidence, including unverified behavior and approved native
+harness/daemon differences. A merged batch does not finish the campaign. Discuss
+uncertain designs before expanding mechanisms; simplify repeated patch loops and
+record unresolved low-ROI cases with evidence and impact. Never defer a safety or
+data-consistency blocker while claiming the affected workflow passed.
+
+Session creation requires initial input for `none`, and for streaming creation
+outside `self_hosted`. Check these conditions before creation retry lookup or
+resource resolution. The parser remains shared with subsequent message admission;
+non-streaming hosted and self-hosted requests may omit input. Do not retain an
+idle-none creation compatibility exception. Valid requests retain their documented
+local idempotency behavior; clients may use the same request/key with stream=false
+to recover a lost creation response. Session metadata updates require a supplied
+metadata field, with null/empty clearing it. Validate an empty update before any
+resource lookup, after authentication.
+
+List order parsing distinguishes omission from an explicit empty value. Reuse the
+shared parser and error serializer, preserving the observed Beta, Files and Skills
+error fields rather than applying one error code to every resource. Qualification
+of one query error does not authorize changing page bounds, cursor ownership or
+parent lookup order. Record uncertain range/lookup behavior separately; do not
+reproduce observed upstream server failures as compatibility behavior. See
+`contracts/agents-api/list-query-semantics.md` for the bounded evidence.
+
 Keep runtime state, test artifacts and build output under `~/.parsar/`. Require
 absolute user-supplied working directories. Keep credentials out of source and
 logs. Update this guide when architecture, ownership or generated contracts change.
@@ -113,7 +140,11 @@ databases, credentials and migrations. The product uses Core exclusively; it has
   with a synthetic model does not constitute live model validation. Keep provider
   credentials in private test configuration, outside source, logs and task records.
   Record unspecified or unverified behavior explicitly; never invent official
-  semantics. Track partial
+  semantics. When current documentation adds operations or fields absent from the
+  fixed baseline, queue a protocol upgrade instead of silently implementing a new
+  version. Owned-resource live probes can qualify status codes and wire details
+  left unspecified by the SDK; retain request evidence and distinguish observations
+  from guaranteed or fully covered behavior. Track partial
   coverage in `contracts/agents-api/README.md` until the complete target is verified.
   Reconcile current coverage summaries with merged routes and recorded acceptance;
   distinguish accepted profiles, partial implementation, missing operations and
@@ -294,6 +325,13 @@ creation, freeze the effective ordinary hosted configuration and reuse inline
 initialization. Do not pass template IDs into Provider or Runtime. Omitted network
 inherits; overrides may only narrow policy. Preserve unresolved caller intent for
 creation retries and recover committed results before reading mutable templates.
+For template-reference Session initialization, omitted/null env, files, commands
+and packages inherit. Overlay non-null env keys; replace non-null files and command
+lists, including empty lists. Select each package manager independently: omitted/null
+inherits, while a supplied list replaces that manager. Revalidate the effective
+configuration through the existing validators and freeze it through the same
+transaction as inline initialization. Keep caller intent separate from resolved
+configuration; do not add a second installer or pass merge rules to adapters.
 Updates and deletion cannot rewrite existing Session snapshots. Initial files use
 one Core-owned installer for template and inline configurations. Keep confidential
 bytes encrypted under the execution-service key and resource-bound AEAD, separately
@@ -351,7 +389,9 @@ tools. This requirement does not add execution prerequisites to Files reads.
 
 Skills and their immutable versions are Core-owned tenant resources, independent of
 Sessions and native Skill installations. Serialize version allocation and pointer
-mutations under the owning Skill row; preserve unique version identities across
+mutations under the owning Skill row. Keep top-level name and description aligned
+with the default version in the same transaction, including default-changing uploads;
+nondefault uploads preserve that metadata. Preserve unique version identities across
 concurrent uploads and deletion. Metadata reads never load or decrypt bundle bytes.
 Encrypt bundle contents with a tenant, Skill and version binding using the existing
 service cipher. Deleting a Skill reclaims its versions without affecting already
@@ -363,11 +403,12 @@ Resolve references inside the Session creation transaction, after the creation
 upsert establishes ownership. Lock referenced resources in a stable order; freeze
 the selected version, descriptive metadata and bytes together. Creation retries
 recover the recorded intent before reading mutable templates or Skill sources.
-Templates preserve omitted/default, latest and explicit version selectors. Session
-responses contain concrete versions; only validated installation metadata crosses
-the Runtime boundary. A supplied Session Skill list replaces the template list;
-omission inherits. Explicit null reference selectors and null list overrides remain
-unqualified and reject rather than silently changing selection.
+Templates preserve default, latest and explicit version selectors. An omitted or
+null reference version selects the default at Session creation and projects as
+`version: null` in Template responses. Session responses contain concrete versions;
+only validated installation metadata crosses the Runtime boundary. A supplied
+Session Skill list replaces the template list; omission inherits. Null list
+overrides remain unqualified and reject rather than silently changing selection.
 
 Inline and referenced Skill ZIPs use the same confidential initialization snapshot and installer.
 Core validates portable manifests and bounded regular-file archives, returns only
@@ -759,7 +800,11 @@ metadata insertion and bytes commit atomically; deletion removes metadata and
 unlinks the object in one transaction. Keep OIDs private and authorize every
 metadata/content/delete lookup by tenant before opening a body. Stream bounded
 chunks; never hold an entire general Files upload in memory or use filenames as
-filesystem paths. A read-only repeatable-read transaction preserves an admitted
+filesystem paths. Public source download admission is separate from internal byte
+consumption: reject direct downloads of the supported `user_data` purpose after
+tenant-scoped metadata lookup; initialization and workspace copies keep their
+authorized Store read. Core Web must not offer that unavailable download action.
+A read-only repeatable-read transaction preserves an admitted
 source snapshot across concurrent deletion. Resolve that snapshot before entering
 the existing Environment write path; deleting a source does not undo a completed
 workspace copy. Bound request/transaction lifetimes, roll back incomplete bodies,
@@ -1185,11 +1230,18 @@ The connection owner spans preparation and the transferred Run without a reserva
 deadline; every exit releases it.
 
 The existing Worker scans pending inputs using the same bounded scheduling slots,
-Session locks, durable deadlines and engine capability checks. A self-hosted Session
+Session locks, durable deadlines and engine capability checks. Keep the one-second
+Environment-input scan cadence and at most 100 candidates per scan. At EOF after a
+nonempty cursor, refill the first page once in the same scan; an empty queue must
+not spin. Advance the cursor before readiness checks so an unavailable Runtime
+cannot starve later candidates. Preserve the four active slots and alternation
+between ordinary Turns and Environment inputs. A self-hosted Session
 waits for its dedicated enrolled device; it cannot select an arbitrary same-tenant
 device or migrate an existing binding. Preparation failure can retry while still
-pending without extending the deadline. Unknown promotion results or errors after
-admission retain the existing no-replay settlement rules.
+pending without extending the deadline. Preparation retries share this scan cadence;
+the four slots bound concurrency, not attempt frequency. Managed-provider lifecycle
+polling retains its separate five-second interval. Unknown promotion results or
+errors after admission retain the existing no-replay settlement rules.
 
 `AGENTS_API_DAEMON_WS_URL` enables the private gateway and supplies the unchanged
 public `remote_url`. `AGENTS_API_HARNESSES` explicitly adds deployment-supported
@@ -1946,7 +1998,8 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   or user-message array through the same parser and admission path. Commit the
   Session, initial input, first Turn and Item/event projections in one transaction.
   A creation retry returns the existing Session without re-admitting initial work,
-  including after terminal or later Turns. Omitted/null input retains idle creation.
+  including after terminal or later Turns. Omitted/null input is permitted only
+  for non-streaming hosted creation and self-hosted creation.
   Creation streaming uses the shared live path above; non-text messages remain a gap.
 - Enabling `AGENTS_API_DAEMON_WS_URL` also starts a bounded execution worker. Select
   only connected, capable devices owned by the authenticated tenant; bind once and

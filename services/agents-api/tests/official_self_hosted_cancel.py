@@ -35,21 +35,21 @@ def main():
         sessions = api.beta.agents.sessions
         endpoint = base + "/v1/agents/sessions/"
 
-        def sdk_submit(session_id, key, events=batch, expected=204):
+        def sdk_submit(session_id, key, events=batch, expected=202):
             with client() as caller:
                 try:
                     response = caller.beta.agents.sessions.events.with_raw_response.create(
                         session_id, events=events, idempotency_key=key)
-                    assert response.status_code == expected == 204 and response.content == b""
+                    assert response.status_code == expected == 202 and response.content == b""
                     assert response.parse() is None
                 except APIStatusError as error:
-                    assert error.status_code == expected and expected != 204
+                    assert error.status_code == expected and expected != 202
 
-        def raw_submit(session_id, key, events=batch, expected=204, key_token=token):
+        def raw_submit(session_id, key, events=batch, expected=202, key_token=token):
             response = raw.post(endpoint + session_id + "/events", json={"events": events},
                                 headers={"Idempotency-Key": key, "Authorization": "Bearer " + key_token})
             assert response.status_code == expected, (response.status_code, expected)
-            if expected == 204:
+            if expected == 202:
                 assert response.content == b"" and response.headers["cache-control"] == "no-store"
 
         def concurrent(session_id, key):

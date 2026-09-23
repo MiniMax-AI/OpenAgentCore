@@ -70,12 +70,12 @@ def main():
             assert response.status_code == status
             body = response.json()
             assert set(body) == {"error"} and body["error"]["code"] == code
-            assert body["error"]["type"] == ("authentication_error" if status == 401 else "invalid_request_error")
+            assert body["error"]["type"] == ("authentication_error" if status == 401 else code if code in {"not_found_error", "invalid_beta"} else "invalid_request_error")
             for private in (token, settings["peer_token"], settings["foreign_token"], settings["executor_token"], environment_id):
                 assert private not in response.text
 
         for missing in (result["deleted_environment_id"], result["foreign_environment_id"], str(uuid.uuid4())):
-            rejected(base + "/v1/agents/environments/" + missing, 404, "not_found")
+            rejected(base + "/v1/agents/environments/" + missing, 404, "not_found_error")
             try:
                 api.beta.agents.environments.retrieve(missing)
             except NotFoundError:
@@ -84,7 +84,7 @@ def main():
                 raise AssertionError("absent Environment was exposed through the SDK")
         for malformed in ("invalid", str(uuid.UUID(int=0))):
             rejected(base + "/v1/agents/environments/" + malformed, 400, "invalid_request")
-        rejected(endpoint, 404, "not_found", headers | {"Authorization": "Bearer " + settings["foreign_token"]})
+        rejected(endpoint, 404, "not_found_error", headers | {"Authorization": "Bearer " + settings["foreign_token"]})
         for authorization in (None, "Bearer invalid", "Bearer " + settings["executor_token"]):
             request_headers = {"OpenAI-Beta": "agents=v1"}
             if authorization is not None:
@@ -94,7 +94,7 @@ def main():
             request_headers = {"Authorization": "Bearer " + token}
             if beta is not None:
                 request_headers["OpenAI-Beta"] = beta
-            rejected(endpoint, 400, "invalid_beta_header", request_headers)
+            rejected(endpoint, 400, "invalid_beta", request_headers)
         rejected(endpoint + "?include=files", 400, "unsupported_parameter")
         for method in ("POST", "PATCH", "DELETE"):
             rejected(endpoint, 405, "unsupported_operation", method=method)

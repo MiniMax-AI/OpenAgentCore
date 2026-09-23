@@ -153,8 +153,13 @@ func TestSourceFilesPublicLifecycleAndEnvironmentCopy(t *testing.T) {
 				t.Fatalf("foreign source: %d", status)
 			}
 		}
-		if status, got := sourceRequest(t, server, "GET", "/v1/files/"+file.ID+"/content", "files-key", "", nil); status != 200 || !bytes.Equal(got, data) {
-			t.Fatalf("content: %d %v", status, got)
+		status, raw = sourceRequest(t, server, "GET", "/v1/files/"+file.ID+"/content", "files-key", "", nil)
+		var denied map[string]map[string]any
+		if status != http.StatusBadRequest || json.Unmarshal(raw, &denied) != nil || f.reads != 0 {
+			t.Fatalf("content policy read source bytes: %d %s reads=%d", status, raw, f.reads)
+		}
+		if e := denied["error"]; e["type"] != "invalid_request_error" || e["code"] != nil || e["param"] != nil || e["message"] != "Not allowed to download files of purpose: user_data" {
+			t.Fatalf("content error projection: %s", raw)
 		}
 		copyBody := `{"type":"file_id","file_id":"` + file.ID + `","path":"/workspace/source.bin"}`
 		if status, _ := sourceRequest(t, server, "POST", "/v1/agents/environments/"+env.environment.ID+"/files", "files-key", "application/json", []byte(copyBody)); status != 400 {
@@ -221,17 +226,17 @@ func TestEnvironmentSourceCopyEnforcesScopeUnionAndSize(t *testing.T) {
 	}
 }
 
-func TestSourceContentDoesNotCompleteTruncatedResponse(t *testing.T) {
-	f := &sourceFilesFixture{file: store.SourceFile{ID: "file-" + uuid.NewString(), Filename: "source.bin", SizeBytes: 3}, data: []byte("x")}
-	h, env := environmentFileCreateHandler(t, WithSourceFiles(f))
-	f.tenant = env.environment.TenantID
-	server := httptest.NewServer(h)
+func TestStoredContentDoesNotCompleteTruncatedResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serveStoredContent(w, r, func(_ context.Context, consume func(string, int64, io.Reader) error) error {
+			return consume("source.bin", 3, strings.NewReader("x"))
+		})
+	}))
 	defer server.Close()
-	r, err := http.NewRequestWithContext(t.Context(), "GET", server.URL+"/v1/files/"+f.file.ID+"/content", nil)
+	r, err := http.NewRequestWithContext(t.Context(), "GET", server.URL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.Header.Set("Authorization", "Bearer files-key")
 	resp, err := server.Client().Do(r)
 	if err != nil {
 		return

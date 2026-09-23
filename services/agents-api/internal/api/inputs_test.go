@@ -34,7 +34,7 @@ func TestPublicInputAdmission(t *testing.T) {
 	r.Header.Set("X-Tenant-ID", "forged")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
-	if w.Code != 204 || w.Body.Len() != 0 || recorder.tenant != tenant || recorder.session != "session-id" || recorder.key != "batch-key" {
+	if w.Code != 202 || w.Body.Len() != 0 || recorder.tenant != tenant || recorder.session != "session-id" || recorder.key != "batch-key" {
 		t.Fatalf("response=%d %s recorder=%+v", w.Code, w.Body, recorder)
 	}
 	if len(recorder.inputs) != 2 || recorder.inputs[0].Kind != "message" || recorder.inputs[1].Kind != "cancel" {
@@ -51,7 +51,8 @@ func TestPublicInputAdmission(t *testing.T) {
 
 func TestPublicInputRejectsUnsupportedOrMalformedBatch(t *testing.T) {
 	for _, body := range []string{
-		`null`, `{}`, `{"events":[]}`, `{"events":[{"type":"agent.session.input.tool_result","call_id":"x"}]}`,
+		`{"events":[{"type":"agent.session.input.message","input":[{"type":null,"role":"user","content":[{"type":"input_text","text":"x"}]}]}]}`,
+		`null`, `{}`, `{"events":null}`, `{"events":[{"type":"agent.session.input.tool_result","call_id":"x"}]}`,
 		`{"events":[{"type":"agent.session.input.message","input":[{"role":"assistant","content":[{"type":"input_text","text":"x"}]}]}]}`,
 		`{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_image","image_url":"https://example.com/a.png"}]}]}]}`,
 		`{"events":[{"type":"agent.session.input.cancel","input":[]}]}`,

@@ -35,7 +35,7 @@ func (s *Store) CreateSkillVersion(ctx context.Context, tenantID, skillID string
 		if err != nil {
 			return err
 		}
-		return q.AdvanceSkillVersion(ctx, sqlc.AdvanceSkillVersionParams{TenantID: tenant, ID: id, MakeDefault: makeDefault})
+		return q.AdvanceSkillVersion(ctx, sqlc.AdvanceSkillVersionParams{TenantID: tenant, ID: id, MakeDefault: makeDefault, Name: metadata.Name, Description: metadata.Description})
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrNotFound

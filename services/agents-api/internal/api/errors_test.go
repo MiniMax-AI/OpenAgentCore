@@ -1,0 +1,68 @@
+package api
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
+)
+
+func TestResourceNotFoundErrorSurfaces(t *testing.T) {
+	for _, path := range []string{
+		"/v1/agents/missing", "/v1/vaults/missing",
+		"/v1/agents/sessions/missing/items", "/v1/agents/environments/missing/files",
+		"/v1/files", "/v1/files/missing/content", "/v1/skills", "/v1/skills/missing/versions/1",
+	} {
+		t.Run(path, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, path, nil)
+			writeStoreError(response, request, fmt.Errorf("lookup: %w", store.ErrNotFound))
+			var body v1.ErrorResponse
+			if response.Code != http.StatusNotFound || json.Unmarshal(response.Body.Bytes(), &body) != nil {
+				t.Fatalf("response = %d %s", response.Code, response.Body)
+			}
+			beta := path == "/v1/agents/missing" || path == "/v1/vaults/missing" || path == "/v1/agents/sessions/missing/items" || path == "/v1/agents/environments/missing/files"
+			if beta {
+				if body.Error.Type != "not_found_error" || body.Error.Code == nil || *body.Error.Code != "not_found_error" {
+					t.Fatalf("beta error = %s", response.Body)
+				}
+			} else if body.Error.Type != "invalid_request_error" || body.Error.Code != nil {
+				t.Fatalf("non-beta error = %s", response.Body)
+			}
+			var raw map[string]json.RawMessage
+			_ = json.Unmarshal(response.Body.Bytes(), &raw)
+			var envelope map[string]json.RawMessage
+			_ = json.Unmarshal(raw["error"], &envelope)
+			if _, present := envelope["code"]; !present {
+				t.Fatal("nullable error code must remain present")
+			}
+		})
+	}
+}
+
+func TestMissingBetaErrorAfterAuthentication(t *testing.T) {
+	for _, authenticated := range []bool{false, true} {
+		handler, _, _ := testHandler(t)
+		request := httptest.NewRequest(http.MethodGet, "/v1/agents/sessions", nil)
+		if authenticated {
+			request.Header.Set("Authorization", "Bearer test-api-key")
+		}
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		var body v1.ErrorResponse
+		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		status, kind, code := http.StatusUnauthorized, "authentication_error", "invalid_api_key"
+		if authenticated {
+			status, kind, code = http.StatusBadRequest, "invalid_beta", "invalid_beta"
+		}
+		if response.Code != status || body.Error.Type != kind || body.Error.Code == nil || *body.Error.Code != code {
+			t.Fatalf("authenticated=%v: %d %s", authenticated, response.Code, response.Body)
+		}
+	}
+}

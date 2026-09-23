@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createSessionInitialInputDraft,
   projectSessionInitialInput,
+  sessionInitialInputError,
   sessionInitialInputDraftReducer,
   type SessionInitialInputDraft,
 } from "./session-initial-input";
@@ -116,6 +117,29 @@ describe("Session initial input projection", () => {
     if (!projection.ok || !Array.isArray(projection.input)) return;
     projection.input[0]!.content[0]!.text = "changed output";
     expect(draft).toEqual(before);
+  });
+});
+
+describe("Session initial input admission", () => {
+  it.each([undefined, null, "", " \t\n\u0085", []])("rejects missing or empty none input: %j", (input) => {
+    expect(sessionInitialInputError(input, "none")).not.toBeNull();
+  });
+
+  it.each(["self_hosted", "openai_hosted"])("permits missing or null input for %s", (environmentType) => {
+    expect(sessionInitialInputError(undefined, environmentType)).toBeNull();
+    expect(sessionInitialInputError(null, environmentType)).toBeNull();
+  });
+
+  it("validates the submitted Web profile without changing text or ordering", () => {
+    const projected = projectSessionInitialInput(messageDraft());
+    expect(projected.ok && sessionInitialInputError(projected.input, "none")).toBeNull();
+    expect(sessionInitialInputError("  Explain this code.\n", "none")).toBeNull();
+    for (const input of [0, {}, [{ role: "assistant", content: [{ type: "input_text", text: "text" }] }],
+      [{ role: "user", content: [] }], [{ type: null, role: "user", content: [{ type: "input_text", text: "text" }] }],
+      [{ role: "user", content: [{ type: "input_text", text: " \u0085" }] }],
+      [{ role: "user", content: [{ type: "input_image", image_url: "https://example.test/image.png" }] }]]) {
+      expect(sessionInitialInputError(input, "none")).not.toBeNull();
+    }
   });
 });
 

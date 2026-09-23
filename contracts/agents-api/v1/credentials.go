@@ -7,8 +7,8 @@ import "encoding/json"
 type CredentialAuthInput struct {
 	Type         string                       `json:"type" binding:"required" enums:"static_bearer,mcp_oauth"`
 	MCPServerURL *string                      `json:"mcp_server_url" binding:"required"`
-	Token        *string                      `json:"token,omitempty"`
-	AccessToken  *string                      `json:"access_token,omitempty"`
+	Token        *string                      `json:"token,omitempty" minLength:"1"`
+	AccessToken  *string                      `json:"access_token,omitempty" minLength:"1"`
 	ExpiresAt    *string                      `json:"expires_at,omitempty" extensions:"x-nullable"`
 	Refresh      *OAuthCredentialRefreshInput `json:"refresh,omitempty" extensions:"x-nullable"`
 }
@@ -39,8 +39,8 @@ type UpdateCredentialRequest struct {
 // Raw nullable fields retain omission separately from explicit null.
 type CredentialAuthReplacement struct {
 	Type        string                             `json:"type" binding:"required" enums:"static_bearer,mcp_oauth"`
-	Token       *string                            `json:"token,omitempty"`
-	AccessToken *string                            `json:"access_token,omitempty" extensions:"x-nullable"`
+	Token       *string                            `json:"token,omitempty" minLength:"1"`
+	AccessToken *string                            `json:"access_token,omitempty" extensions:"x-nullable" minLength:"1"`
 	ExpiresAt   json.RawMessage                    `json:"expires_at,omitempty" swaggertype:"string" extensions:"x-nullable"`
 	Refresh     *OAuthCredentialRefreshReplacement `json:"refresh,omitempty" extensions:"x-nullable"`
 }

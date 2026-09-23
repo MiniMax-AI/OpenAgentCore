@@ -60,7 +60,7 @@ func (h *Handler) recoverSessionCreation(w http.ResponseWriter, r *http.Request,
 		if err != nil {
 			writeStoreError(w, r, err)
 		} else {
-			h.respondSession(w, r, session)
+			h.respondSessionStatus(w, r, session, http.StatusCreated)
 		}
 	}
 	return true

@@ -37,7 +37,7 @@ func TestItemRouteUsesAuthenticationAndSharedPagination(t *testing.T) {
 	if w := request("?after=last&limit=2&order=asc", "test-api-key"); w.Code != 200 || s.tenant != tenant || s.session != "session" || s.cursor != "last" || s.limit != 2 || !s.ascending {
 		t.Fatal(w.Code, w.Body, s)
 	}
-	if w := request("", "test-api-key"); w.Code != 200 || s.limit != 20 || s.ascending || w.Body.String() != "{\"data\":[],\"has_more\":false}\n" {
+	if w := request("", "test-api-key"); w.Code != 200 || s.limit != 20 || s.ascending || w.Body.String() != "{\"object\":\"list\",\"first_id\":null,\"last_id\":null,\"data\":[],\"has_more\":false}\n" {
 		t.Fatal(w.Code, w.Body, s)
 	}
 	for _, q := range []string{"?limit=0", "?limit=101", "?order=bad", "?limit=2&limit=3", "?tenant_id=other"} {

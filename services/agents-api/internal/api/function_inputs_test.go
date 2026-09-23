@@ -30,7 +30,7 @@ func TestPublicFunctionResultsPreserveOptionalValues(t *testing.T) {
 	} {
 		body := `{"events":[{"type":"agent.session.input.tool_result","turn_id":"turn","call_id":"call",` + fields + `}]}`
 		w, recorder := submitResultRequest(t, body, nil)
-		if w.Code != 204 || w.Body.Len() != 0 || len(recorder.inputs) != 1 {
+		if w.Code != 202 || w.Body.Len() != 0 || len(recorder.inputs) != 1 {
 			t.Fatal(w.Code, w.Body, recorder.inputs)
 		}
 		var input store.FunctionResultInput

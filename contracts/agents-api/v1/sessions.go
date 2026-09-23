@@ -11,15 +11,16 @@ type CreateSessionRequest struct {
 	AgentID     *string                `json:"agent_id,omitempty"`
 	Environment *Environment           `json:"environment" binding:"required"`
 	// Input accepts a string or an ordered array of user InputMessage objects.
-	// Omission and null create an idle Session; non-text content is not supported yet.
+	// Required for none and streamed creation outside self_hosted; otherwise optional.
 	Input    any               `json:"input,omitempty" extensions:"x-nullable"`
 	Metadata map[string]string `json:"metadata,omitempty" extensions:"x-nullable"`
 	Stream   bool              `json:"stream,omitempty" default:"false"`
 	VaultIDs []string          `json:"vault_ids,omitempty"`
 }
 
+// UpdateSessionRequest requires metadata; null and an empty object clear it.
 type UpdateSessionRequest struct {
-	Metadata map[string]string `json:"metadata,omitempty" extensions:"x-nullable"`
+	Metadata map[string]string `json:"metadata" extensions:"x-nullable" binding:"required"`
 }
 
 // InlineAgent supplies a complete inline configuration or per-Session overrides.
@@ -104,6 +105,9 @@ type Session struct {
 }
 
 type SessionList struct {
+	Object  string    `json:"object" enums:"list" binding:"required"`
+	FirstID *string   `json:"first_id" extensions:"x-nullable"`
+	LastID  *string   `json:"last_id" extensions:"x-nullable"`
 	Data    []Session `json:"data" binding:"required"`
 	HasMore bool      `json:"has_more" binding:"required"`
 }
@@ -115,6 +119,6 @@ type ErrorResponse struct {
 type APIError struct {
 	Message string  `json:"message" binding:"required"`
 	Type    string  `json:"type" binding:"required"`
-	Code    string  `json:"code" binding:"required"`
+	Code    *string `json:"code" extensions:"x-nullable"`
 	Param   *string `json:"param" extensions:"x-nullable"`
 }

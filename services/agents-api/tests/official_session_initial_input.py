@@ -18,10 +18,32 @@ def main():
                 _strict_response_validation=True, http_client=httpx2.Client(trust_env=False)) as client, httpx2.Client(trust_env=False) as raw:
         sessions = client.beta.agents.sessions
         saved = client.beta.agents.create(model="test-model", instructions="Saved instructions.")
-        idle_key = {"Idempotency-Key": str(uuid.uuid4())}
-        idle = sessions.create(**spec, extra_headers=idle_key)
-        assert sessions.create(**spec, input=None, extra_headers=idle_key) == idle
-        assert list(sessions.turns.list(idle.id)) == []
+        before = {session.id for session in sessions.list()}
+        for fields in ({}, {"input": None}):
+            rejected = raw.post(base + "/v1/agents/sessions", headers=headers, json={**spec, **fields})
+            assert rejected.status_code == 400 and rejected.json()["error"]["code"] == "invalid_request_error"
+        assert {session.id for session in sessions.list()} == before
+        idle = sessions.create(**spec, input="Verify empty event no-op preserves admitted history.")
+        sessions.events.create(idle.id, events=[{"type": "agent.session.input.cancel"}])
+        idle = sessions.retrieve(idle.id)
+        prior_turns = list(sessions.turns.list(idle.id))
+        prior_items = list(sessions.items.list(idle.id))
+        assert len(prior_turns) == len(prior_items) == 1 and prior_turns[0].status == "cancelled"
+        empty_headers = {**headers, "Idempotency-Key": str(uuid.uuid4())}
+        empty_endpoint = base + "/v1/agents/sessions/" + idle.id + "/events"
+        for _ in range(2):
+            response = raw.post(empty_endpoint, headers=empty_headers, json={"events": []})
+            assert response.status_code == 202 and response.content == b""
+        assert sessions.retrieve(idle.id) == idle
+        assert list(sessions.turns.list(idle.id)) == prior_turns and list(sessions.items.list(idle.id)) == prior_items
+        foreign_empty = raw.post(empty_endpoint, headers={**empty_headers, "Authorization": "Bearer " + foreign}, json={"events": []})
+        assert foreign_empty.status_code == 404
+        # Empty requests do not consume a nonempty batch's retry identity.
+        response = raw.post(empty_endpoint, headers=empty_headers, json={"events": [{"type": "agent.session.input.cancel"}]})
+        assert response.status_code == 202 and response.content == b""
+        response = raw.post(empty_endpoint, headers=empty_headers, json={"events": []})
+        assert response.status_code == 202 and response.content == b""
+        assert sessions.retrieve(idle.id) == idle
         forms = ["First", [{"role": "user", "content": [{"type": "input_text", "text": "First"}]},
                            {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Second"}]}]]
         for i, initial in enumerate(forms):
@@ -36,7 +58,7 @@ def main():
             assert [item.content[0].text for item in items] == (["First"] if i == 0 else ["First", "Second"])
             reply = raw.post(base + "/v1/agents/sessions", headers={**headers, **key},
                              json={**configuration, "input": initial})
-            assert reply.status_code == 200 and reply.json()["id"] == session.id
+            assert reply.status_code == 201 and reply.json()["id"] == session.id
             assert [turn.id for turn in sessions.turns.list(session.id)] == [turns[0].id]
             denied = raw.get(base + "/v1/agents/sessions/" + session.id,
                              headers={**headers, "Authorization": "Bearer " + foreign})
@@ -51,7 +73,7 @@ def main():
         verify_creation_streams(client, raw, base, headers, foreign, unsupported)
 
         before = {session.id for session in sessions.list()}
-        for fields in [{"input": 0}, {"input": {}}, {"input": []}, {"input": " "},
+        for fields in [{"input": [{"type": None, "role": "user", "content": [{"type": "input_text", "text": "x"}]}]}, {"input": 0}, {"input": {}}, {"input": []}, {"input": " "},
                        {"input": [{"role": "assistant", "content": [{"type": "input_text", "text": "x"}]}]},
                        {"input": [{"role": "user", "content": [{"type": "input_image", "image_url": "https://example.com/x.png"}]}]}]:
             reply = raw.post(base + "/v1/agents/sessions", headers=headers, json={**spec, **fields})

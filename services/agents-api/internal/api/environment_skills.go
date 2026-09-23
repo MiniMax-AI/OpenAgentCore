@@ -33,9 +33,8 @@ func decodeEnvironmentSkills(raw json.RawMessage) ([]store.EnvironmentSkill, err
 				return nil, store.ErrInvalidInput
 			}
 			metadata := store.EnvironmentSkillMetadata{Type: reference.Type, SkillID: reference.SkillID}
-			if len(reference.Version) > 0 {
-				// Null selection semantics are unconfirmed; do not silently select default.
-				if bytes.Equal(bytes.TrimSpace(reference.Version), []byte("null")) || json.Unmarshal(reference.Version, &metadata.Version) != nil || metadata.Version == "" {
+			if len(reference.Version) > 0 && !bytes.Equal(bytes.TrimSpace(reference.Version), []byte("null")) {
+				if json.Unmarshal(reference.Version, &metadata.Version) != nil || metadata.Version == "" {
 					return nil, store.ErrInvalidInput
 				}
 			}
@@ -63,7 +62,14 @@ func decodeEnvironmentSkills(raw json.RawMessage) ([]store.EnvironmentSkill, err
 func skillResponse(skills []store.EnvironmentSkillMetadata) []json.RawMessage {
 	result := make([]json.RawMessage, 0, len(skills))
 	for _, skill := range skills {
-		raw, _ := json.Marshal(skill)
+		var projection any = skill
+		if skill.Type == "skill_reference" && skill.Version == "" {
+			projection = struct {
+				store.EnvironmentSkillMetadata
+				Version *string `json:"version"`
+			}{EnvironmentSkillMetadata: skill}
+		}
+		raw, _ := json.Marshal(projection)
 		result = append(result, raw)
 	}
 	return result

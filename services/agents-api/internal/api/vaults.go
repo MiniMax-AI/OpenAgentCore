@@ -28,7 +28,7 @@ type VaultStore interface {
 // @Security BearerAuth
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param body body v1.CreateVaultRequest true "Vault name and metadata"
-// @Success 200 {object} v1.Vault
+// @Success 201 {object} v1.Vault
 // @Failure 400,401,413,500 {object} v1.ErrorResponse
 // @Router /vaults [post]
 func (h *Handler) createVault(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +73,7 @@ func (h *Handler) createVault(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, vaultResponse(vault))
+	writeJSON(w, http.StatusCreated, vaultResponse(vault))
 }
 
 // @Summary Retrieve a Vault

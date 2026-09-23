@@ -30,14 +30,14 @@ function recordingFetch(response: Response, calls: FetchCall[]): typeof fetch {
   }) as typeof fetch;
 }
 
-function streamResponse(chunks: string[]): Response {
+function streamResponse(chunks: string[], status = 200): Response {
   const encoder = new TextEncoder();
   return new Response(new ReadableStream<Uint8Array>({
     start(controller) {
       chunks.forEach((chunk) => controller.enqueue(encoder.encode(chunk)));
       controller.close();
     },
-  }), { headers: { "Content-Type": "text/event-stream" } });
+  }), { status, headers: { "Content-Type": "text/event-stream" } });
 }
 
 function ephemeralBearer(): string {
@@ -317,7 +317,7 @@ describe("OpenAIAgentsClient", () => {
       fetch: recordingFetch(streamResponse([
         ": connected\n\nevent: agent.session.cre",
         `ated\ndata: ${created}\n\nevent: agent.session.future_event\ndata: ${later}\n\ndata: [DONE]\n\n`,
-      ]), calls),
+      ], 201), calls),
     });
 
     await client.createSessionStream(
@@ -563,6 +563,20 @@ describe("OpenAIAgentsClient", () => {
       await expect(client.retrieveSession("session"))
         .rejects.toMatchObject({ status: 502, code: "invalid_session_resource" });
     }
+  });
+
+  it("preserves a nullable resource error code", async () => {
+    const client = new OpenAIAgentsClient({
+      fetch: recordingFetch(jsonResponse({ error: {
+        code: null,
+        message: "Resource not found.",
+        type: "invalid_request_error",
+        param: null,
+      } }, 404), []),
+    });
+    await expect(client.retrieveSourceFile("file-123e4567-e89b-42d3-a456-426614174000")).rejects.toMatchObject({
+      status: 404, code: null, param: null, errorType: "invalid_request_error",
+    });
   });
 
   it("preserves a pre-stream Session creation API error without opening or retrying", async () => {
@@ -1711,7 +1725,7 @@ describe("OpenAIAgentsClient", () => {
 
   it("submits typed function-result parts with an explicit idempotency key", async () => {
     const calls: FetchCall[] = [];
-    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 204 }), calls) });
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 202 }), calls) });
 
     await client.submitFunctionResult(
       "session",
@@ -1749,7 +1763,7 @@ describe("OpenAIAgentsClient", () => {
     const calls: FetchCall[] = [];
     const client = new OpenAIAgentsClient({
       baseUrl: "https://core.example.test/v1/",
-      fetch: recordingFetch(new Response(null, { status: 204 }), calls),
+      fetch: recordingFetch(new Response(null, { status: 202 }), calls),
     });
     const events = eventBatchDadf64.request.events as SessionInputEvent[];
 
@@ -1764,7 +1778,7 @@ describe("OpenAIAgentsClient", () => {
 
   it("preserves event order when the same retry key is deliberately reused", async () => {
     const calls: FetchCall[] = [];
-    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 204 }), calls) });
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 202 }), calls) });
     const message: SessionInputEvent = {
       type: "agent.session.input.message",
       input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }],
@@ -1786,7 +1800,7 @@ describe("OpenAIAgentsClient", () => {
 
   it("preserves Core-permitted empty Function values and ordered rich output parts", async () => {
     const calls: FetchCall[] = [];
-    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 204 }), calls) });
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 202 }), calls) });
     const events: SessionInputEvent[] = [
       {
         type: "agent.session.input.tool_result",
@@ -1824,7 +1838,6 @@ describe("OpenAIAgentsClient", () => {
 
   it.each([
     { label: "non-array", events: {} },
-    { label: "empty", events: [] },
     { label: "sparse", events: Array(1) },
     { label: "65 events", events: Array.from({ length: 65 }, () => ({ type: "agent.session.input.cancel" })) },
     { label: "unknown variant", events: [{ type: "agent.session.input.future" }] },
@@ -1878,7 +1891,7 @@ describe("OpenAIAgentsClient", () => {
     }] },
   ])("rejects malformed Session event batch locally: $label", ({ events }) => {
     const calls: FetchCall[] = [];
-    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 204 }), calls) });
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 202 }), calls) });
 
     expect(() => client.submitEvents("session", events as unknown as SessionInputEvent[], "invalid"))
       .toThrow(TypeError);
@@ -1887,7 +1900,7 @@ describe("OpenAIAgentsClient", () => {
 
   it("enforces only Core's 1 MiB HTTP wire limit and leaves canonical internal sizing to Core", async () => {
     const calls: FetchCall[] = [];
-    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 204 }), calls) });
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 202 }), calls) });
     const makeEvent = (text: string): SessionInputEvent => ({
       type: "agent.session.input.message",
       input: [{ role: "user", content: [{ type: "input_text", text }] }],
@@ -1914,7 +1927,7 @@ describe("OpenAIAgentsClient", () => {
 
   it("does not invent JavaScript-only whitespace restrictions for message text", async () => {
     const calls: FetchCall[] = [];
-    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 204 }), calls) });
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 202 }), calls) });
     const event: SessionInputEvent = {
       type: "agent.session.input.message",
       input: [{ role: "user", content: [
@@ -1928,12 +1941,21 @@ describe("OpenAIAgentsClient", () => {
     expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ events: [event] });
   });
 
-  it("does not retry a failed public batch submission or reinterpret non-204 success", async () => {
+  it("sends an empty event batch once and accepts the official empty 202 response", async () => {
+    const calls: FetchCall[] = [];
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 202 }), calls) });
+    await expect(client.submitEvents("session", [], "empty-key")).resolves.toBeUndefined();
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ events: [] });
+    expect(new Headers(calls[0]?.init?.headers).get("Idempotency-Key")).toBe("empty-key");
+  });
+
+  it("does not retry a failed public batch submission or reinterpret non-202 success", async () => {
     const event: SessionInputEvent = { type: "agent.session.input.cancel" };
-    for (const status of [200, 202, 409, 500]) {
+    for (const status of [200, 204, 409, 500]) {
       const calls: FetchCall[] = [];
       const client = new OpenAIAgentsClient({
-        fetch: recordingFetch(jsonResponse({ error: { message: "rejected" } }, status), calls),
+        fetch: recordingFetch(status === 204 ? new Response(null, { status }) : jsonResponse({ error: { message: "rejected" } }, status), calls),
       });
 
       await expect(client.submitEvents("session", [event], "one-attempt")).rejects.toMatchObject({ status });
@@ -1969,7 +1991,7 @@ describe("OpenAIAgentsClient", () => {
     "🙂".repeat(33),
   ])("rejects invalid event-write idempotency key %j before fetch", (key) => {
     const calls: FetchCall[] = [];
-    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 204 }), calls) });
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 202 }), calls) });
 
     expect(() => client.submitEvents(
       "session",
@@ -1981,7 +2003,7 @@ describe("OpenAIAgentsClient", () => {
 
   it("keeps the three legacy single-event helpers on the public batch wire", async () => {
     const calls: FetchCall[] = [];
-    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 204 }), calls) });
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 202 }), calls) });
 
     await client.sendMessage("session", "hello", "message-key");
     await client.cancelTurn("session", "cancel-key");
@@ -2019,19 +2041,19 @@ describe("OpenAIAgentsClient", () => {
       success: false,
       error: "safe failure",
     }, "event-key")],
-  ])("requires HTTP 204 for %s event submission without retrying", async (_label, submit) => {
+  ])("requires HTTP 202 for %s event submission without retrying", async (_label, submit) => {
     const successCalls: FetchCall[] = [];
     const successClient = new OpenAIAgentsClient({
-      fetch: recordingFetch(new Response(null, { status: 204 }), successCalls),
+      fetch: recordingFetch(new Response(null, { status: 202 }), successCalls),
     });
 
     await expect(submit(successClient)).resolves.toBeUndefined();
     expect(successCalls).toHaveLength(1);
 
-    for (const status of [200, 202]) {
+    for (const status of [200, 204]) {
       const calls: FetchCall[] = [];
       const client = new OpenAIAgentsClient({
-        fetch: recordingFetch(jsonResponse({ accepted: true }, status), calls),
+        fetch: recordingFetch(status === 204 ? new Response(null, { status }) : jsonResponse({ accepted: true }, status), calls),
       });
 
       await expect(submit(client)).rejects.toMatchObject({
@@ -2071,12 +2093,12 @@ describe("OpenAIAgentsClient", () => {
         if (path.endsWith(`/credentials/${credentialId}`)) return jsonResponse(credential);
         if (path.endsWith("/credentials")) {
           return init?.method === "POST"
-            ? jsonResponse(credential)
+            ? jsonResponse(credential, 201)
             : jsonResponse({ object: "list", data: [credential], has_more: false, first_id: credentialId, last_id: credentialId });
         }
         if (path.endsWith(`/vaults/${vaultId}`)) return jsonResponse(vault);
         return init?.method === "POST"
-          ? jsonResponse(vault)
+          ? jsonResponse(vault, 201)
           : jsonResponse({ object: "list", data: [vault], has_more: false, first_id: vaultId, last_id: vaultId });
       }) as typeof fetch,
     });
@@ -2223,7 +2245,7 @@ describe("OpenAIAgentsClient", () => {
       updated_at: 2,
       ...change,
     };
-    const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(credential), calls) });
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(credential, 201), calls) });
 
     await expect(client.createVaultCredential(vaultId, {
       name: "Internal MCP",

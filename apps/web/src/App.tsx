@@ -46,6 +46,7 @@ import {
   type StreamState,
 } from "./features/sessions/SessionsView";
 import type { SessionStartInput } from "./features/sessions/create/SessionStartDialog";
+import { sessionInitialInputError } from "./features/sessions/create/session-initial-input";
 import { sessionCreateRequestPayload } from "./features/sessions/create/session-create-attempt";
 import { normalizeSessionEnvironmentInput } from "./features/sessions/create/session-environment";
 import { validateSessionAgentSubmission } from "./features/sessions/create/session-start-draft";
@@ -347,7 +348,6 @@ export function App() {
   const sourceFilesOperations = useMemo<SourceFilesOperations>(() => ({
     uploadSourceFile: (input, options) => core.uploadSourceFile(input, options),
     retrieveSourceFile: (fileId, options) => core.retrieveSourceFile(fileId, options),
-    downloadSourceFile: (fileId, options) => core.downloadSourceFile(fileId, options),
     deleteSourceFile: (fileId, options) => core.deleteSourceFile(fileId, options),
     retrieveEnvironment: (environmentId, options) => core.retrieveEnvironment(environmentId, options),
     createEnvironmentFile: (environmentId, input, options) => core.createEnvironmentFile(environmentId, input, options),
@@ -1581,6 +1581,12 @@ export function App() {
       notify(error.message, "error");
       throw error;
     }
+    const inputError = sessionInitialInputError(input.input, environmentInput.type);
+    if (inputError) {
+      const error = new Error(`Session was not created. ${inputError}`);
+      notify(error.message, "error");
+      throw error;
+    }
     const request = sessionCreateRequestPayload({
       ...(input.agentMode === "saved" ? { agentId: input.agentId } : {}),
       ...(submittedAgent.requestAgent ? { agent: submittedAgent.requestAgent } : {}),
@@ -1620,7 +1626,7 @@ export function App() {
         throw new Error("The Session creation outcome could not be confirmed.");
       }
       openSession(session);
-      notify("Idle Session created. Opening live events…", "success");
+      notify(input.input === undefined ? "Idle Session created. Opening live events…" : "Session opened. Connecting live events…", "success");
       return;
     }
 

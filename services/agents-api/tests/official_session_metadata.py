@@ -27,7 +27,8 @@ def verify_session_metadata(client, other, invalid, spec, expect_error):
         assert next(item for item in sessions.list(limit=1) if item.id == first.id) == session
         return session
 
-    assert_metadata(sessions.update(first.id), original)
+    expect_error(BadRequestError, lambda: sessions.update(first.id))
+    assert_metadata(sessions.retrieve(first.id), original)
     with httpx2.Client(trust_env=False, timeout=10) as raw:
         for metadata in [{"keep": "new", "empty": ""}, None, {},
                          {"🧪" * 64: "界" * 512, **{str(i): "🧪" * 512 for i in range(15)}}]:
@@ -40,8 +41,9 @@ def verify_session_metadata(client, other, invalid, spec, expect_error):
             assert response.json()["metadata"] == expected
             current = assert_metadata(sessions.retrieve(first.id), expected)
             assert response.json() == current.to_dict()
-            assert sessions.update(first.id) == current
-            assert raw.post(url, headers=headers, json={}).json() == current.to_dict()
+            expect_error(BadRequestError, lambda: sessions.update(first.id))
+            empty = raw.post(url, headers=headers, json={})
+            assert empty.status_code == 400 and empty.json()["error"]["code"] == "invalid_request_error"
             # Updating metadata must not rewrite or reapply the original creation request.
             assert sessions.create(**spec, metadata=original, extra_headers=retry) == current
             expect_error(ConflictError, lambda: sessions.create(**spec, metadata=metadata, extra_headers=retry))
@@ -71,10 +73,12 @@ def verify_session_metadata(client, other, invalid, spec, expect_error):
             assert raw.post(path, headers=headers, json={}).status_code == 400
         for target in [other, invalid]:
             expected_error = AuthenticationError if target is invalid else NotFoundError
-            for fields in [{}, {"metadata": None}, {"metadata": {"tenant_id": "untrusted"}}]:
+            for fields in [{"metadata": None}, {"metadata": {"tenant_id": "untrusted"}}]:
                 expect_error(expected_error, lambda: target.beta.agents.sessions.update(first.id, **fields))
         expect_error(NotFoundError, lambda: sessions.update(str(uuid.uuid4()), metadata={}))
-        expect_error(NotFoundError, lambda: sessions.update(str(uuid.uuid4())))
+        expect_error(BadRequestError, lambda: sessions.update(str(uuid.uuid4())))
+        expect_error(BadRequestError, lambda: other.beta.agents.sessions.update(first.id))
+        expect_error(AuthenticationError, lambda: invalid.beta.agents.sessions.update(first.id))
         expect_error(BadRequestError, lambda: sessions.update("invalid-id", metadata={}))
         expect_error(BadRequestError, lambda: sessions.update(first.id, extra_headers={"OpenAI-Beta": ""}))
         assert sessions.retrieve(first.id) == current

@@ -1,4 +1,4 @@
-import { Download, FileUp, FolderInput, RefreshCw, Search, Trash2 } from "lucide-react";
+import { FileUp, FolderInput, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 
 import {
@@ -16,14 +16,13 @@ import "./SourceFilesPanel.css";
 export interface SourceFilesOperations {
   uploadSourceFile: AgentCore["uploadSourceFile"];
   retrieveSourceFile: AgentCore["retrieveSourceFile"];
-  downloadSourceFile: AgentCore["downloadSourceFile"];
   deleteSourceFile: AgentCore["deleteSourceFile"];
   retrieveEnvironment: AgentCore["retrieveEnvironment"];
   createEnvironmentFile: AgentCore["createEnvironmentFile"];
   listEnvironmentFiles: AgentCore["listEnvironmentFiles"];
 }
 
-type Operation = "upload" | "retrieve" | "download" | "delete" | "environment" | "copy" | null;
+type Operation = "upload" | "retrieve" | "delete" | "environment" | "copy" | null;
 type NoticeTone = "info" | "success" | "error" | "warning";
 
 interface Notice {
@@ -74,11 +73,6 @@ export function validHostedDestinationPath(value: string): boolean {
 
 function parentDirectory(path: string): string {
   return path.slice(0, path.lastIndexOf("/")) || "/workspace";
-}
-
-function safeDownloadFilename(metadata: SourceFile | null, fileId: string): string {
-  if (metadata?.id !== fileId) return "source-file.bin";
-  return metadata.filename.replace(/[\\/\0\r\n]/g, "_") || "source-file.bin";
 }
 
 function knownRejected(error: unknown): boolean {
@@ -194,36 +188,6 @@ export function SourceFilesPanel({
       if (!current(request, controller) || isAbort(error)) return;
       finish(request, controller);
       setNotice({ tone: "error", text: safeFailure(error, "retrieve") });
-    }
-  };
-
-  const download = async () => {
-    if (!currentId) return;
-    const { controller, request } = start("download");
-    try {
-      const content = await operations.downloadSourceFile(currentId, { signal: controller.signal });
-      if (!finish(request, controller)) return;
-      const bytes = content.data.buffer.slice(
-        content.data.byteOffset,
-        content.data.byteOffset + content.data.byteLength,
-      ) as ArrayBuffer;
-      const url = URL.createObjectURL(new Blob([bytes], { type: content.content_type }));
-      try {
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = safeDownloadFilename(metadata, currentId);
-        anchor.rel = "noopener";
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-      } finally {
-        URL.revokeObjectURL(url);
-      }
-      setNotice({ tone: "success", text: `Downloaded ${formatFileSize(content.bytes)} after validating the complete binary response.` });
-    } catch (error) {
-      if (!current(request, controller) || isAbort(error)) return;
-      finish(request, controller);
-      setNotice({ tone: "error", text: safeFailure(error, "download") });
     }
   };
 
@@ -361,7 +325,7 @@ export function SourceFilesPanel({
       <header>
         <div>
           <FileUp size={15} strokeWidth={1.5} aria-hidden="true" />
-          <div><h2 id="source-files-heading">Source Files</h2><p>Project-owned upload, metadata, binary download and delete</p></div>
+          <div><h2 id="source-files-heading">Source Files</h2><p>Project-owned upload, metadata, Workspace copy and delete</p></div>
         </div>
         <span>{environmentFilesEnabled ? "512 MiB source · 50 MiB destination" : "512 MiB source"}</span>
       </header>
@@ -399,9 +363,9 @@ export function SourceFilesPanel({
           </label>
           <div className="source-files-actions">
             <button className="button outline" type="button" onClick={() => void retrieve()} disabled={busy || !currentId}><Search size={12} />Retrieve</button>
-            <button className="button outline" type="button" onClick={() => void download()} disabled={busy || !currentId}><Download size={12} />Download</button>
             <button className="button outline danger" type="button" onClick={() => void deleteFile()} disabled={busy || !currentId}><Trash2 size={12} />Delete once</button>
           </div>
+          <p>Uploaded Source Files cannot be downloaded directly. Copy them to a Workspace for execution.</p>
           <p>Core has no Source Files list API. Refreshing or reopening this page requires the ID again.</p>
         </div>
       </div>
@@ -463,7 +427,7 @@ export function SourceFilesPanel({
               />
             </label>
             {!destinationValid ? <p className="source-files-validation">Use one canonical absolute file path beneath <code>/workspace/</code>; parent traversal and trailing slashes are rejected.</p> : null}
-            {metadata && metadata.bytes > maxDestinationBytes ? <p className="source-files-validation">This Source File is retained and downloadable, but it exceeds the 50 MiB destination-copy limit.</p> : null}
+            {metadata && metadata.bytes > maxDestinationBytes ? <p className="source-files-validation">This Source File is retained, but it exceeds the 50 MiB destination-copy limit.</p> : null}
             <button
               className="button primary"
               type="button"

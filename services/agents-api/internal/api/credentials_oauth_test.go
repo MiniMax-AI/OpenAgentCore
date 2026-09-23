@@ -48,7 +48,7 @@ func TestOAuthCredentialVariantsAndSafeResourceReads(t *testing.T) {
 			path := "/v1/vaults/" + f.credential.VaultID + "/credentials"
 			w := credentialRequest(h, "POST", path, oauthCreateBody(t, auth))
 			var body map[string]any
-			if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &body) != nil || !reflect.DeepEqual(body["auth"], wantAuth) || strings.Contains(w.Body.String(), "canary") {
+			if w.Code != 201 || json.Unmarshal(w.Body.Bytes(), &body) != nil || !reflect.DeepEqual(body["auth"], wantAuth) || strings.Contains(w.Body.String(), "canary") {
 				t.Fatal("OAuth resource must expose only exact safe metadata", w.Code)
 			}
 			if f.tenant != tenant || f.vault != f.credential.VaultID || f.oauthInput.Name != "OAuth credential" || f.oauthInput.AccessToken != "access-canary" {
@@ -82,6 +82,7 @@ func TestOAuthCreateRejectsInvalidFieldsBeforeStorage(t *testing.T) {
 	for _, auth := range []string{
 		`{"type":"mcp_oauth","mcp_server_url":"https://mcp.example"}`,
 		`{"type":"mcp_oauth","mcp_server_url":"https://mcp.example","access_token":null}`,
+		`{"type":"mcp_oauth","mcp_server_url":"https://mcp.example","access_token":""}`,
 		`{"type":"mcp_oauth","mcp_server_url":"http://mcp.example","access_token":"access-canary"}`,
 		base + `,"token":"cross-variant"}`, base + `,"expires_at":3}`, base + `,"expires_at":"tomorrow"}`,
 		base + `,"refresh":{}}`, base + `,"refresh":[]}`, base + `,"refresh":{"client_id":null}}`,
@@ -107,16 +108,11 @@ func TestOAuthUpdateRetainsPresenceAndSecretPointers(t *testing.T) {
 		auth string
 		want store.UpdateOAuthCredentialInput
 	}{
-		{`{"type":"mcp_oauth"}`, store.UpdateOAuthCredentialInput{}},
-		{`{"type":"mcp_oauth","access_token":null,"refresh":null}`, store.UpdateOAuthCredentialInput{}},
-		{`{"type":"mcp_oauth","access_token":""}`, store.UpdateOAuthCredentialInput{AccessToken: text("")}},
+		{`{"type":"mcp_oauth","access_token":" \t"}`, store.UpdateOAuthCredentialInput{AccessToken: text(" \t")}},
 		{`{"type":"mcp_oauth","expires_at":null}`, store.UpdateOAuthCredentialInput{ExpiresAtSet: true}},
 		{`{"type":"mcp_oauth","expires_at":"2026-09-22T12:30:00.123+08:00"}`, store.UpdateOAuthCredentialInput{ExpiresAtSet: true, ExpiresAt: text("2026-09-22T12:30:00.123+08:00")}},
-		{`{"type":"mcp_oauth","refresh":{}}`, store.UpdateOAuthCredentialInput{Refresh: &store.OAuthRefreshUpdate{}}},
-		{`{"type":"mcp_oauth","refresh":{"refresh_token":null,"token_endpoint_auth":null}}`, store.UpdateOAuthCredentialInput{Refresh: &store.OAuthRefreshUpdate{}}},
 		{`{"type":"mcp_oauth","refresh":{"scope":null}}`, store.UpdateOAuthCredentialInput{Refresh: &store.OAuthRefreshUpdate{ScopeSet: true}}},
 		{`{"type":"mcp_oauth","refresh":{"scope":"","refresh_token":"refresh-canary","token_endpoint_auth":{"type":"client_secret_post","client_secret":"client-canary"}}}`, store.UpdateOAuthCredentialInput{Refresh: &store.OAuthRefreshUpdate{Scope: text(""), ScopeSet: true, RefreshToken: text("refresh-canary"), TokenEndpointAuthType: "client_secret_post", ClientSecret: text("client-canary")}}},
-		{`{"type":"mcp_oauth","refresh":{"token_endpoint_auth":{"type":"client_secret_basic","client_secret":null}}}`, store.UpdateOAuthCredentialInput{Refresh: &store.OAuthRefreshUpdate{TokenEndpointAuthType: "client_secret_basic"}}},
 	} {
 		h, f, tenant := credentialHandler(t)
 		f.credential.AuthType, f.credential.OAuth = "mcp_oauth", &store.OAuthMetadata{}
@@ -129,6 +125,9 @@ func TestOAuthUpdateRetainsPresenceAndSecretPointers(t *testing.T) {
 
 func TestOAuthUpdateRejectsInvalidPatchesBeforeStorage(t *testing.T) {
 	for _, patch := range []string{
+		`"access_token":""`, `"access_token":null`, `"refresh":{}`,
+		`"refresh":{"refresh_token":null,"token_endpoint_auth":null}`,
+		`"refresh":{"token_endpoint_auth":{"type":"client_secret_basic","client_secret":null}}`,
 		`"token":"cross-variant"`, `"access_token":3`, `"expires_at":[]`, `"expires_at":"not a timestamp"`, `"expires_at":"2026-09-22T1:02:03Z"`, `"expires_at":"2026-09-22T01:02:03+24:00"`,
 		`"refresh":{"client_id":"other"}`, `"refresh":{"token_endpoint":"https://other.example"}`,
 		`"refresh":{"resource":null}`, `"refresh":{"scope":3}`, `"refresh":{"refresh_token":false}`,
@@ -162,5 +161,13 @@ func TestOAuthCredentialStoreFailuresUseSafeExistingErrors(t *testing.T) {
 				t.Fatal("unsafe OAuth store error", w.Code)
 			}
 		}
+	}
+}
+
+func TestOAuthTypeOnlyUpdateRejectsBeforeStorage(t *testing.T) {
+	h, f, _ := credentialHandler(t)
+	w := credentialRequest(h, "POST", "/v1/vaults/"+f.credential.VaultID+"/credentials/"+f.credential.ID, `{"auth":{"type":"mcp_oauth"}}`)
+	if w.Code != 400 || f.calls != 0 {
+		t.Fatal("empty OAuth update reached storage", w.Code)
 	}
 }

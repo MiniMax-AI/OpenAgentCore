@@ -44,7 +44,7 @@ func credentialAuthType(raw json.RawMessage) string {
 func oauthCredentialCreate(raw json.RawMessage, name string) (store.CreateOAuthCredentialInput, error) {
 	var auth v1.CredentialAuthInput
 	input := store.CreateOAuthCredentialInput{Name: name}
-	if decodeInputObject(raw, &auth, "type", "mcp_server_url", "access_token", "expires_at", "refresh") != nil || auth.Type != "mcp_oauth" || auth.AccessToken == nil || !credentialHTTPSURL(auth.MCPServerURL) || !credentialExpiry(auth.ExpiresAt) {
+	if decodeInputObject(raw, &auth, "type", "mcp_server_url", "access_token", "expires_at", "refresh") != nil || auth.Type != "mcp_oauth" || auth.AccessToken == nil || *auth.AccessToken == "" || !credentialHTTPSURL(auth.MCPServerURL) || !credentialExpiry(auth.ExpiresAt) {
 		return input, store.ErrInvalidInput
 	}
 	input.MCPServerURL, input.AccessToken = *auth.MCPServerURL, *auth.AccessToken
@@ -88,6 +88,9 @@ func oauthCredentialUpdate(raw json.RawMessage) (store.UpdateOAuthCredentialInpu
 		return input, store.ErrInvalidInput
 	}
 	input.AccessToken = auth.AccessToken
+	if input.AccessToken != nil && *input.AccessToken == "" {
+		return input, store.ErrInvalidInput
+	}
 	if len(auth.ExpiresAt) > 0 {
 		input.ExpiresAtSet = true
 		if json.Unmarshal(auth.ExpiresAt, &input.ExpiresAt) != nil || !credentialExpiry(input.ExpiresAt) {
@@ -108,6 +111,10 @@ func oauthCredentialUpdate(raw json.RawMessage) (store.UpdateOAuthCredentialInpu
 			}
 			input.Refresh.TokenEndpointAuthType, input.Refresh.ClientSecret = a.Type, a.ClientSecret
 		}
+	}
+	if input.AccessToken == nil && !input.ExpiresAtSet && (input.Refresh == nil ||
+		(input.Refresh.RefreshToken == nil && input.Refresh.ClientSecret == nil && !input.Refresh.ScopeSet)) {
+		return input, store.ErrInvalidInput
 	}
 	return input, nil
 }

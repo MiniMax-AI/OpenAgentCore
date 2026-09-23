@@ -48,9 +48,6 @@ func (s *Store) UpdateAgent(ctx context.Context, tenantID, agentID string, input
 			return SavedAgent{}, err
 		}
 	}
-	if len(patch) == 0 && input.Metadata == nil {
-		return s.GetAgent(ctx, tenantID, agentID)
-	}
 	var updated SavedAgent
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)

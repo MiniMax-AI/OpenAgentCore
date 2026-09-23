@@ -129,7 +129,7 @@ def main():
                 value = response.json()
                 check_session(value, status)
                 page = raw.get("/agents/sessions", params={"agent_id": agent_id, "limit": 1})
-                assert page.status_code == 200 and page.json() == {"data": [value], "has_more": False}
+                assert page.status_code == 200 and page.json() == {"object": "list", "data": [value], "has_more": False, "first_id": value["id"], "last_id": value["id"]}
                 proof["snapshots"][name] = value
                 return value
 

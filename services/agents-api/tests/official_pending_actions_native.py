@@ -38,13 +38,13 @@ def verify_pending_actions(client, foreign, http, model, evidence):
         assert raw == [item.to_dict() for item in sessions.items.list(sid, limit=100, order="asc").data]
         return raw
 
-    def submit(sid, event, key, expected=204, auth=None):
+    def submit(sid, event, key, expected=202, auth=None):
         response = http.post(endpoint + "/" + sid + "/events", headers={**(auth or headers), "Idempotency-Key": key}, json={"events": [event]})
         assert response.status_code == expected, (key, response.status_code, response.text)
-        if expected == 204:
+        if expected == 202:
             assert response.content == b""
         else:
-            assert response.json()["error"]["code"] in {"not_found", "turn_conflict", "idempotency_conflict"}
+            assert response.json()["error"]["code"] in {"not_found_error", "turn_conflict", "idempotency_conflict"}
         return {"request": key, "status": response.status_code}
 
     try:

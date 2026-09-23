@@ -7,7 +7,6 @@ import type { VaultCatalog } from "../../vaults/vault-catalog";
 import {
   genericSessionStartError,
   safeSessionStartError,
-  sessionCreationUsesStream,
   SessionStartDialog,
 } from "./SessionStartDialog";
 
@@ -100,11 +99,11 @@ describe("SessionStartDialog", () => {
     expect(html).not.toContain("template_id");
   });
 
-  it("uses POST SSE for managed idle and initial creation without changing none/self-hosted idle", () => {
-    expect(sessionCreationUsesStream(false, { type: "openai_hosted" })).toBe(true);
-    expect(sessionCreationUsesStream(true, { type: "openai_hosted", network: { access: "disabled" } })).toBe(true);
-    expect(sessionCreationUsesStream(false, { type: "none" })).toBe(false);
-    expect(sessionCreationUsesStream(true, { type: "none" })).toBe(true);
+  it("requires a first message for the default no-Environment selection", () => {
+    const html = render(false, compatible.id);
+    expect(html).toContain("Required without an Environment.");
+    expect(html).toContain('aria-required="true"');
+    expect(html).toMatch(/<button[^>]+disabled=""[^>]*>Create Session<\/button>/u);
   });
 
   it("honors a compatible preselected Agent and exposes whole-field overrides", () => {

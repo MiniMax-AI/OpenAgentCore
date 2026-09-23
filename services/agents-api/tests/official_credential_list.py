@@ -101,9 +101,9 @@ def verify_credential_list(client, other, invalid, peer, binding, saved_vaults, 
                                                             value.auth.mcp_server_url))
         body = response.json()["error"]
         if status == 404:
-            assert body["code"] == "not_found"
+            assert body["code"] == body["type"] == "not_found_error"
         elif status == 400:
-            assert body["type"] == "invalid_request_error"
+            assert body["type"] == ("invalid_beta" if body["code"] == "invalid_beta" else "invalid_request_error")
         return body
 
     with httpx2.Client(trust_env=False, timeout=10) as raw:
@@ -150,7 +150,7 @@ def verify_credential_list(client, other, invalid, peer, binding, saved_vaults, 
             auth = {"Authorization": headers["Authorization"]}
             if beta is not None:
                 auth["OpenAI-Beta"] = beta
-            assert safe_error(raw.get(endpoint, headers=auth), 400)["code"] == "invalid_beta_header"
+            assert safe_error(raw.get(endpoint, headers=auth), 400)["code"] == "invalid_beta"
         for scope in ({"OpenAI-Organization": "wrong-org"}, {"OpenAI-Project": "wrong-project"}):
             safe_error(raw.get(endpoint, headers=headers | scope), 401)
             expect_error(AuthenticationError, lambda: credentials.list(vault.id, extra_headers=scope))
@@ -179,6 +179,6 @@ def verify_credential_list_recovery(client, other, peer, saved, canary, phase="A
                                          ({"status[]": "archived", "order": "asc", "limit": "100"}, archived, False)):
             verify_page(raw.get(endpoint, headers=headers, params=params), vault.id, values, has_more, canary)
         response = raw.get(endpoint, headers=headers | {"Authorization": f"Bearer {other.api_key}"})
-        assert response.status_code == 404 and response.json()["error"]["code"] == "not_found"
+        assert response.status_code == 404 and response.json()["error"]["code"] == "not_found_error"
         assert canary not in response.text and expected[0].id not in response.text
     print(f"Credential list: exact metadata, stored status, discovery/retrieval and project isolation survived {phase}.")

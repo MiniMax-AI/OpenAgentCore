@@ -4,6 +4,7 @@ definitions:
     properties:
       code:
         type: string
+        x-nullable: true
       message:
         type: string
       param:
@@ -12,7 +13,6 @@ definitions:
       type:
         type: string
     required:
-    - code
     - message
     - type
     type: object
@@ -175,7 +175,7 @@ definitions:
       input:
         description: |-
           Input accepts a string or an ordered array of user InputMessage objects.
-          Omission and null create an idle Session; non-text content is not supported yet.
+          Required for none and streamed creation outside self_hosted; otherwise optional.
         x-nullable: true
       metadata:
         additionalProperties:
@@ -254,6 +254,7 @@ definitions:
   v1.CredentialAuthInput:
     properties:
       access_token:
+        minLength: 1
         type: string
       expires_at:
         type: string
@@ -265,6 +266,7 @@ definitions:
         - $ref: '#/definitions/v1.OAuthCredentialRefreshInput'
         x-nullable: true
       token:
+        minLength: 1
         type: string
       type:
         enum:
@@ -278,6 +280,7 @@ definitions:
   v1.CredentialAuthReplacement:
     properties:
       access_token:
+        minLength: 1
         type: string
         x-nullable: true
       expires_at:
@@ -288,6 +291,7 @@ definitions:
         - $ref: '#/definitions/v1.OAuthCredentialRefreshReplacement'
         x-nullable: true
       token:
+        minLength: 1
         type: string
       type:
         enum:
@@ -869,11 +873,22 @@ definitions:
         items:
           $ref: '#/definitions/v1.Item'
         type: array
+      first_id:
+        type: string
+        x-nullable: true
       has_more:
         type: boolean
+      last_id:
+        type: string
+        x-nullable: true
+      object:
+        enum:
+        - list
+        type: string
     required:
     - data
     - has_more
+    - object
     type: object
   v1.ModelProviderInput:
     properties:
@@ -1910,11 +1925,22 @@ definitions:
         items:
           $ref: '#/definitions/v1.Session'
         type: array
+      first_id:
+        type: string
+        x-nullable: true
       has_more:
         type: boolean
+      last_id:
+        type: string
+        x-nullable: true
+      object:
+        enum:
+        - list
+        type: string
     required:
     - data
     - has_more
+    - object
     type: object
   v1.Skill:
     properties:
@@ -2329,11 +2355,22 @@ definitions:
         items:
           $ref: '#/definitions/v1.Turn'
         type: array
+      first_id:
+        type: string
+        x-nullable: true
       has_more:
         type: boolean
+      last_id:
+        type: string
+        x-nullable: true
+      object:
+        enum:
+        - list
+        type: string
     required:
     - data
     - has_more
+    - object
     type: object
   v1.UpdateAgentRequest:
     properties:
@@ -2395,6 +2432,8 @@ definitions:
           type: string
         type: object
         x-nullable: true
+    required:
+    - metadata
     type: object
   v1.Vault:
     properties:
@@ -2512,7 +2551,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Creation order
+        description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -2576,8 +2616,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/v1.SavedAgent'
         "400":
@@ -2697,9 +2737,10 @@ paths:
       - application/json
       description: Preserves omitted fields and replaces supplied fields using shared
         saved-configuration validation. Null name/instructions clear; null or empty
-        metadata clears all pairs. Existing Session snapshots are unchanged. Nested
-        replacement/null defaults, model-derived reasoning and exact hosted error/no-op
-        timestamp behavior remain incompletely verified.
+        metadata clears all pairs. Existing Session snapshots are unchanged. Empty
+        updates advance updated_at without changing saved fields. Nested replacement/null
+        defaults, model-derived reasoning and exact hosted error behavior remain incompletely
+        verified.
       parameters:
       - description: agents=v1
         in: header
@@ -2834,7 +2875,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Case-sensitive path-component order
+        description: Case-sensitive path-component order; omit for descending, explicit
+          empty values are invalid
         enum:
         - asc
         - desc
@@ -2970,7 +3012,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Creation order
+        description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -3031,8 +3074,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/v1.EnvironmentTemplate'
         "400":
@@ -3153,8 +3196,8 @@ paths:
         capability directories replace as lists; null/empty clears. Plugin archives
         are encrypted and omitted from responses. Capability directories are snapshotted
         after setup. Environment MCP execution requires a qualified native transport
-        and runtime network policy. Exact hosted no-op timestamp behavior remains
-        unverified.
+        and runtime network policy. Empty updates advance updated_at without changing
+        saved fields or confidential contents.
       parameters:
       - description: agents=v1
         in: header
@@ -3326,7 +3369,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Creation order
+        description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -3400,35 +3444,39 @@ paths:
         and remote URLs are unsupported. None initial input atomically starts a Turn;
         self_hosted initial input is reserved while returning its Environment connection
         target, with execution deferred to native readiness and Session failure on
-        initial timeout. Omitted or null input creates an idle Session. With stream=true,
-        returns live Session events starting at creation; disconnect does not cancel
-        execution. New Sessions retain their authenticated creator; all creation retries
-        require the same typed subject, including across key rotation. Saved-Agent
-        retries and inline requests using Vault attachments or credential references
-        retain caller intent independently of later resource changes; unrelated inline
-        retries preserve resolved/default equivalences. Unknown historical creators
-        reject retries; known creators without recorded intent retain resolved-snapshot
-        retry rules. These conflict policies are local and not verified hosted parity.
-        Creation retries observe future events without replay; retry with stream=false
-        to retrieve the Session. Claude SDK on none and Core-managed Docker openai_hosted
-        supports qualified object-root json_schema output with medium verbosity, single-Agent
-        execution and ordinary functions. Hosted execution reuses native workspace
-        tools and Files/Artifacts; Skills, Plugins, capability directories, HTTP MCP,
-        Subagent and tool_search combinations remain unqualified, including inherited
-        template contents. Other non-text initial input remains unsupported. Basic
-        Codex and Claude SDK openai_hosted creation requires an explicitly configured
-        managed provider. The Claude workspace profile supports non-deferred function
-        tools with text or successful inline PNG/JPEG results alongside native workspace
-        tools; HTTP MCP remains unsupported. Idle Sessions provision automatically;
-        initial provisioning has no caller connection action. Network defaults to
-        enabled; disabled and restricted exact ASCII hostnames are supported. Restricted
-        policy requires 1–100 allowed domains. Unsupported hostname forms and startup
-        installations are rejected. Confidential env, system/npm/Python packages and
-        ordered setup commands use the shared initialization lifecycle; requested
-        network applies after setup. Initial inline and tenant-owned file_id files
-        freeze encrypted bytes before provisioning, then install through the common
-        Core lifecycle before native execution or live Files access. Referenced files/env/packages/setup
-        overrides are rejected pending semantic verification. Tenant-owned environment_template_id
+        initial timeout. Initial input is required for none and for streamed creation
+        outside self_hosted. Omitted/null input remains valid for non-streaming hosted
+        and self_hosted creation. With stream=true, returns live Session events starting
+        at creation; disconnect does not cancel execution. New Sessions retain their
+        authenticated creator; all creation retries require the same typed subject,
+        including across key rotation. Saved-Agent retries and inline requests using
+        Vault attachments or credential references retain caller intent independently
+        of later resource changes; unrelated inline retries preserve resolved/default
+        equivalences. Unknown historical creators reject retries; known creators without
+        recorded intent retain resolved-snapshot retry rules. These conflict policies
+        are local and not verified hosted parity. Creation retries observe future
+        events without replay; retry with stream=false to retrieve the Session. Claude
+        SDK on none and Core-managed Docker openai_hosted supports qualified object-root
+        json_schema output with medium verbosity, single-Agent execution and ordinary
+        functions. Hosted execution reuses native workspace tools and Files/Artifacts;
+        Skills, Plugins, capability directories, HTTP MCP, Subagent and tool_search
+        combinations remain unqualified, including inherited template contents. Other
+        non-text initial input remains unsupported. Basic Codex and Claude SDK openai_hosted
+        creation requires an explicitly configured managed provider. The Claude workspace
+        profile supports non-deferred function tools with text or successful inline
+        PNG/JPEG results alongside native workspace tools; HTTP MCP remains unsupported.
+        Idle Sessions provision automatically; initial provisioning has no caller
+        connection action. Network defaults to enabled; disabled and restricted exact
+        ASCII hostnames are supported. Restricted policy requires 1–100 allowed domains.
+        Unsupported hostname forms and startup installations are rejected. Confidential
+        env, system/npm/Python packages and ordered setup commands use the shared
+        initialization lifecycle; requested network applies after setup. Initial inline
+        and tenant-owned file_id files freeze encrypted bytes before provisioning,
+        then install through the common Core lifecycle before native execution or
+        live Files access. With a template reference, omitted/null files, env, packages
+        and setup_commands inherit. Non-null files and command lists replace; env
+        overlays by key; each package manager inherits on omission/null and otherwise
+        replaces its list. Empty lists clear their selected field. Tenant-owned environment_template_id
         references inherit omitted network and allow only narrowing overrides. Referenced
         network:null is explicitly unsupported pending semantic verification. Core
         freezes effective configuration; template updates/deletion do not alter Session
@@ -3465,8 +3513,8 @@ paths:
       - application/json
       - text/event-stream
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/v1.Session'
         "400":
@@ -3599,11 +3647,11 @@ paths:
     post:
       consumes:
       - application/json
-      description: Omit metadata to leave it unchanged, send null or {} to clear it,
-        or supply an object to replace all pairs. Up to 16 string pairs, with keys
-        at most 64 characters and values at most 512 characters. Execution configuration
-        and activity are unchanged. Returns the same safe Environment and pending-input
-        activity projection as Session retrieval.
+      description: The metadata field is required in an update body. Send null or
+        {} to clear it, or supply an object to replace all pairs. Up to 16 string
+        pairs, with keys at most 64 characters and values at most 512 characters.
+        Execution configuration and activity are unchanged. Returns the same safe
+        Environment and pending-input activity projection as Session retrieval.
       parameters:
       - description: agents=v1
         in: header
@@ -3685,7 +3733,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Publication order
+        description: Publication order; omit for descending, explicit empty values
+          are invalid
         enum:
         - asc
         - desc
@@ -3934,21 +3983,22 @@ paths:
     post:
       consumes:
       - application/json
-      description: For environment none, atomically accepts text messages, cancellation
-        and function results. Messages steer active work or start a queued Turn. The
-        supported self_hosted profile accepts text-only messages; qualified Codex
-        and Claude SDK openai_hosted profiles also accept inline PNG/JPEG. Under the
-        Session lock, matching retries retain their original target; new active messages
-        append to the current Turn, while idle messages reserve work and wait up to
-        the original five-minute connection/admission deadline. Return 204 only after
-        durable admission, without claiming native application; active messages create
-        no Turn or reservation. Cancellation-only prepared-environment batches use
-        existing durable cancellation admission and return 204 without waiting for
-        native exit; a new cancellation conflicts while a pre-Turn reservation is
-        pending. Homogeneous tool_result-only prepared-environment batches reuse existing
-        scoped result admission and application receipts without creating a Turn or
-        bypassing a pending reservation. Mixed prepared-environment batches remain
-        unsupported. HTTP expiry/cancellation use local 409 environment_input_expired/environment_input_cancelled
+      description: An empty events array is a resource-authorized no-op; it creates
+        no execution retry identity, Turn, Item or input receipt. For environment
+        none, atomically accepts text messages, cancellation and function results.
+        Messages steer active work or start a queued Turn. The supported self_hosted
+        profile accepts text-only messages; qualified Codex and Claude SDK openai_hosted
+        profiles also accept inline PNG/JPEG. Under the Session lock, matching retries
+        retain their original target; new active messages append to the current Turn,
+        while idle messages reserve work and wait up to the original five-minute connection/admission
+        deadline. Return 202 only after durable admission, without claiming native
+        application; active messages create no Turn or reservation. Cancellation-only
+        prepared-environment batches use existing durable cancellation admission and
+        return 202 without waiting for native exit; a new cancellation conflicts while
+        a pre-Turn reservation is pending. Homogeneous tool_result-only prepared-environment
+        batches reuse existing scoped result admission and application receipts without
+        creating a Turn or bypassing a pending reservation. Mixed prepared-environment
+        batches remain unsupported. HTTP expiry/cancellation use local 409 environment_input_expired/environment_input_cancelled
         errors; exact hosted failure mapping is unverified. Losing execution ownership
         returns 503. The response write deadline accommodates the admission window
         for either prepared Environment, independently of new-hosted-admission and
@@ -3985,8 +4035,8 @@ paths:
         schema:
           $ref: '#/definitions/v1.CreateEventsRequest'
       responses:
-        "204":
-          description: No Content
+        "202":
+          description: Accepted
         "400":
           description: Bad Request
           schema:
@@ -4048,7 +4098,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Creation order
+        description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -4228,7 +4279,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Resource order
+        description: Resource order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -4352,7 +4404,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Resource order
+        description: Resource order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -4423,7 +4476,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Creation order
+        description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -4557,7 +4611,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Resource order
+        description: Resource order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -4624,7 +4679,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Creation order
+        description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -4707,11 +4763,12 @@ paths:
       - Turns
   /files:
     get:
-      description: Lists project-owned Files without reading their bodies. Supports
-        the pinned after, limit, order and purpose query surface. The limit defaults
-        to 10000 and must be 1–10000. Equal creation times use ID ordering. Current
-        storage contains only user_data; exact hosted default order, invalid-cursor
-        errors and concurrent-page behavior remain unverified. No Beta header is required.
+      description: Lists project-owned Files without reading their bodies. The limit
+        defaults to 10000 and must be 1–10000. Equal creation times use ID ordering.
+        Purpose validation precedes cursor lookup; current storage contains only user_data.
+        An explicit empty purpose retains the local exact-filter behavior. Hosted
+        positive filtering, default order and concurrent-page behavior remain unverified.
+        No Beta header is required.
       parameters:
       - description: Last File ID from the previous page
         in: query
@@ -4725,7 +4782,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Creation order
+        description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -4910,10 +4968,10 @@ paths:
       - Files
   /files/{file_id}/content:
     get:
-      description: Streams an authorized immutable source snapshot. Already-admitted
-        reads may finish after deletion; later reads reject. No Beta header is required.
-        Range requests and exact hosted headers/error behavior are not implemented
-        or verified.
+      description: Resolves project-owned File metadata before enforcing download
+        policy. Public download of user_data Files returns 400; missing and foreign
+        Files return the same 404. Internal initial-file and workspace copies remain
+        available. No Beta header is required.
       parameters:
       - description: Source file ID
         in: path
@@ -4921,12 +4979,8 @@ paths:
         required: true
         type: string
       produces:
-      - application/octet-stream
+      - application/json
       responses:
-        "200":
-          description: OK
-          schema:
-            type: file
         "400":
           description: Bad Request
           schema:
@@ -4965,7 +5019,8 @@ paths:
         in: query
         name: limit
         type: integer
-      - description: Creation order
+      - description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -5121,7 +5176,8 @@ paths:
         in: query
         name: limit
         type: integer
-      - description: Version order
+      - description: Version order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -5270,7 +5326,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Creation order
+        description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -5345,8 +5402,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/v1.Vault'
         "400":
@@ -5496,7 +5553,8 @@ paths:
         name: limit
         type: integer
       - default: desc
-        description: Creation order
+        description: Creation order; omit for descending, explicit empty values are
+          invalid
         enum:
         - asc
         - desc
@@ -5552,15 +5610,16 @@ paths:
       consumes:
       - application/json
       description: Stores static_bearer or mcp_oauth secrets as execution-owned authenticated
-        ciphertext without contacting any endpoint. OAuth accepts a required access
-        token, nullable RFC3339 expiry and optional refresh configuration with none,
-        client_secret_basic or client_secret_post authentication. Required name is
-        trimmed to 1–256 UTF-8 bytes. Credential and token endpoints require HTTPS
-        without userinfo or fragments. Responses contain safe metadata only, including
-        explicit nullable OAuth expiry, refresh, resource and scope. Missing encryption
-        configuration returns local 503. External authorization and provider revocation
-        remain caller responsibilities; exact hosted error/default semantics remain
-        unverified.
+        ciphertext without contacting any endpoint. Static bearer and OAuth access
+        tokens must be nonempty strings; their bytes are preserved. OAuth accepts
+        a required access token, nullable RFC3339 expiry and optional refresh configuration
+        with none, client_secret_basic or client_secret_post authentication. Required
+        name is trimmed to 1–256 UTF-8 bytes. Credential and token endpoints require
+        HTTPS without userinfo or fragments. Responses contain safe metadata only,
+        including explicit nullable OAuth expiry, refresh, resource and scope. Missing
+        encryption configuration returns local 503. External authorization and provider
+        revocation remain caller responsibilities; exact hosted error/default semantics
+        remain unverified.
       parameters:
       - description: agents=v1
         in: header
@@ -5581,8 +5640,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/v1.Credential'
         "400":
@@ -5725,17 +5784,20 @@ paths:
     post:
       consumes:
       - application/json
-      description: Updates the existing static_bearer or mcp_oauth authentication
-        method without network requests. OAuth access_token omission/null retains
-        the token; a new token clears omitted expiry, explicit null clears expiry,
-        and other omitted fields remain unchanged. OAuth refresh patches cannot add
-        configuration or change client, endpoint, resource or authentication method;
-        nullable token/client-secret values retain stored secrets while explicit null
-        scope clears scope. Whole-null refresh and token_endpoint_auth retain existing
-        configuration under local policy. Identity, destination, creation time and
-        Session bindings remain unchanged. Responses expose safe metadata only. Already-dispatched
-        work is not revoked; provider revocation, storage-key rotation and exact hosted
-        concurrent-update/error semantics remain separate.
+      description: Explicitly empty static bearer or OAuth access tokens and OAuth
+        patches without a mutable field are rejected before storage. Omitted OAuth
+        access tokens preserve the existing grant when expiry or refresh fields change.
+        Updates the existing static_bearer or mcp_oauth authentication method without
+        network requests. OAuth access_token omission/null retains the token; a new
+        token clears omitted expiry, explicit null clears expiry, and other omitted
+        fields remain unchanged. OAuth refresh patches cannot add configuration or
+        change client, endpoint, resource or authentication method; nullable token/client-secret
+        values retain stored secrets while explicit null scope clears scope. Whole-null
+        refresh and token_endpoint_auth retain existing configuration under local
+        policy. Identity, destination, creation time and Session bindings remain unchanged.
+        Responses expose safe metadata only. Already-dispatched work is not revoked;
+        provider revocation, storage-key rotation and exact hosted concurrent-update/error
+        semantics remain separate.
       parameters:
       - description: agents=v1
         in: header

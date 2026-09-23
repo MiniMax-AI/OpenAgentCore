@@ -209,6 +209,9 @@ func TestEnvironmentFilesRejectsInvalidRequestsBeforeRead(t *testing.T) {
 			if w.Code != 400 || f.lookups != 1 || f.reads != 0 {
 				t.Fatal("invalid query reached runtime", w.Code, w.Body, f)
 			}
+			if query == "order=" || query == "order=ASC" {
+				assertListQueryError(t, w, "invalid_request_error", nil, "Failed to deserialize query string: order: unknown variant `"+strings.TrimPrefix(query, "order=")+"`, expected `asc` or `desc`")
+			}
 		})
 	}
 }

@@ -27,7 +27,7 @@ type AgentStore interface {
 // @Security BearerAuth
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param body body v1.CreateAgentRequest true "Reusable Agent configuration"
-// @Success 200 {object} v1.SavedAgent
+// @Success 201 {object} v1.SavedAgent
 // @Failure 400,401,413,500 {object} v1.ErrorResponse
 // @Router /agents [post]
 func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
@@ -54,7 +54,7 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	h.respondAgent(w, r, agent)
+	h.respondAgentStatus(w, r, agent, http.StatusCreated)
 }
 
 // @Summary Retrieve a reusable Agent
@@ -81,12 +81,16 @@ func (h *Handler) getAgent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) respondAgent(w http.ResponseWriter, r *http.Request, agent store.SavedAgent) {
+	h.respondAgentStatus(w, r, agent, http.StatusOK)
+}
+
+func (h *Handler) respondAgentStatus(w http.ResponseWriter, r *http.Request, agent store.SavedAgent, status int) {
 	response, err := agentResponse(agent)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, response)
+	writeJSON(w, status, response)
 }
 
 func agentResponse(agent store.SavedAgent) (v1.SavedAgent, error) {

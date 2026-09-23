@@ -93,11 +93,9 @@ def verify_oauth_credentials(client, other, peer, raw, *, evidence_path=None):
                     "token_endpoint_auth": {"type": method}, "resource": auth["refresh"].get("resource"),
                     "scope": auth["refresh"].get("scope")})
             response = credentials.with_raw_response.create(vault.id, name=" OAuth " + str(index) + " ", auth=auth)
-            body = check_resource(safe(response.http_response), vault.id, expected_auth)
+            body = check_resource(safe(response.http_response, 201), vault.id, expected_auth)
             assert response.parse().to_dict() == body and body["name"] == "OAuth " + str(index)
             current = retrieve(vault.id, body["id"], expected_auth)
-            current = update(vault.id, current, {}, expected_auth)
-            current = update(vault.id, current, {"access_token": None, "refresh": None}, expected_auth, sdk=False)
             changed = deepcopy(expected_auth)
             changed["expires_at"] = None
             current = update(vault.id, current, {"access_token": secrets[3]}, changed)
@@ -107,7 +105,6 @@ def verify_oauth_credentials(client, other, peer, raw, *, evidence_path=None):
             current = update(vault.id, current, {"expires_at": None}, changed)
             current = update(vault.id, current, {"access_token": secrets[0], "expires_at": expiry}, expected_auth)
             if method is not None:
-                current = update(vault.id, current, {"refresh": {"refresh_token": None, "token_endpoint_auth": None}}, expected_auth)
                 current = update(vault.id, current, {"refresh": {"refresh_token": secrets[3]}}, expected_auth, sdk=False)
                 changed = deepcopy(expected_auth)
                 changed["refresh"]["scope"] = None
@@ -118,7 +115,7 @@ def verify_oauth_credentials(client, other, peer, raw, *, evidence_path=None):
                 current = update(vault.id, current, {"refresh": {"scope": ""}}, changed, sdk=False)
                 expected_auth = changed
                 if method != "none":
-                    for secret_patch in ({}, {"client_secret": None}, {"client_secret": secrets[3]}):
+                    for secret_patch in ({"client_secret": secrets[3]},):
                         current = update(vault.id, current, {"refresh": {"token_endpoint_auth": {"type": method, **secret_patch}}}, expected_auth)
                 invalid_patches = [
                     {"refresh": {"token_endpoint_auth": {"type": "client_secret_post" if method != "client_secret_post" else "client_secret_basic"}}},
@@ -126,7 +123,10 @@ def verify_oauth_credentials(client, other, peer, raw, *, evidence_path=None):
                     {"refresh": {"resource": None}}, {"refresh": {"token_endpoint_auth": {"type": "none"}}}]
             else:
                 invalid_patches = [{"refresh": {}}, {"refresh": {"scope": "added"}}]
-            invalid_patches += [{"access_token": 3}, {"expires_at": "tomorrow"}, {"token": secrets[0]},
+            invalid_patches += [{}, {"access_token": ""}, {"access_token": None, "refresh": None},
+                                {"refresh": {}}, {"refresh": {"refresh_token": None, "token_endpoint_auth": None}},
+                                {"refresh": {"token_endpoint_auth": {"type": "client_secret_basic", "client_secret": None}}},
+                                {"access_token": 3}, {"expires_at": "tomorrow"}, {"token": secrets[0]},
                                 {"refresh": {"scope": 3}}, {"refresh": {"refresh_token": 3}}]
             for patch in invalid_patches:
                 safe(raw.post(endpoint(vault.id, current["id"]), headers=headers(), json={"auth": {"type": "mcp_oauth", **patch}}), 400)
@@ -137,7 +137,7 @@ def verify_oauth_credentials(client, other, peer, raw, *, evidence_path=None):
         # Explicit null creation must have the same public nullable fields as omission.
         null_auth = {"type": "mcp_oauth", "mcp_server_url": destination, "expires_at": None, "refresh": None}
         null_body = safe(raw.post(endpoint(vault.id), headers=headers(), json={
-            "name": "Raw nulls", "auth": {**null_auth, "access_token": secrets[0]}}))
+            "name": "Raw nulls", "auth": {**null_auth, "access_token": secrets[0]}}), 201)
         check_resource(null_body, vault.id, null_auth)
         assert retrieve(vault.id, null_body["id"], null_auth) == null_body
         expected[null_body["id"]] = null_body
@@ -149,6 +149,7 @@ def verify_oauth_credentials(client, other, peer, raw, *, evidence_path=None):
         invalid_create = [
             {"type": "mcp_oauth", "mcp_server_url": destination},
             {"type": "mcp_oauth", "mcp_server_url": destination, "access_token": None},
+            {"type": "mcp_oauth", "mcp_server_url": destination, "access_token": ""},
             {"type": "mcp_oauth", "mcp_server_url": "http://issuer.example", "access_token": secrets[0]},
             {"type": "mcp_oauth", "mcp_server_url": destination, "access_token": secrets[0], "refresh": {}},
             {"type": "mcp_oauth", "mcp_server_url": destination, "access_token": secrets[0], "expires_at": 3},
