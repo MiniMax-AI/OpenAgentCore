@@ -86,6 +86,13 @@ that family. Record uncertain range/lookup behavior separately; do not reproduce
 observed upstream server failures as compatibility behavior. See
 `contracts/agents-api/list-query-semantics.md` for the bounded evidence.
 
+Every Agents API JSON route reads its body through the shared gate
+(`readJSONObject`) before route decoding, validation or lookup. It requires a JSON
+Content-Type, applies the route's body limit and rejects invalid UTF-8, malformed
+JSON, repeated keys and non-object roots with the official messages; an empty
+body or null becomes `{}`. DELETE, multipart, Core extension and internal routes
+keep their own readers. See
+`contracts/agents-api/official-semantics-alignment.md#request-body-parsing--september-23`.
 Report validation failures with official evidence through the typed field error,
 which emits `invalid_request_error` with the observed param and message; keep
 other local codes until their official fields are sampled. Every 409 has type

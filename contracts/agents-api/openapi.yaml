@@ -2930,13 +2930,16 @@ paths:
       description: 'Persists configuration independently of execution. Names over
         128 characters and metadata outside 16 string pairs with 64-character keys
         and 512-character values return invalid_request_error with the official param;
-        U+0000 in stored strings is rejected as a local storage limit. Missing, unknown,
-        repeated, wrongly typed or unsupported enum members of the pinned configuration
-        shapes (tools, text, reasoning, service_tier, multi_agent) return invalid_request_error
-        with the JSON path as param; duplicate function names, repeated web_search
-        or tool_search and non-object schema root types return it with a null param.
-        Supports model/name/instructions/metadata, explicit reasoning and service
-        tiers, multi_agent, text/json_schema, function/tool_search/programmatic_tool_calling/web_search
+        U+0000 in stored strings is rejected as a local storage limit. As on every
+        Agents API JSON route, a non-JSON Content-Type, invalid UTF-8, malformed JSON,
+        a repeated key at any depth or a non-object root returns invalid_request_error
+        with a null param and the official message before other checks; an empty or
+        null body is {}. Missing, unknown, wrongly typed or unsupported enum members
+        of the pinned configuration shapes (tools, text, reasoning, service_tier,
+        multi_agent) return invalid_request_error with the JSON path as param; duplicate
+        function names, repeated web_search or tool_search and non-object schema root
+        types return it with a null param. Supports model/name/instructions/metadata,
+        explicit reasoning and service tiers, multi_agent, text/json_schema, function/tool_search/programmatic_tool_calling/web_search
         and HTTP MCP with nullable credential_id, service origin (omitted or null
         on HTTP transport is saved as service) and boolean required defaulting to
         false. Saving credential_id grants no access: Session admission checks attached
