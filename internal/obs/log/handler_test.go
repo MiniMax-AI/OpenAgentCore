@@ -62,3 +62,25 @@ func TestContextHandlerWithAttrsPreservesInjection(t *testing.T) {
 		t.Fatalf("static attr missing: %s", out)
 	}
 }
+
+// A caller-visible request ID is logged next to the trace IDs; records
+// without one carry no request_id attr.
+func TestContextHandlerInjectsRequestID(t *testing.T) {
+	carrier, _ := ParseTraceparent("00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
+	var buf bytes.Buffer
+	logger := slog.New(NewContextHandler(slog.NewJSONHandler(&buf, nil)))
+	ctx := WithRequestID(WithTrace(context.Background(), carrier), "req_0123456789abcdef0123456789abcdef")
+	logger.InfoContext(ctx, "hello")
+	var got map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &got); err != nil {
+		t.Fatalf("unmarshal: %v\nraw=%s", err, buf.String())
+	}
+	if got[AttrRequestID] != "req_0123456789abcdef0123456789abcdef" || got[AttrTraceID] != "0af7651916cd43dd8448eb211c80319c" {
+		t.Fatalf("request/trace IDs: %v", got)
+	}
+	buf.Reset()
+	logger.InfoContext(WithRequestID(context.Background(), ""), "no request")
+	if strings.Contains(buf.String(), AttrRequestID) {
+		t.Fatalf("request_id should be absent; got %s", buf.String())
+	}
+}

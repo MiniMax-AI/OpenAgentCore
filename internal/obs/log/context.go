@@ -31,6 +31,31 @@ func TraceFromContext(ctx context.Context) (Carrier, bool) {
 	return c, true
 }
 
+// requestIDCtxKey keys a caller-visible request ID, kept next to the trace
+// Carrier on the request context.
+type requestIDCtxKey struct{}
+
+// WithRequestID returns ctx annotated with a caller-visible request ID, which
+// ContextHandler emits as request_id next to trace_id. An empty ID is a no-op.
+// HTTPMiddleware never sets one; a service that returns request IDs to its
+// callers attaches them in its own middleware.
+func WithRequestID(ctx context.Context, id string) context.Context {
+	if id == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, requestIDCtxKey{}, id)
+}
+
+// RequestIDFromContext returns the ID attached by WithRequestID, or
+// ("", false) when none is present.
+func RequestIDFromContext(ctx context.Context) (string, bool) {
+	if ctx == nil {
+		return "", false
+	}
+	id, ok := ctx.Value(requestIDCtxKey{}).(string)
+	return id, ok && id != ""
+}
+
 // Ctx returns a ctxLogger so `log.Ctx(ctx).Info(...)` reads cleaner
 // than `slog.Default().InfoContext(ctx, ...)`. ctxLogger is stateless
 // w.r.t. trace IDs — every call re-reads ctx so a child span minted
