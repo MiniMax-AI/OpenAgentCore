@@ -180,11 +180,7 @@ func run() error {
 	var daemonHandler http.Handler
 	var registry *gateway.Registry
 	if wsURL := os.Getenv("AGENTS_API_DAEMON_WS_URL"); wsURL != "" {
-		if managedNodes != nil && managedNodes.setup != nil {
-			daemonHandler, registry, err = runtime.NewGatewayWithURLResolver(executionStore, wsURL, managedNodes.setup.webSocketURL(wsURL))
-		} else {
-			daemonHandler, registry, err = runtime.NewGateway(executionStore, wsURL)
-		}
+		daemonHandler, registry, err = runtime.NewGatewayWithURLResolver(executionStore, wsURL, managedNodes.webSocketURL(wsURL))
 		if err != nil {
 			return err
 		}

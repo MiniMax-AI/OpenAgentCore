@@ -1601,7 +1601,12 @@ key. Bounded polling and reruns retain the original container and history;
 timeout is a diagnostic failure, not permission to relaunch. An explicit installer
 `--public-url` supplies both the console origin and the advertised daemon `wss`
 origin. Keep local managed Provider routing separate; do not return an internal
-Compose hostname to a user-managed Runtime when an external origin was supplied.
+Compose hostname to a user-managed Runtime when an external origin was supplied. Bootstrap routing uses the
+node bound to the authenticated device's persisted allocation, never request Host
+or caller-supplied placement fields. An embedded managed node retains its internal
+Core route; remote managed nodes use the selected setup/public route, while
+self-hosted devices retain the deployment's advertised public address. This does
+not widen sandbox network policies or change credential admission.
 
 The distribution build sets umask 022 for non-root-readable payloads; installation
 credentials and state retain their explicit private permissions.

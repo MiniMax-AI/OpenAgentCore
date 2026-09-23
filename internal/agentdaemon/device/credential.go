@@ -14,6 +14,8 @@ type Credential struct {
 	Name           string
 	Type           string
 	CredentialHash string
+	// RuntimeNodeID is the persisted managed allocation binding, never caller input.
+	RuntimeNodeID string
 }
 
 // HashCredential preserves the paired runtime bearer format, including trimming

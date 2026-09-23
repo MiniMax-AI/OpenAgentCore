@@ -6,7 +6,10 @@ VALUES ($1, $2, $3, $4) RETURNING id;
 SELECT id, name FROM devices WHERE tenant_id = $1 AND id = $2 AND revoked_at IS NULL;
 
 -- name: GetDeviceCredential :one
-SELECT id, name, credential_hash FROM runtime_device_authority WHERE id = $1;
+SELECT d.id, d.name, d.credential_hash, COALESCE(a.node_id::text, '')::text AS runtime_node_id
+FROM runtime_device_authority d
+LEFT JOIN runtime_allocations a ON a.device_id = d.id
+WHERE d.id = $1;
 
 -- name: RevokeDevice :execrows
 UPDATE devices SET revoked_at = COALESCE(revoked_at, clock_timestamp())

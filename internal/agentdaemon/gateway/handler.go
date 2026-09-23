@@ -41,9 +41,9 @@ type HandlerConfig struct {
 	// response so deployments behind a TLS terminator can advertise
 	// the externally-reachable URL.
 	PublicWSURL string
-	// ResolvePublicWSURL reads a deployment's configured public endpoint after
-	// authentication. A failure must not fall back to an unreachable private URL.
-	ResolvePublicWSURL func(context.Context) (string, error)
+	// ResolveWSURL chooses a configured endpoint from the authenticated device's
+	// persisted allocation binding. Resolution failures never use a fallback URL.
+	ResolveWSURL func(context.Context, AuthenticatedRuntime) (string, error)
 
 	// OwnerStore enables multi-pod WebSocket ownership. When set, every
 	// successful daemon WS dial-in claims device_id -> owner_pod_id in
@@ -240,8 +240,8 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	wsURL := h.cfg.PublicWSURL
-	if h.cfg.ResolvePublicWSURL != nil {
-		wsURL, err = h.cfg.ResolvePublicWSURL(r.Context())
+	if h.cfg.ResolveWSURL != nil {
+		wsURL, err = h.cfg.ResolveWSURL(r.Context(), auth)
 		if err != nil || wsURL == "" {
 			writeAuthError(w, http.StatusServiceUnavailable, "bootstrap_unavailable", "Runtime connection address is unavailable")
 			return

@@ -82,19 +82,28 @@ func (q *Queries) GetDevice(ctx context.Context, arg GetDeviceParams) (GetDevice
 }
 
 const getDeviceCredential = `-- name: GetDeviceCredential :one
-SELECT id, name, credential_hash FROM runtime_device_authority WHERE id = $1
+SELECT d.id, d.name, d.credential_hash, COALESCE(a.node_id::text, '')::text AS runtime_node_id
+FROM runtime_device_authority d
+LEFT JOIN runtime_allocations a ON a.device_id = d.id
+WHERE d.id = $1
 `
 
 type GetDeviceCredentialRow struct {
 	ID             pgtype.UUID `json:"id"`
 	Name           string      `json:"name"`
 	CredentialHash string      `json:"credential_hash"`
+	RuntimeNodeID  string      `json:"runtime_node_id"`
 }
 
 func (q *Queries) GetDeviceCredential(ctx context.Context, id pgtype.UUID) (GetDeviceCredentialRow, error) {
 	row := q.db.QueryRow(ctx, getDeviceCredential, id)
 	var i GetDeviceCredentialRow
-	err := row.Scan(&i.ID, &i.Name, &i.CredentialHash)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CredentialHash,
+		&i.RuntimeNodeID,
+	)
 	return i, err
 }
 

@@ -74,7 +74,7 @@ func (s *Store) GetDeviceCredential(ctx context.Context, deviceID string) (devic
 		return device.Credential{}, false, err
 	}
 	return device.Credential{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name,
-		Type: gateway.RuntimeTypeAgentDaemon, CredentialHash: row.CredentialHash}, true, nil
+		Type: gateway.RuntimeTypeAgentDaemon, CredentialHash: row.CredentialHash, RuntimeNodeID: row.RuntimeNodeID}, true, nil
 }
 
 func (s *Store) RevokeDevice(ctx context.Context, tenantID, deviceID string) error {

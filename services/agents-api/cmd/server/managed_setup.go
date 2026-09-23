@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"net/url"
 	"sync/atomic"
 	"time"
 
@@ -59,17 +58,7 @@ func (s *managedSetup) webSocketURL(fallback string) func(context.Context) (stri
 		if selected == nil {
 			return fallback, nil
 		}
-		u, err := url.Parse(selected.CoreURL)
-		if err != nil {
-			return "", err
-		}
-		if u.Scheme == "https" {
-			u.Scheme = "wss"
-		} else {
-			u.Scheme = "ws"
-		}
-		u.Path = "/api/v1/agent-daemon/ws"
-		return u.String(), nil
+		return runtimeWebSocketURL(selected.CoreURL)
 	}
 }
 
