@@ -275,9 +275,19 @@ function elapsedSeconds(start: number | null, end: number | null): number | null
   return end - start;
 }
 
+/** Each Session's reported total tokens, null when its public usage is null. */
+export function reportedSessionTokens(sessions: readonly AgentSession[]): Map<string, number | null> {
+  return new Map(sessions.map((session) => [session.id, canonicalUsage(session.usage)?.total_tokens ?? null]));
+}
+
+/**
+ * Rows show current public usage. The summary token total adds each Session's
+ * held last reported total (see holdLastReported) while its usage is null.
+ */
 export function buildRuntimeDashboardModel(
   sessions: readonly AgentSession[],
   observations: readonly RuntimeObservation[],
+  heldTokens: ReadonlyMap<string, number> = new Map(),
 ): RuntimeDashboardModel {
   const sessionsById = new Map(sessions.map((session) => [session.id, session]));
   const rows: RuntimeDashboardRow[] = [];
@@ -359,8 +369,9 @@ export function buildRuntimeDashboardModel(
       unsupportedRuntimeCount += 1;
     }
 
-    if (sessionRow.totalTokens !== null) {
-      const next = safeAdd(totalTokens, sessionRow.totalTokens);
+    const sessionTokens = sessionRow.totalTokens ?? heldTokens.get(session.id) ?? null;
+    if (sessionTokens !== null) {
+      const next = safeAdd(totalTokens, sessionTokens);
       if (next !== null) {
         totalTokens = next;
         tokensKnown = true;

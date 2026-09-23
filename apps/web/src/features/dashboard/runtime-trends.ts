@@ -1,5 +1,6 @@
 import type { AgentSession, RuntimeObservation } from "@agents-core-web/agents-client";
 
+import { holdLastReported } from "./held-usage";
 import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";
 
 export const RUNTIME_TREND_WINDOW_MS = 60 * 60 * 1_000;
@@ -104,17 +105,13 @@ function tokenTotals(sessions: readonly AgentSession[], sampledAt: number): Runt
   });
 }
 
-// Public Session usage is null while a root Turn runs and after a Turn ends
-// unmeasured. Keep a listed Session's last reported totals so its series neither
-// drops to zero nor breaks; usage measured meanwhile appears once reported.
+// Keep a listed Session's last reported totals while its public usage is null;
+// usage measured meanwhile appears in the interval where it is reported again.
 function carryTokenTotals(previous: RuntimeTrendSample, next: RuntimeTrendSample, snapshot: RuntimeDashboardSnapshot): void {
-  const listed = new Set(snapshot.sessions.map((session) => session.id));
-  const reported = new Set(next.tokenTotals.map((total) => total.sessionId));
-  for (const prior of previous.tokenTotals) {
-    if (listed.has(prior.sessionId) && !reported.has(prior.sessionId)) {
-      next.tokenTotals.push({ ...prior, sampledAt: next.sampledAt });
-    }
-  }
+  const reported = new Map<string, RuntimeTrendTokenTotal | null>(snapshot.sessions.map((session) => [session.id, null]));
+  for (const total of next.tokenTotals) reported.set(total.sessionId, total);
+  const prior = new Map(previous.tokenTotals.map((total) => [total.sessionId, { ...total, sampledAt: next.sampledAt }]));
+  next.tokenTotals = [...holdLastReported(prior, reported).values()];
 }
 
 export function runtimeTrendSample(snapshot: RuntimeDashboardSnapshot): RuntimeTrendSample {

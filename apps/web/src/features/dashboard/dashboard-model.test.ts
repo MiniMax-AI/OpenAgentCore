@@ -11,8 +11,10 @@ import {
   formatDashboardTimestamp,
   formatDashboardBytes,
   formatDashboardDuration,
+  reportedSessionTokens,
   runtimeObservationStatusLabel,
 } from "./dashboard-model";
+import { holdLastReported } from "./held-usage";
 
 function agent(id: string, overrides: Partial<SavedAgent> = {}): SavedAgent {
   return {
@@ -293,6 +295,44 @@ describe("Dashboard loaded-snapshot model", () => {
     expect(runtimeObservationStatusLabel(observations[0]!)).toBe("Observed");
     expect(formatDashboardBytes(2048)).toBe("2.00 KiB");
     expect(formatDashboardDuration(90)).toBe("1m 30s");
+  });
+
+  it("holds each Session's last reported tokens in the summary while public usage is null", () => {
+    const running = session("11111111-1111-4111-8111-111111111111", { usage: usage(21) });
+    const other = session("22222222-2222-4222-8222-222222222222", { usage: usage(5) });
+    const observation = (id: string): RuntimeObservation => ({
+      id,
+      object: "agent.runtime_observation",
+      session_id: id,
+      environment_id: null,
+      mode: "none",
+      provider_type: null,
+      instance: { kind: "none", allocation_id: null, device_id: null, connection_generation: null },
+      status: "unsupported",
+      reason: "runtime_mode_not_observable",
+      allocation_created_at: null,
+      resolved_at: 225,
+      observed_at: null,
+      started_at: null,
+      cpu: null,
+      memory: null,
+    });
+    const observations = [observation(running.id), observation(other.id)];
+    let held = holdLastReported(new Map<string, number>(), reportedSessionTokens([running, other]));
+    expect(buildRuntimeDashboardModel([running, other], observations, held).summary)
+      .toMatchObject({ totalTokens: 26, tokenCoverageCount: 2 });
+
+    // A Turn starts: public usage is withheld, the summary keeps the last total.
+    const withheld = { ...running, status: "in_progress", usage: null } as AgentSession;
+    held = holdLastReported(held, reportedSessionTokens([withheld, { ...other, usage: usage(9) }]));
+    const model = buildRuntimeDashboardModel([withheld, { ...other, usage: usage(9) }], observations, held);
+    expect(model.summary).toMatchObject({ totalTokens: 30, tokenCoverageCount: 2 });
+    expect(model.rows.find((row) => row.session.id === withheld.id)?.session.totalTokens).toBeNull();
+    expect(buildRuntimeDashboardModel([withheld, other], observations).summary.totalTokens).toBe(5);
+
+    // A newly reported value replaces the held one; unlisted Sessions are dropped.
+    held = holdLastReported(held, reportedSessionTokens([{ ...running, usage: usage(40) }]));
+    expect([...held]).toEqual([[running.id, 40]]);
   });
 
   it("does not infer a released allocation lifetime from the current resolution time", () => {

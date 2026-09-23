@@ -300,10 +300,11 @@ model output text and never fills a model-derived default or counter.
   token series stays continuous while Turns run and after an unmeasured Turn.
   Public Session usage (retrieve, list, update and every Session event snapshot,
   including the function-action and Environment-input snapshots) keeps the rule
-  above. The Core Web live token trend reads public Session usage and keeps a
-  listed Session's last reported totals while its usage is null, so the series
-  neither drops to zero nor breaks; usage measured meanwhile appears in the
-  interval where it is reported again.
+  above. The Core Web live token trend and the Runtime summary's reported token
+  total read public Session usage and keep a listed Session's last reported
+  totals while its usage is null, so they neither drop to zero nor break; usage
+  measured meanwhile appears once it is reported again. Rows still show the
+  current public value.
 - **Cancelled Codex usage (S8, EVT-24).** The all-zero counters on a cancelled
   Codex Turn came from the Codex adapter, not from Core or storage. The Turn was
   the second of its Session, on a resumed native thread, and was cancelled

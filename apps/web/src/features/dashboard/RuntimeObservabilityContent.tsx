@@ -31,9 +31,11 @@ import {
   formatDashboardDuration,
   formatDashboardTimestamp,
   formatDashboardTokens,
+  reportedSessionTokens,
   runtimeObservationStatusLabel,
   type RuntimeDashboardRow,
 } from "./dashboard-model";
+import { holdLastReported } from "./held-usage";
 import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";
 import { RuntimeTrendPanel, type RuntimeHistoryLoader } from "./RuntimeTrendPanel";
 
@@ -287,7 +289,21 @@ export function RuntimeObservabilityContent({
   loadRuntimeHistory: RuntimeHistoryLoader;
   onOpenSession: (sessionId: string) => void;
 }) {
-  const model = useMemo(() => buildRuntimeDashboardModel(snapshot.sessions, snapshot.observations), [snapshot]);
+  // Hold each Session's last reported tokens across snapshots, so the summary
+  // total does not drop while a Turn withholds public Session usage.
+  const [heldTokens, setHeldTokens] = useState(() => ({
+    snapshot,
+    totals: holdLastReported(new Map<string, number>(), reportedSessionTokens(snapshot.sessions)),
+  }));
+  let tokenTotals = heldTokens.totals;
+  if (heldTokens.snapshot !== snapshot) {
+    tokenTotals = holdLastReported(heldTokens.totals, reportedSessionTokens(snapshot.sessions));
+    setHeldTokens({ snapshot, totals: tokenTotals });
+  }
+  const model = useMemo(
+    () => buildRuntimeDashboardModel(snapshot.sessions, snapshot.observations, tokenTotals),
+    [snapshot, tokenTotals],
+  );
   const summary = model.summary;
   return (
     <>
