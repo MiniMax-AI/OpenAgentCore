@@ -120,7 +120,8 @@ external Core still requires its separate administrator key.
 
 The target host needs Python 3.9+, a systemd user session with lingering enabled,
 and either Docker socket access or microsandbox's KVM/native-library prerequisites.
-The command reports unmet prerequisites before downloading the Runtime.
+The command checks host access before downloading the Runtime and verifies
+microsandbox's shared libraries after downloading its native programs.
 The console serves only fixed, non-secret distribution files at `/node-install/`;
 private installation configuration is never part of this payload. Retain the
 installed `node-payload/` directory.
