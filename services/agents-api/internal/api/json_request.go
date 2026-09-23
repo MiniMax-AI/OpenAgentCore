@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/maphash"
 	"io"
+	"mime"
 	"net/http"
-	"slices"
 	"strings"
+	"unicode/utf16"
 	"unicode/utf8"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/echotext"
@@ -72,10 +74,13 @@ func readJSONObjectLimit(w http.ResponseWriter, r *http.Request, limit int64, me
 }
 
 // jsonContentType accepts application/json and application/*+json media types
-// case-insensitively, with any parameters.
+// case-insensitively, with well-formed parameters. A malformed media type is
+// rejected like a missing one.
 func jsonContentType(value string) bool {
-	mediaType, _, _ := strings.Cut(value, ";")
-	mediaType = strings.ToLower(strings.TrimSpace(mediaType))
+	mediaType, _, err := mime.ParseMediaType(value)
+	if err != nil {
+		return false
+	}
 	if mediaType == "application/json" {
 		return true
 	}
@@ -91,10 +96,15 @@ func jsonObjectBody(raw []byte) ([]byte, error) {
 		return nil, errBodyUnicode
 	}
 	// A byte order mark, a whitespace-only body or trailing data is invalid JSON.
-	if !json.Valid(raw) {
+	// Key positions are 31-bit; route limits keep bodies far below that.
+	if uint64(len(raw)) >= keyEscaped || !json.Valid(raw) {
 		return nil, errBodyParse
 	}
-	if key, path, found := duplicateJSONKey(raw); found {
+	key, path, found, err := scanJSON(raw)
+	if err != nil {
+		return nil, err
+	}
+	if found {
 		if !echotext.Allowed(key) || !echotext.Allowed(path) {
 			return nil, errBodyDuplicateKey
 		}
@@ -111,91 +121,260 @@ func jsonObjectBody(raw []byte) ([]byte, error) {
 	}
 }
 
-// duplicateJSONKey returns the first repeated object key of a valid JSON value
-// in document order, with its path of object keys joined by '.'. Array indices
-// are omitted, as observed officially: 'metadata.k' and 'tools.type'. Keys are
-// compared after unescaping. The scan is linear, and the path is built only for
-// the reported key.
-func duplicateJSONKey(raw []byte) (key, path string, found bool) {
-	type frame struct {
-		object    bool
-		expectKey bool
-		keys      [][]byte            // the keys of a small object
-		set       map[string]struct{} // every key once an object is large
-		member    []byte              // the key whose value is being read
-	}
-	var stack []frame
+// keyEscaped marks a key position whose string contains escapes. A position is
+// the offset of the key's opening quote plus one, so zero means empty.
+const keyEscaped = 1 << 31
+
+// smallObjectKeys is the number of keys an object compares linearly before it
+// switches to an open-addressing set.
+const smallObjectKeys = 16
+
+type scannedKey struct {
+	position uint32
+	hash     uint64
+}
+
+type scanFrame struct {
+	object, expectKey bool
+	member            uint32   // the position of the key whose value is being read
+	base, count       int      // this object's keys in keyScanner.small while it is small
+	table             []uint32 // key positions once the object is large
+}
+
+// keyScanner finds repeated keys without copying them: keys are positions in
+// the body, compared and hashed after unescaping only when they contain escapes.
+type keyScanner struct {
+	raw         []byte
+	seed        maphash.Seed
+	frames      []scanFrame
+	small       []scannedKey
+	left, right []byte // unescaping buffers
+}
+
+// scanJSON checks a valid JSON value in one linear pass in document order. A
+// string escape that forms a lone or mis-paired UTF-16 surrogate is a parse
+// error, as observed officially (req_1a9b7680d615454ca97c816b25e2f401); valid
+// pairs are accepted. It returns the first repeated object key, compared after
+// unescaping, with its path of object keys joined by '.'. Array indices are
+// omitted, as observed officially: 'metadata.k' and 'tools.type'. Names differing
+// only in case are distinct keys.
+func scanJSON(raw []byte) (key, path string, found bool, err error) {
+	s := keyScanner{raw: raw, seed: maphash.MakeSeed()}
 	for i := 0; i < len(raw); {
-		switch raw[i] {
+		switch c := raw[i]; c {
 		case '{', '[':
-			if len(stack) < cap(stack) {
-				// Reuse the key slice of an earlier sibling at this depth.
-				stack = stack[:len(stack)+1]
-				keys := stack[len(stack)-1].keys[:0]
-				stack[len(stack)-1] = frame{keys: keys}
-			} else {
-				stack = append(stack, frame{})
-			}
-			top := &stack[len(stack)-1]
-			top.object, top.expectKey = raw[i] == '{', raw[i] == '{'
+			s.frames = append(s.frames, scanFrame{object: c == '{', expectKey: c == '{', base: len(s.small)})
 			i++
 		case '}', ']':
-			stack = stack[:len(stack)-1]
+			closed := &s.frames[len(s.frames)-1]
+			s.small = s.small[:closed.base]
+			*closed = scanFrame{}
+			s.frames = s.frames[:len(s.frames)-1]
 			i++
 		case ',':
-			if top := &stack[len(stack)-1]; top.object {
+			if top := &s.frames[len(s.frames)-1]; top.object {
 				top.expectKey = true
 			}
 			i++
 		case '"':
-			end := i + 1
-			for {
-				end += bytes.IndexAny(raw[end:], "\\\"")
-				if raw[end] == '"' {
-					break
+			end, escaped, ok := scanString(raw, i)
+			if !ok {
+				return "", "", false, errBodyParse
+			}
+			if n := len(s.frames); n > 0 && s.frames[n-1].expectKey {
+				position := uint32(i + 1)
+				if escaped {
+					position |= keyEscaped
 				}
-				end += 2
-			}
-			end++
-			if len(stack) == 0 || !stack[len(stack)-1].expectKey {
-				i = end
-				continue
-			}
-			top := &stack[len(stack)-1]
-			name := raw[i+1 : end-1]
-			if bytes.IndexByte(name, '\\') >= 0 {
-				var decoded string
-				_ = json.Unmarshal(raw[i:end], &decoded)
-				name = []byte(decoded)
-			}
-			repeated := false
-			if top.set != nil {
-				_, repeated = top.set[string(name)]
-				top.set[string(name)] = struct{}{}
-			} else {
-				repeated = slices.ContainsFunc(top.keys, func(k []byte) bool { return bytes.Equal(k, name) })
-				top.keys = append(top.keys, name)
-				if len(top.keys) > 16 {
-					top.set = make(map[string]struct{}, 32)
-					for _, k := range top.keys {
-						top.set[string(k)] = struct{}{}
-					}
+				if s.insert(&s.frames[n-1], position) {
+					key, path := s.duplicate(position)
+					return key, path, true, nil
 				}
 			}
-			if repeated {
-				var segments []string
-				for _, f := range stack[:len(stack)-1] {
-					if f.object {
-						segments = append(segments, string(f.member))
-					}
-				}
-				return string(name), strings.Join(append(segments, string(name)), "."), true
-			}
-			top.member, top.expectKey = name, false
 			i = end
 		default:
 			i++
 		}
 	}
-	return "", "", false
+	return "", "", false, nil
+}
+
+// scanString returns the offset after the string starting at raw[quote] and
+// whether it contains escapes, or false for an unpaired surrogate escape.
+func scanString(raw []byte, quote int) (end int, escaped, ok bool) {
+	for i := quote + 1; ; {
+		switch raw[i] {
+		case '"':
+			return i + 1, escaped, true
+		case '\\':
+			escaped = true
+			if raw[i+1] != 'u' {
+				i += 2
+				continue
+			}
+			r := hex4(raw[i+2 : i+6])
+			i += 6
+			if utf16.IsSurrogate(r) {
+				if r >= 0xdc00 || raw[i] != '\\' || raw[i+1] != 'u' {
+					return 0, true, false
+				}
+				if low := hex4(raw[i+2 : i+6]); low < 0xdc00 || low > 0xdfff {
+					return 0, true, false
+				}
+				i += 6
+			}
+		default:
+			i++
+		}
+	}
+}
+
+func hex4(digits []byte) rune {
+	var r rune
+	for _, c := range digits {
+		switch {
+		case c >= 'a':
+			c -= 'a' - 10
+		case c >= 'A':
+			c -= 'A' - 10
+		default:
+			c -= '0'
+		}
+		r = r<<4 | rune(c)
+	}
+	return r
+}
+
+// content returns the raw bytes of the key at position, without quotes.
+func (s *keyScanner) content(position uint32) []byte {
+	start := int(position&^keyEscaped) - 1
+	for i := start + 1; ; i++ {
+		switch s.raw[i] {
+		case '"':
+			return s.raw[start+1 : i]
+		case '\\':
+			i++
+		}
+	}
+}
+
+func (s *keyScanner) hash(position uint32) uint64 {
+	if position&keyEscaped == 0 {
+		return maphash.Bytes(s.seed, s.content(position))
+	}
+	s.left = appendUnescaped(s.left[:0], s.content(position))
+	return maphash.Bytes(s.seed, s.left)
+}
+
+// equal compares two keys after unescaping. Unescaped keys compare in place:
+// their contents contain no quote, so a length mismatch fails at a quote.
+func (s *keyScanner) equal(a, b uint32) bool {
+	if a&keyEscaped == 0 && b&keyEscaped == 0 {
+		content := s.content(b)
+		start := int(a) - 1
+		end := start + 1 + len(content)
+		return end < len(s.raw) && s.raw[end] == '"' && bytes.Equal(s.raw[start+1:end], content)
+	}
+	s.left = appendUnescaped(s.left[:0], s.content(a))
+	s.right = appendUnescaped(s.right[:0], s.content(b))
+	return bytes.Equal(s.left, s.right)
+}
+
+// insert records a key of the top object and reports whether it repeats one.
+func (s *keyScanner) insert(f *scanFrame, position uint32) bool {
+	f.member, f.expectKey = position, false
+	hash := s.hash(position)
+	if f.table == nil {
+		for _, key := range s.small[f.base : f.base+f.count] {
+			if key.hash == hash && s.equal(key.position, position) {
+				return true
+			}
+		}
+		s.small = append(s.small, scannedKey{position, hash})
+		if f.count++; f.count > smallObjectKeys {
+			f.table = make([]uint32, 4*smallObjectKeys)
+			for _, key := range s.small[f.base:] {
+				s.place(f.table, key.position, key.hash)
+			}
+			s.small = s.small[:f.base]
+		}
+		return false
+	}
+	// Linear probing at a load factor of at most 3/4.
+	if (f.count+1)*4 > len(f.table)*3 {
+		grown := make([]uint32, 2*len(f.table))
+		for _, key := range f.table {
+			if key != 0 {
+				s.place(grown, key, s.hash(key))
+			}
+		}
+		f.table = grown
+	}
+	mask := uint64(len(f.table) - 1)
+	for i := hash & mask; ; i = (i + 1) & mask {
+		switch key := f.table[i]; {
+		case key == 0:
+			f.table[i] = position
+			f.count++
+			return false
+		case s.equal(key, position):
+			return true
+		}
+	}
+}
+
+func (s *keyScanner) place(table []uint32, position uint32, hash uint64) {
+	mask := uint64(len(table) - 1)
+	i := hash & mask
+	for table[i] != 0 {
+		i = (i + 1) & mask
+	}
+	table[i] = position
+}
+
+// duplicate returns the repeated key and its path through the enclosing objects.
+func (s *keyScanner) duplicate(position uint32) (string, string) {
+	var segments []string
+	for _, f := range s.frames[:len(s.frames)-1] {
+		if f.object {
+			segments = append(segments, string(appendUnescaped(nil, s.content(f.member))))
+		}
+	}
+	key := string(appendUnescaped(nil, s.content(position)))
+	return key, strings.Join(append(segments, key), ".")
+}
+
+// appendUnescaped decodes the contents of a valid JSON string whose surrogate
+// escapes are paired.
+func appendUnescaped(dst, s []byte) []byte {
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\\' {
+			dst = append(dst, s[i])
+			continue
+		}
+		i++
+		switch s[i] {
+		case 'b':
+			dst = append(dst, '\b')
+		case 'f':
+			dst = append(dst, '\f')
+		case 'n':
+			dst = append(dst, '\n')
+		case 'r':
+			dst = append(dst, '\r')
+		case 't':
+			dst = append(dst, '\t')
+		case 'u':
+			r := hex4(s[i+1 : i+5])
+			i += 4
+			if utf16.IsSurrogate(r) {
+				r = utf16.DecodeRune(r, hex4(s[i+3:i+7]))
+				i += 6
+			}
+			dst = utf8.AppendRune(dst, r)
+		default:
+			dst = append(dst, s[i])
+		}
+	}
+	return dst
 }

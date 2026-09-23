@@ -194,7 +194,6 @@ func TestEnvironmentFileCreateFieldErrors(t *testing.T) {
 		`line\u2028separator`:      false,
 		`bell\u0007`:               false,
 		`caf\u00e9 \u5b57`:         true,
-		`\ud800`:                   false,
 		`\ufffd`:                   false,
 	} {
 		h, f := environmentFileCreateHandler(t)
@@ -215,6 +214,9 @@ func TestEnvironmentFileCreateFieldErrors(t *testing.T) {
 	h, f := environmentFileCreateHandler(t)
 	w := requestCreateEnvironmentFile(h, f.environment.ID, "{\"type\":\"inline\",\"path\":\"/workspace/a\",\"data\":\"\",\"\xff\xfe\":1}", "files-key")
 	assertListQueryError(t, w, "invalid_request_error", nil, "Invalid body: encountered a unicode decode error when parsing this JSON value. Please check the value to ensure it is valid unicode.")
+	// A lone surrogate escape is a parse error (req_1a9b7680d615454ca97c816b25e2f401).
+	w = requestCreateEnvironmentFile(h, f.environment.ID, `{"type":"inline","path":"/workspace/a","data":"","\ud800":1}`, "files-key")
+	assertListQueryError(t, w, "invalid_request_error", nil, "Invalid body: failed to parse JSON value. Please check the value to ensure it is valid JSON. (Common errors include trailing commas, missing closing brackets, missing quotation marks, etc.)")
 	// Foreign Environments stay missing before route-specific body validation.
 	h, f = environmentFileCreateHandler(t)
 	body := `{"type":"inline","path":"/workspace/a","data":"","extra_field":1}`

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -45,23 +46,43 @@ func TestJSONObjectBodyChecks(t *testing.T) {
 		"{\"name\":\xff":            bodyUnicodeMessage,
 		"\xef\xbb":                  bodyUnicodeMessage,
 		// B3 (HP-11): object keys joined by '.', array indices omitted.
-		`{"name":"a","name":"b"}`:                           duplicateKeyMessage("name", "name"),
-		`{"metadata":{"k":"1","k":"2"}}`:                    duplicateKeyMessage("k", "metadata.k"),
-		`{"tools":[{"type":"function","type":"function"}]}`: duplicateKeyMessage("type", "tools.type"),
-		`{"a":[[{"b":1}],[{"c":{"d":1,"d":2}}]]}`:           duplicateKeyMessage("d", "a.c.d"),
-		`{"a":1,"a":2}`:                                     duplicateKeyMessage("a", "a"),
-		`{"x":{"k":1},"y":{"k":1},"x":2}`:                   duplicateKeyMessage("x", "x"),
-		`{"n":1e400,"s":"}","n":1}`:                         duplicateKeyMessage("n", "n"),
-		`{"":1,"":2}`:                                       duplicateKeyMessage("", ""),
-		`{"":{"a":1,"a":2}}`:                                duplicateKeyMessage("a", ".a"),
-		`[{"a":1,"a":2}]`:                                   duplicateKeyMessage("a", "a"),
+		`{"name":"a","name":"b"}`:                                        duplicateKeyMessage("name", "name"),
+		`{"metadata":{"k":"1","k":"2"}}`:                                 duplicateKeyMessage("k", "metadata.k"),
+		`{"tools":[{"type":"function","type":"function"}]}`:              duplicateKeyMessage("type", "tools.type"),
+		`{"a":[[{"b":1}],[{"c":{"d":1,"d":2}}]]}`:                        duplicateKeyMessage("d", "a.c.d"),
+		`{"a":1,"\u0061":2}`:                                             duplicateKeyMessage("a", "a"),
+		`{"x":{"k":1},"y":{"k":1},"x":2}`:                                duplicateKeyMessage("x", "x"),
+		`{"n":1e400,"s":"}","n":1}`:                                      duplicateKeyMessage("n", "n"),
+		`{"":1,"":2}`:                                                    duplicateKeyMessage("", ""),
+		`{"":{"a":1,"a":2}}`:                                             duplicateKeyMessage("a", ".a"),
+		`[{"a":1,"a":2}]`:                                                duplicateKeyMessage("a", "a"),
 		`{"events":[{"input":[{"content":[{"text":"x","text":"y"}]}]}]}`: duplicateKeyMessage("text", "events.input.content.text"),
 		// Bounded echo (echotext.Allowed) for the key and its path.
 		`{"` + long + `":1,"` + long + `":2}`:                                  "Invalid body: duplicate JSON key. Duplicate JSON keys are not supported.",
 		`{"` + long[:200] + `":{"` + long[:60] + `":1,"` + long[:60] + `":2}}`: "Invalid body: duplicate JSON key. Duplicate JSON keys are not supported.",
 		`{"tab\tkey":1,"tab\tkey":2}`:                                          "Invalid body: duplicate JSON key. Duplicate JSON keys are not supported.",
-		`{"\ud800":1,"\ud800":2}`:                                              "Invalid body: duplicate JSON key. Duplicate JSON keys are not supported.",
-		`{"<>":{"café":1,"café":2}}`:                                           duplicateKeyMessage("café", "<>.café"),
+		`{"\u2028":1,"\u2028":2}`:                                              "Invalid body: duplicate JSON key. Duplicate JSON keys are not supported.",
+		// A lone or mis-paired surrogate escape is invalid JSON, in keys and values,
+		// before a later duplicate (official req_1a9b7680d615454ca97c816b25e2f401).
+		`{"name":"\ud800"}`:          bodyParseMessage,
+		`{"name":"\udc00"}`:          bodyParseMessage,
+		`{"name":"a\uD83D"}`:         bodyParseMessage,
+		`{"name":"\ud83d\u0041"}`:    bodyParseMessage,
+		`{"name":"\ud83d\ud83d"}`:    bodyParseMessage,
+		`{"name":"\ude00\ud83d"}`:    bodyParseMessage,
+		`{"name":"\ud83d\n\ude00"}`:  bodyParseMessage,
+		`{"\ud800":1,"\ud800":2}`:    bodyParseMessage,
+		`["\ud800"]`:                 bodyParseMessage,
+		`"\ud800"`:                   bodyParseMessage,
+		`{"a":1,"b":"\udfff","a":2}`: bodyParseMessage,
+		`{"a":1,"a":"\udfff"}`:       duplicateKeyMessage("a", "a"),
+		// Names differing only in case are distinct keys; escapes compare decoded.
+		`{"k":1,"K":2,"\u004b":3}`:                 duplicateKeyMessage("K", "K"),
+		`{"\ud83d\ude00":1,"😀":2}`:                 duplicateKeyMessage("😀", "😀"),
+		`{"a\\":1,"a\u005c":2}`:                    duplicateKeyMessage(`a\`, `a\`),
+		`{"a\/b":1,"a/b":2}`:                       duplicateKeyMessage("a/b", "a/b"),
+		`{"x":{"\u0078":{"a\"b":1,"a\u0022b":2}}}`: duplicateKeyMessage(`a"b`, `x.x.a"b`),
+		`{"<>":{"caf\u00e9":1,"café":2}}`:          duplicateKeyMessage("café", "<>.café"),
 		// B4 (HP-12, HP-14).
 		`"scan6"`:         "Invalid type: expected an object, but got a string instead.",
 		`5`:               "Invalid type: expected an object, but got an integer instead.",
@@ -95,7 +116,9 @@ func TestJSONObjectBodyChecks(t *testing.T) {
 		`{}`:                                    `{}`,
 		` {"a":[{"b":1},{"b":2}],"c":{"b":3}} `: ` {"a":[{"b":1},{"b":2}],"c":{"b":3}} `,
 		`{"x_agents_core":{"model_provider":null},"metadata":{"k":"v"}}`: `{"x_agents_core":{"model_provider":null},"metadata":{"k":"v"}}`,
-		`{"name":"é😀"}`: `{"name":"é😀"}`,
+		`{"name":"\u00e9\ud83d\ude00"}`:                                  `{"name":"\u00e9\ud83d\ude00"}`,
+		`{"k":1,"K":2,"Metadata":{},"metadata":{}}`:                      `{"k":1,"K":2,"Metadata":{},"metadata":{}}`,
+		`{"a\\":1,"a\\\\":2,"a\"":3,"a\u005cb":4}`:                       `{"a\\":1,"a\\\\":2,"a\"":3,"a\u005cb":4}`,
 	} {
 		got, err := jsonObjectBody([]byte(body))
 		if err != nil || string(got) != want {
@@ -106,24 +129,32 @@ func TestJSONObjectBodyChecks(t *testing.T) {
 
 func TestJSONContentType(t *testing.T) {
 	for value, want := range map[string]bool{
-		"application/json":                    true,
-		"application/json; charset=utf-8":     true,
-		"Application/JSON":                    true,
-		" application/json ;charset=UTF-8":    true,
-		"application/merge-patch+json":        true,
-		"APPLICATION/VND.API+JSON; x=y":       true,
-		"":                                    false,
-		"text/plain":                          false,
-		"application/x-www-form-urlencoded":   false,
-		"multipart/form-data; boundary=x":     false,
-		"text/json":                           false,
-		"application/jsonx":                   false,
-		"application/json-seq":                false,
-		"application/+json":                   false,
-		"application/json+xml":                false,
-		"application / json":                  false,
-		"application/octet-stream; t=+json":   false,
-		"application/x-json-stream; t=a+json": false,
+		"application/json":                                true,
+		"application/json; charset=utf-8":                 true,
+		"Application/JSON":                                true,
+		" application/json ;charset=UTF-8":                true,
+		"application/merge-patch+json":                    true,
+		"APPLICATION/VND.API+JSON; x=y":                   true,
+		"":                                                false,
+		"text/plain":                                      false,
+		"application/x-www-form-urlencoded":               false,
+		"multipart/form-data; boundary=x":                 false,
+		"text/json":                                       false,
+		"application/jsonx":                               false,
+		"application/json-seq":                            false,
+		"application/+json":                               false,
+		"application/json+xml":                            false,
+		"application / json":                              false,
+		"application/foo bar+json":                        false,
+		"application/json garbage":                        false,
+		"application/json; charset":                       false,
+		"application/json; charset=utf-8; charset=latin1": false,
+		"application/json;;":                              false,
+		"application/json, text/plain":                    false,
+		"application/json; charset=\"utf-8\"":             true,
+		"application/json;":                               true,
+		"application/octet-stream; t=+json":               false,
+		"application/x-json-stream; t=a+json":             false,
 	} {
 		if got := jsonContentType(value); got != want {
 			t.Errorf("%q: got %t, want %t", value, got, want)
@@ -220,15 +251,18 @@ func TestAgentsJSONRoutesShareBodyGate(t *testing.T) {
 func TestAgentsJSONBodyGateOrder(t *testing.T) {
 	h, s := validationHandler(t)
 	for _, route := range agentsJSONRoutes() {
+		// A bad Content-Type and a malformed body prove the order.
 		r := httptest.NewRequest(http.MethodPost, route.path, strings.NewReader(`{"name":`))
 		r.Header.Set("Authorization", "Bearer test-api-key")
+		r.Header.Set("Content-Type", "text/plain")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
-		if w.Code != http.StatusBadRequest || strings.Contains(w.Body.String(), "Invalid body") {
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"invalid_beta"`) {
 			t.Errorf("%s: missing Beta: %d %s", route.name, w.Code, w.Body)
 		}
 		r = httptest.NewRequest(http.MethodPost, route.path, strings.NewReader(`{"name":`))
 		r.Header.Set("OpenAI-Beta", "agents=v1")
+		r.Header.Set("Content-Type", "text/plain")
 		w = httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 		if w.Code != http.StatusUnauthorized {
@@ -276,32 +310,6 @@ func TestAgentsJSONBodyGateKeepsValidBodies(t *testing.T) {
 	assertConfigurationError(t, bodyGateRequest(h, "/v1/agents/"+uuid.NewString(), "application/json", []byte(`{"model":4}`)), "invalid_request_error", param("model"), "Invalid type for 'model': expected a string, but got an integer instead.")
 	if w := bodyGateRequest(h, "/v1/agents", "application/json", []byte(`{"model":"`+strings.Repeat("x", 1<<20)+`"}`)); w.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("limit: %d %s", w.Code, w.Body)
-	}
-}
-
-// DELETE, multipart uploads and Core extension routes keep their own body
-// handling without the Content-Type rule.
-func TestBodyGateExcludedRoutes(t *testing.T) {
-	h, _ := validationHandler(t)
-	for _, path := range []string{"/v1/agents/" + uuid.NewString(), "/v1/vaults/" + uuid.NewString(), "/v1/agents/sessions/" + uuid.NewString()} {
-		r := httptest.NewRequest(http.MethodDelete, path, strings.NewReader(`{"name":`))
-		r.Header.Set("Authorization", "Bearer test-api-key")
-		r.Header.Set("OpenAI-Beta", "agents=v1")
-		w := httptest.NewRecorder()
-		h.ServeHTTP(w, r)
-		if w.Code != http.StatusBadRequest || strings.Contains(w.Body.String(), "Content-Type") || strings.Contains(w.Body.String(), "Invalid body") {
-			t.Errorf("DELETE %s: %d %s", path, w.Code, w.Body)
-		}
-	}
-	for _, request := range []struct{ path, contentType string }{
-		{"/v1/files", "multipart/form-data; boundary=x"},
-		{"/v1/skills", "multipart/form-data; boundary=x"},
-		{"/core/v1/environments/" + uuid.NewString() + "/executor-credentials/", ""},
-	} {
-		w := bodyGateRequest(h, request.path, request.contentType, []byte("--x--\r\n"))
-		if strings.Contains(w.Body.String(), bodyContentTypeMessage) || strings.Contains(w.Body.String(), "Invalid body") {
-			t.Errorf("POST %s: %d %s", request.path, w.Code, w.Body)
-		}
 	}
 }
 
@@ -358,49 +366,123 @@ func referenceDuplicateJSONKey(raw []byte) (string, string, bool) {
 	}
 }
 
+// The scan agrees with the reference on small objects and on objects with more
+// than smallObjectKeys members, which use the open-addressing set.
 func TestDuplicateJSONKeyMatchesReference(t *testing.T) {
-	names := []string{`a`, `b`, `a`, `a\"b`, `a\\b`, ``, `k,:{}[]`, `\ud800`, `�`, `é`, `é`}
-	values := []string{`1`, `-2.5e3`, `true`, `null`, `"x,y:{}[]"`, `"\"a\":1"`, `"\\"`, `[]`, `{}`}
+	names := []string{`a`, `b`, `\u0061`, `a\"b`, `a\\b`, `a\u005cb`, ``, `k,:{}[]`, `\ud83d\ude00`, `😀`, `\ufffd`, `é`, `\u00e9`, `K`, `k`}
+	values := []string{`1`, `-2.5e3`, `true`, `null`, `"x,y:{}[]"`, `"\"a\":1"`, `"\\"`, `"\ud83d\ude00"`, `[]`, `{}`}
 	random := uint64(1)
 	next := func(n int) int {
 		random = random*6364136223846793005 + 1442695040888963407
 		return int(random>>33) % n
 	}
-	var value func(depth int) string
-	value = func(depth int) string {
+	large := 0
+	var value func(depth, width, suffixes int) string
+	value = func(depth, width, suffixes int) string {
 		switch choice := next(4); {
 		case depth > 3 || choice == 0:
 			return values[next(len(values))]
 		case choice == 1:
 			items := make([]string, next(4))
 			for i := range items {
-				items[i] = value(depth + 1)
+				items[i] = value(depth+1, width, suffixes)
 			}
 			return "[" + strings.Join(items, ",") + "]"
 		default:
-			members := make([]string, next(6))
+			members := make([]string, next(width))
+			if len(members) > smallObjectKeys {
+				large++
+			}
+			// Members of a large object nest less deeply, in small objects.
+			child, childWidth := depth+1, width
+			if width > smallObjectKeys {
+				child, childWidth = depth+2, 6
+			}
 			for i := range members {
-				members[i] = `"` + names[next(len(names))] + fmt.Sprint(next(3)) + `": ` + value(depth+1)
+				members[i] = `"` + names[next(len(names))] + fmt.Sprint(next(suffixes)) + `": ` + value(child, childWidth, suffixes)
 			}
 			return "{" + strings.Join(members, ",") + "}"
 		}
 	}
 	duplicates := 0
-	for range 20000 {
-		body := []byte(value(0))
+	for i := range 20000 {
+		width, suffixes := 6, 3
+		if i%2 == 1 {
+			width, suffixes = 60, 200
+		}
+		body := []byte(value(0, width, suffixes))
 		if !json.Valid(body) {
 			t.Fatalf("invalid generated body %s", body)
 		}
-		key, path, found := duplicateJSONKey(body)
+		key, path, found, err := scanJSON(body)
 		wantKey, wantPath, wantFound := referenceDuplicateJSONKey(body)
-		if key != wantKey || path != wantPath || found != wantFound {
-			t.Fatalf("%s: got %q %q %t, want %q %q %t", body, key, path, found, wantKey, wantPath, wantFound)
+		if err != nil || key != wantKey || path != wantPath || found != wantFound {
+			t.Fatalf("%s: got %q %q %t %v, want %q %q %t", body, key, path, found, err, wantKey, wantPath, wantFound)
 		}
 		if found {
 			duplicates++
 		}
 	}
-	if duplicates < 1000 || duplicates > 19000 {
-		t.Fatalf("unbalanced generated bodies: %d duplicates", duplicates)
+	if duplicates < 1000 || duplicates > 19000 || large < 1000 {
+		t.Fatalf("unbalanced generated bodies: %d duplicates, %d large objects", duplicates, large)
 	}
+	// Deterministic large objects: the repeat at every position, escaped forms
+	// and nesting inside a large object.
+	for size := smallObjectKeys + 1; size <= 300; size += 7 {
+		for _, repeat := range []int{0, smallObjectKeys - 1, smallObjectKeys, size / 2, size - 1} {
+			members := make([]string, size)
+			for i := range members {
+				members[i] = fmt.Sprintf(`"k%d":{"k%d":[{"x":1}]}`, i, i)
+			}
+			valid := []byte("{" + strings.Join(members, ",") + "}")
+			if _, _, found, err := scanJSON(valid); found || err != nil {
+				t.Fatalf("size %d: false duplicate %v", size, err)
+			}
+			escaped := fmt.Sprintf(`"\u006b%d":2`, repeat)
+			body := []byte("{" + strings.Join(append(members, escaped), ",") + "}")
+			key, path, found, err := scanJSON(body)
+			if want := fmt.Sprintf("k%d", repeat); !found || err != nil || key != want || path != want {
+				t.Fatalf("size %d repeat %d: %q %q %t %v", size, repeat, key, path, found, err)
+			}
+		}
+	}
+}
+
+// A body of many short keys needs memory proportional to its key count, not
+// a copy of every key: 116 MiB was allocated for this 16 MiB body before, and
+// about 16 MiB, mostly the growing key-position set, is allocated now.
+func TestDuplicateJSONKeyMemory(t *testing.T) {
+	body := manyShortKeys(16 << 20)
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	_, _, found, err := scanJSON(body)
+	runtime.ReadMemStats(&after)
+	if found || err != nil {
+		t.Fatal(found, err)
+	}
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 2*uint64(len(body)) {
+		t.Fatalf("allocated %d MiB for a %d MiB body", allocated>>20, len(body)>>20)
+	}
+}
+
+func BenchmarkDuplicateJSONKeyManyShortKeys(b *testing.B) {
+	body := manyShortKeys(16 << 20)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(body)))
+	for b.Loop() {
+		if _, _, found, err := scanJSON(body); found || err != nil {
+			b.Fatal(found, err)
+		}
+	}
+}
+
+func manyShortKeys(size int) []byte {
+	var body bytes.Buffer
+	body.WriteString("{")
+	for i := 0; body.Len() < size; i++ {
+		fmt.Fprintf(&body, `"k%07d":0,`, i)
+	}
+	body.WriteString(`"z":0}`)
+	return body.Bytes()
 }

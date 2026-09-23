@@ -398,8 +398,9 @@ func containsString(values []string, value string) bool {
 	return false
 }
 
-// orderedMembers returns every key of an object in document order, including
-// repeated keys, and each key's last value. The input is valid JSON.
+// orderedMembers returns every key of an object in document order with its
+// value. The input is valid JSON without repeated keys, which the shared body
+// gate rejects.
 func orderedMembers(raw json.RawMessage) ([]string, map[string]json.RawMessage) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	fields := map[string]json.RawMessage{}
