@@ -227,7 +227,7 @@ func TestEnvironmentFileCreateIgnoresUnknownQueryKeys(t *testing.T) {
 	if w := request(f.environment.ID, "files-key", `{"type":"inline","path":"/workspace/a"}`); w.Code != http.StatusBadRequest || f.writes != 0 {
 		t.Fatalf("invalid body admitted: %d", w.Code)
 	}
-	if w := request(f.environment.ID, "files-key", body); w.Code != http.StatusOK || f.writes != 1 || f.path != "a" || string(f.data) != "abc" {
+	if w := request(f.environment.ID, "files-key", body); w.Code != http.StatusCreated || f.writes != 1 || f.path != "a" || string(f.data) != "abc" {
 		t.Fatalf("create: %d %s path=%q", w.Code, w.Body, f.path)
 	}
 }

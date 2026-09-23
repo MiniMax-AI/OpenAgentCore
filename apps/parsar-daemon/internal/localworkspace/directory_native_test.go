@@ -1,10 +1,12 @@
 package localworkspace
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/google/uuid"
 )
 
@@ -33,8 +35,15 @@ func TestNativeLocalDirectoryConfinement(t *testing.T) {
 	if err != nil || got.Truncated || len(got.Entries) != 1 || got.Entries[0].Name != "data.bin" || got.Entries[0].SizeBytes == nil || *got.Entries[0].SizeBytes != 4 {
 		t.Fatalf("native file metadata: %+v %v", got, err)
 	}
-	if _, err := b.ListWorkspaceDirectory(t.Context(), "escape", 10); err == nil {
-		t.Fatal("native helper followed an external symlink")
+	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A link, a regular file and a missing path are not listable directories;
+	// the external link target is never listed.
+	for _, path := range []string{"escape", "escape/secret", "file.txt", "missing", "missing/deeper"} {
+		if _, err := b.ListWorkspaceDirectory(t.Context(), path, 10); !errors.Is(err, agent.ErrWorkspaceNotDirectory) {
+			t.Fatal("native helper classified a non-directory path differently", path, err)
+		}
 	}
 	got, err = b.ListWorkspaceDirectory(t.Context(), "", 1)
 	if err != nil || !got.Truncated || len(got.Entries) != 1 {
@@ -47,7 +56,7 @@ func TestNativeLocalDirectoryConfinement(t *testing.T) {
 	if err := os.Symlink(outside, root); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := b.ListWorkspaceDirectory(t.Context(), "", 10); err == nil {
-		t.Fatal("native helper followed a replaced root")
+	if _, err := b.ListWorkspaceDirectory(t.Context(), "", 10); !errors.Is(err, agent.ErrWorkspaceReadInvalid) {
+		t.Fatal("native helper followed a replaced root or hid it as an empty directory", err)
 	}
 }

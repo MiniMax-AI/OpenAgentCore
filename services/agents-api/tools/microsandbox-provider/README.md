@@ -48,6 +48,15 @@ complete host network policy. This adapter does not install registry credentials
 
 ## Bootstrap and network
 
+The SDK creates a private owned ext4 disk at `/environment`, with explicit
+`environment_disk_mib` capacity. Workspace, staging and generated outputs share
+that filesystem, preserving the existing cross-device and link checks. The
+layered root filesystem can report different device IDs for directories and
+upper-layer files and is not used for workspace storage. Native full snapshots
+and sandbox removal capture, restore and reclaim the owned disk; no host path or
+external volume lifecycle is introduced. Creation starts in `/` until bootstrap
+creates the workspace directories.
+
 VM creation does not implicitly run the OCI ENTRYPOINT. Before admitting native
 work, the helper uses confidential stdin to install the existing private
 `auth.json` format, create Runtime directories, bind the same workspace at
@@ -119,13 +128,27 @@ successful stdin completion and an explicit guest exit before returning a result
 Timeouts, output overflow and missing receipts return ErrCommandUnconfirmed.
 Closing an SDK exec handle alone does not prove the guest process exited.
 
-The read-only metrics operation verifies the same exact allocation and compute
-incarnation before calling the pinned SDK's point-in-time `SandboxHandle.Metrics`.
-It returns only observation time, uptime, cumulative vCPU time and guest memory
-usage/limit to Core. It does not connect to the guest, renew activity, resume paused
-compute or mutate lifecycle state. SDK metrics-disabled and no-current-sample errors
-are reduced to one safe unavailable code; raw diagnostics never cross the helper
-boundary.
+The read-only metrics operation holds the allocation lock and verifies the exact
+compute ID through the SDK before and after `msb metrics NAME --format json`.
+The CLI is the same checksum/version-pinned runtime binary. Its registry report
+preserves the native sample timestamp and fractional-second uptime; parsing both
+at native millisecond precision reconstructs the real run start consistently
+across polls and Core restarts, while new runs have a new start. The Go SDK v0.7.2
+projection drops that timestamp and truncates uptime to whole seconds, so it
+cannot supply this fence. Sandbox creation time is not a run start time.
+
+The helper returns only the native observation time, exact uptime, cumulative
+vCPU time and guest memory usage/limit. It rejects stale/exited reports and
+malformed or missing fields. CLI output is bounded; command failures expose only
+an unavailable code, never native diagnostics. Observation does not connect to
+the guest, renew activity, resume paused compute or mutate lifecycle state.
+
+The pinned source evidence is tag `v0.7.2`, commit
+`1c59b8dbf0ad47dda2f807c0214b529aceb81c74`: `crates/metrics/lib/registry.rs`
+reads `sampled_at_unix_ms` and `started_at_unix_ms` coherently and subtracts them
+for uptime; `crates/cli/lib/commands/metrics.rs` serializes the timestamp and
+`uptime.as_secs_f64()`. The private native fields and identifiers do not cross
+the helper boundary.
 
 ## Acceptance boundary
 

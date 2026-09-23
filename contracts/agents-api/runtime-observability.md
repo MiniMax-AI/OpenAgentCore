@@ -78,51 +78,30 @@ an activity revision and timestamps such as `idle_since` and
 `shutdown_requested_at`. Metrics, an in-memory cache, or a monitoring backend must
 not become the lifecycle authority.
 
-## Optional history export boundary
+## Retained history and optional export
 
-An optional server-only OTLP/HTTP exporter can forward validated observation
-results to an operator Collector when `AGENTS_API_RUNTIME_HISTORY_FILE` is set.
-It is disabled by default and does not change the current API result, execution
-ownership, or lifecycle authority. The file may contain endpoint authorization
-headers and is never returned to Web. Provider receipts, native identifiers, raw
-errors, paths, and credentials are excluded from metric attributes. CPU,
-capacity, and memory points require the provider-qualified compute `started_at`
-fence; unfenced observations export coverage and read duration only. Core
-resolved/observed nanosecond attributes provide a backend join key even when
-generic OTLP storage lowers the event timestamp precision.
+Periodic Runtime observations are persisted asynchronously in the existing Core
+PostgreSQL database. The execution owner samples every 30 seconds by default,
+using bounded pages, concurrency and source deadlines. Collection never wakes or
+mutates compute. The worker lease is checked during the sweep and before each
+handoff. Only periodic samples populate durable history; current API reads cannot
+inflate cadence coverage. Retention is seven days; public queries span at most
+24 hours and have explicit input and output limits.
 
-The server-only file may also enable a bounded periodic cadence. Only the Core
-service holding the execution database lease runs that deployment-wide sampler;
-it scans nondeleted managed Sessions with bounded pages and concurrency, gives
-each provider read an independent deadline, monitors lease ownership throughout
-the sweep, rechecks ownership before export, and never mutates Runtime state.
-Exports distinguish `periodic` samples from `on_read` samples.
+`AGENTS_API_RUNTIME_HISTORY_FILE` optionally changes sampling and adds OTLP/HTTP
+export. The local database and external exporter have independent bounded queues.
+No Collector is required for the Dashboard. Failures and queue saturation remain
+missing observations rather than fabricated zeroes or failed executions. Transport
+credentials stay server-only; native identifiers, receipts, raw errors, paths and
+credentials are excluded from observations.
 
-The Collector, high-cardinality history backend, server-side history query
-adapter, retention policy, and durable Web ranges remain separate optional
-capabilities in the [full design](runtime-observability-design.md). A ClickHouse
-Reader plus reference projection/Collector configuration is available under
-`services/agents-api/runtime-history/clickhouse`; it is disabled by default. When
-configured with qualified periodic sampling, Web advertises explicit 1h, 6h, and
-24h History ranges and reconstructs them after reload.
+The internal `runtimehistory` boundary validates Core scope, bucket coverage,
+nullability, time bounds and point limits. One chart series represents an allocation;
+CPU deltas reset across compute incarnations or counter regressions. Canonical
+Session Usage supplies independently sampled token counters. History queries survive
+Core restart and browser reload without replaying execution.
 
-The internal `runtimehistory` boundary is backend-neutral and validates Core
-scope, incarnation fences, bucket coverage, nullability, time bounds and total
-point limits. The public capability and Session history routes plus strict client
-projection are implemented, but they do not make history available by themselves:
-an operator must configure the Reader and qualified periodic collection.
-
-## First-phase boundary
-
-The current-snapshot implementation adds no migration, metrics backend, token
-duplication, Kubernetes/E2B source, or telemetry-driven lifecycle action. Optional
-Durable history separately samples canonical Session Usage into its configured
-metrics backend; provider sources still do not own token accounting. The
-internal source interface admits Docker and microsandbox without changing Session
-attribution or the existing sandbox lifecycle interface.
-
-The current API and browser-local Web live window are documented in the
-[full design](runtime-observability-design.md) and the
-[current-snapshot extension](runtime-observability-api.md), and the optional
-[history extension](runtime-history-api.md). Additional providers, self-hosted
-telemetry, exporter health counters, and idle-policy authority remain later phases.
+See the [design](runtime-observability-design.md),
+[current API](runtime-observability-api.md), [history API](runtime-history-api.md)
+and [configuration](../../services/agents-api/runtime-history/README.md).
+Additional provider telemetry and idle-policy authority remain separate work.

@@ -127,3 +127,45 @@ func TestSampleFromMetricsRejectsInvalidTimingAndLimit(t *testing.T) {
 		}
 	}
 }
+
+func TestObserveKeepsIncarnationAcrossPollsAndCoreRestart(t *testing.T) {
+	config, reference := testConfig(), testRef()
+	compute := Compute{Name: Name(config, reference, 0), ID: "local:first"}
+	startedAt := time.Date(2026, 9, 22, 12, 0, 0, 122000000, time.UTC)
+	var previous runtimeobs.Sample
+	for index, uptime := range []time.Duration{300001 * time.Millisecond, 301877 * time.Millisecond, time.Millisecond} {
+		currentStart := startedAt
+		cpu := uint64(2_500_000_000 + index*1_000_000_000)
+		if index == 2 {
+			compute = Compute{Name: Name(config, reference, 1), ID: "local:restored", Generation: 1, RestoredFrom: func() *SnapshotIdentity { s := testSnapshot(); return &s }()}
+			currentStart = startedAt.Add(5 * time.Minute)
+			cpu = 1_000_000
+		}
+		// Each poll uses a fresh Core provider, with no process-local time cache.
+		provider, err := NewWithCaller(config, callerFunc(func(_ context.Context, request Request) (Response, error) {
+			if request.Compute.ID != compute.ID || request.Compute.Generation != compute.Generation {
+				t.Fatalf("wrong compute: %+v", request.Compute)
+			}
+			return Response{Version: ProtocolVersion, Metrics: &Metrics{ObservedAt: currentStart.Add(uptime), Uptime: uptime, VCPUTimeNs: cpu, MemoryLimitBytes: 8192}}, nil
+		}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sample, err := provider.Observe(deadline(t), observationTarget(t, compute))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sample.StartedAt == nil || !sample.StartedAt.Equal(currentStart) {
+			t.Fatalf("wrong start: %+v", sample)
+		}
+		if index == 1 {
+			if !sample.StartedAt.Equal(*previous.StartedAt) || *sample.CPUUsageSecondsTotal-*previous.CPUUsageSecondsTotal != 1 {
+				t.Fatal("repeated polls lost the CPU delta")
+			}
+		}
+		if index == 2 && sample.StartedAt.Equal(*previous.StartedAt) {
+			t.Fatal("restored compute reused the source incarnation")
+		}
+		previous = sample
+	}
+}

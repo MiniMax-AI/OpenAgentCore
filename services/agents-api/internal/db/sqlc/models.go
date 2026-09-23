@@ -177,6 +177,24 @@ type RuntimeDeviceAuthority struct {
 	CredentialHash string      `json:"credential_hash"`
 }
 
+type RuntimeHistorySample struct {
+	TenantID         pgtype.UUID   `json:"tenant_id"`
+	SessionID        pgtype.UUID   `json:"session_id"`
+	EnvironmentID    pgtype.UUID   `json:"environment_id"`
+	ResolvedAtNs     int64         `json:"resolved_at_ns"`
+	AllocationID     pgtype.UUID   `json:"allocation_id"`
+	ProviderType     string        `json:"provider_type"`
+	Status           string        `json:"status"`
+	ObservedAtNs     pgtype.Int8   `json:"observed_at_ns"`
+	StartedAtNs      pgtype.Int8   `json:"started_at_ns"`
+	CpuUsageSeconds  pgtype.Float8 `json:"cpu_usage_seconds"`
+	CpuCapacityCores pgtype.Float8 `json:"cpu_capacity_cores"`
+	MemoryUsageBytes pgtype.Int8   `json:"memory_usage_bytes"`
+	MemoryLimitBytes pgtype.Int8   `json:"memory_limit_bytes"`
+	InputTokens      pgtype.Int8   `json:"input_tokens"`
+	OutputTokens     pgtype.Int8   `json:"output_tokens"`
+}
+
 type Session struct {
 	ID                  pgtype.UUID        `json:"id"`
 	TenantID            pgtype.UUID        `json:"tenant_id"`

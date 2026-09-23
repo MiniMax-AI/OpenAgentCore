@@ -101,6 +101,10 @@ export function runtimeDurableTrendSamples(
   };
 
   for (const history of histories) {
+    const { start, end } = history.requested_range;
+    for (let bucketStart = start; bucketStart < end; bucketStart += history.resolution_seconds) {
+      bucket(Math.min(bucketStart + history.resolution_seconds, end) * 1_000);
+    }
     for (const coverage of history.coverage.buckets) bucket(coverage.end * 1_000);
     for (const usage of history.token_usage) {
       bucket(usage.end * 1_000).tokens.set(history.session_id, {
@@ -110,18 +114,16 @@ export function runtimeDurableTrendSamples(
       });
     }
     for (const series of history.series) {
-      const startedAt = series.started_at.seconds + series.started_at.nanoseconds / 1_000_000_000;
       const targetID = `${history.session_id}:${series.allocation_id}`;
       const label = titles.get(history.session_id) ?? "Runtime";
       for (const point of series.points) {
         const value = bucket(point.end * 1_000);
         const observedAt = point.last_observed_at;
-        const uptime = observedAt === null || observedAt < startedAt ? null : observedAt - startedAt;
         value.targets.set(targetID, {
           seriesId: targetID,
           label,
           cpuRatio: point.cpu?.utilization_ratio ?? null,
-          uptimeSeconds: uptime,
+          uptimeSeconds: null,
         });
         const usage = point.memory?.usage_bytes;
         const limit = point.memory?.limit_bytes;

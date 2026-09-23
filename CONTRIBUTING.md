@@ -20,10 +20,13 @@ hashes. Do not automatically sync or delete the original repository's Core.
 
 Develop in an isolated worktree on a feature branch and submit a PR. Do not edit
 or commit implementation directly on main. An empty repository bootstrap commit
-is only the comparison base for the first import PR. After validation, conduct an
-independent blind review using only requirements, acceptance criteria, boundaries,
-repository path and comparison baseline. Fix in-scope blockers before delivery.
-Do not use `codex exec` as a substitute reviewer.
+is only the comparison base for the first import PR. Choose review depth by risk. Substantial changes and changes involving security,
+shared lifecycle ownership or uncertain cross-package behavior need an independent
+blind review after validation. Give the reviewer only requirements, acceptance
+criteria, boundaries, repository path and comparison baseline. Small, verified
+fixes may use self-review, including focused corrections after a blind review;
+repeat independent review when a correction materially changes the design or risk.
+Fix in-scope blockers before delivery. Do not use `codex exec` as a substitute reviewer.
 
 The Core Web is an administrator console for execution and resource operations;
 business collaboration remains in Parsar. Environment Template management shares
@@ -65,16 +68,17 @@ to recover a lost creation response. Session metadata updates require a supplied
 metadata field, with null/empty clearing it. Validate an empty update before any
 resource lookup, after authentication.
 
-List order parsing distinguishes omission from an explicit empty value. Lists read by
-the shared list parser and single-resource routes ignore unknown query keys; a
-repeated supported list key still rejects. The Environment Files list keeps its own
-strict key parser and still rejects unknown keys; that difference is deferred. Reuse the shared parser and error serializer, preserving the observed
-Beta, Files and Skills error fields and per-family limit bounds rather than applying
-one policy to every resource. Change page bounds, cursor ownership or parent lookup
-order only with owned evidence for that family. Record uncertain range/lookup
-behavior separately; do not reproduce observed upstream server failures as
-compatibility behavior. See `contracts/agents-api/list-query-semantics.md` for the
-bounded evidence.
+List order parsing distinguishes omission from an explicit empty value. Lists and
+single-resource routes ignore unknown query keys; a repeated supported list key
+still rejects. The Environment Files list keeps its own path and cursor parsing but
+uses the same unknown-key and duplicate-key rules, except that it still rejects
+malformed query encoding (such as `%GG` or `;` separators) that the shared lists
+drop. Reuse the shared parser and error serializer, preserving the observed Beta, Files and Skills error fields and
+per-family limit bounds rather than applying one policy to every resource. Change
+page bounds, cursor ownership or parent lookup order only with owned evidence for
+that family. Record uncertain range/lookup behavior separately; do not reproduce
+observed upstream server failures as compatibility behavior. See
+`contracts/agents-api/list-query-semantics.md` for the bounded evidence.
 
 Report validation failures with official evidence through the typed field error,
 which emits `invalid_request_error` with the observed param and message; keep
@@ -299,10 +303,25 @@ may inform operators, but automatic suspension requires durable Core-owned activ
 state and must not use a monitoring backend as lifecycle authority.
 Managed Docker observes one non-streaming Inspect/Stats sample. Managed microsandbox
 observes the exact persisted compute generation through the existing one-shot helper
-and pinned SDK Metrics call. Preserve cumulative CPU seconds, memory usage/limit and
+and pinned native CLI metrics report, with SDK identity checks before and after
+observation. Derive compute start from the same native sample timestamp and precise
+uptime; never subtract rounded uptime from a new wall-clock timestamp. Preserve
+cumulative CPU seconds, memory usage/limit and
 compute uptime semantics across both. Do not use microsandbox's instantaneous CPU
 percent, wake suspended compute, or expose provider-native identifiers to fill a
 common field.
+
+Runtime history uses the existing Core PostgreSQL database: one sanitized row per
+periodic observation, seven-day retention and bounded reads. It is best-effort
+operational evidence, not execution or Usage authority. The execution owner samples
+by default every 30 seconds. Existing canonical Session Usage supplies token
+snapshots; never aggregate provider counters as model tokens. Preserve missing data
+and reset CPU derivation across compute incarnations or counter regressions.
+The bounded asynchronous database writer and optional OTLP exporter have independent
+queues; external telemetry outages must not stall local history or execution.
+Retention cleanup also runs without active Runtimes. The browser queries only Core,
+never storage or a Collector, and stays a lightweight administrator console.
+No additional metrics database or Collector is required for retained charts.
 
 In V1, our daemon fills the user-side executor role. Users deploy daemon, the
 selected harness, local tools and workspace together. Do not require Codex
@@ -574,8 +593,8 @@ does not qualify its isolation or enable public creation.
 
 ### Optional single-host sandbox suspension
 
-Each Core deployment enables exactly one sandbox provider, selected at setup:
-Docker or microsandbox. Keep both adapters but reject multiple provider entries,
+A Core deployment may run without a sandbox provider. When enabled, exactly one
+sandbox provider is selected at setup: Docker or microsandbox. Keep both adapters but reject multiple provider entries,
 legacy default-provider maps and engine-based placement. Harness selection is
 independent. The configuration has one installation UUID, one provider kind and
 one backend object. No compatibility parser or parallel provider route remains.
@@ -612,6 +631,12 @@ pause does not release RAM. Suspension captures and verifies a full snapshot,
 stops the exact source, and removes its writable compute closure only after the
 artifact is durably identified. Explicit network policy applies on create and
 restore. Do not inherit undeclared host resources.
+The native SDK owns a dedicated ext4 disk mounted at `/environment`, separately
+bounded by `environment_disk_mib` alongside `root_disk_mib`. Workspace, staging
+and outputs must share that filesystem; do not weaken cross-device or link
+checks to accommodate the layered root. Creation uses `/` until bootstrap creates
+the workspace. Existing full snapshots and sandbox cleanup own the disk, with
+no external mount or separate storage lifecycle.
 
 Suspend only after at least one Turn is terminal, no queued/in-progress/waiting
 root or subagent Turn, pending input/file operation or initialization remains,
@@ -832,8 +857,11 @@ Revoke the scoped read transport credential on
 completion or failure. Runtime retains uncertain cleanup ownership and capacity;
 this does not require a second durable Core owner registry or establish remote
 write retirement. Public Files.list delegates workspace access to this reader;
-the API owns tenant authorization, path validation and protocol pagination. Keep
-partial directory coverage and unverified defaults explicit in the Files contract.
+the API owns tenant authorization, path validation and protocol pagination. Only
+the reader's distinct `not_directory` result (a missing path, a regular file or an
+unfollowed symlink) becomes an empty page; root, permission, transport and
+uncertain failures keep their errors. Keep partial directory coverage and
+unverified defaults explicit in the Files contract.
 
 Source Files belong to the execution project and have an independent lifecycle
 from copied workspace files. Store immutable source metadata and PostgreSQL large
@@ -1348,6 +1376,87 @@ prove compatibility between unrelated Core/Runtime versions: accept the exact
 package with a fresh database, extracted binaries, loaded image and real public
 workflow. Keep model/operator credentials external and Provider ownership stable
 across upgrades. This is the same managed Runtime, not user-managed enrollment.
+
+#### Matched Core and console distribution
+
+The installer milestone packages Core and the unchanged Web console together,
+with independent `--core-only` and `--web-only` modes. `site/` is the public static
+landing, separate from `apps/web`; it must not create an onboarding prerequisite,
+call a model, or claim complete protocol compatibility. Operator installation,
+optional API examples and service diagnostics live in `docs/getting-started/`.
+
+`make build-core-distribution` builds from clean committed source and reuses the
+existing API, Runtime, SDK, helper and Web builders. Artifacts record source and
+immutable image identities, the actual Runtime manifest digest, checksums and
+microsandbox runtime/firmware hashes and executable native payloads. Release generation is not publication or
+qualification. A release must be tested from fresh extraction with real models;
+no synthetic result may substitute for native execution acceptance.
+
+The distribution build sets umask 022 for non-root-readable payloads; installation
+credentials and state retain their explicit private permissions.
+
+The first installer targets a trusted Linux amd64 Docker host. It installs a
+private dedicated PostgreSQL service and separate Core and console services in
+Compose by default, with zero execution nodes. The default requires neither KVM
+nor systemd user services, imports no Runtime image, mounts neither the Docker
+socket nor host devices into Core, and generates no managed Provider configuration.
+Local sandbox placement is opt-in: `--sandbox-provider true --provider microsandbox`
+or `--sandbox-provider true --provider docker`. Enabling the option without naming
+a provider selects microsandbox; `--provider` without enabling the option is an
+error. Web-only mode cannot enable a sandbox provider. Core-only mode retains the
+same opt-in rule. Missing KVM fails when microsandbox is selected without changing
+that choice.
+The distribution supplies native Core/helper binaries and pinned msb runtime and
+firmware. For microsandbox, Core is a native systemd user service with direct
+`ExecStart` and `KillMode=process`: its restart must preserve the Provider's resident
+microVM/helper processes. Never package those processes inside Core's container
+PID namespace, kill their process group on Core stop, or add recovery mechanisms to
+compensate for that packaging. User KVM access, the Linux runtime libraries and
+linger are prerequisites only for the microsandbox option. With the Docker sandbox
+option, Core runs in Compose with the canonical Docker socket. PostgreSQL/Web use
+Compose in either case; native Core
+and its Web proxy use loopback, with a private PostgreSQL port. This packaging
+choice does not change either Provider's execution contract.
+The basic distroless API image and binary builds remain independent artifacts.
+
+One Runtime image contains the existing daemon, shared helpers and three native
+harness packages. Their differences remain in the adapters. Core keeps exclusive
+ownership of Session allocation, initialization, cancellation, snapshots and
+cleanup. When a sandbox provider is enabled, the installer imports its Runtime
+image and prepares running conditions; it never creates an execution Session or
+supplies a model credential. Applications use the
+existing write-only model execution extension, with the installation's persistent
+credential encryption key. Provider identity/backend namespace and native history
+must not change on a repeated install.
+
+`services/core-console` serves the existing production Web build and forwards only
+public `/v1` requests to one configured Core. It uses the standard Go reverse
+proxy with streaming/cancellation, a separate operator password, fixed origin and
+cross-site checks. Only the server reads the Core bearer. It does not implement
+product identity, resource semantics, Runtime discovery or an execution loop.
+The console has neither KVM nor Docker authority; its static root contains no
+secrets. Installation exposes only loopback API/console ports. Remote exposure
+requires an operator-configured HTTPS/access boundary. Web-only mode can connect
+to a loopback existing Core on the same Linux host or a remote HTTPS Core.
+
+Installation state and secrets live in a private directory under `~/.parsar/` by
+default. No credential enters build arguments, image layers, browser bundles or
+diagnostic output. Compose configuration is confidential. The generated database,
+caller/tenant/provider identities and encryption key survive reruns; automatic
+revision replacement and provider migration are outside this initial installer.
+Reruns also refuse enabling or disabling a sandbox provider on an existing
+installation, including adding one to the default zero-node installation.
+Stopping control-plane services does not stop all Provider resources; use Core's
+existing release operations for full cleanup. No native restart promise covers
+host reboot or a lost running microVM. Do not delete data or issue broad
+container/volume pruning as recovery.
+
+`make check-distribution` covers the production proxy, installation rules and
+release metadata. Real bundle validation covers default/provider selection,
+component modes, existing Web connection, public native execution and restart
+retention. Diagnostics report observed service health, not fabricated model or
+complete environment readiness. Runtime observations are Core-owned; do not add
+a duplicate monitoring/lifecycle framework to installation or the public landing.
 
 #### Current implementation
 

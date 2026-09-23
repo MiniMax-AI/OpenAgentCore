@@ -67,6 +67,42 @@ func TestWorkspaceReadRejectsIncompleteOrContradictoryReplies(t *testing.T) {
 	}
 }
 
+func TestWorkspaceDirectoryAcceptsNotDirectoryOnlyForDirectoryReads(t *testing.T) {
+	directory := proto.WorkspaceReadPayload{Handle: "prepared", EnvironmentID: "environment", Path: "missing", MaxEntries: 2}
+	for _, test := range []struct {
+		directory bool
+		result    proto.WorkspaceReadResultPayload
+		accepted  bool
+	}{
+		{true, proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: proto.WorkspaceReadNotDirectory}, true},
+		{true, proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: "not_found"}, true},
+		{true, proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: proto.WorkspaceReadNotDirectory, CloseAcknowledged: true}, false},
+		{true, proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: proto.WorkspaceReadNotDirectory, Directory: &proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{}}}, false},
+		{true, proto.WorkspaceReadResultPayload{Outcome: "unknown", ErrorCode: proto.WorkspaceReadNotDirectory}, false},
+		{true, proto.WorkspaceReadResultPayload{Outcome: "completed", CloseAcknowledged: true, ErrorCode: proto.WorkspaceReadNotDirectory, Directory: &proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{}}}, false},
+		{false, proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: proto.WorkspaceReadNotDirectory}, false},
+	} {
+		s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+		done := make(chan error, 1)
+		go func() {
+			var err error
+			if test.directory {
+				_, err = s.ListWorkspaceDirectory(t.Context(), directory)
+			} else {
+				_, err = s.ReadWorkspaceFile(t.Context(), workspaceReadRequest())
+			}
+			done <- err
+		}()
+		request := <-s.sendCh
+		reply, _ := proto.NewEnvelope(proto.TypeWorkspaceReadResult, request.ID, test.result)
+		s.dispatch(reply)
+		if err := <-done; (err == nil) != test.accepted {
+			t.Fatal("directory result validation changed", test.directory, test.result, err)
+		}
+		s.Close("test")
+	}
+}
+
 func TestWorkspaceReadObserverCancellationDoesNotSendCancelOrRetry(t *testing.T) {
 	s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 	defer s.Close("test")

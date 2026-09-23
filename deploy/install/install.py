@@ -1,0 +1,329 @@
+#!/usr/bin/env python3
+"""Install one matched Core distribution without changing execution ownership."""
+import argparse
+import base64
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import secrets
+import socket
+import stat
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+import uuid
+
+from configuration import compose_config, core_environment, managed_config
+import native_service
+
+
+class InstallError(Exception):
+    pass
+
+
+def run(args, **kwargs):
+    # Never print a generated Compose file, process environment or secret value.
+    return subprocess.run(args, check=True, **kwargs)
+
+
+def private_write(path, value):
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, "w") as stream:
+        stream.write(value)
+
+
+def write_json(path, value):
+    private_write(path, json.dumps(value, indent=2) + "\n")
+
+
+def digest(path):
+    result = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            result.update(block)
+    return result.hexdigest()
+
+
+def verify_bundle(bundle):
+    covered = set()
+    for line in (bundle / "SHA256SUMS").read_text().splitlines():
+        expected, name = line.split("  ", 1)
+        if name in covered:
+            raise InstallError("Duplicate distribution checksum entry")
+        covered.add(name)
+        path = bundle / name
+        if not path.resolve().is_relative_to(bundle.resolve()) or path.is_symlink() or not path.is_file():
+            raise InstallError("Invalid distribution path")
+        if digest(path) != expected:
+            raise InstallError("Distribution checksum mismatch: " + name)
+    required = {"manifest.json", "install.sh", "install.py", "configuration.py", "native_service.py", "runtime/seccomp.json"}
+    required.update(f"images/{name}.tar" for name in ("core", "web", "runtime", "database"))
+    required.update("native/bin/" + name for name in ("agents-api", "agents-api-migrate", "agents-api-microsandbox-provider"))
+    required.update("native/microsandbox/" + name for name in ("msb", "libkrunfw.so.5.6.1"))
+    if not required.issubset(covered):
+        raise InstallError("Distribution checksum list is incomplete")
+    manifest = json.loads((bundle / "manifest.json").read_text())
+    for image in manifest["images"].values():
+        if not image.startswith("sha256:") or len(image) != 71:
+            raise InstallError("Distribution must select immutable images")
+    return manifest
+
+
+def free_port(port):
+    with socket.socket() as sock:
+        try:
+            sock.bind(("127.0.0.1", port))
+        except OSError:
+            raise InstallError(f"Port {port} is already in use; select another port") from None
+
+
+def database_port():
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def core_target(value):
+    from urllib.parse import urlsplit
+    parsed = urlsplit(value)
+    if (parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or
+            parsed.password or parsed.query or parsed.fragment or parsed.path not in ("", "/")):
+        raise argparse.ArgumentTypeError("Core URL must be an HTTP(S) origin without credentials")
+    if parsed.scheme != "https" and parsed.hostname not in ("127.0.0.1", "localhost"):
+        raise argparse.ArgumentTypeError("Remote Core requires HTTPS")
+    return value.rstrip("/")
+
+
+def arguments(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--core-only", action="store_true")
+    modes.add_argument("--web-only", action="store_true")
+    parser.add_argument("--sandbox-provider", choices=("true", "false"), nargs="?", const="true", default="false",
+                        help="Prepare a local sandbox provider (default: false)")
+    parser.add_argument("--provider", choices=("microsandbox", "docker"),
+                        help="Local sandbox provider when enabled (default: microsandbox)")
+    parser.add_argument("--install-dir", type=Path, default=Path.home() / ".parsar/core")
+    parser.add_argument("--core-port", type=int, default=8091)
+    parser.add_argument("--web-port", type=int, default=8080)
+    parser.add_argument("--core-url", type=core_target)
+    parser.add_argument("--core-token-file", type=Path)
+    parser.add_argument("--status", action="store_true", help="Read installation health; never invoke a model")
+    parser.add_argument("--stop", action="store_true", help="Stop installed services; retain all data")
+    args = parser.parse_args(argv)
+    args.sandbox_provider = args.sandbox_provider == "true"
+    if args.provider and not args.sandbox_provider:
+        parser.error("--provider requires --sandbox-provider true")
+    if args.web_only and args.sandbox_provider:
+        parser.error("--web-only cannot install a sandbox provider")
+    args.provider = (args.provider or "microsandbox") if args.sandbox_provider else None
+    if args.status and args.stop:
+        parser.error("Choose status or stop")
+    if not args.install_dir.is_absolute():
+        parser.error("--install-dir must be absolute")
+    if any(not 1024 <= p <= 65535 for p in (args.core_port, args.web_port)):
+        parser.error("Ports must be between 1024 and 65535")
+    if not args.core_only and not args.web_only and args.core_port == args.web_port:
+        parser.error("Core and Web need different ports")
+    if args.web_only and not (args.core_url and args.core_token_file):
+        parser.error("--web-only requires --core-url and --core-token-file")
+    if not args.web_only and (args.core_url or args.core_token_file):
+        parser.error("Existing Core connection flags require --web-only")
+    return args
+
+
+def compose(root, *args, **kwargs):
+    return run(["docker", "compose", "-f", str(root / "compose.json"), *args], **kwargs)
+
+
+def wait_http(url, headers=None, attempts=60):
+    for attempt in range(attempts):
+        try:
+            request = urllib.request.Request(url, headers=headers or {})
+            with urllib.request.urlopen(request, timeout=2) as response:
+                if response.status == 200:
+                    return True
+        except (urllib.error.URLError, TimeoutError):
+            pass
+        if attempt + 1 < attempts:
+            time.sleep(1)
+    return False
+
+
+def status(root, state):
+    output = compose(root, "ps", "--all", "--format", "json", capture_output=True, text=True).stdout
+    # Compose versions may return one array or one object per line.
+    rows = json.loads(output) if output.lstrip().startswith("[") else [json.loads(line) for line in output.splitlines() if line]
+    required = {"web"} if state["mode"] == "web-only" else {"database", "core"}
+    if state["mode"] == "all":
+        required.add("web")
+    observed = {row["Service"]: row for row in rows}
+    if native_service.is_native(state):
+        observed["core"] = {"State": "running" if native_service.active(state) else "stopped"}
+        print("Core service: " + observed["core"]["State"])
+    healthy = all(name in observed and observed[name]["State"] == "running"
+                  and observed[name].get("Health", "") in ("", "healthy") for name in required)
+    for row in rows:
+        print(f'{row["Service"]}: {row["State"]} {row.get("Health", "")}')
+    if state["mode"] != "web-only":
+        core_ok = wait_http(f'http://127.0.0.1:{state["core_port"]}/healthz', attempts=1)
+        healthy = healthy and core_ok
+        print("Core API: " + ("healthy" if core_ok else "unavailable"))
+    if state["mode"] != "core-only":
+        web_ok = wait_http(f'http://127.0.0.1:{state["web_port"]}/healthz', attempts=1)
+        healthy = healthy and web_ok
+        print("Web: " + ("healthy" if web_ok else "unavailable"))
+    print("Service health does not prove model execution. This check makes no model requests.")
+    if not healthy:
+        raise InstallError("One or more installed services are unavailable")
+
+
+def initialize(root, args, manifest):
+    mode = "core-only" if args.core_only else "web-only" if args.web_only else "all"
+    if (root / "installation.json").exists():
+        state = json.loads((root / "installation.json").read_text())
+        wanted = (mode, args.provider, args.core_port, args.web_port, args.core_url)
+        actual = (state["mode"], state["provider"], state["core_port"], state["web_port"], state.get("core_url"))
+        if wanted != actual or state["source_commit"] != manifest["source_commit"]:
+            raise InstallError("Existing installation differs; preserve it and follow the upgrade/provider-change guide")
+        return state
+    if root.exists() and any(root.iterdir()):
+        raise InstallError("Installation directory is not empty; refusing to overwrite existing state")
+    if mode == "web-only":
+        source = args.core_token_file
+        info = source.stat()
+        if (not source.is_absolute() or source.is_symlink() or not stat.S_ISREG(info.st_mode)
+                or stat.S_IMODE(info.st_mode) & 0o077 or info.st_size > 4096):
+            raise InstallError("Core token file must be an absolute, private regular file")
+        token = source.read_text().strip()
+        if not token or any(c.isspace() for c in token) or "\x00" in token:
+            raise InstallError("Invalid Core token file")
+    else:
+        if args.provider:
+            device_gid = os.stat("/dev/kvm" if args.provider == "microsandbox" else "/var/run/docker.sock").st_gid
+        token = secrets.token_hex(32)
+    if mode != "web-only":
+        free_port(args.core_port)
+    if mode != "core-only":
+        free_port(args.web_port)
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(root, 0o700)
+    directories = ["config"]
+    if args.provider == "microsandbox":
+        directories.extend(("state", "state/msb"))
+    for name in directories:
+        (root / name).mkdir(mode=0o700)
+    state = {"version": 1, "source_commit": manifest["source_commit"], "mode": mode,
+             "provider": args.provider, "installation_id": str(uuid.uuid4()),
+             "project": "parsar-" + secrets.token_hex(5), "uid": os.getuid(), "gid": os.getgid(),
+             "core_port": args.core_port, "web_port": args.web_port, "core_url": args.core_url}
+    if native_service.is_native(state):
+        state["database_port"] = database_port()
+    config = root / "config"
+    if mode != "web-only":
+        if args.provider:
+            state["device_gid"] = device_gid
+        write_json(config / "keys.json", [{"tenant_id": str(uuid.uuid4()), "organization_id": "installation",
+            "project_id": "default", "subject_kind": "service_account", "subject_id": "operator",
+            "token_sha256": hashlib.sha256(token.encode()).hexdigest()}])
+        private_write(config / "credential.key", base64.b64encode(secrets.token_bytes(32)).decode())
+        private_write(config / "database.password", secrets.token_hex(32))
+        if args.provider:
+            write_json(config / "managed-runtimes.json", managed_config(root, state, manifest))
+    private_write(config / "caller.key", token)
+    if mode != "core-only":
+        private_write(config / "console.password", secrets.token_hex(24))
+    password = (config / "database.password").read_text() if mode != "web-only" else ""
+    write_json(root / "compose.json", compose_config(root, state, manifest, password))
+    write_json(root / "installation.json", state)
+    return state
+
+
+def import_runtime(root, state, manifest, bundle):
+    if not native_service.is_native(state):
+        return
+    runtime = root / "native/microsandbox"
+    env = dict(os.environ, MSB_BACKEND="local", MSB_HOME=str(root / "state/msb"),
+               MSB_PATH=str(runtime / "msb"), MSB_LIBKRUNFW_PATH=str(runtime / "libkrunfw.so.5.6.1"))
+    run([str(runtime / "msb"), "image", "load", "--input", str(bundle / "images/runtime.tar"),
+         "--tag", manifest["runtime_ref"], "--quiet"], env=env)
+
+
+def main(argv=None):
+    args = arguments(argv)
+    root = args.install_dir
+    if root.is_symlink() or root.resolve() != root:
+        raise InstallError("Installation directory must be canonical and not a symlink")
+    if args.status or args.stop:
+        state = json.loads((root / "installation.json").read_text())
+        if args.stop:
+            if native_service.is_native(state):
+                native_service.stop(root, state)
+            compose(root, "stop")
+            print("Control-plane services stopped. Sandbox resources and data retained; running sandbox work may continue.")
+        else:
+            status(root, state)
+        return
+    if platform.system() != "Linux" or platform.machine() not in ("x86_64", "amd64") or os.getuid() == 0:
+        raise InstallError("Run as a non-root user on Linux amd64 with Docker access")
+    run(["docker", "compose", "version"], stdout=subprocess.DEVNULL)
+    run(["docker", "info", "--format", "{{.ServerVersion}}"], stdout=subprocess.DEVNULL)
+    if not args.web_only and args.provider == "microsandbox" and not Path("/dev/kvm").exists():
+        raise InstallError("microsandbox requires host KVM; enable virtualization or explicitly choose --provider docker")
+    bundle = Path(__file__).resolve().parent
+    manifest = verify_bundle(bundle)
+    if args.provider == "microsandbox" and not args.web_only:
+        native_service.preflight(bundle)
+    state = initialize(root, args, manifest)
+    if state["provider"] == "docker":
+        seccomp = bundle / "runtime/seccomp.json"
+        if not (root / "config/seccomp.json").exists():
+            private_write(root / "config/seccomp.json", seccomp.read_text())
+    images = ["web"] if state["mode"] == "web-only" else ["core", "database"]
+    if state["provider"] == "docker":
+        images.append("runtime")
+    if native_service.is_native(state):
+        images = ["database"]
+        password = (root / "config/database.password").read_text()
+        environment = core_environment(root, state, password)
+        native_service.prepare(root, state, bundle, environment)
+    if state["mode"] == "all":
+        images.append("web")
+    for name in images:
+        run(["docker", "load", "--input", str(bundle / f"images/{name}.tar")], stdout=subprocess.DEVNULL)
+    import_runtime(root, state, manifest, bundle)
+    compose(root, "up", "--detach", "--wait")
+    if native_service.is_native(state):
+        run([str(root / "native/bin/agents-api-migrate")], env=dict(os.environ, **environment),
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        native_service.start(root, state)
+    if state["mode"] != "web-only" and not wait_http(f'http://127.0.0.1:{state["core_port"]}/healthz'):
+        raise InstallError("Core did not become healthy. Use --status; retained state has not been removed")
+    if state["mode"] != "core-only":
+        url = f'http://127.0.0.1:{state["web_port"]}'
+        auth = base64.b64encode(("admin:" + (root / "config/console.password").read_text()).encode()).decode()
+        if not wait_http(url + "/v1/agents", {"Authorization": "Basic " + auth, "OpenAI-Beta": "agents=v1"}):
+            raise InstallError("Web could not authenticate to Core. Inspect private configuration; no model was called")
+        print("Console: " + url + " (user: admin)")
+        print("Console password file: " + str(root / "config/console.password"))
+    if state["mode"] != "web-only":
+        print(f'API: http://127.0.0.1:{state["core_port"]}/v1')
+        print("Caller key file: " + str(root / "config/caller.key"))
+        if state["provider"]:
+            print("Provider: " + state["provider"] + ". Runtime image prepared; Core provisions Sessions on demand.")
+        else:
+            print("No local sandbox provider configured. No execution node was installed.")
+    print("Services installed. No model request was made. See docs/getting-started/quickstart.md.")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (InstallError, RuntimeError, OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:
+        # Errors never include generated configuration or external process output.
+        print(str(error) if isinstance(error, (InstallError, RuntimeError)) else "Installation failed; inspect prerequisites and private deployment files", file=sys.stderr)
+        sys.exit(1)

@@ -2631,10 +2631,6 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
       metrics: [],
     }),
   }));
-  await page.goto("/");
-  const dashboard = page.locator(".dashboard-page");
-  await expect(dashboard.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
-
   await page.route("**/v1/agents/sessions*", async (route) => {
     if (new URL(route.request().url()).pathname !== "/v1/agents/sessions") return route.fallback();
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(list(runtimeSessions)) });
@@ -2677,8 +2673,11 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
     });
   });
 
+  await page.goto("/");
+  const dashboard = page.locator(".dashboard-page");
+  await expect(dashboard.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
   const refresh = dashboard.getByRole("button", { name: "Refresh Dashboard snapshot" });
-  await refresh.click();
+  await expect(dashboard.locator(".dashboard-runtime-sample-count")).toContainText("1 sample ·");
   await expect(dashboard.getByRole("heading", { name: "CPU usage" })).toBeVisible();
   await expect(dashboard.getByRole("heading", { name: "Memory usage" })).toBeVisible();
   await expect(dashboard.getByRole("heading", { name: "Compute uptime" })).toBeVisible();
@@ -2688,9 +2687,8 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
   await expect(liveRange.getByRole("button", { name: "1h" })).toHaveAttribute("aria-pressed", "true");
   await liveRange.getByRole("button", { name: "15m" }).click();
   await expect(liveRange.getByRole("button", { name: "15m" })).toHaveAttribute("aria-pressed", "true");
-  await page.waitForTimeout(20);
   await refresh.click();
-  await page.waitForTimeout(20);
+  await expect(dashboard.getByLabel("CPU usage: 2 live samples")).toBeVisible();
   await refresh.click();
   await expect(dashboard.getByLabel("CPU usage: 3 live samples")).toBeVisible();
   await expect(dashboard.getByLabel("Memory usage: 3 live samples")).toBeVisible();
@@ -2803,7 +2801,7 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
   await attachElementScreenshot(dashboard.locator(".dashboard-runtime-panel"), testInfo, "runtime-visual-dashboard-narrow");
 });
 
-test("restores ClickHouse Runtime history after a Dashboard reload", async ({ page }) => {
+test("restores retained Runtime history after a Dashboard reload", async ({ page }) => {
   const sessionId = "11111111-1111-4111-8111-111111111111";
   const environmentId = "22222222-2222-4222-8222-222222222222";
   const allocationId = "33333333-3333-4333-8333-333333333333";
@@ -2879,7 +2877,7 @@ test("restores ClickHouse Runtime history after a Dashboard reload", async ({ pa
       return pointStart === gapStart
         ? gap
         : point(pointStart, .25 + index / 1_000, 536_870_912 + index * 1_048_576);
-    });
+    }).filter((point) => point.start !== end - 90);
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -2895,12 +2893,12 @@ test("restores ClickHouse Runtime history after a Dashboard reload", async ({ pa
           environment_id: environmentId, allocation_id: allocationId,
           started_at: { seconds: startedAt, nanoseconds: 123_456_789 }, provider_type: "docker", points,
         }],
-        token_usage: points.map((_, index) => ({
-          start: start + index * 30,
-          end: start + (index + 1) * 30,
-          sampled_at: start + index * 30 + 20,
-          input_tokens: 10_000 + index * 300,
-          output_tokens: 2_000 + index * 60,
+        token_usage: points.map((point) => ({
+          start: point.start,
+          end: point.end,
+          sampled_at: point.start + 20,
+          input_tokens: 10_000 + (point.start - start) * 10,
+          output_tokens: 2_000 + (point.start - start) * 2,
         })),
       }),
     });
@@ -2911,14 +2909,18 @@ test("restores ClickHouse Runtime history after a Dashboard reload", async ({ pa
   await expect(dashboard.getByRole("group", { name: "Runtime trend source" })).toHaveCount(0);
   await expect(dashboard.getByLabel(/Durable · 30s; 1 Runtime targets/)).toBeVisible();
   await expect(dashboard.getByLabel("Runtime durable-history charts")).toBeVisible();
+  await expect(dashboard.getByRole("heading", { name: "Compute uptime", exact: true })).toHaveCount(0);
+  await expect(dashboard.locator('[data-chart-engine="uplot"]')).toHaveCount(3);
   await expect(dashboard.getByText("CPU usage durable trend available")).toBeAttached();
   await expect(dashboard).toContainText("120 buckets");
-  await expect(dashboard).toContainText("120/120 observations");
+  await expect(dashboard).toContainText("119/120 observations");
   await expect(dashboard.getByText("Token throughput durable trend available")).toBeAttached();
   const durableCpuChart = dashboard.getByLabel("CPU usage: 120 retained buckets");
   await expect(dashboard.getByRole("region", { name: "CPU usage durable history chart" })).toBeVisible();
   const durableCpuCard = durableCpuChart.locator("xpath=ancestor::section[contains(@class, 'dashboard-runtime-trend-card')]");
   await durableCpuChart.focus();
+  await durableCpuChart.press("ArrowLeft");
+  await expect(durableCpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Unavailable");
   await durableCpuChart.press("ArrowLeft");
   await expect(durableCpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Unavailable");
   const durableMemoryCard = dashboard.getByRole("region", { name: "Memory usage durable history chart" });
@@ -3036,7 +3038,7 @@ test("publishes Dashboard counts only after every top-level Agent and Session pa
   expect(agentAfters).toEqual([null, "agent_b"]);
   // Session collection loads once for the page and once per Runtime snapshot.
   // Returning to Dashboard refreshes Runtime immediately instead of waiting 30 seconds.
-  expect(sessionAfters).toHaveLength(6);
+  await expect.poll(() => sessionAfters.length).toBe(6);
   expect(sessionAfters.filter((after) => after === null)).toHaveLength(3);
   expect(sessionAfters.filter((after) => after === "session_snapshot")).toHaveLength(3);
 });

@@ -111,18 +111,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	history, err := runtimeHistory(ctx)
+	history, err := runtimeHistory(ctx, executionStore, os.Getenv("AGENTS_API_DAEMON_WS_URL") != "")
 	if err != nil {
 		return err
 	}
-	if history.Reader != nil {
-		defer closeRuntimeHistoryReader(history.Reader)
-	}
-	observationOptions := []runtimeobs.ServiceOption{}
-	if history.Option != nil {
-		observationOptions = append(observationOptions, history.Option)
-	}
-	observationService, err := runtimeobs.NewService(observationResolver, observationSources, observationOptions...)
+	observationService, err := runtimeobs.NewService(observationResolver, observationSources, history.Options...)
 	if err != nil {
 		if history.Exporter != nil {
 			closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -139,6 +132,13 @@ func run() error {
 			closeRuntimeHistory(closeCtx, history.Exporter)
 		}
 	}()
+	cleanupCtx, cancelCleanup := context.WithCancel(ctx)
+	cleanupDone := make(chan struct{})
+	go func() {
+		defer close(cleanupDone)
+		runHistoryCleanup(cleanupCtx, history.Prune)
+	}()
+	defer func() { cancelCleanup(); <-cleanupDone }()
 	var workerDone chan error
 	var worker *execution.Worker
 	options := []api.Option{api.WithSubagents(executionStore), api.WithSkills(executionStore), api.WithSourceFiles(executionStore), api.WithSessionArtifacts(executionStore), api.WithRuntimeObservations(observationService)}

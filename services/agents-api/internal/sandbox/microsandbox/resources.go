@@ -14,7 +14,7 @@ var _ runtimeobs.Source = (*Provider)(nil)
 
 func (*Provider) ObservationProviderType() string { return "microsandbox" }
 
-// Observe reads one point-in-time SDK metrics snapshot through the existing
+// Observe reads one point-in-time native metrics snapshot through the existing
 // one-shot helper. The persisted compute receipt selects the exact generation;
 // browser input and provider display names never select a sandbox.
 func (p *Provider) Observe(ctx context.Context, target runtimeobs.Target) (runtimeobs.Sample, error) {
@@ -59,6 +59,8 @@ func sampleFromMetrics(config Config, metrics Metrics) (runtimeobs.Sample, error
 	if metrics.ObservedAt.IsZero() || metrics.Uptime < 0 || metrics.MemoryLimitBytes == 0 || config.CPUs == 0 {
 		return runtimeobs.Sample{}, ErrUnconfirmed
 	}
+	// Both values come from one native registry sample at millisecond precision.
+	// Helper wall time and the SDK's rounded uptime cannot establish this fence.
 	startedAt := metrics.ObservedAt.Add(-metrics.Uptime)
 	if startedAt.Unix() < 0 || startedAt.After(metrics.ObservedAt) {
 		return runtimeobs.Sample{}, ErrUnconfirmed

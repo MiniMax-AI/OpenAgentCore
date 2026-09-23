@@ -166,14 +166,16 @@ unsampled inputs:
 ### Deferred
 
 These remain registered differences and are not changed here: repeated Files
-`purpose` values (SFT-18); unsampled overflowing limits; unknown and repeated keys
-on the Environment Files list, which keeps its own strict parser (its limit range
-errors now use the Beta code through the shared limit reader); Skill sole-version
+`purpose` values (SFT-18); unsampled overflowing limits; Skill sole-version
 deletion and number reuse (SFT-01/02); Session deletion lifecycle (SES-29/30);
 whitespace input (SES-01..04); Template network forms (SFT-21/22); and response
 defaults (VA-11, SES-23/25). Malformed path IDs (SES-28), metadata and name error
 fields (VA-07/08/09), U+0000 (VA-10) and Template network codes (SFT-20) are
 addressed by the [validation error batch](official-semantics-alignment.md#validation-error-fields--september-23).
+Unknown and repeated keys on the Environment Files list (HE-34/35) follow rows A1
+and B1 through the [Environment Files wire batch](environment-files.md#wire-alignment--september-23-2026);
+that list still rejects malformed query encoding (such as `?foo=%GG` or `;`
+separators), which the shared lists drop.
 
 ### Acceptance boundary
 

@@ -10,8 +10,8 @@ execution truth or expose server-side credentials in the browser. Update
 architecture and generated contracts with changes. Run `make check` before
 reporting completion.
 
-After implementation and verification, request an independent blind review with
-only requirements, acceptance criteria, boundaries, repository path and baseline.
-Fix in-scope blockers and review again. Never use `codex exec` for this review.
+Choose independent blind review according to change risk; follow CONTRIBUTING.md
+for reviewer context and re-review criteria. Small, verified fixes may use self-review.
+Never use `codex exec` as a substitute reviewer.
 
 Documentation and code comments are English; user-facing copy may be bilingual.

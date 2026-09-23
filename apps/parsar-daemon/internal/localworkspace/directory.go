@@ -64,6 +64,8 @@ func decodeDirectory(data []byte, limit int) (agent.WorkspaceDirectoryResult, er
 			err = fs.ErrPermission
 		case "invalid_path":
 			err = agent.ErrWorkspaceReadInvalid
+		case proto.WorkspaceReadNotDirectory:
+			err = agent.ErrWorkspaceNotDirectory
 		}
 		return agent.WorkspaceDirectoryResult{}, err
 	}

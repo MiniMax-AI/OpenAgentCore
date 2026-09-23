@@ -4,8 +4,8 @@ Status: provider abstraction with Docker and microsandbox sampling, the
 current-snapshot API/client contract, and Core Web Live and capability-gated
 Durable Dashboard sources are implemented. Phase 4 includes the bounded sanitized
 exporter seam, optional OTLP/HTTP transport, execution-owner singleton background
-sampling, ClickHouse projection/Reader, public history API, and 1h/6h/24h Web
-ranges. History remains disabled by default. Other provider sources are not implemented.
+sampling, PostgreSQL history, public history API, and 1h/6h/24h Web ranges.
+History uses the existing Core database by default. Other provider sources are not implemented.
 Microsandbox idle suspension is a separate durable lifecycle feature; it does
 not consume this telemetry as authority.
 
@@ -186,7 +186,10 @@ measurement or lifecycle state.
 | Busy duration | Turn `started_at` to `completed_at` or now | Time model work has been active. |
 | Idle duration | future durable `idle_since` | Not available in the current design. |
 
-Container restart resets compute uptime but not allocation age. Dashboard labels
+Container restart resets compute uptime but not allocation age. Live CPU deltas
+require the same known compute start as well as the same allocation. Retained
+charts show CPU, memory and tokens; uptime stays in the current/Live view because
+the history contract does not supply each bucket's compute start. Dashboard labels
 must not collapse these values into one generic Runtime duration.
 
 ## 9. Collection behavior
@@ -243,57 +246,23 @@ Provider type, Runtime mode, and coarse status are safe low-cardinality labels.
 High-cardinality identities require tenant-scoped access and retention policies;
 they are not global Prometheus labels by default.
 
-### 10.1 Qualified public implementation reference
+### 10.1 Lightweight deployment
 
-The first Phase 4 qualification uses E2B Runtime commit
-`ccf2a64ee40472645209b92525a5459d413bce76` as implementation evidence, not as
-an API contract to copy. Its sandbox observer samples every five seconds, exports
-provider metrics through OTLP, and attaches sandbox and team identity. The
-OpenTelemetry Collector sends ordinary operational metrics to Mimir but routes
-the high-cardinality `e2b.*` sandbox series to ClickHouse. Its authenticated API
-derives team identity from the caller, queries with both `team_id` and
-`sandbox_id`, validates the requested time range, calculates a bounded step, and
-retains the specialized sandbox table for seven days. Relevant public files are:
+Core reuses its PostgreSQL database for bounded recent Runtime history. The
+provider-neutral observation service hands each sanitized periodic result to a
+bounded asynchronous writer. One typed row contains the observation and optional
+canonical Session Usage snapshot. The public API resolves caller ownership before
+issuing bounded queries; Web never queries storage directly.
 
-- [`packages/orchestrator/pkg/metrics/sandboxes.go`](https://github.com/e2b-dev/runtime/blob/ccf2a64ee40472645209b92525a5459d413bce76/packages/orchestrator/pkg/metrics/sandboxes.go)
-  for bounded collection and identity attributes;
-- [`packages/local-dev/otel-collector.yaml`](https://github.com/e2b-dev/runtime/blob/ccf2a64ee40472645209b92525a5459d413bce76/packages/local-dev/otel-collector.yaml)
-  for OTLP fan-out to Mimir and ClickHouse;
-- [`packages/clickhouse/migrations/20250717135224_sandbox_metrics.sql`](https://github.com/e2b-dev/runtime/blob/ccf2a64ee40472645209b92525a5459d413bce76/packages/clickhouse/migrations/20250717135224_sandbox_metrics.sql)
-  for the high-cardinality history schema and retention; and
-- [`packages/api/internal/clusters/resources_local.go`](https://github.com/e2b-dev/runtime/blob/ccf2a64ee40472645209b92525a5459d413bce76/packages/api/internal/clusters/resources_local.go)
-  plus [`packages/clickhouse/pkg/sandbox.go`](https://github.com/e2b-dev/runtime/blob/ccf2a64ee40472645209b92525a5459d413bce76/packages/clickhouse/pkg/sandbox.go)
-  for tenant-scoped, downsampled reads.
-
-Dify commit `a068c47ea993ccc0f943131c274b7830b16de9f4` independently demonstrates an
-optional OTLP exporter that becomes a no-op when disabled, but it does not
-provide a Runtime-incarnation history query boundary. It supports the exporter
-choice, not the history adapter design.
-
-For Core, the qualified topology is therefore:
-
-1. a bounded, best-effort provider-neutral handoff after validated current
-   observations;
-2. an optional operator-managed OTLP Collector;
-3. a high-cardinality history store behind a separate server-side adapter; and
-4. authenticated Core history routes that resolve tenant and Session ownership
-   before issuing a backend query.
-
-Mimir remains suitable for low-cardinality service health. The initial Runtime
-history qualification does not treat a shared Prometheus label filter as a
-tenant security boundary and does not let Web query Mimir, ClickHouse, or the
-Collector directly. ClickHouse is the first reference backend because its query
-shape can require tenant, Session, allocation, and incarnation predicates, but
-the public API and `runtimehistory` interface must remain backend-neutral. The
-backend, Collector, and exporter are disabled by default and are not required for
-Session execution or current observations.
+External OTLP export remains optional. Each destination has an independent queue,
+so a Collector outage cannot delay local persistence. Neither history nor export
+is execution or lifecycle authority. No additional metrics service is deployed.
 
 ### 10.2 OTLP transport configuration and instruments
 
-Core enables Runtime history export only when
-`AGENTS_API_RUNTIME_HISTORY_FILE` points to a server-only JSON file. With the
-variable unset, no exporter is created and no Collector or history store is
-required. A minimal configuration is:
+Core enables external export only when `AGENTS_API_RUNTIME_HISTORY_FILE` contains
+an OTLP endpoint. With the variable unset, local history and 30-second sampling
+remain enabled. An optional server-only configuration is:
 
 ```json
 {
@@ -311,11 +280,10 @@ committed. Plain HTTP requires the explicit combination of an `http` endpoint
 and `"insecure": true`; HTTPS rejects that flag. Endpoint userinfo, query
 strings, fragments, invalid headers, reserved transport headers, queues above
 4096 records, and timeouts above 30 seconds fail startup without echoing config
-contents. `sample_interval_seconds` is optional; values from 5 through 300 enable
-the deployment sampler, while omission retains on-read export only. Periodic
-sampling requires the execution Worker because its database lease is the
-deployment singleton boundary. Export is best effort through the bounded queue
-documented above.
+contents. `sample_interval_seconds` accepts 5 through 300; omission uses 30.
+Periodic sampling requires the execution Worker and its existing database lease.
+API-only processes without that worker advertise on-read collection. External
+export is optional and best effort; PostgreSQL writes use a separate bounded queue.
 
 The OTLP request uses standard protobuf metrics and these instruments:
 
@@ -359,26 +327,24 @@ A history API must expose actual sample coverage. Core Web must not
 advertise a durable range until the operator backend, query adapter, and a
 qualified periodic collection cadence are all configured.
 
-The reference ClickHouse Reader uses the same server-only file under an optional
-`clickhouse` object. Its native address, database, reader username, password, TLS
-mode, and bounded dial/query timeouts are never capability fields. The fixed
-reference policy is seven-day retention, a 24-hour maximum range, at most 1,000
-buckets per series, 64 series, and 10,000 returned points. Operator schema and
-Collector examples live under `services/agents-api/runtime-history/clickhouse`.
-Exactly one of `secure` or `insecure` must be set for the native connection;
-plaintext transport is never inferred from an omitted TLS flag.
+The PostgreSQL Reader shares Core database access and SQLC ownership. It limits
+queries to seven-day retention, a 24-hour range, 1,000 buckets per series, 64 series
+and 10,000 output points. Raw input has a separate bounded budget, so dense sampling
+does not consume the output budget before downsampling. A bounded periodic cleanup
+removes expired rows even when no Runtime is active. Expired rows are excluded from
+reads immediately; physical removal is incremental.
 
 ### 10.3 Backend-neutral history query boundary
 
 `services/agents-api/internal/runtimehistory` defines the server-side query
-contract independently from ClickHouse, OTLP, and the public HTTP shape. Its
+contract independently from SQL, OTLP, and the public HTTP shape. Its
 service resolves the authenticated tenant and Session to durable Core identity
 before calling a Reader. Reader queries always carry tenant, Session, and
 Environment scope plus a bounded start, exclusive end, server-selected step,
 and total point budget. Provider-native identity is never a query input.
 
 Reader results remain divided by allocation. Provider `started_at` values are
-retained only as compatible display metadata and never split one durable allocation
+retained as metadata and never split one durable allocation
 into multiple Dashboard series.
 Every bucket reports explicit observation coverage and nullable CPU/memory
 values. CPU utilization may be derived only from ordered cumulative counters
@@ -396,11 +362,10 @@ is not sufficient to advertise a Durable Dashboard source. Backend identity,
 URLs, credentials, and tenant data are never capability fields.
 
 This internal boundary, the Session-scoped public extension, capability discovery,
-strict client, and production ClickHouse reference Reader are implemented. The
-Reader queries only the specialized projection, always includes tenant, Session,
-Environment, bounded time, and `collection_source = 'periodic'` predicates, and
-aggregates resource points by allocation, resetting CPU derivation after a
-cumulative-counter regression. Durable
+strict client, and PostgreSQL Reader are implemented. The Reader includes tenant,
+Session, Environment and bounded-time predicates. Only periodic records are stored.
+It aggregates resource points by allocation, resetting CPU derivation across compute
+incarnations, missing counters and cumulative-counter regressions. Durable
 Web ranges remain gated on real retention, isolation, restart, and incarnation
 acceptance.
 
@@ -490,8 +455,8 @@ history sweep, the Core resolver reads the existing canonical cumulative Session
 Usage snapshot from the execution store alongside Runtime identity. The exporter
 emits Session-scoped input/output token gauges with the same Session and sampling
 time, independently of Docker, microsandbox, Kubernetes, or another provider.
-ClickHouse retains those cumulative points separately from allocation/incarnation
-series. Web derives throughput from adjacent nondecreasing points. Missing or
+PostgreSQL retains those cumulative snapshots alongside the sample; query results
+keep Session token points separate from allocation series. Web derives throughput from adjacent nondecreasing points. Missing or
 incomplete native usage and counter regressions remain gaps, never zero.
 
 The current snapshot API still does not duplicate Usage fields: Web joins its
@@ -516,9 +481,9 @@ authorized backend, never by exposing product credentials to Core Web.
 
 ## 14. Data model impact
 
-Current snapshot and Dashboard work require no migration. Existing
-`runtime_allocations`, `environments`, Sessions, Turns, and Usage are sufficient.
-No time-series table is proposed.
+Current snapshots reuse existing control-plane resources. Retained history adds
+one bounded observation table to the Core database. It does not change canonical
+Sessions, Turns or Usage and cannot authorize execution or lifecycle changes.
 
 Automatic idle shutdown is a separate feature. It requires durable fields such as
 `activity_revision`, `idle_since`, and `shutdown_requested_at` with fenced state
@@ -559,34 +524,16 @@ Implemented for the browser-local current-snapshot live window.
 - Build an explicitly ephemeral live window from complete Web snapshots.
 - Expose 15-minute and one-hour views with an explicit browser-local source label.
 
-### Phase 4: optional history
+### Phase 4: retained history
 
-- Implemented: bounded asynchronous handoff of sanitized, validated current
-  observation results. It is disabled by default, drops on queue saturation, and
-  cannot fail the current-observation request path.
-- Implemented: optional server-only OTLP/HTTP protobuf transport for the six
-  documented Runtime instruments, including allocation identity and provider
-  start metadata. Configuration is strict and secrets never reach Web.
-- Implemented: optional execution-owner singleton sampling across all nondeleted
-  managed Sessions. Keyset scans, provider concurrency, source deadlines, and
-  non-overlapping sweeps are bounded; collection source is exported explicitly.
-- Implemented: backend-neutral `runtimehistory` types and service validation.
-  Tenant/Session/Environment scope precedes every Reader query; allocation,
-  coverage, nullability, ordering, range and total-point invariants are enforced.
-- Implemented: safe public capability discovery, bounded Session-scoped history
-  query routes, generated OpenAPI schemas, and strict `packages/agents-client`
-  projection. Unconfigured or on-read-only deployments cannot advertise Durable.
-- Implemented: optional ClickHouse Reader, seven-day schema/TTL projection,
-  Collector example, strict server-only configuration, and mandatory
-  tenant/Session/Environment/periodic-source query predicates. No backend is a
-  Core execution dependency.
-- Qualified: real OTLP Collector-to-ClickHouse acceptance covers tenant isolation,
-  periodic-only public reads, Reader restart persistence, continuous allocation
-  series, and CPU baseline reset after cumulative-counter regression.
-- Implemented: Core Web discovers capabilities, reloads bounded Session histories
-  with bounded concurrency, and exposes explicit Live versus History sources with
-  1h, 6h, and 24h Durable ranges, including canonical Session token throughput.
-- Not implemented: exporter queue/drop/error coverage telemetry.
+- Bounded asynchronous writes of sanitized periodic observations to Core PostgreSQL.
+- Optional OTLP/HTTP export with server-only credentials and a separate queue.
+- Execution-owner sampling with bounded pages, concurrency and source deadlines.
+- Tenant-scoped history queries with input/output limits, explicit gaps and CPU fences.
+- Seven-day retention and bounded cleanup independent of active Runtime count.
+- Core Web history restoration after refresh, including canonical token snapshots.
+- Real Docker/microsandbox and PostgreSQL acceptance remains mandatory for delivery.
+- Exporter queue/drop/error coverage counters remain outside this batch.
 
 ### Phase 5: additional sources
 

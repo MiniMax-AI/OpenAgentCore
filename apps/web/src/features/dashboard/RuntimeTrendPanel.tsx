@@ -29,12 +29,16 @@ export function RuntimeTrendPanel({
   loadRuntimeHistory,
   headingId = "dashboard-runtime-live-heading",
   title = "Resource trends",
+  showDurableUptimePlaceholder = false,
+  allowSourceSelection = false,
 }: {
   snapshot: RuntimeDashboardSnapshot;
   stale: boolean;
   loadRuntimeHistory: RuntimeHistoryLoader;
   headingId?: string;
   title?: string;
+  showDurableUptimePlaceholder?: boolean;
+  allowSourceSelection?: boolean;
 }) {
   const [trendSamples, setTrendSamples] = useState<RuntimeTrendSample[]>(() => appendRuntimeTrendSample([], snapshot));
   const [selectedTrendRange, setSelectedTrendRange] = useState<RuntimeTrendRange>(RUNTIME_TREND_WINDOW_MS);
@@ -42,13 +46,17 @@ export function RuntimeTrendPanel({
   const [durableSnapshot, setDurableSnapshot] = useState<RuntimeDurableSnapshot | null>(null);
   const [durableState, setDurableState] = useState<"connecting" | "ready" | "unavailable" | "failed">("connecting");
   const [durableError, setDurableError] = useState<string | null>(null);
+  const [sourcePreference, setSourcePreference] = useState<RuntimeTrendSource>("durable");
   const visibleTrendSamples = useMemo(
     () => runtimeTrendRange(trendSamples, selectedTrendRange),
     [selectedTrendRange, trendSamples],
   );
-  const source: RuntimeTrendSource = durableState === "unavailable" && durableSnapshot === null
+  const durableAvailable = durableState !== "unavailable" || durableSnapshot !== null;
+  const source: RuntimeTrendSource = allowSourceSelection && sourcePreference === "live"
     ? "live"
-    : "durable";
+    : durableAvailable
+      ? "durable"
+      : "live";
   const selectedSamples = source === "durable"
     ? durableSnapshot?.samples ?? []
     : visibleTrendSamples;
@@ -103,9 +111,15 @@ export function RuntimeTrendPanel({
       <header className="dashboard-runtime-live-toolbar">
         <div>
           <h3 id={headingId}>{title}</h3>
-          <p>{source === "durable" ? "ClickHouse-backed retained samples · explicit history source" : "Browser-local samples · reset on reload"}</p>
+          <p>{source === "durable" ? "Retained samples · durable history" : "Browser-local samples · reset on reload"}</p>
         </div>
         <div className="dashboard-runtime-live-controls">
+          {allowSourceSelection ? (
+            <div className="dashboard-runtime-source" role="group" aria-label="Runtime metric source">
+              <button type="button" aria-pressed={source === "live"} onClick={() => setSourcePreference("live")}>Live</button>
+              <button type="button" aria-pressed={source === "durable"} disabled={!durableAvailable} onClick={() => setSourcePreference("durable")}>History</button>
+            </div>
+          ) : null}
           <span
             className={`${sourceStatusStale ? "dashboard-runtime-live-status dashboard-runtime-live-status-stale" : "dashboard-runtime-live-status"}${source === "durable" ? " dashboard-runtime-live-status-durable" : ""}`}
             aria-label={source === "durable"
@@ -140,7 +154,7 @@ export function RuntimeTrendPanel({
       </header>
       {durableState === "failed" && durableError ? <p className="dashboard-runtime-history-error" role="status">Durable history refresh failed: {durableError}</p> : null}
       {durableState === "unavailable" ? <p className="dashboard-runtime-history-note">Durable history is not configured; Live samples remain available.</p> : null}
-      <RuntimeTrendCharts samples={selectedSamples} source={source} rangeStart={rangeStart} rangeEnd={rangeEnd} />
+      <RuntimeTrendCharts samples={selectedSamples} source={source} rangeStart={rangeStart} rangeEnd={rangeEnd} showDurableUptimePlaceholder={showDurableUptimePlaceholder} />
     </section>
   );
 }

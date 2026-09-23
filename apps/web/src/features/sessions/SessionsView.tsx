@@ -924,6 +924,8 @@ export function SessionsView({
                   loadRuntimeHistory={loadRuntimeHistory}
                   headingId="session-runtime-trends-heading"
                   title="Session resource trends"
+                  showDurableUptimePlaceholder
+                  allowSourceSelection
                 />
               ) : runtimeError ? (
                 <ErrorState

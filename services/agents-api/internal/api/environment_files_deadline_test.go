@@ -41,7 +41,7 @@ func TestEnvironmentFilesReadOutlivesDefaultHTTPWriteDeadline(t *testing.T) {
 				t.Fatal("invalid delayed response", response.StatusCode, err)
 			}
 			if status == http.StatusOK {
-				if string(body["data"]) != "[]" || string(body["next"]) != "null" {
+				if string(body["object"]) != `"page"` || string(body["data"]) != "[]" || string(body["next"]) != "null" || string(body["has_more"]) != "false" {
 					t.Fatal("delayed page changed shape")
 				}
 			} else if body["error"] == nil || body["data"] != nil || body["next"] != nil {

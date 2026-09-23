@@ -507,11 +507,13 @@ export function RuntimeTrendCharts({
   source = "live",
   rangeStart,
   rangeEnd,
+  showDurableUptimePlaceholder = false,
 }: {
   samples: readonly RuntimeTrendSample[];
   source?: RuntimeTrendSource;
   rangeStart?: number;
   rangeEnd?: number;
+  showDurableUptimePlaceholder?: boolean;
 }) {
   const charts = useMemo(() => {
     const cpuIds = targetIds(samples, "cpuRatio");
@@ -556,7 +558,7 @@ export function RuntimeTrendCharts({
     <div className="dashboard-runtime-trend-grid" aria-label={durable ? "Runtime durable-history charts" : "Runtime live-window charts"}>
       <TrendChart title="CPU usage" subtitle={durable ? "bucketed cumulative-delta utilization · durable history" : "reported or cumulative-delta utilization · live window"} samples={samples} series={charts.cpu} maximum={cpuMaximum} formatValue={(value) => `${Math.round(value)}%`} rangeStart={oldest} rangeEnd={newest} source={source} bands={[{ from: 0, to: 30, tone: "safe" }, { from: 30, to: 70, tone: "warning" }, { from: 70, to: 100, tone: "danger" }]} ticks={[1, .7, .3, 0]} emptyMessage={durable ? "No retained CPU samples" : undefined} />
       <TrendChart title="Memory usage" subtitle={durable ? "complete target aggregate / configured limit · durable history" : "working set / configured limit · live window"} samples={samples} series={charts.memory} maximum={memoryMaximum} formatValue={(value) => formatDashboardBytes(Math.round(value))} rangeStart={oldest} rangeEnd={newest} source={source} emptyMessage={durable ? "No complete retained memory samples" : undefined} />
-      <TrendChart title="Compute uptime" subtitle={durable ? "earliest retained start → bucket observation · allocation series" : "provider started_at → observed_at · allocation series"} samples={samples} series={charts.uptime} maximum={uptimeMaximum} formatValue={(value) => formatDashboardDuration(value)} rangeStart={oldest} rangeEnd={newest} source={source} emptyMessage={durable ? "No retained uptime samples" : undefined} />
+      {!durable || showDurableUptimePlaceholder ? <TrendChart title="Compute uptime" subtitle={durable ? "current Runtime measurement · not retained in durable history" : "provider started_at → observed_at · allocation series"} samples={samples} series={durable ? [] : charts.uptime} maximum={uptimeMaximum} formatValue={(value) => formatDashboardDuration(value)} rangeStart={oldest} rangeEnd={newest} source={source} emptyMessage={durable ? "Live-only metric" : undefined} emptyDetail={durable ? "Select Live to inspect current Runtime uptime" : undefined} /> : null}
       <TrendChart title="Token throughput" subtitle={durable ? "canonical Session Usage deltas · durable history" : "Session Usage deltas · missing usage excluded"} samples={samples} series={charts.tokens} maximum={tokenMaximum} formatValue={(value) => `${formatDashboardTokens(Math.round(value))}/min`} rangeStart={oldest} rangeEnd={newest} source={source} emptyMessage={durable ? "No retained token samples" : undefined} />
     </div>
   );

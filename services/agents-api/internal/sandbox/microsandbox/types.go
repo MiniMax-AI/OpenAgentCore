@@ -18,18 +18,19 @@ const MaxResponseBytes = 16 * 1024 * 1024
 // Config is trusted deployment configuration. Paths and hashes refer to one
 // immutable, qualified installation. Network is explicitly used on create and restore.
 type Config struct {
-	InstallationID string
-	HelperPath     string
-	RuntimeHome    string
-	RuntimePath    string
-	FirmwarePath   string
-	RuntimeSHA256  string
-	FirmwareSHA256 string
-	Image          string
-	MemoryMiB      uint32
-	CPUs           uint8
-	RootDiskMiB    uint32
-	Network        NetworkPolicy
+	InstallationID     string
+	HelperPath         string
+	RuntimeHome        string
+	RuntimePath        string
+	FirmwarePath       string
+	RuntimeSHA256      string
+	FirmwareSHA256     string
+	Image              string
+	MemoryMiB          uint32
+	CPUs               uint8
+	RootDiskMiB        uint32
+	EnvironmentDiskMiB uint32
+	Network            NetworkPolicy
 }
 
 type NetworkPolicy struct {
@@ -70,7 +71,8 @@ type Response struct {
 }
 
 // Metrics is the bounded provider-helper projection used by Core observability.
-// It intentionally excludes instantaneous CPU percent and provider-native names.
+// ObservedAt and Uptime preserve the same native registry sample at millisecond
+// precision. It excludes instantaneous CPU percent and provider-native names.
 type Metrics struct {
 	ObservedAt       time.Time
 	Uptime           time.Duration

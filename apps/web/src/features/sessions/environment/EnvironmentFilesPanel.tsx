@@ -44,6 +44,11 @@ export function validEnvironmentFilesDirectory(
   return root === "/" || directory === root || directory.startsWith(`${root}/`);
 }
 
+/** Core accepts only the cleaned form, so a valid trailing separator is dropped before sending. */
+export function environmentFilesRequestDirectory(value: string): string {
+  return canonicalDirectory(value) ?? value;
+}
+
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
@@ -119,7 +124,7 @@ export function EnvironmentFilesPanel({
     abortRef.current = controller;
     const request = requestRef.current + 1;
     requestRef.current = request;
-    const requestedDirectory = append ? appliedDirectory : directory;
+    const requestedDirectory = append ? appliedDirectory : environmentFilesRequestDirectory(directory);
     const requestedOrder = append ? appliedOrder : order;
     setState(append ? "loading-more" : "loading");
     setError(null);
