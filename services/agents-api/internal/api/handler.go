@@ -81,10 +81,11 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 
 // routes builds the router. HEAD runs the GET route without a body after the
 // same authentication and Beta checks (HP-19). Routes that stream events,
-// download content or read a live workspace directory register an explicit
-// HEAD 405 instead, so HEAD never holds a stream open, reads full content or
-// waits on a Runtime. Every 405, including unknown methods and routes outside
-// the Beta group, has the JSON body and Allow header.
+// download content, read a live workspace directory, sample Runtime
+// observations or query Runtime history register an explicit HEAD 405 instead,
+// so HEAD never holds a stream open, reads full content or does Runtime or
+// telemetry work. Every 405, including unknown methods and routes outside the
+// Beta group, has the JSON body and Allow header.
 func (h *Handler) routes() *chi.Mux {
 	router := chi.NewRouter()
 	router.Use(agentsResponseHeaders, log.HTTPMiddleware, middleware.GetHead)
@@ -137,9 +138,12 @@ func (h *Handler) routes() *chi.Mux {
 		r.Get("/agents/sessions/{session_id}", h.getSession)
 		r.Get("/agents/sessions/{session_id}/execution-configuration", h.getSessionExecutionConfiguration)
 		r.Get("/agents/sessions/{session_id}/runtime-observation", h.getRuntimeObservation)
+		r.Head("/agents/sessions/{session_id}/runtime-observation", methodNotAllowed)
 		r.Get("/agents/runtime-observations", h.listRuntimeObservations)
+		r.Head("/agents/runtime-observations", methodNotAllowed)
 		r.Get("/agents/runtime-history/capabilities", h.getRuntimeHistoryCapabilities)
 		r.Get("/agents/sessions/{session_id}/runtime-history", h.getRuntimeHistory)
+		r.Head("/agents/sessions/{session_id}/runtime-history", methodNotAllowed)
 		r.Post("/agents/sessions/{session_id}", h.updateSession)
 		r.Delete("/agents/sessions/{session_id}", h.deleteSession)
 		r.Post("/agents/sessions/{session_id}/events", h.createEvents)

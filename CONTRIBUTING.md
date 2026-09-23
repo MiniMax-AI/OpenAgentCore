@@ -124,8 +124,8 @@ Skills and Core project extensions `invalid_api_key` only for a rejected Bearer
 credential. Agents API responses carry a fresh `X-Request-Id` (also in the log
 context), `OpenAI-Version`, `OpenAI-Processing-Ms` and nosniff through the API
 router's own middleware, not the shared log middleware. HEAD runs GET routes;
-streaming, content-download and live directory routes register an explicit HEAD
-405 instead. Every 405 of the API router, unknown methods included, has the JSON
+streaming, content-download, live directory, Runtime observation and Runtime
+history routes register an explicit HEAD 405 instead. Every 405 of the API router, unknown methods included, has the JSON
 body and lists the route's methods in `Allow`.
 
 Keep runtime state, test artifacts and build output under `~/.parsar/`. Require
