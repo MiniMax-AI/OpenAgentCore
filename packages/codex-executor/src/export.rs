@@ -81,6 +81,9 @@ fn walk<W: Write>(
                 )?;
                 append(File::from(file), &path, device, budget, archive)?;
             }
+            // A link is recognized by its lstat type and skipped: it is never
+            // followed, opened or resolved, and publishes no Artifact.
+            FileType::Symlink => {}
             _ => return Err(invalid()),
         }
     }

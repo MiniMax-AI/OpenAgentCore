@@ -20,6 +20,7 @@ type artifactFixture struct {
 	tenant, session, id, environment, cursor string
 	limit                                    int
 	ascending                                bool
+	empty                                    bool
 	err                                      error
 	calls                                    int
 }
@@ -33,6 +34,9 @@ func (f *artifactFixture) GetSessionArtifact(_ context.Context, tenant, session,
 func (f *artifactFixture) ListSessionArtifacts(_ context.Context, tenant, session, environment, cursor string, limit int, ascending bool) (store.ArtifactPage, error) {
 	f.calls++
 	f.tenant, f.session, f.environment, f.cursor, f.limit, f.ascending = tenant, session, environment, cursor, limit, ascending
+	if f.empty {
+		return store.ArtifactPage{Artifacts: []store.SessionArtifact{}}, f.err
+	}
 	return store.ArtifactPage{Artifacts: []store.SessionArtifact{f.artifact}, NextCursor: f.artifact.ID}, f.err
 }
 
@@ -78,6 +82,15 @@ func TestSessionArtifactRoutesAndPublicProjection(t *testing.T) {
 	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &page) != nil || !page.HasMore || len(page.Data) != 1 || f.environment != "environment" || f.cursor != "previous" || f.limit != 1 || !f.ascending {
 		t.Fatalf("filtered page: %d %s %+v", w.Code, w.Body, f)
 	}
+	// The list envelope matches the Session, Turn and Item lists (HE-53).
+	if page.Object != "list" || page.FirstID == nil || *page.FirstID != "artifact" || page.LastID == nil || *page.LastID != "artifact" {
+		t.Fatalf("list envelope: %s", w.Body)
+	}
+	f.empty = true
+	if w := request("GET", "?environment_id=not-a-uuid", "agents=v1"); w.Code != 200 || strings.TrimSpace(w.Body.String()) != `{"object":"list","first_id":null,"last_id":null,"data":[],"has_more":false}` || f.environment != "not-a-uuid" {
+		t.Fatalf("empty list envelope: %d %s", w.Code, w.Body)
+	}
+	f.empty = false
 	w = request("GET", "/artifact/content", "agents=v1")
 	if w.Code != 200 || !bytes.Equal(w.Body.Bytes(), []byte{0, 255, 1}) || w.Header().Get("Content-Type") != "application/octet-stream" || w.Header().Get("Content-Length") != "3" {
 		t.Fatalf("content: %d %s %v", w.Code, w.Body, w.Header())

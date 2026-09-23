@@ -98,7 +98,7 @@ paths start at `/vaults`, not `/agents/vaults`.
 | sessions.events | create, stream | Text/cancel/function-result admission and live events; function-action state snapshots supported |
 | sessions.turns | retrieve, list | Implemented reads; lifecycle conformance still partial |
 | sessions.items | list | Partial Item variants |
-| sessions.artifacts | retrieve, list, delete, content | Shared output capture and immutable stored reads/deletion on accepted Docker profiles and [qualified user-managed workflows](user-managed-runtime-v1.md) (prior Core-managed E2B evidence remains historical), including retained downloads after Runtime loss; exact upstream defaults/errors, unchanged-file republishing and cancellation-edge parity remain unverified |
+| sessions.artifacts | retrieve, list, delete, content | Shared output capture and immutable stored reads/deletion on accepted Docker profiles and [qualified user-managed workflows](user-managed-runtime-v1.md) (prior Core-managed E2B evidence remains historical), including retained downloads after Runtime loss. [Aligned](official-semantics-alignment.md#artifact-capture-and-listing--september-23) output symlink skipping, unchanged-path non-republication, the list envelope and malformed filters; exact upstream defaults/errors, hard-link/special-file capture and cancellation-edge parity remain unverified |
 | sessions.subagents | retrieve, list | [Three-harness Docker reads, native lifecycle limits and real evidence](subagents.md); full multi-agent semantics remain partial |
 | sessions.subagents.items | list | Qualified own-child history reads; full Item variants and live child streaming remain partial |
 | sessions.subagents.turns | retrieve, list | Implemented; shared Session/child IDs |

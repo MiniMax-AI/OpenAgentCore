@@ -50,11 +50,8 @@ func (s *Store) ListSessionArtifacts(ctx context.Context, tenantID, sessionID, e
 	session, _ := parseID(sessionID)
 	params := sqlc.ListSessionArtifactsParams{TenantID: tenant, SessionID: session, PageLimit: int32(limit + 1), Ascending: ascending, AfterID: pgtype.UUID{Valid: true}}
 	if environmentID != "" {
-		var err error
-		params.EnvironmentID, err = parseID(environmentID)
-		if err != nil {
-			return ArtifactPage{}, err
-		}
+		// A malformed filter matches nothing, like another Environment's ID (HE-56).
+		params.EnvironmentID = parsePathID(environmentID)
 	}
 	if cursor != "" {
 		// A malformed cursor remains an invalid request, unlike a path identifier.
