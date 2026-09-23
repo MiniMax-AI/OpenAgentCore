@@ -14,8 +14,11 @@ workspace tools, preparation, Files and Artifacts. The native SDK remains
 responsible for its model/tool loop and schema validation. Codex and MiniMax
 structured-output execution, self-hosted/E2B execution, Skills/Plugins/capability
 directories (including inherited template contents), HTTP MCP, Subagent/tool-search
-combinations and other root types are unqualified and explicitly rejected. These
-are implementation gaps, not a redefinition of the official protocol.
+combinations and schemas without an explicit object root are unqualified and
+explicitly rejected. These are implementation gaps, not a redefinition of the
+official protocol. An explicit non-object root type is an official protocol error
+on save and Session creation for every harness
+([validation](official-semantics-alignment.md#agent-configuration-validation--september-23)).
 
 The Claude SDK consumes JSON numbers as binary64. Session admission rejects schema
 numbers whose values cannot survive that conversion; saved Agent resources still

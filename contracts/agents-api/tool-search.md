@@ -26,8 +26,9 @@ false and the adapter explicitly enables native ToolSearch. Only declared callba
 and ToolSearch are allowed. No search index, callback protocol, provider proxy or
 model loop is added to production.
 
-Search-only, missing-search, duplicate-search, workspace, HTTP MCP, structured-output
-and Subagent combinations remain unqualified. They are implementation/verification
+Search-only, missing-search, workspace, HTTP MCP, structured-output and Subagent
+combinations remain unqualified. A repeated `tool_search` is an official protocol
+error on saved and inline configuration. They are implementation/verification
 gaps, not claimed upstream restrictions. Codex and MiniMax discovery remain gaps.
 Unknown public combinations reject before execution; an actual Runtime must also
 advertise the operation. An advertisement alone cannot qualify a public profile.

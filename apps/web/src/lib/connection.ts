@@ -24,7 +24,7 @@ export function isLocalProxyBaseUrl(baseUrl: string): boolean {
   return (baseUrl.trim() || "/v1").replace(/\/+$/, "") === "/v1";
 }
 
-function isLoopbackHostname(hostname: string): boolean {
+export function isLoopbackHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase();
   return (
     normalized === "localhost" ||

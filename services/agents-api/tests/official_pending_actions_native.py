@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import uuid
 
+from session_cleanup import delete_session
+
 
 def verify_pending_actions(client, foreign, http, model, evidence):
     """The private runner supplies an isolated Core/native provider deployment."""
@@ -162,4 +164,4 @@ def verify_pending_actions(client, foreign, http, model, evidence):
     finally:
         Path(evidence).write_text(json.dumps(proof, indent=2))
         for sid in reversed(created):
-            sessions.delete(sid)
+            delete_session(sessions, sid)

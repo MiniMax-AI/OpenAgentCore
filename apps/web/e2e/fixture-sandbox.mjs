@@ -54,7 +54,7 @@ export function handleSandboxFixture(request, response, url, sendJson, sendError
     });
   }
   else if (path.endsWith("/deployment")) sendJson(response, deployment());
-  else if (path.endsWith("/enrollment-tokens")) sendJson(response, { token: "fixture-once-token", expires_at: "2026-09-23T09:00:00Z" });
+  else if (path.endsWith("/enrollment-tokens")) sendJson(response, { token: "fixture-once-token", expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString() });
   else if (path.endsWith("/allocations")) sendJson(response, { data: path.includes("node-local") ? [{ id: "allocation-1", node_id: "node-local", session_id: "session_snapshot", tenant_id: "fixture-project", environment_id: "environment-1", state: "active", compute_phase: "running", initialization: "ready", diagnostic, created_at: now }] : [] });
   else if (request.method === "DELETE") {
     const id = path.split("/").at(-1);

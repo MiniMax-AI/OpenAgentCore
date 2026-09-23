@@ -1,5 +1,6 @@
 import {
   AgentCoreError,
+  isSessionDeletionConflict,
   type AgentCore,
   type AgentSession,
   type SessionDeleted,
@@ -18,6 +19,8 @@ export interface SessionMetadataValidation {
 export type SessionActionFailureKind =
   | "not_found"
   | "lifecycle_conflict"
+  | "session_busy"
+  | "session_input_pending"
   | "core_unavailable"
   | "metadata_conflict"
   | "request_failed"
@@ -295,6 +298,13 @@ function normalizeSessionActionError(
         { cause: error },
       );
     }
+    if (action === "delete" && phase === "write" && isSessionDeletionConflict(error)) {
+      return new SessionActionError(
+        "Agent Core deletes a Session only when it is idle or failed without required actions. This Session still has queued, running or waiting work or pending input, so nothing was changed. Choose Cancel work and delete to cancel it, wait until it is idle and then delete it.",
+        "session_busy",
+        { cause: error },
+      );
+    }
     if (error.status === 409) {
       if (phase === "read") {
         return new SessionActionError(
@@ -389,12 +399,42 @@ export async function requestSessionUpdate(
   }
 }
 
+/**
+ * A Session that reads idle or failed, or only awaits its Environment
+ * connection, yet cannot be deleted is holding input that has not started.
+ * Core rejects cancellation while that input is pending.
+ */
+function onlyInputPending(session: AgentSession): boolean {
+  if (session.status === "idle" || session.status === "failed") return true;
+  return session.status === "requires_action" &&
+    session.required_actions.length > 0 &&
+    session.required_actions.every((action) => action.type === "environment_connection");
+}
+
+// Reads the Session once after a busy conflict so the dialog only offers
+// cancellation when there is work that cancellation can stop.
+async function classifyBusyDelete(core: AgentCore, sessionId: string, busy: SessionActionError): Promise<SessionActionError> {
+  let latest: AgentSession;
+  try {
+    latest = await retrieveCanonicalSession(core, sessionId);
+  } catch {
+    return busy;
+  }
+  if (!onlyInputPending(latest)) return busy;
+  return new SessionActionError(
+    "Agent Core deletes a Session only when it is idle or failed without required actions. This Session has input waiting to start in its Environment, which cannot be cancelled, so nothing was changed. Delete it after that input starts, expires or fails; once it starts, cancel its work first.",
+    "session_input_pending",
+    { cause: busy.cause },
+  );
+}
+
 export async function requestSessionDelete(core: AgentCore, sessionId: string): Promise<SessionDeleted> {
   let deleted: SessionDeleted;
   try {
     deleted = await core.deleteSession(sessionId);
   } catch (error) {
-    throw normalizeSessionActionError(error, "delete", "write");
+    const failure = normalizeSessionActionError(error, "delete", "write");
+    throw failure.kind === "session_busy" ? await classifyBusyDelete(core, sessionId, failure) : failure;
   }
   if (
     deleted?.id !== sessionId ||
@@ -407,6 +447,88 @@ export async function requestSessionDelete(core: AgentCore, sessionId: string): 
     );
   }
   return deleted;
+}
+
+/**
+ * Sends one explicit cancellation before a confirmed delete. It never deletes;
+ * a rejected or uncertain cancellation keeps the Session.
+ */
+export async function requestSessionCancelBeforeDelete(
+  core: AgentCore,
+  sessionId: string,
+  idempotencyKey: string,
+): Promise<void> {
+  try {
+    await core.cancelTurn(sessionId, idempotencyKey);
+  } catch (error) {
+    if (error instanceof AgentCoreError && error.status === 404) {
+      throw normalizeSessionActionError(error, "delete", "write");
+    }
+    const detail = error instanceof AgentCoreError
+      ? `Agent Core rejected the cancellation (${error.status}): ${error.message}`
+      : "The cancellation result is unknown because the connection ended before Core confirmed it.";
+    throw new SessionActionError(
+      `${detail} The Session was not deleted and the Web did not retry.`,
+      "request_failed",
+      { cause: error },
+    );
+  }
+}
+
+export type SessionIdleWait = "idle" | "missing" | "stale";
+
+export interface SessionIdleWaitOptions {
+  /** Stops waiting without error once the result would no longer be applied. */
+  isCurrent?: () => boolean;
+  intervalMs?: number;
+  timeoutMs?: number;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+function isDeletableSession(session: AgentSession): boolean {
+  return (session.status === "idle" || session.status === "failed") && session.required_actions.length === 0;
+}
+
+/**
+ * Reads the Session until it is idle or failed without required actions, the
+ * public state that permits deletion. The wait is bounded and never writes.
+ */
+export async function waitForSessionIdle(
+  core: AgentCore,
+  sessionId: string,
+  {
+    isCurrent = () => true,
+    intervalMs = 1_000,
+    timeoutMs = 30_000,
+    now = Date.now,
+    sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  }: SessionIdleWaitOptions = {},
+): Promise<SessionIdleWait> {
+  const deadline = now() + timeoutMs;
+  for (;;) {
+    if (!isCurrent()) return "stale";
+    let latest: AgentSession;
+    try {
+      latest = await retrieveCanonicalSession(core, sessionId);
+    } catch (error) {
+      if (error instanceof AgentCoreError && error.status === 404) return "missing";
+      throw new SessionActionError(
+        "Cancellation was requested, but the Session could not be read while waiting for it to become idle. It was not deleted.",
+        "request_failed",
+        { cause: error },
+      );
+    }
+    if (!isCurrent()) return "stale";
+    if (isDeletableSession(latest)) return "idle";
+    if (now() >= deadline) {
+      throw new SessionActionError(
+        `Cancellation was requested, but the Session was still ${latest.status.replaceAll("_", " ")} after ${Math.round(timeoutMs / 1000)} seconds. It was not deleted; try again once it is idle.`,
+        "session_busy",
+      );
+    }
+    await sleep(intervalMs);
+  }
 }
 
 export async function reconcileUnknownSessionDelete(

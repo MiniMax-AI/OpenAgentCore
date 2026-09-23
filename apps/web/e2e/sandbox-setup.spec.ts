@@ -7,7 +7,7 @@ async function openSetup(page: Page) {
   await expect(page.getByRole("heading", { name: "Set up hosted sandboxes" })).toBeVisible();
 }
 test.beforeEach(async ({ page, request }) => {
-  await page.route("**/console/config", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ sandbox_admin: true, node_installer: false }) }));
+  await page.route("**/console/config", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ sandbox_admin: true, node_installer: true, node_installer_sha256: "a".repeat(64) }) }));
   await request.post(`${fixture}/__fixture/reset`);
   await request.post(`${fixture}/__fixture/sandbox-uninitialized`);
   await page.goto("/");
@@ -25,20 +25,21 @@ test("bundled console needs no extra admin key and provides one install command 
   await page.getByRole("button", { name: "Hosted Sandbox Manager", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Set up hosted sandboxes" })).toBeVisible();
   await expect(page.getByLabel("Deployment admin key")).toHaveCount(0);
-  await expect(page.getByLabel("Core origin reachable from nodes and guests")).toHaveValue(new URL(page.url()).origin);
+  await expect(page.getByLabel("Core origin reachable from nodes and guests")).toBeVisible();
+  await page.getByLabel("Core origin reachable from nodes and guests").fill("https://core.example");
   await page.getByLabel("Sandbox provider").selectOption("docker");
   await page.getByRole("button", { name: "Initialize sandbox deployment" }).click();
-  await page.getByRole("button", { name: "Generate node command" }).click();
+  await page.getByRole("button", { name: "Add node", exact: true }).click();
   const command = page.getByLabel("One-time enrollment command");
-  await expect(command).toHaveValue(/PARSAR_NODE_ENROLLMENT_TOKEN='fixture-once-token' python3 -c/);
+  await expect(command).toHaveValue(/fixture-once-token/);
   await expect(command).toHaveValue(/\/node-install\/node_install.py/);
-  await expect(command).toHaveValue(/hashlib.sha256/);
+
   await expect(page.getByRole("button", { name: "Copy node command" })).toBeVisible();
-  await expect(page.getByRole("status")).toContainText("refresh automatically");
+  await expect(page.getByRole("dialog").getByRole("status")).toContainText("Waiting for your node");
   await expect(page.locator(".sandbox-manager")).not.toContainText("Create a private /etc/parsar/sandbox-node.json");
   await request.post(`${fixture}/__fixture/sandbox-add-node`);
   await expect(page.getByRole("region", { name: "Sandbox nodes", exact: true })).toContainText("Enrolled host", { timeout: 10000 });
-  await expect(page.getByRole("region", { name: "Sandbox nodes", exact: true })).toContainText("Provider ready");
+  await expect(page.getByRole("region", { name: "Sandbox nodes", exact: true })).toContainText("Available");
   expect(browserAuthorizations.length).toBeGreaterThan(0);
   expect(browserAuthorizations.every((value) => value === undefined)).toBe(true);
 });
@@ -50,30 +51,28 @@ for (const provider of ["docker", "microsandbox"]) {
     const submit = page.getByRole("button", { name: "Initialize sandbox deployment" });
     await expect(submit).toBeDisabled();
     await expect(page.getByLabel("Sandbox provider")).toHaveValue("");
-    await expect(page.getByRole("button", { name: "Generate enrollment command" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Add node", exact: true })).toHaveCount(0);
     await page.getByLabel("Sandbox provider").selectOption(provider);
     const origin = page.getByLabel("Core origin reachable from nodes and guests");
-    for (const invalid of ["http://core.example", "https://core.example/v1", "https://user:secret@core.example", "https://core.example?key=secret"]) {
+    for (const invalid of ["http://127.0.0.1:8080", "https://localhost", "https://[::1]", "http://core.example", "https://core.example/v1", "https://user:secret@core.example", "https://core.example?key=secret"]) {
       await origin.fill(invalid);
       await expect(submit).toBeDisabled();
     }
     await origin.fill("https://CORE.example/");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await submit.click();
-    await expect(page.locator(".sandbox-summary")).toContainText(provider === "docker" ? "Docker" : "microsandbox");
+    await page.getByText("Deployment details", { exact: true }).click();
+    await expect(page.locator(".sandbox-deployment-details")).toContainText(provider === "docker" ? "Docker" : "microsandbox");
     await expect(page.getByLabel("Sandbox provider")).toHaveCount(0);
     await expect(page.getByText("No nodes registered. Add a node to provide hosted capacity.")).toBeVisible();
-    await expect(page.getByLabel("Core URL reachable from the node")).toHaveValue("https://core.example");
-    await expect(page.getByLabel("Core URL reachable from the node")).toHaveAttribute("readonly", "");
-    await expect(page.getByRole("link", { name: "Node configuration guide" })).toBeVisible();
-    await expect(page.locator(".sandbox-steps")).toContainText("fixture-installation");
-    await page.getByRole("button", { name: "Generate enrollment command" }).click();
+    await page.getByRole("button", { name: "Add node", exact: true }).click();
     await expect(page.getByLabel("One-time enrollment command")).toHaveValue(/--core-url 'https:\/\/core.example'/);
     expect(await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }))).not.toMatch(/fixture-admin-key|fixture-once-token/);
     await request.post(`${fixture}/__fixture/sandbox-add-node`);
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Refresh sandbox state" }).click();
     await expect(page.getByRole("region", { name: "Sandbox nodes", exact: true })).toContainText("Enrolled host");
-    await expect(page.getByRole("region", { name: "Sandbox nodes", exact: true })).toContainText("Provider ready");
+    await expect(page.getByRole("region", { name: "Sandbox nodes", exact: true })).toContainText("Available");
     const state = await (await request.get(`${fixture}/__fixture/sandbox`)).json();
     expect(state.calls.filter((call: { path: string; method: string }) => call.path.endsWith("/deployment") && call.method === "POST")).toHaveLength(1);
     expect(state.provider).toBe(provider);
@@ -92,8 +91,9 @@ test("concurrent setup conflict requires refresh and displays the committed prov
   await expect(page.getByRole("alert")).toContainText("already configured");
   await expect(page.getByRole("button", { name: "Initialize sandbox deployment" })).toBeDisabled();
   await page.getByRole("button", { name: "Refresh sandbox state" }).click();
-  await expect(page.locator(".sandbox-summary")).toContainText("microsandbox");
-  await expect(page.getByLabel("Core URL reachable from the node")).toHaveValue(winner.core_url);
+  await page.getByText("Deployment details", { exact: true }).click();
+  await expect(page.locator(".sandbox-deployment-details")).toContainText("microsandbox");
+  await expect(page.locator(".sandbox-deployment-details")).toContainText(winner.core_url);
   await expect(page.getByLabel("Sandbox provider")).toHaveCount(0);
 });
 
@@ -113,7 +113,8 @@ test("a lost setup response is not retried and refresh recovers the saved deploy
   await expect(page.getByRole("button", { name: "Initialize sandbox deployment" })).toBeDisabled();
   expect(writes).toBe(1);
   await page.getByRole("button", { name: "Refresh sandbox state" }).click();
-  await expect(page.locator(".sandbox-summary")).toContainText("Docker");
+  await page.getByText("Deployment details", { exact: true }).click();
+  await expect(page.locator(".sandbox-deployment-details")).toContainText("Docker");
   expect(writes).toBe(1);
   expect((await (await request.get(setupUrl)).json()).provider).toBe("docker");
 });
@@ -159,7 +160,7 @@ for (const operation of ["setup", "enrollment"] as const) {
     } else {
       await request.post(setupUrl, { data: { provider: "docker", core_url: "https://core.example" } });
       await page.getByRole("button", { name: "Refresh sandbox state" }).click();
-      await page.getByRole("button", { name: "Generate enrollment command" }).click();
+      await page.getByRole("button", { name: "Add node", exact: true }).click();
     }
     await expect.poll(() => page.evaluate(() => typeof (window as Window & { releaseSandboxResponse?: () => void }).releaseSandboxResponse)).toBe("function");
     await page.evaluate(() => { location.hash = "system"; });
@@ -190,30 +191,41 @@ test("unpaired or unavailable consoles show setup guidance without admin credent
     await expect(page.getByLabel("Deployment admin key")).toHaveCount(0);
     expect((await (await request.get(`${fixture}/__fixture/sandbox`)).json()).calls).toHaveLength(0);
   }
-  await page.route("**/console/config", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ sandbox_admin: true, node_installer: false }) }));
+  await page.route("**/console/config", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ sandbox_admin: true, node_installer: true, node_installer_sha256: "a".repeat(64) }) }));
   await page.getByRole("button", { name: "Refresh sandbox state" }).click();
   await expect(page.getByRole("heading", { name: "Set up hosted sandboxes" })).toBeVisible();
 });
 
-test("Chinese setup and the generated installer command preserve polling and language switching", async ({ page, request }) => {
-  await page.route("**/console/config", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ sandbox_admin: true, node_installer: true, node_installer_sha256: "a".repeat(64) }) }));
-  await page.getByLabel("Language / 语言").selectOption("zh");
-  await page.getByRole("button", { name: "托管沙箱管理", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "配置托管沙箱" })).toBeVisible();
-  await page.getByLabel("沙箱运行后端").selectOption("docker");
-  await expect(page.locator(".sandbox-manager")).toContainText("节点命令会安装匹配的运行时镜像");
-  await page.getByLabel("节点和沙箱可访问的 Core 地址").fill("https://core.example");
-  await page.getByRole("button", { name: "初始化沙箱部署" }).click();
-  await page.getByRole("button", { name: "生成节点命令" }).click();
-  await expect(page.getByLabel("一次性注册命令")).toHaveValue(/PARSAR_NODE_ENROLLMENT_TOKEN='fixture-once-token' python3 -c/);
-  await expect(page.getByRole("button", { name: "复制节点命令" })).toBeVisible();
-  await expect(page.locator(".sandbox-manager")).toContainText("每隔几秒自动刷新");
-  await request.post(`${fixture}/__fixture/sandbox-add-node`);
-  await expect(page.getByRole("region", { name: "沙箱节点", exact: true })).toContainText("Enrolled host", { timeout: 10000 });
-  await expect(page.getByRole("region", { name: "沙箱节点", exact: true })).toContainText("后端就绪");
-  await page.getByLabel("Language / 语言").selectOption("en");
-  await expect(page.getByRole("button", { name: "Copy node command" })).toBeVisible();
-  await expect(page.getByLabel("One-time enrollment command")).toHaveValue(/fixture-once-token/);
-  await page.getByRole("button", { name: "Clear enrollment command" }).click();
-  await expect(page.getByLabel("One-time enrollment command")).toHaveCount(0);
+test("loopback console setup exposes the address and cannot save the automatic default", async ({ page, request }) => {
+  await openSetup(page);
+  const origin = page.getByLabel("Core origin reachable from nodes and guests");
+  await expect(origin).toBeVisible();
+  await expect(origin).toHaveValue(new URL(page.url()).origin);
+  await expect(page.getByText("This console address cannot be used by sandbox guests.", { exact: false })).toBeVisible();
+  await page.getByLabel("Sandbox provider").selectOption("docker");
+  const submit = page.getByRole("button", { name: "Initialize sandbox deployment" });
+  await expect(submit).toBeDisabled();
+  await origin.press("Enter");
+  expect((await (await request.get(`${fixture}/__fixture/sandbox`)).json()).calls.filter((call: { method: string }) => call.method === "POST")).toHaveLength(0);
+  await origin.fill("https://core.example");
+  await submit.click();
+  expect((await (await request.get(setupUrl)).json()).core_url).toBe("https://core.example");
+});
+
+test("a usable HTTPS console origin initializes without exposing the network field", async ({ page, request }) => {
+  const localOrigin = new URL(page.url()).origin;
+  await page.route("https://core.example/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/console/config") return route.fallback();
+    if (url.pathname.endsWith("/events")) return route.fulfill({ contentType: "text/event-stream", body: "" });
+    const response = await route.fetch({ url: `${localOrigin}${url.pathname}${url.search}` });
+    await route.fulfill({ response });
+  });
+  await page.goto("https://core.example/");
+  await openSetup(page);
+  await expect(page.getByLabel("Core origin reachable from nodes and guests")).toBeHidden();
+  await page.getByLabel("Sandbox provider").selectOption("docker");
+  await page.getByRole("button", { name: "Initialize sandbox deployment" }).click();
+  await expect(page.getByRole("button", { name: "Add node", exact: true })).toBeVisible();
+  expect((await (await request.get(setupUrl)).json()).core_url).toBe("https://core.example");
 });

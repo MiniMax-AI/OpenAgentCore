@@ -59,12 +59,14 @@ import {
   removeSession,
   reconcileUnknownSessionDelete,
   replaceSessionMetadata,
+  requestSessionCancelBeforeDelete,
   requestSessionDelete,
   requestSessionDetail,
   requestSessionUpdate,
   selectionAfterSessionDelete,
   SessionActionError,
   SessionMetadataConflictError,
+  waitForSessionIdle,
 } from "./features/sessions/actions/session-actions";
 import {
   environmentObservationFromResource,
@@ -114,6 +116,7 @@ import {
 } from "./lib/pending-function-result";
 import {
   beginPendingSend,
+  createIdempotencyKey,
   failPendingSend,
   type FailedPendingSend,
 } from "./lib/pending-send";
@@ -2015,6 +2018,25 @@ export function App() {
     return removeSessionFromWorkspace(sessionId, "Session deleted from Agent Core.");
   };
 
+  // Runs only after the user confirms Cancel work and delete for a Session that
+  // Core refused to delete: cancel once, read until idle, then delete once.
+  const cancelAndDeleteSessionFromCore = async (sessionId: string): Promise<boolean> => {
+    const generation = coreGeneration;
+    const isCurrent = () => generation === connectionGenerationRef.current;
+    await requestSessionCancelBeforeDelete(core, sessionId, createIdempotencyKey());
+    const settled = await waitForSessionIdle(core, sessionId, { isCurrent });
+    if (settled === "stale" || !isCurrent()) {
+      throw new SessionActionError(
+        "The cancellation was sent, but the Core connection changed before deletion, so no deletion was attempted. The current Core view was kept.",
+        "request_failed",
+      );
+    }
+    if (settled === "missing") {
+      return removeSessionFromWorkspace(sessionId, "Session is absent from Agent Core after cancellation.");
+    }
+    return deleteSessionFromCore(sessionId);
+  };
+
   const sendMessage = async (text: string) => {
     const sessionId = selectedId;
     if (!sessionId) return;
@@ -2358,6 +2380,7 @@ export function App() {
               onAgentFilterChange={changeSessionAgentFilter}
               onCreateSession={createSession}
               onDeleteSession={deleteSessionFromCore}
+              onCancelAndDeleteSession={cancelAndDeleteSessionFromCore}
               onFunctionResult={submitFunctionResult}
               onListEnvironmentFiles={listEnvironmentFiles}
               onCreateEnvironmentFile={createEnvironmentFile}

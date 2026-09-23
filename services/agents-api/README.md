@@ -236,15 +236,21 @@ are 20 and descending order; exact hosted limits/error semantics remain unverifi
 Session updates require the metadata field; null/empty clears it and an object
 replaces supplied pairs. An empty update body rejects before resource lookup.
 
-Delete with `client.beta.agents.sessions.delete(session.id)`. Confirmation means
-public removal: Session/history reads and new input become unavailable. Active
-work receives a cancellation request; existing streams close on observing removal.
-Already claimed work may still complete. Creation keys stay reserved; deletion
-never affects other Sessions, saved Agents or their shared device. Internal records
-are retained for execution settlement. Managed Docker deletion separately revokes
-authority and reclaims owned compute/workspace/history; caller-managed compute
-is not reclaimed by this service. Local repeated deletion returns 404 and creation-key reuse returns
-409; exact hosted errors and overlapping stream timing are unverified.
+Delete with `client.beta.agents.sessions.delete(session.id)`. Only a durably idle
+or failed Session without required actions or pending input can be deleted; a
+queued, running or waiting root Turn or a pending input reservation returns 409
+`conflict_error` and leaves the Session unchanged. Subagent child Turns and
+pending Environment file writes do not block deletion. Cancel its work
+with an `agent.session.input.cancel` event, wait until it is idle, then delete it.
+Confirmation means public removal: Session/history reads and new input become
+unavailable, and existing streams close on observing removal. Creation keys stay
+reserved; deletion never affects other Sessions, saved Agents or their shared
+device. Internal records are retained for execution settlement. Managed Docker
+deletion separately revokes authority and reclaims owned compute/workspace/history;
+caller-managed compute is not reclaimed by this service. Repeating the deletion of
+your own deleted Session returns the same confirmation, missing and foreign
+Sessions return 404, and creation-key reuse returns 409; overlapping stream timing
+is unverified.
 
 Codex command Items support live `agent.output.command_execution_output.delta`
 events when emitted by the connected daemon. Queries retain accumulated drafts and

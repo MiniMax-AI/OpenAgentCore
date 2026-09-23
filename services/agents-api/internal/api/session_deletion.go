@@ -11,14 +11,14 @@ import (
 )
 
 // @Summary Delete an execution Session
-// @Description Removes the Session and its history from the public API. Active work receives a cancellation request; confirmation does not guarantee native execution has stopped. Internal records and native history are retained pending separate physical cleanup. Missing/repeated deletion locally returns 404; exact hosted errors and overlapping stream timing remain unverified.
+// @Description Removes a durably idle or failed Session and its history from the public API. A Session whose root Turn is queued, in progress or waiting (including required actions) or whose input reservation is pending returns 409 conflict_error and is left unchanged; cancel it and wait until it is idle before deleting. Subagent child Turns and pending Environment file writes are not checked and do not block deletion. Repeating the deletion of the caller's own deleted Session returns the same confirmation; missing and foreign Sessions return 404. Internal records and native history are retained pending separate physical cleanup; overlapping stream timing remains unverified.
 // @Tags Sessions
 // @Produce json
 // @Security BearerAuth
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param session_id path string true "Session ID"
 // @Success 200 {object} v1.SessionDeleted
-// @Failure 400,401,404,413,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,409,413,500 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id} [delete]
 func (h *Handler) deleteSession(w http.ResponseWriter, r *http.Request) {
 	body, ok := readJSONBody(w, r)

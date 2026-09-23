@@ -9,22 +9,62 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// DeleteSession removes public access while retaining state needed to settle execution.
+// ErrSessionNotIdle rejects deletion of a Session that still has work or input
+// pending. Callers cancel first and delete after the Session settles.
+var ErrSessionNotIdle = errors.New("session must be durably idle or failed without required actions before deletion")
+
+// errSessionAlreadyDeleted rolls back a repeated deletion without any write.
+var errSessionAlreadyDeleted = errors.New("session already deleted")
+
+// DeleteSession removes public access to a durably idle or failed Session while
+// retaining state needed to settle execution. The decision is taken under the
+// Session lock that also orders Turn and input admission, so a concurrent
+// admission either commits first and is rejected here, or observes the deletion.
+// The owner's repeated deletion succeeds without another write; foreign and
+// missing Sessions remain not found.
 func (s *Store) DeleteSession(ctx context.Context, tenantID, sessionID string) error {
-	return s.withPublicSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
-		if err := cancelSessionWork(ctx, q, session); err != nil {
+	err := s.withLockedSession(ctx, tenantID, sessionID, true, func(ctx context.Context, q *sqlc.Queries, session sqlc.LockSessionRow) error {
+		if session.DeletedAt.Valid {
+			return errSessionAlreadyDeleted
+		}
+		if err := requireSessionSettled(ctx, q, session.ID); err != nil {
 			return err
 		}
-		if err := q.DeleteSessionArtifacts(ctx, session); err != nil {
+		if err := q.DeleteSessionArtifacts(ctx, session.ID); err != nil {
 			return err
 		}
-		if err := q.ReleaseUnallocatedRuntimePlacement(ctx, session); err != nil {
+		if err := q.ReleaseUnallocatedRuntimePlacement(ctx, session.ID); err != nil {
 			return err
 		}
-		return q.MarkSessionDeleted(ctx, session)
+		return q.MarkSessionDeleted(ctx, session.ID)
 	})
+	if errors.Is(err, errSessionAlreadyDeleted) {
+		return nil
+	}
+	return err
 }
 
+// requireSessionSettled rejects a queued, in-progress or waiting Turn, which
+// includes pending required actions and function results, and a pending input
+// reservation: queued later input, self-hosted input awaiting a connection, or
+// hosted initial input while provisioning. Terminal idle and failed Sessions pass.
+func requireSessionSettled(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
+	if _, err := q.GetActiveTurn(ctx, session); err == nil {
+		return ErrSessionNotIdle
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	_, pending, err := environmentInputState(ctx, q, session)
+	if err != nil {
+		return err
+	}
+	if pending {
+		return ErrSessionNotIdle
+	}
+	return nil
+}
+
+// cancelSessionWork requests cancellation of active work for Runtime cleanup.
 func cancelSessionWork(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 	turn, err := q.GetActiveTurn(ctx, session)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {

@@ -23,6 +23,7 @@ interface SessionActionsDialogProps {
   session: AgentSession | null;
   onClose: () => void;
   onDelete: (sessionId: string) => Promise<boolean>;
+  onCancelAndDelete: (sessionId: string) => Promise<boolean>;
   onDeleted: (sessionId: string) => void;
   onRetrieve: (sessionId: string) => Promise<AgentSession | undefined>;
   onUpdate: (
@@ -69,13 +70,16 @@ export function SessionDetails({ session }: { session: AgentSession }) {
   );
 }
 
-export function SessionDeleteConfirmation({ session }: { session: AgentSession }) {
+export function SessionDeleteConfirmation({ session, busy = false }: { session: AgentSession; busy?: boolean }) {
   return (
     <div className="session-delete-confirmation">
       <p>Delete <strong>{sessionTitle(session)}</strong> from Agent Core?</p>
       <p className="session-delete-target">Exact Session: <code>{session.id}</code></p>
       <p>The Web removes this Session only after Core confirms success. A missing, conflicting, unavailable, or uncertain response leaves the current durable view in place and is never retried automatically.</p>
       <p>Parsar deletion follows server lifecycle semantics. It is not a promise of physical history erasure, immediate native executor shutdown, or deletion of executor Workspace files.</p>
+      {busy ? (
+        <p className="session-delete-busy">Cancel work and delete sends one cancellation for the current work, waits until Core reports the Session idle or failed, and then sends one deletion. Input still waiting for its Environment cannot be cancelled; wait for it to start or expire.</p>
+      ) : null}
     </div>
   );
 }
@@ -151,6 +155,7 @@ export function SessionActionsDialog({
   session,
   onClose,
   onDelete,
+  onCancelAndDelete,
   onDeleted,
   onRetrieve,
   onUpdate,
@@ -160,6 +165,8 @@ export function SessionActionsDialog({
   const [detailLoading, setDetailLoading] = useState(false);
   const [pending, setPending] = useState(false);
   const [deleteRetryBlocked, setDeleteRetryBlocked] = useState(false);
+  // Core refused deletion because the Session still has work or pending input.
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [formReplacement, setFormReplacement] = useState<{
     revision: number;
@@ -180,6 +187,7 @@ export function SessionActionsDialog({
     setActionError(null);
     setFormReplacement(null);
     setPending(false);
+    setDeleteBusy(false);
     setDeleteRetryBlocked(uncertainDeleteSessionRef.current === session?.id);
     setDetailLoading(Boolean(session));
     if (!session) return;
@@ -227,6 +235,7 @@ export function SessionActionsDialog({
   const returnToDetail = () => {
     if (pending) return;
     if (!deleteRetryBlocked) setActionError(null);
+    setDeleteBusy(false);
     restoreDetailFocus.current = true;
     setMode("detail");
   };
@@ -264,14 +273,14 @@ export function SessionActionsDialog({
     }
   };
 
-  const confirmDelete = async () => {
+  const confirmDelete = async (cancelFirst = false) => {
     if (!current || pending) return;
     const request = requestRef.current + 1;
     requestRef.current = request;
     setActionError(null);
     setPending(true);
     try {
-      const confirmed = await onDelete(current.id);
+      const confirmed = await (cancelFirst ? onCancelAndDelete : onDelete)(current.id);
       if (request !== requestRef.current) return;
       if (!confirmed) {
         throw new Error("The deletion confirmation belongs to an earlier Core connection. The current Core view and draft were kept.");
@@ -284,6 +293,9 @@ export function SessionActionsDialog({
           uncertainDeleteSessionRef.current = current.id;
           setDeleteRetryBlocked(true);
         }
+        // Offer cancellation only for work it can stop; pending input cannot be cancelled.
+        if (error instanceof SessionActionError && error.kind === "session_busy") setDeleteBusy(true);
+        if (error instanceof SessionActionError && error.kind === "session_input_pending") setDeleteBusy(false);
         setActionError(errorMessage(error));
       }
     } finally {
@@ -309,9 +321,15 @@ export function SessionActionsDialog({
   ) : mode === "delete" ? (
     <>
       <button ref={deleteCancelRef} className="button outline" type="button" onClick={returnToDetail} disabled={pending}>Cancel</button>
-      <button className="button danger" type="button" onClick={() => void confirmDelete()} disabled={unavailable || deleteRetryBlocked}>
-        {pending ? "Deleting…" : "Delete Session"}
-      </button>
+      {deleteBusy ? (
+        <button className="button danger" type="button" onClick={() => void confirmDelete(true)} disabled={unavailable || deleteRetryBlocked}>
+          {pending ? "Cancelling and deleting…" : "Cancel work and delete"}
+        </button>
+      ) : (
+        <button className="button danger" type="button" onClick={() => void confirmDelete()} disabled={unavailable || deleteRetryBlocked}>
+          {pending ? "Deleting…" : "Delete Session"}
+        </button>
+      )}
     </>
   ) : (
     <>
@@ -340,7 +358,7 @@ export function SessionActionsDialog({
             replacement={formReplacement}
           />
         ) : null}
-        {current && mode === "delete" ? <SessionDeleteConfirmation session={current} /> : null}
+        {current && mode === "delete" ? <SessionDeleteConfirmation session={current} busy={deleteBusy} /> : null}
       </Modal>
     </div>
   );

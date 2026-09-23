@@ -274,3 +274,177 @@ cover the envelope, other, foreign and malformed filters, and foreign or missing
 Sessions. The pinned-SDK and raw HTTP verifier used by live acceptance runs
 against PostgreSQL across three Turns. Real Core, daemon and model acceptance is
 recorded separately by the coordinator.
+
+## Session deletion lifecycle — September 23
+
+This batch aligns Session deletion with the observed official lifecycle rules.
+Evidence comes from the campaign scan at main `beb18fd`, recorded privately in
+`~/.parsar/remediation/20260923/campaign-scan-1/sessions/findings.json` (SES-29
+and SES-30) with raw records under `official/`: `q5-delete-repeat.json`,
+`q5b-delete-while-in-progress.json`, `q5-delete-never-existed.json` and
+`q5-delete-while-running.json`, plus the September 22 retry-session cleanup that
+first returned 409.
+
+| Row | Case | Core behavior |
+| --- | --- | --- |
+| D1 | DELETE of the caller's own Session that is already publicly deleted (SES-29) | 200 `{id, object: "agent.session.deleted", deleted: true}`, identical to the first confirmation, with no database write. GET, update, events, Turns and Items stay 404. |
+| D2 | DELETE of a never-existing, malformed or foreign Session, including a foreign deleted one | Unchanged: the byte-identical 404 `not_found_error` of a missing Session. |
+| D3 | DELETE while a root Turn is queued, in progress (including a requested cancellation) or waiting on required actions or function results, or while an input reservation is pending: a queued later input, self-hosted input awaiting a connection, or hosted initial input while provisioning (SES-30). Subagent child Turns and pending Environment file writes are not checked (see follow-ups) | 409 with type and code `conflict_error`, param null and message "session must be durably idle or failed without required actions before deletion". Nothing changes: no cancellation, marker, event, Artifact removal or Runtime cleanup. |
+| D4 | DELETE of an idle Session, including an idle hosted Session still provisioning without input, and of a failed Session without required actions, including expired initial input | 200 with the existing public deletion and managed Runtime cleanup. |
+| D5 | Callers that need to delete running work | Cancel first with `agent.session.input.cancel`, wait until the Session is idle, then delete. The Core Web offers this as an explicit action after a 409. |
+
+Decisions:
+
+- The rule is the one the creation stream already uses to settle: the Session is
+  idle or failed, no root Turn is queued, running or waiting, and the latest input
+  reservation is not pending. Deletion reuses the Store's active-Turn query and
+  reservation state, so a pending reservation blocks deletion even while the
+  public status projects idle.
+- The decision and the marker commit in one transaction under the tenant Session
+  row lock that also orders Turn and input admission. Either admission commits
+  first and deletion returns 409 without mutation, or deletion commits first and
+  admission returns 404. A rejected deletion rolls its transaction back.
+- A repeated deletion locks the owner's deleted row and returns the confirmation
+  without a write. Foreign and missing rows are never locked, so they stay
+  indistinguishable. Physical purge, when implemented, may end this idempotency.
+- Documented stricter local behavior: official DELETE immediately after an
+  `events.create` 202 on an idle Session returned 200 (`q5-delete-while-running`);
+  its Turn was apparently not yet durably in progress. Core admits the Turn
+  synchronously in the 202 transaction, so Core returns 409 in that window.
+- A self-hosted or hosted Session whose reserved input waits for its Environment
+  cannot be cancelled publicly (the pending reservation rejects new batches), so
+  it stays undeletable until the input starts, its five-minute deadline expires
+  or its Environment fails. The official behavior of that window is unobserved.
+- Capacity change: previously, deleting a provisioning hosted Session with
+  reserved input released its sandbox node placement immediately. Now the
+  deletion returns 409, and the placement keeps counting toward the node's
+  retained and reserved capacity until the input is admitted or its five-minute
+  deadline expires. A later allowed deletion releases an unallocated placement.
+- Earlier releases deleted busy Sessions after requesting cancellation. Their
+  markers can remain in upgraded databases; hidden-work settlement, restart
+  reconciliation and Runtime cleanup keep handling them unchanged.
+- The Core Web keeps the plain delete action. When Core returns the busy 409, the
+  dialog reads the Session once. If a Turn is still busy it replaces the action
+  with Cancel work and delete, which sends one cancellation, reads the Session
+  until it is idle or failed without required actions (a 30-second bound checked
+  between reads) and sends one deletion. A rejected or uncertain cancellation, a
+  timeout, a connection change or another 409 stops without retrying. If the
+  Session reads idle or failed, or only awaits its Environment connection, only
+  pending input blocks deletion; Core rejects its cancellation, so the dialog
+  explains that the input must start, expire or fail first and offers no
+  cancellation.
+
+Follow-up: deletion checks only root Turns and input reservations. A subagent child
+Turn that is still running and a pending Environment file write do not block it,
+which matches the permissive behavior before this batch. The official behavior for
+both is unobserved; decide whether they should return 409 once it is sampled.
+
+Unchanged: physical retention and purge (SESSION-CLEANUP-001 remainder), 404 for
+reads of deleted Sessions, Artifact retention rules after deletion, managed Runtime
+cleanup once deletion is allowed, and caller-owned self-hosted compute, which is
+never reclaimed. No schema change.
+
+Real-PostgreSQL HTTP tests replay D1–D4 across every busy and settled state with
+exact bodies, tenant B requests and a whole-database digest proving that a 409
+and a repeated deletion write nothing. Store tests race deletion against Turn and
+input admission on one real row lock in both commit orders and concurrently, and
+a Worker test cancels a waiting Turn through the daemon protocol before deleting.
+Handler, pinned-SDK, TypeScript client and Web unit tests cover the error fields
+and the cancel-then-delete flow. Real Core, daemon and model acceptance is
+recorded separately by the coordinator.
+
+## Agent configuration validation — September 23
+
+This batch moves protocol validation of Agent configuration into Core with the
+official error fields: saved Agent create and update bodies and the inline
+`agent` on Session create. Evidence comes from the campaign scan at main
+`beb18fd`, recorded privately in
+`~/.parsar/remediation/20260923/campaign-scan-3/subagents-tools/findings.json`
+(TV-01..07) with raw official records in `official/validation-{B1,B2A,B2B,B3}.json`
+and the Core replay under `core/`. The official probe used one owned Agent and 44
+requests without a model: Agent updates, two Agent creates and nine Session
+creates without input on `none`, so no Session or Turn could start. The Agent was
+deleted and a read confirmed 404.
+
+| Row | Case | Core behavior |
+| --- | --- | --- |
+| C1 | A missing required member, an unknown member, a wrong JSON type or an unsupported enum value in `tools[]`, `text`, `reasoning`, `service_tier`, `multi_agent`, `model`, `name` or `instructions`, including the unpinned `tool_choice` (TV-01) | 400 with type and code `invalid_request_error`, param set to the JSON path (`tools[0].parameters`; `agent.tools[0].parameters` on Session create) and the observed messages: `Missing required parameter: '<path>'.`, `Unknown parameter: '<path>'.`, `Invalid type for '<path>': expected <kind>, but got <kind> instead.`, `Invalid value: '<v>'. Supported values are: ...` with the pinned literals, and `Invalid '<path>': integer below minimum value. Expected a value >= 1, but got <n> instead.` |
+| C2 | Repeated function name, more than one `web_search` or more than one `tool_search` (TV-02) | 400 `invalid_request_error`, param null: `duplicate function tool name: <name>`, `duplicate web_search tool`, `duplicate tool_search tool`. |
+| C3 | Function `parameters` or `text.format` json_schema with an explicit string root `type` other than `object` (TV-03) | 400 `invalid_request_error`, param null: `Invalid schema for function '<name>': schema must be a JSON Schema of 'type: "object"', got 'type: "<t>"'.` and `agent.text.format.schema must have top-level type "object"; got "<t>"`, for every harness and before harness admission. |
+| C4 | Session create on `none` without input and with an invalid inline agent (TV-04) | The configuration error first. Valid configurations, including enabled `web_search` or programmatic tool calling, still receive the input requirement. |
+| K1 | Function names with any characters or over 64 characters, programmatic tool calling enabled on a saved Agent, reasoning effort `max`, service tier `flex` (TV-07) | Unchanged: saved and echoed. |
+| K2 | Harness and execution admission limits: enabled `web_search` or programmatic tool calling, structured output on an unqualified harness, explicit reasoning or a non-`auto` service tier on Session create (TV-06) | Unchanged: `unsupported_or_invalid_configuration` with the existing messages, after protocol validation. |
+| K3 | Saved `web_search` with mode `live`, `cached`, null or omitted (TV-05) | Unchanged: `unsupported_or_invalid_configuration`, "Only disabled web_search is qualified for execution." |
+
+Decisions:
+
+- A compact validator walks the raw JSON along the pinned shapes
+  (`PersistedAgentToolParam`/`AgentToolParam`, `AgentTextParam`,
+  `AgentReasoningParam`, `MultiAgentConfigParam` and the `service_tier` literal)
+  and reports the first violation through the typed field error from the
+  validation error batch. It runs before the existing parsers, which keep Core's
+  local limits and codes, and before harness admission. It is not a JSON Schema
+  engine: function and output schemas, `request_metadata` values, MCP `transport`
+  members, `metadata` and `x_agents_core` stay with their existing parsers.
+- In each object, a union's `type` is checked first. Unknown and repeated members
+  are then reported in document order, followed by member values in document
+  order and missing required members in the pinned order. The whole object is
+  checked before the C2/C3 conflicts, and tools before `text`. The official order
+  between several errors in one body was not observed.
+- Member names match exactly, so a name that differs from a member only by case,
+  such as `reasoning.Effort`, is an unknown parameter. A member repeated anywhere
+  in the checked tree returns 400 `invalid_request_error` with its path as param
+  and the local message `Duplicate parameter: '<path>'.`; the official response
+  is unobserved. Both are needed because encoding/json matches names
+  case-insensitively and merges repeated objects into the decoded structs:
+  checking only the last copy let `"text"` given twice store an array-root schema,
+  and `{"reasoning":{"Effort":"high"},"reasoning":{}}` store `effort: high`.
+  Members left to their parsers are checked on the decoded values, so they cannot
+  differ from what is stored.
+- Observed expected-kind phrases are `an object`, `a boolean` and
+  `an object with string keys and unknown value values`. At unsampled positions
+  Core uses `a string` (also for enum members), `an integer` and `an array`, and
+  reports a missing Agent create `model` and a non-object Session `agent` in the
+  same forms.
+- Caller-supplied member names, enum values, function names and schema root types
+  are repeated only when they are at most 256 bytes of printable UTF-8, the
+  Environment Files rule. Otherwise the error keeps its code and path param, or
+  a null param for an unknown member, and drops the value: `Unknown parameter.`,
+  `Invalid value. Supported values are: ...`, `duplicate function tool name`, or
+  the schema message without the name or `got` clause.
+- C3 rejects only an explicit string root type. Schemas without a root type, or
+  with a non-string `type` such as an array, are unchanged; neither was sampled.
+  The output schema message names `agent.text.format.schema` on Agent requests as
+  well, as observed on Agent update; Agent create was not sampled.
+- Session admission also applies C2 and C3 to the resolved saved configuration, so
+  Agents saved before this batch cannot execute with such tools or schemas;
+  replacing the field in the Session override admits them. An invalid inline
+  override is reported before the saved-Agent lookup, so owned, foreign and missing
+  Agents give the same response. Otherwise the lookup order (SES-33) is unchanged.
+- Validation of the update body precedes the Agent lookup, so owned, foreign,
+  missing and malformed Agent IDs give the same response.
+- Inline agent validation runs before same-key creation recovery. A same-key
+  retry of an inline Session created before this batch therefore returns the new
+  400 if its original configuration is now invalid, instead of the original
+  Session. Saved-Agent retries still recover, because the resolved-configuration
+  checks run after recovery. Core is pre-release, so the order is not changed for
+  such retries.
+
+Deferred and unchanged: TV-05, saving `web_search` with mode `live`, `cached` or
+omitted (officially saved, omitted stored as `live`), needs a separate decision
+about saved-but-unqualified settings. Duplicate `programmatic_tool_calling`
+declarations and MCP server labels were not sampled: saved Agents accept them and
+Session admission keeps "Execution requires distinct tool controls." and
+"Execution requires distinct MCP server labels.". A missing model without
+`agent_id`, unknown top-level Session members, `max_concurrent_subagents` above
+4294967295, nonblank and 512-byte function names and the 64-function Session bound
+keep their local codes.
+
+Go handler tests cover every C and K row on Agent create and update and on Session
+create with and without input, the echo bounds and saved records from before this
+batch. A real-PostgreSQL test replays the TV-01..03 rows on Agent create by two
+tenants, on updates of owned, foreign, missing and malformed Agents, and on inline
+and saved-override Session creates, with a database digest proving no writes; it
+then saves and reads back the K1 values and checks tenant isolation. The
+pinned-SDK acceptance scripts assert the new codes, params and messages. Real
+Core, daemon and model acceptance is recorded separately by the coordinator.

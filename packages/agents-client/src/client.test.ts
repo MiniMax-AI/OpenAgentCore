@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AgentCoreError, CreationStreamRetryError, createIdempotencyKey, OpenAIAgentsClient } from "./client";
+import { AgentCoreError, CreationStreamRetryError, createIdempotencyKey, isSessionDeletionConflict, OpenAIAgentsClient } from "./client";
 import hostedDadf64 from "./fixtures/parsar-dadf64a7/openai-hosted.json";
 import eventBatchDadf64 from "./fixtures/parsar-dadf64a7/session-event-batch.json";
 import type {
@@ -217,6 +217,30 @@ describe("OpenAIAgentsClient", () => {
       expect(headers.get("Authorization")).toBe("Bearer tenant-key");
       expect(headers.get("OpenAI-Beta")).toBe("agents=v1");
     }
+  });
+
+  it("surfaces the busy-Session deletion conflict with its official fields", async () => {
+    const calls: FetchCall[] = [];
+    const message = "session must be durably idle or failed without required actions before deletion";
+    const client = new OpenAIAgentsClient({
+      baseUrl: "https://core.example/v1",
+      token: "tenant-key",
+      fetch: recordingFetch(jsonResponse({
+        error: { type: "conflict_error", code: "conflict_error", message, param: null },
+      }, 409), calls),
+    });
+
+    const error = await client.deleteSession("session_busy").catch((value: unknown) => value);
+    expect(error).toBeInstanceOf(AgentCoreError);
+    expect(error).toMatchObject({ status: 409, code: "conflict_error", errorType: "conflict_error", param: null, message });
+    expect(isSessionDeletionConflict(error)).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.init?.method).toBe("DELETE");
+
+    expect(isSessionDeletionConflict(new AgentCoreError("Resource not found.", 404, "not_found_error"))).toBe(false);
+    expect(isSessionDeletionConflict(new AgentCoreError("Other conflict.", 409, "turn_conflict"))).toBe(false);
+    expect(isSessionDeletionConflict(new CreationStreamRetryError())).toBe(false);
+    expect(isSessionDeletionConflict(new Error(message))).toBe(false);
   });
 
   it("preserves the event-stream Accept header and decodes streamed events", async () => {

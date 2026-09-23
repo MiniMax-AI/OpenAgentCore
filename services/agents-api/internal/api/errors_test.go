@@ -66,3 +66,14 @@ func TestMissingBetaErrorAfterAuthentication(t *testing.T) {
 		}
 	}
 }
+
+// Session deletion conflicts use the observed official 409 fields.
+func TestSessionDeletionConflictError(t *testing.T) {
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodDelete, "/v1/agents/sessions/session", nil)
+	writeStoreError(response, request, fmt.Errorf("delete: %w", store.ErrSessionNotIdle))
+	want := `{"error":{"message":"session must be durably idle or failed without required actions before deletion","type":"conflict_error","code":"conflict_error","param":null}}` + "\n"
+	if response.Code != http.StatusConflict || response.Body.String() != want {
+		t.Fatalf("response = %d %s", response.Code, response.Body)
+	}
+}

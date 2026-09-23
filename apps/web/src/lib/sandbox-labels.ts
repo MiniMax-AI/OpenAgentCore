@@ -1,4 +1,4 @@
-import { AgentCoreError } from "@agents-core-web/agents-client";
+import { AgentCoreError, type SandboxNode } from "@agents-core-web/agents-client";
 import { translate, type Locale } from "./locale";
 import type { MessageKey } from "./locale-strings";
 
@@ -22,4 +22,8 @@ export function sandboxRequestError(error: unknown, locale: Locale): string {
     else key = "The sandbox request was rejected. Refresh to check the current state.";
   } else if (error instanceof Error && error.message === "removal_unconfirmed") key = "Core did not confirm node removal. Refresh to check its state.";
   return translate(locale, key);
+}
+
+export function sandboxNodeStatus(node: SandboxNode, stale: boolean, locale: Locale): string {
+  return translate(locale, stale ? "Status unconfirmed" : !node.online ? "Offline" : node.provider_ready ? "Available" : "Unavailable");
 }

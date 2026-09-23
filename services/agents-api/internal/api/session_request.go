@@ -64,6 +64,10 @@ func (request decodedSessionRequest) validated() (sessionRequest, error) {
 		return input, err
 	}
 	if len(request.Agent) > 0 {
+		// Protocol errors in the inline agent precede the input requirement.
+		if err := validateSessionAgent(request.Agent); err != nil {
+			return input, err
+		}
 		if decodeInputObject(request.Agent, &input.Agent, "model", "instructions", "multi_agent", "reasoning", "service_tier", "text", "tools", "x_agents_core") != nil {
 			return input, store.ErrInvalidInput
 		}

@@ -6,6 +6,8 @@ from pathlib import Path
 import time
 import uuid
 
+from session_cleanup import delete_session
+
 
 def verify_hosted_functions(client, foreign, http, model, restart, evidence):
     """restart(session_id, environment_id) restarts the operator-owned deployment."""
@@ -106,4 +108,4 @@ def verify_hosted_functions(client, foreign, http, model, restart, evidence):
         Path(evidence).write_text(json.dumps(proof, indent=2))
         return checks
     finally:
-        sessions.delete(session.id)
+        delete_session(sessions, session.id)

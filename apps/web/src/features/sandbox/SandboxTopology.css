@@ -1,0 +1,47 @@
+.sandbox-topology-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.sandbox-topology { position: relative; min-width: 780px; isolation: isolate; overflow: hidden; background-image: radial-gradient(circle, color-mix(in srgb, var(--line-strong) 58%, transparent) 1px, transparent 1px); background-size: 22px 22px; }
+.sandbox-topology::before { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at center, color-mix(in srgb, var(--accent) 6%, transparent), transparent 54%); pointer-events: none; }
+.sandbox-topology-caption { position: absolute; top: 24px; left: 26px; display: grid; gap: 5px; color: var(--fg-muted); font-size: 12px; }
+.sandbox-topology-eyebrow { font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+.sandbox-topology-lines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.sandbox-topology-connection { color: var(--line-strong); }
+.sandbox-topology-connection.online { color: var(--accent); }
+.sandbox-topology-connection.warning { color: var(--warning, #b7791f); }
+.sandbox-topology-edge, .sandbox-topology-flow { fill: none; vector-effect: non-scaling-stroke; }
+.sandbox-topology-edge { stroke: currentColor; stroke-width: 1.25px; opacity: .28; }
+.sandbox-topology-connection.offline .sandbox-topology-edge { stroke-dasharray: 5 7; opacity: .8; }
+.sandbox-topology-flow { stroke: currentColor; stroke-width: 2px; stroke-linecap: round; stroke-dasharray: 3 27; opacity: .7; animation: sandbox-connection-flow 4s linear infinite; }
+.sandbox-topology-port { fill: var(--surface); stroke: currentColor; stroke-width: 1.5px; }
+.sandbox-topology-core { position: absolute; left: 50%; top: 50%; width: 144px; height: 144px; transform: translate(-50%, -50%); display: grid; place-items: center; }
+.sandbox-core-body { display: grid; place-content: center; justify-items: center; gap: 9px; width: 116px; height: 116px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: 32px; background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 11%, var(--surface)), var(--surface)); color: var(--accent); box-shadow: 0 0 44px color-mix(in srgb, var(--accent) 12%, transparent), inset 0 1px 0 color-mix(in srgb, var(--surface) 90%, transparent); z-index: 1; }
+.sandbox-core-body strong { font-size: 23px; font-weight: 600; letter-spacing: -.04em; color: var(--fg); }
+.sandbox-core-orbit { position: absolute; inset: -9px; border: 1px solid color-mix(in srgb, var(--accent) 15%, transparent); border-radius: 50%; }
+.sandbox-core-orbit.outer { inset: -37px; border-color: color-mix(in srgb, var(--accent) 8%, transparent); animation: sandbox-core-breathe 6s ease-in-out infinite; }
+.sandbox-topology-node { position: absolute; width: 24%; min-height: 132px; transform: translateY(-50%); display: grid; gap: 13px; padding: 16px; text-align: left; color: var(--fg); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: 0 4px 18px color-mix(in srgb, var(--fg) 3%, transparent); transition: border-color 160ms ease, box-shadow 160ms ease; }
+.sandbox-topology-node:hover, .sandbox-topology-node.selected { border-color: color-mix(in srgb, var(--accent) 70%, var(--line)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 7%, transparent), 0 8px 24px color-mix(in srgb, var(--fg) 4%, transparent); }
+.sandbox-topology-node:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.sandbox-topology-node-header { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.sandbox-topology-node-icon { display: inline-flex; color: var(--fg-muted); }
+.sandbox-topology-node-header strong { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sandbox-topology-node-arrow { margin-left: auto; color: var(--fg-muted); font-size: 15px; }
+.sandbox-topology-node-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--fg-muted); }
+.sandbox-topology-node.online .sandbox-topology-node-status { color: color-mix(in srgb, var(--success) 65%, var(--fg)); }
+.sandbox-topology-node.warning .sandbox-topology-node-status, .sandbox-topology-attention { color: color-mix(in srgb, var(--warning, #b7791f) 75%, var(--fg)); }
+.sandbox-topology-node-capacity { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-top: 11px; border-top: 1px solid var(--line); }
+.sandbox-topology-node-capacity > span { color: var(--fg-muted); font-size: 10px; }
+.sandbox-topology-node-capacity > strong { font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.sandbox-topology-node-capacity > strong > span { font-size: 11px; color: var(--fg-muted); font-weight: 400; }
+.sandbox-topology-attention { font-size: 10px; line-height: 1; }
+.sandbox-topology-legend { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 20px; color: var(--fg-muted); font-size: 10px; }
+.sandbox-topology-legend > span { display: flex; align-items: center; gap: 7px; }
+.sandbox-topology-legend i { display: inline-block; width: 17px; border-top: 1px dashed var(--fg-muted); }
+.sandbox-topology-legend i.online { border-top: 2px solid var(--accent); }
+.sandbox-selected-node { margin-top: 20px; }
+.sandbox-selected-node .sandbox-node-card { display: grid; grid-template-columns: minmax(200px, .75fr) minmax(0, 1.5fr); align-items: start; padding-top: 8px; }
+.sandbox-selected-node .sandbox-node-top, .sandbox-selected-node .sandbox-node-capacity, .sandbox-selected-node .sandbox-node-resources, .sandbox-selected-node .sandbox-node-warning, .sandbox-selected-node .sandbox-diagnostic { grid-column: 1; }
+.sandbox-selected-node .sandbox-node-details { grid-column: 2; grid-row: 1 / span 6; border-top: 0; border-left: 1px solid var(--line); margin-top: 12px; }
+.sandbox-selected-node .sandbox-node-details > summary { padding-top: 0; }
+@keyframes sandbox-connection-flow { to { stroke-dashoffset: -60; } }
+@keyframes sandbox-core-breathe { 50% { opacity: .45; transform: scale(1.04); } }
+@media (prefers-reduced-motion: reduce) { .sandbox-topology-flow, .sandbox-core-orbit.outer { animation: none; } .sandbox-topology-node { transition: none; } }
+.sandbox-selected-node .sandbox-node-detail-body > div > small { display: block; color: var(--fg-muted); margin-top: 4px; }

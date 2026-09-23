@@ -1,58 +1,236 @@
 import { expect, test, type Page } from "@playwright/test";
 const fixture = `http://127.0.0.1:${process.env.AGENTS_FIXTURE_PORT ?? 18092}`;
+const installer = { sandbox_admin: true, node_installer: true, node_installer_sha256: "a".repeat(64) };
 async function openManager(page: Page) {
   await page.getByRole("button", { name: "Hosted Sandbox Manager", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Nodes", exact: true })).toBeVisible();
 }
+async function details(page: Page, name = "Core server") {
+  await page.locator(".sandbox-topology-node").filter({ hasText: name }).click();
+  const card = page.locator(".sandbox-node-card").filter({ has: page.getByRole("heading", { name, exact: true }) });
+  return card;
+}
 test.beforeEach(async ({ page, request }) => {
-  await page.route("**/console/config", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ sandbox_admin: true, node_installer: false }) }));
+  await page.route("**/console/config", (route) => route.fulfill({ json: installer }));
   await request.post(`${fixture}/__fixture/reset`);
   await page.goto("/");
   await expect(page.getByRole("button", { name: "Sessions", exact: true })).toBeVisible();
 });
-test("console access needs no browser admin credential; removal and enrollment are guarded", async ({ page, request }) => {
+
+test("nodes lead the page, details preserve diagnostics and removal is confirmed", async ({ page, request }) => {
   await openManager(page);
   await expect(page.getByLabel("Deployment admin key")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /Connect admin|Disconnect admin/ })).toHaveCount(0);
-  const calls = (await (await request.get(`${fixture}/__fixture/sandbox`)).json()).calls;
-  expect(calls.length).toBeGreaterThan(0);
-  expect(calls.every((call: { authorization: unknown }) => call.authorization === null)).toBe(true);
-  await expect(page.getByRole("region", { name: "Sandbox nodes", exact: true })).toContainText("Provider ready");
-  await expect(page.getByRole("region", { name: "Sandbox nodes", exact: true })).toContainText("Host metrics unavailable");
-  await expect(page.getByRole("region", { name: "Sandbox allocations", exact: true })).toContainText("session_snapshot");
-  await page.getByRole("button", { name: "Remove Core server", exact: true }).click();
-  await page.getByRole("button", { name: "Confirm removal" }).click();
+  await expect(page.getByLabel("Core URL reachable from the node")).toHaveCount(0);
+  await expect(page.getByText("fixture-installation", { exact: true })).toBeHidden();
+  await expect(page.getByText("session_snapshot", { exact: true })).toBeHidden();
+  const nodes = page.getByRole("region", { name: "Sandbox nodes", exact: true });
+  await expect(nodes).toContainText("Available");
+  await expect(nodes).toContainText("Offline");
+  const card = await details(page);
+  await expect(card.getByRole("region", { name: "Sandbox allocations" })).toContainText("session_snapshot");
+  await card.getByRole("button", { name: "Remove Core server", exact: true }).click();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await card.getByRole("button", { name: "Confirm removal" }).click();
   await expect(page.getByRole("alert")).toContainText("active allocations or retained resources");
-  await expect(page.getByRole("button", { name: "Remove Core server", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Cancel removal" }).click();
-  await page.getByRole("button", { name: "Remove Offline host", exact: true }).click();
-  await page.getByRole("button", { name: "Confirm removal" }).click();
-  await expect(page.getByRole("button", { name: "Remove Offline host", exact: true })).toHaveCount(0);
-  await page.getByLabel("Core URL reachable from the node").fill("https://core.example");
-  await page.getByRole("button", { name: "Generate enrollment command" }).click();
-  await expect(page.getByLabel("One-time enrollment command")).toHaveValue(/fixture-once-token/);
-  await expect(page.getByLabel("One-time enrollment command")).toHaveValue(/--enrollment-token-file/);
-  const storage = await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }));
-  expect(storage).not.toContain("fixture-admin-key"); expect(storage).not.toContain("fixture-once-token");
-  expect(page.url()).not.toContain("fixture-admin-key");
+  await card.getByRole("button", { name: "Cancel removal" }).click();
+  const offline = await details(page, "Offline host");
+  await offline.getByRole("button", { name: "Remove Offline host" }).click();
+  await offline.getByRole("button", { name: "Confirm removal" }).click();
+  await expect(offline).toHaveCount(0);
+  const calls = (await (await request.get(`${fixture}/__fixture/sandbox`)).json()).calls;
+  expect(calls.every((call: { authorization: unknown }) => call.authorization === null)).toBe(true);
+});
+
+test("add opens one command, copy works, existing hosts do not imply connection, and close discards secrets", async ({ page, context, request }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openManager(page);
+  await page.getByRole("button", { name: "Add node", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Add node" });
+  const command = dialog.getByLabel("One-time enrollment command");
+  await expect(command).toHaveValue(/fixture-once-token/);
+  await expect(dialog.getByRole("status")).toHaveText("Waiting for your node to connect…");
+  await expect(dialog.getByRole("textbox")).toHaveCount(1);
+  await dialog.getByRole("button", { name: "Copy node command" }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(await command.inputValue());
+  await expect(dialog).toContainText("One-time enrollment token expires");
+  await request.post(`${fixture}/__fixture/sandbox-add-node`);
+  await expect(dialog.getByRole("status")).toContainText("Enrolled host · Connected", { timeout: 10000 });
+  expect(await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }))).not.toContain("fixture-once-token");
+  await page.keyboard.press("Escape");
+  await expect(command).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add node", exact: true })).toBeFocused();
+  const calls = (await (await request.get(`${fixture}/__fixture/sandbox`)).json()).calls;
+  expect(calls.filter((call: { method: string; path: string }) => call.method === "POST" && call.path.endsWith("enrollment-tokens"))).toHaveLength(1);
+});
+
+test("unavailable installer shows compact guidance and never creates an enrollment", async ({ page, request }) => {
+  await page.route("**/console/config", (route) => route.fulfill({ json: { sandbox_admin: true, node_installer: false } }));
+  await openManager(page);
+  await page.getByRole("button", { name: "Add node", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Node installation is unavailable");
+  await expect(dialog.getByRole("textbox")).toHaveCount(0);
+  expect((await (await request.get(`${fixture}/__fixture/sandbox`)).json()).calls.filter((call: { method: string }) => call.method === "POST")).toHaveLength(0);
+});
+
+test("empty nodes and stale reads are distinct; failed reads cannot imply ready", async ({ page }) => {
+  await openManager(page);
+  await page.route("**/core/v1/sandbox/deployment", (route) => route.fulfill({ status: 503, json: { error: { message: "Deployment unavailable." } } }));
+  await page.getByRole("button", { name: "Refresh sandbox state" }).click();
+  await expect(page.getByRole("alert")).toContainText("Previously loaded state is shown below");
+  await expect(page.locator(".sandbox-topology-node-status").first()).toHaveText("Status unconfirmed");
+  await page.unroute("**/core/v1/sandbox/deployment");
+  await page.route("**/core/v1/sandbox/nodes", (route) => route.fulfill({ json: { data: [] } }));
+  await page.getByRole("button", { name: "Refresh sandbox state" }).click();
+  await expect(page.getByRole("heading", { name: "Add your first node" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Sandbox allocations" })).toHaveCount(0);
+});
+
+for (const value of ["node_unavailable", "resource_missing"]) {
+  test(`${value} remains visible in node details and clears after recovery`, async ({ page, request }) => {
+    await request.post(`${fixture}/__fixture/sandbox-diagnostic?value=${value}`);
+    await openManager(page);
+    const card = await details(page);
+    const allocations = card.getByRole("region", { name: "Sandbox allocations" });
+    await expect(allocations).toContainText(value === "node_unavailable" ? "Node disconnected" : "Sandbox resource missing");
+    await request.post(`${fixture}/__fixture/sandbox-diagnostic?value=`);
+    await page.getByRole("button", { name: "Refresh sandbox state" }).click();
+    await expect(allocations).toContainText("No reported issue");
+  });
+}
+
+test("Chinese actions, diagnostics, and enrollment are translated and language persists", async ({ page, request }) => {
+  await page.getByLabel("Language / 语言").selectOption("zh");
+  await request.post(`${fixture}/__fixture/sandbox-diagnostic?value=resource_missing`);
+  await page.getByRole("button", { name: "托管沙箱管理", exact: true }).click();
+  await page.locator(".sandbox-topology-node").first().click();
+  await expect(page.getByRole("region", { name: "沙箱资源分配" }).first()).toContainText("沙箱资源缺失");
+  await page.getByRole("button", { name: "添加节点", exact: true }).click();
+  await expect(page.getByLabel("一次性注册命令")).toHaveValue(/fixture-once-token/);
+  await expect(page.getByRole("dialog")).toContainText("等待节点连接");
+  await page.keyboard.press("Escape");
+  await page.getByLabel("Language / 语言").selectOption("en");
   await page.reload();
-  await expect(page.getByLabel("Deployment admin key")).toHaveCount(0);
+  await expect(page.getByLabel("Language / 语言")).toHaveValue("en");
   await expect(page.getByLabel("One-time enrollment command")).toHaveCount(0);
 });
-test("microsandbox shares the manager and mobile tables stay contained", async ({ page, request }) => {
-  await request.post(`${fixture}/__fixture/sandbox-microsandbox`);
-  await page.setViewportSize({ width: 390, height: 844 });
+
+test("an uncertain write is never retried; closing discards a late token and allows a fresh request", async ({ page }) => {
   await openManager(page);
-  await expect(page.locator(".sandbox-summary")).toContainText("microsandbox");
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  const table = page.getByRole("region", { name: "Sandbox nodes", exact: true });
-  await expect(table).toBeVisible();
-  const bounds = await table.boundingBox();
-  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
-  await expect(page.getByLabel("Language / 语言")).toBeVisible();
-  await page.getByLabel("Core URL reachable from the node").scrollIntoViewIfNeeded();
-  await expect(page.getByLabel("Core URL reachable from the node")).toBeInViewport();
+  let attempts = 0;
+  let release: () => void = () => {};
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/core/v1/sandbox/enrollment-tokens", async (route) => {
+    attempts++;
+    if (attempts === 1) await pending;
+    await route.fulfill({ json: { token: attempts === 1 ? "stale-token" : "fresh-token", expires_at: new Date(Date.now() + 600000).toISOString() } }).catch(() => {});
+  });
+  await page.getByRole("button", { name: "Add node", exact: true }).click();
+  await expect.poll(() => attempts).toBe(1);
+  await page.keyboard.press("Escape");
+  release();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(attempts).toBe(1);
+  await page.getByRole("button", { name: "Add node", exact: true }).click();
+  await expect(page.getByLabel("One-time enrollment command")).toHaveValue(/fresh-token/);
+  expect(attempts).toBe(2);
 });
+
+test("a connected node remains successful after its enrollment token expires", async ({ page, request }) => {
+  const startedAt = new Date();
+  await page.clock.install({ time: startedAt });
+  let attempts = 0;
+  await page.route("**/core/v1/sandbox/enrollment-tokens", (route) => {
+    attempts++;
+    return route.fulfill({ json: { token: "short-lived-token", expires_at: new Date(startedAt.getTime() + 60000).toISOString() } });
+  });
+  await openManager(page);
+  await page.getByRole("button", { name: "Add node", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Add node" });
+  await expect(dialog.getByLabel("One-time enrollment command")).toHaveValue(/short-lived-token/);
+  await request.post(`${fixture}/__fixture/sandbox-add-node`);
+  await page.clock.fastForward(3000);
+  await expect(dialog.getByRole("status")).toHaveText("Enrolled host · Connected");
+  await expect(dialog.getByLabel("One-time enrollment command")).toHaveCount(0);
+  await page.clock.fastForward(65000);
+  await expect(dialog.getByRole("status")).toHaveText("Enrolled host · Connected");
+  await expect(dialog.getByText("Generate a new command to continue.", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Generate new command" })).toHaveCount(0);
+  expect(attempts).toBe(1);
+  await dialog.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(dialog).toBeHidden();
+});
+
+test("expired commands and failed writes require an explicit retry", async ({ page }) => {
+  await openManager(page);
+  let attempts = 0;
+  await page.route("**/core/v1/sandbox/enrollment-tokens", (route) => {
+    attempts++;
+    return attempts === 1 ? route.fulfill({ json: { token: "expired-token", expires_at: "2020-01-01T00:00:00Z" } }) : route.fulfill({ status: 503, json: { error: { message: "Unavailable" } } });
+  });
+  await page.getByRole("button", { name: "Add node", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("Command expired");
+  await expect(page.getByLabel("One-time enrollment command")).toHaveCount(0);
+  expect(attempts).toBe(1);
+  await page.getByRole("button", { name: "Generate new command" }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toBeVisible();
+  expect(attempts).toBe(2);
+  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+});
+
+test("topology supports keyboard inspection, distinct health states, and reduced motion", async ({ page }, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.route("**/core/v1/sandbox/nodes", async (route) => {
+    const result = await (await route.fetch()).json();
+    result.data.push({ ...result.data[0], id: "node-provider-down", name: "Provider unavailable host", provider_ready: false });
+    for (let index = 0; index < 4; index++) result.data.push({ ...result.data[0], id: `extra-${index}`, name: `Extra host ${index}` });
+    await route.fulfill({ json: result });
+  });
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await openManager(page);
+  const nodes = page.locator(".sandbox-topology-node");
+  await expect(nodes).toHaveCount(7);
+  await expect(page.locator(".sandbox-topology-node.warning")).toContainText("Unavailable");
+  await expect(page.locator(".sandbox-topology-connection.offline .sandbox-topology-flow")).toHaveCount(0);
+  await expect(page.locator(".sandbox-topology-flow").first()).toHaveCSS("animation-name", "none");
+  const boxes = await nodes.evaluateAll((elements) => elements.map((element) => {
+    const { x, y, width, height } = element.getBoundingClientRect(); return { x, y, width, height };
+  }));
+  for (let a = 0; a < boxes.length; a++) for (let b = a + 1; b < boxes.length; b++) {
+    const first = boxes[a]!, second = boxes[b]!;
+    expect(first.x + first.width <= second.x || second.x + second.width <= first.x || first.y + first.height <= second.y || second.y + second.height <= first.y).toBe(true);
+  }
+  await page.locator(".sandbox-topology").screenshot({ path: testInfo.outputPath("topology-seven-nodes.png"), animations: "disabled" });
+  await nodes.first().focus();
+  await page.keyboard.press("Enter");
+  await expect(nodes.first()).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#sandbox-selected-node")).toContainText("session_snapshot");
+  await expect(page.getByRole("button", { name: "Remove Core server" })).toBeVisible();
+  await page.locator("#sandbox-selected-node").screenshot({ path: testInfo.outputPath("selected-node-details.png"), animations: "disabled" });
+});
+
+for (const width of [1280, 1440]) {
+  for (const theme of ["light", "dark"]) {
+    test(`node manager and add modal fit ${width}px ${theme}`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.evaluate((theme) => document.documentElement.dataset.theme = theme, theme);
+      await openManager(page);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ animations: "disabled", path: testInfo.outputPath(`nodes-${width}-${theme}.png`) });
+      await page.getByRole("button", { name: "Add node", exact: true }).click();
+      await expect(page.getByLabel("One-time enrollment command")).toHaveValue(/fixture-once-token/);
+      const copyButton = page.getByRole("button", { name: "Copy node command" });
+      await expect(copyButton).toBeInViewport();
+      const copyBounds = await copyButton.boundingBox();
+      const commandBounds = await page.locator(".sandbox-command").boundingBox();
+      expect(copyBounds!.x + copyBounds!.width).toBeLessThanOrEqual(commandBounds!.x + commandBounds!.width);
+      const bounds = await page.getByRole("dialog").boundingBox();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+      await page.screenshot({ animations: "disabled", path: testInfo.outputPath(`add-node-${width}-${theme}.png`) });
+    });
+  }
+}
 test("hosted creation defaults to automatic and an explicit unavailable node is never replaced", async ({ page }) => {
   await page.getByRole("button", { name: "Sessions", exact: true }).click();
   await page.getByRole("button", { name: "New Session", exact: true }).click();
@@ -82,15 +260,6 @@ test("Session details show the actual Core placement", async ({ page }) => {
   await expect(dialog).toContainText("Core server");
   await expect(dialog).toContainText("node-local");
 });
-test("empty nodes and a failed refresh have distinct states", async ({ page }) => {
-  await page.route("**/core/v1/sandbox/nodes", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ data: [] }) }));
-  await openManager(page);
-  await expect(page.getByText("No nodes registered. Add a node to provide hosted capacity.")).toBeVisible();
-  await expect(page.getByText("No sandbox allocations.")).toBeVisible();
-  await page.route("**/core/v1/sandbox/deployment", (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { message: "Deployment unavailable." } }) }));
-  await page.getByRole("button", { name: "Refresh sandbox state" }).click();
-  await expect(page.getByRole("alert")).toContainText("Previously loaded state is shown below");
-});
 test("late placement reads cannot replace another Session's placement", async ({ page, request }) => {
   const second = await request.post(`${fixture}/v1/agents/sessions`, {
     headers: { "OpenAI-Beta": "agents=v1", "Idempotency-Key": "placement-second" },
@@ -116,106 +285,17 @@ test("late placement reads cannot replace another Session's placement", async ({
   releaseOld();
   await expect(page.getByRole("dialog")).not.toContainText("Old placement");
 });
-test("disconnect diagnostics clear after reconnection in manager and Session details", async ({ page, request }) => {
-  await request.post(`${fixture}/__fixture/sandbox-diagnostic?value=node_unavailable`);
-  await openManager(page);
-  await expect(page.getByRole("region", { name: "Sandbox allocations", exact: true })).toContainText("Node disconnected");
-  await expect(page.getByRole("region", { name: "Sandbox allocations", exact: true })).toContainText("Existing resources stay assigned");
-  await page.getByRole("button", { name: "Sessions", exact: true }).click();
-  await page.locator(".conversation-session-action").click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("Node disconnected");
-  await request.post(`${fixture}/__fixture/sandbox-diagnostic?value=`);
-  await dialog.getByRole("button", { name: "Refresh placement" }).click();
-  await expect(dialog).toContainText("Available · Recorded allocation");
-  await expect(dialog).not.toContainText("Node disconnected");
-  await page.getByRole("button", { name: "Close dialog", exact: true }).click();
-  await openManager(page);
-  await expect(page.getByRole("region", { name: "Sandbox allocations", exact: true })).toContainText("No reported issue");
-  await expect(page.getByRole("region", { name: "Sandbox allocations", exact: true })).not.toContainText("Node disconnected");
-});
-test("a missing resource preserves ownership and offers inspection without replacement", async ({ page, request }) => {
-  await request.post(`${fixture}/__fixture/sandbox-diagnostic?value=resource_missing`);
-  await openManager(page);
-  const allocations = page.getByRole("region", { name: "Sandbox allocations", exact: true });
-  await expect(allocations).toContainText("Sandbox resource missing");
-  await expect(allocations).toContainText("retains the ownership record");
-  await expect(allocations).toContainText("does not create a replacement automatically");
-  await page.getByRole("button", { name: "Sessions", exact: true }).click();
-  await page.locator(".conversation-session-action").click();
-  await expect(page.getByRole("dialog")).toContainText("Sandbox resource missing");
-  await expect(page.getByRole("dialog")).toContainText("Check the provider resource on the assigned node");
-  const requests = await (await request.get(`${fixture}/__fixture/requests`)).json();
-  expect(requests.filter((entry: { method: string; path: string }) => entry.method === "POST" && entry.path === "/v1/agents/sessions")).toHaveLength(0);
-});
 
-test("Chinese defaults from browser preference, persists, and translates manager actions and diagnostics", async ({ page, request }) => {
-  await page.addInitScript(() => Object.defineProperty(navigator, "languages", { get: () => ["zh-CN", "en-US"] }));
-  await request.post(`${fixture}/__fixture/sandbox-diagnostic?value=resource_missing`);
-  await page.reload();
-  await page.getByRole("button", { name: "托管沙箱管理", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "节点", exact: true })).toBeVisible();
-  const allocations = page.getByRole("region", { name: "沙箱资源分配", exact: true });
-  await expect(allocations).toContainText("沙箱资源缺失");
-  await expect(allocations).toContainText("活跃");
-  await expect(allocations).toContainText("运行中");
-  await expect(page.getByRole("region", { name: "沙箱节点", exact: true })).toContainText("主机指标不可用（心跳已过期）");
-  await page.getByRole("button", { name: "移除 Core server", exact: true }).click();
-  await page.getByRole("button", { name: "确认移除", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("节点仍有活跃分配或保留资源");
-  await page.getByRole("button", { name: "取消移除", exact: true }).click();
-  await page.getByRole("button", { name: "刷新沙箱状态" }).click();
-  await expect(page.getByRole("alert")).toHaveCount(0);
-  await page.getByLabel("节点可访问的 Core 地址").fill("https://core.example");
-  await page.getByRole("button", { name: "生成注册命令", exact: true }).click();
-  await expect(page.getByLabel("一次性注册命令")).toHaveValue(/fixture-once-token/);
-  await page.getByLabel("Language / 语言").selectOption("en");
-  await expect(page.getByRole("heading", { name: "Hosted Sandbox Manager" })).toBeVisible();
-  await expect(page.getByLabel("One-time enrollment command")).toHaveValue(/fixture-once-token/);
-  await page.reload();
-  await expect(page.getByLabel("Language / 语言")).toHaveValue("en");
-  await expect(page.getByLabel("One-time enrollment command")).toHaveCount(0);
-  await page.getByLabel("Language / 语言").selectOption("zh");
-  await page.route("**/core/v1/sandbox/deployment", (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "sandbox_admin_not_configured", message: "Sandbox administration is not configured on this console" } }) }));
-  await page.getByRole("button", { name: "刷新沙箱状态" }).click();
-  await expect(page.getByRole("alert")).toContainText("此控制台尚未配置沙箱管理权限");
-});
-
-test("a direct Core connection never requests sandbox administration and clears enrollment", async ({ page, request }) => {
-  await openManager(page);
-  await page.getByLabel("Core URL reachable from the node").fill("https://core.example");
-  await page.getByRole("button", { name: "Generate enrollment command" }).click();
-  await expect(page.getByLabel("One-time enrollment command")).toHaveValue(/fixture-once-token/);
-  const before = (await (await request.get(`${fixture}/__fixture/sandbox`)).json()).calls.length;
-  await page.getByRole("button", { name: "Configure Agent Core connection", exact: true }).click();
-  const connection = page.getByRole("dialog", { name: "Connect an Agent Core", exact: true });
-  await connection.getByRole("radio", { name: /Other compatible Core/ }).check();
-  await connection.getByLabel("Compatible Core base URL").fill(`${new URL(page.url()).origin}/v1`);
-  await connection.getByLabel("Bearer token").fill("project-only");
-  await connection.getByRole("button", { name: "Apply connection", exact: true }).click();
-  await expect(page.getByText("Sandbox management is available through the signed-in console connection.", { exact: false })).toBeVisible();
-  await expect(page.getByLabel("One-time enrollment command")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Nodes", exact: true })).toHaveCount(0);
-  expect((await (await request.get(`${fixture}/__fixture/sandbox`)).json()).calls).toHaveLength(before);
-});
-
-test("an uncertain enrollment write is not retried and a late response cannot survive navigation", async ({ page }) => {
-  await openManager(page);
-  let attempts = 0;
-  let release: () => void = () => {};
-  const pending = new Promise<void>((resolve) => { release = resolve; });
-  await page.route("**/core/v1/sandbox/enrollment-tokens", async (route) => {
-    attempts += 1;
-    await pending;
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ token: "stale-token", expires_at: "2026-09-24T00:00:00Z" }) }).catch(() => {});
+for (const theme of ["light", "dark"]) {
+  test(`Chinese topology and node details render on desktop in ${theme}`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.evaluate((theme) => document.documentElement.dataset.theme = theme, theme);
+    await page.getByLabel("Language / 语言").selectOption("zh");
+    await page.getByRole("button", { name: "托管沙箱管理", exact: true }).click();
+    await expect(page.getByRole("region", { name: "沙箱节点", exact: true })).toContainText("可用");
+    await page.screenshot({ path: testInfo.outputPath(`topology-zh-${theme}.png`), animations: "disabled" });
+    await page.locator(".sandbox-topology-node").first().click();
+    await expect(page.getByRole("button", { name: "移除 Core server", exact: true })).toBeVisible();
+    await page.locator("#sandbox-selected-node").screenshot({ path: testInfo.outputPath(`node-details-zh-${theme}.png`), animations: "disabled" });
   });
-  await page.getByLabel("Core URL reachable from the node").fill("https://core.example");
-  await page.getByRole("button", { name: "Generate enrollment command" }).click();
-  await expect.poll(() => attempts).toBe(1);
-  await page.getByRole("button", { name: "Sessions", exact: true }).click();
-  await openManager(page);
-  release();
-  await expect(page.getByLabel("One-time enrollment command")).toHaveCount(0);
-  await expect(page.getByLabel("Core URL reachable from the node")).toHaveValue(new URL(page.url()).origin);
-  expect(attempts).toBe(1);
-});
+}

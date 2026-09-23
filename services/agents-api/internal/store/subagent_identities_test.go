@@ -130,7 +130,10 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(again, saved) {
 		t.Fatal("continuation changed immutable first observation", again, err)
 	}
-	if err = reopened.DeleteSession(ctx, tenant, session.ID); err != nil {
+	if err = reopened.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, ErrSessionNotIdle) {
+		t.Fatal("running Session deleted", err)
+	}
+	if err = reopened.commitLegacyDeletion(ctx, tenant, session.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = reopened.GetSubagentIdentity(ctx, tenant, session.ID, "child-a"); !errors.Is(err, ErrNotFound) {

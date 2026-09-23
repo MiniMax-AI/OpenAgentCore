@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
@@ -25,7 +26,10 @@ func TestEnvironmentInputWorkFiltersAndPagesDevices(t *testing.T) {
 				t.Fatal(err)
 			}
 		case "deleted":
-			if err := h.s.DeleteSession(t.Context(), h.tenant, pending.SessionID); err != nil {
+			if err := h.s.DeleteSession(t.Context(), h.tenant, pending.SessionID); !errors.Is(err, store.ErrSessionNotIdle) {
+				t.Fatal("pending input deleted", err)
+			}
+			if err := h.s.CommitLegacyDeletion(t.Context(), h.tenant, pending.SessionID); err != nil {
 				t.Fatal(err)
 			}
 		case "unbound":

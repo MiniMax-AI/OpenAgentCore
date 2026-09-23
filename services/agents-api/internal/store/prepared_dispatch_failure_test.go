@@ -30,7 +30,10 @@ func TestPreparedDispatchSettlesOnlyReadyInput(t *testing.T) {
 					t.Fatal(err)
 				}
 			case "delete":
-				if err := h.s.DeleteSession(t.Context(), h.tenant, h.session.ID); err != nil {
+				if err := h.s.DeleteSession(t.Context(), h.tenant, h.session.ID); !errors.Is(err, store.ErrSessionNotIdle) {
+					t.Fatal("pending input deleted", err)
+				}
+				if err := h.s.CommitLegacyDeletion(t.Context(), h.tenant, h.session.ID); err != nil {
 					t.Fatal(err)
 				}
 			case "prepare-failure":

@@ -226,6 +226,7 @@ def service_unit(root):
 
 
 def install(args, token):
+    print("Checking host requirements...", flush=True)
     preflight(args.provider)
     if args.provider == "microsandbox":
         runtime_home = micro_home(args.installation_id)
@@ -242,6 +243,7 @@ def install(args, token):
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise InstallError("Another node installation is running") from None
+        print("Downloading and verifying node files...", flush=True)
         manifest, sums = metadata(args.source_url)
         names = COMMON + (MICRO if args.provider == "microsandbox" else ())
         if any(name not in sums for name in names):
@@ -259,12 +261,14 @@ def install(args, token):
         write_once(unit, service_unit(root))
         marker = root / "registered.json"
         if not existing_file(marker):
+            print("Preparing the sandbox runtime...", flush=True)
             prepare_runtime(root, args, manifest)
             # The one-time credential is never passed through process arguments or service environments.
             descriptor, secret_path = tempfile.mkstemp(prefix=".enrollment-", dir=root)
             try:
                 with os.fdopen(descriptor, "w") as secret:
                     secret.write(token)
+                print("Registering this node with Core...", flush=True)
                 checked([str(root / COMMON[0]), "register", "--config", str(root / "provider.json"), "--state-dir", str(root / "state/node"),
                          "--core-url", args.core_url, "--name", socket.gethostname(), "--max-active", "4", "--max-retained", "16",
                          "--enrollment-token-file", secret_path], "Node enrollment was not confirmed. Keep its state and rerun the command to recover.")
@@ -274,6 +278,7 @@ def install(args, token):
                     os.unlink(secret_path)
         elif marker.read_text() != json_text(state):
             raise InstallError("Registered node identity differs; refusing to replace it")
+        print("Starting the node service...", flush=True)
         checked(["systemctl", "--user", "daemon-reload"], "Cannot reload the systemd user manager")
         checked(["systemctl", "--user", "enable", "--now", str(unit)], "Cannot start the node service; retained identity is unchanged")
         checked(["systemctl", "--user", "is-active", "--quiet", unit.name], "Node service is unavailable; inspect its systemd user journal")

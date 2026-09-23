@@ -21,6 +21,17 @@ func (s *Store) withPublicSession(ctx context.Context, tenantID, sessionID strin
 }
 
 func (s *Store) withSessionState(ctx context.Context, tenantID, sessionID string, public bool, apply func(context.Context, *sqlc.Queries, pgtype.UUID) error) error {
+	return s.withLockedSession(ctx, tenantID, sessionID, public, func(ctx context.Context, q *sqlc.Queries, session sqlc.LockSessionRow) error {
+		if public && session.DeletedAt.Valid {
+			return ErrNotFound
+		}
+		return apply(ctx, q, session.ID)
+	})
+}
+
+// withLockedSession locks the tenant-owned Session row, including a publicly
+// deleted one, and commits only when apply succeeds.
+func (s *Store) withLockedSession(ctx context.Context, tenantID, sessionID string, public bool, apply func(context.Context, *sqlc.Queries, sqlc.LockSessionRow) error) error {
 	tenant, err := parseID(tenantID)
 	if err != nil {
 		return err
@@ -49,10 +60,7 @@ func (s *Store) withSessionState(ctx context.Context, tenantID, sessionID string
 		} else if err != nil {
 			return err
 		}
-		if public && session.DeletedAt.Valid {
-			return ErrNotFound
-		}
-		if err := apply(ctx, q, id); err != nil {
+		if err := apply(ctx, q, session); err != nil {
 			return err
 		}
 		return q.PruneSessionEvents(ctx, id)

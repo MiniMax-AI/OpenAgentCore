@@ -71,5 +71,14 @@ describe("Session actions dialog content", () => {
     expect(html).toContain("server lifecycle semantics");
     expect(html).toContain("not a promise of physical history erasure");
     expect(html).toContain("Workspace files");
+    expect(html).not.toContain("Cancel work and delete");
+  });
+
+  it("explains cancel-then-delete only after Core reports a busy Session", () => {
+    const html = renderToStaticMarkup(<SessionDeleteConfirmation session={session} busy />);
+    expect(html).toContain("Cancel work and delete sends one cancellation");
+    expect(html).toContain("waits until Core reports the Session idle or failed");
+    expect(html).toContain("then sends one deletion");
+    expect(html).toContain("cannot be cancelled");
   });
 });

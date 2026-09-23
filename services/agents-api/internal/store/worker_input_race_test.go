@@ -45,7 +45,9 @@ func TestWorkerInputReadSkipsConcurrentlyCancelledCandidate(t *testing.T) {
 			mutated := make(chan error, 1)
 			cfg.ConnConfig.Tracer = &beforeInputRead{run: func() {
 				if deleted {
-					mutated <- h.s.DeleteSession(t.Context(), h.tenant, candidateSession)
+					// Public deletion now rejects the queued candidate; an
+					// earlier release's marker must still fence its execution.
+					mutated <- h.s.CommitLegacyDeletion(t.Context(), h.tenant, candidateSession)
 					return
 				}
 				_, err := h.s.SubmitInputs(t.Context(), h.tenant, candidateSession, "cancel", []store.Input{{Kind: "cancel", Payload: json.RawMessage(`{}`)}})

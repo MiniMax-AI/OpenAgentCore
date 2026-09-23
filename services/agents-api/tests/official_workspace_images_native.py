@@ -8,6 +8,7 @@ import secrets
 import time
 
 from image_fixture import picture
+from session_cleanup import delete_session
 
 
 def verify_workspace_images(client, foreign, http, model, kind, restart, evidence):
@@ -224,7 +225,7 @@ def verify_workspace_images(client, foreign, http, model, kind, restart, evidenc
             assert history() == before
             check("same_tenant_session_result_artifact_and_workspace_isolation")
         finally:
-            sessions.delete(other.id)
+            delete_session(sessions, other.id)
 
         restart(sid, eid)
         assert history() == before
@@ -250,4 +251,4 @@ def verify_workspace_images(client, foreign, http, model, kind, restart, evidenc
     finally:
         save()
         if sid:
-            sessions.delete(sid)
+            delete_session(sessions, sid)

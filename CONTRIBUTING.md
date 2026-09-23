@@ -32,9 +32,14 @@ The Core Web is an administrator console for execution and resource operations;
 business collaboration remains in Parsar. Environment Template management shares
 the Session creation catalog and uses the existing public client operations. Patch
 only edited fields, confirm deletion, and never automatically retry an uncertain
-write. A Core connection change must discard the previous connection's forms,
-pending results and notices. Saving a Template must not allocate a Runtime, call a
-model or imply execution readiness. Keep unsupported advanced profiles explicit.
+write. When Core refuses to delete a busy Session, offer an explicit Cancel work
+and delete action that cancels once, reads until the Session is idle within a
+bounded wait and deletes once; never cancel without that confirmation. When only
+input waiting for its Environment blocks deletion, explain that it must start,
+expire or fail instead, because Core rejects its cancellation. A Core connection
+change must discard the previous connection's forms, pending results and notices.
+Saving a Template must not allocate a Runtime, call a model or imply execution
+readiness. Keep unsupported advanced profiles explicit.
 
 For subsequent alignment and milestone closure batches, the main thread coordinates
 design, shared interface agreements, file ownership, integration and merge. First
@@ -59,7 +64,8 @@ record unresolved low-ROI cases with evidence and impact. Never defer a safety o
 data-consistency blocker while claiming the affected workflow passed.
 
 Session creation requires initial input for `none`, and for streaming creation
-outside `self_hosted`. Check these conditions before creation retry lookup or
+outside `self_hosted`. Report inline agent protocol errors first, then check these
+conditions before creation retry lookup or
 resource resolution. The parser remains shared with subsequent message admission;
 non-streaming hosted and self-hosted requests may omit input. Do not retain an
 idle-none creation compatibility exception. Valid requests retain their documented
@@ -82,7 +88,10 @@ observed upstream server failures as compatibility behavior. See
 
 Report validation failures with official evidence through the typed field error,
 which emits `invalid_request_error` with the observed param and message; keep
-other local codes until their official fields are sampled. A malformed path
+other local codes until their official fields are sampled. Agent configuration
+(saved create/update and the inline Session agent) uses one path-tracking
+validator of the pinned shapes before its parsers and harness admission, which
+keep their local codes; do not grow it into a JSON Schema engine. A malformed path
 identifier must produce exactly the response of a well-formed missing one on that
 route, including invalid bodies, queries and storage availability: resolve it to
 the never-assigned maximum UUID and let the missing path run, or reject it
@@ -1144,7 +1153,7 @@ direct batches, including cancellation, while successful earlier retries remain
 readable. Promotion commits the original inputs, history, reservation settlement
 and execution claim (`queued` to `in_progress`) together; expiration and targeted
 cancellation retain the terminal identity. Session deletion
-cancels pending input in the same transaction. A terminal reservation retry must not
+is rejected while input is pending and changes nothing. A terminal reservation retry must not
 affect a later reservation or Turn. Evaluate deadlines after acquiring the Session
 lock, and return terminal storage outcomes without rolling their transaction back.
 
@@ -1202,7 +1211,7 @@ An admitted retry returns the original receipts without reclaiming execution; a
 read or uncertain commit never authorizes another Start. A crash after promotion
 but before Start uses existing claimed-Turn reconciliation (`execution_interrupted`),
 including unbound or deleted Sessions, rather than ordinary queued dispatch. Deletion
-after claim requests cancellation under existing active-Turn semantics.
+after claim is rejected like any active Turn.
 The Worker expires at most 32 due reservations on each existing tick, after
 checking ownership and before checking devices or execution slots. The sweep
 requires the leased Store and uses its connection with the existing transaction
@@ -1601,7 +1610,21 @@ Chinese/English sandbox text, status and diagnostic formatting live in the share
 `apps/web/src/lib/` locale modules. A persisted explicit language preference wins
 before the first browser language; unrelated product surfaces are outside this
 translation scope. Preserve zero-node setup and node installation behavior when
-localizing their controls.
+localizing their controls. The sandbox manager centers node readiness and capacity in a desktop topology,
+with Core surrounded by actual node buttons. Connection animation represents
+liveness only, never invented traffic or work; offline/stale connections are
+static and reduced-motion preferences disable decorative animation. Node selection
+reveals inspection details. Installation identifiers, provider metadata and
+allocation records are secondary content. Node enrollment is an explicit Add node action in a focused
+dialog, using the saved Core origin or the paired console origin by default.
+Do not expose routine network wiring or manual runtime setup as the primary flow.
+Generate a one-time command only on user intent, never retry enrollment writes
+automatically, and discard credentials and late responses when the dialog closes
+or the Core connection changes. Detect successful addition against the node IDs
+present before enrollment; an existing node reconnecting is not a new enrollment.
+The command verifies the installer checksum before execution, retains normal TLS
+verification, and passes the enrollment credential only to the installer process.
+
 
 Both proxy paths retain fixed-origin, cross-site, safe-path, redirect and Upgrade
 restrictions through the standard Go reverse proxy with streaming/cancellation.
@@ -1643,21 +1666,40 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   types. Product adapters live in `server/internal/agentdaemon`. Keep protocol
   frames in `internal/agentdaemon/proto` until the contracts directory migration.
   Store aliases preserve existing callers during this transition.
-- Session deletion uses a durable `sessions.deleted_at` marker, committed with an
-  existing Turn cancellation request under the tenant Session lock. Public reads,
-  metadata changes, event streams and input admission exclude deleted Sessions;
-  admission checks visibility under that lock before retry lookup. Creation keys
-  remain reserved and cannot resurrect deleted Sessions. Missing/repeated deletion
-  locally returns 404 and reuse of a deleted creation identity returns 409; exact
-  hosted errors and overlapping stream timing remain unverified. Existing streams
-  close when removal is observed without a fabricated deletion event.
+- Session deletion uses a durable `sessions.deleted_at` marker. Public deletion
+  accepts only a durably idle or failed Session without required actions: no
+  queued, in-progress or waiting root Turn and no pending input reservation, the
+  same settlement rule as the creation stream. Subagent child Turns and pending
+  Environment file writes are not checked, as before this rule; their official
+  behavior is unobserved. Take that decision and commit the marker
+  under the tenant Session lock that orders Turn and input admission, so either
+  admission commits first and deletion conflicts, or admission observes the
+  deletion. A busy Session returns 409 `conflict_error` with the observed official
+  message and nothing changes: no cancellation, marker, event or cleanup. Callers
+  cancel first (`agent.session.input.cancel`), wait until the Session is idle and
+  delete it. Core admits a Turn synchronously, so it also conflicts right after an
+  `events.create` 202, where the official service was observed to return 200.
+  Deleting a provisioning hosted Session with reserved input used to release its
+  sandbox node placement at once; it now conflicts, and the placement counts
+  toward node capacity until the input is admitted or its five-minute deadline
+  expires. A later allowed deletion releases an unallocated placement.
+  The owner's repeated deletion returns the same 200 confirmation without writing;
+  foreign, missing and malformed identifiers keep the byte-identical 404. Public
+  reads, metadata changes, event streams and input admission exclude deleted
+  Sessions; admission checks visibility under that lock before retry lookup.
+  Creation keys remain reserved and cannot resurrect deleted Sessions; reuse of a
+  deleted creation identity returns 409. Existing streams close when removal is
+  observed without a fabricated deletion event; overlapping stream timing remains
+  unverified. Earlier releases also deleted busy Sessions after requesting
+  cancellation, so upgraded databases can hold markers with hidden work.
   Internal Turn/receipt/finalization and restart reconciliation retain access so
-  hidden work can settle under the existing execution lease. Queued deletion
-  prevents claim; an already claimed execution may complete or receive cancellation.
-  Confirmation does not guarantee native quiescence. Never revoke a shared device,
+  that work settles under the existing execution lease; queued work cannot be
+  claimed, and Runtime cleanup still cancels pending work. Confirmation does not
+  guarantee native quiescence. Never revoke a shared device,
   remove a saved Agent or touch product data as part of Session deletion. Physical
   SQL/native history cleanup remains a separate required implementation gap; these
-  records are retained, not claimed purged. Do not deploy a pre-deletion service
+  records are retained, not claimed purged, and purging may end repeat idempotency.
+  Do not deploy a pre-deletion service
   against a database with deletion markers; migration rollback refuses to remove
   the column while deleted records exist, preventing public resurrection.
 - `services/agents-api` owns its SQL schema, sqlc queries and embedded goose
@@ -2570,8 +2612,8 @@ adapter. The maintained native harness owns dynamic model/provider eligibility;
 its SDK exposes no reliable pre-input receipt proving effective deferral after a
 policy change. Do not represent tool inventory or an operator allowlist as that
 proof. Record exact real model/provider evidence and this detection gap separately.
-Search-only, missing-search, duplicate-search, workspace, MCP and Subagent combinations
-remain unqualified. See [the operation coverage](contracts/agents-api/tool-search.md).
+Search-only, missing-search, workspace, MCP and Subagent combinations remain
+unqualified; a repeated `tool_search` is a protocol error. See [the operation coverage](contracts/agents-api/tool-search.md).
 
 ### Structured output execution
 
@@ -2594,8 +2636,9 @@ function tools and text results. The workspace uses its existing preparation and
 native sandbox with only the SDK's configured `StructuredOutput` tool added to
 inventory and permission checks. Frozen schemas reach preparation before the
 input handoff; Start cannot replace them. Skills, Plugins, capability directories,
-HTTP MCP, Subagent/tool-discovery combinations and non-object root schemas remain
-unqualified. Check resolved template contents as well as inline configuration;
+HTTP MCP, Subagent/tool-discovery combinations and schemas without an explicit
+object root remain unqualified; an explicit non-object root type is a protocol
+error for every harness. Check resolved template contents as well as inline configuration;
 ordinary text requests retain their existing qualifications.
 The SDK uses binary64 JSON numbers: reject execution schemas whose numeric values
 would change during that conversion, without narrowing saved Agent storage.

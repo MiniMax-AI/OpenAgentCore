@@ -50,7 +50,10 @@ def verify_agents(client, other, invalid, expect_error):
         assert raw.get(base + "/" + agent.id, headers=headers).json() == body
         assert agents.retrieve(agent.id) == agent
         saved.append(agent)
+        # Function names are not restricted, as officially (TV-07).
         for fields in [
+            {"tools": [{"type": "function", "name": name, "description": "", "parameters": {"type": "object"}}
+                       for name in ("bad name!", "n" * 65)]},
             {"model": "", "name": "🧪" * 128, "instructions": "", "metadata": {}},
             {"multi_agent": {"enabled": True, "max_concurrent_subagents": 4294967295}},
             {"multi_agent": {"enabled": False, "max_concurrent_subagents": 4}},
@@ -101,6 +104,7 @@ def verify_agents(client, other, invalid, expect_error):
             assert response.json()["error"]["type"] == "invalid_request_error"
             expect_error(BadRequestError, lambda: agents.create(model="resource-model", extra_body=fields))
         # Rejections with official evidence report its code, param and message.
+        lookup = {"type": "function", "name": "lookup", "description": "Look up a value.", "parameters": {"type": "object"}}
         field_errors = [
             ({"name": "x" * 129}, "name", "Invalid 'name': string too long. Expected a string with maximum length 128, but got a string with length 129 instead."),
             ({"metadata": {"k": 1}}, "metadata.k", "Invalid type for 'metadata.k': expected a string, but got an integer instead."),
@@ -109,6 +113,18 @@ def verify_agents(client, other, invalid, expect_error):
             ({"metadata": {"x" * 65: "v"}}, "metadata." + "x" * 65, "Invalid property name in 'metadata': '" + "x" * 65 + "' is too long. Expected a string with maximum length 64, but got a string with length 65 instead."),
             ({"metadata": {"k": "v" * 513}}, "metadata.k", "Invalid 'metadata.k': string too long. Expected a string with maximum length 512, but got a string with length 513 instead."),
             ({"metadata": {"k": "a\x00b"}}, "metadata.k", "Invalid 'metadata.k': string contains U+0000, which this service cannot store."),
+            # Configuration protocol errors (TV-01..03); conflicts have a null param.
+            ({"tools": [{**lookup, "parameters": []}]}, "tools[0].parameters", "Invalid type for 'tools[0].parameters': expected an object with string keys and unknown value values, but got an array instead."),
+            ({"tools": [{k: v for k, v in lookup.items() if k != "parameters"}]}, "tools[0].parameters", "Missing required parameter: 'tools[0].parameters'."),
+            ({"tools": [{"type": "tool_search", "max_results": 3}]}, "tools[0].max_results", "Unknown parameter: 'tools[0].max_results'."),
+            ({"tools": [{"type": "bogus_tool"}]}, "tools[0].type", "Invalid value: 'bogus_tool'. Supported values are: 'function', 'tool_search', 'programmatic_tool_calling', 'mcp', and 'web_search'."),
+            ({"tool_choice": "auto"}, "tool_choice", "Unknown parameter: 'tool_choice'."),
+            ({"text": {"format": {"type": "json_object"}}}, "text.format.type", "Invalid value: 'json_object'. Supported values are: 'text' and 'json_schema'."),
+            ({"multi_agent": {"enabled": True, "max_concurrent_subagents": 0}}, "multi_agent.max_concurrent_subagents", "Invalid 'multi_agent.max_concurrent_subagents': integer below minimum value. Expected a value >= 1, but got 0 instead."),
+            ({"tools": [lookup, {**lookup, "description": "Second."}]}, None, "duplicate function tool name: lookup"),
+            ({"tools": [{"type": "tool_search"}, {"type": "tool_search"}]}, None, "duplicate tool_search tool"),
+            ({"tools": [{**lookup, "parameters": {"type": "string"}}]}, None, "Invalid schema for function 'lookup': schema must be a JSON Schema of 'type: \"object\"', got 'type: \"string\"'."),
+            ({"text": {"format": {"type": "json_schema", "schema": {"type": "array"}}}}, None, 'agent.text.format.schema must have top-level type "object"; got "array"'),
         ]
         count = len(list(agents.list()))
         for fields, param, message in field_errors:

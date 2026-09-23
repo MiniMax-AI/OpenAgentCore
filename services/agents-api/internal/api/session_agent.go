@@ -61,6 +61,10 @@ func resolveSessionAgent(input sessionRequest, saved *v1.SavedAgent) (v1.Agent, 
 }
 
 func admitSessionAgent(cfg v1.SavedAgentConfiguration) (v1.Agent, error) {
+	// Protocol conflicts precede execution limits, including in saved records.
+	if err := configurationConflict(cfg.Tools, cfg.Text.Format.Type, cfg.Text.Format.Schema); err != nil {
+		return v1.Agent{}, err
+	}
 	if strings.TrimSpace(cfg.Model) == "" {
 		return v1.Agent{}, errors.New("Execution currently requires a nonempty model.")
 	}

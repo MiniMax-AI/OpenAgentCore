@@ -34,8 +34,9 @@ existing Sessions retain their node across disconnects and resume.
    `admin` and the password in `~/.parsar/core/config/console.password`.
    The paired console needs no additional API key setup.
 3. **Add a node.** Open **Hosted Sandbox Manager**, choose Docker or microsandbox,
-   and confirm the reachable Core origin. Select **Generate node command**, then
-   copy and run it on a prepared Linux host. Web shows when the node is online
+   and initialize the deployment. The paired console address is used by default;
+   advanced network settings allow a different reachable HTTPS origin. Select
+   **Add node**, then copy and run the command on a prepared Linux host. Web shows when the node is online
    and its provider is ready. All nodes in a deployment use the same provider.
 
 Installation and node enrollment do not call a model. Once a node is ready,

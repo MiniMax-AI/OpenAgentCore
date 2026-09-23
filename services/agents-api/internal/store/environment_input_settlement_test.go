@@ -225,7 +225,13 @@ func TestEnvironmentInputDeletionSettlesPendingAndFencesPromotion(t *testing.T) 
 					done <- err
 				}()
 			}
-			if err := s.DeleteSession(ctx, tenant, session.ID); err != nil {
+			if !concurrent {
+				if err := s.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, ErrSessionNotIdle) {
+					t.Fatal("pending input deleted", err)
+				}
+			}
+			// A marker from an earlier release still settles and fences the input.
+			if err := s.commitLegacyDeletion(ctx, tenant, session.ID); err != nil {
 				t.Fatal(err)
 			}
 			if concurrent {
