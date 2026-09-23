@@ -50,3 +50,33 @@ func TestDisabledToolRequestPreservesIntentOnResume(t *testing.T) {
 		}
 	}
 }
+
+// TV-05: saved Agents store enabled and omitted-mode search, but such a snapshot
+// fails admission qualification, device selection/preclaim tool decoding and
+// dispatch request construction.
+func TestEnabledWebSearchNeverReachesDispatch(t *testing.T) {
+	for _, tool := range []string{
+		`{"type":"web_search","mode":"live","context_size":"medium","allowed_domains":null,"location":null}`,
+		`{"type":"web_search","mode":"cached","context_size":"medium","allowed_domains":null,"location":null}`,
+		`{"type":"web_search","context_size":"medium","allowed_domains":null,"location":null}`,
+		`{"type":"web_search","mode":null}`,
+	} {
+		tools := []json.RawMessage{json.RawMessage(tool)}
+		if _, err := executionTools(tools); err == nil || err.Error() != "only disabled web search is qualified for execution" {
+			t.Fatal(tool, err)
+		}
+		snapshot := Snapshot{Agent: v1.Agent{Model: "model", Tools: tools}}
+		if _, err := (&Dispatcher{}).executionRequest(t.Context(), store.Session{ID: "session"}, snapshot, device.KindCapabilities{}, store.SessionExecutionBinding{}); err == nil {
+			t.Fatal("dispatch request built for", tool)
+		}
+		raw := json.RawMessage(`{"agent":{"model":"model","tools":[` + tool + `]},"environment":{"type":"none"}}`)
+		for _, kind := range []string{"codex", "claude_sdk", "mcode"} {
+			if err := (Policy{}).ValidateSessionConfiguration(kind, raw); err == nil {
+				t.Fatal(kind, "admitted", tool)
+			}
+		}
+	}
+	if _, err := executionTools([]json.RawMessage{json.RawMessage(`{"type":"web_search","mode":"disabled","context_size":"medium","allowed_domains":null,"location":null}`)}); err != nil {
+		t.Fatal(err)
+	}
+}
