@@ -2,7 +2,8 @@
 
 Install one matching Parsar Core distribution. By default it starts PostgreSQL,
 Core and the existing Web console, prepares microsandbox and imports the Runtime
-image. Core creates a sandbox and starts its daemon when a Session needs it.
+image. When a Session needs a sandbox, Core asks its Provider to create one from
+that image and initializes the colocated daemon, native harness and workspace.
 No model key, Environment wizard or sample task is required during installation.
 
 ## Host requirements

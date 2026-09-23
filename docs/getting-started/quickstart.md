@@ -32,8 +32,9 @@ environment. Installation has no mandatory sample task.
 
 ## Run a Session when you are ready
 
-Core prepares the sandbox and starts its Runtime. You do not install or start a
-separate daemon for a Core-managed Session. The public discriminator remains
+Core creates the sandbox through its Provider using the prepared Runtime image,
+then initializes the daemon, native harness and workspace inside it. You do not
+install or start a separate daemon for a Core-managed Session. The public discriminator remains
 `openai_hosted`; in this deployment it means the sandbox managed by Parsar Core.
 The installation's provider can be microsandbox or Docker.
 
@@ -44,11 +45,13 @@ endpoint and key through your application's private configuration:
 import os
 
 session = client.beta.agents.sessions.create(
-    agent={"model": os.environ["MODEL_NAME"]},
     environment={"type": "openai_hosted"},
     input="Create /workspace/hello.txt with a short greeting, then describe it.",
     extra_body={
-        "agent": {"x_agents_core": {"harness": "codex"}},
+        "agent": {
+            "model": os.environ["MODEL_NAME"],
+            "x_agents_core": {"harness": "codex"},
+        },
         "x_agents_core": {
             "model_provider": {
                 "protocol": "responses",
@@ -67,6 +70,8 @@ model configuration. They are not fields in the official SDK 3.13.0 protocol.
 The service encrypts model configuration with tenant/Session binding and never
 returns the secret through public resource reads. Keep the installation's
 credential encryption key and database together across restarts.
+Keep the complete `agent` object together: SDK 3.13.0 replaces an ordinary body
+field with the corresponding `extra_body` field rather than merging nested fields.
 
 The model must support the selected harness's native protocol:
 
