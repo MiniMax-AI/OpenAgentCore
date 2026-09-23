@@ -3,6 +3,8 @@ package store
 import (
 	"errors"
 	"fmt"
+
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/echotext"
 )
 
 // InvalidCursorError reports a list `after` cursor that does not name a
@@ -28,8 +30,12 @@ var (
 )
 
 // skillVersionCursorPrefix reports a Skill version cursor that is not a
-// version resource ID at all; the official message echoes the value.
+// version resource ID at all. The official message echoes the value; a long or
+// unprintable value is left out so the error stays bounded.
 func skillVersionCursorPrefix(value string) error {
+	if !echotext.Allowed(value) {
+		return &InvalidCursorError{Message: "Invalid 'after'. Expected an ID that begins with 'skillver'."}
+	}
 	return &InvalidCursorError{Message: fmt.Sprintf("Invalid 'after': '%s'. Expected an ID that begins with 'skillver'.", value)}
 }
 

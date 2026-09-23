@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
@@ -310,6 +311,10 @@ func TestListCursorErrorsPostgres(t *testing.T) {
 	for _, value := range []string{"not-a-valid-id", a.skill, random, "3", "SKILLVER_" + random} {
 		expect(owner, versions, http.StatusBadRequest, prefix(value), value)
 	}
+	// Long, unprintable and invalid UTF-8 values are not repeated in the message.
+	unechoed := wireError("invalid_request_error", text("invalid_value"), text("after"), "Invalid 'after'. Expected an ID that begins with 'skillver'.")
+	expect(owner, versions, http.StatusBadRequest, unechoed, strings.Repeat("x", 257), strings.Repeat("a", 200<<10), "bad\x01value", strings.Repeat("\x01", 1000), "line\nbreak", "\xff")
+	expect(owner, versions, http.StatusBadRequest, prefix(strings.Repeat("y", 256)), strings.Repeat("y", 256))
 	expect(owner, versions, http.StatusBadRequest, otherSkill, a.otherSkillVersion)
 	expect(owner, versions, http.StatusNotFound, skillsMissing, "skillver_"+random, a.deletedVersion, b.version, "skillver_not-a-uuid", "skillver", "skillver_"+uuid.Nil.String())
 

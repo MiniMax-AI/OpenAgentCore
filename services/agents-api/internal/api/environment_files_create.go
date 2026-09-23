@@ -10,11 +10,11 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/echotext"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/go-chi/chi/v5"
@@ -173,21 +173,9 @@ func environmentFileCreatePathError(value string) error {
 // whose name is not echoed.
 var errUnknownEnvironmentFileField = &fieldError{message: "Unknown parameter."}
 
-// echoableField bounds the caller-supplied name that an unknown-field error
-// repeats in both message and param; JSON escaping can grow each byte sixfold.
-// encoding/json has already replaced invalid bytes and lone surrogates with
-// U+FFFD, so a name containing it is not repeated either.
-func echoableField(field string) bool {
-	if len(field) > 256 || !utf8.ValidString(field) || strings.ContainsRune(field, utf8.RuneError) {
-		return false
-	}
-	for _, r := range field {
-		if !unicode.IsPrint(r) {
-			return false
-		}
-	}
-	return true
-}
+// echoableField bounds the caller-supplied name that an error repeats in its
+// message or param; see echotext.Allowed.
+func echoableField(field string) bool { return echotext.Allowed(field) }
 
 // unknownBodyField returns the first top-level member outside allowed, in
 // document order. Malformed and non-object bodies are left to the caller's

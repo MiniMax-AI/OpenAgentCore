@@ -132,6 +132,9 @@ def verify_cursors(raw, base, token, foreign, client, owned, session_id, vault_i
     versions = lambda **q: client.skills.versions.list(skill, **q)
     for value in ("not-a-valid-id", skill, random):
         expect(token, f"/skills/{skill}/versions", 400, version_prefix_error(value), [value], versions, beta=False)
+    # A long or unprintable value is not repeated in the message.
+    unechoed = {**version_prefix_error(""), "message": "Invalid 'after'. Expected an ID that begins with 'skillver'."}
+    expect(token, f"/skills/{skill}/versions", 400, unechoed, ["x" * 300, "bad\x01value"], versions, beta=False)
     expect(token, f"/skills/{skill}/versions", 400, OTHER_SKILL_VERSION, [other_version], versions, beta=False)
     expect(token, f"/skills/{skill}/versions", 404, SKILLS_MISSING, ["skillver_" + random, "skillver_not-a-uuid", b_version], versions, beta=False)
     expect(foreign, f"/skills/{b_skill.id}/versions", 404, SKILLS_MISSING, [first_version, later_version], beta=False)
