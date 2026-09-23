@@ -19,8 +19,9 @@ service does: omitted/null mode is saved as `live`, and `cached` and `live` are
 saved as sent ([TV-05](official-semantics-alignment.md#saved-web_search-modes--september-23)).
 Search settings are resource data in every mode: omitted/null context size
 resolves to `medium`; domain and location omission resolves to null; an empty
-domain list remains empty; a supplied location includes `city`, `country`,
-`region` and `timezone`, with null for omitted keys. These settings cannot
+domain list remains empty; a supplied location, including `{}`, includes `city`,
+`country`, `region` and `timezone`, with null for omitted keys (observed
+officially: `req_db41d2f6261b4abfb69465eafe719ab5` and `req_165d53b88445490b9146d8272c54134d`). These settings cannot
 enable execution. Session admission resolves saved references and inline
 declarations with the execution parser into the immutable Session snapshot.
 Only explicit `disabled` search is qualified: enabled or omitted-mode search,

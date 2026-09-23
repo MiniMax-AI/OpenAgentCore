@@ -2935,10 +2935,12 @@ paths:
         Model-derived reasoning defaults, other MCP variants and public retry conformance
         remain incomplete. web_search saves every pinned mode: omitted or null mode
         is saved as live and omitted or null context_size as medium; allowed_domains
-        preserves null versus empty and a present location includes all four keys.
-        Session execution accepts only explicit disabled web_search and disabled programmatic_tool_calling
-        through qualified Runtime controls; saved enabled forms reject at Session
-        admission. Session execution admits only its supported configuration subset.'
+        preserves null versus empty and a present location, including {}, includes
+        all four keys with null for omitted ones, as observed officially (req_db41d2f6261b4abfb69465eafe719ab5,
+        req_165d53b88445490b9146d8272c54134d). Session execution accepts only explicit
+        disabled web_search and disabled programmatic_tool_calling through qualified
+        Runtime controls; saved enabled forms reject at Session admission. Session
+        execution admits only its supported configuration subset.'
       parameters:
       - description: agents=v1
         in: header

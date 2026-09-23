@@ -156,7 +156,9 @@ def verify_agents(client, other, invalid, expect_error):
         mcp = {"type": "mcp", "server_label": "x", "transport": {"type": "http", "server_url": "https://example.invalid"}}
         expect_error(BadRequestError, lambda: agents.create(model="x", tools=[mcp]))
         # Every pinned web_search mode is saved as the official service does (TV-05);
-        # omitted or null mode is saved as live. Session admission still rejects it.
+        # omitted or null mode is saved as live. A supplied location, including {},
+        # has all four keys (req_db41d2f6261b4abfb69465eafe719ab5,
+        # req_165d53b88445490b9146d8272c54134d).
         live = {"type": "web_search", "mode": "live", "context_size": "medium", "allowed_domains": None, "location": None}
         for tool, expected in (
             ({"type": "web_search"}, live),
@@ -165,6 +167,9 @@ def verify_agents(client, other, invalid, expect_error):
               "location": {"country": "FR", "city": "Paris"}},
              {"type": "web_search", "mode": "cached", "context_size": "high", "allowed_domains": ["example.com"],
               "location": {"city": "Paris", "country": "FR", "region": None, "timezone": None}}),
+            ({"type": "web_search", "mode": "cached", "location": {}},
+             {"type": "web_search", "mode": "cached", "context_size": "medium", "allowed_domains": None,
+              "location": {"city": None, "country": None, "region": None, "timezone": None}}),
         ):
             response = agents.with_raw_response.create(model="x", tools=[tool])
             agent = response.parse()

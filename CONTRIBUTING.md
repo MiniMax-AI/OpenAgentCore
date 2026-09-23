@@ -1851,11 +1851,12 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   model/name/instructions verbatim, nullable fields and structured JSON numbers.
   Stored reasoning/service tiers, enabled multi-agent settings, JSON Schema output,
   enabled web-search modes and deferred/tool-search/programmatic tools do not imply
-  execution support.
-  Reuse function wire validation, keeping Session execution restrictions separate.
-  Model-derived reasoning effort is unresolved when omitted; do not infer it from
-  the selected harness. Omitted/null service tier currently uses `auto`; complete
-  upstream default/error/retry conformance and remaining MCP variants remain gaps. Unknown/unsupported variants fail explicitly. No product lookup is permitted.
+  execution support. Reuse function wire validation, keeping Session execution
+  restrictions separate. Model-derived reasoning effort is unresolved when omitted;
+  do not infer it from the selected harness. Omitted/null service tier currently
+  uses `auto`; complete upstream default/error/retry conformance and remaining MCP
+  variants remain gaps. Unknown/unsupported variants fail explicitly. No product
+  lookup is permitted.
 - Service-origin public HTTP MCP uses the native harness client and tool loop on
   trusted service-owned `environment:none` compute, with Codex or Claude SDK.
   The V1 colocated `self_hosted` profile rejects it: user-owned compute cannot be

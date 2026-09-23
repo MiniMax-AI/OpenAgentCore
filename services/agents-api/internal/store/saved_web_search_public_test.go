@@ -85,8 +85,14 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 		{"mode-null", `{"type":"web_search","mode":null}`, live},
 		{"mode-live", `{"type":"web_search","mode":"live"}`, live},
 		{"mode-cached", `{"type":"web_search","mode":"cached"}`, `{"type":"web_search","mode":"cached",` + defaults},
-		{"mode-cached-full", `{"type":"web_search","mode":"cached","context_size":"high","allowed_domains":["example.com"],"location":{"country":"FR","city":"Paris"}}`,
+		{"mode-cached-full", `{"type":"web_search","mode":"cached","context_size":"high","allowed_domains":["example.com"],"location":{"city":"Paris","country":"FR","region":null,"timezone":null}}`,
 			`{"type":"web_search","mode":"cached","context_size":"high","allowed_domains":["example.com"],"location":{"country":"FR","region":null,"city":"Paris","timezone":null}}`},
+		// A supplied location projects all four keys, with null for omitted ones
+		// (req_db41d2f6261b4abfb69465eafe719ab5, req_165d53b88445490b9146d8272c54134d).
+		{"location-partial-omitted", `{"type":"web_search","mode":"cached","location":{"city":"Paris","country":"FR"}}`,
+			`{"type":"web_search","mode":"cached","context_size":"medium","allowed_domains":null,"location":{"country":"FR","region":null,"city":"Paris","timezone":null}}`},
+		{"location-empty", `{"type":"web_search","mode":"cached","location":{}}`,
+			`{"type":"web_search","mode":"cached","context_size":"medium","allowed_domains":null,"location":{"country":null,"region":null,"city":null,"timezone":null}}`},
 		{"mode-disabled", `{"type":"web_search","mode":"disabled"}`, `{"type":"web_search","mode":"disabled",` + defaults},
 	} {
 		status, body := client.do(owner, http.MethodPost, "/v1/agents", "application/json", []byte(`{"model":"search-model","tools":[`+tc.tool+`]}`))
@@ -111,7 +117,8 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 		readBack(tc.name, updated, body)
 	}
 
-	// A disabled record saved before this batch reads and executes unchanged (W7).
+	// A disabled record saved before this batch reads unchanged and is admitted with
+	// the same frozen Session tool (W7).
 	legacy, err := s.CreateAgent(t.Context(), ownerTenant, store.CreateAgentInput{Metadata: map[string]string{}, Configuration: json.RawMessage(
 		`{"model":"search-model","name":null,"instructions":null,"multi_agent":{"enabled":false,"max_concurrent_subagents":null},"reasoning":{},"service_tier":"auto","text":{"format":{"type":"text"},"verbosity":"medium"},"tools":[{"type":"web_search","mode":"disabled","context_size":"medium","allowed_domains":[],"location":null}]}`)})
 	if err != nil {
@@ -140,7 +147,8 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 		t.Fatalf("legacy Session tool %s, want %s", got, legacyTool)
 	}
 
-	// A same-key retry recovers its Session after the Agent enables search.
+	// A same-key retry of a Session that recorded its creation request recovers it
+	// after the Agent enables search.
 	retry := func(key string) (int, string) {
 		request, err := http.NewRequest(http.MethodPost, server.URL+"/v1/agents/sessions", strings.NewReader(`{"agent_id":"`+agents["mode-disabled"]+`","environment":{"type":"none"},"input":"hi"}`))
 		if err != nil {

@@ -608,11 +608,15 @@ and owned probes under `~/.parsar/remediation/20260923/saved-web-search/official
 (`results.json`, `ledger.jsonl`): four owned Agents with the create records
 `type-only`, `mode-null`, `mode-cached` and `mode-cached-full`, the update records
 `update-disabled`, `update-omitted-low` and `update-live-domains-empty`, and a
-`retrieve`, without a Session or model. All four Agents were deleted.
+`retrieve`, without a Session or model. All four Agents were deleted. A second
+probe created two more Agents, both deleted and confirmed 404 afterwards:
+`location-partial-omitted` (`{"city":"Paris","country":"FR"}` saved with null
+`region` and `timezone`, `req_db41d2f6261b4abfb69465eafe719ab5`) and `location-empty`
+(`{}` saved with all four keys null, `req_165d53b88445490b9146d8272c54134d`).
 
 | Row | Case | Core behavior |
 | --- | --- | --- |
-| W1 | Agent create with `web_search` mode `live`, `cached`, null or omitted | 201. Omitted or null mode is saved as `live`, and omitted or null `context_size` as `medium`. `allowed_domains` keeps null versus `[]`. `location` stays null, or else includes `city`, `country`, `region` and `timezone`, with null for omitted keys. |
+| W1 | Agent create with `web_search` mode `live`, `cached`, null or omitted | 201. Omitted or null mode is saved as `live`, and omitted or null `context_size` as `medium`. `allowed_domains` keeps null versus `[]`. `location` stays null, or else includes `city`, `country`, `region` and `timezone`, with null for omitted keys, also for `{}`. |
 | W2 | Agent update replacing tools with these forms, including a return to `disabled` | 200 with the same projection. Retrieve and list return the saved form. |
 | W3 | Protocol errors in a `web_search` declaration | Unchanged: the C1 and C2 fields. |
 | W4 | Session creation from a saved Agent with enabled search, without a Session `tools` replacement | Unchanged K2 rejection: 400 `unsupported_or_invalid_configuration`, "Only disabled web_search is qualified for execution.", writing no Session, Turn, Environment or reservation, for plain, streamed, self-hosted and hosted creation. Protocol errors and the C4 input requirement still come first. |
@@ -629,9 +633,10 @@ Decisions:
   (K1, K2). All creation modes share that admission, and Worker device selection
   and the final preclaim still refuse a non-disabled search control, so enabled
   search cannot reach dispatch.
-- Same-key creation retries keep their rules. A retry of a Session created before
-  its Agent enabled search recovers that Session with its frozen disabled control;
-  a new key is rejected.
+- Same-key creation retries keep their rules. A retry recovers the earlier Session
+  with its frozen disabled control only when that Session recorded its creation
+  request hash, as current Sessions do. An older Session without that record falls
+  through to admission and, like a new key, receives the 400.
 - An inline agent passes the saved-form parser before execution admission, so its
   enabled search is now reported by the execution check, with the same message.
   When one configuration hits several execution limits, another limit, such as
@@ -640,8 +645,9 @@ Decisions:
   snapshots keep their own. Clients compare decoded values.
 - The TypeScript client types the saved `web_search` declaration with its mode
   union; inline execution types are unchanged. Core Web shows saved search as a
-  read-only, saved-only tool and keeps blocking Sessions from such Agents, as for
-  `tool_search` and programmatic tool calling.
+  read-only tool. Its Session admission check mirrors Core: it starts Sessions
+  from Agents with one well-formed disabled search and blocks enabled or
+  omitted-mode search, which Core does not run.
 
 Unchanged: execution qualification, Runtime controls, the schema and the
 configuration validation errors. Enabling search execution needs its own
