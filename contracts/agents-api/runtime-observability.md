@@ -97,8 +97,9 @@ credentials are excluded from observations.
 
 The internal `runtimehistory` boundary validates Core scope, bucket coverage,
 nullability, time bounds and point limits. One chart series represents an allocation;
-CPU deltas reset across compute incarnations or counter regressions. Canonical
-Session Usage supplies independently sampled token counters. History queries survive
+CPU deltas reset across compute incarnations or counter regressions. Core's
+measured Session usage (recorded root Turn snapshots, active Turns included)
+supplies independently sampled token counters. History queries survive
 Core restart and browser reload without replaying execution.
 
 See the [design](runtime-observability-design.md),

@@ -251,7 +251,8 @@ they are not global Prometheus labels by default.
 Core reuses its PostgreSQL database for bounded recent Runtime history. The
 provider-neutral observation service hands each sanitized periodic result to a
 bounded asynchronous writer. One typed row contains the observation and optional
-canonical Session Usage snapshot. The public API resolves caller ownership before
+measured Session usage snapshot (recorded root Turn snapshots, active Turns
+included, not the public Session usage rule). The public API resolves caller ownership before
 issuing bounded queries; Web never queries storage directly.
 
 External OTLP export remains optional. Each destination has an independent queue,

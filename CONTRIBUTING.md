@@ -332,8 +332,9 @@ common field.
 Runtime history uses the existing Core PostgreSQL database: one sanitized row per
 periodic observation, seven-day retention and bounded reads. It is best-effort
 operational evidence, not execution or Usage authority. The execution owner samples
-by default every 30 seconds. Existing canonical Session Usage supplies token
-snapshots; never aggregate provider counters as model tokens. Preserve missing data
+by default every 30 seconds. Core's internal measured Session usage (every
+recorded root Turn snapshot, active Turns included) supplies token snapshots, not
+the public Session usage rule; never aggregate provider counters as model tokens. Preserve missing data
 and reset CPU derivation across compute incarnations or counter regressions.
 The bounded asynchronous database writer and optional OTLP exporter have independent
 queues; external telemetry outages must not stall local history or execution.
@@ -2177,8 +2178,9 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   Core replaces complete valid token breakdowns and preserves the last committed
   measurement on interruption. Missing measurements remain unknown. Do not infer
   token consumption from context occupancy or estimated costs, or parse native
-  Raw payloads in Core. Session totals cover recorded root Turns and are null
-  while any root Turn has not ended or once one ends with unknown usage; Subagent
+  Raw payloads in Core. Public Session totals cover recorded root Turns and are
+  null while any root Turn has not ended or once one ends with unknown usage;
+  Runtime telemetry uses the separate measured sum of recorded snapshots. Subagent
   Turn listings are not a summable accounting ledger. A cumulative native total that has not advanced
   past the Turn's baseline is not a measurement of that Turn. Native measurement coverage
   and exact provider/model attribution remain explicit qualification boundaries.
