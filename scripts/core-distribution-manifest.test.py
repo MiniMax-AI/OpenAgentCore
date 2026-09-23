@@ -59,6 +59,10 @@ class DistributionTests(unittest.TestCase):
             distribution.manifest(self.bundle, self.stage, "commit", "tree")
 
     def test_archive_reproducible_and_installer_executable(self):
+        native = self.bundle / "native/bin/agents-api"
+        native.parent.mkdir(parents=True)
+        native.write_bytes(b"native executable")
+        native.chmod(0o555)
         distribution.manifest(self.bundle, self.stage, "commit", "tree")
         distribution.archive(self.bundle, "1700000000")
         archive = self.bundle.with_name(self.bundle.name + ".tar.gz")
@@ -69,6 +73,7 @@ class DistributionTests(unittest.TestCase):
         with tarfile.open(archive) as contents:
             self.assertEqual(contents.getmember(self.bundle.name + "/install.sh").mode, 0o755)
             self.assertEqual(contents.getmember(self.bundle.name + "/manifest.json").mode, 0o644)
+            self.assertEqual(contents.getmember(self.bundle.name + "/native/bin/agents-api").mode, 0o555)
 
     def test_bad_upstream_checksum_does_not_extract(self):
         archive = self.stage / "untrusted.tar.gz"

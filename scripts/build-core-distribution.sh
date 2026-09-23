@@ -99,6 +99,8 @@ if [[ ! -f "$msb_archive" ]]; then
 else
   python3 scripts/core-distribution-manifest.py extract-runtime "$msb_archive" "$stage/core/microsandbox"
 fi
+mkdir -p "$bundle/native"
+cp -R "$stage/core/bin" "$stage/core/microsandbox" "$bundle/native/"
 cp deploy/distribution/Dockerfile "$stage/core/Dockerfile"
 build_image --platform linux/amd64 --iidfile "$stage/core.id" \
   --label "org.opencontainers.image.revision=$revision" "$stage/core"

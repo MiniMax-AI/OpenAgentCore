@@ -113,7 +113,10 @@ def archive(bundle, epoch):
                 relative = path.relative_to(bundle)
                 info = tarfile.TarInfo(bundle.name + "/" + relative.as_posix())
                 info.size = path.stat().st_size
-                info.mode = 0o755 if relative.as_posix() == "install.sh" else 0o644
+                if relative.parts[0] == "native":
+                    info.mode = path.stat().st_mode & 0o777
+                else:
+                    info.mode = 0o755 if relative.as_posix() == "install.sh" else 0o644
                 info.mtime = int(epoch)
                 with path.open("rb") as stream:
                     tar.addfile(info, stream)
