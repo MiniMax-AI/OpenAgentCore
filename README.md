@@ -1,8 +1,10 @@
-# Parsar Core
+# OpenAgentCore
+
+![OpenAgentCore: One core. Many agents. Open infrastructure for AI agents.](docs/assets/openagentcore-banner.png)
 
 **Open-source Agents API infrastructure, with your choice of native harness.**
 
-Run Codex, Claude Code and MiniMax Code behind one execution API. Parsar Core
+Run Codex, Claude Code and MiniMax Code behind one execution API. OpenAgentCore
 owns Sessions, environments, files, credentials and execution history; each
 native harness keeps its own model and tool loop. Core runs independently of the
 Parsar product.
