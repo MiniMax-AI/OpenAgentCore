@@ -55,22 +55,23 @@ func TestWhitespaceOnlyTextQualificationUsesEngineProfiles(t *testing.T) {
 		return store.Input{Kind: "message", Payload: raw}
 	}
 	whitespace := []store.Input{message("   "), message("ok", "\n\t")}
-	for _, kind := range []string{"codex", "mcode"} {
+	codex, _ := (engine.Catalog{}).Lookup("codex")
+	for _, input := range whitespace {
+		if err := validateProfileInputs(codex, "none", []store.Input{input}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, kind := range []string{"claude_sdk", "mcode"} {
 		profile, _ := (engine.Catalog{}).Lookup(kind)
 		for _, input := range whitespace {
-			if err := validateProfileInputs(profile, "none", []store.Input{input}); err != nil {
-				t.Fatal(kind, err)
+			for _, placement := range []string{"none", "openai_hosted", "self_hosted"} {
+				if err := validateProfileInputs(profile, placement, []store.Input{input}); !errors.Is(err, ErrWhitespaceOnlyText) {
+					t.Fatalf("%s %s %s: %v", kind, placement, input.Payload, err)
+				}
 			}
 		}
 	}
 	claude, _ := (engine.Catalog{}).Lookup("claude_sdk")
-	for _, input := range whitespace {
-		for _, placement := range []string{"none", "openai_hosted", "self_hosted"} {
-			if err := validateProfileInputs(claude, placement, []store.Input{input}); !errors.Is(err, ErrWhitespaceOnlyText) {
-				t.Fatalf("%s %s: %v", placement, input.Payload, err)
-			}
-		}
-	}
 	// Legacy text payloads use the same rule.
 	if err := validateProfileInputs(claude, "none", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":" \t"}`)}}); !errors.Is(err, ErrWhitespaceOnlyText) {
 		t.Fatal(err)

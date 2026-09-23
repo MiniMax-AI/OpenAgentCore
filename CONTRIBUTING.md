@@ -347,7 +347,7 @@ User-message boundaries and text/image order remain intact through Core and the
 Runtime wire; adapters own native conversion and receipt aggregation. Text-only
 transports reject image content rather than dropping it. Text is never trimmed:
 engine profiles declare whether whitespace-only messages are qualified, and
-unqualified harnesses (Claude SDK) reject them at admission rather than having
+unqualified harnesses (Claude SDK, MiniMax Code) reject them at admission rather than having
 their input rewritten. Codex has a flat native
 input list and uses blank-line separators between messages; this does not preserve
 independent native user-message boundaries. No old wire fallback is maintained.

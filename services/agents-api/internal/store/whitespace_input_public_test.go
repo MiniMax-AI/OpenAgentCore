@@ -95,7 +95,7 @@ func TestWhitespaceInputStoredVerbatimPostgres(t *testing.T) {
 }
 
 // W6: harness profiles declare whether whitespace-only text is qualified. Codex
-// and MiniMax Code admit it; Claude SDK rejects it at Session creation and
+// admits it; Claude SDK and MiniMax Code reject it at Session creation and
 // events.create, before any write, reservation or promotion.
 func TestWhitespaceOnlyTextHarnessAdmissionPostgres(t *testing.T) {
 	s, pool := store.NewManagedTestStore(t)
@@ -131,53 +131,53 @@ func TestWhitespaceOnlyTextHarnessAdmissionPostgres(t *testing.T) {
 	const cancel = `{"events":[{"type":"agent.session.input.cancel"}]}`
 	const whitespace = `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"   "}]},{"role":"user","content":[{"type":"input_text","text":"\n\t"}]}]}]}`
 
-	for _, engine := range []string{"codex", "mcode"} {
+	codex := serve("codex")
+	admitted := codex.created(token, "/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"none"},"input":"   "}`)
+	if status, body := events(codex, admitted, cancel); status != http.StatusAccepted {
+		t.Fatalf("codex cancel: %d %s", status, body)
+	}
+	if status, body := events(codex, admitted, whitespace); status != http.StatusAccepted {
+		t.Fatalf("codex events: %d %s", status, body)
+	}
+	if got := userTexts(t, codex, token, admitted); !reflect.DeepEqual(got, [][]string{{"   "}, {"   "}, {"\n\t"}}) {
+		t.Errorf("codex Items %q", got)
+	}
+
+	const rejection = `{"error":{"message":"This Session's harness does not accept a message whose text is only whitespace. Include non-whitespace text or an image, or use a harness that supports whitespace-only text.","type":"invalid_request_error","code":"unsupported_or_invalid_configuration","param":null}}` + "\n"
+	for _, engine := range []string{"claude_sdk", "mcode"} {
 		client := serve(engine)
-		session := client.created(token, "/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"none"},"input":"   "}`)
+		session := client.created(token, "/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"none"},"input":"Start."}`)
 		if status, body := events(client, session, cancel); status != http.StatusAccepted {
 			t.Fatalf("%s cancel: %d %s", engine, status, body)
 		}
-		if status, body := events(client, session, whitespace); status != http.StatusAccepted {
-			t.Fatalf("%s events: %d %s", engine, status, body)
+		before := databaseDigest(t, pool)
+		for _, body := range []string{
+			`{"agent":{"model":"m"},"environment":{"type":"none"},"input":"   "}`,
+			`{"agent":{"model":"m"},"environment":{"type":"none"},"input":[{"role":"user","content":[{"type":"input_text","text":"\n\t"}]}]}`,
+			`{"agent":{"model":"m"},"environment":{"type":"none"},"input":[{"role":"user","content":[{"type":"input_text","text":"x"}]},{"role":"user","content":[{"type":"input_text","text":""},{"type":"input_text","text":" "}]}]}`,
+			`{"agent":{"model":"m"},"environment":{"type":"none"},"stream":true,"input":"   "}`,
+			// The self-hosted initial reservation is never created.
+			`{"agent":{"model":"m"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"input":"   "}`,
+		} {
+			if status, response := client.do(token, http.MethodPost, "/v1/agents/sessions", "application/json", []byte(body)); status != http.StatusBadRequest || response != rejection {
+				t.Errorf("%s create %s: %d %s", engine, body, status, response)
+			}
 		}
-		if got := userTexts(t, client, token, session); !reflect.DeepEqual(got, [][]string{{"   "}, {"   "}, {"\n\t"}}) {
+		for _, body := range []string{whitespace, `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"x"}]},{"role":"user","content":[{"type":"input_text","text":"\t"}]}]}]}`} {
+			if status, response := events(client, session, body); status != http.StatusBadRequest || response != rejection {
+				t.Errorf("%s events %s: %d %s", engine, body, status, response)
+			}
+		}
+		if after := databaseDigest(t, pool); !mapsEqual(before, after) {
+			t.Errorf("%s: rejected whitespace-only text changed persisted state", engine)
+		}
+		// Whitespace beside non-whitespace text in one message remains admitted verbatim.
+		if status, body := events(client, session, `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"   "},{"type":"input_text","text":"Reply only OK."}]}]}]}`); status != http.StatusAccepted {
+			t.Fatalf("%s mixed events: %d %s", engine, status, body)
+		}
+		if got := userTexts(t, client, token, session); !reflect.DeepEqual(got, [][]string{{"Start."}, {"   ", "Reply only OK."}}) {
 			t.Errorf("%s Items %q", engine, got)
 		}
-	}
-
-	claude := serve("claude_sdk")
-	session := claude.created(token, "/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"none"},"input":"Start."}`)
-	if status, body := events(claude, session, cancel); status != http.StatusAccepted {
-		t.Fatalf("claude cancel: %d %s", status, body)
-	}
-	before := databaseDigest(t, pool)
-	const rejection = `{"error":{"message":"This Session's harness does not accept a message whose text is only whitespace. Include non-whitespace text or an image, or use a harness that supports whitespace-only text.","type":"invalid_request_error","code":"unsupported_or_invalid_configuration","param":null}}` + "\n"
-	for _, body := range []string{
-		`{"agent":{"model":"m"},"environment":{"type":"none"},"input":"   "}`,
-		`{"agent":{"model":"m"},"environment":{"type":"none"},"input":[{"role":"user","content":[{"type":"input_text","text":"\n\t"}]}]}`,
-		`{"agent":{"model":"m"},"environment":{"type":"none"},"input":[{"role":"user","content":[{"type":"input_text","text":"x"}]},{"role":"user","content":[{"type":"input_text","text":""},{"type":"input_text","text":" "}]}]}`,
-		`{"agent":{"model":"m"},"environment":{"type":"none"},"stream":true,"input":"   "}`,
-		// The self-hosted initial reservation is never created.
-		`{"agent":{"model":"m"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"input":"   "}`,
-	} {
-		if status, response := claude.do(token, http.MethodPost, "/v1/agents/sessions", "application/json", []byte(body)); status != http.StatusBadRequest || response != rejection {
-			t.Errorf("claude create %s: %d %s", body, status, response)
-		}
-	}
-	for _, body := range []string{whitespace, `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"x"}]},{"role":"user","content":[{"type":"input_text","text":"\t"}]}]}]}`} {
-		if status, response := events(claude, session, body); status != http.StatusBadRequest || response != rejection {
-			t.Errorf("claude events %s: %d %s", body, status, response)
-		}
-	}
-	if after := databaseDigest(t, pool); !mapsEqual(before, after) {
-		t.Error("rejected whitespace-only text changed persisted state")
-	}
-	// Whitespace beside non-whitespace text in one message remains admitted verbatim.
-	if status, body := events(claude, session, `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"   "},{"type":"input_text","text":"Reply only OK."}]}]}]}`); status != http.StatusAccepted {
-		t.Fatalf("claude mixed events: %d %s", status, body)
-	}
-	if got := userTexts(t, claude, token, session); !reflect.DeepEqual(got, [][]string{{"Start."}, {"   ", "Reply only OK."}}) {
-		t.Errorf("claude Items %q", got)
 	}
 }
 

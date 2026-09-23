@@ -470,7 +470,7 @@ deleted.
 | W3 | `events.create` message with whitespace-only `input_text` parts, including two such messages in one event (SES-04) | 202; one Turn, Items verbatim. String `content` or string `input` stay type errors, as observed officially. |
 | W4 | Empty string, empty `content`, empty `input`, or a message whose text parts are all empty (SES-05..07) | Unchanged 400 `invalid_request` with the generic message and null param, without writes. The official responses use code `invalid_request_error`, specific messages and, for the empty create string, param `input`; aligning them is outside this batch. |
 | W5 | A message with parts `["", "real text"]` (SES-08) | Unchanged: accepted and stored with the empty part. Official behavior is unobserved; its per-part error message suggests it may reject. |
-| W6 | Native execution of a whitespace-only Turn on Codex, Claude SDK and MiniMax Code | Declared per harness through the engine profile. Codex and MiniMax Code admit and deliver the text unchanged. Claude SDK is not qualified: a message without an image or non-whitespace text returns 400 `unsupported_or_invalid_configuration` at Session creation (including streaming and self-hosted creation) and `events.create`, before any write, reservation or promotion. Live native outcomes are recorded separately. |
+| W6 | Native execution of a whitespace-only Turn on Codex, Claude SDK and MiniMax Code | Declared per harness through the engine profile. Codex admits and delivers the text unchanged; live acceptance at `898b197a` completed its whitespace-only Turns. Claude SDK and MiniMax Code are not qualified: a message without an image or non-whitespace text returns 400 `unsupported_or_invalid_configuration` at Session creation (including streaming and self-hosted creation) and `events.create`, before any write, reservation or promotion. Live evidence for MiniMax Code: after admission its native runtime refused the prompt with "Local message content or attachments are required." and the Turn failed with `engine_failed` (public `internal_error`). The Claude SDK admission rejection was confirmed live at `d88ffba6`. |
 
 Decisions:
 
@@ -482,11 +482,13 @@ Decisions:
   `WhitespaceOnlyText` qualification checked with the other input profile rules
   during Worker admission, without engine-name branches in handlers. The Claude
   bridge and Anthropic-compatible providers reject text blocks without
-  non-whitespace characters, so Core declares the combination instead of failing
-  the Turn or rewriting input. Whitespace beside non-whitespace text in one
+  non-whitespace characters, and the MiniMax Code native runtime refuses such a
+  prompt, so Core declares both combinations instead of failing the Turn or
+  rewriting input. Whitespace beside non-whitespace text in one
   message stays admitted for every harness. Whitespace is one explicit set, the
   union of Go `unicode.IsSpace` and ECMAScript `String.prototype.trim`, used by
-  both Core admission and the bridge; a shared table test keeps them equal.
+  both Core admission and the Claude bridge; a shared table test keeps them
+  equal. The MiniMax native check is covered only by live evidence.
   Admission makes the bridge's own check unreachable. If such a steering message
   still reached the bridge it would report `input_rejected`, and Core would end
   the running Turn as before; the delivery lifetime is unchanged.
@@ -508,8 +510,8 @@ Follow-ups:
   not only blank sends. This is a UI choice; other clients' text is unchanged.
 
 Go proto, dispatch, Codex and API handler tests cover W1–W5. Profile, error
-mapping and real-PostgreSQL Worker tests cover W6 admission: Codex and MiniMax
-Code admit and store the text, and Claude SDK rejects at none, streaming and
+mapping and real-PostgreSQL Worker tests cover W6 admission: Codex admits and
+stores the text, and Claude SDK and MiniMax Code reject at none, streaming and
 self-hosted creation and at events.create without writes. A real-PostgreSQL
 test creates Sessions and submits events over HTTP, reads back the exact user
 Item text, and proves the W4 rejections write nothing; the pinned-SDK initial
