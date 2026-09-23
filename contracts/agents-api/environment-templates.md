@@ -415,7 +415,10 @@ version-1 JSON operation on stdin. It configures read-only tool env under
 and runs ordered commands through distro bubblewrap. The fixed mount/process map
 excludes daemon credentials, native history and staging. User values are applied
 inside isolation, never to the launcher. Receipt and process exit must both confirm
-completion; child output is discarded because it can contain secrets.
+completion; child output is discarded because it can contain secrets. A failed step
+that ran inside that isolation (a setup command or a package manager) adds only its
+integer `exit_code` to the failed receipt; see
+[Initialization failure](#initialization-failure--september-23).
 
 Runtime receives a `tool_environment` execution flag, without template identity or
 provider information. Adapters validate the common files and apply them in their
@@ -429,6 +432,38 @@ Codex 0.153.4 can execute an original command when a native hook process fails.
 The adapter verifies the required trusted managed hook before preparation and
 stops the Turn on an observed failed hook. Earlier command effects may already
 exist; this is not an atomic hook-failure prevention guarantee.
+
+## Initialization failure — September 23
+
+When a hosted Environment fails to provision, Core now reports it the way the
+official service does (evidence and rows H1–H8 in
+[official semantics](official-semantics-alignment.md#hosted-initialization-failure--september-23)).
+In the allocation's cleanup transaction, Core marks the Environment failed and
+records, in order, `agent.session.environment.failed`, an `error` event and one
+`agent.session.failed`. The Session reads `failed` with the safe reason as `error`
+and the failure time as `last_active_at`; live streams end after the failed event.
+New input on that Session returns 409 `conflict_error` "the hosted environment
+failed to provision". Pending input settles as failed exactly as before.
+
+The reason names only the failed step and its exit status:
+
+| Step | Reason |
+| --- | --- |
+| Setup command `i` | `Failed to provision environment: script "setup_commands[i]" failed with exit code N` (observed) |
+| Python packages | `... script "Python package installation" failed with exit code N` (observed label; the official reason appends raw pip output, Core never does) |
+| npm or system packages | `... script "npm package installation"` / `"System package installation"` `failed with exit code N` (unverified) |
+| Initial file or Skill with a confirmed failed write | `Failed to provision environment: initial file installation failed` / `Skill installation failed` (unverified) |
+| Anything else | `Failed to provision environment: initialization did not complete` |
+
+"Anything else" covers timeouts, the thirty-minute budget, unknown effects,
+missing or malformed receipts, receipts without `exit_code` from Runtime images
+built before this change, Plugin and capability installation, bootstrap
+rejection and Core restart during initialization. Core accepts an exit status
+only from a strict version-1 failed receipt with process status 1 and no stderr,
+as an integer from 1 to 255, and the Store composes the reason from a fixed label
+and integers. Commands, env values, package names, paths and any process output
+therefore never reach the reason, events, logs or responses. The failed step is
+not retried and later steps do not run.
 
 ## System packages
 

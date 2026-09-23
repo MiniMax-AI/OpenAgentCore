@@ -725,3 +725,67 @@ creation-stream and live events, deletion and retries. The pinned-SDK scripts
 `official_mcp.py` and `official_mcp_credentials.py` assert the omitted origin,
 the projection and the error fields. Real Core acceptance is recorded separately
 by the coordinator.
+
+## Hosted initialization failure — September 23
+
+Hosted Environments that fail to provision now surface the failure as the
+official service does, from Core main `e1970fd7`. Evidence is HI-01..04 in the
+campaign scan recorded privately in
+`~/.parsar/remediation/20260923/campaign-scan-6/hosted-init/findings.json`, with
+raw official records under `official/`: `006-S2-create-setup-exit3`,
+`007-S2-events`, `009-S3-events`, `021-S2-env-after-failed`,
+`024-S2-session-after-failed`, `025-S3-session-after-failed`,
+`026-S2-input-after-failure`, `027-S3-input-after-failure`, `038-S2-delete` and
+`041-S3-delete`. Two owned `openai_hosted` Sessions without a Turn failed, one on a
+setup command that echoed a value and exited 3, one on a nonexistent Python
+package; both were deleted. The batch plan is
+`~/.parsar/remediation/20260924/hosted-init-failure/PLAN.md`.
+
+| Row | Case | Core behavior |
+| --- | --- | --- |
+| H1 | Hosted initialization fails in any step | One transaction records the Environment failure, `agent.session.environment.failed`, `error` and one `agent.session.failed`. The Session reads `status: failed`, the stored safe reason as `error`, `required_actions: []` and the failure time as `last_active_at`; retrieve, list and the event snapshot agree. Pending input reserved for the Environment settles as failed exactly as before, captured in the same snapshot. |
+| H2 | `environment.failed` payload | `error` is `{type: environment_error, code: environment_connection_failed, message: "The environment failed to connect."}`. |
+| H3 | `error` event | `{type: environment_error, code: sandbox_error, message: <reason>, param: null}`. |
+| H4 | Reason | `Failed to provision environment: script "setup_commands[i]" failed with exit code N`, and `script "Python package installation"` for Python packages; the official Python reason also appends raw pip output, which Core never copies. npm, system package, initial file and Skill labels are unverified. Other failures use `Failed to provision environment: initialization did not complete`; see the [initialization lifecycle](environment-templates.md#initialization-failure--september-23). |
+| H5 | Live SSE | GET and creation streams end right after that `agent.session.failed`. |
+| H6 | Later `events.create` | 409 `conflict_error`/`conflict_error` "the hosted environment failed to provision", param null. Expired Environments, and input already waiting when the Environment failed, keep 409 `environment_unavailable`. |
+| H7 | Delete | 200 `agent.session.deleted`, as officially, then 404. Deletion while provisioning is unchanged (HI-05 awaits a decision). |
+| H8 | Unchanged | `self_hosted` and `none` Environments, successful initialization and its timing, the two-minute step limit (HI-06), expiry and tenant isolation. |
+
+Decisions:
+
+- **No output.** The shared Runtime initializer adds only an integer `exit_code`
+  to its failed receipt, and only for a step run inside its bwrap isolation;
+  Runtime helpers, signals and other errors keep the generic receipt, and the
+  exception is never serialized. Core accepts the status only from a strict
+  version-1 failed receipt with process status 1 and no stderr, as an integer
+  from 1 to 255. The Store composes the reason from a fixed step label and
+  integers, so commands, env values, package names, paths and process output
+  cannot reach the reason, events, logs or responses.
+- **Storage.** The additive migration `000061_environment_failure.sql` adds the
+  nullable `environments.failure_reason` and `failed_at`; a check ties them to
+  `status = failed` and bounds the reason to 256 characters. Environments that
+  failed earlier keep NULL and their previous projection and events; new input
+  on them gets the H6 409.
+- **Runtime images.** A Runtime image built before this change reports no
+  `exit_code`; its failures use the generic reason and otherwise follow H1–H7.
+  The Codex, Claude and MiniMax Code images must be rebuilt for exit statuses.
+- **Scope of the terminal state.** Only a recorded hosted provisioning failure
+  makes the Session terminal. A Turn failure still leaves GET streams open, and
+  a GET stream opened after the failure stays open; that case was not observed.
+- **Clients.** Every `error` event now carries `param`. The TypeScript client
+  delivers error events other than Core's `stream_interrupted` to `onEvent`
+  before the failed snapshot, instead of raising them. Core Web already renders
+  the failed Session, its error and the blocked input.
+
+Go store tests on a dedicated PostgreSQL database drive the managed Worker with a
+controlled Provider through setup exit statuses (first and later command),
+Python packages, a receipt without `exit_code`, an unknown effect, raw output
+instead of a receipt and a failed initial file write. They check the Session
+read, list, the exact three events and snapshot, the H6 rejection, pending-input
+settlement, tenant B and the absence of a canary. A real-PostgreSQL HTTP test
+checks retrieve, list, the live GET stream and its end, the exact 409, tenant B
+404s, delete and the canary in every body. Go API and contract tests pin the
+projection, stream lifetime, wire shapes and error mapping; Python tests pin the
+initializer receipt, and the TypeScript client and Web unit tests pass. Live
+Docker acceptance is recorded separately by the coordinator.

@@ -338,3 +338,37 @@ the TypeScript client and Web unit tests. `make openapi` adds only `x-nullable` 
 Item `phase` and event `output_index`; `make sqlc-generate` changes
 `SessionTokenUsage` and adds the internal `SessionMeasuredTokenUsage`. The native pinned-SDK scripts updated for these shapes run
 only with a native daemon, and live model acceptance is recorded separately.
+
+## Hosted initialization failure events, 2026-09-23
+
+Evidence: campaign scan 6 HI-01..04 (private
+`~/.parsar/remediation/20260923/campaign-scan-6/hosted-init/`, raw frames
+`official/007-S2-events.json` and `009-S3-events.json`); rows H1–H8 are in
+[official semantics](official-semantics-alignment.md#hosted-initialization-failure--september-23).
+
+- **Order.** A hosted Environment that fails to provision records
+  `agent.session.environment.failed`, `error` and `agent.session.failed` in one
+  transaction, as officially observed. The official streams showed no
+  `environment.pending` event; Core records none either.
+- **Payloads.** `environment.error` is `{type: environment_error, code:
+  environment_connection_failed, message: "The environment failed to connect."}`.
+  The `error` event carries the pinned `SessionError`: `{type: environment_error,
+  code: sandbox_error, message: <safe reason>, param: null}`. Every `error` event
+  now includes `param` (null when unset), including Core's own
+  `stream_interrupted`. The `agent.session.failed` snapshot has `status: failed`,
+  the reason as `error`, `required_actions: []` and the failure time as
+  `last_active_at`, identical to later retrieve and list reads. Pending input
+  settled by the failure is captured in the same snapshot.
+- **Stream lifetime.** GET and creation streams end right after that
+  `agent.session.failed`, as the official GET stream did. This changes the
+  earlier rule that GET streams never end on their own, for this terminal case
+  only: a Turn failure leaves GET streams open because the Session can continue,
+  and a GET stream opened after the failure stays open (not observed officially).
+- **Client.** The TypeScript client still raises `stream_interrupted` as an
+  `AgentCoreError`, and now delivers other `error` events to `onEvent` as
+  `AgentSessionErrorEvent`, before the failed snapshot. It accepts an optional
+  nullable `param` on stream errors. Core Web renders the failed Session and its
+  error from the snapshot and ignores the error event.
+
+Environments that failed before migration `000061` have no recorded reason; they
+keep their earlier projection and events.

@@ -281,7 +281,9 @@ ordered setup and [public Environment Templates](../../contracts/agents-api/envi
 resolve to the same immutable hosted configuration, independently of provider templates. Additional harnesses
 require separate integration and qualification.
 Connected describes the authenticated Runtime connection, not native readiness.
-Exact hosted failure/expiry semantics remain unverified.
+A provisioning failure fails the Session with a safe step and exit-status reason
+([initialization failure](../../contracts/agents-api/environment-templates.md#initialization-failure--september-23));
+other exact hosted failure and expiry semantics remain unverified.
 
 ## Internal execution device connection
 

@@ -440,6 +440,15 @@ This bounds extra maintenance work but does not bypass capacity, a busy lifecycl
 gate or multi-page scheduling, and does not guarantee a resume deadline.
 
 A recovered or uncertain running installation fails and uses existing cleanup, without replaying writes.
+A hosted provisioning failure is terminal for its Session. The allocation's cleanup
+transaction stores a safe reason with the failed Environment and records
+`environment.failed`, `error` and one `agent.session.failed`; Session reads derive
+`failed`, that reason and the failure time from the same record, and live streams end
+after the failed event. The initializer reports only the integer exit status of a
+failed sandboxed step. Core composes the reason from a fixed step label and that status,
+never from command, package-manager or file output; unknown effects, timeouts and
+receipts without a status keep a generic reason. New input then gets the observed 409
+`conflict_error`; expiry and pending-input settlement keep their behavior.
 Completed environments never reinstall initial files on reconnect or native recovery.
 Provider RunCommand carries bounded stdin, not confidential argv. Only fixed trusted
 initializers may run with Runtime authority. User setup and package install hooks
@@ -1266,8 +1275,9 @@ admission deadline plus response grace. Request/observer disconnect stops waitin
 not the durable reservation or execution; retries keep the original identity and
 deadline. The Worker remains the readiness, promotion and Start owner. Local failure
 mapping uses 409 `environment_input_expired` / `environment_input_cancelled`, 503
-`execution_unavailable` for ownership loss, and existing 404 for deletion. Exact
-hosted failure status/body and pending-input crash recovery remain unverified.
+`execution_unavailable` for ownership loss, and existing 404 for deletion. New input
+after a hosted provisioning failure returns the observed 409 `conflict_error`; other
+exact hosted failure statuses/bodies and pending-input crash recovery remain unverified.
 Principal acceptance must use public Session creation and input against the built
 standalone service, including a wait exceeding its ordinary 30-second write timeout,
 real remote commands/files and a second native-history Turn. Private provisioning
