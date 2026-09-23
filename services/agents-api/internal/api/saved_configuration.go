@@ -36,7 +36,7 @@ func resolveSavedFields(input v1.CreateAgentRequest) (store.CreateAgentInput, er
 	if err := input.XAgentsCore.Validate(); err != nil {
 		return store.CreateAgentInput{}, err
 	}
-	cfg := v1.SavedAgentConfiguration{XAgentsCore: input.XAgentsCore, Name: input.Name, Instructions: input.Instructions, ServiceTier: "auto"}
+	cfg := v1.SavedAgentConfiguration{XAgentsCore: input.XAgentsCore.SafeView(), Name: input.Name, Instructions: input.Instructions, ServiceTier: "auto"}
 	if input.Model != nil {
 		cfg.Model = *input.Model
 	}
@@ -70,7 +70,11 @@ func resolveSavedFields(input v1.CreateAgentRequest) (store.CreateAgentInput, er
 		return store.CreateAgentInput{}, err
 	}
 	configuration, err := json.Marshal(cfg)
-	return store.CreateAgentInput{Metadata: metadata, Configuration: configuration}, err
+	result := store.CreateAgentInput{Metadata: metadata, Configuration: configuration}
+	if input.XAgentsCore != nil {
+		result.ModelProvider = input.XAgentsCore.ModelProvider
+	}
+	return result, err
 }
 
 func resolveSavedMultiAgent(raw json.RawMessage) (v1.MultiAgentConfig, error) {

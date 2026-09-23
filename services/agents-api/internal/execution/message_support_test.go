@@ -40,3 +40,46 @@ func TestMessageImageQualificationIsOperationSpecific(t *testing.T) {
 		t.Fatal("qualified image rejected", err)
 	}
 }
+
+// Whitespace-only text is a declared per-harness qualification, not rewritten input.
+func TestWhitespaceOnlyTextQualificationUsesEngineProfiles(t *testing.T) {
+	url := "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXioAAAAASUVORK5CYII="
+	message := func(messages ...string) store.Input {
+		raw, _ := json.Marshal(map[string]any{"input": func() []any {
+			var input []any
+			for _, text := range messages {
+				input = append(input, map[string]any{"role": "user", "content": []any{map[string]any{"type": "input_text", "text": text}}})
+			}
+			return input
+		}()})
+		return store.Input{Kind: "message", Payload: raw}
+	}
+	whitespace := []store.Input{message("   "), message("ok", "\n\t")}
+	codex, _ := (engine.Catalog{}).Lookup("codex")
+	for _, input := range whitespace {
+		if err := validateProfileInputs(codex, "none", []store.Input{input}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, kind := range []string{"claude_sdk", "mcode"} {
+		profile, _ := (engine.Catalog{}).Lookup(kind)
+		for _, input := range whitespace {
+			for _, placement := range []string{"none", "openai_hosted", "self_hosted"} {
+				if err := validateProfileInputs(profile, placement, []store.Input{input}); !errors.Is(err, ErrWhitespaceOnlyText) {
+					t.Fatalf("%s %s %s: %v", kind, placement, input.Payload, err)
+				}
+			}
+		}
+	}
+	claude, _ := (engine.Catalog{}).Lookup("claude_sdk")
+	// Legacy text payloads use the same rule.
+	if err := validateProfileInputs(claude, "none", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":" \t"}`)}}); !errors.Is(err, ErrWhitespaceOnlyText) {
+		t.Fatal(err)
+	}
+	mixed, _ := json.Marshal(map[string]any{"input": []any{map[string]any{"role": "user", "content": []any{
+		map[string]any{"type": "input_text", "text": " "}, map[string]any{"type": "input_text", "text": "text"}}},
+		map[string]any{"role": "user", "content": []any{map[string]any{"type": "input_text", "text": " "}, map[string]any{"type": "input_image", "image_url": url}}}}})
+	if err := validateProfileInputs(claude, "none", []store.Input{{Kind: "message", Payload: mixed}}); err != nil {
+		t.Fatal("non-whitespace text or image rejected", err)
+	}
+}

@@ -50,7 +50,7 @@ func TestSessionHarnessAdmission(t *testing.T) {
 
 func TestSavedHarnessReplacementAndEffectiveRead(t *testing.T) {
 	model := "fixture"
-	resolved, err := resolveSavedAgent(v1.CreateAgentRequest{Model: &model, XAgentsCore: &v1.AgentsCore{Harness: "claude_sdk"}})
+	resolved, err := resolveSavedAgent(v1.CreateAgentRequest{Model: &model, XAgentsCore: &v1.SavedAgentCoreInput{Harness: "claude_sdk"}})
 	if err != nil {
 		t.Fatal(err)
 	}

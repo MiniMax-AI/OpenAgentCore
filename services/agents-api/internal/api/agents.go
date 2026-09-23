@@ -38,6 +38,10 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 	if writeFieldError(w, metadataTypeError(raw)) || writeFieldError(w, validateSavedAgentBody(raw, savedAgentCreate)) {
 		return
 	}
+	if err := validateSavedCoreInput(raw); err != nil {
+		writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())
+		return
+	}
 	var request v1.CreateAgentRequest
 	if decodeInputObject(raw, &request, "model", "name", "instructions", "metadata", "multi_agent", "reasoning", "service_tier", "text", "tools", "x_agents_core") != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "Request must be a JSON object containing supported fields.")

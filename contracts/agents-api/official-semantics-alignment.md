@@ -40,9 +40,9 @@ credential values belong in the repository or task board.
   status/configuration shapes are a queued baseline upgrade, as approved by the user.
 - The Session admission batch rejects missing/null input for `none` and for
   streaming creation outside `self_hosted`. September 23 official probes confirmed
-  these conditions and idle self-hosted creation. Existing blank-text validation
-  remains stricter: official whitespace-only string input returned 201. This
-  newly found difference is queued rather than expanding the admission batch.
+  these conditions and idle self-hosted creation. Official whitespace-only string
+  input returned 201; the
+  [whitespace batch](#whitespace-only-message-text--september-23) admits it.
 - Two otherwise identical official creates with the same `Idempotency-Key`
   returned 201 and distinct Session IDs. Core retains its durable creation retry
   guarantee. This is a local behavior, not evidence of official idempotency parity.
@@ -191,7 +191,8 @@ accepts (SFT-22); non-canonical UUID spellings such as uppercase, braces or
 `urn:uuid:` still resolve to the same resource; Skill sole-version deletion and
 number reuse (since resolved or recorded in
 [file resource semantics](file-resource-semantics.md#sole-version-deletion--september-23-2026));
-Session deletion lifecycle; whitespace input; response defaults;
+Session deletion lifecycle; whitespace input (since addressed by the
+[whitespace batch](#whitespace-only-message-text--september-23)); response defaults;
 and the Files `limit=abc` code. The Environment Files list query parser is aligned
 for unknown and repeated keys by the [Environment Files wire batch](environment-files.md#wire-alignment--september-23-2026);
 it still rejects malformed query encoding locally.
@@ -448,3 +449,71 @@ and saved-override Session creates, with a database digest proving no writes; it
 then saves and reads back the K1 values and checks tenant isolation. The
 pinned-SDK acceptance scripts assert the new codes, params and messages. Real
 Core, daemon and model acceptance is recorded separately by the coordinator.
+
+## Whitespace-only message text — September 23
+
+Core admitted user text only when it had a non-whitespace character; the official
+service admits any non-empty text and stores it unchanged. Evidence comes from the
+campaign scan recorded privately in
+`~/.parsar/remediation/20260923/campaign-scan-1/sessions/findings.json`
+(SES-01..08) with raw official records under `official/`: `s1-create-string-spaces`,
+`s4-create-string-newline-tab`, `s2-create-message-part-newline-tab`,
+`e1-events-two-whitespace-messages`, `q2-items-l100` (user Item text `"   "`),
+`p1a-create-missingagent-empty-string`, `e2-events-empty-content`,
+`e3-events-text-emptystring` and `e4-events-empty-input`. The probed Sessions were
+deleted.
+
+| Row | Case | Core behavior |
+| --- | --- | --- |
+| W1 | Session create with string input `"   "` or `"\n\t"` (SES-01/02) | 201; the user Item keeps the exact text. |
+| W2 | Session create with a message whose only `input_text` part is whitespace-only (SES-03) | 201; stored verbatim. |
+| W3 | `events.create` message with whitespace-only `input_text` parts, including two such messages in one event (SES-04) | 202; one Turn, Items verbatim. String `content` or string `input` stay type errors, as observed officially. |
+| W4 | Empty string, empty `content`, empty `input`, or a message whose text parts are all empty (SES-05..07) | Unchanged 400 `invalid_request` with the generic message and null param, without writes. The official responses use code `invalid_request_error`, specific messages and, for the empty create string, param `input`; aligning them is outside this batch. |
+| W5 | A message with parts `["", "real text"]` (SES-08) | Unchanged: accepted and stored with the empty part. Official behavior is unobserved; its per-part error message suggests it may reject. |
+| W6 | Native execution of a whitespace-only Turn on Codex, Claude SDK and MiniMax Code | Declared per harness through the engine profile. Codex admits and delivers the text unchanged; live acceptance at `898b197a` completed its whitespace-only Turns. Claude SDK and MiniMax Code are not qualified: a message without an image or non-whitespace text returns 400 `unsupported_or_invalid_configuration` at Session creation (including streaming and self-hosted creation) and `events.create`, before any write, reservation or promotion. Live evidence for MiniMax Code: after admission its native runtime refused the prompt with "Local message content or attachments are required." and the Turn failed with `engine_failed` (public `internal_error`). The Claude SDK admission rejection was confirmed live at `d88ffba6`. |
+
+Decisions:
+
+- `MessageInput.Validate` treats any non-empty text part as content and no longer
+  trims. Image reference checks are unchanged. The rule applies wherever the
+  validator runs: Core admission for create and events, Worker delivery, daemon
+  steering and prepared start, and the Codex and MiniMax adapters.
+- W6 reuses the engine profile that declares image placements: a
+  `WhitespaceOnlyText` qualification checked with the other input profile rules
+  during Worker admission, without engine-name branches in handlers. The Claude
+  bridge and Anthropic-compatible providers reject text blocks without
+  non-whitespace characters, and the MiniMax Code native runtime refuses such a
+  prompt, so Core declares both combinations instead of failing the Turn or
+  rewriting input. Whitespace beside non-whitespace text in one
+  message stays admitted for every harness. Whitespace is one explicit set, the
+  union of Go `unicode.IsSpace` and ECMAScript `String.prototype.trim`, used by
+  both Core admission and the Claude bridge; a shared table test keeps them
+  equal. The MiniMax native check is covered only by live evidence.
+  Admission makes the bridge's own check unreachable. If such a steering message
+  still reached the bridge it would report `input_rejected`, and Core would end
+  the running Turn as before; the delivery lifetime is unchanged.
+- The TypeScript client mirrored the old rule for event batches; it now rejects
+  only messages whose text is empty. Core Web keeps its local nonblank composer
+  and Start Session rules; they are a UI choice, not protocol validation.
+- No schema, model output or image rule changes.
+
+Follow-ups:
+
+- Codex omits the `text` field of an empty text part (`omitempty` on its native
+  input), so a W5 message `["", "text"]` may be rejected natively. It is recorded
+  rather than changed here, because removing the tag would also add empty text to
+  image parts.
+- On Claude SDK, a mixed message such as `["   ", "text"]` is admitted and sends
+  a whitespace-only native text block, and `["", "text"]` sends an empty block;
+  the provider's behavior for such blocks is unverified.
+- The Core Web composer trims leading and trailing whitespace from all sent text,
+  not only blank sends. This is a UI choice; other clients' text is unchanged.
+
+Go proto, dispatch, Codex and API handler tests cover W1–W5. Profile, error
+mapping and real-PostgreSQL Worker tests cover W6 admission: Codex admits and
+stores the text, and Claude SDK and MiniMax Code reject at none, streaming and
+self-hosted creation and at events.create without writes. A real-PostgreSQL
+test creates Sessions and submits events over HTTP, reads back the exact user
+Item text, and proves the W4 rejections write nothing; the pinned-SDK initial
+input script asserts the same. Real Core, daemon and model acceptance is recorded
+separately by the coordinator.

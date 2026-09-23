@@ -77,8 +77,10 @@ For multiple engines, use an exclusive `by_harness` object in the private
 `AGENTS_API_EXECUTION_OPTIONS_FILE`, with one existing adapter-options object per
 engine. No engine inherits another engine's credentials. A legacy flat options
 object is usable only by the deployment default engine. Missing options for a
-selected engine fail execution. Credentials stay in private operator files and
-transient adapter requests, never Agent defaults, metadata or effective responses.
+selected engine fail execution. Operator credentials stay in private files and
+encrypted hosted Session snapshots. Saved Agent provider credentials use separately
+encrypted defaults; public reads return only safe fields and a configured flag.
+Credentials never enter metadata or ordinary effective responses.
 A Session may instead provide the [write-only model execution extension](model-execution.md);
 its frozen configuration takes precedence without operator fallback.
 

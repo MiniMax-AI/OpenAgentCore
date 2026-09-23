@@ -12,6 +12,7 @@ import (
 // otherwise erase it. The embedded wire type retains strict nested decoding.
 type decodedSessionRequest struct {
 	v1.CreateSessionRequest
+	Execution   json.RawMessage    `json:"x_agents_core"`
 	Input       json.RawMessage    `json:"input"`
 	Agent       json.RawMessage    `json:"agent"`
 	AgentID     json.RawMessage    `json:"agent_id"`
@@ -25,6 +26,7 @@ type sessionRequest struct {
 	initialFiles        []store.InitialFile
 	initialization      store.EnvironmentSetup
 	originalEnvironment json.RawMessage
+	modelProviderNull   bool
 	v1.CreateSessionRequest
 	Input               json.RawMessage
 	templateID          string
@@ -34,6 +36,14 @@ type sessionRequest struct {
 
 func (request decodedSessionRequest) validated() (sessionRequest, error) {
 	input := sessionRequest{CreateSessionRequest: request.CreateSessionRequest, Input: request.Input}
+	if len(request.Execution) > 0 && !bytes.Equal(bytes.TrimSpace(request.Execution), []byte("null")) {
+		if decodeInputObject(request.Execution, &input.XAgentsCore, "model_provider", "sandbox_node_id") != nil {
+			return input, store.ErrInvalidInput
+		}
+		var fields map[string]json.RawMessage
+		_ = json.Unmarshal(request.Execution, &fields)
+		input.modelProviderNull = bytes.Equal(bytes.TrimSpace(fields["model_provider"]), []byte("null"))
+	}
 	var vaultIDs []*string
 	if len(request.VaultIDs) != 0 && json.Unmarshal(request.VaultIDs, &vaultIDs) != nil {
 		return input, store.ErrInvalidInput

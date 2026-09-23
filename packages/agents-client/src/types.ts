@@ -173,7 +173,7 @@ export interface VaultCredentialDeleted {
 export interface SavedAgent {
   id: string;
   object: "agent";
-  x_agents_core?: AgentsCoreSelection | null;
+  x_agents_core?: SavedAgentCore | null;
   model: string;
   name: string | null;
   instructions: string | null;
@@ -191,7 +191,7 @@ export interface SavedAgent {
 }
 
 export interface CreateAgentInput {
-  x_agents_core?: AgentsCoreSelection | null;
+  x_agents_core?: SavedAgentCoreInput | null;
   model: string;
   name?: string | null;
   instructions?: string | null;
@@ -216,7 +216,9 @@ export interface InlineAgentInput {
   multi_agent?: MultiAgentInput | null;
 }
 
-export type AgentSnapshot = Omit<SavedAgent, "object" | "metadata" | "created_at" | "updated_at">;
+export type AgentSnapshot = Omit<SavedAgent, "object" | "metadata" | "created_at" | "updated_at" | "x_agents_core"> & {
+  x_agents_core?: AgentsCoreSelection | null;
+};
 
 declare const unknownEnvironmentType: unique symbol;
 declare const unknownItemType: unique symbol;
@@ -476,7 +478,7 @@ export interface AgentSession {
 }
 
 export interface CreateSessionInput {
-  x_agents_core?: { sandbox_node_id?: string; model_provider?: { protocol: "anthropic" | "responses"; base_url: string; api_key: string; context_window?: number; max_output_tokens?: number } };
+  x_agents_core?: { sandbox_node_id?: string; model_provider?: ModelProviderInput | null };
   agent_id?: string;
   agent?: InlineAgentInput;
   environment: AgentEnvironmentInput;
@@ -949,6 +951,36 @@ export interface RuntimeHistory {
 
 export type CoreHarnessKind = "claude_sdk" | "codex" | "mcode";
 export type CoreManagedSandboxProvider = "docker" | "microsandbox";
+
+/** A complete replacement bundle. API keys are write-only. */
+export interface ModelProviderInput {
+  protocol: "anthropic" | "responses";
+  base_url: string;
+  api_key: string;
+  context_window?: number;
+  max_output_tokens?: number;
+  api_key_configured?: never;
+}
+
+export interface ModelProviderView {
+  protocol: "anthropic" | "responses";
+  base_url: string;
+  context_window?: number;
+  max_output_tokens?: number;
+  api_key_configured: boolean;
+  api_key?: never;
+}
+
+/** Omitted members preserve saved defaults on update; null provider clears it. */
+export interface SavedAgentCoreInput {
+  harness?: CoreHarnessKind;
+  model_provider?: ModelProviderInput | null;
+}
+
+export interface SavedAgentCore {
+  harness?: CoreHarnessKind;
+  model_provider?: ModelProviderView;
+}
 
 export interface AgentsCoreSelection {
   harness: CoreHarnessKind;

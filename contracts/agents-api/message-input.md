@@ -34,6 +34,44 @@ Query Session/Turn/Items to recover results. SSE remains live-only; reconnecting
 does not replay inputs or recreate completed Turns. The request contains no
 image `detail` or file-ID extension.
 
+## Text content
+
+Text is never trimmed. A message is valid when it contains an image or at least
+one non-empty `input_text` part, so whitespace-only text such as `"   "` or
+`"\n\t"` is admitted at Session creation (string or message input) and by
+`events.create`, then stored and projected in Items verbatim, as the official
+service does (SES-01..04). The empty string, an empty `content` array and an
+empty `input` array keep the existing 400 `invalid_request` response. A message
+whose parts are `["", "text"]` is still accepted; its official behavior is
+unobserved (SES-08). String `content` and string event `input` remain type errors,
+as observed officially. The shared daemon validator, daemon dispatch and the
+TypeScript client apply the same rule. Core Web keeps local UI rules: its
+composer trims leading and trailing whitespace from every message it sends and
+does not send blank text, and its Start Session form omits whitespace-only simple
+text ([Web architecture](../../docs/web/architecture.md)). Other clients' text is
+never trimmed.
+
+Harness profiles declare whether whitespace-only text is qualified, through the
+same engine profile that declares image placements. Only Codex is qualified; it
+delivers such text unchanged and completed whitespace-only Turns in live
+acceptance. Claude SDK is not qualified: the bridge and Anthropic-compatible
+providers reject text without a non-whitespace character. MiniMax Code is not
+qualified: its native runtime refused a whitespace-only prompt with "Local message
+content or attachments are required.", failing the Turn with `engine_failed`
+(public `internal_error`). Whitespace here is one explicit set, the union of Go
+`unicode.IsSpace` and ECMAScript `String.prototype.trim` (for example U+0085 and
+U+FEFF), shared by Core admission and the Claude bridge. For Claude SDK and
+MiniMax Code Sessions, a message without an image or any non-whitespace text is
+rejected at Session creation and
+`events.create` with 400 `unsupported_or_invalid_configuration`, before any write,
+input reservation or promotion, so no Turn starts and a running Turn is never
+disturbed. Whitespace beside non-whitespace text in the same message is admitted
+unchanged. Core never trims or pads model input to fit a harness. Admission makes
+the Claude bridge's own check unreachable. If such a message still reached the bridge,
+initial and prepared input would end with `invalid_request`, and a steering
+message would be reported as `input_rejected`, which ends the running Turn as
+before.
+
 ## Runtime boundary
 
 Private wire 0.5.0 uses `MessageInput` for initial requests, prepared start and
@@ -136,6 +174,7 @@ MiniMax's fixed ACP advertises `image:false`; its adapter rejects images. These 
 implementation gaps, not changes to the official protocol. JPEG parsing/conversion
 has deterministic coverage; the original `none` message fixtures are PNG, and
 the hosted workflow also exercises JPEG. Empty
-messages, local payload limits and native batch-size parity need upstream evidence.
+parts beside text (SES-08), local payload limits and native batch-size parity need
+upstream evidence.
 Function-result image support has its own [coverage record](function-result-images.md). No full protocol
 compatibility or support for arbitrary vision-model/provider combinations is claimed.

@@ -11,7 +11,8 @@ import (
 )
 
 // Operator options use the existing transient adapter configuration path. They
-// are not public Session configuration and are never persisted with its snapshot.
+// are never public Session configuration. Hosted creation freezes its model
+// provider bundle separately in the encrypted Session credential snapshot.
 func executionOptions() (func(context.Context, store.Session) (map[string]any, error), error) {
 	resolve, _, err := executionOptionsConfiguration()
 	return resolve, err

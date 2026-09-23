@@ -2051,13 +2051,13 @@ describe("OpenAIAgentsClient", () => {
       type: "agent.session.input.message",
       input: [{ role: "assistant", content: [{ type: "input_text", text: "hello" }] }],
     }] },
-    { label: "blank complete message", events: [{
+    { label: "empty text message", events: [{
       type: "agent.session.input.message",
-      input: [{ role: "user", content: [{ type: "input_text", text: " " }] }],
+      input: [{ role: "user", content: [{ type: "input_text", text: "" }] }],
     }] },
-    { label: "Core Unicode whitespace message", events: [{
+    { label: "all-empty text parts", events: [{
       type: "agent.session.input.message",
-      input: [{ role: "user", content: [{ type: "input_text", text: "\u0085" }] }],
+      input: [{ role: "user", content: [{ type: "input_text", text: "" }, { type: "input_text", text: "" }] }],
     }] },
     { label: "sparse message content", events: [{
       type: "agent.session.input.message",
@@ -2127,6 +2127,23 @@ describe("OpenAIAgentsClient", () => {
     expect(() => client.submitEvents("session", [unicodeOversize], "utf8-over"))
       .toThrow("Session input event request exceeds 1 MiB.");
     expect(calls).toHaveLength(2);
+  });
+
+  it("sends whitespace-only message text verbatim, as Core admits it", async () => {
+    const calls: FetchCall[] = [];
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 202 }), calls) });
+    const event: SessionInputEvent = {
+      type: "agent.session.input.message",
+      input: [
+        { role: "user", content: [{ type: "input_text", text: "   " }] },
+        { role: "user", content: [{ type: "input_text", text: "\n\t" }] },
+        { role: "user", content: [{ type: "input_text", text: "\u0085" }] },
+      ],
+    };
+
+    await client.submitEvents("session", [event], "whitespace-text");
+
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ events: [event] });
   });
 
   it("does not invent JavaScript-only whitespace restrictions for message text", async () => {

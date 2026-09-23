@@ -44,8 +44,35 @@ func TestMessageInputOrderAndTextOnlyRejection(t *testing.T) {
 	}
 }
 
+func TestMessageInputWhitespaceTextIsContent(t *testing.T) {
+	for _, raw := range []string{
+		`[{"content":[{"type":"input_text","text":"   "}]}]`,
+		`[{"content":[{"type":"input_text","text":"\n\t"}]}]`,
+		`[{"content":[{"type":"input_text","text":"   "}]},{"content":[{"type":"input_text","text":"\n\t"}]}]`,
+		// Unknown officially (SES-08); an empty part beside text keeps today's acceptance.
+		`[{"content":[{"type":"input_text","text":""},{"type":"input_text","text":"Reply only OK."}]}]`,
+		`[{"content":[{"type":"input_text","text":""},{"type":"input_text","text":" "}]}]`,
+	} {
+		var input MessageInput
+		if err := json.Unmarshal([]byte(raw), &input); err != nil {
+			t.Fatal(err)
+		}
+		if err := input.Validate(); err != nil {
+			t.Fatalf("rejected %s: %v", raw, err)
+		}
+		encoded, err := json.Marshal(input)
+		if err != nil || string(encoded) != raw {
+			t.Fatalf("content changed: %s, %v", encoded, err)
+		}
+	}
+	text, err := append(TextInput("   "), TextInput("\u0085\u3000\n\t")...).TextOnly()
+	if err != nil || text != "   \n\n\u0085\u3000\n\t" {
+		t.Fatalf("whitespace text changed: %q %v", text, err)
+	}
+}
+
 func TestMessageInputInvalidUnion(t *testing.T) {
-	for _, raw := range []string{`[]`, `[{"content":[]}]`, `[{"content":[{"type":"input_text","text":null}]}]`, `[{"content":[{"type":"input_image","image_url":""}]}]`, `[{"content":[{"type":"input_image","image_url":"image","text":"unexpected"}]}]`} {
+	for _, raw := range []string{`[]`, `[{"content":[]}]`, `[{"content":[{"type":"input_text","text":""}]}]`, `[{"content":[{"type":"input_text","text":""},{"type":"input_text","text":""}]}]`, `[{"content":[{"type":"input_text","text":"x"}]},{"content":[{"type":"input_text","text":""}]}]`, `[{"content":[{"type":"input_text","text":null}]}]`, `[{"content":[{"type":"input_image","image_url":""}]}]`, `[{"content":[{"type":"input_image","image_url":" "}]}]`, `[{"content":[{"type":"input_image","image_url":"image","text":"unexpected"}]}]`} {
 		var input MessageInput
 		if err := json.Unmarshal([]byte(raw), &input); err == nil && input.Validate() == nil {
 			t.Fatalf("accepted %s", raw)

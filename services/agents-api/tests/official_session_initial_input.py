@@ -72,8 +72,23 @@ def main():
 
         verify_creation_streams(client, raw, base, headers, foreign, unsupported)
 
+        # Whitespace-only text is content: admitted and kept verbatim (SES-01..04).
+        def user_texts(session_id):
+            return [[part.text for part in item.content] for item in sessions.items.list(session_id, order="asc")]
+        for initial, texts in (("   ", [["   "]]), ("\n\t", [["\n\t"]]),
+                               ([{"role": "user", "content": [{"type": "input_text", "text": "\n\t"}]}], [["\n\t"]])):
+            session = sessions.create(**spec, input=initial)
+            assert session.status == "in_progress" and user_texts(session.id) == texts, (initial, user_texts(session.id))
+        sessions.events.create(session.id, events=[{"type": "agent.session.input.cancel"}])
+        sessions.events.create(session.id, events=[{"type": "agent.session.input.message", "input": [
+            {"role": "user", "content": [{"type": "input_text", "text": "   "}]},
+            {"role": "user", "content": [{"type": "input_text", "text": "\n\t"}]}]}])
+        assert user_texts(session.id) == [["\n\t"], ["   "], ["\n\t"]]
+        assert len(list(sessions.turns.list(session.id))) == 2
+
         before = {session.id for session in sessions.list()}
-        for fields in [{"input": [{"type": None, "role": "user", "content": [{"type": "input_text", "text": "x"}]}]}, {"input": 0}, {"input": {}}, {"input": []}, {"input": " "},
+        for fields in [{"input": [{"type": None, "role": "user", "content": [{"type": "input_text", "text": "x"}]}]}, {"input": 0}, {"input": {}}, {"input": []}, {"input": ""},
+                       {"input": [{"role": "user", "content": []}]}, {"input": [{"role": "user", "content": [{"type": "input_text", "text": ""}]}]},
                        {"input": [{"role": "assistant", "content": [{"type": "input_text", "text": "x"}]}]},
                        {"input": [{"role": "user", "content": [{"type": "input_image", "image_url": "https://example.com/x.png"}]}]}]:
             reply = raw.post(base + "/v1/agents/sessions", headers=headers, json={**spec, **fields})
@@ -81,7 +96,7 @@ def main():
         reply = raw.post(unsupported + "/v1/agents/sessions", headers=headers, json={**spec, "input": "x"})
         assert reply.status_code == 400
         assert {session.id for session in sessions.list()} == before
-    print("Initial text: pinned SDK/raw HTTP, saved and inline snapshots, null/omission, ordered Items, retries/cancellation, tenant isolation and no writes on rejection passed.")
+    print("Initial text: pinned SDK/raw HTTP, saved and inline snapshots, null/omission, ordered Items, verbatim whitespace-only text, retries/cancellation, tenant isolation and no writes on rejection passed.")
 
 
 if __name__ == "__main__":

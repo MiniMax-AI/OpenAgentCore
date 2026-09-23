@@ -1,4 +1,4 @@
-import { parseMessageInput, nativeContent, type MessageInput } from "./message_input.js";
+import { EmptyUserMessageError, parseMessageInput, nativeContent, type MessageInput } from "./message_input.js";
 import type { SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { randomUUID } from "node:crypto";
 
@@ -37,7 +37,15 @@ export class Inputs implements AsyncIterable<SDKUserMessage> {
     const input = value as Record<string, unknown>;
     if (input.type !== "steer" || Object.keys(input).some(key => !["type", "input_id", "input"].includes(key)) ||
         typeof input.input_id !== "string" || !input.input_id.trim() || input.input_id.length > 256) throw new Error("Invalid input.");
-    const messages = parseMessageInput(input.input);
+    let messages: MessageInput;
+    try {
+      messages = parseMessageInput(input.input);
+    } catch (error) {
+      // Core admission rejects blank text for this harness, so this is
+      // unreachable. A rejected steering input still ends the Turn in Core.
+      if (error instanceof EmptyUserMessageError) return [{ type: "input_rejected", input_id: input.input_id }];
+      throw error;
+    }
     // The native consumed-UUID list has 64 slots, including the opening prompt.
     if (this.ended || !this.sessionID || this.submitted.size + messages.length > 64 || this.ids.has(input.input_id)) {
       return [{ type: "input_rejected", input_id: input.input_id }];

@@ -54,6 +54,9 @@ func resolveAgentUpdate(raw []byte) (store.UpdateAgentInput, error) {
 	if err := validateSavedAgentBody(raw, savedAgentUpdate); err != nil {
 		return store.UpdateAgentInput{}, err
 	}
+	if err := validateSavedCoreInput(raw); err != nil {
+		return store.UpdateAgentInput{}, err
+	}
 	var request v1.UpdateAgentRequest
 	if decodeInputObject(raw, &request, "model", "name", "instructions", "metadata", "multi_agent", "reasoning", "service_tier", "text", "tools", "x_agents_core") != nil {
 		return store.UpdateAgentInput{}, errors.New("Request must be a JSON object containing supported fields.")
@@ -81,7 +84,23 @@ func resolveAgentUpdate(raw []byte) (store.UpdateAgentInput, error) {
 			delete(patch, field)
 		}
 	}
-	result := store.UpdateAgentInput{}
+	result := store.UpdateAgentInput{ModelProvider: normalized.ModelProvider}
+	if extension, supplied := fields["x_agents_core"]; supplied {
+		if request.XAgentsCore == nil {
+			result.ModelProviderSet = true
+		} else {
+			_, coreFields := orderedMembers(extension)
+			_, result.ModelProviderSet = coreFields["model_provider"]
+			if result.ModelProviderSet && request.XAgentsCore.ModelProvider == nil {
+				_, corePatch := orderedMembers(patch["x_agents_core"])
+				corePatch["model_provider"] = json.RawMessage(`null`)
+				patch["x_agents_core"], err = json.Marshal(corePatch)
+				if err != nil {
+					return store.UpdateAgentInput{}, err
+				}
+			}
+		}
+	}
 	if _, supplied := fields["metadata"]; supplied {
 		result.Metadata = &normalized.Metadata
 	}

@@ -9,6 +9,8 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 )
 
+// WhitespaceOnlyText stays unqualified: the bridge and Anthropic-compatible
+// providers reject text without non-whitespace characters.
 func claudeProfile() Profile {
 	return Profile{
 		ProgrammaticToolCallingDisable: true,
