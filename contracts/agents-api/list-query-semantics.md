@@ -142,8 +142,10 @@ Environment retrieval, so no single-resource route keeps a query rejection.
 Unchanged: every default (20, Files 10000), the maximum page capacity (100, Files
 10000), `order` handling, cursor lookup order, `after` trimming, authentication,
 tenant scoping and missing/foreign masking. A `tenant_id` query key is an ignored
-unknown key; only authentication selects the tenant. Query rejections happen before
-any resource lookup or write.
+unknown key; only authentication selects the tenant. Shared-parser list rejections
+happen before any resource lookup, so tenant B receives the same error. The
+Environment Files list validates its query only after the Environment lookup, so a
+foreign or missing Environment returns 404 first. No rejected request writes.
 
 Families are still selected by path, as for order errors. Local choices for
 unsampled inputs:

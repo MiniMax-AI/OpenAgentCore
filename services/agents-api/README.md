@@ -224,7 +224,8 @@ Execution uses the selected
 [engine profile](../../contracts/agents-api/README.md#public-engine-profiles),
 including `none` and the colocated self-hosted profile described below.
 Ordinary JSON requests have a 1 MiB body limit; file transfers use the separate
-bounds in the Files contracts. Session lists support `after`, `limit` (1..100),
+bounds in the Files contracts. Session lists support `after`, `limit` (0 is treated
+as 1 and values above 100 as 100),
 `order` (`asc`/`desc`) and optional immutable root `agent_id`. The local defaults
 are 20 and descending order; exact hosted limits/error semantics remain unverified.
 Session updates require the metadata field; null/empty clears it and an object
