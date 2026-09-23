@@ -540,11 +540,19 @@ definitions:
         items:
           $ref: '#/definitions/v1.EnvironmentFile'
         type: array
+      has_more:
+        type: boolean
       next:
         type: string
         x-nullable: true
+      object:
+        enum:
+        - page
+        type: string
     required:
     - data
+    - has_more
+    - object
     type: object
   v1.EnvironmentInfo:
     properties:
@@ -2501,16 +2509,18 @@ paths:
   /agents/environments/{environment_id}/files:
     get:
       description: Lists direct regular files in one authorized self_hosted or qualified
-        local workspace directory. Local paths use the public /workspace root. This
-        partial implementation defaults to the workspace root and limit 20; recursive
-        scope, directory/symlink treatment and these defaults are not verified upstream
-        semantics. Sorts by case-sensitive path components, descending by default.
-        Keep the same path, order and limit when using page. Each page rereads the
-        complete bounded directory; changed file paths/sizes invalidate continuation
-        locally with 400. There is no snapshot guarantee. Truncated or uncertain native
-        results fail with 503 without returning a partial page. This read never starts
-        a Turn or admits model input. Actual transport disconnect/reconnect events
-        remain observable.
+        local workspace directory. Local paths use the public /workspace root and
+        must be in cleaned form. This partial implementation defaults to the workspace
+        root and limit 20; recursive scope and these defaults are not verified upstream
+        semantics. A missing path, a regular file or a symbolic link returns an empty
+        page; links are never followed. Unknown query keys are ignored and a repeated
+        supported key is rejected. Sorts by case-sensitive path components, descending
+        by default. Keep the same path, order and limit when using page. Each page
+        rereads the complete bounded directory; changed file paths/sizes invalidate
+        continuation locally with 400. There is no snapshot guarantee. Truncated or
+        uncertain native results fail with 503 without returning a partial page. This
+        read never starts a Turn or admits model input. Actual transport disconnect/reconnect
+        events remain observable.
       parameters:
       - description: agents=v1
         in: header
@@ -2522,7 +2532,7 @@ paths:
         name: environment_id
         required: true
         type: string
-      - description: Absolute directory inside the Environment workspace
+      - description: Absolute directory in cleaned form inside /workspace
         in: query
         name: path
         type: string
@@ -2581,14 +2591,14 @@ paths:
       consumes:
       - application/json
       description: Uploads standard Base64 bytes to a file beneath /workspace in a
-        qualified local Environment. Accepts inline bytes or a project-owned source
-        file_id through the same write path. Basic public hosted creation requires
-        explicit managed Runtime configuration. A private 50 MiB decoded-content limit
-        applies. The parent directory must exist. Replacement installs a new mode-0600
-        inode; upstream overwrite metadata semantics remain unverified. Idle writes
-        exclude execution. Missing receipts return unavailable and retain a durable
-        mutation gate without automatic replay. Error/timing parity with upstream
-        remains unverified.
+        qualified local Environment and returns 201. Accepts inline bytes or a project-owned
+        source file_id through the same write path. Unknown body fields are rejected
+        with their name as param. Basic public hosted creation requires explicit managed
+        Runtime configuration. A private 50 MiB decoded-content limit applies. The
+        parent directory must exist. Replacement installs a new mode-0600 inode; upstream
+        overwrite metadata semantics remain unverified. Idle writes exclude execution.
+        Missing receipts return unavailable and retain a durable mutation gate without
+        automatic replay. Error/timing parity with upstream remains unverified.
       parameters:
       - description: agents=v1
         in: header
@@ -2609,8 +2619,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/v1.EnvironmentFile'
         "400":

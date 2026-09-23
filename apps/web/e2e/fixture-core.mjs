@@ -1494,7 +1494,7 @@ const server = http.createServer(async (request, response) => {
         response.destroy();
         return;
       }
-      return sendJson(response, result);
+      return sendJson(response, result, 201);
     }
     if (request.method === "GET" && environmentFilesMatch) {
       trackAbort(response, "environmentFileReads");
@@ -1523,7 +1523,7 @@ const server = http.createServer(async (request, response) => {
           .filter((file) => file.path.slice(0, file.path.lastIndexOf("/")) === directory)
           .sort((left, right) => left.path.localeCompare(right.path));
         if (order === "desc") files.reverse();
-        return sendJson(response, { data: files.slice(0, limit), next: null });
+        return sendJson(response, { object: "page", data: files.slice(0, limit), next: null, has_more: false });
       }
       const sessionEnvironment = state.sessions[0]?.environment;
       const expectedId = sessionEnvironment?.type === "self_hosted" ? sessionEnvironment.id : null;
@@ -1547,9 +1547,12 @@ const server = http.createServer(async (request, response) => {
       }));
       if (order === "desc") allFiles.reverse();
       const start = cursor === "fixture-page-2" ? 20 : 0;
+      const next = start + limit < allFiles.length ? "fixture-page-2" : null;
       return sendJson(response, {
+        object: "page",
         data: allFiles.slice(start, start + limit),
-        next: start + limit < allFiles.length ? "fixture-page-2" : null,
+        next,
+        has_more: next !== null,
       });
     }
 

@@ -111,7 +111,7 @@ describe("EnvironmentPanel", () => {
         }}
         connectionActions={[{ type: "environment_connection", environment_id: hostedEnvironmentUuid }]}
         environmentFilesEnabled
-        onListFiles={async () => ({ data: [], next: null })}
+        onListFiles={async () => ({ object: "page", data: [], next: null, has_more: false })}
         onCreateFile={async (_environmentId, input) => ({
           environment_id: hostedEnvironmentUuid,
           object: "agent.environment.file",
@@ -205,7 +205,7 @@ describe("EnvironmentPanel", () => {
         }}
         connectionActions={[]}
         environmentFilesEnabled
-        onListFiles={async () => ({ data: [], next: null })}
+        onListFiles={async () => ({ object: "page", data: [], next: null, has_more: false })}
         onCreateFile={async () => ({
           environment_id: hostedEnvironmentUuid,
           object: "agent.environment.file",
@@ -270,7 +270,7 @@ describe("EnvironmentPanel", () => {
         observation={null}
         connectionActions={[]}
         environmentFilesEnabled
-        onListFiles={async () => ({ data: [], next: null })}
+        onListFiles={async () => ({ object: "page", data: [], next: null, has_more: false })}
       />,
     );
     expect(complete).toContain("Workspace files");
@@ -290,7 +290,7 @@ describe("EnvironmentPanel", () => {
         observation={null}
         connectionActions={[]}
         environmentFilesEnabled={false}
-        onListFiles={async () => ({ data: [], next: null })}
+        onListFiles={async () => ({ object: "page", data: [], next: null, has_more: false })}
       />,
     );
     expect(buildDisabled).not.toContain("Workspace files");
@@ -310,7 +310,7 @@ describe("EnvironmentPanel", () => {
         observation={null}
         connectionActions={[]}
         environmentFilesEnabled
-        onListFiles={async () => ({ data: [], next: null })}
+        onListFiles={async () => ({ object: "page", data: [], next: null, has_more: false })}
       />,
     );
     expect(incomplete).not.toContain("Workspace files");
@@ -327,7 +327,7 @@ describe("EnvironmentPanel", () => {
         observation={null}
         connectionActions={[]}
         environmentFilesEnabled
-        onListFiles={async () => ({ data: [], next: null })}
+        onListFiles={async () => ({ object: "page", data: [], next: null, has_more: false })}
       />,
     );
     expect(unsupportedProfile).not.toContain("Workspace files");

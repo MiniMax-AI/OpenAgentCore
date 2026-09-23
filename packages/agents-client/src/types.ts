@@ -381,9 +381,12 @@ export interface EnvironmentFile {
   size_bytes: number;
 }
 
+/** Official token page: has_more is true exactly when next carries a token. */
 export interface EnvironmentFileList {
+  object: "page";
   data: EnvironmentFile[];
   next: string | null;
+  has_more: boolean;
 }
 
 export interface EnvironmentFileListOptions extends ReadOptions {

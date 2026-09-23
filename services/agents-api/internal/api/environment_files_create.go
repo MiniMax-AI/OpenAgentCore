@@ -1,13 +1,16 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"io"
 	"net/http"
-	"path"
+	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
@@ -25,7 +28,7 @@ func WithEnvironmentFileWriter(writer EnvironmentFileWriter) Option {
 }
 
 // @Summary Create an Environment file from inline bytes or a source file
-// @Description Uploads standard Base64 bytes to a file beneath /workspace in a qualified local Environment. Accepts inline bytes or a project-owned source file_id through the same write path. Basic public hosted creation requires explicit managed Runtime configuration. A private 50 MiB decoded-content limit applies. The parent directory must exist. Replacement installs a new mode-0600 inode; upstream overwrite metadata semantics remain unverified. Idle writes exclude execution. Missing receipts return unavailable and retain a durable mutation gate without automatic replay. Error/timing parity with upstream remains unverified.
+// @Description Uploads standard Base64 bytes to a file beneath /workspace in a qualified local Environment and returns 201. Accepts inline bytes or a project-owned source file_id through the same write path. Unknown body fields are rejected with their name as param. Basic public hosted creation requires explicit managed Runtime configuration. A private 50 MiB decoded-content limit applies. The parent directory must exist. Replacement installs a new mode-0600 inode; upstream overwrite metadata semantics remain unverified. Idle writes exclude execution. Missing receipts return unavailable and retain a durable mutation gate without automatic replay. Error/timing parity with upstream remains unverified.
 // @Tags Environments
 // @Accept json
 // @Produce json
@@ -33,7 +36,7 @@ func WithEnvironmentFileWriter(writer EnvironmentFileWriter) Option {
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param environment_id path string true "Environment ID"
 // @Param request body v1.EnvironmentFileCreateRequest true "Inline bytes or source file ID and absolute workspace path"
-// @Success 200 {object} v1.EnvironmentFile
+// @Success 201 {object} v1.EnvironmentFile
 // @Failure 400,401,404,409,413,500,503 {object} v1.ErrorResponse
 // @Router /agents/environments/{environment_id}/files [post]
 func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) {
@@ -49,6 +52,10 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 	}
 	var request v1.EnvironmentFileCreateRequest
 	fields := []string{"type", "path", "data", "file_id"}
+	if field, found := unknownBodyField(raw, fields...); found {
+		writeFieldError(w, &fieldError{param: field, message: "Unknown parameter: '" + field + "'."})
+		return
+	}
 	if err := decodeInputObject(raw, &request, fields...); err != nil || request.Path == nil {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
@@ -74,8 +81,8 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
-	if !validEnvironmentFilePath(*request.Path) || path.Clean(*request.Path) != *request.Path || !strings.HasPrefix(*request.Path, "/workspace/") {
-		writeStoreError(w, r, store.ErrInvalidInput)
+	if err := environmentFileCreatePathError(*request.Path); err != nil {
+		writeFieldError(w, err)
 		return
 	}
 	var data []byte
@@ -89,7 +96,8 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 			writeStoreError(w, r, store.ErrSourceFileTooLarge)
 			return
 		}
-	} else {
+	}
+	if request.Type == "file_id" {
 		if !h.sourceFilesAvailable(w) {
 			return
 		}
@@ -127,5 +135,51 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 		writeStoreError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}
-	writeJSON(w, http.StatusOK, v1.EnvironmentFile{EnvironmentID: environment.ID, Object: "agent.environment.file", Path: *request.Path, SizeBytes: size})
+	writeJSON(w, http.StatusCreated, v1.EnvironmentFile{EnvironmentID: environment.ID, Object: "agent.environment.file", Path: *request.Path, SizeBytes: size})
+}
+
+// Official Files.create path errors (HE-16); the messages keep the observed field name.
+var (
+	errEnvironmentFileCreatePath       = &fieldError{message: "environment.files[0].path must be an absolute POSIX path inside /workspace"}
+	errEnvironmentFileCreateComponents = &fieldError{message: "environment.files[0].path cannot contain empty, . or .. path components"}
+)
+
+// environmentFileCreatePathError accepts exactly the canonical absolute paths
+// below /workspace; the accepted set is unchanged, only the errors are specific.
+func environmentFileCreatePathError(value string) error {
+	if !strings.HasPrefix(value, "/") {
+		return errEnvironmentFileCreatePath
+	}
+	for _, component := range strings.Split(value[1:], "/") {
+		if component == "" || component == "." || component == ".." {
+			return errEnvironmentFileCreateComponents
+		}
+	}
+	if len(value) > 4096 || !utf8.ValidString(value) || strings.ContainsAny(value, "\\\x00\r\n") || !strings.HasPrefix(value, "/workspace/") {
+		return errEnvironmentFileCreatePath
+	}
+	return nil
+}
+
+// unknownBodyField returns the first top-level member outside allowed, in
+// document order. Non-object bodies are left to the caller's decoder.
+func unknownBodyField(raw []byte, allowed ...string) (string, bool) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	if token, err := decoder.Token(); err != nil || token != json.Delim('{') {
+		return "", false
+	}
+	for decoder.More() {
+		token, err := decoder.Token()
+		if err != nil {
+			return "", false
+		}
+		if key, _ := token.(string); !slices.Contains(allowed, key) {
+			return key, true
+		}
+		var value json.RawMessage
+		if decoder.Decode(&value) != nil {
+			return "", false
+		}
+	}
+	return "", false
 }

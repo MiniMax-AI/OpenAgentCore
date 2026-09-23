@@ -165,7 +165,7 @@ func TestSourceFilesPublicLifecycleAndEnvironmentCopy(t *testing.T) {
 		if status, _ := sourceRequest(t, server, "POST", "/v1/agents/environments/"+env.environment.ID+"/files", "files-key", "application/json", []byte(copyBody)); status != 400 {
 			t.Fatal("Agents Beta requirement changed", status)
 		}
-		if got := requestCreateEnvironmentFile(h, env.environment.ID, copyBody, "files-key"); got.Code != 200 || !bytes.Equal(env.data, data) || env.writes != 1 {
+		if got := requestCreateEnvironmentFile(h, env.environment.ID, copyBody, "files-key"); got.Code != 201 || !bytes.Equal(env.data, data) || env.writes != 1 {
 			t.Fatalf("copy: %d %s", got.Code, got.Body)
 		}
 		if status, _ := sourceRequest(t, server, "DELETE", "/v1/files/"+file.ID, "other-key", "", nil); status != 404 {

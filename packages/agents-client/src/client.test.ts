@@ -1172,6 +1172,7 @@ describe("OpenAIAgentsClient", () => {
     const calls: FetchCall[] = [];
     const controller = new AbortController();
     const page = {
+      object: "page",
       data: [
         {
           environment_id: "environment/one",
@@ -1181,6 +1182,7 @@ describe("OpenAIAgentsClient", () => {
         },
       ],
       next: null,
+      has_more: false,
     } as const;
     const client = new OpenAIAgentsClient({
       baseUrl: "https://core.example/v1/",
@@ -1205,12 +1207,12 @@ describe("OpenAIAgentsClient", () => {
 
   it("uses the fixed public /workspace root when path is omitted and validates direct children", async () => {
     const calls: FetchCall[] = [];
-    const page = { data: [{
+    const page = { object: "page", data: [{
       environment_id: "environment",
       object: "agent.environment.file",
       path: "/workspace/report.json",
       size_bytes: 3,
-    }], next: null };
+    }], next: null, has_more: false };
     const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(page), calls) });
 
     await expect(client.listEnvironmentFiles("environment", { order: "asc" }))
@@ -1218,7 +1220,7 @@ describe("OpenAIAgentsClient", () => {
     expect(new URL(String(calls[0]?.input), "https://web.example").searchParams.has("path")).toBe(false);
 
     const nested = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse({
-      data: [{ ...page.data[0], path: "/workspace/nested/report.json" }], next: null,
+      ...page, data: [{ ...page.data[0], path: "/workspace/nested/report.json" }],
     }), []) });
     await expect(nested.listEnvironmentFiles("environment", { order: "asc" }))
       .rejects.toMatchObject({ status: 502, code: "invalid_environment_files" });
@@ -1226,12 +1228,12 @@ describe("OpenAIAgentsClient", () => {
 
   it("accepts an explicit self-hosted Workspace root and validates direct children there", async () => {
     const calls: FetchCall[] = [];
-    const page = { data: [{
+    const page = { object: "page", data: [{
       environment_id: "environment",
       object: "agent.environment.file",
       path: "/test/report.json",
       size_bytes: 3,
-    }], next: null };
+    }], next: null, has_more: false };
     const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(page), calls) });
 
     await expect(client.listEnvironmentFiles("environment", { path: "/test", order: "asc" }))
@@ -1260,18 +1262,24 @@ describe("OpenAIAgentsClient", () => {
   it.each([
     null,
     {},
-    { data: [], next: null, extra: true },
-    { data: [], next: "" },
-    { data: [], next: "opaque-next" },
-    { data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/file", size_bytes: 1 }], next: "opaque-next" },
-    { data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/file", size_bytes: 1 }], next: "x".repeat(1025) },
-    { data: null, next: null },
-    { data: [{ environment_id: "other", object: "agent.environment.file", path: "/workspace/file", size_bytes: 1 }], next: null },
-    { data: [{ environment_id: "environment", object: "file", path: "/workspace/file", size_bytes: 1 }], next: null },
-    { data: [{ environment_id: "environment", object: "agent.environment.file", path: "relative", size_bytes: 1 }], next: null },
-    { data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/../secret", size_bytes: 1 }], next: null },
-    { data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/file", size_bytes: -1 }], next: null },
-    { data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/file", size_bytes: 1, extra: true }], next: null },
+    { data: [], next: null },
+    { object: "list", data: [], next: null, has_more: false },
+    { data: [], next: null, has_more: false },
+    { object: "page", data: [], next: null },
+    { object: "page", data: [], next: null, has_more: true },
+    { object: "page", data: [], next: null, has_more: "false" },
+    { object: "page", data: [], next: null, has_more: false, extra: true },
+    { object: "page", data: [], next: "", has_more: true },
+    { object: "page", data: [], next: "opaque-next", has_more: true },
+    { object: "page", data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/file", size_bytes: 1 }], next: "opaque-next", has_more: true },
+    { object: "page", data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/file", size_bytes: 1 }], next: "x".repeat(1025), has_more: true },
+    { object: "page", data: null, next: null, has_more: false },
+    { object: "page", data: [{ environment_id: "other", object: "agent.environment.file", path: "/workspace/file", size_bytes: 1 }], next: null, has_more: false },
+    { object: "page", data: [{ environment_id: "environment", object: "file", path: "/workspace/file", size_bytes: 1 }], next: null, has_more: false },
+    { object: "page", data: [{ environment_id: "environment", object: "agent.environment.file", path: "relative", size_bytes: 1 }], next: null, has_more: false },
+    { object: "page", data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/../secret", size_bytes: 1 }], next: null, has_more: false },
+    { object: "page", data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/file", size_bytes: -1 }], next: null, has_more: false },
+    { object: "page", data: [{ environment_id: "environment", object: "agent.environment.file", path: "/workspace/file", size_bytes: 1, extra: true }], next: null, has_more: false },
   ])("rejects a malformed Environment files page without retrying", async (page) => {
     const calls: FetchCall[] = [];
     const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(page), calls) });
@@ -1291,13 +1299,14 @@ describe("OpenAIAgentsClient", () => {
       path,
       size_bytes: 1,
     });
+    const final = (data: unknown[]) => ({ object: "page", data, next: null, has_more: false });
     const cases: Array<{ page: unknown; options: EnvironmentFileListOptions }> = [
-      { page: { data: [file("/other/file")], next: null }, options: { path: "/workspace", order: "asc" } },
-      { page: { data: [file("/workspace/nested/file")], next: null }, options: { path: "/workspace", order: "asc" } },
-      { page: { data: [file("/workspace//file")], next: null }, options: { path: "/workspace", order: "asc" } },
-      { page: { data: [file("/workspace/a"), file("/workspace/a")], next: null }, options: { path: "/workspace", order: "asc" } },
-      { page: { data: [file("/workspace/b"), file("/workspace/a")], next: null }, options: { path: "/workspace", order: "asc" } },
-      { page: { data: [file("/workspace/a"), file("/workspace/b")], next: null }, options: { path: "/workspace", order: "asc", limit: 1 } },
+      { page: final([file("/other/file")]), options: { path: "/workspace", order: "asc" } },
+      { page: final([file("/workspace/nested/file")]), options: { path: "/workspace", order: "asc" } },
+      { page: final([file("/workspace//file")]), options: { path: "/workspace", order: "asc" } },
+      { page: final([file("/workspace/a"), file("/workspace/a")]), options: { path: "/workspace", order: "asc" } },
+      { page: final([file("/workspace/b"), file("/workspace/a")]), options: { path: "/workspace", order: "asc" } },
+      { page: final([file("/workspace/a"), file("/workspace/b")]), options: { path: "/workspace", order: "asc", limit: 1 } },
     ];
 
     for (const entry of cases) {
@@ -1562,7 +1571,7 @@ describe("OpenAIAgentsClient", () => {
     } as const;
     const client = new OpenAIAgentsClient({
       baseUrl: "https://core.example/v1/",
-      fetch: recordingFetch(jsonResponse(result), calls),
+      fetch: recordingFetch(jsonResponse(result, 201), calls),
     });
 
     await expect(client.createEnvironmentFile("environment/one", {
@@ -1582,6 +1591,37 @@ describe("OpenAIAgentsClient", () => {
     const headers = new Headers(calls[0]?.init?.headers);
     expect(headers.get("OpenAI-Beta")).toBe("agents=v1");
     expect(headers.get("Content-Type")).toBe("application/json");
+  });
+
+  it("lists a continued Environment files page and requires the official has_more flag", async () => {
+    const file = (name: string) => ({
+      environment_id: "environment",
+      object: "agent.environment.file",
+      path: `/workspace/${name}`,
+      size_bytes: 1,
+    });
+    const page = { object: "page", data: [file("a"), file("b")], next: "opaque-next", has_more: true } as const;
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(page), []) });
+    await expect(client.listEnvironmentFiles("environment", { order: "asc", limit: 2 })).resolves.toEqual(page);
+
+    const empty = { object: "page", data: [], next: null, has_more: false } as const;
+    const missing = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(empty), []) });
+    await expect(missing.listEnvironmentFiles("environment", { path: "/workspace/missing" })).resolves.toEqual(empty);
+  });
+
+  it("requires 201 Created for an Environment file and never retries another success status", async () => {
+    const calls: FetchCall[] = [];
+    const result = {
+      environment_id: "environment",
+      object: "agent.environment.file",
+      path: "/workspace/notes.txt",
+      size_bytes: 1,
+    };
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(result, 200), calls) });
+
+    await expect(client.createEnvironmentFile("environment", { type: "inline", data: "YQ==", path: result.path }))
+      .rejects.toMatchObject({ status: 200 });
+    expect(calls).toHaveLength(1);
   });
 
   it("rejects invalid Source and Environment file inputs before making a request", async () => {

@@ -24,13 +24,13 @@ func WithEnvironmentDirectoryReader(reader EnvironmentDirectoryReader) Option {
 }
 
 // @Summary List live Environment files
-// @Description Lists direct regular files in one authorized self_hosted or qualified local workspace directory. Local paths use the public /workspace root. This partial implementation defaults to the workspace root and limit 20; recursive scope, directory/symlink treatment and these defaults are not verified upstream semantics. Sorts by case-sensitive path components, descending by default. Keep the same path, order and limit when using page. Each page rereads the complete bounded directory; changed file paths/sizes invalidate continuation locally with 400. There is no snapshot guarantee. Truncated or uncertain native results fail with 503 without returning a partial page. This read never starts a Turn or admits model input. Actual transport disconnect/reconnect events remain observable.
+// @Description Lists direct regular files in one authorized self_hosted or qualified local workspace directory. Local paths use the public /workspace root and must be in cleaned form. This partial implementation defaults to the workspace root and limit 20; recursive scope and these defaults are not verified upstream semantics. A missing path, a regular file or a symbolic link returns an empty page; links are never followed. Unknown query keys are ignored and a repeated supported key is rejected. Sorts by case-sensitive path components, descending by default. Keep the same path, order and limit when using page. Each page rereads the complete bounded directory; changed file paths/sizes invalidate continuation locally with 400. There is no snapshot guarantee. Truncated or uncertain native results fail with 503 without returning a partial page. This read never starts a Turn or admits model input. Actual transport disconnect/reconnect events remain observable.
 // @Tags Environments
 // @Produce json
 // @Security BearerAuth
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param environment_id path string true "Environment ID"
-// @Param path query string false "Absolute directory inside the Environment workspace"
+// @Param path query string false "Absolute directory in cleaned form inside /workspace"
 // @Param limit query int false "Maximum file count; local default 20" minimum(1) maximum(100)
 // @Param order query string false "Case-sensitive path-component order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Param page query string false "Opaque continuation token; keep path, order and limit unchanged"
@@ -47,7 +47,7 @@ func (h *Handler) listEnvironmentFiles(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if h.directoryReader == nil {
+	if h.directoryReader == nil || !execution.LocalWorkspaceConfiguration(environment.Configuration) {
 		writeStoreError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}
@@ -84,7 +84,9 @@ func (h *Handler) listEnvironmentFiles(w http.ResponseWriter, r *http.Request) {
 	})
 	response, err := environmentFilePage(files, options)
 	if err != nil {
-		writeStoreError(w, r, err)
+		if !writeFieldError(w, err) {
+			writeStoreError(w, r, err)
+		}
 		return
 	}
 	writeJSON(w, http.StatusOK, response)

@@ -229,7 +229,7 @@ function withQuery(path: string, params: URLSearchParams): string {
 
 const environmentResourceFields = new Set(["id", "object", "type", "status", "files", "plugins", "skills"]);
 const environmentFileFields = new Set(["environment_id", "object", "path", "size_bytes"]);
-const environmentFileListFields = new Set(["data", "next"]);
+const environmentFileListFields = new Set(["object", "data", "next", "has_more"]);
 const sourceFileFields = new Set([
   "id", "object", "bytes", "created_at", "filename", "purpose", "status", "expires_at", "status_details",
 ]);
@@ -1568,6 +1568,8 @@ function projectEnvironmentFileList(
   if (
     fields.length !== environmentFileListFields.size ||
     fields.some((field) => !environmentFileListFields.has(field)) ||
+    page.object !== "page" ||
+    page.has_more !== (page.next !== null) ||
     !Array.isArray(page.data) ||
     !Number.isSafeInteger(limit) ||
     limit < 1 ||
@@ -1624,7 +1626,7 @@ function projectEnvironmentFileList(
     };
   });
 
-  return { data: files, next: page.next as string | null };
+  return { object: "page", data: files, next: page.next as string | null, has_more: page.has_more as boolean };
 }
 
 export class OpenAIAgentsClient implements AgentCore {
@@ -2100,7 +2102,7 @@ export class OpenAIAgentsClient implements AgentCore {
     const value = await this.request<unknown>(
       `/agents/environments/${encodeURIComponent(environmentId)}/files`,
       { method: "POST", body: JSON.stringify(input), signal: options?.signal },
-      200,
+      201,
     );
     return projectEnvironmentFile(value, environmentId, input.path, expectedSize);
   }
