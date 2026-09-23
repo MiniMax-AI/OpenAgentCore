@@ -68,8 +68,9 @@ resource lookup, after authentication.
 List order parsing distinguishes omission from an explicit empty value. Lists and
 single-resource routes ignore unknown query keys; a repeated supported list key
 still rejects. The Environment Files list keeps its own path and cursor parsing but
-uses the same unknown-key and duplicate-key rules. Reuse the shared parser and
-error serializer, preserving the observed Beta, Files and Skills error fields and
+uses the same unknown-key and duplicate-key rules, except that it still rejects
+malformed query encoding (such as `%GG` or `;` separators) that the shared lists
+drop. Reuse the shared parser and error serializer, preserving the observed Beta, Files and Skills error fields and
 per-family limit bounds rather than applying one policy to every resource. Change
 page bounds, cursor ownership or parent lookup order only with owned evidence for
 that family. Record uncertain range/lookup behavior separately; do not reproduce

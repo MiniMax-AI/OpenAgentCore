@@ -191,7 +191,8 @@ accepts (SFT-22); non-canonical UUID spellings such as uppercase, braces or
 `urn:uuid:` still resolve to the same resource; Skill sole-version deletion and
 number reuse; Session deletion lifecycle; whitespace input; response defaults;
 and the Files `limit=abc` code. The Environment Files list query parser is aligned
-by the [Environment Files wire batch](environment-files.md#wire-alignment--september-23-2026).
+for unknown and repeated keys by the [Environment Files wire batch](environment-files.md#wire-alignment--september-23-2026);
+it still rejects malformed query encoding locally.
 
 Go handler tests cover every row. Real-PostgreSQL tests replay every path-ID
 route for malformed, missing and foreign identifiers (tenant B), with valid and

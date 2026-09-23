@@ -173,7 +173,9 @@ defaults (VA-11, SES-23/25). Malformed path IDs (SES-28), metadata and name erro
 fields (VA-07/08/09), U+0000 (VA-10) and Template network codes (SFT-20) are
 addressed by the [validation error batch](official-semantics-alignment.md#validation-error-fields--september-23).
 Unknown and repeated keys on the Environment Files list (HE-34/35) follow rows A1
-and B1 through the [Environment Files wire batch](environment-files.md#wire-alignment--september-23-2026).
+and B1 through the [Environment Files wire batch](environment-files.md#wire-alignment--september-23-2026);
+that list still rejects malformed query encoding (such as `?foo=%GG` or `;`
+separators), which the shared lists drop.
 
 ### Acceptance boundary
 

@@ -202,7 +202,7 @@ func TestEnvironmentFilesAuthorizationPrecedesInspection(t *testing.T) {
 
 func TestEnvironmentFilesRejectsInvalidRequestsBeforeRead(t *testing.T) {
 	for _, query := range []string{
-		"limit=0", "limit=101", "limit=no", "limit=", "limit=1&limit=2", "order=ASC", "order=", "path=", "path=relative", "path=/workspace-sibling", "path=/workspace/../workspace", "path=/workspace/a/../../workspace", "path=/workspace/%00", "path=/workspace/%5C", "path=/workspace/%0A", "path=/workspace/%FF", "path=x&path=y", "path=" + strings.Repeat("a", 4097), "page=", "page=not-json", "page=" + strings.Repeat("a", 1025), "bad=%GG",
+		"limit=0", "limit=101", "limit=no", "limit=", "limit=1&limit=2", "order=ASC", "order=", "path=", "path=relative", "path=/workspace-sibling", "path=/workspace/../workspace", "path=/workspace/a/../../workspace", "path=/workspace/%00", "path=/workspace/%5C", "path=/workspace/%0A", "path=/workspace/%FF", "path=x&path=y", "path=" + strings.Repeat("a", 4097), "page=", "page=not-json", "page=" + strings.Repeat("a", 1025), "bad=%GG", "foo=1;bar=2",
 	} {
 		t.Run(query[:min(len(query), 70)], func(t *testing.T) {
 			h, f := environmentFilesHandler(t, true)

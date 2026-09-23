@@ -38,10 +38,11 @@ final page) and `has_more`, which is true exactly when `next` is set.
   missing, a regular file or a symlink lists an empty page; the link is not followed.
   Daemons without a local workspace binding use the Claude SDK adapter reader,
   which keeps 404 for a missing path and 503 for a regular file or symlink.
-- Omitted limit uses 20. Unknown query keys are ignored, as on the shared lists; a
-  repeated `path`, `limit`, `order` or `page` returns the Beta duplicate-field error.
-  Empty values are rejected by their own rule and malformed query encoding remains
-  a local rejection. Limit errors use the Beta `invalid_request_error` code. The pinned SDK's
+- Omitted limit uses 20. Well-formed unknown query keys are ignored; a repeated
+  `path`, `limit`, `order` or `page` returns the Beta duplicate-field error. Unlike
+  the shared lists, which drop malformed pairs, malformed query encoding (such as
+  `?foo=%GG` or a `;` separator) still rejects the request locally. Empty values are
+  rejected by their own rule. Limit errors use the Beta `invalid_request_error` code. The pinned SDK's
   [query serializer](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/_qs.py)
   omits scalar `None` values, so nullable limit/path follow omission behavior.
   Literal `null` and empty scalar query values are not accepted.
@@ -163,7 +164,7 @@ used three owned hosted Sessions, all deleted. The batch plan is
 | --- | --- | --- | --- |
 | F1 | Successful Files.create | 201 with the same four fields | HE-10: `req_cce5244cdd76471d85575b7bbcc3fdac`, `req_69a44a96866a4b52b637a5a5530dcd3c` |
 | F2 | List envelope | `object: page`, `data`, `next`, `has_more`; `has_more` is true exactly when `next` is set. Paging and ordering are unchanged | HE-32: `req_c8c247cfd13145a2b92be5cad412508f`, `req_a311bf80ff0643db945aa5db0a78e95b` |
-| F3 | Unknown list query key | Ignored; the page equals the request without it | HE-34: `req_c4cd4618f7264840ad7454e80ac7f83c` |
+| F3 | Unknown list query key | Ignored; the page equals the request without it. Malformed query encoding (such as `?foo=%GG` or `;` separators) is still rejected locally, while the shared lists drop those pairs | HE-34: `req_c4cd4618f7264840ad7454e80ac7f83c` |
 | F4 | Repeated `path`, `limit`, `order` or `page` | 400 `invalid_request_error`, param null, ``Failed to deserialize query string: duplicate field `<key>` `` | HE-35: `req_30b3c8bfced64383bf13c9d5bbc44a74` |
 | F5 | `path` names a missing directory | 200 `{object: page, data: [], next: null, has_more: false}` with a local workspace reader (Claude SDK adapter exception below) | HE-36: `req_a311bf80ff0643db945aa5db0a78e95b` |
 | F6 | `path` names a regular file or a symlink to a directory | The same empty page with a local workspace reader; the link is never followed | HE-37: `req_25fb0220fa7d4157a783711622b5d580`, `req_58b6784dc49640c194910c719d5c8102` |
@@ -219,7 +220,9 @@ overwrite and the 50 MiB inline limit (HE-11/12/15, which change the shared
 installer); the Environment retrieve `files[]` projection (HE-03); Environment
 events (HE-02); the `self_hosted` status value (HE-04); `self_hosted` Files
 support, which the official service refuses and Core's daemon keeps; limit bounds,
-the default path and ordering. Malformed query encoding stays a local rejection.
+the default path and ordering. Malformed query encoding (such as `?foo=%GG` or `;`
+separators) stays a local rejection on this list, while the shared lists drop those
+pairs; there is no official sample.
 The official conflict and size-limit messages and the deleted-Session 404 message
 are not adopted. The Claude SDK adapter directory reader, used only when a daemon has
 no local workspace binding, is unchanged: F5 and F6 there keep 404 for a missing

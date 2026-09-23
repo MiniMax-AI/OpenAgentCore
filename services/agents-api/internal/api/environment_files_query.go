@@ -29,6 +29,8 @@ var (
 
 // readEnvironmentFileQuery follows the shared list rules: unknown keys are
 // ignored and a repeated supported key uses the Beta duplicate-field error.
+// Unlike the shared lists, which drop malformed pairs, it rejects malformed
+// query encoding.
 func readEnvironmentFileQuery(w http.ResponseWriter, r *http.Request, environment store.Environment) (environmentFileOptions, bool) {
 	var options environmentFileOptions
 	// Malformed query encoding remains a local rejection; no official sample exists.
