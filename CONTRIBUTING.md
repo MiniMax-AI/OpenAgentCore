@@ -1964,18 +1964,13 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   identity; retries cannot replace it. Keep this query separate from runtime
   observations and do not touch activity or wake sandboxes. The versioned contract
   is `contracts/agents-api/execution-configuration.md`.
-- Provider configuration support belongs to shared adapter-owned declarations in
-  `internal/harnessconfig`. One immutable declaration registry supplies public
-  provider validation, startup discovery and the optional safe provider descriptor
-  on native adapter registration. The separate engine catalog qualifies operations,
-  not a duplicate table of provider facts. Core owns credential environment and
-  endpoint admission policy, deployment enablement and safe HTTP projection. No parallel
-  HTTP harness table or readiness gate is permitted. The startup query includes
-  these declarations only with `include=configuration_capabilities`, preserving
-  its legacy default response for installed strict clients; the extension has an
-  independent schema version. Advertise build scope and unknown live availability,
-  not universal support across deployed Runtime versions. Operation-specific
-  admission remains authoritative; an extra registry declaration cannot enable it.
+- Provider input validation uses the adapter-owned rules in `internal/harnessconfig`.
+  Keep one internal registry for protocol and token-limit validation; Core owns
+  credential environment and endpoint admission policy. These rules are not a
+  public discovery API or Runtime registration descriptor. Operation qualification
+  and live readiness retain their existing owners. The Core startup view keeps its
+  basic supported/configured deployment snapshot and accepts no query parameters.
+  Session frozen execution-configuration reads remain a separate Core extension.
 - Public Agent updates use `POST /v1/agents/{agent_id}` with the same tenant/Beta
   boundary and shared saved-field validation. Preserve omission separately from
   null; only supplied fields replace saved values. Metadata is a separate whole-map

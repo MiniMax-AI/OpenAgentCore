@@ -128,33 +128,6 @@ definitions:
     required:
     - harness
     type: object
-  v1.CoreConfigurationCapabilities:
-    properties:
-      admission:
-        $ref: '#/definitions/v1.CoreModelProviderAdmission'
-      harnesses:
-        items:
-          $ref: '#/definitions/v1.CoreHarnessConfigurationSupport'
-        type: array
-      runtime_availability:
-        enum:
-        - unknown
-        type: string
-      schema_version:
-        enum:
-        - 1
-        type: integer
-      scope:
-        enum:
-        - core_build_provider_configuration
-        type: string
-    required:
-    - admission
-    - harnesses
-    - runtime_availability
-    - schema_version
-    - scope
-    type: object
   v1.CoreConfiguredStartupConfiguration:
     properties:
       daemon_gateway:
@@ -189,30 +162,6 @@ definitions:
     - model_providers
     - self_hosted
     type: object
-  v1.CoreHarnessConfigurationSupport:
-    properties:
-      default:
-        type: boolean
-      enabled:
-        type: boolean
-      harness:
-        type: string
-      providers:
-        items:
-          $ref: '#/definitions/v1.CoreProviderProtocolSupport'
-        type: array
-      support:
-        enum:
-        - supported
-        - unknown
-        type: string
-    required:
-    - default
-    - enabled
-    - harness
-    - providers
-    - support
-    type: object
   v1.CoreHarnessModelProviderConfiguration:
     properties:
       endpoint_configured:
@@ -244,83 +193,8 @@ definitions:
     - maintenance
     - provider
     type: object
-  v1.CoreModelProviderAdmission:
-    properties:
-      base_url:
-        $ref: '#/definitions/v1.CoreProviderEndpointRules'
-      credential_environment_types:
-        items:
-          enum:
-          - openai_hosted
-          type: string
-        type: array
-      token_limits:
-        $ref: '#/definitions/v1.CoreProviderTokenLimitRules'
-    required:
-    - base_url
-    - credential_environment_types
-    - token_limits
-    type: object
-  v1.CoreProviderEndpointRules:
-    properties:
-      fragment:
-        type: boolean
-      query:
-        type: boolean
-      schemes:
-        items:
-          enum:
-          - https
-          type: string
-        type: array
-      user_info:
-        type: boolean
-    required:
-    - fragment
-    - query
-    - schemes
-    - user_info
-    type: object
-  v1.CoreProviderProtocolSupport:
-    properties:
-      positive_fields:
-        items:
-          enum:
-          - context_window
-          - max_output_tokens
-          type: string
-        type: array
-      protocol:
-        type: string
-      required_fields:
-        items:
-          enum:
-          - protocol
-          - base_url
-          - api_key
-          - context_window
-          - max_output_tokens
-          type: string
-        type: array
-    required:
-    - positive_fields
-    - protocol
-    - required_fields
-    type: object
-  v1.CoreProviderTokenLimitRules:
-    properties:
-      max_output_not_above_context:
-        type: boolean
-      minimum:
-        type: integer
-    required:
-    - max_output_not_above_context
-    - minimum
-    type: object
   v1.CoreStartupConfiguration:
     properties:
-      configuration_capabilities:
-        $ref: '#/definitions/v1.CoreConfigurationCapabilities'
       configured:
         $ref: '#/definitions/v1.CoreConfiguredStartupConfiguration'
       object:
@@ -3265,12 +3139,6 @@ paths:
         in: header
         name: OpenAI-Beta
         required: true
-        type: string
-      - description: Opt in to versioned provider configuration capabilities
-        enum:
-        - configuration_capabilities
-        in: query
-        name: include
         type: string
       produces:
       - application/json

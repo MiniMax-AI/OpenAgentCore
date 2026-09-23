@@ -58,35 +58,17 @@ provenance. Missing, deleted and foreign-tenant Session IDs share the existing
 not-found response. Responses are `Cache-Control: no-store`. Keys, ciphertext,
 secret references, native headers, query parameters and permissions are excluded.
 
-## Supported provider configuration
+## Discovery boundary
 
-`GET /v1/agents/core/startup-configuration?include=configuration_capabilities`
-adds a `configuration_capabilities` field to the existing startup view. Without
-that exact optional query, the legacy response shape is unchanged, including its
-schema version. Duplicate, unknown or malformed startup queries are rejected.
-The extension has its own `schema_version: 1`:
+Provider configuration discovery is not exposed. The Core startup-configuration
+extension retains its basic supported/configured deployment snapshot and accepts
+no query parameters, including the retired `include=configuration_capabilities`.
+Provider inputs are still validated against internal adapter-owned rules and Core
+admission policy. Removing discovery does not change the supported inputs or
+create/update/execute behavior.
 
-- `scope: core_build_provider_configuration` identifies the limited subject.
-- `runtime_availability: unknown` explicitly excludes live peer readiness.
-- `admission` declares Core's hosted-only credential boundary, HTTPS endpoint
-  restrictions and nonnegative ordered token limits.
-- `harnesses` is sorted by registered harness name. Each entry contains
-  `support` (`supported` or `unknown`), deployment `enabled` and `default` flags,
-  plus provider protocol declarations. An unknown declaration has no providers.
-- Each provider lists `required_fields` and `positive_fields`. Codex declares
-  Responses; Claude SDK and MiniMax Code declare Anthropic. MiniMax Code also
-  requires positive `context_window` and `max_output_tokens`.
-
-Adapter-owned declarations in `internal/harnessconfig` have one immutable registry
-used by provider validation and discovery. Native adapter registration attaches
-the same optional safe provider descriptor to the common Runtime contract. The
-separate engine catalog still owns qualification of public operations. Core
-composition adds deployment enablement and Core-owned admission restrictions, then projects
-only public fields. It does not serialize native capability or operator objects.
-Adding a declaration does not authorize a new public operation. Runtime versions
-may differ; actual selection/admission still checks the chosen Runtime's features.
-No node, binary, endpoint, model or key readiness is implied by support or enablement.
-
-The endpoints do not mutate configuration, rotate keys, migrate Sessions, expose
-a model catalog or accept arbitrary native options. See
+This Session query and the startup view are Core extensions, not OpenAI Agents
+API operations. Ordinary Agent and Session operations retain their pinned upstream
+contracts. Neither query mutates configuration, rotates keys, migrates Sessions,
+exposes a model catalog or accepts arbitrary native options. See
 [model-execution.md](model-execution.md) for write and inheritance semantics.

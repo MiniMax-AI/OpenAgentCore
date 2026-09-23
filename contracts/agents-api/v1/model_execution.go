@@ -49,8 +49,8 @@ func (p *ModelProviderInput) ValidateHarness(harness string) error {
 	return p.ValidateHarnessWithRegistry(harness, builtin.Registry())
 }
 
-// ValidateHarnessWithRegistry uses the same adapter registration snapshot as
-// capability discovery. It does not enable an execution engine or placement.
+// ValidateHarnessWithRegistry validates provider input against adapter-owned rules.
+// It does not enable an execution engine or placement.
 func (p *ModelProviderInput) ValidateHarnessWithRegistry(harness string, registry harnessconfig.Registry) error {
 	if err := p.validate(registry); err != nil {
 		return err

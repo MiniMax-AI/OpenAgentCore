@@ -69,15 +69,6 @@ func (r Registry) Lookup(kind string) (Configuration, bool) {
 	return configuration.Clone(), ok
 }
 
-func (r Registry) Kinds() []string {
-	kinds := make([]string, 0, len(r.configurations))
-	for kind := range r.configurations {
-		kinds = append(kinds, kind)
-	}
-	slices.Sort(kinds)
-	return kinds
-}
-
 func (r Registry) ValidateProtocol(kind, protocol string) error {
 	configuration, _ := r.Lookup(kind)
 	return configuration.ValidateProtocol(protocol)

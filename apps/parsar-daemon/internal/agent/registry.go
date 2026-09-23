@@ -24,8 +24,6 @@ import (
 	"sync"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig"
-	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig/builtin"
 )
 
 // Factory builds a Session for one prompt_request. out is the upstream
@@ -57,25 +55,17 @@ var ErrUnsupportedKind = errors.New("agent: unsupported agent_kind")
 // Registry maps agent_kind → Factory and keeps the daemon-advertised
 // capability descriptor for each kind. Safe for concurrent use.
 type Registry struct {
-	mu             sync.RWMutex
-	factories      map[string]Factory
-	preparers      map[string]PreparationFactory
-	kinds          map[string]proto.SupportedAgentKind
-	configurations harnessconfig.Registry
+	mu        sync.RWMutex
+	factories map[string]Factory
+	preparers map[string]PreparationFactory
+	kinds     map[string]proto.SupportedAgentKind
 }
 
 func NewRegistry() *Registry {
-	return NewRegistryWithConfigurations(builtin.Registry())
-}
-
-// NewRegistryWithConfigurations shares an immutable adapter declaration snapshot
-// with discovery and validation; factory registration still owns availability.
-func NewRegistryWithConfigurations(configurations harnessconfig.Registry) *Registry {
 	return &Registry{
-		factories:      make(map[string]Factory),
-		preparers:      make(map[string]PreparationFactory),
-		kinds:          make(map[string]proto.SupportedAgentKind),
-		configurations: configurations,
+		factories: make(map[string]Factory),
+		preparers: make(map[string]PreparationFactory),
+		kinds:     make(map[string]proto.SupportedAgentKind),
 	}
 }
 
@@ -102,7 +92,6 @@ func (r *Registry) RegisterKind(info proto.SupportedAgentKind, f Factory) {
 	delete(r.preparers, kind)
 	info.Capabilities.Preparation = false
 	info.Capabilities.WorkspaceReadPreparation = false
-	info.ProviderConfiguration = providerConfigurationDescriptor(r.configurations, kind)
 	r.kinds[kind] = info
 }
 
@@ -140,7 +129,6 @@ func (r *Registry) SupportedAgentKinds() []proto.SupportedAgentKind {
 		if info.Kind == "" {
 			info = proto.SupportedAgentKind{Kind: kind, Available: true}
 		}
-		info.ProviderConfiguration = info.ProviderConfiguration.Clone()
 		out = append(out, info)
 	}
 	slices.SortFunc(out, func(a, b proto.SupportedAgentKind) int {
