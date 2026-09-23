@@ -1571,8 +1571,8 @@ guide in each artifact checksum list so extracted documentation matches its buil
 The distribution includes the sandbox-node binary. An enabled local node uses a
 persistent private state directory, explicitly separate from read-only configuration.
 Docker grants Core write access only to that node-state mount; native Core uses the
-same installation-owned directory. Zero-node installs create neither node identity
-state nor sandbox administrator credentials.
+same installation-owned directory. Zero-node installs create no node identity
+state, but retain the paired administrator credential for first setup.
 
 One Runtime image contains the existing daemon, shared helpers and three native
 harness packages. Their differences remain in the adapters. Core keeps exclusive
@@ -1586,14 +1586,23 @@ must not change on a repeated install.
 
 `services/core-console` serves the production Web build and forwards public `/v1`
 requests to one configured Core using its project bearer, after console Basic
-authentication. Its explicit sandbox administration routes instead require a
-unique browser-supplied Bearer credential and forward it unchanged for Core to
-verify; console Basic access does not confer deployment administration. Never
-substitute the project bearer on those routes or give the console a shared admin
-credential. The installer keeps the administrator key and digests separate from
-project configuration and exposes only the digest file to Core. The Web keeps an
-entered administrator credential in memory. Node registration, identity and
-WebSocket transport are not console routes; nodes connect directly to Core.
+authentication. The paired console uses the same login for allowlisted sandbox
+management routes and supplies its private server-side administrator token from
+`CORE_CONSOLE_SANDBOX_ADMIN_TOKEN_FILE`. The browser receives only capability
+flags through `/console/config`, never the deployment bearer. Project API keys
+retain their separate authority. The installer mounts only the administrator
+key file into Web and only its digest file into Core. Node/daemon transport uses
+its own authenticated finite routes and credentials, never that admin token.
+
+The Web manager offers no manual administrator-key fallback. A console without
+paired management configuration shows setup guidance; direct remote project API
+connections do not silently administer the console's configured deployment.
+Chinese/English sandbox text, status and diagnostic formatting live in the shared
+`apps/web/src/lib/` locale modules. A persisted explicit language preference wins
+before the first browser language; unrelated product surfaces are outside this
+translation scope. Preserve zero-node setup and node installation behavior when
+localizing their controls.
+
 Both proxy paths retain fixed-origin, cross-site, safe-path, redirect and Upgrade
 restrictions through the standard Go reverse proxy with streaming/cancellation.
 The console implements no product identity, resource semantics, Runtime discovery

@@ -98,7 +98,10 @@ Every Core installation creates a separate private deployment administrator key 
 digest file read-only. The bundled Web server reads the separate administrator
 key to proxy authenticated console operations; it never sends this key to the
 browser. The migration service receives neither. A Web-only connection to an
-external Core still requires its separate administrator key.
+external Core can enable management by configuring its administrator token
+server-side through `CORE_CONSOLE_SANDBOX_ADMIN_TOKEN_FILE`; the Web page does not
+ask the operator to enter another key. Use the same-origin console connection for
+management. Choose English or Chinese through the System language selector.
 
 ### Add nodes after a default installation
 

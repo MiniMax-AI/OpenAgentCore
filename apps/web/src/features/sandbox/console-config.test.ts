@@ -14,7 +14,7 @@ describe("bundled console capabilities", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(body))));
     expect((await sandboxConsoleConfig(new AbortController().signal))?.node_installer).toBe(false);
   });
-  it("falls back to direct credentials on an absent console capability endpoint", async () => {
+  it("reports unavailable capability on an absent console endpoint", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Not found", { status: 404 })));
     expect(await sandboxConsoleConfig(new AbortController().signal)).toBeNull();
   });

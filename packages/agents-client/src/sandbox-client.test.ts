@@ -4,6 +4,22 @@ import { SandboxAdminClient, SandboxProjectClient } from "./sandbox-client";
 function response(value: unknown, status = 200) { return new Response(JSON.stringify(value), { status }); }
 
 describe("Core sandbox credential boundaries", () => {
+  it("uses console authentication without sending a browser bearer and forwards cancellation", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => response({ data: [] }));
+    const client = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", fetch });
+    const controller = new AbortController();
+    await client.listNodes({ signal: controller.signal });
+    expect(fetch.mock.calls[0]?.[0]).toBe("/core/v1/sandbox/nodes");
+    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).has("Authorization")).toBe(false);
+    expect(fetch.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
+  });
+  it("does not retry an enrollment write with an uncertain outcome", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError("Network failed"));
+    const client = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", fetch });
+    await expect(client.createEnrollment()).rejects.toThrow("Network failed");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("initializes using only the explicit provider and origin with cancellation and admin credentials", async () => {
     const deployment = { installation_id: "installation", provider: "docker", core_url: "https://core.example", maintenance: false, owner_epoch: 1 };
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response(deployment));

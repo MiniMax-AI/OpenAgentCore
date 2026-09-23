@@ -35,8 +35,9 @@ export function handleSandboxFixture(request, response, url, sendJson, sendError
     sendJson(response, { node_id: "node-local", node_name: "Core server", available: !diagnostic, state: "active", compute_phase: "running", diagnostic }); return true;
   }
   if (!path.startsWith("/core/v1/sandbox/")) return false;
-  calls.push({ path, method: request.method, authorized: request.headers.authorization === "Bearer fixture-admin-key" });
-  if (request.headers.authorization !== "Bearer fixture-admin-key") { sendError(response, 401, "A deployment admin key is required.", "invalid_admin_key"); return true; }
+  calls.push({ path, method: request.method, authorization: request.headers.authorization ?? null });
+  // This fixture represents authenticated console routes, not direct Core administration.
+  if (request.headers.authorization) { sendError(response, 400, "Browser admin credentials are not accepted.", "unexpected_authorization"); return true; }
   const deployment = () => ({ installation_id: "fixture-installation", provider, core_url: coreUrl, maintenance: false, owner_epoch: 1 });
   if (path.endsWith("/deployment") && request.method === "POST") {
     let body = "";

@@ -10,8 +10,15 @@ The Web console's **Hosted Sandbox Manager** page uses deployment administrator
 authority, separate from project credentials. In a paired distribution, the
 console server reads its own administrator key and forwards it only on sandbox
 management routes after console login. No administrator key reaches the browser.
-Direct Core and Web-only connections still require an explicit administrator
-credential, retained only in page memory.
+There is no second login or manual administrator-key form. Management uses the
+same-origin paired console connection; direct remote project connections do not
+grant deployment access. An unpaired console shows setup guidance. For manual or
+Web-only deployments, an operator can configure the matching private `0600` token
+file server-side through `CORE_CONSOLE_SANDBOX_ADMIN_TOKEN_FILE`.
+
+The sandbox page and its setup, enrollment, status and diagnostic controls support
+Chinese and English. Choose a language in System navigation; the preference is
+saved, and otherwise the page follows the browser's first language.
 
 The installer creates the separate key under the private `admin/` directory,
 including zero-node installs. Core receives its digest; the bundled Web server

@@ -11,8 +11,3 @@ export function SandboxProvider({ connection, children }: { connection: CoreConn
   return <SandboxContext.Provider value={client}>{children}</SandboxContext.Provider>;
 }
 export function useSandboxClient() { return useContext(SandboxContext); }
-
-export function sandboxAdminBaseUrl(projectBaseUrl: string): string {
-  if (isLocalProxyBaseUrl(projectBaseUrl)) return "/core/v1/sandbox";
-  return `${projectBaseUrl.replace(/\/+$/, "").replace(/\/v1$/, "")}/core/v1/sandbox`;
-}

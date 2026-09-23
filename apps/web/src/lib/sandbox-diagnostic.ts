@@ -1,6 +1,8 @@
+import { translate, type Locale } from "./locale";
+import type { MessageKey } from "./locale-strings";
 export interface SandboxDiagnosticMessage { label: string; advice: string }
 
-const diagnostics: Record<string, SandboxDiagnosticMessage> = {
+const diagnostics: Record<string, { label: MessageKey; advice: MessageKey }> = {
   node_unavailable: {
     label: "Node disconnected",
     advice: "Reconnect the assigned node, then refresh. Existing resources stay assigned to this node; Core does not move the Session automatically.",
@@ -23,10 +25,11 @@ const diagnostics: Record<string, SandboxDiagnosticMessage> = {
   },
 };
 
-export function sandboxDiagnosticMessage(value?: string): SandboxDiagnosticMessage | null {
+export function sandboxDiagnosticMessage(value?: string, locale: Locale = "en"): SandboxDiagnosticMessage | null {
   if (!value) return null;
-  return Object.hasOwn(diagnostics, value) ? diagnostics[value]! : {
+  const message = Object.hasOwn(diagnostics, value) ? diagnostics[value]! : {
     label: "Sandbox state needs attention",
     advice: "Ask the deployment administrator to inspect the assigned node and resource, then refresh.",
-  };
+  } as const;
+  return { label: translate(locale, message.label), advice: translate(locale, message.advice) };
 }

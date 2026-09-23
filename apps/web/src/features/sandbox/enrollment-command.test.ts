@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { enrollmentCommand, nodeInstallCommand } from "./enrollment-command";
-import { sandboxAdminBaseUrl } from "./SandboxContext";
 
 describe("sandbox connection and enrollment", () => {
   it("creates one node installer command with a verified same-release script and no credential argument", () => {
@@ -12,10 +11,6 @@ describe("sandbox connection and enrollment", () => {
     expect(command).toContain("Installer redirects are not supported");
     expect(command).toContain("--source-url 'https://console.example' --core-url 'https://core.example' --provider 'docker' --installation-id 'installation'");
     expect(command).not.toContain("--enrollment-token");
-  });
-  it("derives a separate admin prefix for local and prefixed remote Core deployments", () => {
-    expect(sandboxAdminBaseUrl("/v1")).toBe("/core/v1/sandbox");
-    expect(sandboxAdminBaseUrl("https://core.example/prefix/v1/")).toBe("https://core.example/prefix/core/v1/sandbox");
   });
   it("writes the one-time credential as a private file rather than a process argument", () => {
     const command = enrollmentCommand("fixture-token", "https://core.example");

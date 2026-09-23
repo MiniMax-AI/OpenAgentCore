@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { SandboxDeployment } from "@agents-core-web/agents-client";
+import { useLocale } from "../../lib/LocaleProvider";
 import { sandboxCoreOrigin } from "./core-origin";
 import type { SandboxConsoleConfig } from "./console-config";
 import { enrollmentCommand, nodeInstallCommand } from "./enrollment-command";
@@ -13,6 +14,7 @@ export function NodeEnrollment({ consoleConfig, deployment, initialCoreUrl, busy
   onEnroll: () => Promise<void>;
   onClear: () => void;
 }) {
+  const { t, locale } = useLocale();
   const [commandUrl, setCommandUrl] = useState(initialCoreUrl);
   const sourceUrl = sandboxCoreOrigin(window.location.origin);
   const installer = consoleConfig?.node_installer && sourceUrl;
@@ -26,25 +28,25 @@ export function NodeEnrollment({ consoleConfig, deployment, initialCoreUrl, busy
     try { await navigator.clipboard.writeText(command); setCopied(true); setCopyFailed(false); }
     catch { setCopied(false); setCopyFailed(true); }
   }
-  return <section className="form-stack sandbox-enrollment" aria-labelledby="sandbox-enrollment-heading"><h2 id="sandbox-enrollment-heading">Add node</h2>
+  return <section className="form-stack sandbox-enrollment" aria-labelledby="sandbox-enrollment-heading"><h2 id="sandbox-enrollment-heading">{t("Add node")}</h2>
     {installer ? <>
-      <p>Run one command on the Linux amd64 host you want to add. It installs the matched node program and runtime image, writes the configuration, registers this host, and starts its background service.</p>
-      <p>The host needs Python 3.9+, a systemd user session with lingering enabled, and {deployment.provider === "docker" ? "access to Docker at /var/run/docker.sock" : "KVM access and the microsandbox host libraries"}. Run as a non-root user. The host must reach this console to download its node program; the host and sandbox guests must also reach the Core origin below.</p>
+      <p>{t("Run one command on the Linux amd64 host you want to add. It installs the matched node program and runtime image, writes the configuration, registers this host, and starts its background service.")}</p>
+      <p>{t("The host needs Python 3.9+, a systemd user session with lingering enabled, and")} {deployment.provider === "docker" ? t("access to Docker at /var/run/docker.sock") : t("KVM access and the microsandbox host libraries")}. {t("Run as a non-root user. The host must reach this console to download its node program; the host and sandbox guests must also reach the Core origin below.")}</p>
     </> : <ol className="sandbox-steps">
-      <li>Install <code>parsar-sandbox-node</code> from the same Core release on a Linux host. {deployment.provider === "docker" ? "Prepare its local Docker Unix socket and pinned runtime image." : "Prepare KVM access and the qualified microsandbox runtime, helper and firmware."}</li>
-      <li>Create a private <code>/etc/parsar/sandbox-node.json</code> provider configuration with provider <code>{deployment.provider}</code> and installation ID <code>{deployment.installation_id}</code>. Use this host’s own backend paths and image. <a href="https://github.com/MiniMax-AI/parsar-core/blob/main/services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host" target="_blank" rel="noreferrer">Node configuration guide</a></li>
-      <li>Generate the command below. Adjust its absolute paths, node name and capacity, then execute it on that host. Keep its private state directory on persistent storage.</li>
-      <li>Run the node under the host’s service supervisor. Refresh sandbox state here and check that the node is online and its provider is ready.</li>
+      <li>{t("Install")} <code>parsar-sandbox-node</code> {t("from the same Core release on a Linux host.")} {deployment.provider === "docker" ? t("Prepare its local Docker Unix socket and pinned runtime image.") : t("Prepare KVM access and the qualified microsandbox runtime, helper and firmware.")}</li>
+      <li>{t("Create a private")} <code>/etc/parsar/sandbox-node.json</code> {t("provider configuration with provider")} <code>{deployment.provider}</code> {t("and installation ID")} <code>{deployment.installation_id}</code>. {t("Use this host's own backend paths and image.")} <a href="https://github.com/MiniMax-AI/parsar-core/blob/main/services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host" target="_blank" rel="noreferrer">{t("Node configuration guide")}</a></li>
+      <li>{t("Generate the command below. Adjust its absolute paths, node name and capacity, then execute it on that host. Keep its private state directory on persistent storage.")}</li>
+      <li>{t("Run the node under the host's service supervisor. Refresh sandbox state here and check that the node is online and its provider is ready.")}</li>
     </ol>}
-    <label className="field"><span>Core URL reachable from the node</span><input type="url" placeholder="https://core.example" value={deployment.core_url || commandUrl} onChange={(event) => setCommandUrl(event.target.value)} readOnly={Boolean(deployment.core_url)} disabled={busy || Boolean(enrollment)} /></label>
-    <p>This Core origin must also be reachable from sandbox guests. Every added node uses this deployment’s {deployment.provider} provider.</p>
-    {!enrollment ? <button type="button" className="button primary" disabled={busy || !coreUrl} onClick={() => void onEnroll()}>{installer ? "Generate node command" : "Generate enrollment command"}</button> : <>
-      <p>One-time enrollment token expires {new Date(enrollment.expires_at).toLocaleString()}. Save the command now; it is cleared when you leave this page.</p>
-      <label className="field"><span>One-time enrollment command</span><textarea readOnly rows={12} value={command} onFocus={(event) => event.target.select()} spellCheck={false} /></label>
-      <p role="status">Connection and provider health refresh automatically every few seconds.</p>
-      <button type="button" className="button primary" onClick={() => void copyCommand()}>{copied ? "Copied" : "Copy node command"}</button>
-      {copyFailed ? <p role="alert">Select the command above and copy it manually.</p> : null}
-      <button type="button" className="button" onClick={() => { setCopied(false); setCopyFailed(false); onClear(); }}>Clear enrollment command</button>
+    <label className="field"><span>{t("Core URL reachable from the node")}</span><input type="url" placeholder="https://core.example" value={deployment.core_url || commandUrl} onChange={(event) => setCommandUrl(event.target.value)} readOnly={Boolean(deployment.core_url)} disabled={busy || Boolean(enrollment)} /></label>
+    <p>{t("This Core origin must also be reachable from sandbox guests. Every added node uses this deployment's {provider} provider.").replace("{provider}", deployment.provider)}</p>
+    {!enrollment ? <button type="button" className="button primary" disabled={busy || !coreUrl} onClick={() => void onEnroll()}>{installer ? t("Generate node command") : t("Generate enrollment command")}</button> : <>
+      <p>{t("One-time enrollment token expires")} {new Date(enrollment.expires_at).toLocaleString(locale)}. {t("Save the command now; it is cleared when you leave this page.")}</p>
+      <label className="field"><span>{t("One-time enrollment command")}</span><textarea readOnly rows={12} value={command} onFocus={(event) => event.target.select()} spellCheck={false} /></label>
+      <p role="status">{t("Connection and provider health refresh automatically every few seconds.")}</p>
+      <button type="button" className="button primary" onClick={() => void copyCommand()}>{copied ? t("Copied") : t("Copy node command")}</button>
+      {copyFailed ? <p role="alert">{t("Select the command above and copy it manually.")}</p> : null}
+      <button type="button" className="button" onClick={() => { setCopied(false); setCopyFailed(false); onClear(); }}>{t("Clear enrollment command")}</button>
     </>}
   </section>;
 }

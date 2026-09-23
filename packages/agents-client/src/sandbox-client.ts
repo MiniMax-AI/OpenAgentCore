@@ -64,7 +64,7 @@ export class SandboxProjectClient extends OpenAIAgentsClient {
     return this.request(`/agents/sessions/${encodeURIComponent(sessionId)}/sandbox-placement`, { signal: options?.signal });
   }
 }
-/** Deployment administration requires its own credential and /core/v1/sandbox base. */
+/** Deployment administration uses /core/v1/sandbox, through an authenticated console or an explicit server credential. */
 export class SandboxAdminClient extends OpenAIAgentsClient {
   retrieveDeployment(options?: ReadOptions): Promise<SandboxDeployment> {
     return this.request("/deployment", { signal: options?.signal }, undefined, false);
