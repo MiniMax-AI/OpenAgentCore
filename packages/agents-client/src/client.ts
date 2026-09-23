@@ -125,7 +125,8 @@ export class CreationStreamRetryError extends AgentCoreError {
  * Core deletes only a durably idle or failed Session without required actions
  * or pending input. Any other Session is rejected with HTTP 409 and code
  * `conflict_error` and left unchanged: cancel its work, wait until it is idle,
- * then delete it.
+ * then delete it. Apply this only to a `deleteSession` failure: Session input
+ * conflicts use the same status and code.
  */
 export function isSessionDeletionConflict(error: unknown): error is AgentCoreError {
   return error instanceof AgentCoreError && error.status === 409 && error.code === "conflict_error";
@@ -2571,6 +2572,14 @@ export class OpenAIAgentsClient implements AgentCore {
     return this.submitEvents(sessionId, [{ type: "agent.session.input.cancel" }], idempotencyKey);
   }
 
+  /**
+   * Submits one function result. Core rejects a result the Session cannot accept,
+   * such as one after cancellation or one that differs from the saved result,
+   * with HTTP 409 `conflict_error`. A call that is unknown or belongs to another
+   * Turn of the Session is HTTP 400 `invalid_request_error`; nothing changes.
+   * Cores before these codes used 409 `turn_conflict`/`idempotency_conflict`
+   * and 404, so branch on the HTTP status.
+   */
   submitFunctionResult(sessionId: string, input: FunctionResultInput, idempotencyKey: string): Promise<void> {
     const event: SessionToolResultInputEvent = {
       type: "agent.session.input.tool_result",

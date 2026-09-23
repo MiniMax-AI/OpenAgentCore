@@ -352,7 +352,10 @@ describe("Session deletion", () => {
     await requestSessionCancelBeforeDelete(core, "session-1", "cancel-key");
     expect(cancelTurn).toHaveBeenCalledWith("session-1", "cancel-key");
 
+    // Current Cores report a rejected cancellation with the official conflict
+    // fields; earlier Cores used turn_conflict. Neither is a deletion conflict.
     for (const [error, kind, text] of [
+      [new AgentCoreError("Earlier input to this Session is still pending.", 409, "conflict_error", null, "conflict_error"), "request_failed", "rejected the cancellation (409): Earlier input to this Session is still pending."],
       [new AgentCoreError("pending input", 409, "turn_conflict"), "request_failed", "rejected the cancellation (409)"],
       [new TypeError("connection lost"), "request_failed", "result is unknown"],
       [new AgentCoreError("missing", 404), "not_found", "not found"],
@@ -362,7 +365,7 @@ describe("Session deletion", () => {
       expect(failure).toMatchObject({ kind });
       expect((failure as Error).message).toContain(text);
     }
-    expect(cancelTurn).toHaveBeenCalledTimes(4);
+    expect(cancelTurn).toHaveBeenCalledTimes(5);
     expect(deleteSession).not.toHaveBeenCalled();
   });
 
