@@ -2223,6 +2223,7 @@ export function App() {
               coreBaseUrl={connection.baseUrl}
               coreError={agentCollectionError}
               coreState={agentCollectionState}
+              startupConfiguration={startupConfigurationState === "ready" && startupConfigurationSupported === true ? startupConfiguration : null}
               vaultCatalog={sessionVaultCatalog}
               createRequest={agentCreateRequest ?? 0}
               onCreateRequestConsumed={consumeAgentCreateRequest}

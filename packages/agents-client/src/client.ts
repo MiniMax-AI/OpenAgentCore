@@ -261,6 +261,7 @@ const agentSnapshotFields = new Set([
   "id", "model", "name", "instructions", "multi_agent", "reasoning",
   "service_tier", "text", "tools",
 ]);
+const agentSnapshotAcceptedFields = new Set([...agentSnapshotFields, "x_agents_core"]);
 const multiAgentFields = new Set(["enabled", "max_concurrent_subagents"]);
 const reasoningFields = new Set(["effort", "summary"]);
 const textFields = new Set(["format", "verbosity"]);
@@ -645,7 +646,11 @@ function invalidSessionResource(message = "Agent Core returned an invalid Sessio
 }
 
 function projectAgentSnapshot(value: unknown): AgentSession["agent"] {
-  if (!isRecord(value) || !exactFields(value, agentSnapshotFields)) return invalidSessionResource();
+  if (
+    !isRecord(value) || !onlyFields(value, agentSnapshotAcceptedFields) ||
+    [...agentSnapshotFields].some((field) => !hasOwn(value, field))
+  ) return invalidSessionResource();
+  const agentsCore = value.x_agents_core;
   const multiAgent = value.multi_agent;
   const reasoning = value.reasoning;
   const text = value.text;
@@ -654,6 +659,9 @@ function projectAgentSnapshot(value: unknown): AgentSession["agent"] {
     typeof value.model !== "string" || value.model.trim() === "" ||
     !(value.name === null || typeof value.name === "string") ||
     !(value.instructions === null || typeof value.instructions === "string") ||
+    !(agentsCore === undefined || agentsCore === null || (
+      isRecord(agentsCore) && exactFields(agentsCore, new Set(["harness"])) && isHarnessKind(agentsCore.harness)
+    )) ||
     !isRecord(multiAgent) || !exactFields(multiAgent, multiAgentFields) ||
     typeof multiAgent.enabled !== "boolean" ||
     !(multiAgent.max_concurrent_subagents === null ||
@@ -677,6 +685,9 @@ function projectAgentSnapshot(value: unknown): AgentSession["agent"] {
 
   return {
     id: value.id,
+    ...(agentsCore === undefined
+      ? {}
+      : { x_agents_core: agentsCore === null ? null : { harness: agentsCore.harness as CoreHarnessKind } }),
     model: value.model,
     name: value.name,
     instructions: value.instructions,

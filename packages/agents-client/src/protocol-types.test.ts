@@ -12,6 +12,7 @@ import turnResources from "./fixtures/parsar-0438880a/turn-resources.json";
 import toolProfiles from "./fixtures/parsar-2b34ea46/tool-profiles.json";
 import type {
   AnonymousHttpMcpToolInput,
+  AgentsCoreSelection,
   AgentCore,
   AgentSession,
   AgentEnvironmentResource,
@@ -153,6 +154,14 @@ describe("Parsar 2b34ea46 bounded tool profiles", () => {
       [{ title: "Guide" }, null],
       [null, { message: "Core could not call the MCP server." }],
     ]);
+  });
+});
+
+describe("Core harness selection extension", () => {
+  it("uses the same nullable selection shape for saved, create, update, and inline Agents", () => {
+    expectTypeOf<CreateAgentInput["x_agents_core"]>().toEqualTypeOf<AgentsCoreSelection | null | undefined>();
+    expectTypeOf<UpdateAgentInput["x_agents_core"]>().toEqualTypeOf<AgentsCoreSelection | null | undefined>();
+    expectTypeOf<InlineAgentInput["x_agents_core"]>().toEqualTypeOf<AgentsCoreSelection | null | undefined>();
   });
 });
 

@@ -1,7 +1,7 @@
 import { Info } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import type { SavedAgent } from "@agents-core-web/agents-client";
+import type { CoreHarnessKind, SavedAgent } from "@agents-core-web/agents-client";
 
 import {
   buildModelOptionGroups,
@@ -15,7 +15,9 @@ import { type AgentFormSubmitInput, type AgentFormValues, type AgentToolDraft, v
 
 interface AgentFormProps {
   agent?: SavedAgent;
+  defaultHarness?: CoreHarnessKind;
   disabled?: boolean;
+  enabledHarnesses?: readonly CoreHarnessKind[] | null;
   formId: string;
   initialValues?: AgentFormValues;
   knownModels: string[];
@@ -24,9 +26,29 @@ interface AgentFormProps {
   onSubmit: (input: AgentFormSubmitInput) => Promise<unknown>;
 }
 
-export function AgentForm({ agent, disabled = false, formId, initialValues, knownModels, vaultCatalog = null, onDraftChange, onSubmit }: AgentFormProps) {
+function harnessLabel(harness: CoreHarnessKind): string {
+  if (harness === "claude_sdk") return "Claude SDK";
+  if (harness === "mcode") return "MiniMax Code";
+  return "Codex";
+}
+
+export function AgentForm({
+  agent,
+  defaultHarness,
+  disabled = false,
+  enabledHarnesses = null,
+  formId,
+  initialValues,
+  knownModels,
+  vaultCatalog = null,
+  onDraftChange,
+  onSubmit,
+}: AgentFormProps) {
   const nameRef = useRef<HTMLInputElement>(null);
   const initial = agent ? valuesFromAgent(agent, vaultCatalog) : initialValues ?? valuesFromAgent(undefined, vaultCatalog);
+  const initialHarness = agent
+    ? initial.harness
+    : initial.harness || (defaultHarness && enabledHarnesses?.includes(defaultHarness) ? defaultHarness : "");
   const options = buildModelOptionGroups(
     knownModels,
     import.meta.env.VITE_AGENT_MODEL_PRESETS,
@@ -34,6 +56,8 @@ export function AgentForm({ agent, disabled = false, formId, initialValues, know
   );
   const initialIsSuggested = [...options.configured, ...options.previouslyUsed].includes(initial.model);
   const [name, setName] = useState(initial.name);
+  const [harness, setHarness] = useState<CoreHarnessKind | "">(initialHarness);
+  const [harnessModified, setHarnessModified] = useState(initial.harnessModified);
   const [modelChoice, setModelChoice] = useState(
     initial.model && !initialIsSuggested ? CUSTOM_MODEL_OPTION : modelOptionValue(initial.model || options.defaultModel),
   );
@@ -66,8 +90,16 @@ export function AgentForm({ agent, disabled = false, formId, initialValues, know
   }, []);
 
   useEffect(() => {
+    if (!agent && !harness && defaultHarness && enabledHarnesses?.includes(defaultHarness)) {
+      setHarness(defaultHarness);
+    }
+  }, [agent, defaultHarness, enabledHarnesses, harness]);
+
+  useEffect(() => {
     onDraftChange?.({
       name,
+      harness,
+      harnessModified,
       model,
       instructions,
       metadata,
@@ -79,12 +111,14 @@ export function AgentForm({ agent, disabled = false, formId, initialValues, know
       tools,
       toolsModified,
     });
-  }, [instructions, metadata, model, name, onDraftChange, reasoningEffort, reasoningSummary, serviceTier, textFormat, textVerbosity, tools, toolsModified]);
+  }, [harness, harnessModified, instructions, metadata, model, name, onDraftChange, reasoningEffort, reasoningSummary, serviceTier, textFormat, textVerbosity, tools, toolsModified]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const result = validateAgentForm({
       name,
+      harness,
+      harnessModified,
       model,
       instructions,
       metadata,
@@ -134,6 +168,40 @@ export function AgentForm({ agent, disabled = false, formId, initialValues, know
           rows={5}
         />
       </label>
+      {enabledHarnesses !== null ? (
+        <div className="field">
+          <label className="field-label" htmlFor={`${formId}-harness`}>
+            <span>Harness</span>
+            <span className="field-optional">Core startup</span>
+          </label>
+          <select
+            id={`${formId}-harness`}
+            value={harness}
+            onChange={(event) => {
+              setHarness(event.target.value as CoreHarnessKind | "");
+              setHarnessModified(true);
+            }}
+            aria-describedby={`${formId}-harness-help`}
+            disabled={enabledHarnesses.length === 0}
+          >
+            {agent && !agent.x_agents_core && defaultHarness ? (
+              <option value="">{harnessLabel(defaultHarness)} · Core default</option>
+            ) : null}
+            {harness && !enabledHarnesses.includes(harness) ? (
+              <option value={harness} disabled>{harnessLabel(harness)} · Not enabled</option>
+            ) : null}
+            {enabledHarnesses.filter((value) => !(
+              agent && !agent.x_agents_core && value === defaultHarness
+            )).map((value) => (
+              <option value={value} key={value}>{harnessLabel(value)}</option>
+            ))}
+            {enabledHarnesses.length === 0 ? <option value="">No harness enabled</option> : null}
+          </select>
+          <small id={`${formId}-harness-help`}>
+            Only harnesses enabled when this Core process started are selectable. Selection does not prove Runtime, provider, or model readiness.
+          </small>
+        </div>
+      ) : null}
       <div className="field">
         <label className="field-label" htmlFor={`${formId}-model`}>
           <span>Model</span>

@@ -53,6 +53,11 @@ export function agentInputForPreview(values: AgentFormValues, intent: "create" |
     service_tier: values.serviceTier,
     text: { format: values.textFormat, verbosity: values.textVerbosity },
   };
+  if (intent === "create") {
+    if (values.harness) input.x_agents_core = { harness: values.harness };
+  } else if (values.harnessModified) {
+    input.x_agents_core = values.harness ? { harness: values.harness } : null;
+  }
   if (values.reasoningEffort || values.reasoningSummary) {
     input.reasoning = {
       ...(values.reasoningEffort ? { effort: values.reasoningEffort } : {}),

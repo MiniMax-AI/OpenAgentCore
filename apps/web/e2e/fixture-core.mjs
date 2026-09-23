@@ -1001,6 +1001,7 @@ const server = http.createServer(async (request, response) => {
       const defaults = savedAgent(`agent_created_${state.sequence}`, body.name ?? null, body.model, baseline + state.sequence);
       const created = {
         ...defaults,
+        ...(body.x_agents_core === undefined ? {} : { x_agents_core: body.x_agents_core }),
         instructions: body.instructions ?? null,
         metadata: body.metadata ?? {},
         multi_agent: body.multi_agent ?? { enabled: false, max_concurrent_subagents: null },

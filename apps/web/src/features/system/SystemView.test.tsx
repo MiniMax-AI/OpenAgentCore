@@ -45,11 +45,10 @@ describe("SystemView", () => {
     const html = render();
 
     expect(html).toContain("Core startup configuration");
-    expect(html.match(/role="listitem"/g)).toHaveLength(4);
+    expect(html.match(/role="listitem"/g)).toHaveLength(3);
     expect(html).not.toContain("Core API");
     expect(html).not.toContain("Vault catalog loaded");
-    expect(html).toContain("Default harness");
-    expect(html).toContain("Used by Agents created in this Web UI");
+    expect(html).not.toContain("Default harness");
     expect(html).toContain("Managed sandbox");
     expect(html).toContain("Endpoint overrides");
     expect(html).toContain("<strong>Configured</strong>");
@@ -63,7 +62,7 @@ describe("SystemView", () => {
     expect(html).not.toContain("Configured for this process");
     expect(html).not.toContain("Managed execution");
     expect(html).not.toContain("Self-hosted execution");
-    expect(html).toContain("This UI does not expose adapter selection. API requests can select any enabled adapter");
+    expect(html).toContain("Agent create and edit forms can select any adapter enabled for this Core process");
     expect(html).not.toContain("Enabled · default");
     expect(html).toContain("Operator endpoint override: configured");
     expect(html).toContain("Operator endpoint override: not set; the harness may use its native default");
@@ -109,7 +108,6 @@ describe("SystemView", () => {
     expect(html).toContain("<strong>Not configured</strong>");
     expect(html).not.toContain("0 explicit");
     expect(html).toContain("No execution adapters are enabled for this Core process");
-    expect(html).toContain("Configured as the default, but no harness is active");
     expect(html).toContain("This Core process has no daemon gateway, so no execution adapters are active");
     expect(html.match(/Build only/g)).toHaveLength(3);
     expect(html).not.toContain("Enabled · default");

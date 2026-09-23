@@ -335,6 +335,7 @@ test("creates, previews, edits, and removes bounded Function and anonymous HTTP 
   await page.getByRole("button", { name: /^Create agent/ }).click();
   await page.getByLabel("Name").fill("Tool Agent");
   await page.getByLabel("Instructions").fill("Use only the configured tools.");
+  await page.getByLabel("Harness").selectOption("claude_sdk");
   await page.getByLabel("Model").selectOption({ label: "Custom model ID…" });
   await page.getByLabel("Custom model ID").fill("fixture/tool-model");
 
@@ -360,6 +361,7 @@ test("creates, previews, edits, and removes bounded Function and anonymous HTTP 
   await expect(previewBody).toContainText('"name": "lookup_customer"');
   await expect(previewBody).toContainText('"type": "mcp"');
   await expect(previewBody).toContainText('"required": true');
+  await expect(previewBody).toContainText('"harness": "claude_sdk"');
 
   await page.getByRole("button", { name: "Save Agent definition" }).click();
   await expect(page.getByRole("status")).toContainText("Agent definition saved as");
@@ -367,6 +369,7 @@ test("creates, previews, edits, and removes bounded Function and anonymous HTTP 
   const creates = requests.filter((entry) => entry.method === "POST" && entry.path === "/v1/agents");
   expect(creates).toHaveLength(1);
   expect(creates[0]?.body).toEqual({
+    x_agents_core: { harness: "claude_sdk" },
     model: "fixture/tool-model",
     name: "Tool Agent",
     instructions: "Use only the configured tools.",
@@ -397,6 +400,7 @@ test("creates, previews, edits, and removes bounded Function and anonymous HTTP 
   const setup = page.locator(".agent-setup-page");
   await expect(setup.getByRole("heading", { name: "Saved definition" })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(setup.getByLabel("Harness")).toHaveValue("claude_sdk");
   const editFunction = setup.locator(".agent-tool-card").filter({ hasText: "Function" }).first();
   await editFunction.getByLabel("Name", { exact: true }).fill("lookup_customer_v2");
   const editMcp = setup.locator(".agent-tool-card").filter({ hasText: "Anonymous HTTP MCP" }).first();
@@ -416,7 +420,9 @@ test("creates, previews, edits, and removes bounded Function and anonymous HTTP 
       defer_loading: false,
     },
   ]);
+  expect(updates[0]?.body).not.toHaveProperty("x_agents_core");
 
+  await setup.getByLabel("Harness").selectOption("codex");
   await setup.locator(".agent-tool-card").filter({ hasText: "Function" }).first().getByRole("button", { name: "Remove" }).click();
   await setup.getByRole("button", { name: "Save changes" }).click();
   await expect(setup.getByRole("status")).toContainText("Agent definition updated");
@@ -425,6 +431,7 @@ test("creates, previews, edits, and removes bounded Function and anonymous HTTP 
   updates = requests.filter((entry) => entry.method === "POST" && entry.path.startsWith("/v1/agents/agent_created_"));
   expect(updates).toHaveLength(2);
   expect(updates[1]?.body?.tools).toEqual([]);
+  expect(updates[1]?.body?.x_agents_core).toEqual({ harness: "codex" });
 });
 
 test("keeps Source Files controls out of the System status page", async ({ page, request }) => {
@@ -2371,16 +2378,15 @@ test("presents Dashboard page-chain results and System boundaries without extra 
 
   await page.getByRole("button", { name: "System", exact: true }).click();
   const system = page.locator(".system-page");
-  await expect(system.getByRole("listitem").filter({ hasText: "Default harness" })).toContainText("Codex");
   await expect(system.getByRole("listitem").filter({ hasText: "Daemon gateway" })).toContainText("Enabled");
   await expect(system.getByRole("listitem").filter({ hasText: "Managed sandbox" })).toContainText("Docker");
   await expect(system.getByRole("listitem").filter({ hasText: "Endpoint overrides" })).toContainText("Configured");
-  await expect(system.getByRole("listitem")).toHaveCount(4);
+  await expect(system.getByRole("listitem")).toHaveCount(3);
   await expect(system).not.toContainText("Configured for this process");
   await expect(system).not.toContainText("Managed execution");
   await expect(system).not.toContainText("Self-hosted execution");
-  await expect(system).toContainText("Used by Agents created in this Web UI");
-  await expect(system).toContainText("This UI does not expose adapter selection");
+  await expect(system).not.toContainText("Default harness");
+  await expect(system).toContainText("Agent create and edit forms can select any adapter enabled for this Core process");
   await expect(system).not.toContainText("Enabled · default");
   await expect(system).toContainText("Operator endpoint override: configured");
   await expect(system).toContainText("Compiled into this build, but not enabled when this Core process started");

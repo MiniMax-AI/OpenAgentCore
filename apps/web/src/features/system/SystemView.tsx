@@ -84,16 +84,6 @@ export function SystemView({
       : "Reported by the safe Core startup configuration extension.";
   const cards: SystemStatusCard[] = [
     {
-      label: "Default harness",
-      status: startupStatus,
-      value: startupValue(configuration ? harnessLabel(configuration.configured.default_harness) : ""),
-      detail: configuration
-        ? executionAdaptersEnabled
-          ? "Used by Agents created in this Web UI."
-          : "Configured as the default, but no harness is active."
-        : startupDetail,
-    },
-    {
       label: "Daemon gateway",
       status: startupStatus,
       value: startupValue(configuration?.configured.daemon_gateway ? "Enabled" : "Not configured"),
@@ -164,7 +154,7 @@ export function SystemView({
             </header>
             <p className="system-config-explanation">
               {executionAdaptersEnabled
-                ? <>This UI does not expose adapter selection. API requests can select any enabled adapter.</>
+                ? <>Agent create and edit forms can select any adapter enabled for this Core process.</>
                 : <>This Core process has no daemon gateway, so no execution adapters are active.</>}
             </p>
             <div className="system-harness-grid">

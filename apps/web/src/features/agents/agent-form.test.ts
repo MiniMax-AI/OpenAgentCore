@@ -95,6 +95,8 @@ describe("Agent form contract", () => {
       updated_at: 2,
     })).toEqual({
       name: "",
+      harness: "",
+      harnessModified: false,
       model: "model",
       instructions: "",
       metadata: '{\n  "scope": "test"\n}',
@@ -106,6 +108,38 @@ describe("Agent form contract", () => {
       tools: [],
       toolsModified: false,
     });
+  });
+
+  it("serializes an explicit create harness and preserves omitted update selection", () => {
+    const create = validateAgentForm({
+      ...valuesFromAgent(),
+      harness: "claude_sdk",
+      model: "provider/model",
+    });
+    expect(create.input).toMatchObject({ x_agents_core: { harness: "claude_sdk" } });
+
+    const existing = valuesFromAgent({
+      id: "agent_1",
+      object: "agent",
+      x_agents_core: { harness: "claude_sdk" },
+      model: "provider/model",
+      name: null,
+      instructions: null,
+      metadata: {},
+      multi_agent: { enabled: false, max_concurrent_subagents: null },
+      reasoning: {},
+      service_tier: "auto",
+      text: { format: { type: "text" }, verbosity: "medium" },
+      tools: [],
+      created_at: 1,
+      updated_at: 2,
+    });
+    expect(existing.harness).toBe("claude_sdk");
+    expect(validateAgentForm(existing, "update").input).not.toHaveProperty("x_agents_core");
+    expect(validateAgentForm({ ...existing, harness: "codex", harnessModified: true }, "update").input)
+      .toMatchObject({ x_agents_core: { harness: "codex" } });
+    expect(validateAgentForm({ ...existing, harness: "", harnessModified: true }, "update").input)
+      .toMatchObject({ x_agents_core: null });
   });
 
   it("serializes only non-deferred Function and anonymous service-origin HTTP MCP profiles", () => {

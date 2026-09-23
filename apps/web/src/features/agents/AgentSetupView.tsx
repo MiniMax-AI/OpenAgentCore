@@ -1,7 +1,7 @@
 import { Check, ChevronRight, Circle, Code2, MessageSquare, Trash2 } from "lucide-react";
 import { useState } from "react";
 
-import type { CreateAgentInput, SavedAgent, UpdateAgentInput } from "@agents-core-web/agents-client";
+import type { CoreHarnessKind, CreateAgentInput, SavedAgent, UpdateAgentInput } from "@agents-core-web/agents-client";
 
 import { buildModelOptionGroups } from "../../lib/model-options";
 import type { VaultCatalog } from "../vaults/vault-catalog";
@@ -56,7 +56,7 @@ function SavedDefinitionSummary({ agent }: { agent: SavedAgent }) {
 
 function SetupGuide({ saved }: { saved: boolean }) {
   const steps = [
-    ["Define an Agent", "Choose a model and instructions; the Web keeps generation settings on the current Session-safe profile.", true],
+    ["Define an Agent", "Choose a startup-enabled harness, model, and instructions; the Web keeps generation settings on the current Session-safe profile.", true],
     ["Save the definition", "Core becomes the durable source of truth for the saved Agent.", saved],
     ["Start a Session", "Choose a supported Environment profile, create an idle Session, and subscribe before sending input.", false],
     ["Exchange events", "A real Turn still requires a compatible worker, executor, model, and provider.", false],
@@ -81,6 +81,8 @@ export function AgentSetupView({
   agent,
   baseUrl,
   busy,
+  defaultHarness,
+  enabledHarnesses = null,
   initialValues,
   knownModels,
   vaultCatalog = null,
@@ -94,6 +96,8 @@ export function AgentSetupView({
   agent?: SavedAgent;
   baseUrl: string;
   busy: boolean;
+  defaultHarness?: CoreHarnessKind;
+  enabledHarnesses?: readonly CoreHarnessKind[] | null;
   initialValues?: AgentFormValues;
   knownModels: string[];
   vaultCatalog?: VaultCatalog | null;
@@ -106,13 +110,16 @@ export function AgentSetupView({
   const isEditing = Boolean(agent);
   const [draft, setDraft] = useState<AgentFormValues>(() => {
     const values = agent ? valuesFromAgent(agent, vaultCatalog) : initialValues ?? valuesFromAgent(undefined, vaultCatalog);
-    if (values.model) return values;
+    const harness = !agent && !values.harness && defaultHarness && enabledHarnesses?.includes(defaultHarness)
+      ? defaultHarness
+      : values.harness;
+    if (values.model) return { ...values, harness };
     const models = buildModelOptionGroups(
       knownModels,
       import.meta.env.VITE_AGENT_MODEL_PRESETS,
       import.meta.env.VITE_AGENT_DEFAULT_MODEL,
     );
-    return { ...values, model: models.defaultModel };
+    return { ...values, harness, model: models.defaultModel };
   });
   const [savedAgent, setSavedAgent] = useState<SavedAgent | null>(agent ?? null);
   const [formRevision, setFormRevision] = useState(0);
@@ -177,7 +184,9 @@ export function AgentSetupView({
           <AgentForm
             key={isEditing && savedAgent ? `${savedAgent.id}:${savedAgent.updated_at}:${formRevision}` : "create"}
             agent={isEditing ? savedAgent ?? agent : undefined}
+            defaultHarness={defaultHarness}
             disabled={busy || (!isEditing && Boolean(savedAgent))}
+            enabledHarnesses={enabledHarnesses}
             formId={formId}
             initialValues={isEditing ? undefined : draft}
             knownModels={knownModels}

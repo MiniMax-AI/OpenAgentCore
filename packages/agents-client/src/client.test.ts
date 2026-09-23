@@ -529,6 +529,17 @@ describe("OpenAIAgentsClient", () => {
     }
   });
 
+  it("projects an explicit Core harness from an effective Session Agent", async () => {
+    const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse({
+      ...sessionResource(),
+      agent: { ...agentSnapshot(), x_agents_core: { harness: "claude_sdk" } },
+    }), []) });
+
+    await expect(client.retrieveSession("session")).resolves.toMatchObject({
+      agent: { x_agents_core: { harness: "claude_sdk" } },
+    });
+  });
+
   it("preserves a pre-stream Session creation API error without opening or retrying", async () => {
     const calls: FetchCall[] = [];
     const onOpen = vi.fn();

@@ -59,6 +59,29 @@ describe("Agent setup page", () => {
     expect(html).not.toContain("manual-token");
   });
 
+  it("offers only startup-enabled harnesses and defaults new Agents to the Core default", () => {
+    const html = renderToStaticMarkup(
+      <AgentSetupView
+        actionError={null}
+        baseUrl="/v1"
+        busy={false}
+        defaultHarness="codex"
+        enabledHarnesses={["claude_sdk", "codex"]}
+        knownModels={["provider/model"]}
+        onBack={() => undefined}
+        onCreate={async () => undefined}
+        onStartSession={() => undefined}
+      />,
+    );
+
+    expect(html).toContain(">Harness<");
+    expect(html).toContain('<option value="codex" selected="">Codex</option>');
+    expect(html).toContain('<option value="claude_sdk">Claude SDK</option>');
+    expect(html).not.toContain("MiniMax Code");
+    expect(html).toContain('&quot;x_agents_core&quot;: {');
+    expect(html).toContain('&quot;harness&quot;: &quot;codex&quot;');
+  });
+
   it("locks the submitted draft while Core creation is in flight", () => {
     const html = renderToStaticMarkup(
       <AgentSetupView

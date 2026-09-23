@@ -1,6 +1,6 @@
 .system-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
@@ -173,7 +173,7 @@
     border-right: 0;
   }
 
-  .system-summary-cell:nth-last-child(-n + 2) {
+  .system-summary-cell:last-child {
     border-bottom: 0;
   }
 
