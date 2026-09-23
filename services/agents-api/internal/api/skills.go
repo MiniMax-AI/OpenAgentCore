@@ -140,7 +140,7 @@ func (h *Handler) getSkillVersion(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Delete a Skill version
-// @Description Rejects deletion of the current default version. Exact hosted last-version/default deletion precedence is not verified.
+// @Description Deleting the only remaining version also deletes the Skill; existing Session installation snapshots remain independent. The default version cannot be deleted while other versions remain. Version numbers are never reused.
 // @Tags Skills
 // @Produce json
 // @Security BearerAuth
