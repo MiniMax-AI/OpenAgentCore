@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
@@ -36,12 +37,16 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client
 	t.Helper()
 	ctx := t.Context()
 	var f cursorFixture
+	// Each list has at least two resources, so valid cursors page between them.
 	f.agent = client.created(token, "/v1/agents", `{"model":"cursor-model"}`)
+	client.created(token, "/v1/agents", `{"model":"cursor-model"}`)
 	f.template = client.created(token, "/v1/agents/environments/templates", `{"name":"cursor-template"}`)
+	client.created(token, "/v1/agents/environments/templates", `{"name":"cursor-template-2"}`)
 	f.vault = client.created(token, "/v1/vaults", `{"name":"cursor-vault"}`)
 	f.otherVault = client.created(token, "/v1/vaults", `{"name":"cursor-other-vault"}`)
 	credential := `{"name":"cursor","auth":{"type":"static_bearer","mcp_server_url":"https://mcp.example/mcp","token":"cursor-token"}}`
 	f.credential = client.created(token, "/v1/vaults/"+f.vault+"/credentials", credential)
+	client.created(token, "/v1/vaults/"+f.vault+"/credentials", credential)
 	f.otherCredential = client.created(token, "/v1/vaults/"+f.otherVault+"/credentials", credential)
 
 	// Queued Turns and user Items exist without a daemon.
@@ -54,16 +59,23 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client
 		}
 		return page.Data[0].ID
 	}
-	newSession := `{"agent":{"model":"cursor-model"},"environment":{"type":"none"},"input":"Keep this Session."}`
+	// Both Sessions use the saved Agent, so the Session list can page them by agent_id.
+	newSession := `{"agent_id":"` + f.agent + `","environment":{"type":"none"},"input":"Keep this Session."}`
 	f.session = client.created(token, "/v1/agents/sessions", newSession)
 	f.turn = first("/v1/agents/sessions/" + f.session + "/turns")
 	f.item = first("/v1/agents/sessions/" + f.session + "/items")
+	if _, err := s.TransitionTurn(ctx, tenant, f.session, f.turn, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnCancelled}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SubmitMessage(ctx, tenant, f.session, label+"-second", json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"second"}]}]}`)); err != nil {
+		t.Fatal(err)
+	}
 	f.otherSession = client.created(token, "/v1/agents/sessions", newSession)
 	f.otherItem = first("/v1/agents/sessions/" + f.otherSession + "/items")
 
 	artifactSession, environment := hostedArtifactSession(t, s, tenant, label+"-artifacts")
 	f.artifactSession = artifactSession
-	f.artifactTurn = completeArtifactTurn(t, s, tenant, artifactSession, environment, label+"-artifact-turn", map[string]string{"a.txt": "alpha"})
+	f.artifactTurn = completeArtifactTurn(t, s, tenant, artifactSession, environment, label+"-artifact-turn", map[string]string{"a.txt": "alpha", "c.txt": "charlie"})
 	f.artifact = first("/v1/agents/sessions/" + artifactSession + "/artifacts")
 	otherArtifactSession, otherEnvironment := hostedArtifactSession(t, s, tenant, label+"-other-artifacts")
 	completeArtifactTurn(t, s, tenant, otherArtifactSession, otherEnvironment, label+"-other-artifact-turn", map[string]string{"b.txt": "bravo"})
@@ -95,18 +107,19 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client
 		identity := func(child string) store.ExecutionEvent {
 			return subagentFixture(proto.TypeSubagentIdentity, proto.SubagentIdentityPayload{NativeID: child, ParentNativeID: "root", NativeCreatedAt: 1700000001, ParentTurnID: "native-root", SourceItemID: "spawn-" + child})
 		}
-		turn := func(child, id string) store.ExecutionEvent {
-			return subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: child, TurnID: id, Status: store.TurnInProgress, CreatedAtMS: opened, StartedAtMS: &opened})
+		// Distinct creation times keep child-turn before later-child-turn.
+		turn := func(child, id string, created int64) store.ExecutionEvent {
+			return subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: child, TurnID: id, Status: store.TurnInProgress, CreatedAtMS: created, StartedAtMS: &created})
 		}
-		message := func(child, turn, id string) store.ExecutionEvent {
+		message := func(child, turn, id string, position int32) store.ExecutionEvent {
 			text := "answer " + id
 			payload, _ := json.Marshal(proto.OutputMessagePayload{ID: id, Status: "completed", Text: &text})
-			return subagentFixture(proto.TypeSubagentItem, proto.SubagentItemPayload{NativeID: child, TurnID: turn, ItemID: id, Position: 0, Kind: proto.TypeOutputMessage, Payload: payload})
+			return subagentFixture(proto.TypeSubagentItem, proto.SubagentItemPayload{NativeID: child, TurnID: turn, ItemID: id, Position: position, Kind: proto.TypeOutputMessage, Payload: payload})
 		}
 		facts := []store.ExecutionEvent{identity("child"), identity("sibling"),
-			turn("child", "child-turn"), message("child", "child-turn", "child-item"),
-			turn("child", "later-child-turn"), message("child", "later-child-turn", "later-child-item"),
-			turn("sibling", "sibling-turn"), message("sibling", "sibling-turn", "sibling-item")}
+			turn("child", "child-turn", opened), message("child", "child-turn", "child-item", 0), message("child", "child-turn", "child-item-2", 1),
+			turn("child", "later-child-turn", opened+1000), message("child", "later-child-turn", "later-child-item", 0),
+			turn("sibling", "sibling-turn", opened), message("sibling", "sibling-turn", "sibling-item", 0)}
 		if err = writer.AppendTurnEvents(ctx, tenant, created.ID, receipt.TurnID, 1, facts); err != nil {
 			t.Fatal(err)
 		}
@@ -323,38 +336,60 @@ func TestListCursorErrorsPostgres(t *testing.T) {
 	expect(owner, "/v1/files", http.StatusNotFound, filesMissing, "file-"+random, "not-a-valid-id", b.file, a.skill)
 	expect(owner, "/v1/skills", http.StatusNotFound, skillsMissing, "skill_"+random, b.skill, a.version)
 
-	// K2: valid cursors still page in order.
-	for path, cursor := range map[string]string{
-		"/v1/agents/sessions/" + a.session + "/items":             a.item,
-		"/v1/agents/sessions/" + a.session + "/turns":             a.turn,
-		subagents + a.child + "/items":                            a.childItem,
-		subagents + a.child + "/turns":                            a.childTurn,
-		subagents + a.child + "/turns/" + a.childTurn + "/items":  a.childItem,
-		"/v1/agents/sessions/" + a.subSession + "/subagents":      a.child,
-		"/v1/agents/sessions/" + a.artifactSession + "/artifacts": a.artifact,
-		versions:                                 a.version,
-		"/v1/vaults/" + a.vault + "/credentials": a.credential,
-	} {
-		status, raw := client.do(owner, http.MethodGet, path+"?order=asc&"+url.Values{"after": {cursor}}.Encode(), "", nil)
-		var page struct{ Data []struct{ ID string } }
-		if status != http.StatusOK || json.Unmarshal([]byte(raw), &page) != nil {
-			t.Errorf("valid cursor %s: %d %s", path, status, raw)
-			continue
+	// K2: a valid cursor still returns exactly the next resource in either order,
+	// with has_more and the first and last IDs of that page.
+	type envelope struct {
+		FirstID *string               `json:"first_id"`
+		LastID  *string               `json:"last_id"`
+		HasMore *bool                 `json:"has_more"`
+		Data    []struct{ ID string } `json:"data"`
+	}
+	read := func(path string, query url.Values) (envelope, []string) {
+		t.Helper()
+		// The Session list is filtered to the two HTTP-created Sessions; the
+		// store-seeded fixture Sessions lack a public Agent projection.
+		if path == "/v1/agents/sessions" {
+			query.Set("agent_id", a.agent)
 		}
+		status, raw := client.do(owner, http.MethodGet, path+"?"+query.Encode(), "", nil)
+		var page envelope
+		if status != http.StatusOK || json.Unmarshal([]byte(raw), &page) != nil || page.HasMore == nil {
+			t.Fatalf("GET %s?%s: %d %s", path, query.Encode(), status, raw)
+		}
+		ids := make([]string, 0, len(page.Data))
 		for _, value := range page.Data {
-			if value.ID == cursor {
-				t.Errorf("valid cursor %s repeated its anchor: %s", path, raw)
+			ids = append(ids, value.ID)
+		}
+		return page, ids
+	}
+	pages := 0
+	for _, path := range []string{
+		"/v1/agents", "/v1/agents/sessions", sessions + a.session + "/turns", sessions + a.session + "/items",
+		"/v1/agents/environments/templates", "/v1/vaults", "/v1/vaults/" + a.vault + "/credentials",
+		sessions + a.subSession + "/subagents", subagents + a.child + "/items", subagents + a.child + "/turns",
+		subagents + a.child + "/turns/" + a.childTurn + "/items", sessions + a.artifactSession + "/artifacts", versions,
+	} {
+		for _, order := range []string{"asc", "desc"} {
+			_, all := read(path, url.Values{"order": {order}, "limit": {"100"}})
+			if len(all) < 2 {
+				t.Fatalf("K2 fixture %s has %d resources", path, len(all))
+			}
+			for index, cursor := range all {
+				page, got := read(path, url.Values{"order": {order}, "limit": {"1"}, "after": {cursor}})
+				want := all[index+1 : min(index+2, len(all))]
+				bounds := page.FirstID == nil && page.LastID == nil
+				if len(want) == 1 {
+					bounds = page.FirstID != nil && page.LastID != nil && *page.FirstID == want[0] && *page.LastID == want[0]
+				}
+				if !slices.Equal(got, want) || *page.HasMore != (index+2 < len(all)) || !bounds {
+					t.Errorf("%s order=%s after %d/%d: got %v has_more=%t; want %v", path, order, index, len(all), got, *page.HasMore, want)
+				}
+				pages++
 			}
 		}
 	}
-	status, raw := client.do(owner, http.MethodGet, versions+"?order=asc&after="+a.version, "", nil)
-	var page struct{ Data []struct{ ID string } }
-	if status != http.StatusOK || json.Unmarshal([]byte(raw), &page) != nil || len(page.Data) != 1 || page.Data[0].ID != a.laterVersion {
-		t.Errorf("Skill version page after version 1: %d %s", status, raw)
-	}
-	status, raw = client.do(owner, http.MethodGet, subagents+a.child+"/turns?order=asc&after="+a.childTurn, "", nil)
-	if status != http.StatusOK || json.Unmarshal([]byte(raw), &page) != nil || len(page.Data) != 1 || page.Data[0].ID != a.laterChildTurn {
-		t.Errorf("child Turn page after the first Turn: %d %s", status, raw)
+	if pages < 52 {
+		t.Fatalf("K2 checked only %d pages", pages)
 	}
 
 	// K3: a missing or foreign parent is 404 before any cursor is evaluated.
