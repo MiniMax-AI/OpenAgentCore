@@ -38,8 +38,20 @@ func (s *Store) SettleRuntimeCreation(ctx context.Context, owner RuntimeAllocati
 }
 
 // RequestRuntimeCleanup revokes future authority before external reclamation.
-// Cancellation requests do not prove existing native work has stopped.
+// Cancellation requests do not prove existing native work has stopped. A live,
+// unexpired Environment fails with the generic provisioning reason.
 func (s *Store) RequestRuntimeCleanup(ctx context.Context, owner RuntimeAllocation) (RuntimeAllocation, error) {
+	return s.requestRuntimeCleanup(ctx, owner, provisioningFailureReason)
+}
+
+// FailRuntimeInitialization is RequestRuntimeCleanup after a confirmed failed
+// initialization step: the step's safe reason becomes the Session error. Deleted
+// Sessions, expired and already terminal Environments keep their existing outcome.
+func (s *Store) FailRuntimeInitialization(ctx context.Context, owner RuntimeAllocation, failure ProvisioningFailure) (RuntimeAllocation, error) {
+	return s.requestRuntimeCleanup(ctx, owner, failure.reason())
+}
+
+func (s *Store) requestRuntimeCleanup(ctx context.Context, owner RuntimeAllocation, reason string) (RuntimeAllocation, error) {
 	return s.mutateRuntimeAllocation(ctx, owner, false, func(ctx context.Context, q *sqlc.Queries, row sqlc.RuntimeAllocation) (sqlc.RuntimeAllocation, error) {
 		if row.State == "released" {
 			return row, nil
@@ -56,12 +68,7 @@ func (s *Store) RequestRuntimeCleanup(ctx context.Context, owner RuntimeAllocati
 		if current.DeletedAt.Valid {
 			err = cancel()
 		} else {
-			err = withEnvironmentInputActivity(ctx, q, current.SessionID, func() error {
-				if err := terminateRuntimeEnvironment(ctx, q, current); err != nil {
-					return err
-				}
-				return cancel()
-			})
+			err = terminateRuntimeEnvironment(ctx, q, current, reason, cancel)
 		}
 		if err != nil {
 			return sqlc.RuntimeAllocation{}, err

@@ -24,6 +24,9 @@ type SessionChange struct {
 	SessionUsage             json.RawMessage           `json:"session_usage,omitempty"`
 	RequiredActions          []v1.FunctionCallAction   `json:"required_actions,omitempty"`
 	EnvironmentInputActivity *EnvironmentInputActivity `json:"environment_input_activity,omitempty"`
+	// EnvironmentFailure is set on the agent.session.failed snapshot of a hosted
+	// provisioning failure, which also ends live event streams.
+	EnvironmentFailure *EnvironmentFailure `json:"environment_failure,omitempty"`
 	// Settled marks an idle or failed snapshot recorded when a Turn ends, or when
 	// the latest input reservation stops being pending (expired, cancelled or
 	// failed). A reservation made while the ending Turn captured Artifacts can

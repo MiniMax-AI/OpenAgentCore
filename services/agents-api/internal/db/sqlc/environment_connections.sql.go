@@ -81,6 +81,24 @@ func (q *Queries) ListEnvironmentConnections(ctx context.Context, id pgtype.UUID
 	return items, nil
 }
 
+const recordEnvironmentFailure = `-- name: RecordEnvironmentFailure :one
+UPDATE environments SET status = 'failed', failure_reason = $2, failed_at = clock_timestamp()
+WHERE id = $1 AND status NOT IN ('failed', 'expired')
+RETURNING failed_at
+`
+
+type RecordEnvironmentFailureParams struct {
+	ID            pgtype.UUID `json:"id"`
+	FailureReason pgtype.Text `json:"failure_reason"`
+}
+
+func (q *Queries) RecordEnvironmentFailure(ctx context.Context, arg RecordEnvironmentFailureParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, recordEnvironmentFailure, arg.ID, arg.FailureReason)
+	var failed_at pgtype.Timestamptz
+	err := row.Scan(&failed_at)
+	return failed_at, err
+}
+
 const replaceEnvironmentConnection = `-- name: ReplaceEnvironmentConnection :exec
 INSERT INTO environment_connections (environment_id, generation, revision)
 VALUES ($1, $2, 0)

@@ -29,6 +29,9 @@ type StreamError struct {
 	Code    string `json:"code"`
 	Type    string `json:"type"`
 	Message string `json:"message"`
+	// Param is the pinned SessionError field. A top-level error event always
+	// carries it, null when unset; Environment state errors omit it.
+	Param *string `json:"param,omitempty" extensions:"x-nullable"`
 }
 
 // TerminalTurnEvent reports whether an event type settles a Turn.
@@ -45,11 +48,27 @@ func itemEvent(eventType string) bool {
 	return eventType == "agent.session.turn.item.added" || eventType == "agent.session.turn.item.done"
 }
 
+// sessionError is the pinned SessionError of a top-level error event, whose
+// param is present and null when unset (HI-01).
+type sessionError struct {
+	Code    string  `json:"code"`
+	Type    string  `json:"type"`
+	Message string  `json:"message"`
+	Param   *string `json:"param"`
+}
+
 // MarshalJSON keeps the nullable top-level usage on terminal Turn events only,
-// and a nullable output_index on every Item event (EVT-09).
+// a nullable output_index on every Item event (EVT-09) and a nullable error
+// param on error events.
 func (e SessionEvent) MarshalJSON() ([]byte, error) {
 	type wire SessionEvent
 	switch {
+	case e.Type == "error" && e.Error != nil:
+		e.Usage = nil
+		return json.Marshal(struct {
+			wire
+			Error sessionError `json:"error"`
+		}{wire(e), sessionError(*e.Error)})
 	case TerminalTurnEvent(e.Type):
 		return json.Marshal(struct {
 			wire

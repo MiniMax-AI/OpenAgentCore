@@ -97,6 +97,7 @@ func (r *runtimeLifecycle) advanceInitialization(ctx context.Context) error {
 		r.initializing = nil
 		return err
 	}
+	step := store.ProvisioningFailure{Step: store.ProvisioningInitialFile}
 	if active.next < active.files {
 		var file store.InitialFileMetadata
 		var body []byte
@@ -105,12 +106,25 @@ func (r *runtimeLifecycle) advanceInitialization(ctx context.Context) error {
 			err = installInitialFile(operation, r.config.Provider, runtimeReference(owner), file, body)
 		}
 	} else {
-		err = runRuntimeSetup(operation, r.config.Provider, runtimeReference(owner), active.operations[active.next-active.files])
+		setup := active.operations[active.next-active.files]
+		step = setup.provisioningFailure(0)
+		err = runRuntimeSetup(operation, r.config.Provider, runtimeReference(owner), setup)
 	}
 	if err != nil {
 		// Clearing the in-memory owner makes the next observation request cleanup,
 		// even when the failed operation consumed its entire deadline.
 		r.initializing = nil
+		var failed *runtimeStepFailure
+		if errors.As(err, &failed) {
+			// A confirmed failed step records its safe reason now. Unknown effects
+			// keep the generic reason recorded by that later cleanup.
+			step.ExitCode = failed.exitCode
+			record, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+			if _, cleanupErr := r.store.FailRuntimeInitialization(record, owner, step); cleanupErr != nil {
+				return errors.Join(err, cleanupErr)
+			}
+		}
 		return err
 	}
 	active.next++
@@ -139,10 +153,16 @@ func installInitialFile(ctx context.Context, provider sandbox.Provider, referenc
 		Outcome   string `json:"outcome"`
 		SizeBytes *int64 `json:"size_bytes"`
 	}
-	if result.ExitCode != 0 || result.Stderr != "" || json.Unmarshal([]byte(result.Stdout), &receipt) != nil || receipt.Version != 1 || receipt.Outcome != "completed" || receipt.SizeBytes == nil || *receipt.SizeBytes != int64(len(body)) {
-		return errors.New("initial environment file installation unconfirmed")
+	valid := result.Stderr == "" && json.Unmarshal([]byte(result.Stdout), &receipt) == nil && receipt.Version == 1
+	if valid && result.ExitCode == 0 && receipt.Outcome == "completed" && receipt.SizeBytes != nil && *receipt.SizeBytes == int64(len(body)) {
+		return nil
 	}
-	return nil
+	if valid && receipt.Outcome == "failed" {
+		// The writer exits 0 with a failed receipt when it committed nothing;
+		// "unknown" and every other result stay generic.
+		return &runtimeStepFailure{}
+	}
+	return errors.New("initial environment file installation unconfirmed")
 }
 
 // Isolated Python creates only fd-anchored workspace parents, then replaces itself with the existing atomic writer.

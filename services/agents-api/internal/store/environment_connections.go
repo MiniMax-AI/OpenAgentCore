@@ -102,26 +102,44 @@ func (s *Store) withEnvironmentConnection(ctx context.Context, tenant, environme
 }
 
 func recordEnvironmentConnection(ctx context.Context, q *sqlc.Queries, row sqlc.GetSessionEnvironmentRow, status string) error {
-	var config struct {
-		Type string `json:"type"`
+	if _, err := storedEnvironmentType(row); err != nil {
+		return err
 	}
-	if err := json.Unmarshal(row.Configuration, &config); err != nil || (config.Type != "self_hosted" && config.Type != "openai_hosted") {
-		return errors.New("invalid stored Environment type")
-	}
-	if status != "connected" && status != "disconnected" && status != "failed" {
+	if status != "connected" && status != "disconnected" {
 		return ErrInvalidInput
 	}
 	if err := q.SetEnvironmentConnectionStatus(ctx, sqlc.SetEnvironmentConnectionStatusParams{ID: row.Environment.ID, Status: status}); err != nil {
 		return err
 	}
-	state := &v1.SessionEnvironmentState{ID: uuid.UUID(row.Environment.ID.Bytes).String(), Type: config.Type, Status: status}
+	return recordEnvironmentState(ctx, q, row, status)
+}
+
+// recordEnvironmentState appends the pinned Environment state event for an
+// already committed status. A failure uses the observed official error; the
+// failed step travels only in the separate error event and Session error.
+func recordEnvironmentState(ctx context.Context, q *sqlc.Queries, row sqlc.GetSessionEnvironmentRow, status string) error {
+	kind, err := storedEnvironmentType(row)
+	if err != nil {
+		return err
+	}
+	state := &v1.SessionEnvironmentState{ID: uuid.UUID(row.Environment.ID.Bytes).String(), Type: kind, Status: status}
 	if status == "failed" {
-		state.Error = &v1.StreamError{Code: "environment_unavailable", Type: "server_error", Message: "The environment could not be prepared for execution."}
+		state.Error = &v1.StreamError{Type: "environment_error", Code: "environment_connection_failed", Message: "The environment failed to connect."}
 	}
 	return recordSessionChange(ctx, q, row.Environment.SessionID, SessionChange{Event: v1.SessionEvent{
 		Type:        "agent.session.environment." + status,
 		Environment: state,
 	}})
+}
+
+func storedEnvironmentType(row sqlc.GetSessionEnvironmentRow) (string, error) {
+	var config struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(row.Configuration, &config); err != nil || (config.Type != "self_hosted" && config.Type != "openai_hosted") {
+		return "", errors.New("invalid stored Environment type")
+	}
+	return config.Type, nil
 }
 
 func parseConnectionGeneration(value string) (pgtype.UUID, error) {

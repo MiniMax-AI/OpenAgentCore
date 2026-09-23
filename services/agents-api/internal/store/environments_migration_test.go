@@ -78,7 +78,6 @@ func TestEnvironmentMigrationPreservesHistoryAndGuardsIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(migrated.Close)
-	s := New(migrated)
 
 	sessionID, environmentID := uuid.NewString(), uuid.NewString()
 	tx, err := migrated.Begin(ctx)
@@ -124,8 +123,11 @@ func TestEnvironmentMigrationPreservesHistoryAndGuardsIdentity(t *testing.T) {
 	if err := <-outcome; err == nil || !strings.Contains(err.Error(), "Cannot remove durable Environment identities") {
 		t.Fatal("concurrent downgrade discarded identity", err)
 	}
-	retained, err := s.GetEnvironment(ctx, tenant, environmentID)
-	if err != nil || retained.ID != environmentID || retained.SessionID != sessionID {
+	// Read the version-20 row directly: current Store queries select columns
+	// that later migrations add to environments.
+	var retained string
+	if err := migrated.QueryRow(ctx, `SELECT e.session_id::text FROM environments e JOIN sessions s ON s.id = e.session_id
+        WHERE s.tenant_id = $1 AND e.id = $2 AND s.deleted_at IS NULL`, tenant, environmentID).Scan(&retained); err != nil || retained != sessionID {
 		t.Fatal("downgrade destroyed ownership", retained, err)
 	}
 }

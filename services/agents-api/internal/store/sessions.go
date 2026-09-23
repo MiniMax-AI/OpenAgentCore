@@ -47,6 +47,9 @@ type Session struct {
 	RequiredActions          []v1.FunctionCallAction
 	Environment              *Environment
 	EnvironmentInputActivity *EnvironmentInputActivity
+	// EnvironmentFailure is the recorded provisioning failure of a failed hosted
+	// Environment. It makes the Session failed and is terminal.
+	EnvironmentFailure *EnvironmentFailure
 	// PendingInput reports that the latest input reservation, read once no Turn
 	// is active or newer, can still start a Turn. It only supports settlement
 	// checks and is never rendered.

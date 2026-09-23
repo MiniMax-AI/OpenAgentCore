@@ -107,6 +107,9 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 		writeError(w, http.StatusRequestEntityTooLarge, "request_too_large", "File exceeds this operation's content limit.")
 	case errors.Is(err, store.ErrCredentialStorageUnavailable):
 		writeError(w, http.StatusServiceUnavailable, "credential_storage_unavailable", "Credential encryption is not configured on this service.")
+	case errors.Is(err, store.ErrHostedEnvironmentFailed):
+		// Observed official status, type, code, null param and message.
+		writeError(w, http.StatusConflict, "conflict_error", "the hosted environment failed to provision")
 	case errors.Is(err, store.ErrEnvironmentUnavailable):
 		writeError(w, http.StatusConflict, "environment_unavailable", "The environment is no longer available for new input.")
 	case errors.Is(err, execution.ErrEnvironmentInputExpired):

@@ -21,7 +21,7 @@ type eventStore interface {
 }
 
 // @Summary Stream live Session events
-// @Description Live-only events, including command output fragments from capable Codex peers as agent.output.command_execution_output.delta with stable Item/output indexes. Native text conversion and output quotas apply; completion snapshots remain authoritative. Reconnect through Session, Turn and Items reads; missed events are not replayed. A lagging stream closes with an error when its bounded buffer is exceeded. Session activity includes immutable pending-input connection actions before Turn creation; self_hosted environments use the same safe output as Session retrieval.
+// @Description Live-only events, including command output fragments from capable Codex peers as agent.output.command_execution_output.delta with stable Item/output indexes. Native text conversion and output quotas apply; completion snapshots remain authoritative. Reconnect through Session, Turn and Items reads; missed events are not replayed. A lagging stream closes with an error when its bounded buffer is exceeded. When a hosted Environment fails to provision, the stream sends agent.session.environment.failed, an error event (environment_error/sandbox_error with the safe step and exit-status reason, never command output) and agent.session.failed, then ends. Session activity includes immutable pending-input connection actions before Turn creation; self_hosted environments use the same safe output as Session retrieval.
 // @Tags Events
 // @Produce text/event-stream
 // @Security BearerAuth
@@ -111,7 +111,7 @@ func (h *Handler) serveSessionEvents(w http.ResponseWriter, r *http.Request, eve
 				return
 			}
 			cursor = change.Sequence
-			if settlement != nil && settlingEvent(change) {
+			if terminalEvent(change) || settlement != nil && settlingEvent(change) {
 				return
 			}
 			recheck = recheck || sessionStatusEvent(change.Event.Type)
@@ -197,6 +197,13 @@ func settlingEvent(change store.SessionChange) bool {
 	return false
 }
 
+// terminalEvent reports the agent.session.failed of a hosted provisioning
+// failure. The Session can never run again, so GET streams end after it too, as
+// officially observed; other failures leave GET streams open.
+func terminalEvent(change store.SessionChange) bool {
+	return change.Event.Type == "agent.session.failed" && change.EnvironmentFailure != nil
+}
+
 func sessionStatusEvent(eventType string) bool {
 	switch eventType {
 	case "agent.session.in_progress", "agent.session.requires_action", "agent.session.idle", "agent.session.failed":
@@ -207,7 +214,7 @@ func sessionStatusEvent(eventType string) bool {
 
 func streamResponse(session store.Session, change store.SessionChange, executorURL string) (v1.SessionEvent, error) {
 	event := change.Event
-	if change.Turn == nil && change.EnvironmentInputActivity == nil {
+	if change.Turn == nil && change.EnvironmentInputActivity == nil && change.EnvironmentFailure == nil {
 		return withTurnUsage(event), nil
 	}
 	if change.Turn != nil && strings.HasPrefix(event.Type, "agent.session.turn.") {
@@ -218,7 +225,7 @@ func streamResponse(session store.Session, change store.SessionChange, executorU
 	event.SessionID = ""
 	session.RequiredActions = change.RequiredActions
 	session.LastTurn, session.Usage = change.Turn, change.SessionUsage
-	session.EnvironmentInputActivity = change.EnvironmentInputActivity
+	session.EnvironmentInputActivity, session.EnvironmentFailure = change.EnvironmentInputActivity, change.EnvironmentFailure
 	value, err := sessionResponse(session, executorURL)
 	event.Session = &value
 	return event, err

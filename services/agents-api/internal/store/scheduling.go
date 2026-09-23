@@ -142,6 +142,7 @@ func readSessionActivity(ctx context.Context, q *sqlc.Queries, session Session) 
 			return session, err
 		}
 		session.Environment = &value
+		session.EnvironmentFailure = environmentFailure(environment.Environment)
 		session.EnvironmentInputActivity, session.PendingInput, err = environmentInputState(ctx, q, id)
 		if err != nil {
 			return session, err

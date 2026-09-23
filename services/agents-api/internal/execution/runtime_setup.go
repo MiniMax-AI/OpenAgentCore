@@ -26,6 +26,24 @@ type runtimeSetupOperation struct {
 	Packages     []string                     `json:"packages,omitempty"`
 	Command      string                       `json:"command,omitempty"`
 	CWD          string                       `json:"cwd,omitempty"`
+	// Index is the setup command position, used only for the public failure label.
+	Index int `json:"-"`
+}
+
+// runtimeStepFailure is a confirmed failed initialization receipt. It holds only
+// the Runtime-reported exit status (0 when absent), never command or output.
+type runtimeStepFailure struct{ exitCode int }
+
+func (*runtimeStepFailure) Error() string { return "environment initialization operation failed" }
+
+// provisioningFailure labels a confirmed failed setup operation for the Store,
+// which composes the public reason. Other actions keep the generic reason.
+func (operation runtimeSetupOperation) provisioningFailure(exitCode int) store.ProvisioningFailure {
+	switch operation.Action {
+	case "setup", "python", "npm", "system", "skill":
+		return store.ProvisioningFailure{Step: operation.Action, Index: operation.Index, ExitCode: exitCode}
+	}
+	return store.ProvisioningFailure{}
 }
 
 func setupOperations(setup store.EnvironmentSetup) []runtimeSetupOperation {
@@ -55,12 +73,12 @@ func setupOperations(setup store.EnvironmentSetup) []runtimeSetupOperation {
 	if len(setup.Packages.Python) > 0 {
 		result = append(result, runtimeSetupOperation{Version: 1, Action: "python", Network: network, Packages: setup.Packages.Python})
 	}
-	for _, command := range setup.Commands {
+	for i, command := range setup.Commands {
 		cwd := command.CWD
 		if cwd == "" {
 			cwd = "/workspace"
 		}
-		result = append(result, runtimeSetupOperation{Version: 1, Action: "setup", Network: network, Command: command.Command, CWD: cwd})
+		result = append(result, runtimeSetupOperation{Version: 1, Action: "setup", Network: network, Command: command.Command, CWD: cwd, Index: i})
 	}
 	if len(setup.Skills)+len(setup.Plugins)+len(setup.CapabilityDirectories) > 0 {
 		sources := agentcapabilities.Input{Plugins: setup.PluginMetadata(), Directories: setup.CapabilityDirectories}
@@ -98,11 +116,22 @@ func runRuntimeSetup(ctx context.Context, provider sandbox.Provider, reference s
 		return err
 	}
 	var receipt struct {
-		Version int    `json:"version"`
-		Outcome string `json:"outcome"`
+		Version  int    `json:"version"`
+		Outcome  string `json:"outcome"`
+		ExitCode *int   `json:"exit_code"`
 	}
-	if result.ExitCode != 0 || result.Stderr != "" || json.Unmarshal([]byte(result.Stdout), &receipt) != nil || receipt.Version != 1 || receipt.Outcome != "completed" {
-		return errors.New("environment initialization operation unconfirmed")
+	valid := result.Stderr == "" && json.Unmarshal([]byte(result.Stdout), &receipt) == nil && receipt.Version == 1
+	if valid && result.ExitCode == 0 && receipt.Outcome == "completed" {
+		return nil
 	}
-	return nil
+	// The initializer confirms a failed step with status 1 and, for a sandboxed
+	// step, that step's exit status only. Images without exit_code stay generic.
+	if valid && result.ExitCode == 1 && receipt.Outcome == "failed" && operation.Capabilities == nil {
+		failure := &runtimeStepFailure{}
+		if receipt.ExitCode != nil && *receipt.ExitCode > 0 && *receipt.ExitCode < 256 {
+			failure.exitCode = *receipt.ExitCode
+		}
+		return failure
+	}
+	return errors.New("environment initialization operation unconfirmed")
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -43,6 +44,10 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			if err != nil || ended.Environment.Status != status || ended.LastTurn != nil || ended.EnvironmentInputActivity == nil || ended.EnvironmentInputActivity.Status != "failed" || ended.EnvironmentInputActivity.Failure != "environment_unavailable" {
 				t.Fatal("terminal projection", ended, err)
 			}
+			// Only a hosted failure records a provisioning failure, with the generic reason.
+			if failure := ended.EnvironmentFailure; expired != (failure == nil) || !expired && (failure.Reason != provisioningFailureReason || failure.FailedAt.IsZero()) {
+				t.Fatal("terminal failure projection", failure)
+			}
 			if _, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 				t.Fatal("terminal credential remained usable", err)
 			}
@@ -50,7 +55,7 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			if err != nil || failed.State != EnvironmentInputFailed || len(failed.Receipts) != 0 || failed.SettledAt == nil || !failed.Deadline.Equal(reservation.Deadline) {
 				t.Fatal("late preparation resurrected failed input", failed, err)
 			}
-			if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, session.ID, "new", []Input{messageInput("later")}); !errors.Is(err, ErrEnvironmentUnavailable) {
+			if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, session.ID, "new", []Input{messageInput("later")}); !errors.Is(err, ErrEnvironmentUnavailable) || expired == errors.Is(err, ErrHostedEnvironmentFailed) {
 				t.Fatal("terminal environment admitted new input", err)
 			}
 			if _, err := s.CreateSession(t.Context(), tenant, input); err != nil {
@@ -60,15 +65,31 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			if err != nil {
 				t.Fatal(err)
 			}
-			expected := 2
+			expected := 3
 			if expired {
 				expected = 1
 			}
 			if len(events) != expected || events[len(events)-1].Event.Type != "agent.session.failed" {
 				t.Fatal("wrong terminal events", events)
 			}
-			if !expired && (events[0].Event.Type != "agent.session.environment.failed" || events[0].Event.Environment.Error == nil) {
-				t.Fatal("missing safe environment failure", events)
+			last := events[len(events)-1]
+			if activity := last.EnvironmentInputActivity; activity == nil || activity.Status != "failed" || activity.Failure != "environment_unavailable" || !last.Settled {
+				t.Fatal("pending input settlement changed", last)
+			}
+			if !expired {
+				environment, failure := events[0].Event, events[1].Event.Error
+				if environment.Type != "agent.session.environment.failed" || environment.Environment.Error == nil ||
+					*environment.Environment.Error != (v1.StreamError{Type: "environment_error", Code: "environment_connection_failed", Message: "The environment failed to connect."}) {
+					t.Fatal("missing safe environment failure", events)
+				}
+				if events[1].Event.Type != "error" || failure == nil || *failure != (v1.StreamError{Type: "environment_error", Code: "sandbox_error", Message: provisioningFailureReason}) {
+					t.Fatal("missing safe error event", events)
+				}
+				if snapshot := last.EnvironmentFailure; snapshot == nil || snapshot.Reason != ended.EnvironmentFailure.Reason || !snapshot.FailedAt.Equal(ended.EnvironmentFailure.FailedAt) {
+					t.Fatal("failed snapshot differs from Session reads", last.EnvironmentFailure, ended.EnvironmentFailure)
+				}
+			} else if last.EnvironmentFailure != nil {
+				t.Fatal("expiry recorded a provisioning failure", last)
 			}
 			cursor, _ := s.SessionEventCursor(t.Context(), tenant, session.ID)
 			if _, err := writer.RequestRuntimeCleanup(t.Context(), owner); err != nil {
@@ -125,5 +146,30 @@ func TestManagedEnvironmentFailureRollsBackWithSessionEvent(t *testing.T) {
 	}
 	if _, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || !ok {
 		t.Fatal("partial credential revocation", err)
+	}
+}
+
+// Reasons contain only a fixed label and an exit status. Setup and Python labels
+// match official samples; npm, system, file and Skill labels are unverified.
+func TestProvisioningFailureReasons(t *testing.T) {
+	for failure, want := range map[ProvisioningFailure]string{
+		{Step: ProvisioningSetupCommand, Index: 0, ExitCode: 3}:  `Failed to provision environment: script "setup_commands[0]" failed with exit code 3`,
+		{Step: ProvisioningSetupCommand, Index: 12, ExitCode: 1}: `Failed to provision environment: script "setup_commands[12]" failed with exit code 1`,
+		{Step: ProvisioningPythonPackages, ExitCode: 1}:          `Failed to provision environment: script "Python package installation" failed with exit code 1`,
+		{Step: ProvisioningNPMPackages, ExitCode: 1}:             `Failed to provision environment: script "npm package installation" failed with exit code 1`,
+		{Step: ProvisioningSystemPackages, ExitCode: 100}:        `Failed to provision environment: script "System package installation" failed with exit code 100`,
+		{Step: ProvisioningInitialFile}:                          "Failed to provision environment: initial file installation failed",
+		{Step: ProvisioningSkill}:                                "Failed to provision environment: Skill installation failed",
+		// Missing or impossible statuses, unknown steps and old receipts stay generic.
+		{Step: ProvisioningSetupCommand, Index: 0}:               provisioningFailureReason,
+		{Step: ProvisioningSetupCommand, Index: -1, ExitCode: 3}: provisioningFailureReason,
+		{Step: ProvisioningPythonPackages, ExitCode: 256}:        provisioningFailureReason,
+		{Step: ProvisioningNPMPackages, ExitCode: -9}:            provisioningFailureReason,
+		{Step: "configure", ExitCode: 1}:                         provisioningFailureReason,
+		{}:                                                       provisioningFailureReason,
+	} {
+		if got := failure.reason(); got != want || len(got) > 256 {
+			t.Errorf("%+v: %q", failure, got)
+		}
 	}
 }
