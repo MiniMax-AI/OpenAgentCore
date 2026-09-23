@@ -40,6 +40,9 @@ func TextInput(text string) MessageInput {
 	return MessageInput{{Content: []InputContent{{Type: "input_text", Text: &text}}}}
 }
 
+// Validate requires every message to have an image or non-empty text. Text is
+// never trimmed: whitespace-only text is user content, as officially admitted,
+// while a message whose text parts are all empty still rejects.
 func (m MessageInput) Validate() error {
 	if len(m) == 0 {
 		return errors.New("user input requires messages")
@@ -55,7 +58,7 @@ func (m MessageInput) Validate() error {
 					return errors.New("image input requires a reference")
 				}
 				meaningful = true
-			} else if strings.TrimSpace(*part.Text) != "" {
+			} else if *part.Text != "" {
 				meaningful = true
 			}
 		}

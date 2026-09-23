@@ -147,12 +147,20 @@ func TestSteeringReadinessAndUnsupportedRuns(t *testing.T) {
 	if ack := lastSteeringAck(t, h.sender, "run-2", "input-1"); ack.ErrorCode != "unsupported" {
 		t.Fatalf("unsupported: %+v", ack)
 	}
-	input.Input = proto.TextInput(" \n ")
+	input.Input = proto.TextInput("")
 	if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run-2", input)); err != nil {
 		t.Fatal(err)
 	}
 	if ack := lastSteeringAck(t, h.sender, "run-2", "input-1"); ack.ErrorCode != "invalid_input" {
 		t.Fatalf("invalid: %+v", ack)
+	}
+	// Whitespace-only text is content: dispatch forwards it like any other text.
+	input.InputID, input.Input = "input-2", proto.TextInput(" \n ")
+	if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run-2", input)); err != nil {
+		t.Fatal(err)
+	}
+	if ack := lastSteeringAck(t, h.sender, "run-2", "input-2"); ack.ErrorCode != "unsupported" {
+		t.Fatalf("whitespace: %+v", ack)
 	}
 }
 

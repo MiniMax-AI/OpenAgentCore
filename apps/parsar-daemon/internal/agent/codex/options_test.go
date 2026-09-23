@@ -269,8 +269,16 @@ func TestNativeInputPreservesText(t *testing.T) {
 }
 
 func TestFirstUserInput_EmptyReturnsNil(t *testing.T) {
-	if got, err := nativeInput(proto.TextInput("   ")); err == nil {
+	if got, err := nativeInput(proto.TextInput("")); err == nil {
 		t.Fatalf("empty prompt must return nil, got %+v", got)
+	}
+}
+
+// The shared validator admits whitespace-only text; Codex receives it unchanged.
+func TestFirstUserInput_WhitespaceIsUnchanged(t *testing.T) {
+	inputs, err := nativeInput(append(proto.TextInput("   "), proto.TextInput("\n\t")...))
+	if err != nil || len(inputs) != 3 || inputs[0].Text != "   " || inputs[1].Text != "\n\n" || inputs[2].Text != "\n\t" {
+		t.Fatalf("input = %+v, %v", inputs, err)
 	}
 }
 
