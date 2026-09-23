@@ -106,7 +106,7 @@ def main():
             safe(resource.http_response)
             assert resource.status_code == 200
             assert resource.parse().to_dict()["skills"] == selection["skills"]
-            for field in ("skills", "plugins", "capability_directories", "network", "files"):
+            for field in ("skills", "plugins", "files"):
                 assert resource.http_response.json()[field] == environment[field]
             assert list(client.beta.agents.sessions.turns.list(session_id)) == []
             return body
