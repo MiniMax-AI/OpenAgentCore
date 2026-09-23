@@ -2805,9 +2805,8 @@ test("restores ClickHouse Runtime history after a Dashboard reload", async ({ pa
     const url = new URL(route.request().url());
     const start = Number(url.searchParams.get("start"));
     const end = Number(url.searchParams.get("end"));
-    const firstStart = start + 30;
-    const secondStart = start + 60;
-    const gapStart = Math.floor((start + end) / 2);
+    const firstStart = start;
+    const gapStart = end - 60;
     const lastStart = end - 30;
     const startedAt = start;
     const point = (pointStart: number, ratio: number, memory: number) => ({
@@ -2820,12 +2819,12 @@ test("restores ClickHouse Runtime history after a Dashboard reload", async ({ pa
       start: gapStart, end: gapStart + 30, first_observed_at: gapStart + 10, last_observed_at: gapStart + 20,
       observation_count: 1, observed_count: 0, unavailable_count: 1, cpu: null, memory: null,
     };
-    const points = [
-      point(firstStart, .25, 536_870_912),
-      point(secondStart, .35, 671_088_640),
-      gap,
-      point(lastStart, .5, 805_306_368),
-    ];
+    const points = Array.from({ length: Math.floor((end - start) / 30) }, (_, index) => {
+      const pointStart = start + index * 30;
+      return pointStart === gapStart
+        ? gap
+        : point(pointStart, .25 + index / 1_000, 536_870_912 + index * 1_048_576);
+    });
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -2834,7 +2833,7 @@ test("restores ClickHouse Runtime history after a Dashboard reload", async ({ pa
         requested_range: { start, end }, resolution_seconds: 30, generated_at: end,
         coverage: {
           retained_start: start, first_sample_at: firstStart + 10, last_sample_at: lastStart + 20,
-          sample_count: 4, expected_sample_count: Math.floor((end - start) / 30),
+          sample_count: points.length, expected_sample_count: Math.floor((end - start) / 30),
           buckets: points.map(({ cpu: _cpu, memory: _memory, ...coverage }) => coverage),
         },
         series: [{
@@ -2851,15 +2850,38 @@ test("restores ClickHouse Runtime history after a Dashboard reload", async ({ pa
   await expect(dashboard.getByLabel(/Durable · 30s; 1 Runtime targets/)).toBeVisible();
   await expect(dashboard.getByLabel("Runtime durable-history charts")).toBeVisible();
   await expect(dashboard.getByText("CPU usage durable trend available")).toBeAttached();
-  await expect(dashboard).toContainText("4 buckets");
-  await expect(dashboard).toContainText("4/120 observations");
+  await expect(dashboard).toContainText("120 buckets");
+  await expect(dashboard).toContainText("120/120 observations");
   await expect(dashboard.getByText("Live-only metric", { exact: true })).toBeVisible();
-  const durableCpuChart = dashboard.getByLabel("CPU usage: 4 retained buckets");
+  const durableCpuChart = dashboard.getByLabel("CPU usage: 120 retained buckets");
   await expect(dashboard.getByRole("region", { name: "CPU usage durable history chart" })).toBeVisible();
+  const durableCpuCard = durableCpuChart.locator("xpath=ancestor::section[contains(@class, 'dashboard-runtime-trend-card')]");
   await durableCpuChart.focus();
   await durableCpuChart.press("ArrowLeft");
-  const durableCpuCard = durableCpuChart.locator("xpath=ancestor::section[contains(@class, 'dashboard-runtime-trend-card')]");
   await expect(durableCpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Unavailable");
+  const durableMemoryCard = dashboard.getByRole("region", { name: "Memory usage durable history chart" });
+  const durableMemorySpan = await durableMemoryCard.locator("canvas").evaluate((canvas: HTMLCanvasElement) => {
+    const context = canvas.getContext("2d");
+    if (!context) return 0;
+    const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
+    let minimumX = width;
+    let maximumX = -1;
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const offset = (y * width + x) * 4;
+        const red = data[offset] ?? 0;
+        const green = data[offset + 1] ?? 0;
+        const blue = data[offset + 2] ?? 0;
+        const alpha = data[offset + 3] ?? 0;
+        if (alpha > 128 && Math.abs(red - 185) < 20 && Math.abs(green - 152) < 20 && Math.abs(blue - 244) < 20) {
+          minimumX = Math.min(minimumX, x);
+          maximumX = Math.max(maximumX, x);
+        }
+      }
+    }
+    return maximumX < minimumX ? 0 : maximumX - minimumX;
+  });
+  expect(durableMemorySpan).toBeGreaterThan(100);
   const durableInitialStart = Number(await durableCpuChart.getAttribute("data-view-start"));
   const durablePlotBox = await durableCpuCard.locator(".u-over").boundingBox();
   expect(durablePlotBox).not.toBeNull();
@@ -2872,7 +2894,7 @@ test("restores ClickHouse Runtime history after a Dashboard reload", async ({ pa
   const durableZoomEnd = Number(await durableCpuChart.getAttribute("data-view-end"));
   await expect(durableCpuCard.getByRole("button", { name: "Reset zoom" })).toBeVisible();
   await page.getByRole("button", { name: "Refresh Dashboard snapshot" }).click();
-  const refreshedDurableCpuChart = dashboard.getByLabel("CPU usage: 4 retained buckets");
+  const refreshedDurableCpuChart = dashboard.getByLabel("CPU usage: 120 retained buckets");
   await expect(refreshedDurableCpuChart).toHaveAttribute("data-view-start", String(durableZoomStart));
   await expect(refreshedDurableCpuChart).toHaveAttribute("data-view-end", String(durableZoomEnd));
 

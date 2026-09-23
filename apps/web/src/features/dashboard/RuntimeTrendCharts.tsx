@@ -201,7 +201,6 @@ function TrendChart({
     const axisColor = color("--fg-muted", theme === "dark" ? "#a8adb8" : "#6f7480");
     const gridColor = color("--line", theme === "dark" ? "#30343b" : "#e3e5e8");
     const surfaceColor = color("--surface", theme === "dark" ? "#17191d" : "#ffffff");
-    const yMaximum = Math.max(1, maximum);
     const bandColors: Record<TrendBand["tone"], string> = {
       safe: withAlpha("#50d5a0", .07),
       warning: withAlpha("#f59e52", .07),
@@ -214,7 +213,10 @@ function TrendChart({
       legend: { show: false },
       scales: {
         x: { time: true },
-        y: { auto: false, range: [0, yMaximum] },
+        // Stable series can create the plot before their first data response.
+        // Read the current maximum whenever uPlot ranges the y scale so the
+        // initial 0..1 fallback does not survive a later data update.
+        y: { range: () => [0, Math.max(1, maximumRef.current)] },
       },
       axes: [
         {
@@ -341,16 +343,12 @@ function TrendChart({
       Number.isFinite(currentX.min) && Number.isFinite(currentX.max);
     const xMinimum = preserveZoom ? currentX!.min! : domain.start / 1_000;
     const xMaximum = preserveZoom ? currentX!.max! : domain.end / 1_000;
-    plot.setData(chartData, false);
-    plot.setScale("y", { min: 0, max: Math.max(1, maximum) });
-    // Reapplying x recalculates uPlot's visible data indices after setData,
-    // while preserving an active drag-selected range.
-    plot.setScale("x", { min: xMinimum, max: xMaximum });
-    // setData(..., false) preserves the selected time range, but uPlot does not
-    // commit a draw when the explicit scales are unchanged. Memory keeps stable
-    // series ids across loading and loaded states, so force the refreshed paths
-    // onto the canvas even when its 0..limit scale remains identical.
-    plot.redraw(false);
+    plot.batch(() => {
+      plot.setData(chartData, false);
+      // Reapplying x recalculates visible indices and the auto y scale after
+      // setData, while preserving an active drag-selected range.
+      plot.setScale("x", { min: xMinimum, max: xMaximum });
+    });
   }, [chartData, domain, maximum, zoomed]);
 
   useEffect(() => {
