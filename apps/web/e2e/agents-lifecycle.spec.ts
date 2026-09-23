@@ -2540,6 +2540,22 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
     last_id: data.at(-1)?.id ?? null,
   });
 
+  await page.route("**/v1/agents/runtime-history/capabilities", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      object: "agent.runtime_history_capabilities",
+      available: false,
+      reason: "not_configured",
+      collection_mode: null,
+      sample_interval_seconds: null,
+      retention_seconds: null,
+      minimum_step_seconds: null,
+      maximum_range_seconds: null,
+      maximum_points: null,
+      metrics: [],
+    }),
+  }));
   await page.goto("/");
   const dashboard = page.locator(".dashboard-page");
   await expect(dashboard.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
@@ -2785,9 +2801,8 @@ test("restores ClickHouse Runtime history after a Dashboard reload", async ({ pa
 
   await page.goto("/");
   const dashboard = page.locator(".dashboard-runtime-panel");
-  const source = dashboard.getByRole("group", { name: "Runtime trend source" });
-  await expect(source.getByRole("button", { name: "History" })).toBeEnabled();
-  await expect(source.getByRole("button", { name: "History" })).toHaveAttribute("aria-pressed", "true");
+  await expect(dashboard.getByRole("group", { name: "Runtime trend source" })).toHaveCount(0);
+  await expect(dashboard.getByLabel(/Durable · 30s; 1 Runtime targets/)).toBeVisible();
   await expect(dashboard.getByLabel("Runtime durable-history charts")).toBeVisible();
   await expect(dashboard.getByText("CPU usage durable trend available")).toBeAttached();
   await expect(dashboard).toContainText("4 buckets");
@@ -2810,8 +2825,8 @@ test("restores ClickHouse Runtime history after a Dashboard reload", async ({ pa
   }
 
   await page.reload();
-  await expect(dashboard.getByRole("group", { name: "Runtime trend source" }).getByRole("button", { name: "History" }))
-    .toHaveAttribute("aria-pressed", "true");
+  await expect(dashboard.getByRole("group", { name: "Runtime trend source" })).toHaveCount(0);
+  await expect(dashboard.getByLabel(/Durable · 30s; 1 Runtime targets/)).toBeVisible();
   await expect(dashboard.getByText("CPU usage durable trend available")).toBeAttached();
 });
 

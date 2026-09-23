@@ -320,6 +320,7 @@ export function App() {
   const runtimeCollectionAbortRef = useRef<AbortController | null>(null);
   const runtimeCollectionRequestRef = useRef(0);
   const runtimeCollectionHasSnapshotRef = useRef(false);
+  const dashboardRefreshInFlightRef = useRef(false);
   const filteredSessionCollectionAbortRef = useRef<AbortController | null>(null);
   const filteredSessionCollectionRequestRef = useRef(0);
   const sessionAgentFilterRef = useRef<string | null>(sessionAgentFilter);
@@ -913,11 +914,17 @@ export function App() {
   }, [coreGeneration, refreshAgents, refreshFilteredSessions, refreshSelectedSession, refreshSessions]);
 
   const refreshDashboard = useCallback(() => {
+    if (dashboardRefreshInFlightRef.current) return;
+    dashboardRefreshInFlightRef.current = true;
     void refreshAgents();
     void refreshVaults();
     void refreshEnvironmentTemplates();
     void (async () => {
-      if (await refreshSessions()) await refreshRuntimeSnapshot();
+      try {
+        if (await refreshSessions()) await refreshRuntimeSnapshot();
+      } finally {
+        dashboardRefreshInFlightRef.current = false;
+      }
     })();
     const filter = sessionAgentFilterRef.current;
     if (filter) void refreshFilteredSessions(filter);
@@ -989,7 +996,13 @@ export function App() {
     if (view !== "dashboard") return;
     let timer: number | null = null;
     void (async () => {
-      if (sessionCollectionState === "ready") await refreshRuntimeSnapshot();
+      if (
+        sessionCollectionState === "ready" &&
+        !runtimeCollectionHasSnapshotRef.current &&
+        !dashboardRefreshInFlightRef.current
+      ) {
+        await refreshRuntimeSnapshot();
+      }
     })();
     const schedule = () => {
       const jitter = Math.floor(Math.random() * 5_000);
