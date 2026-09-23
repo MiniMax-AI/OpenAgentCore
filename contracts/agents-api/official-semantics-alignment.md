@@ -274,3 +274,66 @@ cover the envelope, other, foreign and malformed filters, and foreign or missing
 Sessions. The pinned-SDK and raw HTTP verifier used by live acceptance runs
 against PostgreSQL across three Turns. Real Core, daemon and model acceptance is
 recorded separately by the coordinator.
+
+## Session deletion lifecycle — September 23
+
+This batch aligns Session deletion with the observed official lifecycle rules.
+Evidence comes from the campaign scan at main `beb18fd`, recorded privately in
+`~/.parsar/remediation/20260923/campaign-scan-1/sessions/findings.json` (SES-29
+and SES-30) with raw records under `official/`: `q5-delete-repeat.json`,
+`q5b-delete-while-in-progress.json`, `q5-delete-never-existed.json` and
+`q5-delete-while-running.json`, plus the September 22 retry-session cleanup that
+first returned 409.
+
+| Row | Case | Core behavior |
+| --- | --- | --- |
+| D1 | DELETE of the caller's own Session that is already publicly deleted (SES-29) | 200 `{id, object: "agent.session.deleted", deleted: true}`, identical to the first confirmation, with no database write. GET, update, events, Turns and Items stay 404. |
+| D2 | DELETE of a never-existing, malformed or foreign Session, including a foreign deleted one | Unchanged: the byte-identical 404 `not_found_error` of a missing Session. |
+| D3 | DELETE while a Turn is queued, in progress (including a requested cancellation) or waiting on required actions or function results, or while an input reservation is pending: a queued later input, self-hosted input awaiting a connection, or hosted initial input while provisioning (SES-30) | 409 with type and code `conflict_error`, param null and message "session must be durably idle or failed without required actions before deletion". Nothing changes: no cancellation, marker, event, Artifact removal or Runtime cleanup. |
+| D4 | DELETE of an idle Session, including an idle hosted Session still provisioning without input, and of a failed Session without required actions, including expired initial input | 200 with the existing public deletion and managed Runtime cleanup. |
+| D5 | Callers that need to delete running work | Cancel first with `agent.session.input.cancel`, wait until the Session is idle, then delete. The Core Web offers this as an explicit action after a 409. |
+
+Decisions:
+
+- The rule is the one the creation stream already uses to settle: the Session is
+  idle or failed, no Turn is queued, running or waiting, and the latest input
+  reservation is not pending. Deletion reuses the Store's active-Turn query and
+  reservation state, so a pending reservation blocks deletion even while the
+  public status projects idle.
+- The decision and the marker commit in one transaction under the tenant Session
+  row lock that also orders Turn and input admission. Either admission commits
+  first and deletion returns 409 without mutation, or deletion commits first and
+  admission returns 404. A rejected deletion rolls its transaction back.
+- A repeated deletion locks the owner's deleted row and returns the confirmation
+  without a write. Foreign and missing rows are never locked, so they stay
+  indistinguishable. Physical purge, when implemented, may end this idempotency.
+- Documented stricter local behavior: official DELETE immediately after an
+  `events.create` 202 on an idle Session returned 200 (`q5-delete-while-running`);
+  its Turn was apparently not yet durably in progress. Core admits the Turn
+  synchronously in the 202 transaction, so Core returns 409 in that window.
+- A self-hosted or hosted Session whose reserved input waits for its Environment
+  cannot be cancelled publicly (the pending reservation rejects new batches), so
+  it stays undeletable until the input starts, its five-minute deadline expires
+  or its Environment fails. The official behavior of that window is unobserved.
+- Earlier releases deleted busy Sessions after requesting cancellation. Their
+  markers can remain in upgraded databases; hidden-work settlement, restart
+  reconciliation and Runtime cleanup keep handling them unchanged.
+- The Core Web keeps the plain delete action. When Core returns the busy 409, the
+  dialog explains it and replaces the action with Cancel work and delete, which
+  sends one cancellation, reads the Session until it is idle or failed without
+  required actions (bounded to 30 seconds) and sends one deletion. A rejected or
+  uncertain cancellation, a timeout or another 409 stops without retrying.
+
+Unchanged: physical retention and purge (SESSION-CLEANUP-001 remainder), 404 for
+reads of deleted Sessions, Artifact retention rules after deletion, managed Runtime
+cleanup once deletion is allowed, and caller-owned self-hosted compute, which is
+never reclaimed. No schema change.
+
+Real-PostgreSQL HTTP tests replay D1–D4 across every busy and settled state with
+exact bodies, tenant B requests and a whole-database digest proving that a 409
+and a repeated deletion write nothing. Store tests race deletion against Turn and
+input admission on one real row lock in both commit orders and concurrently, and
+a Worker test cancels a waiting Turn through the daemon protocol before deleting.
+Handler, pinned-SDK, TypeScript client and Web unit tests cover the error fields
+and the cancel-then-delete flow. Real Core, daemon and model acceptance is
+recorded separately by the coordinator.

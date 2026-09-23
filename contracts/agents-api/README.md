@@ -94,7 +94,7 @@ paths start at `/vaults`, not `/agents/vaults`.
 | --- | --- | --- |
 | Root reusable Agents | create, retrieve, update, list, delete | Partial create/retrieve/update/list/delete and Session references; configuration/error gaps remain |
 | Skills and Versions | create, retrieve, update default, list, delete, content | [Tenant-owned encrypted bundles and hosted references](environment-templates.md); [default metadata/content and deletion evidence](file-resource-semantics.md), qualified upload limits and unresolved semantics |
-| sessions | create, retrieve, update, list, delete | Create (ordinary/live), retrieve, list with root-Agent filter, metadata-only update, public deletion with owned Docker cleanup; user-managed compute stays caller-owned; general physical cleanup and exact hosted semantics remain open |
+| sessions | create, retrieve, update, list, delete | Create (ordinary/live), retrieve, list with root-Agent filter, metadata-only update, [idle-only public deletion](official-semantics-alignment.md#session-deletion-lifecycle--september-23) with idempotent owner repeat and owned Docker cleanup; user-managed compute stays caller-owned; general physical cleanup and exact hosted semantics remain open |
 | sessions.events | create, stream | Text/cancel/function-result admission and live events; function-action state snapshots supported |
 | sessions.turns | retrieve, list | Implemented reads; lifecycle conformance still partial |
 | sessions.items | list | Partial Item variants |
@@ -304,13 +304,16 @@ upgrade the protocol.
   hosted nested/null behavior, no-op timestamp policy and exact errors remain
   unverified. This operation shares the existing saved-configuration coverage gaps.
 - `DELETE /agents/sessions/{session_id}` returns the canonical `id`,
-  `object=agent.session.deleted` and `deleted=true` after durable public removal.
-  Session/Turn/Items reads, live streams, metadata updates and new input exclude
-  the resource. Queued work is cancelled; active work receives the existing
-  asynchronous cancellation request while internal finalization remains available.
+  `object=agent.session.deleted` and `deleted=true` after durable public removal
+  of a durably idle or failed Session without required actions or pending input.
+  A queued, running or waiting Turn or pending input returns 409 `conflict_error`
+  without any change; callers cancel first and delete once idle. Session/Turn/Items
+  reads, live streams, metadata updates and new input exclude the resource.
   Existing streams close on observing removal without an invented deletion event.
-  Creation keys remain reserved (local 409); missing/repeated deletion locally
-  returns 404. Qualified managed Docker deletion also reclaims its owned Runtime;
+  Creation keys remain reserved (local 409); the owner's repeated deletion returns
+  the same confirmation and missing or foreign deletion returns 404 ([batch
+  record](official-semantics-alignment.md#session-deletion-lifecycle--september-23)).
+  Qualified managed Docker deletion also reclaims its owned Runtime;
   broader physical SQL/native history cleanup, immediate native quiescence and
   exact hosted error/retry/overlapping-stream semantics remain unverified or
   unimplemented. Shared devices, saved Agents and other Sessions are independent.

@@ -395,8 +395,9 @@ requires the leased writer and atomically creates history, settles the reservati
 and claims its Turn as `in_progress`. Only the first non-replay receipts authorize
 Start on the retained native preparation. Retries cannot reclaim execution. Startup
 reconciliation settles a committed claim interrupted before Start, without replay.
-Expiration, targeted cancellation and Session deletion retain their existing
-pre-admission or claimed-Turn semantics.
+Expiration and targeted cancellation retain their existing pre-admission or
+claimed-Turn semantics; Session deletion is rejected while a reservation is
+pending or its Turn is claimed.
 
 The initial public idle-text profile uses this primitive. Its message-only scope
 and single pending reservation are implementation limits, not claims about the
