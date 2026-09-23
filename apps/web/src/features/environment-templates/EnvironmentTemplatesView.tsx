@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AgentCore, EnvironmentTemplate } from "@agents-core-web/agents-client";
 import { Modal } from "../../components/Modal";
 import { ErrorState } from "../../components/ErrorState";
+import { formatDashboardTimestamp } from "../dashboard/dashboard-model";
 import type { EnvironmentTemplateCatalog } from "../sessions/environment/environment-templates";
 import { TemplateForm } from "./TemplateForm";
 import { createTemplateWriteScope, templateName, templatePatch, type TemplateDraft } from "./template-editor";
@@ -16,10 +17,6 @@ export interface EnvironmentTemplatesViewProps {
 }
 
 type Dialog = { kind: "create" } | { kind: "edit" | "delete"; template: EnvironmentTemplate } | null;
-
-function timestamp(seconds: number) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(seconds * 1_000));
-}
 
 export function EnvironmentTemplatesView({ catalog, operations, onRefresh, onConfigureConnection }: EnvironmentTemplatesViewProps) {
   const [query, setQuery] = useState("");
@@ -121,7 +118,7 @@ export function EnvironmentTemplatesView({ catalog, operations, onRefresh, onCon
               <div className="templates-list" aria-label="Environment Templates">
                 {visible.map((template) => (
                   <article className="template-row" key={template.id}>
-                    <div className="template-identity"><h2>{templateName(template)}</h2><code>{template.id}</code><small>Updated {timestamp(template.updated_at)}</small></div>
+                    <div className="template-identity"><h2>{templateName(template)}</h2><code>{template.id}</code><small>Updated {formatDashboardTimestamp(template.updated_at)}</small></div>
                     <dl className="template-summary"><div><dt>Network</dt><dd>{template.network.access === "enabled" ? "Enabled" : "Disabled"}</dd></div><div><dt>Allowed domains</dt><dd>{template.network.allowed_domains.length}</dd></div></dl>
                     <div className="template-row-actions"><button className="button outline" type="button" disabled={blocked} aria-label={`Edit ${templateName(template)}`} onClick={() => setDialog({ kind: "edit", template })}>Edit</button><button className="button outline" type="button" disabled={blocked} aria-label={`Delete ${templateName(template)}`} onClick={() => setDialog({ kind: "delete", template })}>Delete</button></div>
                   </article>

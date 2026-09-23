@@ -34,6 +34,7 @@ import {
   requestAgentUpdate,
 } from "./features/agents/agent-actions";
 import { DashboardView } from "./features/dashboard/DashboardView";
+import { EnvironmentTemplatesView } from "./features/environment-templates/EnvironmentTemplatesView";
 import {
   SessionsView,
   type SessionDetailState,
@@ -131,6 +132,7 @@ type View = ProductView | "system";
 function viewFromLocation(): View {
   if (typeof window === "undefined") return "dashboard";
   const candidate = window.location.hash.slice(1);
+  if (candidate === "templates" && __AGENTS_CORE_WEB_OPENAI_HOSTED_SESSIONS__) return "templates";
   return candidate === "agents" || candidate === "sessions" || candidate === "vaults" || candidate === "system"
     ? candidate
     : "dashboard";
@@ -2115,6 +2117,7 @@ export function App() {
           active={view === "system" ? null : view}
           onSelect={(nextView) => setView(nextView)}
           showVaults={vaultSupported === true}
+          showTemplates={__AGENTS_CORE_WEB_OPENAI_HOSTED_SESSIONS__}
         />
 
         <nav className="main-nav" aria-label="System navigation">
@@ -2162,6 +2165,15 @@ export function App() {
           />
         </header>
         <div className="page-transition" key={view}>
+          {view === "templates" ? (
+            <EnvironmentTemplatesView
+              key={`templates:${coreGeneration}`}
+              catalog={environmentTemplates}
+              operations={core}
+              onRefresh={refreshEnvironmentTemplates}
+              onConfigureConnection={() => setConnectionOpen(true)}
+            />
+          ) : null}
           {view === "dashboard" ? (
             <DashboardView
               agents={agents}

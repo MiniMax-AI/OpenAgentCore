@@ -25,6 +25,14 @@ independent blind review using only requirements, acceptance criteria, boundarie
 repository path and comparison baseline. Fix in-scope blockers before delivery.
 Do not use `codex exec` as a substitute reviewer.
 
+The Core Web is an administrator console for execution and resource operations;
+business collaboration remains in Parsar. Environment Template management shares
+the Session creation catalog and uses the existing public client operations. Patch
+only edited fields, confirm deletion, and never automatically retry an uncertain
+write. A Core connection change must discard the previous connection's forms,
+pending results and notices. Saving a Template must not allocate a Runtime, call a
+model or imply execution readiness. Keep unsupported advanced profiles explicit.
+
 For subsequent alignment and milestone closure batches, the main thread coordinates
 design, shared interface agreements, file ownership, integration and merge. First
 reconcile main and the boards, then list remaining mandatory milestone work,

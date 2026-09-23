@@ -2,10 +2,10 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-Agents Core Web is an open-source workspace for creating AI Agents, starting durable
-Sessions, following live work, and managing the resources used by a compatible Agent
-Core. It gives teams a product UI for their own Core deployment without moving
-credentials or execution into the browser.
+Agents Core Web is the administrator console for a self-deployed Agent Core. It
+shows execution records and manages Agents, Sessions and reusable resources through
+Core APIs. Business collaboration belongs in Parsar; credentials and execution stay
+outside the browser.
 
 ![Agents Core Web Dashboard](images/dashboard.png)
 
@@ -50,6 +50,14 @@ and follow-up input without losing the durable record.
 
 ![Durable Session conversation](images/sessions.png)
 
+### Environment Templates
+
+In managed-Environment builds, open **Templates** to view reusable configuration,
+create a basic name/network template, edit those fields, or confirm deletion. The
+Session creation picker uses the same refreshed catalog. Saving a template does
+not start a Runtime or a model request, and edits do not change existing Sessions.
+Advanced template profiles remain outside the current Web client coverage.
+
 ### System and connection status
 
 System shows what the connected Core build supports and what this process configured at
@@ -71,6 +79,7 @@ configuration is never presented as model execution readiness.
 | Vaults | Create project Vaults and manage write-only MCP bearer credentials without reading tokens back |
 | Environments | Default execution, optional self-hosted executor connection, and optional managed Runtime views |
 | Workspace and Files | Inspect supported Environment files and manage project Source Files when enabled by Core |
+| Templates | Basic name/network configuration, full catalog reads, partial updates and confirmed deletion |
 | System | Connection status plus safe build support and process startup configuration, clearly separated from Session/Environment runtime state |
 
 Capabilities appear only when the connected Core and the Web operator configuration expose

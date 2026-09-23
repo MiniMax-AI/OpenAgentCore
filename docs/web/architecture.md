@@ -267,7 +267,14 @@ not executor, native-runtime, model, provider, or Turn readiness. The operator-i
 key stays outside Web, and the Linux launcher—not the browser, Web server, or daemon
 container—owns access to the Workspace. This profile is not a top-level Environment
 catalog or standalone CRUD API, and it is distinct from the managed hosted profile.
-Environment templates and automatic E2B/AWS Bedrock AgentCore provisioning stay hidden.
+Automatic provider provisioning controls stay outside the browser. The separate
+Templates navigation entry manages reusable basic Environment configuration through
+the public Template API; it is not an inventory of running Environments. It shares
+the complete catalog with Session creation, patches only edited name/network fields,
+and refreshes Core after each successful mutation. Deletion requires confirmation.
+Unknown write outcomes are never automatically replayed. Switching Core remounts
+the view and discards pending reads, forms and notices from the old connection.
+Advanced configurations outside the client projection remain explicitly unsupported.
 
 Workspace file controls require the independent default-off
 `AGENTS_CORE_WEB_ENVIRONMENT_FILES=1` flag because Core has no runtime capability

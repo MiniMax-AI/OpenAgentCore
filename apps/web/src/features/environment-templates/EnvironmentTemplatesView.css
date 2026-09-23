@@ -35,3 +35,4 @@
   .templates-page .page-actions { flex-wrap: wrap; }
   .templates-page .button, .template-form-actions .button { min-height: 40px; }
 }
+.templates-page { overflow-y: auto; }
