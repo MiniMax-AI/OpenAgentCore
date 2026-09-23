@@ -16,6 +16,35 @@ test.beforeEach(async ({ page, request }) => {
   await expect(page.getByRole("button", { name: "Sessions", exact: true })).toBeVisible();
 });
 
+test("bundled console needs no extra admin key and provides one install command with automatic node status", async ({ page, request }) => {
+  await page.route("**/console/config", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ sandbox_admin: true, node_installer: true, node_installer_sha256: "a".repeat(64) }) }));
+  const browserAuthorizations: Array<string | undefined> = [];
+  await page.route("**/core/v1/sandbox/**", async (route) => {
+    browserAuthorizations.push(route.request().headers().authorization);
+    await route.continue({ headers: { ...route.request().headers(), authorization: "Bearer fixture-admin-key" } });
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Hosted Sandbox Manager", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Set up hosted sandboxes" })).toBeVisible();
+  await expect(page.getByLabel("Deployment admin key")).toHaveCount(0);
+  await expect(page.getByLabel("Core origin reachable from nodes and guests")).toHaveValue(new URL(page.url()).origin);
+  await page.getByLabel("Sandbox provider").selectOption("docker");
+  await page.getByRole("button", { name: "Initialize sandbox deployment" }).click();
+  await page.getByRole("button", { name: "Generate node command" }).click();
+  const command = page.getByLabel("One-time enrollment command");
+  await expect(command).toHaveValue(/PARSAR_NODE_ENROLLMENT_TOKEN='fixture-once-token' python3 -c/);
+  await expect(command).toHaveValue(/\/node-install\/node_install.py/);
+  await expect(command).toHaveValue(/hashlib.sha256/);
+  await expect(page.getByRole("button", { name: "Copy node command" })).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("refresh automatically");
+  await expect(page.locator(".sandbox-manager")).not.toContainText("Create a private /etc/parsar/sandbox-node.json");
+  await request.post(`${fixture}/__fixture/sandbox-add-node`);
+  await expect(page.getByRole("region", { name: "Sandbox nodes", exact: true })).toContainText("Enrolled host", { timeout: 10000 });
+  await expect(page.getByRole("region", { name: "Sandbox nodes", exact: true })).toContainText("Provider ready");
+  expect(browserAuthorizations.length).toBeGreaterThan(0);
+  expect(browserAuthorizations.every((value) => value === undefined)).toBe(true);
+});
+
 for (const provider of ["docker", "microsandbox"]) {
   test(`initial ${provider} setup, enrollment, refresh and immutable selection`, async ({ page, request }) => {
     await page.setViewportSize({ width: 390, height: 844 });

@@ -2,8 +2,9 @@ import { useState, type FormEvent } from "react";
 import type { InitializeSandboxDeployment, SandboxProvider } from "@agents-core-web/agents-client";
 import { sandboxCoreOrigin } from "./core-origin";
 
-export function SandboxSetup({ initialCoreUrl, disabled, onInitialize }: {
+export function SandboxSetup({ initialCoreUrl, automaticInstall = false, disabled, onInitialize }: {
   initialCoreUrl: string;
+  automaticInstall?: boolean;
   disabled: boolean;
   onInitialize: (input: InitializeSandboxDeployment) => Promise<void>;
 }) {
@@ -20,7 +21,7 @@ export function SandboxSetup({ initialCoreUrl, disabled, onInitialize }: {
     <label className="field"><span>Sandbox provider</span><select value={provider} onChange={(event) => setProvider(event.target.value as SandboxProvider)} disabled={disabled} required>
       <option value="" disabled>Choose a provider</option><option value="docker">Docker</option><option value="microsandbox">microsandbox</option>
     </select></label>
-    <p>{provider === "docker" ? "Docker nodes need a local Docker Unix socket and a pinned runtime image." : provider === "microsandbox" ? "microsandbox nodes need Linux with KVM, the qualified runtime, helper and firmware." : "Prepare a compatible host after selecting the provider."}</p>
+    <p>{provider === "docker" ? (automaticInstall ? "The host needs Docker access. The node command installs the matched runtime image." : "Docker nodes need a local Docker Unix socket and a pinned runtime image.") : provider === "microsandbox" ? (automaticInstall ? "The host needs Linux with KVM and the required host libraries. The node command installs the matched runtime, helper and firmware." : "microsandbox nodes need Linux with KVM, the qualified runtime, helper and firmware.") : "Prepare a compatible host after selecting the provider."}</p>
     <label className="field"><span>Core origin reachable from nodes and guests</span><input type="url" value={coreUrl} onChange={(event) => setCoreUrl(event.target.value)} placeholder="https://core.example" disabled={disabled} required aria-describedby="sandbox-core-origin-help" /></label>
     <p id="sandbox-core-origin-help">Use the Core API origin, reachable from every node and sandbox guest, without a path or credentials. Remote hosts require HTTPS; loopback HTTP is for local use only. The console URL may be different.</p>
     {coreUrl && !origin ? <p className="sandbox-error">Enter an HTTPS origin such as https://core.example, or a loopback HTTP origin for local use.</p> : null}

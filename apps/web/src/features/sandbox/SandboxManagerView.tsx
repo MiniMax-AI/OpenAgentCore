@@ -3,6 +3,8 @@ import { SandboxAdminClient, type InitializeSandboxDeployment, type SandboxAlloc
 import { sandboxAdminBaseUrl } from "./SandboxContext";
 import { SandboxDiagnostic } from "./SandboxDiagnostic";
 import { NodeHealth } from "./NodeHealth";
+import { isLocalProxyBaseUrl } from "../../lib/connection";
+import { sandboxConsoleConfig, type SandboxConsoleConfig } from "./console-config";
 import { SandboxSetup } from "./SandboxSetup";
 import { NodeEnrollment } from "./NodeEnrollment";
 import "./SandboxManagerView.css";
@@ -18,6 +20,16 @@ export function SandboxManagerView({ coreBaseUrl }: { coreBaseUrl: string }) {
 function SandboxAccess({ coreBaseUrl }: { coreBaseUrl: string }) {
   const [draft, setDraft] = useState("");
   const [credential, setCredential] = useState("");
+  const [consoleConfig, setConsoleConfig] = useState<SandboxConsoleConfig | null>(null);
+  const [checkingConsole, setCheckingConsole] = useState(isLocalProxyBaseUrl(coreBaseUrl));
+  useEffect(() => {
+    if (!isLocalProxyBaseUrl(coreBaseUrl)) return;
+    const controller = new AbortController();
+    void sandboxConsoleConfig(controller.signal).then((config) => {
+      if (!controller.signal.aborted) { setConsoleConfig(config); setCheckingConsole(false); }
+    });
+    return () => controller.abort();
+  }, [coreBaseUrl]);
   function connect(event: FormEvent) {
     event.preventDefault();
     if (draft.trim()) { setCredential(draft.trim()); setDraft(""); }
@@ -26,17 +38,17 @@ function SandboxAccess({ coreBaseUrl }: { coreBaseUrl: string }) {
     <header className="sandbox-heading"><div><h1>Hosted Sandbox Manager</h1><p>Deployment provider, runtime nodes and Session allocations.</p></div>
       {credential ? <button type="button" className="button" onClick={() => setCredential("")}>Disconnect admin</button> : null}
     </header>
-    {!credential ? <form className="form-stack sandbox-access" onSubmit={connect}>
+    {checkingConsole ? <p role="status">Connecting to this console’s Core…</p> : !credential && !consoleConfig?.sandbox_admin ? <form className="form-stack sandbox-access" onSubmit={connect}>
       <h2>Deployment administrator access</h2>
       <p>Enter the separate deployment admin key. It stays in memory until you leave this page or disconnect.</p>
       <label className="field"><span>Deployment admin key</span><input type="password" autoComplete="off" value={draft} onChange={(event) => setDraft(event.target.value)} required /></label>
       <button type="submit" className="button primary" disabled={!draft.trim()}>Connect admin</button>
-    </form> : <SandboxManager key={`${coreBaseUrl}:${credential}`} coreBaseUrl={coreBaseUrl} credential={credential} />}
+    </form> : <SandboxManager key={`${coreBaseUrl}:${credential}`} coreBaseUrl={coreBaseUrl} credential={credential} consoleConfig={consoleConfig} />}
   </section>;
 }
 
-function SandboxManager({ coreBaseUrl, credential }: { coreBaseUrl: string; credential: string }) {
-  const client = useMemo(() => new SandboxAdminClient({ baseUrl: sandboxAdminBaseUrl(coreBaseUrl), token: credential }), [coreBaseUrl, credential]);
+function SandboxManager({ coreBaseUrl, credential, consoleConfig }: { coreBaseUrl: string; credential: string; consoleConfig: SandboxConsoleConfig | null }) {
+  const client = useMemo(() => new SandboxAdminClient({ baseUrl: sandboxAdminBaseUrl(coreBaseUrl), token: credential, fetch: (input, init) => fetch(input, { ...init, credentials: "include" }) }), [coreBaseUrl, credential]);
   const [snapshot, setSnapshot] = useState<{ deployment: SandboxDeployment; nodes: SandboxNode[]; allocations: SandboxAllocation[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,7 +56,7 @@ function SandboxManager({ coreBaseUrl, credential }: { coreBaseUrl: string; cred
   const [revision, setRevision] = useState(0);
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [enrollment, setEnrollment] = useState<{ token: string; expires_at: string } | null>(null);
-  const initialCoreUrl = coreBaseUrl.startsWith("http") ? coreBaseUrl.replace(/\/v1\/?$/, "") : "";
+  const initialCoreUrl = coreBaseUrl.startsWith("http") ? coreBaseUrl.replace(/\/v1\/?$/, "") : consoleConfig?.sandbox_admin ? window.location.origin : "";
   const [setupNeedsRefresh, setSetupNeedsRefresh] = useState(false);
   const lifetime = useRef<AbortController | null>(null);
   useEffect(() => {
@@ -65,6 +77,11 @@ function SandboxManager({ coreBaseUrl, credential }: { coreBaseUrl: string; cred
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [client, revision]);
+  useEffect(() => {
+    if (!enrollment || busy) return;
+    const interval = window.setInterval(() => setRevision((value) => value + 1), 3000);
+    return () => window.clearInterval(interval);
+  }, [enrollment, busy]);
   async function initialize(input: InitializeSandboxDeployment) {
     const controller = lifetime.current;
     if (!controller || busy || loading || setupNeedsRefresh) return;
@@ -103,7 +120,7 @@ function SandboxManager({ coreBaseUrl, credential }: { coreBaseUrl: string; cred
   return <div className="form-stack">
     <div className="sandbox-toolbar"><button type="button" className="button" disabled={loading || busy} onClick={() => setRevision((v) => v + 1)}>Refresh sandbox state</button>{loading ? <span role="status">Loading sandbox state…</span> : busy ? <span role="status">Saving sandbox change…</span> : null}</div>
     {error ? <p role="alert" className="sandbox-error">{error}{snapshot ? " Previously loaded state is shown below." : ""}</p> : null}
-    {snapshot && !snapshot.deployment.provider ? <SandboxSetup key={revision} initialCoreUrl={initialCoreUrl} disabled={busy || loading || setupNeedsRefresh || Boolean(error)} onInitialize={initialize} /> : null}
+    {snapshot && !snapshot.deployment.provider ? <SandboxSetup automaticInstall={consoleConfig?.node_installer} key={revision} initialCoreUrl={initialCoreUrl} disabled={busy || loading || setupNeedsRefresh || Boolean(error)} onInitialize={initialize} /> : null}
     {snapshot?.deployment.provider ? <>
       <dl className="sandbox-summary">
         <div><dt>Provider</dt><dd>{snapshot.deployment.provider === "docker" ? "Docker" : "microsandbox"}</dd></div>
@@ -121,7 +138,7 @@ function SandboxManager({ coreBaseUrl, credential }: { coreBaseUrl: string; cred
           {snapshot.allocations.map((allocation) => <tr key={allocation.id}><td><code>{allocation.session_id}</code></td><td>{snapshot.nodes.find((node) => node.id === allocation.node_id)?.name ?? allocation.node_id}</td><td>{allocation.state}</td><td>{allocation.compute_phase}</td><td><SandboxDiagnostic diagnostic={allocation.diagnostic} />{!allocation.diagnostic ? "No reported issue" : null}</td></tr>)}
         </tbody></table></div> : <p>No sandbox allocations.</p>}
       </section>
-      <NodeEnrollment deployment={snapshot.deployment} initialCoreUrl={initialCoreUrl} busy={busy || loading || Boolean(error)} enrollment={enrollment} onEnroll={enroll} onClear={() => setEnrollment(null)} />
+      <NodeEnrollment consoleConfig={consoleConfig} deployment={snapshot.deployment} initialCoreUrl={initialCoreUrl} busy={busy || loading || Boolean(error)} enrollment={enrollment} onEnroll={enroll} onClear={() => setEnrollment(null)} />
     </> : null}
   </div>;
 }

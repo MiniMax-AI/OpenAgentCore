@@ -1,8 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { enrollmentCommand } from "./enrollment-command";
+import { enrollmentCommand, nodeInstallCommand } from "./enrollment-command";
 import { sandboxAdminBaseUrl } from "./SandboxContext";
 
 describe("sandbox connection and enrollment", () => {
+  it("creates one node installer command with a verified same-release script and no credential argument", () => {
+    const command = nodeInstallCommand("secret'onetime", "https://core.example", "https://console.example", "docker", "installation", "a".repeat(64));
+    expect(command).toContain("PARSAR_NODE_ENROLLMENT_TOKEN='secret'\\''onetime' python3 -c");
+    expect(command).toContain("https://console.example/node-install/node_install.py");
+    expect(command).toContain("hashlib.sha256(code).hexdigest()");
+    expect(command).toContain("a".repeat(64));
+    expect(command).toContain("Installer redirects are not supported");
+    expect(command).toContain("--source-url 'https://console.example' --core-url 'https://core.example' --provider 'docker' --installation-id 'installation'");
+    expect(command).not.toContain("--enrollment-token");
+  });
   it("derives a separate admin prefix for local and prefixed remote Core deployments", () => {
     expect(sandboxAdminBaseUrl("/v1")).toBe("/core/v1/sandbox");
     expect(sandboxAdminBaseUrl("https://core.example/prefix/v1/")).toBe("https://core.example/prefix/core/v1/sandbox");
