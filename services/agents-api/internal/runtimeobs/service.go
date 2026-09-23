@@ -31,7 +31,7 @@ type Service struct {
 	resolver TargetResolver
 	sources  map[string]Source
 	now      func() time.Time
-	exports  *exportDispatcher
+	exports  []*exportDispatcher
 }
 
 func NewService(resolver TargetResolver, sources map[string]Source, options ...ServiceOption) (*Service, error) {
@@ -55,8 +55,8 @@ func NewService(resolver TargetResolver, sources map[string]Source, options ...S
 		copySources[key] = source
 	}
 	service := &Service{resolver: resolver, sources: copySources, now: time.Now}
-	if config.exporter != nil {
-		service.exports = newExportDispatcher(config.exporter, config.exportOptions)
+	for _, export := range config.exporters {
+		service.exports = append(service.exports, newExportDispatcher(export.exporter, export.exportOptions))
 	}
 	return service, nil
 }
@@ -64,18 +64,19 @@ func NewService(resolver TargetResolver, sources map[string]Source, options ...S
 // Close drains pending history handoffs within ctx. Current-observation callers
 // may keep using a Service without an exporter; Close is then a no-op.
 func (s *Service) Close(ctx context.Context) error {
-	if s.exports == nil {
-		return nil
+	var result error
+	for _, exporter := range s.exports {
+		result = errors.Join(result, exporter.close(ctx))
 	}
-	return s.exports.close(ctx)
+	return result
 }
 
 func (s *Service) finish(ctx context.Context, observation Observation, source CollectionSource, owner OwnershipChecker) (Observation, error) {
 	if err := checkHistoryOwnership(ctx, owner); err != nil {
 		return Observation{}, err
 	}
-	if s.exports != nil {
-		s.exports.enqueue(exportRecord(observation, source))
+	for _, exporter := range s.exports {
+		exporter.enqueue(exportRecord(observation, source))
 	}
 	return observation, nil
 }

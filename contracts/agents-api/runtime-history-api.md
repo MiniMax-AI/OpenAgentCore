@@ -1,14 +1,13 @@
 # Runtime history API
 
-Status: public contract, strict TypeScript client, optional ClickHouse reference
-Reader, and capability-gated Core Web History ranges implemented. No Reader is
-configured by default. The capability route therefore advertises
-`available=false` until an operator supplies both a validated Reader and qualified
-periodic collection.
+Status: public contract, strict TypeScript client, PostgreSQL history and Core Web
+History ranges implemented. Core uses its existing database; the execution owner
+samples every 30 seconds by default. API-only processes without an execution worker
+advertise on-read collection rather than claiming periodic coverage.
 
-This is an optional Agents Core extension. It is read-only and backend-neutral.
-The browser never receives a ClickHouse endpoint, OTLP credential, provider-native
-identity, or tenant selector.
+This is an Agents Core extension. It is read-only and backend-neutral. The browser
+never receives a storage endpoint, OTLP credential, provider-native identity or
+tenant selector.
 
 ## Capability discovery
 
@@ -165,7 +164,7 @@ or malformed data reject the entire response with a 502 client projection error.
 ## Explicit boundaries
 
 - The routes never sample a live provider, provision compute, or mutate lifecycle.
-- The contract does not choose ClickHouse, Prometheus, Mimir, or another backend.
+- The public contract does not expose a storage backend.
 - History availability does not imply current Runtime readiness.
 - Current observations and Durable history have separate freshness and retention
   semantics and must remain separately labelled in Web.

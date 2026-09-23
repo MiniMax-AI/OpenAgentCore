@@ -307,6 +307,18 @@ compute uptime semantics across both. Do not use microsandbox's instantaneous CP
 percent, wake suspended compute, or expose provider-native identifiers to fill a
 common field.
 
+Runtime history uses the existing Core PostgreSQL database: one sanitized row per
+periodic observation, seven-day retention and bounded reads. It is best-effort
+operational evidence, not execution or Usage authority. The execution owner samples
+by default every 30 seconds. Existing canonical Session Usage supplies token
+snapshots; never aggregate provider counters as model tokens. Preserve missing data
+and reset CPU derivation across compute incarnations or counter regressions.
+The bounded asynchronous database writer and optional OTLP exporter have independent
+queues; external telemetry outages must not stall local history or execution.
+Retention cleanup also runs without active Runtimes. The browser queries only Core,
+never storage or a Collector, and stays a lightweight administrator console.
+No additional metrics database or Collector is required for retained charts.
+
 In V1, our daemon fills the user-side executor role. Users deploy daemon, the
 selected harness, local tools and workspace together. Do not require Codex
 `exec-server`, a service-side harness, registry/Noise transport or remote tool

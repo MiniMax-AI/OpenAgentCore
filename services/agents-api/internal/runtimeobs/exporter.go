@@ -48,9 +48,13 @@ type ExportOptions struct {
 
 type ServiceOption func(*serviceOptions) error
 
-type serviceOptions struct {
+type exporterConfig struct {
 	exporter      Exporter
 	exportOptions ExportOptions
+}
+
+type serviceOptions struct {
+	exporters []exporterConfig
 }
 
 // WithExporter enables best-effort history export. Queue saturation drops the
@@ -66,8 +70,7 @@ func WithExporter(exporter Exporter, options ExportOptions) ServiceOption {
 		if options.Timeout < 0 {
 			return errors.New("Runtime observation export timeout cannot be negative")
 		}
-		config.exporter = exporter
-		config.exportOptions = options
+		config.exporters = append(config.exporters, exporterConfig{exporter: exporter, exportOptions: options})
 		return nil
 	}
 }

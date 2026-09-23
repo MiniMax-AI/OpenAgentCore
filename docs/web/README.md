@@ -33,14 +33,12 @@ outside the browser.
 Dashboard is the starting point. It summarizes the current Agent and Session results
 and loads complete tenant-scoped Runtime observation snapshots without inventing
 missing values. The searchable, filterable, sortable, paginated semantic table
-remains available on demand. When the operator enables qualified periodic sampling
-plus the ClickHouse Reader, Web automatically discovers the capability and uses the
-retained 1-hour, 6-hour, and 24-hour History ranges as the primary chart source.
-A reload reconstructs History from Core instead of briefly publishing a new
-browser-local window; Web never receives ClickHouse credentials or queries it
-directly. An unconfigured deployment falls back to a bounded browser-local Live
-window. Token throughput stays Live-only because Runtime telemetry does not
-duplicate canonical Session Usage.
+remains available on demand. Core stores periodic observations in its existing
+PostgreSQL database, with no separate monitoring stack. Web discovers periodic
+history and offers 1-hour, 6-hour and 24-hour ranges; reload restores data through
+Core. API-only deployments without a sampler retain the browser-local Live view.
+Token throughput uses snapshots of canonical Session Usage, preserving missing data.
+Web never connects to a database or receives telemetry credentials.
 When a provider reports only
 cumulative CPU time, Web derives interval utilization only across adjacent samples
 from the same verified Runtime incarnation; restarts and counter regressions create
