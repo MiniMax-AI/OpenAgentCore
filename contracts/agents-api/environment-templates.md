@@ -23,8 +23,8 @@ and five-operation SandboxProvider path as inline configuration.
   Creation timestamp plus ID supplies stable local ordering. Missing/foreign IDs
   and cursors return the same not-found result. No compute is allocated by CRUD.
 - Session `environment_template_id` resolves under the caller's tenant. Omitted
-  or null network inherits; enabled can narrow to restricted or disabled. Restricted can
-  narrow to an exact-host subset or disabled; disabled cannot widen. Effective
+  or null network inherits; enabled can narrow to restricted or disabled.
+  Restricted can narrow to an exact-host subset or disabled; disabled cannot widen. Effective
   configuration is frozen without passing the template ID to execution.
 - Updating/deleting a template does not change existing Sessions. Creation retries
   recover recorded caller intent before template lookup, including after deletion;
@@ -516,9 +516,9 @@ appear automatically in public metadata or initialization diagnostics.
 The [current Template reference](https://developers.openai.com/api/reference/python/resources/beta/subresources/agents/subresources/environments/subresources/templates)
 mentions different GA/beta defaults; this service retains `agents=v1` and the
 [fixed baseline](upstream.json), whose omitted network is enabled. Exact upstream
-errors, concurrent pagination and broader network
-override semantics remain unverified. The last case explicitly rejects in this
-batch rather than guessing inheritance. This batch is not full protocol compatibility.
+errors, concurrent pagination and broader network combinations remain unverified.
+Referenced null network follows the [qualified inheritance rule](template-null-selection.md);
+unsupported hostname forms still reject. This is not full protocol compatibility.
 
 ## Template and inline configuration composition
 
@@ -559,7 +559,9 @@ subdirectories `official-env-setup` and `official-files-packages`. Reports retai
 fixed-source snapshots, raw status/body/request IDs, command-output proofs,
 accounting, cleanup and credential scans. This covers the observed fixtures rather
 than all possible combinations. Null network and null Skill/Plugin/directory list
-selection remained outside that composition batch; the [subsequent qualification](template-null-selection.md) records those rules. No new protocol version is introduced.
+selection remained outside that composition batch; the
+[subsequent qualification](template-null-selection.md) records those rules.
+No new protocol version is introduced.
 
 ### Core checks for composition (2026-09-23)
 

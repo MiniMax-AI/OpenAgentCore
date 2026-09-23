@@ -47,7 +47,66 @@ and Plugin metadata but no capability-directory field; do not equate them with
 the richer Session environment projection. Mixed individual-field official null
 cases and all native/provider combinations remain unqualified.
 
-Core implementation checks and real execution results are recorded after completion;
-this record does not yet claim batch acceptance.
+## Core verification
+
+`TestTemplateNullSelectionOfficialClientPostgres` and
+`official_template_null_selection.py` exercise the actual HTTP handler, isolated
+PostgreSQL, pinned strict SDK and raw HTTP. Eleven successful selections cover
+combined and mixed fields, disabled/restricted inheritance, narrowing, inline null,
+Template resets and exclusion of an unselected foreign Skill. Eight rejected
+creations leave no Session, Environment or initialization residue. Foreign and
+missing template lookups remain indistinguishable; direct foreign snapshot reads
+reject. Encrypted archive digests and unrelated initial file/env contents remain
+frozen after source/default/template mutation and deletion and reopening the Store.
+Changed retry intent conflicts. This test does not execute a native model.
+
+The first acceptance assertion incorrectly expected Session-only directory/network
+fields on the Environment resource. The one-line test correction uses its pinned
+projection; the original failure remains. Independent PostgreSQL acceptance passed
+in 1.74 seconds. The complete server gate then passed at `65f9898`, including
+228.891 seconds of Store tests, sqlc byte comparison, Go/build/native package and
+Rust checks. No database query or migration changed.
+
+Fresh `make check-web` passed with Node22 and pinned pnpm10.30.3: 63 doctor,
+287 client, 583 Web unit and 76 browser cases. Its initial dependency setup used
+the app's pnpm11 fallback and stopped before tests; the tool-generated workspace
+placeholder was removed and the unchanged repository was tested with its pinned
+toolchain. No dependency or build-policy change was made. `make openapi` and
+`git diff --check` passed. Optional 512 MiB/source streaming and packaged MiniMax
+scratch/large-output live profiles were not enabled.
+
+The first Codex/Docker attempt initialized three Sessions. Its Kimi null-selection
+Turn read the three inherited capability markers through native commands. The next
+empty-selection Turn failed on provider HTTP 429 before a native command or reported
+usage; replacement and restart checks were not submitted. These records are retained.
+
+An OpenAI-provider continuation was stopped when the user clarified that its key
+was restricted to official Agents API probes. One submitted Core Turn was cancelled;
+its stored usage was 10,576 input and 61 output tokens. This attempt is not acceptance.
+Its owned resources and temporary credential copies were removed. Subsequent Core
+model verification uses only the authorized Kimi or MiniMax providers.
+
+MiniMax-M3 completed the empty and replacement Turns. Each produced one completed,
+exit-zero native command whose unmodified JSON output exactly matched the selected
+capabilities, excluded markers, inherited confidential env and single setup trace.
+The original runner still failed because the replacement assistant answer omitted
+one trailing newline from that trace. Both native proofs and the mismatching answer
+remain preserved; Core and model output were not changed. Initialization acceptance
+uses the actual command output, with the assistant answer retained as an observation.
+
+The separate one-Session null continuation passed two MiniMax-M3 Turns. After the
+first native proof, the test changed the source Skill version and Template, deleted
+both resources, restarted Core, and retried the original creation key. The retry
+returned the same Session; its second native command read the original markers,
+confidential env and unchanged one-line setup trace. Initialization was not replayed.
+
+All Core native execution used production source `f86223f`; the final server gate
+adds only the corrected resource-test assertion and documentation. The null
+continuation reused the verified Core/daemon binaries and base image. Rebuilding
+the deleted wrapper image changed its image ID; base identity, in-image daemon
+hash, Dockerfile and runtime configuration established the same content provenance.
+No native feature, model response or production behavior was changed for acceptance.
+Reports in `live/attempt-minimax/` and `live/attempt-minimax-null/` retain the original
+failures, command proofs, source hashes and owned-resource cleanup records.
 
 This batch does not widen hostname syntax, change native capability support, requalify every harness/Provider combination, or claim full protocol compatibility. Provisioning-delete retries and private test assertion failures remain in the evidence rather than being counted as successful first attempts.

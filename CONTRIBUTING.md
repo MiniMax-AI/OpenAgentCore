@@ -310,7 +310,8 @@ of provider image/build templates. Resolve a tenant-owned reference once at Sess
 creation, freeze the effective ordinary hosted configuration and reuse inline
 initialization. Do not pass template IDs into Provider or Runtime. Omitted or null
 network inherits the complete template policy; overrides may only narrow policy.
-Preserve unresolved caller intent for creation retries and recover committed results before reading mutable templates.
+Preserve unresolved caller intent for creation retries and recover committed
+results before reading mutable templates.
 For template-reference Session initialization, omitted/null env, files, commands
 and packages inherit. Overlay non-null env keys; replace non-null files and command
 lists, including empty lists. Select each package manager independently: omitted/null
