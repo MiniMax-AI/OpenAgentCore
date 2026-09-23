@@ -44,14 +44,18 @@ cd "$HOME/.parsar/releases/parsar-core-<commit>-linux-amd64"
 ./install.sh --public-url https://core.example
 ```
 
-The bundle contains the same-revision native Core binaries and service image,
-unchanged Web build, production Web proxy and colocated Runtime. It includes microsandbox's pinned runtime and
-firmware. It also contains image archives, source provenance and checksums;
-installation does not need Go, Node, Rust or a product checkout. The default
-installation loads only the Core, Web and PostgreSQL images; Runtime and
-microsandbox payloads are used only when a sandbox provider is enabled.
-The matched `parsar-sandbox-node` executable is included in the native payload
-and Core service image; packaging it does not start or register a node.
+The thin bundle contains same-revision Core and Web service images, PostgreSQL,
+native Core binaries, installer bootstraps, documentation and checksums. Node,
+Runtime and microsandbox binaries are separate prebuilt assets. Installing the
+default zero-node deployment downloads none of those execution assets and needs
+no Go, Node, Rust or source checkout.
+
+The manifest identifies every asset by immutable revision, SHA-256 and byte size.
+Adding a node downloads only its selected provider's assets. Runtime images use
+compressed archives; verified local files and already imported images are reused.
+Downloads use temporary files and bounded retries, so a truncated response is
+never promoted into the cache. An optional `-offline.tar.gz` bundle contains the
+same assets locally; its console can serve them without a public release host.
 
 ## Sign in to Web
 
@@ -102,9 +106,11 @@ management. Choose English or Chinese through the System language selector.
    this page does not switch providers. Microsandbox uses a five-minute idle
    timeout and one-day snapshot retention.
 4. Click **Add node**, copy the command, and run it as a non-root user on the
-   target Linux amd64 host. It downloads the matched files from your console,
-   verifies checksums, imports the Runtime image, writes the provider configuration,
-   registers the node and starts a systemd user service. Web refreshes node health
+   target Linux amd64 host. It downloads the matched bootstrap from your console and execution assets from
+   the manifest's release location (or the offline console payload), verifies
+   checksums, imports the Runtime image only when missing, writes the provider configuration,
+   registers the node and starts a systemd user service. The installer waits for Core to confirm
+   connection and provider readiness. Web refreshes node health
    automatically. Wait for the node to be online and its provider to be ready;
    registration alone does not mean it can accept work.
 
@@ -131,6 +137,38 @@ the colocated daemon, native harness and workspace.
 
 Once a node is ready, you can [make an API request](quickstart.md). The model
 credentials are supplied with execution requests, not during node installation.
+
+## Connect a user-managed Runtime
+
+A `self_hosted` Session uses your own execution machine; it does not enroll that
+machine as a shared sandbox node. Create the Session through the public API, then
+use your project caller credential to obtain a restricted credential for its
+Environment. The [credential contract](../../contracts/agents-api/environment-executor-credentials.md)
+describes issuance, rotation and revocation. Save the response to an owned,
+mode-0600 file. Keep the project caller key on your application machine.
+
+Download `self-hosted-install.pyz` and `SHA256SUMS` from your Core's HTTPS
+`/node-install/` endpoint. Verify the bootstrap entry in `SHA256SUMS`, then run:
+
+```sh
+python3 self-hosted-install.pyz --source-url https://core.example \
+  --environment-id ENVIRONMENT_UUID \
+  --remote wss://core.example/api/v1/agent-daemon/ws \
+  --credential-file /absolute/private/executor-key.json
+```
+
+Use the exact Environment ID and reachable `remote_url` returned by your Session.
+The Linux amd64 host needs Python 3.9+ and Docker access as a non-root user.
+The installer prepares the matched daemon, native harnesses and local workspace
+inside the same isolated Runtime used for hosted execution. No shared node,
+model credential or source build is needed. Model access remains execution input.
+
+A started Runtime is not proof of a connected Environment or a successful model
+request. Read the Session to confirm its connection, then submit your task.
+Installation state stays under `~/.parsar/self-hosted/ENVIRONMENT_UUID`; retain its
+credentials, volumes and native history. An uncertain launch gives inspection
+instructions instead of creating replacement history. Session deletion does not
+reclaim user-owned Docker resources.
 
 ## Installation choices
 
@@ -243,6 +281,7 @@ MiniMax companion prepared through the existing Runtime build instructions:
 ```sh
 export AGENTS_RUNTIME_CODEX_PACKAGE=/absolute/path/to/codex-linux-package
 export MCODE_HARNESS_BUILD_DIR=/absolute/path/to/mcode-harness-artifact
+export CORE_DISTRIBUTION_RELEASE_BASE_URL=https://downloads.example/releases/COMMIT
 make build-core-distribution
 ```
 
@@ -251,3 +290,12 @@ the commit, immutable image identities, microsandbox binary hashes and the actua
 Runtime OCI manifest digest. Build output lives under `~/.parsar/build/`; it is
 not automatically published to GitHub, an image registry or a website. Qualify the
 exact bundle before distribution. See the [contributor guide](https://github.com/MiniMax-AI/parsar-core/blob/main/CONTRIBUTING.md).
+
+The release base must host the generated flat asset filenames over HTTPS. Use
+`CORE_DISTRIBUTION_OFFLINE=1` to also emit a full offline archive; a build without
+any release URL must select offline mode. The release workflow prepares pinned
+harness dependencies, builds versioned assets, and uploads an Actions artifact.
+An explicit manual option can create an unpublished draft release. Neither a
+successful build nor a draft makes a private repository anonymously downloadable;
+publish qualified assets through your chosen distribution channel before sharing
+installation instructions with external users.

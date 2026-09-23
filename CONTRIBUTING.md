@@ -1548,6 +1548,25 @@ microsandbox runtime/firmware hashes and executable native payloads. Release gen
 qualification. A release must be tested from fresh extraction with real models;
 no synthetic result may substitute for native execution acceptance.
 
+The manifest is the shared download contract for Core, node and self-hosted
+installers: flat versioned filenames, compressed Runtime size/hash and unpacked
+size/hash, with HTTPS release URLs or the explicit offline payload. Download into
+private temporary files, verify before atomic promotion, and reuse only verified
+cache entries or exact image identities. Core's default image must not acquire
+execution-only payloads. Python zipapps bundle the shared resolver with each
+remote bootstrap; the console publishes only fixed non-secret files and declared
+artifact names. Release automation builds artifacts and may create an unpublished
+draft, but cannot claim real execution qualification or public availability.
+
+Project-authenticated executor-credential extensions remain outside the upstream
+API namespace and reuse the existing restricted issuer. They require the exact
+creator of a live self-hosted Environment; deployment administrator authority and
+shared Session read access do not grant credential issuance. The console preserves
+explicit caller credentials on these routes and never substitutes its administrator
+key. Self-hosted installation reuses Docker Runtime isolation, owns no sandbox
+node or Core allocation, and retains user-owned native history after uncertain
+launches. Report started, connected and real execution success separately.
+
 The distribution build sets umask 022 for non-root-readable payloads; installation
 credentials and state retain their explicit private permissions.
 
@@ -1562,8 +1581,9 @@ a provider selects microsandbox; `--provider` without enabling the option is an
 error. Web-only mode cannot enable a sandbox provider. Core-only mode retains the
 same opt-in rule. Missing KVM fails when microsandbox is selected without changing
 that choice.
-The distribution supplies native Core/helper binaries and pinned msb runtime and
-firmware. For microsandbox, Core is a native systemd user service with direct
+The thin distribution supplies native Core binaries. Provider helpers, the node
+agent, Runtime launcher and pinned msb runtime/firmware are separate, same-revision
+assets resolved only when selected. For microsandbox, Core is a native systemd user service with direct
 `ExecStart` and `KillMode=process`: its restart must preserve the Provider's resident
 microVM/helper processes. Never package those processes inside Core's container
 PID namespace, kill their process group on Core stop, or add recovery mechanisms to
@@ -1577,7 +1597,7 @@ The basic distroless API image and binary builds remain independent artifacts.
 The standalone API release and Core distribution both include the Hosted Sandbox
 Manager guide at the relative path used by their packaged README. Include the
 guide in each artifact checksum list so extracted documentation matches its build.
-The distribution includes the sandbox-node binary. An enabled local node uses a
+The node asset includes the sandbox-node binary. An enabled local node uses a
 persistent private state directory, explicitly separate from read-only configuration.
 Docker grants Core write access only to that node-state mount; native Core uses the
 same installation-owned directory. Zero-node installs create no node identity

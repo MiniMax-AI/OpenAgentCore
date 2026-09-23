@@ -151,6 +151,19 @@ definitions:
       provider:
         type: string
     type: object
+  store.RuntimeNodeStatus:
+    properties:
+      connected:
+        type: boolean
+      installation_id:
+        type: string
+      node_id:
+        type: string
+      provider:
+        type: string
+      provider_ready:
+        type: boolean
+    type: object
   store.RuntimeNodeUpdate:
     properties:
       max_active:
@@ -479,7 +492,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/store.RuntimeNodeIdentity'
+            $ref: '#/definitions/store.RuntimeNodeStatus'
         "400":
           description: Bad Request
           schema:
@@ -506,7 +519,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - NodeAuth: []
-      summary: Recover an enrolled sandbox node identity
+      summary: Recover an enrolled sandbox node identity and observe its readiness
       tags:
         - Sandbox Manager
   /core/v1/sandbox/nodes:
