@@ -46,8 +46,8 @@ func microsandboxProbe(entry Microsandbox) func(context.Context) error {
 		if err != nil || !helper.Mode().IsRegular() || helper.Mode().Perm()&0111 == 0 {
 			return errors.New("microsandbox helper is unavailable")
 		}
-		home, err := os.Stat(entry.RuntimeHome)
-		if err != nil || !home.IsDir() {
+		home, err := os.Lstat(entry.RuntimeHome)
+		if err != nil || !home.IsDir() || home.Mode().Perm() != 0700 {
 			return errors.New("microsandbox state directory is unavailable")
 		}
 		kvm, err := os.OpenFile("/dev/kvm", os.O_RDWR, 0)
