@@ -147,7 +147,10 @@ def verify_credential_list(client, other, invalid, peer, binding, saved_vaults, 
         for params in invalid_queries:
             safe_error(raw.get(endpoint, headers=headers, params=params), 400)
         for suffix in (vault.id, "invalid-vault"):
-            safe_error(raw.get(base + suffix + "/credentials", params={"after": "invalid"}), 401)
+            # The Beta header is checked before authentication (HP-05).
+            safe_error(raw.get(base + suffix + "/credentials", params={"after": "invalid"}), 400)
+            safe_error(raw.get(base + suffix + "/credentials", headers={"OpenAI-Beta": "agents=v1"},
+                               params={"after": "invalid"}), 401)
         for beta in (None, "agents=v2"):
             auth = {"Authorization": headers["Authorization"]}
             if beta is not None:

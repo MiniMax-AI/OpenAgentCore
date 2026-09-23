@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -108,5 +109,10 @@ func TestService(t *testing.T) {
 	_, err = b.List(ctx, openai.BetaAgentSessionListParams{After: openai.String(first.ID)})
 	expectStatus(err, 404)
 	_, err = invalid.Get(ctx, first.ID)
-	expectStatus(err, 401)
+	// Beta 401s are invalid_request_error with a null code and a request ID (HP-07/HP-23).
+	var unauthorized *openai.Error
+	if !errors.As(err, &unauthorized) || unauthorized.StatusCode != 401 || unauthorized.Type != "invalid_request_error" ||
+		unauthorized.Code != "" || !strings.HasPrefix(unauthorized.Response.Header.Get("X-Request-Id"), "req_") {
+		t.Fatalf("expected SDK HTTP 401 error: %v", err)
+	}
 }

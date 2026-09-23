@@ -26,7 +26,9 @@ def verify_vault_deletion(client, other, invalid, peer, canary, expect_error):
     auth_headers = {"Authorization": f"Bearer {client.api_key}", "OpenAI-Beta": "agents=v1"}
     endpoint = str(client.base_url).rstrip("/") + "/vaults/"
     with httpx2.Client(trust_env=False, timeout=10) as raw:
-        assert raw.delete(endpoint + target.id).status_code == 401
+        # The Beta header is checked before authentication (HP-05).
+        assert raw.delete(endpoint + target.id).status_code == 400
+        assert raw.delete(endpoint + target.id, headers={"OpenAI-Beta": "agents=v1"}).status_code == 401
         response = raw.delete(endpoint + target.id, headers={"Authorization": auth_headers["Authorization"]})
         assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_beta"
         # The body rejects; the unknown include key is ignored.

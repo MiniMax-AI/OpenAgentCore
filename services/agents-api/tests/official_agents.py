@@ -153,7 +153,9 @@ def verify_agents(client, other, invalid, expect_error):
         expect_error(AuthenticationError, lambda: invalid.beta.agents.retrieve(saved[0].id))
         expect_error(AuthenticationError, lambda: invalid.beta.agents.create(model="x"))
         expect_error(BadRequestError, lambda: agents.create(model="x", extra_headers={"OpenAI-Beta": ""}))
-        assert raw.post(base, json={"model": "x"}).status_code == 401
+        # The Beta header is checked before authentication (HP-05).
+        assert raw.post(base, json={"model": "x"}).json()["error"]["code"] == "invalid_beta"
+        assert raw.post(base, headers={"OpenAI-Beta": "agents=v1"}, json={"model": "x"}).status_code == 401
         # The minimal pinned MCP tool saves its omitted origin as "service" (MV-01);
         # the environment origin remains an explicit gap.
         mcp = {"type": "mcp", "server_label": "x", "transport": {"type": "http", "server_url": "https://example.invalid"}}

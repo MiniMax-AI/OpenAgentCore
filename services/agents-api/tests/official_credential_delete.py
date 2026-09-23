@@ -23,7 +23,9 @@ def verify_credential_deletion(client, other, invalid, peer, canary, expect_erro
     expect_error(AuthenticationError, lambda: invalid.beta.agents.vaults.credentials.delete(target.id, vault_id=vault.id))
     with httpx2.Client(trust_env=False, timeout=10) as raw:
         url = endpoint + "/" + target.id
-        assert raw.delete(url).status_code == 401
+        # The Beta header is checked before authentication (HP-05).
+        assert raw.delete(url).status_code == 400
+        assert raw.delete(url, headers={"OpenAI-Beta": "agents=v1"}).status_code == 401
         response = raw.delete(url, headers={"Authorization": headers["Authorization"]})
         assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_beta"
         # The body rejects; the unknown include key is ignored and never exposes the token.

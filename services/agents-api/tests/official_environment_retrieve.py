@@ -70,7 +70,7 @@ def main():
             assert response.status_code == status
             body = response.json()
             assert set(body) == {"error"} and body["error"]["code"] == code
-            assert body["error"]["type"] == ("authentication_error" if status == 401 else code if code in {"not_found_error", "invalid_beta"} else "invalid_request_error")
+            assert body["error"]["type"] == (code if code in {"not_found_error", "invalid_beta"} else "invalid_request_error")
             for private in (token, settings["peer_token"], settings["foreign_token"], settings["executor_token"], environment_id):
                 assert private not in response.text
 
@@ -92,7 +92,7 @@ def main():
             request_headers = {"OpenAI-Beta": "agents=v1"}
             if authorization is not None:
                 request_headers["Authorization"] = authorization
-            rejected(endpoint, 401, "invalid_api_key", request_headers)
+            rejected(endpoint, 401, None, request_headers)
         for beta in (None, "agents=v2"):
             request_headers = {"Authorization": "Bearer " + token}
             if beta is not None:

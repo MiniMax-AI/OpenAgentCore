@@ -19,7 +19,8 @@ def verify_caller_principals(client, base, binding, token, rotated, peer, sessio
             try:
                 invalid.beta.agents.sessions.retrieve(session.id)
             except AuthenticationError as error:
-                assert error.body["code"] == "invalid_api_key"
+                # Beta 401s are invalid_request_error with a null code (HP-07).
+                assert error.body["type"] == "invalid_request_error" and error.body["code"] is None
             else:
                 raise AssertionError("Untrusted scope header was accepted")
     headers = [("Authorization", "Bearer " + token), ("OpenAI-Beta", "agents=v1")]
@@ -29,7 +30,8 @@ def verify_caller_principals(client, base, binding, token, rotated, peer, sessio
                       [('OpenAI-Organization', binding['organization_id']), ('OpenAI-Organization', 'other')],
                       [('Authorization', 'Bearer ' + peer)]):
             response = raw.get(path, headers=headers + extra)
-            assert response.status_code == 401 and response.json()["error"]["code"] == "invalid_api_key"
+            error = response.json()["error"]
+            assert response.status_code == 401 and error["type"] == "invalid_request_error" and error["code"] is None
         response = raw.get(path, headers=headers + [("X-Tenant-ID", str(uuid.uuid4())), ("X-User-ID", "forged")])
         assert response.status_code == 200 and response.json()["id"] == session.id
 

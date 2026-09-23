@@ -96,7 +96,10 @@ def verify_vaults(client, other, invalid, peer, binding, expect_error):
         expect_error(AuthenticationError, lambda: invalid.beta.agents.vaults.create())
         expect_error(AuthenticationError, lambda: invalid.beta.agents.vaults.retrieve(saved[0].id))
         for suffix, method in (("", "POST"), ("/" + saved[0].id, "GET")):
-            assert raw.request(method, base + suffix, json={} if method == "POST" else None).status_code == 401
+            # The Beta header is checked before authentication (HP-05).
+            assert raw.request(method, base + suffix, json={} if method == "POST" else None).status_code == 400
+            assert raw.request(method, base + suffix, headers={"OpenAI-Beta": "agents=v1"},
+                               json={} if method == "POST" else None).status_code == 401
             for beta in (None, "agents=v2"):
                 request_headers = {"Authorization": headers["Authorization"]}
                 if beta is not None:

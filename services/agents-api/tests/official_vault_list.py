@@ -111,7 +111,9 @@ def verify_vault_list(client, other, invalid, peer, binding, saved, root, direct
             response = raw.get(endpoint, headers=headers, params=params)
             assert response.status_code == 400
             assert response.json()["error"]["type"] == "invalid_request_error"
-        assert raw.get(endpoint).status_code == 401
+        # The Beta header is checked before authentication (HP-05).
+        assert raw.get(endpoint).status_code == 400
+        assert raw.get(endpoint, headers={"OpenAI-Beta": "agents=v1"}).status_code == 401
         for beta in (None, "agents=v2"):
             auth = {"Authorization": headers["Authorization"]}
             if beta is not None:

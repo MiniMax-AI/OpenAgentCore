@@ -53,6 +53,8 @@ def verify_agent_list(client, other, invalid, saved, expect_error):
         assert missing.status_code == malformed.status_code == 404 and missing.json() == malformed.json()
         zero = raw.get(url, headers=headers, params={"limit": "0", "tenant_id": "other"}).json()
         assert [agent["id"] for agent in zero["data"]] == [desc[0].id] and zero["has_more"] is True
-        assert raw.get(url).status_code == 401
+        # The Beta header is checked before authentication (HP-05).
+        assert raw.get(url).status_code == 400
+        assert raw.get(url, headers={"OpenAI-Beta": "agents=v1"}).status_code == 401
     print("Agent list: fixed SDK auto-pagination/raw HTTP, order/cursors, snapshots, isolation and local limit/envelope behavior passed; exact upstream defaults/caps/errors remain unverified.")
     return [agent.id for agent in asc]

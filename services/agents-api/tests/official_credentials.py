@@ -109,7 +109,9 @@ def verify_credentials(client, other, invalid, peer, saved_vaults, canary, expec
             expect_error(AuthenticationError, lambda: credentials.retrieve(saved[0].id, vault_id=vault.id, extra_headers=scope))
         for method, url in (("POST", endpoint), ("GET", endpoint + "/" + saved[0].id)):
             body = {"json": request} if method == "POST" else {}
-            safe_body(raw.request(method, url, **body), 401)
+            # The Beta header is checked before authentication (HP-05).
+            safe_body(raw.request(method, url, **body), 400)
+            safe_body(raw.request(method, url, headers={"OpenAI-Beta": "agents=v1"}, **body), 401)
             response = raw.request(method, url, headers={"Authorization": headers["Authorization"]}, **body)
             assert safe_body(response, 400)["error"]["code"] == "invalid_beta"
         # Unknown query keys are ignored: they neither select a tenant nor expose tokens.

@@ -94,7 +94,9 @@ def verify_credential_rotation(client, other, invalid, peer, saved_vaults, saved
             original.id, vault_id=vault.id, **replacement))
         expect_error(AuthenticationError, lambda: invalid.beta.agents.vaults.credentials.update(
             original.id, vault_id=vault.id, **replacement))
-        safe(raw.post(endpoint, json=replacement), 401)
+        # The Beta header is checked before authentication (HP-05).
+        assert safe(raw.post(endpoint, json=replacement), 400)["error"]["code"] == "invalid_beta"
+        safe(raw.post(endpoint, headers={"OpenAI-Beta": "agents=v1"}, json=replacement), 401)
         assert safe(raw.post(endpoint, headers={"Authorization": headers["Authorization"]},
                              json=replacement), 400)["error"]["code"] == "invalid_beta"
         for scope in ({"OpenAI-Project": "other-project"}, {"OpenAI-Organization": "other-organization"}):

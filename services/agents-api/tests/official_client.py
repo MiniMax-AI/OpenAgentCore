@@ -30,6 +30,7 @@ from official_credential_rotation import verify_credential_rotation, verify_rota
 from official_credential_delete import verify_credential_deletion, verify_credential_deletion_recovery, verify_keyless_credential_deletion
 from official_vault_delete import verify_vault_deletion, verify_vault_deletion_recovery, verify_keyless_vault_deletion
 from official_agent_list import verify_agent_list
+from official_http_routing import verify_http_routing
 from official_agent_references import verify_agent_references
 from official_session_requests import verify_session_create_requests
 from official_session_metadata import verify_session_metadata, verify_active_session_metadata
@@ -163,6 +164,7 @@ def main():
                         listed_files = verify_source_file_list(a, b, invalid, peer, expect_error)
                     saved_agents = verify_agents(a, b, invalid, expect_error)
                     listed_agents = verify_agent_list(a, b, invalid, saved_agents, expect_error)
+                    verify_http_routing(base, tokens[0])
                     sessions = a.beta.agents.sessions
                     spec = {"input": "Verify client fixture admission.", "agent": {"model": "requested-test-model", "instructions": "Keep the configuration."}, "environment": {"type": "none"}}
                     headers = {"Idempotency-Key": "same-key"}
