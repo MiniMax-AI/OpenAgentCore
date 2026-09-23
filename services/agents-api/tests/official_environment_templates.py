@@ -101,7 +101,6 @@ def verify_template_session_rejections(client, foreign, http, agent, enabled, di
     headers = {'Authorization': 'Bearer ' + client.api_key, 'OpenAI-Beta': 'agents=v1'}
     for reference, override, status, token in [
         (disabled, {'network': {'access': 'enabled'}}, 400, client.api_key),
-        (disabled, {'network': None}, 400, client.api_key),
         (str(uuid.uuid4()), {}, 404, client.api_key),
         (enabled, {}, 404, foreign.api_key),
     ]:

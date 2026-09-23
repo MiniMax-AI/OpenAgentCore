@@ -23,7 +23,7 @@ and five-operation SandboxProvider path as inline configuration.
   Creation timestamp plus ID supplies stable local ordering. Missing/foreign IDs
   and cursors return the same not-found result. No compute is allocated by CRUD.
 - Session `environment_template_id` resolves under the caller's tenant. Omitted
-  network inherits; enabled can narrow to restricted or disabled. Restricted can
+  or null network inherits; enabled can narrow to restricted or disabled. Restricted can
   narrow to an exact-host subset or disabled; disabled cannot widen. Effective
   configuration is frozen without passing the template ID to execution.
 - Updating/deleting a template does not change existing Sessions. Creation retries
@@ -123,10 +123,10 @@ creation, `"latest"` selects latest, and a positive version string selects that
 version. A Session freezes tenant-authorized bytes and concrete version metadata
 in its creation transaction. Later source deletion, default changes or template
 updates cannot change that Session or its committed creation retry. A supplied
-Session Skill list replaces the template list; omission inherits. Template
+Session Skill list replaces the template list; omission/null inherit. Template
 responses include `version: null` for an unresolved default selector; resolved
-Session references retain a concrete version string. Null list overrides remain
-unqualified and reject. See [resource selector qualification](resource-selector-semantics.md).
+Session references retain a concrete version string. See [resource selector
+qualification](resource-selector-semantics.md) and [null selection evidence](template-null-selection.md).
 References return type/skill_id/version/name/description in Session metadata,
 while template responses retain unresolved selectors. Confidential bundle content
 never appears in these metadata responses. The common Runtime installation path
@@ -187,9 +187,9 @@ A hosted
 Skill directories with `skills`; complete package-relative resources are retained.
 The same parser, template resolution and encrypted Session snapshot serve inline
 and template requests. Only type/name/description appears in public Plugin metadata.
-Template Plugin lists inherit on omission and replace when supplied. Template
-updates accept null/empty clearing; explicit null Session overrides remain an
-unconfirmed semantic and reject.
+Referencing Session Plugin lists inherit on omission/null and replace when a
+non-null list is supplied, including empty-list clearing. Template resource updates
+continue to accept null/empty clearing.
 
 `capability_directories` currently accepts clean absolute paths within `/workspace`.
 Initial files and setup can populate them. The shared initializer snapshots these
@@ -197,7 +197,7 @@ directories after setup, then publishes one protected installed manifest. Recove
 uses those installed bytes even if the source directory changes or is removed.
 This timing and workspace restriction are local implementation choices, not claims
 about unspecified upstream behavior. A supplied Session directory list replaces
-the template list; omitted lists inherit. Missing, overlapping duplicate Skill
+the template list; omitted/null lists inherit. Missing, overlapping duplicate Skill
 names, unsupported manifests and nonregular files reject initialization without
 publishing completion. Directory-discovered Skills do not become fabricated
 inline entries in public `skills` or `plugins` metadata.
@@ -516,7 +516,7 @@ appear automatically in public metadata or initialization diagnostics.
 The [current Template reference](https://developers.openai.com/api/reference/python/resources/beta/subresources/agents/subresources/environments/subresources/templates)
 mentions different GA/beta defaults; this service retains `agents=v1` and the
 [fixed baseline](upstream.json), whose omitted network is enabled. Exact upstream
-errors, no-op timestamps, concurrent pagination and referenced Session null-network
+errors, concurrent pagination and broader network
 override semantics remain unverified. The last case explicitly rejects in this
 batch rather than guessing inheritance. This batch is not full protocol compatibility.
 
@@ -559,7 +559,7 @@ subdirectories `official-env-setup` and `official-files-packages`. Reports retai
 fixed-source snapshots, raw status/body/request IDs, command-output proofs,
 accounting, cleanup and credential scans. This covers the observed fixtures rather
 than all possible combinations. Null network and null Skill/Plugin/directory list
-selection remain outside this batch. No new protocol version is introduced.
+selection remained outside that composition batch; the [subsequent qualification](template-null-selection.md) records those rules. No new protocol version is introduced.
 
 ### Core checks for composition (2026-09-23)
 

@@ -2883,22 +2883,24 @@ paths:
         and setup_commands inherit. Non-null files and command lists replace; env
         overlays by key; each package manager inherits on omission/null and otherwise
         replaces its list. Empty lists clear their selected field. Tenant-owned environment_template_id
-        references inherit omitted network and allow only narrowing overrides. Referenced
-        network:null is explicitly unsupported pending semantic verification. Core
-        freezes effective configuration; template updates/deletion do not alter Session
-        snapshots or same-intent creation retries. Inline or tenant-owned skill_reference
-        Skills share initialization. Templates preserve default/latest/explicit selectors;
+        references inherit omitted/null network and allow only narrowing overrides.
+        Inline hosted network:null retains the enabled default; updating a Template
+        with network:null resets its saved policy to enabled. Core freezes effective
+        configuration; template updates/deletion do not alter Session snapshots or
+        same-intent creation retries. Inline or tenant-owned skill_reference Skills
+        share initialization. Templates preserve default/latest/explicit selectors;
         Session creation freezes concrete metadata and encrypted content atomically.
-        Skill-list omission inherits and a supplied list replaces; null overrides
-        and null version selectors remain unqualified and reject. Source deletion/default
-        updates cannot change committed Session Skill contents. Deferred function
-        discovery uses type-only tool_search and per-function defer_loading in the
-        qualified single-agent Claude environment:none function profile, including
-        qualified inline image messages and text results. Explicit web_search mode
-        disabled and programmatic_tool_calling enabled false use frozen common Runtime
-        controls. Enabled forms remain unqualified. Omitted programmatic configuration
-        preserves native behavior, a documented difference from the official default-on
-        behavior. Other combinations remain unqualified; see the operation coverage.
+        Skill, Plugin and capability-directory list omission/null inherit; a non-null
+        list replaces, including empty-list clearing. Omitted/null Skill version selectors
+        resolve the default version. Source deletion/default updates cannot change
+        committed Session Skill contents. Deferred function discovery uses type-only
+        tool_search and per-function defer_loading in the qualified single-agent Claude
+        environment:none function profile, including qualified inline image messages
+        and text results. Explicit web_search mode disabled and programmatic_tool_calling
+        enabled false use frozen common Runtime controls. Enabled forms remain unqualified.
+        Omitted programmatic configuration preserves native behavior, a documented
+        difference from the official default-on behavior. Other combinations remain
+        unqualified; see the operation coverage.
       parameters:
       - description: agents=v1
         in: header

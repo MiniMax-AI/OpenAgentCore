@@ -308,9 +308,9 @@ not transfer ownership of user compute to Core or prove process quiescence.
 Public Environment Templates belong to Core and its execution database, independently
 of provider image/build templates. Resolve a tenant-owned reference once at Session
 creation, freeze the effective ordinary hosted configuration and reuse inline
-initialization. Do not pass template IDs into Provider or Runtime. Omitted network
-inherits; overrides may only narrow policy. Preserve unresolved caller intent for
-creation retries and recover committed results before reading mutable templates.
+initialization. Do not pass template IDs into Provider or Runtime. Omitted or null
+network inherits the complete template policy; overrides may only narrow policy.
+Preserve unresolved caller intent for creation retries and recover committed results before reading mutable templates.
 For template-reference Session initialization, omitted/null env, files, commands
 and packages inherit. Overlay non-null env keys; replace non-null files and command
 lists, including empty lists. Select each package manager independently: omitted/null
@@ -393,8 +393,12 @@ Templates preserve default, latest and explicit version selectors. An omitted or
 null reference version selects the default at Session creation and projects as
 `version: null` in Template responses. Session responses contain concrete versions;
 only validated installation metadata crosses the Runtime boundary. A supplied
-Session Skill list replaces the template list; omission inherits. Null list
-overrides remain unqualified and reject rather than silently changing selection.
+Session Skill, Plugin or capability-directory list replaces its template list;
+omission and null inherit, while an empty list clears that selection. This differs
+from Template resource updates, where null clears lists and resets network to the
+pinned enabled default. Preserve caller intent and frozen Session snapshots in
+both cases. Public capability directories remain caller paths; adapter-owned
+installation directories are not portable public paths.
 
 Inline and referenced Skill ZIPs use the same confidential initialization snapshot and installer.
 Core validates portable manifests and bounded regular-file archives, returns only
