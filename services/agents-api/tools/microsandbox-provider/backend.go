@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	wire "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/microsandbox"
@@ -15,11 +14,6 @@ import (
 const bootstrapLabel = "io.parsar.bootstrap"
 
 type backend struct{ q wire.Request }
-
-type liveMetricsSource interface {
-	Metrics(context.Context) (*sdk.Metrics, error)
-	Detach(context.Context) error
-}
 
 func (b backend) run(ctx context.Context) (wire.Response, error) {
 	switch b.q.Operation {
@@ -70,61 +64,6 @@ func (b backend) run(ctx context.Context) (wire.Response, error) {
 	return wire.Response{}, sandbox.ErrInvalid
 }
 
-func (b backend) metrics(ctx context.Context, c wire.Compute) (*wire.Metrics, error) {
-	metricsCtx, cancel := context.WithDeadline(ctx, b.q.Deadline)
-	defer cancel()
-	h, state, err := b.inspect(metricsCtx, c)
-	if err != nil {
-		return nil, err
-	}
-	if state.Status != string(sdk.SandboxStatusRunning) && state.Status != "draining" {
-		return nil, sandbox.ErrNotFound
-	}
-	// v0.7.2's name-based handle metrics omit cumulative vCPU time. Connect to
-	// the already-running, identity-qualified instance so CPU usage remains a
-	// monotonic counter that Core can safely derive rates from. Connect never
-	// starts stopped compute, and Detach leaves the runtime lifecycle unchanged.
-	metrics, err := observeConnectedMetrics(metricsCtx, func(ctx context.Context) (liveMetricsSource, error) {
-		return h.Connect(ctx)
-	})
-	if err != nil {
-		return nil, err
-	}
-	projected := projectMetrics(metrics, time.Now().UTC())
-	if projected == nil {
-		return nil, wire.ErrUnconfirmed
-	}
-	return projected, nil
-}
-
-func observeConnectedMetrics(ctx context.Context, connect func(context.Context) (liveMetricsSource, error)) (*sdk.Metrics, error) {
-	live, err := connect(ctx)
-	if err != nil {
-		return nil, err
-	}
-	metrics, metricsErr := live.Metrics(ctx)
-	detachCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	detachErr := live.Detach(detachCtx)
-	cancel()
-	if metricsErr != nil {
-		return nil, metricsErr
-	}
-	if detachErr != nil {
-		return nil, detachErr
-	}
-	return metrics, nil
-}
-
-func projectMetrics(metrics *sdk.Metrics, observedAt time.Time) *wire.Metrics {
-	if metrics == nil {
-		return nil
-	}
-	return &wire.Metrics{
-		ObservedAt: observedAt, Uptime: metrics.Uptime,
-		VCPUTimeNs: metrics.VCPUTimeNs, MemoryBytes: metrics.MemoryBytes,
-		MemoryLimitBytes: metrics.MemoryLimitBytes,
-	}
-}
 func (b backend) inspect(ctx context.Context, c wire.Compute) (*sdk.SandboxHandle, wire.State, error) {
 	state := wire.State{Compute: c}
 	h, e := sdk.GetSandbox(ctx, c.Name)

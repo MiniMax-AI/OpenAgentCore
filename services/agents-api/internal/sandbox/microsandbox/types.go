@@ -71,7 +71,8 @@ type Response struct {
 }
 
 // Metrics is the bounded provider-helper projection used by Core observability.
-// It intentionally excludes instantaneous CPU percent and provider-native names.
+// ObservedAt and Uptime preserve the same native registry sample at millisecond
+// precision. It excludes instantaneous CPU percent and provider-native names.
 type Metrics struct {
 	ObservedAt       time.Time
 	Uptime           time.Duration
