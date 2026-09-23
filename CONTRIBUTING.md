@@ -1933,12 +1933,13 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   create/retrieve. Page by `(created_at, id)` with a same-tenant saved-Agent cursor;
   listing never resolves Sessions, product objects or execution capabilities.
   Reuse shared list-query parsing and its per-family limit policy. Agent, Session,
-  Item and Template lists treat limit 0 as 1 and larger limits as 100; Vault and
-  Credential lists also clamp negative limits; Turn, Subagent and Artifact lists
-  reject limits outside 1–100; Skill lists accept 0–100, where 0 returns an empty
-  page; Files accept 1–10000. Pages hold at most 100 records (Files 10000) with
-  accurate continuation. The local default is 20 (Files 10000). Return the
-  list envelope with data/has_more and first/last IDs (null for empty pages).
+  Item, Subagent Item and Template lists treat limit 0 as 1 and larger limits as
+  100; Vault and Credential lists also clamp negative limits; Turn, Subagent,
+  Subagent Turn and Artifact lists reject limits outside 1–100; Skill lists accept
+  0–100, where 0 returns an empty page; Files accept 1–10000. Pages hold at most
+  100 records (Files 10000) with accurate continuation. The local default is 20
+  (Files 10000). Return the list envelope with data/has_more and first/last IDs
+  (null for empty pages).
   Exact pinned upstream default/cap, empty-envelope and error semantics remain
   unverified; do not present local limits or generic SDK parsing as full conformance.
 - Session `agent_id` lookup uses the authenticated tenant. Copy the saved resource
@@ -2100,8 +2101,8 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   Core replaces complete valid token breakdowns and preserves the last committed
   measurement on interruption. Missing measurements remain unknown. Do not infer
   token consumption from context occupancy or estimated costs, or parse native
-  Raw payloads in Core. Session totals cover recorded root Turns; mixed root/child
-  Turn listings are not a summable accounting ledger. Native measurement coverage
+  Raw payloads in Core. Session totals cover recorded root Turns; Subagent Turn
+  listings are not a summable accounting ledger. Native measurement coverage
   and exact provider/model attribution remain explicit qualification boundaries.
   No separate public usage event or historical SSE replay is introduced.
 - The dispatcher is an internal entry point used by the standalone service worker.
@@ -2174,8 +2175,12 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   assigns public IDs and projects them under the existing Session lock and leased
   execution journal. Native names, history parsing and outcome proof stay in
   adapters. Public GETs read persisted resources without starting native work.
-  Child Turns have a native writer and a separate table from the Core queue;
-  `public_execution_turns` provides the shared Session read/pagination view.
+  Child Turns have a native writer and a separate table from the Core queue.
+  Session Turn reads and the Session event stream carry root work only: read child
+  Turns and Items through the Subagent routes, and never publish child Turn or Item
+  events on the Session stream. A child Turn's `agent_id` is the Session's Agent
+  ID; `subagent_id` names the child. The migration-defined `public_execution_turns`
+  view has no public reader; do not reintroduce mixed Session Turn pages.
   Session Items stay root-owned; copied parent transcripts never become child work.
   Repeated effects are idempotent. Active includes idle; task completion, process
   release and cancellation cannot fabricate public closure. Native timestamps
