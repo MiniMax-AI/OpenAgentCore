@@ -268,7 +268,7 @@ func TestUnstorableTextMapsToInvalidRequest(t *testing.T) {
 		if w.Code != tc.status || json.Unmarshal(w.Body.Bytes(), &response) != nil || response.Error.Param != nil {
 			t.Fatalf("%v: %d %s", tc.err, w.Code, w.Body)
 		}
-		if tc.status == http.StatusBadRequest && (response.Error.Code == nil || *response.Error.Code != "invalid_request_error" || response.Error.Type != "invalid_request_error") {
+		if tc.status == http.StatusBadRequest && (response.Error.Code == nil || *response.Error.Code != "invalid_request_error" || response.Error.Type != "invalid_request_error" || response.Error.Message != unstorableTextMessage) {
 			t.Fatalf("%v: %s", tc.err, w.Body)
 		}
 	}

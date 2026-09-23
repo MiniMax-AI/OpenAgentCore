@@ -39,6 +39,8 @@ func writeError(w http.ResponseWriter, status int, code, message string, param .
 	writeJSON(w, status, v1.ErrorResponse{Error: v1.APIError{Message: message, Type: kind, Code: errorCode, Param: errorParam}})
 }
 
+const unstorableTextMessage = "Request text contains characters this service cannot store or compare, such as U+0000 or invalid UTF-8."
+
 // fieldError is a request validation failure reported with the official
 // invalid_request_error code. An empty param serializes as null.
 type fieldError struct {
@@ -92,8 +94,9 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 	case errors.Is(err, store.ErrInvalidInput):
 		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid resource identifier or request limits.")
 	case store.UnstorableText(err):
-		// A documented local limit: PostgreSQL text and jsonb cannot store U+0000.
-		writeError(w, http.StatusBadRequest, "invalid_request_error", "Request strings containing U+0000 cannot be stored by this service.")
+		// A documented local limit: PostgreSQL text and jsonb cannot store U+0000,
+		// and text parameters, including query filters, reject invalid UTF-8.
+		writeError(w, http.StatusBadRequest, "invalid_request_error", unstorableTextMessage)
 	default:
 		// Driver errors can include submitted values; do not log the raw error.
 		log.Ctx(r.Context()).Error("agents-api persistence operation failed")

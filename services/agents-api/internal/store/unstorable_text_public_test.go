@@ -110,6 +110,11 @@ func TestUnstorableTextRejectsWithoutWritesPostgres(t *testing.T) {
 	if status, body := client.do(token, http.MethodPost, "/v1/skills", form.FormDataContentType(), upload.Bytes()); status != http.StatusBadRequest || !strings.Contains(body, `"code":"invalid_request_error"`) {
 		t.Errorf("skill description: %d %s", status, body)
 	}
+	// Invalid UTF-8 in a query filter reaches the same mapping, so its message is generic.
+	status, body := client.do(token, http.MethodGet, "/v1/agents/sessions?agent_id=%ff", "", nil)
+	if status != http.StatusBadRequest || body != `{"error":{"message":"Request text contains characters this service cannot store or compare, such as U+0000 or invalid UTF-8.","type":"invalid_request_error","code":"invalid_request_error","param":null}}`+"\n" {
+		t.Errorf("invalid UTF-8 filter: %d %s", status, body)
+	}
 	if after := databaseDigest(t, pool); !mapsEqual(before, after) {
 		t.Error("rejected U+0000 strings changed persisted state")
 	}

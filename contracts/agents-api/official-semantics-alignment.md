@@ -163,11 +163,14 @@ Decisions:
   document order before generic decoding; limit checks keep their previous
   position, so validation order relative to lookups (SES-33) is unchanged.
 - U+0000 is checked explicitly in metadata, so the param is exact. All other
-  stored strings rely on mapping PostgreSQL `22021` (U+0000 in text) and `22P05`
-  (`\u0000` in jsonb) to 400. The persisted string fields are too many to check
-  one by one, and the database is the single place that knows which strings are
-  stored. The failing statement aborts its transaction; real-PostgreSQL tests
-  compare every public table before and after the rejected requests.
+  stored strings rely on mapping PostgreSQL `22021` (U+0000 or invalid UTF-8 in
+  a text parameter) and `22P05` (`\u0000` in jsonb) to 400 with the generic
+  message "Request text contains characters this service cannot store or compare,
+  such as U+0000 or invalid UTF-8." The same mapping covers query filters, for
+  example `agent_id=%ff` on the Session list. The persisted string fields are too
+  many to check one by one, and the database is the single place that knows which
+  strings are stored. The failing statement aborts its transaction; real-PostgreSQL
+  tests compare every public table before and after the rejected requests.
 - A malformed path identifier resolves to the maximum UUID, which Core never
   assigns because it only generates version 4 and 5 UUIDs. The request then
   follows exactly the missing-identifier path, including body, query and storage
