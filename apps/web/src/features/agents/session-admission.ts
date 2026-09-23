@@ -49,6 +49,19 @@ function isCanonicalExecutionFunction(tool: Record<string, unknown>): boolean {
     && (tool.defer_loading === undefined || typeof tool.defer_loading === "boolean");
 }
 
+// Mirrors Core's saved web_search projection; Core runs only mode "disabled".
+function isCanonicalWebSearch(tool: Record<string, unknown>): boolean {
+  const domains = tool.allowed_domains;
+  const location = tool.location;
+  return hasOnlyKeys(tool, ["type", "mode", "context_size", "allowed_domains", "location"])
+    && (tool.mode == null || ["disabled", "cached", "live"].includes(String(tool.mode)))
+    && (tool.context_size == null || ["low", "medium", "high"].includes(String(tool.context_size)))
+    && (domains == null || Array.isArray(domains) && domains.every((domain) => typeof domain === "string"))
+    && (location == null || isRecord(location)
+      && hasOnlyKeys(location, ["city", "country", "region", "timezone"])
+      && Object.values(location).every((value) => value === null || typeof value === "string"));
+}
+
 function isCanonicalExecutionMcp(tool: Record<string, unknown>): boolean {
   const transport = tool.transport;
   const allowedTools = tool.allowed_tools;
@@ -130,6 +143,7 @@ export function knownSessionAdmissionBlockers(agent: SavedAgent): string[] {
   const functionNames = new Set<string>();
   const mcpLabels = new Set<string>();
   let functionCount = 0;
+  let searchCount = 0;
   for (const rawTool of agent.tools) {
     if (!rawTool || typeof rawTool !== "object" || Array.isArray(rawTool)) {
       blockers.push("the saved tool configuration is not executable");
@@ -158,9 +172,13 @@ export function knownSessionAdmissionBlockers(agent: SavedAgent): string[] {
           mcpLabels.add(tool.server_label);
         }
         break;
+      case "web_search":
+        searchCount += 1;
+        if (!isCanonicalWebSearch(tool)) blockers.push("the saved web_search tool is incomplete or malformed");
+        else if (tool.mode !== "disabled") blockers.push("web_search mode must be disabled because Core does not run enabled search");
+        break;
       case "tool_search":
       case "programmatic_tool_calling":
-      case "web_search":
         blockers.push(`${String(tool.type)} is saved-only`);
         break;
       default:
@@ -168,6 +186,7 @@ export function knownSessionAdmissionBlockers(agent: SavedAgent): string[] {
     }
   }
   if (functionCount > 64) blockers.push("at most 64 function tools can execute");
+  if (searchCount > 1) blockers.push("at most one web_search tool can execute");
   return [...new Set(blockers)];
 }
 

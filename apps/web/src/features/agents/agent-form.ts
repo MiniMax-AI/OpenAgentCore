@@ -172,7 +172,11 @@ function readOnlyToolLabel(value: unknown): string {
   if (
     value.type === "web_search"
     && hasOnlyKeys(value, ["type", "mode", "context_size", "allowed_domains", "location"])
-  ) return "web_search is saved-only and cannot run in a Session";
+  ) {
+    return value.mode === "disabled"
+      ? "Disabled web_search is read-only in Web; Sessions keep search off"
+      : "Enabled web_search is saved-only; Core does not run enabled search in a Session";
+  }
   if (value.type === "function" && value.defer_loading === true) return "Deferred Function is saved-only";
   if (value.type === "mcp" && value.credential_id != null) return "Credentialed MCP is unresolved or URL-mismatched in the current Vault catalog";
   if (value.type === "function") return "Unsupported Function tool definition";

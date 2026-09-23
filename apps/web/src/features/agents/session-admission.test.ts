@@ -90,7 +90,11 @@ describe("known Session admission blockers", () => {
     [{ text: { format: { type: "json_schema" as const, schema: { type: "object" } }, verbosity: "medium" as const } }, "text format must be text"],
     [{ multi_agent: { enabled: true, max_concurrent_subagents: 2 } }, "multi-agent execution is not supported"],
     [{ tools: [{ type: "tool_search" }] }, "tool_search is saved-only"],
-    [{ tools: [{ type: "web_search", mode: "live", context_size: "medium", allowed_domains: null, location: null }] }, "web_search is saved-only"],
+    [{ tools: [{ type: "web_search", mode: "live", context_size: "medium", allowed_domains: null, location: null }] }, "web_search mode must be disabled because Core does not run enabled search"],
+    [{ tools: [{ type: "web_search", mode: "cached" }] }, "web_search mode must be disabled because Core does not run enabled search"],
+    [{ tools: [{ type: "web_search" }] }, "web_search mode must be disabled because Core does not run enabled search"],
+    [{ tools: [{ type: "web_search", mode: "disabled", location: { extra: "x" } }] }, "the saved web_search tool is incomplete or malformed"],
+    [{ tools: [{ type: "web_search", mode: "disabled" }, { type: "web_search", mode: "disabled" }] }, "at most one web_search tool can execute"],
     [{ tools: [{ type: "function", name: "later", description: "", parameters: {}, defer_loading: true }] }, "deferred functions are saved-only"],
     [{ tools: [{ type: "function", name: " ", description: "", parameters: {}, defer_loading: false }] }, "function names must be non-empty and at most 512 bytes"],
     [{ tools: [{ type: "function", name: "\u0085", description: "", parameters: {}, defer_loading: false }] }, "function names must be non-empty and at most 512 bytes"],
@@ -117,6 +121,11 @@ describe("known Session admission blockers", () => {
   ])("blocks a known unsupported saved configuration", (change, message) => {
     const agent = { ...executableAgent, ...change } as SavedAgent;
     expect(knownSessionAdmissionBlockers(agent)).toContain(message);
+  });
+
+  it("admits saved disabled web_search, which Core runs with search off", () => {
+    const tools = [{ type: "web_search", mode: "disabled", context_size: "medium", allowed_domains: [], location: { city: "Paris", country: null, region: null, timezone: null } }];
+    expect(knownSessionAdmissionBlocker({ ...executableAgent, tools })).toBeNull();
   });
 
   it("does not turn conditional Codex verbosity support into a deterministic blocker", () => {
