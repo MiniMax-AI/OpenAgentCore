@@ -38,6 +38,9 @@ AND runtime_nodes.connected_epoch <= sqlc.arg(owner_epoch);
 UPDATE runtime_nodes SET last_seen_at=clock_timestamp(),provider_ready=$3,health=sqlc.arg(health)::jsonb FROM runtime_deployment d
 WHERE runtime_nodes.id=$1 AND connection_id=$2 AND removed_at IS NULL AND connected_epoch=d.owner_epoch AND d.owner_epoch=sqlc.arg(owner_epoch);
 
+-- name: LockRuntimeNodePresence :one
+SELECT id FROM runtime_nodes WHERE id=$1 FOR UPDATE;
+
 -- name: DisconnectRuntimeNode :exec
 UPDATE runtime_nodes SET connection_id=NULL FROM runtime_deployment d WHERE runtime_nodes.id=$1 AND connection_id=$2 AND connected_epoch=d.owner_epoch AND d.owner_epoch=sqlc.arg(owner_epoch);
 

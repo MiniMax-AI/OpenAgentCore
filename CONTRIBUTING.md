@@ -603,7 +603,12 @@ state. Authentication, ownership and Store callbacks run synchronously outside
 that mutex, respect cancellation and have a five-second limit; never detach
 database writes. Closing the Hub cancels opening and live connections without
 waiting for database callbacks. Keep each node reservation until its fenced
-disconnect cleanup finishes. Heartbeats establish provider readiness and
+disconnect cleanup finishes. Register database presence in an explicit transaction:
+a canceled statement must not later publish presence through autocommit. Disconnect
+cleanup first locks the node row by identity, then applies the connection/epoch
+fence with a fresh READ COMMITTED statement so an in-flight commit cannot be
+missed. These transactions must not acquire the deployment-wide manager lock.
+Heartbeats establish provider readiness and
 last-observed host metrics, never Session activity. Transport reconnects use
 bounded backoff. Send relative operation budgets, anchored to the node clock at
 receipt and consumed while queued; clocks on different hosts need not agree. Core

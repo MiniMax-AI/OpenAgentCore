@@ -16,7 +16,8 @@ import (
 )
 
 // Real PostgreSQL row locks exercise the same synchronous, cancellable pgx
-// callbacks used by Core. Each run owns a unique table, never runtime data.
+// callbacks used by Core, including transactional presence and per-node cleanup
+// locking. Each run owns a unique table, never runtime data.
 func TestHubPostgresBlockedOpeningIsBounded(t *testing.T) {
 	dsn := os.Getenv("PARSAR_AGENTS_API_TEST_DATABASE_URL")
 	if dsn == "" {
@@ -76,7 +77,12 @@ func TestHubPostgresBlockedOpeningIsBounded(t *testing.T) {
 					if attempt == 1 {
 						pids <- conn.Conn().PgConn().PID()
 					}
-					_, err = conn.Exec(ctx, "UPDATE "+table+" SET connection=$2 WHERE id=$1", id.NodeID, connection)
+					err = pgx.BeginFunc(ctx, conn.Conn(), func(tx pgx.Tx) error {
+						if _, err := tx.Exec(ctx, "UPDATE "+table+" SET connection=$2 WHERE id=$1", id.NodeID, connection); err != nil {
+							return err
+						}
+						return ctx.Err()
+					})
 					if attempt == 1 {
 						results <- err
 					}
@@ -86,7 +92,17 @@ func TestHubPostgresBlockedOpeningIsBounded(t *testing.T) {
 					if id.NodeID != slow.NodeID {
 						return
 					}
-					if _, err := pool.Exec(ctx, "UPDATE "+table+" SET connection=NULL WHERE id=$1 AND connection=$2", id.NodeID, connection); err != nil {
+					err := pgx.BeginTxFunc(ctx, pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
+						var nodeID string
+						if err := tx.QueryRow(ctx, "SELECT id FROM "+table+" WHERE id=$1 FOR UPDATE", id.NodeID).Scan(&nodeID); err != nil {
+							return err
+						}
+						if _, err := tx.Exec(ctx, "UPDATE "+table+" SET connection=NULL WHERE id=$1 AND connection=$2", id.NodeID, connection); err != nil {
+							return err
+						}
+						return ctx.Err()
+					})
+					if err != nil {
 						t.Error(err)
 					}
 				},

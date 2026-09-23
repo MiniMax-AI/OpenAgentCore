@@ -169,59 +169,6 @@ func (s *Store) AuthenticateRuntimeNode(ctx context.Context, nodeID, credential 
 	}
 	return nodeIdentity(n, d.ProviderKind), nil
 }
-func (s *Store) ConnectRuntimeNode(ctx context.Context, nodeID, connectionID string, epoch uint64) error {
-	id, err := parseConnectionGeneration(nodeID)
-	if err != nil {
-		return err
-	}
-	connection, err := parseConnectionGeneration(connectionID)
-	if err != nil {
-		return err
-	}
-	changed, err := s.queries.ConnectRuntimeNode(ctx, sqlc.ConnectRuntimeNodeParams{ID: id, ConnectionID: connection, OwnerEpoch: int64(epoch)})
-	if err == nil && changed != 1 {
-		return ErrRuntimeNodeCredential
-	}
-	return err
-}
-func (s *Store) HeartbeatRuntimeNode(ctx context.Context, nodeID, connectionID string, epoch uint64, health RuntimeNodeHealth) error {
-	id, err := parseConnectionGeneration(nodeID)
-	if err != nil {
-		return err
-	}
-	connection, err := parseConnectionGeneration(connectionID)
-	if err != nil {
-		return err
-	}
-	if health.Diagnostic != "" && health.Diagnostic != "provider_unavailable" {
-		return ErrInvalidInput
-	}
-	for _, value := range []*int64{health.CPUCount, health.AvailableMemoryBytes, health.AvailableDiskBytes} {
-		if value != nil && *value < 0 {
-			return ErrInvalidInput
-		}
-	}
-	raw, err := json.Marshal(health)
-	if err != nil {
-		return err
-	}
-	changed, err := s.queries.HeartbeatRuntimeNode(ctx, sqlc.HeartbeatRuntimeNodeParams{ID: id, ConnectionID: connection, OwnerEpoch: int64(epoch), ProviderReady: health.ProviderReady, Health: raw})
-	if err == nil && changed != 1 {
-		return ErrRuntimeNodeCredential
-	}
-	return err
-}
-func (s *Store) DisconnectRuntimeNode(ctx context.Context, nodeID, connectionID string, epoch uint64) error {
-	id, err := parseConnectionGeneration(nodeID)
-	if err != nil {
-		return err
-	}
-	connection, err := parseConnectionGeneration(connectionID)
-	if err != nil {
-		return err
-	}
-	return s.queries.DisconnectRuntimeNode(ctx, sqlc.DisconnectRuntimeNodeParams{ID: id, ConnectionID: connection, OwnerEpoch: int64(epoch)})
-}
 func (s *Store) UpdateRuntimeNode(ctx context.Context, nodeID string, input RuntimeNodeUpdate) error {
 	if err := validateRuntimeNode(input.Name, input.MaxActive, input.MaxRetained); err != nil {
 		return err

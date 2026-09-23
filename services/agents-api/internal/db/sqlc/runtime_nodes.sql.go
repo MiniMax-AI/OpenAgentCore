@@ -509,6 +509,16 @@ func (q *Queries) ListRuntimeNodes(ctx context.Context) ([]ListRuntimeNodesRow, 
 	return items, nil
 }
 
+const lockRuntimeNodePresence = `-- name: LockRuntimeNodePresence :one
+SELECT id FROM runtime_nodes WHERE id=$1 FOR UPDATE
+`
+
+func (q *Queries) LockRuntimeNodePresence(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockRuntimeNodePresence, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
 const releaseRuntimePlacement = `-- name: ReleaseRuntimePlacement :exec
 UPDATE runtime_placements SET released_at=COALESCE(released_at,clock_timestamp()) WHERE environment_id=$1
 `
