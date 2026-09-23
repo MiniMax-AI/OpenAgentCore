@@ -7,8 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math/big"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 
@@ -88,14 +88,28 @@ func projectMetrics(data []byte, name string) (*wire.Metrics, error) {
 	}
 	// Registry timestamps are integer milliseconds. Parse the CLI decimal
 	// exactly, without float-to-nanosecond rounding changing the start fence.
-	seconds, fraction, _ := strings.Cut(string(report.UptimeSeconds), ".")
-	if seconds == "" || len(fraction) > 3 || strings.ContainsAny(seconds+fraction, "-+eE/") {
+	decimal := string(report.UptimeSeconds)
+	if len(decimal) == 0 || len(decimal) > 32 || strings.ContainsAny(decimal, "-+eE/") {
 		return nil, wire.ErrUnconfirmed
 	}
-	milliseconds, err := strconv.ParseInt(seconds+fraction+strings.Repeat("0", 3-len(fraction)), 10, 64)
-	if err != nil || milliseconds < 0 {
+	uptime, ok := new(big.Rat).SetString(decimal)
+	if !ok {
 		return nil, wire.ErrUnconfirmed
 	}
+	uptime.Mul(uptime, big.NewRat(1000, 1))
+	// as_secs_f64 can serialize 1.118 seconds as 1.1179999999999999.
+	// Recover the nearest native millisecond exactly. Within Go's duration
+	// range, floating serialization error stays below one microsecond.
+	rounded := new(big.Rat).Add(uptime, big.NewRat(1, 2))
+	millisecondsValue := new(big.Int).Quo(rounded.Num(), rounded.Denom())
+	if !millisecondsValue.IsInt64() {
+		return nil, wire.ErrUnconfirmed
+	}
+	deviation := new(big.Rat).Sub(uptime, new(big.Rat).SetInt(millisecondsValue))
+	if deviation.Abs(deviation).Cmp(big.NewRat(1, 1000)) > 0 {
+		return nil, wire.ErrUnconfirmed
+	}
+	milliseconds := millisecondsValue.Int64()
 	if milliseconds > int64((1<<63-1)/time.Millisecond) || report.Timestamp.UnixMilli() < milliseconds {
 		return nil, wire.ErrUnconfirmed
 	}

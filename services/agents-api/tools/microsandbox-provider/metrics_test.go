@@ -47,6 +47,15 @@ func TestProjectMetricsRetainsNativeStartAcrossPollsAndReplacement(t *testing.T)
 	}
 }
 
+func TestProjectMetricsRecoversNativeFloatingSerializationAtMillisecondPrecision(t *testing.T) {
+	for _, uptime := range []string{"1.118", "1.1179999999999999", "1.1180000000000001"} {
+		sample, err := projectMetrics(nativeMetrics("2026-09-22T12:00:00.123Z", uptime, 123), "owned")
+		if err != nil || sample.Uptime != 1118*time.Millisecond {
+			t.Fatalf("uptime %s: sample=%+v error=%v", uptime, sample, err)
+		}
+	}
+}
+
 func TestProjectMetricsRejectsUnqualifiedReports(t *testing.T) {
 	valid := string(nativeMetrics("2026-09-22T12:00:00.123Z", "300.001", 123))
 	for _, input := range []string{
