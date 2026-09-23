@@ -1353,7 +1353,8 @@ function projectStreamEventSession(
     const usage = withUsage ? { usage: projectTokenUsage(value.usage, invalidStreamEvent) } : {};
     if (
       !sameResourceId(turn.id, turnId) ||
-      // Native child history can first appear as a completed created snapshot.
+      // Core no longer streams child Turns. Earlier releases did, and native child
+      // history could first appear there as a completed created snapshot.
       (!(event.type === "agent.session.turn.created" && turn.subagent_id != null) && turn.status !== turnStatusByEvent[event.type]) ||
       (immutable !== undefined && turn.subagent_id == null && !sameResourceId(turn.agent_id, immutable.agent.id))
     ) return invalidStreamEvent();
