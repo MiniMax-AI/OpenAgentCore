@@ -97,7 +97,7 @@ func TestExecutionOptionsConfigurationReportsOnlyEndpointPresence(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, private := range []string{"example.test", "user:secret", "token=private", "codex-secret", "claude-secret", "mcode-secret", "base_url", "baseURL", "apiKey", "bearer_token"} {
+	for _, private := range []string{"example.test", "user:secret", "token=private", "codex-secret", "claude-secret", "mcode-secret", `"base_url":"`, `"api_key":`, "baseURL", "apiKey", "bearer_token"} {
 		if strings.Contains(string(encoded), private) {
 			t.Fatalf("private execution option %q leaked into startup projection: %s", private, encoded)
 		}

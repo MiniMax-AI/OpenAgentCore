@@ -2,8 +2,10 @@ package v1
 
 import (
 	"errors"
-	"net/url"
 	"strings"
+
+	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig"
+	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig/builtin"
 )
 
 // SessionExecutionInput is a write-only execution extension, not a provider resource.
@@ -21,14 +23,17 @@ type ModelProviderInput struct {
 }
 
 func (p *ModelProviderInput) Validate() error {
+	return p.validate(builtin.Registry())
+}
+
+func (p *ModelProviderInput) validate(registry harnessconfig.Registry) error {
 	if p == nil {
 		return errors.New("model_provider is required")
 	}
-	u, err := url.Parse(p.BaseURL)
-	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.ContainsAny(p.BaseURL, "\x00\r\n") {
+	if !validModelProviderBaseURL(p.BaseURL) {
 		return errors.New("model provider requires an HTTPS base_url without credentials, query or fragment")
 	}
-	if p.Protocol != "anthropic" && p.Protocol != "responses" {
+	if !registry.SupportsProtocol(p.Protocol) {
 		return errors.New("unsupported model provider protocol")
 	}
 	if strings.TrimSpace(p.APIKey) == "" || len(p.APIKey) > 16384 || strings.ContainsAny(p.APIKey, "\x00\r\n") {
@@ -41,15 +46,18 @@ func (p *ModelProviderInput) Validate() error {
 }
 
 func (p *ModelProviderInput) ValidateHarness(harness string) error {
-	if err := p.Validate(); err != nil {
+	return p.ValidateHarnessWithRegistry(harness, builtin.Registry())
+}
+
+// ValidateHarnessWithRegistry uses the same adapter registration snapshot as
+// capability discovery. It does not enable an execution engine or placement.
+func (p *ModelProviderInput) ValidateHarnessWithRegistry(harness string, registry harnessconfig.Registry) error {
+	if err := p.validate(registry); err != nil {
 		return err
 	}
-	return p.SafeView().ValidateHarness(harness)
+	return p.SafeView().ValidateHarnessWithRegistry(harness, registry)
 }
 
 func ValidateModelProtocol(protocol, harness string) error {
-	if (harness == "codex" && protocol == "responses") || ((harness == "claude_sdk" || harness == "mcode") && protocol == "anthropic") {
-		return nil
-	}
-	return errors.New("selected harness does not support this model provider protocol")
+	return builtin.Registry().ValidateProtocol(harness, protocol)
 }

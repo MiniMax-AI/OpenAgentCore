@@ -54,8 +54,9 @@ type Session struct {
 }
 
 type CreateSessionInput struct {
-	SandboxNodeID string
-	ModelProvider *v1.ModelProviderInput
+	ExecutionConfiguration *v1.SessionExecutionConfiguration
+	SandboxNodeID          string
+	ModelProvider          *v1.ModelProviderInput
 	// ModelOptions is a private snapshot of trusted deployment execution options.
 	ModelOptions    map[string]any
 	Initialization  EnvironmentSetup
@@ -139,7 +140,8 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 			return SessionCreation{}, ErrInvalidInput
 		}
 		environment, _ := fields["environment"].(map[string]any)
-		if environment["type"] != "openai_hosted" {
+		environmentType, _ := environment["type"].(string)
+		if !v1.ModelProviderEnvironmentSupported(environmentType) {
 			return SessionCreation{}, fmt.Errorf("%w: model credentials require a hosted environment", ErrInvalidInput)
 		}
 		fields["model_provider_configured"] = true
@@ -178,7 +180,7 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 		Configuration: configuration, CreationRequestHash: creationHash,
 		CreatorKind: pgtype.Text{String: input.Creator.Kind, Valid: true}, CreatorID: pgtype.Text{String: input.Creator.ID, Valid: true},
 	}
-	row, environment, err := s.createSessionResources(ctx, tenantID, params, batch, encodedInput, input.InitialFiles, input.Initialization, input.ModelProvider, input.ModelOptions, input.SandboxNodeID)
+	row, environment, err := s.createSessionResources(ctx, tenantID, params, batch, encodedInput, input.InitialFiles, input.Initialization, input.ModelProvider, input.ModelOptions, input.SandboxNodeID, input.ExecutionConfiguration)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SessionCreation{}, ErrIdempotencyConflict
 	}

@@ -20,7 +20,7 @@ const agent = await client.createAgent({
 });
 
 // Future Sessions inherit the saved defaults; saving itself does not execute.
-await client.createSession({
+const session = await client.createSession({
   agent_id: agent.id,
   environment: { type: "openai_hosted" },
   input: "Follow the saved Agent instructions.",
@@ -44,3 +44,26 @@ member preserves that member. A null provider clears its saved bundle, while
 defers protocol compatibility to Session admission. Existing Sessions retain their
 configuration snapshots. Session inline `agent.x_agents_core` remains harness-only;
 one-off provider overrides belong in the Session's top-level `x_agents_core`.
+
+Inspect the configuration committed for one Session without reading credentials:
+
+```ts
+const frozen = await client.retrieveSessionExecutionConfiguration(session.id);
+console.log(frozen.model.value, frozen.model.source, frozen.harness.value);
+// Deployment details are redacted; historical provider snapshots may be unavailable.
+if (frozen.model_provider.status === "available") {
+  console.log(frozen.model_provider.configuration?.protocol);
+}
+
+const startup = await client.retrieveStartupConfiguration({
+  includeConfigurationCapabilities: true,
+});
+const declarations = startup.configuration_capabilities;
+// Build support and deployment enablement do not prove live Runtime readiness.
+console.log(declarations?.harnesses, declarations?.runtime_availability);
+```
+
+The startup option is explicit to preserve the legacy response for older clients.
+On servers predating this extension, use the default startup read; requesting the
+new include parameter is unsupported. Configuration reads do not execute or wake
+Sessions. See [the query contract](../../contracts/agents-api/execution-configuration.md).

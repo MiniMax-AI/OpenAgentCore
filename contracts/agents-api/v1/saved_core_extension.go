@@ -1,6 +1,11 @@
 package v1
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig"
+	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig/builtin"
+)
 
 // SavedAgentCoreInput carries defaults for future Sessions. The provider bundle
 // is replaced as a whole; its API key is write-only.
@@ -60,14 +65,12 @@ func (p *ModelProviderInput) SafeView() *ModelProviderView {
 
 // ValidateHarness checks non-confidential protocol and limit compatibility.
 func (p *ModelProviderView) ValidateHarness(harness string) error {
+	return p.ValidateHarnessWithRegistry(harness, builtin.Registry())
+}
+
+func (p *ModelProviderView) ValidateHarnessWithRegistry(harness string, registry harnessconfig.Registry) error {
 	if p == nil {
 		return errors.New("model_provider is required")
 	}
-	if err := ValidateModelProtocol(p.Protocol, harness); err != nil {
-		return err
-	}
-	if harness == "mcode" && (p.ContextWindow == 0 || p.MaxOutputTokens == 0) {
-		return errors.New("MiniMax Code requires model context_window and max_output_tokens")
-	}
-	return nil
+	return registry.Validate(harness, p.Protocol, p.ContextWindow, p.MaxOutputTokens)
 }
