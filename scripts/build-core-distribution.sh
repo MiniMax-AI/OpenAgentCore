@@ -119,7 +119,7 @@ else
   for harness in codex claude mcode; do
     script="scripts/build-$harness-runtime.sh"
     if [[ "$harness" == codex ]]; then script=scripts/build-agents-runtime.sh; fi
-    AGENTS_RUNTIME_BUILD_DIR="$stage/$harness" "$script"
+    AGENTS_RUNTIME_BUILD_DIR="$stage/$harness" bash "$script"
     docker build --platform linux/amd64 --iidfile "$stage/$harness.id" \
       --label "org.opencontainers.image.revision=$revision" "$stage/$harness"
   done
