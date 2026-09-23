@@ -16,14 +16,17 @@ HELPER = '/usr/local/bin/agents-api-runtime-initialize'
 CANARY = 'private-initialization-canary-47a8'
 
 
-def invoke(action, *, succeeds=True, **fields):
+def invoke(action, *, succeeds=True, exit_code=None, **fields):
     payload = json.dumps({'version': 1, 'action': action, 'network': 'enabled', **fields})
     result = subprocess.run(['/usr/bin/python3', '-I', '-S', HELPER], input=payload,
                             text=True, capture_output=True, timeout=120)
-    expected = 'completed' if succeeds else 'failed'
+    expected = {'version': 1, 'outcome': 'completed' if succeeds else 'failed'}
+    if exit_code is not None:
+        # A failed sandboxed step reports only its exit status, never its output.
+        expected['exit_code'] = exit_code
     assert result.returncode == (0 if succeeds else 1), (action, result.returncode)
     assert result.stderr == '', (action, 'unexpected stderr')
-    assert json.loads(result.stdout) == {'version': 1, 'outcome': expected}, action
+    assert json.loads(result.stdout) == expected, (action, result.stdout)
     assert CANARY not in result.stdout + result.stderr, 'confidential output exposed'
 
 
@@ -100,8 +103,10 @@ assert len(socket.if_nameindex()) == 1
             assert result.stdout == cwd + '\n42\n', result.stdout
     invoke('setup', cwd='/workspace/sub', command='test -f ../first && pwd > second')
     assert Path('/environment/workspace/sub/second').read_text() == '/workspace/sub\n'
-    invoke('setup', succeeds=False, command='echo secret; echo secret >&2; exit 7')
-    invoke('setup', succeeds=False, cwd='/missing', command='touch /workspace/should-not-exist')
+    invoke('setup', succeeds=False, exit_code=7, command='echo secret; echo secret >&2; exit 7')
+    invoke('setup', succeeds=False, exit_code=3, command='echo "$INITIALIZATION_VALUE"; echo "$INITIALIZATION_VALUE" >&2; exit 3')
+    # bwrap reports its own failure to enter the missing cwd as status 1.
+    invoke('setup', succeeds=False, exit_code=1, cwd='/missing', command='touch /workspace/should-not-exist')
     assert not Path('/environment/workspace/should-not-exist').exists()
     invoke('setup', command='setsid /bin/bash -c "sleep 2; touch /workspace/descendant" >/dev/null 2>&1 &')
     time.sleep(3)
@@ -110,6 +115,8 @@ assert len(socket.if_nameindex()) == 1
         # Actual public registries, not synthetic package fixtures.
         invoke('npm', packages=['is-number@7.0.0'])
         invoke('python', packages=['packaging==26.0'])
+        # pip's diagnostics name the package and can echo configuration; only its status is reported.
+        invoke('python', succeeds=False, exit_code=1, packages=['parsar-initializer-nonexistent-4f7e-zz'])
         invoke('setup', cwd='/workspace/sub', command="node -e \"if (!require('/environment/packages/npm/lib/node_modules/is-number')(42)) process.exit(1)\" && python3 -c 'import packaging; assert packaging.__version__ == \"26.0\"'")
     print(json.dumps({'initialization': 'passed', 'real_packages': '--packages' in sys.argv,
                       'system_packages': '--system' in sys.argv}))

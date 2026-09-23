@@ -218,6 +218,22 @@ def run(request):
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
 
+def failed_receipt(error):
+    """Report only the integer exit status of a step run inside the isolation sandbox.
+
+    Setup commands and package managers (including apt from the system tool root)
+    run through bwrap. Runtime-internal helpers such as seed extraction and the
+    Skill writer do not, so their failures stay generic. The exception itself is
+    never serialized: it can contain the command, input or captured output.
+    """
+    receipt = {'version': 1, 'outcome': 'failed'}
+    code = getattr(error, 'returncode', None)
+    if (isinstance(error, subprocess.CalledProcessError) and isinstance(error.cmd, list)
+            and error.cmd[:1] == ['/usr/bin/bwrap'] and type(code) is int and 0 < code < 256):
+        receipt['exit_code'] = code
+    return json.dumps(receipt, separators=(',', ':'))
+
+
 def stdio_lifetime(args):
     """Bind sandbox lifetime to the native process, not its transient spawn thread."""
     parent = os.getppid()
@@ -297,9 +313,8 @@ def main():
             raise ValueError('invalid version')
         roots()
         run(request)
-    except Exception:
-        # Never serialize an exception that could contain input or process args.
-        print('{"version":1,"outcome":"failed"}')
+    except Exception as error:
+        print(failed_receipt(error))
         return 1
     print('{"version":1,"outcome":"completed"}')
     return 0

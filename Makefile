@@ -50,6 +50,7 @@ build-agents-api-release:
 
 check-agents-api: build-agents-api
 	go test ./services/agents-api/... ./packages/agents-client/... -count=1
+	PYTHONDONTWRITEBYTECODE=1 python3 services/agents-api/deploy/runtime/initialize_receipt_test.py
 
 docker-build-agents-api:
 	./scripts/build-agents-api-image.sh
