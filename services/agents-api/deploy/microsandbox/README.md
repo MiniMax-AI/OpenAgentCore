@@ -115,7 +115,10 @@ installation UUID for `installation_id`. Keep that identity and its original
 backend while any allocation needs cleanup. Set `provider: "microsandbox"` and
 include the single `microsandbox` object; do not include a `docker` object.
 
-Set VM memory, CPU and disk limits explicitly. `max_active` bounds active compute.
+Set VM memory, CPU and disk limits explicitly. `root_disk_mib` bounds the root
+disk; `environment_disk_mib` separately bounds the native owned ext4 disk at
+`/environment`, including workspace, staging and initialization data. Both are
+required; budget for both disks and their retained snapshots. `max_active` bounds active compute.
 `max_retained` bounds all retained allocations, including suspended snapshots, and
 must be at least `max_active`. `idle_seconds` is the sustained idle interval before
 suspension.

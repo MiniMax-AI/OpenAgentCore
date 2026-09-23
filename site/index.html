@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Parsar Core is open-source Agents API infrastructure. Deploy your own Core and Web console, with Codex, Claude Code and MiniMax Code through a shared Runtime.">
+    <meta name="theme-color" content="#f8fafc">
+    <title>Parsar Core · Open-source Agents API infrastructure</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header wrap">
+      <a class="brand" href="#" aria-label="Parsar Core home"><span class="brand-mark" aria-hidden="true">p<span>_</span></span>Parsar <span class="brand-core">Core</span></a>
+      <nav aria-label="Main navigation">
+        <a href="#architecture">Architecture</a>
+        <a href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/quickstart.md">Docs</a>
+        <a class="nav-github" href="https://github.com/MiniMax-AI/parsar-core">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero wrap" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="small-square" aria-hidden="true"></span> Open source. Self-deployed.</p>
+          <h1 id="hero-title">Agents API<br>infrastructure.<br><span>On your terms.</span></h1>
+          <p class="hero-description">Run Codex, Claude Code and MiniMax Code through one Core API and a shared Runtime. Deploy it on your infrastructure, with a Web console included.</p>
+          <div class="actions">
+            <a class="button primary" href="#install">Install Core <span aria-hidden="true">→</span></a>
+            <a class="button secondary" href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/quickstart.md">Read the docs</a>
+          </div>
+          <p class="hero-note">Your service. Your Runtime. Your model provider.</p>
+        </div>
+        <div class="code-panel">
+          <div class="panel-header"><span class="file-label"><span aria-hidden="true">&lt;/&gt;</span> connect.py</span><span class="panel-tag">READ ONLY</span></div>
+          <div class="code-intro">Point an OpenAI client at your Core.</div>
+          <pre aria-label="Python example listing saved agents from your Core"><code><span class="syntax-keyword">import</span> os
+<span class="syntax-keyword">from</span> openai <span class="syntax-keyword">import</span> OpenAI
+
+client = OpenAI(
+    base_url=<span class="syntax-string">"http://localhost:8091/v1"</span>,
+    api_key=os.environ[<span class="syntax-string">"PARSAR_CORE_API_KEY"</span>],
+)
+
+<span class="syntax-keyword">for</span> agent <span class="syntax-keyword">in</span> client.beta.agents.list():
+    <span class="syntax-function">print</span>(agent.id)</code></pre>
+          <div class="code-caption"><span class="caption-label">Protocol baseline</span><span>openai-python 3.13.0 · agents=v1</span></div>
+          <p class="code-footnote">Use your Core API key and endpoint. This reads saved Agents; it does not call a model. <a href="https://github.com/MiniMax-AI/parsar-core/blob/main/contracts/agents-api/README.md">Check coverage →</a></p>
+        </div>
+      </section>
+
+      <section class="architecture-section" id="architecture" aria-labelledby="architecture-title">
+        <div class="wrap">
+          <div class="section-heading"><div><p class="eyebrow">01 / Architecture</p><h2 id="architecture-title">One execution path.<br>Multiple native harnesses.</h2></div><p>Core owns the API and execution state. The shared Runtime connects that contract to each native harness.</p></div>
+          <div class="architecture" aria-label="Core connects to a shared Runtime, which connects to Codex, Claude Code or MiniMax Code">
+            <div class="architecture-node"><span class="node-kind">PUBLIC API</span><h3>Parsar Core</h3><p>Agents, Sessions &amp; execution state</p></div>
+            <span class="connector" aria-hidden="true">→</span>
+            <div class="architecture-node runtime-node"><span class="node-kind">SHARED CONTRACT</span><h3>Runtime</h3><p>Daemon, tools &amp; workspace</p></div>
+            <span class="connector" aria-hidden="true">→</span>
+            <div class="harnesses"><span>Codex</span><span>Claude Code</span><span>MiniMax Code</span></div>
+          </div>
+          <div class="architecture-notes"><p><strong>Web console included.</strong> Connect to your Core through the same public API.</p><p><strong>Native differences stay explicit.</strong> Supported capabilities depend on the harness and deployment profile.</p></div>
+        </div>
+      </section>
+
+      <section class="install-section wrap" id="install" aria-labelledby="install-title">
+        <div class="install-copy"><p class="eyebrow">02 / Installation</p><h2 id="install-title">Start with a<br> local bundle.</h2><p>Download or build a bundle for your host, extract it, then run the installer from that directory.</p><p>The default runs Core, the Web console and PostgreSQL with zero execution nodes. A local sandbox provider is an explicit installation option.</p><a class="text-link" href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/install.md">Installation guide <span aria-hidden="true">→</span></a></div>
+        <div class="install-options">
+          <div class="install-default"><div class="install-label"><h3>Core + Web</h3><span class="badge">DEFAULT</span></div><pre><code>./install.sh</code></pre><p>Includes PostgreSQL. No sandbox provider, KVM or systemd user service required.</p></div>
+          <div class="install-option"><div><h3>Local sandbox</h3><p>Optional microsandbox. Add --provider docker to choose Docker.</p></div><code>./install.sh --sandbox-provider true</code></div>
+          <div class="install-option"><div><h3>Core only</h3><p>Deploy the API without the Web console.</p></div><code>./install.sh --core-only</code></div>
+          <div class="install-option"><div><h3>Web only</h3><p>Connect the console to an existing Core.</p></div><code>./install.sh --web-only</code></div>
+          <p class="bundle-note">Bundle availability and supported hosts are documented in the installation guide. <a href="https://github.com/MiniMax-AI/parsar-core/releases">Browse releases ↗</a></p>
+        </div>
+      </section>
+
+      <section class="docs-section wrap" aria-labelledby="docs-title">
+        <div class="section-heading"><div><p class="eyebrow">03 / Before you deploy</p><h2 id="docs-title">Know what you are running.</h2></div><p>The pinned Agents API is the compatibility target. Coverage is tracked by operation and workflow; full compatibility is not claimed.</p></div>
+        <div class="docs-grid">
+          <a class="doc-card" href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/quickstart.md"><span class="doc-number">01 <span aria-hidden="true">↗</span></span><h3>Connect your first client</h3><p>Configure your Core endpoint and authentication, then make your first API request.</p><span class="doc-link">Quickstart</span></a>
+          <a class="doc-card" href="https://github.com/MiniMax-AI/parsar-core/blob/main/contracts/agents-api/README.md"><span class="doc-number">02 <span aria-hidden="true">↗</span></span><h3>Check protocol coverage</h3><p>Review verified workflows, harness differences and known gaps against the pinned baseline.</p><span class="doc-link">Coverage &amp; limitations</span></a>
+          <a class="doc-card" href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/operations.md"><span class="doc-number">03 <span aria-hidden="true">↗</span></span><h3>Operate your deployment</h3><p>Self-deployment means owning service and container health, Runtime availability and recovery.</p><span class="doc-link">Operations guide</span></a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer wrap"><a class="brand" href="#" aria-label="Parsar Core home"><span class="brand-mark" aria-hidden="true">p<span>_</span></span>Parsar <span class="brand-core">Core</span></a><p>Open-source Agents API infrastructure.</p><a href="https://github.com/MiniMax-AI/parsar-core">View the source <span aria-hidden="true">↗</span></a></footer>
+  </body>
+</html>

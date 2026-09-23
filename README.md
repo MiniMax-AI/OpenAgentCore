@@ -1,37 +1,49 @@
 # Parsar Core
 
-Standalone Agent API Core and its execution runtimes, copied from
-[Parsar](https://github.com/MiniMax-AI-Dev/parsar) at
-[`72ab4d37`](https://github.com/MiniMax-AI-Dev/parsar/commit/72ab4d37d49245f15b63d34f5741780e540bcec0).
-The source repository retains both its product and its existing Core copy.
+**Open-source Agents API infrastructure, with your choice of native harness.**
 
-This repository contains the API service, PostgreSQL migrations, pinned public
-protocol, execution daemon, the Docker provider, native Harness adapters,
-runtime image builders, Go and TypeScript client libraries, the standalone Core
-Web console, tests and operator documentation. It does not contain the Parsar
-product application, product backend, product database, business CLI or product
-deployment stack.
+Run Codex, Claude Code and MiniMax Code behind one execution API. Parsar Core
+owns Sessions, environments, files, credentials and execution history; each
+native harness keeps its own model and tool loop. Core runs independently of the
+Parsar product.
 
-V1 user-managed deployments colocate our daemon, selected harness, tools and
-`/workspace`. Core manages Docker only; users provision, renew and destroy E2B
-through the official SDK. The returned `remote_url` uses our private daemon
-transport, not stock `exec-server`. See the
-[Runtime enrollment guide](services/agents-api/README.md#user-managed-runtime-enrollment)
-for harness enablement and the [qualification record](contracts/agents-api/user-managed-runtime-v1.md)
-for tested deployments and remaining limits.
+Core and its Web console ship together. The default installation runs Core, Web
+and PostgreSQL with zero execution nodes. A local sandbox provider is optional:
+enable microsandbox or Docker explicitly when installing. With a provider enabled,
+Core creates each required sandbox from the colocated Runtime image. Model
+credentials are supplied through the existing write-only API extension.
 
 ## Start here
 
-- [API setup, authentication and execution](services/agents-api/README.md)
-- [Standalone containers](services/agents-api/CONTAINER.md)
-- [Docker Runtime](services/agents-api/deploy/codex/README.md)
-- [Protocol coverage and known gaps](contracts/agents-api/README.md)
-- [Harness selection](contracts/agents-api/harness-selection.md)
-- [Core Web overview](docs/web/README.md)
-- [Core Web 中文说明](docs/web/README.zh-CN.md)
-- [Connect Core Web to Core](docs/web/core-connection.md)
-- [Contributor rules](CONTRIBUTING.md)
-- [Copy provenance and validation](provenance/README.md)
+- [Install Core and Web](docs/getting-started/install.md)
+- [Make your first API request](docs/getting-started/quickstart.md)
+- [Service health, data and operations](docs/getting-started/operations.md)
+- [Protocol coverage and native differences](contracts/agents-api/README.md)
+- [Add or select a harness](contracts/agents-api/harness-selection.md)
+- [Public landing page source](site/index.html)
+
+After verifying and extracting a matching Linux amd64 distribution:
+
+```sh
+./install.sh                    # Core + Web + PostgreSQL, no sandbox provider
+./install.sh --core-only        # Core + PostgreSQL, no sandbox provider
+./install.sh --sandbox-provider true --provider microsandbox
+./install.sh --sandbox-provider true --provider docker
+```
+
+Web-only installation connects the unchanged console to an existing Core; see the
+installation guide for its URL and private credential-file options. Installation
+never creates a sample Session or calls a model. API examples are optional.
+
+The protocol baseline is `openai-python` 3.13.0 and `agents=v1`. Harness selection,
+model execution configuration and our daemon transport are documented differences.
+A passing workflow does not establish complete OpenAI Agents API compatibility.
+
+## Develop and build
+
+The repository includes the API, its independent PostgreSQL migrations, daemon,
+Runtime/provider adapters, clients, Web console and distribution tools. It has no
+Parsar product service, product database or business-user dependency.
 
 ```sh
 make build-agents-api
@@ -39,23 +51,22 @@ make build-daemon
 pnpm dev:web
 ```
 
-These builds require the Go version pinned in `go.mod`. Output goes under
-`~/.parsar/build/`; no product checkout, frontend or product database is needed.
-Provision a dedicated Core PostgreSQL database and caller credentials using the
-operator guide before starting the service. Native execution also needs the
-appropriate Runtime image and provider configuration.
+Use the toolchain pinned in `go.mod`, Node 22 and pnpm 10.30.3. Build output goes
+under `~/.parsar/build/`. For advanced deployment, see the
+[service guide](services/agents-api/README.md),
+[Docker Runtime](services/agents-api/deploy/codex/README.md),
+[microsandbox provider](services/agents-api/deploy/microsandbox/README.md), and
+[Web development guide](docs/web/README.md).
 
-Core Web lives in `apps/web` and talks only to the public `/v1/agents/**`
-HTTP/SSE contract through the TypeScript implementation in
-`packages/agents-client`. The Go client remains in
-`packages/agents-client/v1`; both clients live next to the contract they consume
-without coupling browser state to Core execution internals.
+Core-managed and user-managed environments reuse the colocated daemon, native
+harness, tools and workspace. E2B uses caller-managed provisioning through the
+official SDK; the returned `remote_url` connects our daemon, not `exec-server`.
+See the [Runtime enrollment guide](services/agents-api/README.md#user-managed-runtime-enrollment).
 
-The copied Go module/import paths, executable names and `PARSAR_*` environment
-variables intentionally retain their existing names. They resolve to source in
-this checkout, not a dependency on the Parsar product repository. This extraction
-does not rename protocols or change execution behavior. Third-party native
-sources and packages remain pinned dependencies, not vendored binaries.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before developing. Historical source-copy
+provenance is retained in [provenance/README.md](provenance/README.md). Existing Go
+import paths resolve inside this repository and do not require the product repo.
+Third-party native packages remain pinned build dependencies.
 
 ## Validate
 
