@@ -299,7 +299,10 @@ may inform operators, but automatic suspension requires durable Core-owned activ
 state and must not use a monitoring backend as lifecycle authority.
 Managed Docker observes one non-streaming Inspect/Stats sample. Managed microsandbox
 observes the exact persisted compute generation through the existing one-shot helper
-and pinned SDK Metrics call. Preserve cumulative CPU seconds, memory usage/limit and
+and pinned native CLI metrics report, with SDK identity checks before and after
+observation. Derive compute start from the same native sample timestamp and precise
+uptime; never subtract rounded uptime from a new wall-clock timestamp. Preserve
+cumulative CPU seconds, memory usage/limit and
 compute uptime semantics across both. Do not use microsandbox's instantaneous CPU
 percent, wake suspended compute, or expose provider-native identifiers to fill a
 common field.
