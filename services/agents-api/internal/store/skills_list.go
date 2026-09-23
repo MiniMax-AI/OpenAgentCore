@@ -84,6 +84,10 @@ func (s *Store) ListSkillVersions(ctx context.Context, tenantID, skillID, after 
 			return SkillVersionPage{}, err
 		}
 		if cursor.SkillID != id {
+			// As for Artifacts, a Skill deleted since its lookup stays not found.
+			if _, err := s.GetSkill(ctx, tenantID, skillID); err != nil {
+				return SkillVersionPage{}, err
+			}
 			return SkillVersionPage{}, errSkillVersionCursorParent
 		}
 		params.AfterVersion = pgtype.Int8{Int64: cursor.Version, Valid: true}

@@ -57,8 +57,17 @@ func (s *Store) ListSessionArtifacts(ctx context.Context, tenantID, sessionID, e
 		// Any cursor that is not an Artifact of this Session, including a
 		// malformed one, is an invalid cursor rather than a missing resource.
 		after, err := s.GetSessionArtifact(ctx, tenantID, sessionID, cursor)
+		if errors.Is(err, ErrNotFound) {
+			// The Session lookup above is a separate statement: a Session deleted
+			// since then stays not found. Deleted Sessions never reappear, so an
+			// existing one here also existed when the cursor was read.
+			if _, err := s.GetSession(ctx, tenantID, sessionID); err != nil {
+				return ArtifactPage{}, err
+			}
+			return ArtifactPage{}, errArtifactCursor
+		}
 		if err != nil {
-			return ArtifactPage{}, unresolvedCursor(err, errArtifactCursor)
+			return ArtifactPage{}, err
 		}
 		params.AfterCreated = pgtype.Timestamptz{Time: after.CreatedAt, Valid: true}
 		params.AfterID, _ = parseID(after.ID)
