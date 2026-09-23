@@ -1,5 +1,6 @@
 """Deployment files for the existing Core, Runtime and production console."""
 from pathlib import Path
+from urllib.parse import urlsplit
 
 
 def bind(source, target, readonly=True):
@@ -42,8 +43,11 @@ def core_environment(root, state, database_password):
     config = str(Path(root) / "config") if native else "/config"
     database = f'127.0.0.1:{state["database_port"]}' if native else "database:5432"
     daemon_host = f'host.microsandbox.internal:{state["core_port"]}' if native else "core:8091"
-    daemon_url = (state["public_url"].replace("https://", "wss://", 1) if state.get("public_url")
-                  else f"ws://{daemon_host}") + "/api/v1/agent-daemon/ws"
+    daemon_url = f"ws://{daemon_host}/api/v1/agent-daemon/ws"
+    if state.get("public_url"):
+        origin = urlsplit(state["public_url"])
+        daemon_url = origin._replace(scheme="wss" if origin.scheme == "https" else "ws",
+                                     path="/api/v1/agent-daemon/ws").geturl()
     result = {
         "AGENTS_API_DATABASE_URL": f"postgres://agents_api:{database_password}@{database}/agents_api?sslmode=disable",
         "AGENTS_API_KEYS_FILE": config + "/keys.json",

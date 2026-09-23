@@ -467,6 +467,17 @@ class InstallerTests(unittest.TestCase):
                 expected_host = "host.microsandbox.internal:8091" if provider == "microsandbox" else "core:8091"
                 self.assertEqual(local["AGENTS_API_DAEMON_WS_URL"], "ws://" + expected_host + "/api/v1/agent-daemon/ws")
 
+    def test_accepted_public_origin_schemes_generate_websocket_urls(self):
+        state = self.initialize()
+        for origin, expected in (("HTTPS://core.example", "wss://core.example"),
+                                 ("http://localhost:8080", "ws://localhost:8080"),
+                                 ("http://127.0.0.1:8080", "ws://127.0.0.1:8080")):
+            with self.subTest(origin=origin):
+                args = self.args("--public-url", origin)
+                configured = dict(state, public_url=args.public_url)
+                env = install.core_environment(self.root, configured, "fixture-password")
+                self.assertEqual(env["AGENTS_API_DAEMON_WS_URL"], expected + "/api/v1/agent-daemon/ws")
+
     def test_provider_requires_explicit_enablement_and_cannot_belong_to_web_only(self):
         self.assertIsNone(self.args("--sandbox-provider", "false").provider)
         self.assertEqual(self.args("--sandbox-provider").provider, "microsandbox")
