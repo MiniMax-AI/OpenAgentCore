@@ -11,7 +11,7 @@ import (
 )
 
 // @Summary Delete an execution Session
-// @Description Removes a durably idle or failed Session and its history from the public API. A Session with a queued, in-progress or waiting Turn, required actions or pending input returns 409 conflict_error and is left unchanged; cancel it and wait until it is idle before deleting. Repeating the deletion of the caller's own deleted Session returns the same confirmation; missing and foreign Sessions return 404. Internal records and native history are retained pending separate physical cleanup; overlapping stream timing remains unverified.
+// @Description Removes a durably idle or failed Session and its history from the public API. A Session whose root Turn is queued, in progress or waiting (including required actions) or whose input reservation is pending returns 409 conflict_error and is left unchanged; cancel it and wait until it is idle before deleting. Subagent child Turns and pending Environment file writes are not checked and do not block deletion. Repeating the deletion of the caller's own deleted Session returns the same confirmation; missing and foreign Sessions return 404. Internal records and native history are retained pending separate physical cleanup; overlapping stream timing remains unverified.
 // @Tags Sessions
 // @Produce json
 // @Security BearerAuth

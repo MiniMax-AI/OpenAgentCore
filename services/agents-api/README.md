@@ -237,8 +237,10 @@ Session updates require the metadata field; null/empty clears it and an object
 replaces supplied pairs. An empty update body rejects before resource lookup.
 
 Delete with `client.beta.agents.sessions.delete(session.id)`. Only a durably idle
-or failed Session without required actions or pending input can be deleted; any
-other Session returns 409 `conflict_error` and is left unchanged. Cancel its work
+or failed Session without required actions or pending input can be deleted; a
+queued, running or waiting root Turn or a pending input reservation returns 409
+`conflict_error` and leaves the Session unchanged. Subagent child Turns and
+pending Environment file writes do not block deletion. Cancel its work
 with an `agent.session.input.cancel` event, wait until it is idle, then delete it.
 Confirmation means public removal: Session/history reads and new input become
 unavailable, and existing streams close on observing removal. Creation keys stay

@@ -306,8 +306,9 @@ upgrade the protocol.
 - `DELETE /agents/sessions/{session_id}` returns the canonical `id`,
   `object=agent.session.deleted` and `deleted=true` after durable public removal
   of a durably idle or failed Session without required actions or pending input.
-  A queued, running or waiting Turn or pending input returns 409 `conflict_error`
-  without any change; callers cancel first and delete once idle. Session/Turn/Items
+  A queued, running or waiting root Turn or pending input returns 409
+  `conflict_error` without any change; callers cancel first and delete once idle.
+  Subagent child Turns and pending Environment file writes do not block deletion. Session/Turn/Items
   reads, live streams, metadata updates and new input exclude the resource.
   Existing streams close on observing removal without an invented deletion event.
   Creation keys remain reserved (local 409); the owner's repeated deletion returns

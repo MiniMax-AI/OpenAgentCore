@@ -289,14 +289,14 @@ first returned 409.
 | --- | --- | --- |
 | D1 | DELETE of the caller's own Session that is already publicly deleted (SES-29) | 200 `{id, object: "agent.session.deleted", deleted: true}`, identical to the first confirmation, with no database write. GET, update, events, Turns and Items stay 404. |
 | D2 | DELETE of a never-existing, malformed or foreign Session, including a foreign deleted one | Unchanged: the byte-identical 404 `not_found_error` of a missing Session. |
-| D3 | DELETE while a Turn is queued, in progress (including a requested cancellation) or waiting on required actions or function results, or while an input reservation is pending: a queued later input, self-hosted input awaiting a connection, or hosted initial input while provisioning (SES-30) | 409 with type and code `conflict_error`, param null and message "session must be durably idle or failed without required actions before deletion". Nothing changes: no cancellation, marker, event, Artifact removal or Runtime cleanup. |
+| D3 | DELETE while a root Turn is queued, in progress (including a requested cancellation) or waiting on required actions or function results, or while an input reservation is pending: a queued later input, self-hosted input awaiting a connection, or hosted initial input while provisioning (SES-30). Subagent child Turns and pending Environment file writes are not checked (see follow-ups) | 409 with type and code `conflict_error`, param null and message "session must be durably idle or failed without required actions before deletion". Nothing changes: no cancellation, marker, event, Artifact removal or Runtime cleanup. |
 | D4 | DELETE of an idle Session, including an idle hosted Session still provisioning without input, and of a failed Session without required actions, including expired initial input | 200 with the existing public deletion and managed Runtime cleanup. |
 | D5 | Callers that need to delete running work | Cancel first with `agent.session.input.cancel`, wait until the Session is idle, then delete. The Core Web offers this as an explicit action after a 409. |
 
 Decisions:
 
 - The rule is the one the creation stream already uses to settle: the Session is
-  idle or failed, no Turn is queued, running or waiting, and the latest input
+  idle or failed, no root Turn is queued, running or waiting, and the latest input
   reservation is not pending. Deletion reuses the Store's active-Turn query and
   reservation state, so a pending reservation blocks deletion even while the
   public status projects idle.
@@ -319,10 +319,20 @@ Decisions:
   markers can remain in upgraded databases; hidden-work settlement, restart
   reconciliation and Runtime cleanup keep handling them unchanged.
 - The Core Web keeps the plain delete action. When Core returns the busy 409, the
-  dialog explains it and replaces the action with Cancel work and delete, which
-  sends one cancellation, reads the Session until it is idle or failed without
-  required actions (bounded to 30 seconds) and sends one deletion. A rejected or
-  uncertain cancellation, a timeout or another 409 stops without retrying.
+  dialog reads the Session once. If a Turn is still busy it replaces the action
+  with Cancel work and delete, which sends one cancellation, reads the Session
+  until it is idle or failed without required actions (a 30-second bound checked
+  between reads) and sends one deletion. A rejected or uncertain cancellation, a
+  timeout, a connection change or another 409 stops without retrying. If the
+  Session reads idle or failed, or only awaits its Environment connection, only
+  pending input blocks deletion; Core rejects its cancellation, so the dialog
+  explains that the input must start, expire or fail first and offers no
+  cancellation.
+
+Follow-up: deletion checks only root Turns and input reservations. A subagent child
+Turn that is still running and a pending Environment file write do not block it,
+which matches the permissive behavior before this batch. The official behavior for
+both is unobserved; decide whether they should return 409 once it is sampled.
 
 Unchanged: physical retention and purge (SESSION-CLEANUP-001 remainder), 404 for
 reads of deleted Sessions, Artifact retention rules after deletion, managed Runtime

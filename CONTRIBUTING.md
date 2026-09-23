@@ -34,9 +34,12 @@ the Session creation catalog and uses the existing public client operations. Pat
 only edited fields, confirm deletion, and never automatically retry an uncertain
 write. When Core refuses to delete a busy Session, offer an explicit Cancel work
 and delete action that cancels once, reads until the Session is idle within a
-bounded wait and deletes once; never cancel without that confirmation. A Core connection change must discard the previous connection's forms,
-pending results and notices. Saving a Template must not allocate a Runtime, call a
-model or imply execution readiness. Keep unsupported advanced profiles explicit.
+bounded wait and deletes once; never cancel without that confirmation. When only
+input waiting for its Environment blocks deletion, explain that it must start,
+expire or fail instead, because Core rejects its cancellation. A Core connection
+change must discard the previous connection's forms, pending results and notices.
+Saving a Template must not allocate a Runtime, call a model or imply execution
+readiness. Keep unsupported advanced profiles explicit.
 
 For subsequent alignment and milestone closure batches, the main thread coordinates
 design, shared interface agreements, file ownership, integration and merge. First
@@ -1647,8 +1650,10 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   Store aliases preserve existing callers during this transition.
 - Session deletion uses a durable `sessions.deleted_at` marker. Public deletion
   accepts only a durably idle or failed Session without required actions: no
-  queued, in-progress or waiting Turn and no pending input reservation, the same
-  settlement rule as the creation stream. Take that decision and commit the marker
+  queued, in-progress or waiting root Turn and no pending input reservation, the
+  same settlement rule as the creation stream. Subagent child Turns and pending
+  Environment file writes are not checked, as before this rule; their official
+  behavior is unobserved. Take that decision and commit the marker
   under the tenant Session lock that orders Turn and input admission, so either
   admission commits first and deletion conflicts, or admission observes the
   deletion. A busy Session returns 409 `conflict_error` with the observed official
