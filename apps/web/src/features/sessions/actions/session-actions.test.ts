@@ -297,13 +297,51 @@ describe("Session deletion", () => {
       new AgentCoreError(busyMessage, 409, "conflict_error", null, "conflict_error"),
     );
     const cancelTurn = vi.fn();
-    const core = { deleteSession, cancelTurn } as unknown as AgentCore;
+    const retrieveSession = vi.fn().mockResolvedValue({ ...session("session-1"), status: "in_progress" });
+    const core = { deleteSession, cancelTurn, retrieveSession } as unknown as AgentCore;
     const error = await requestSessionDelete(core, "session-1").catch((value: unknown) => value);
     expect(error).toBeInstanceOf(SessionActionError);
     expect((error as SessionActionError).message).toContain("only when it is idle or failed without required actions");
     expect((error as SessionActionError).message).toContain("nothing was changed");
     expect((error as SessionActionError).message).toContain("Cancel work and delete");
     expect(deleteSession).toHaveBeenCalledTimes(1);
+    expect(cancelTurn).not.toHaveBeenCalled();
+  });
+
+  it("does not offer cancellation when only input waiting for its Environment blocks deletion", async () => {
+    const deleteSession = vi.fn().mockRejectedValue(
+      new AgentCoreError(busyMessage, 409, "conflict_error", null, "conflict_error"),
+    );
+    const cancelTurn = vi.fn();
+    const awaitingConnection = {
+      ...session("session-1"),
+      status: "requires_action" as const,
+      required_actions: [{ type: "environment_connection" as const, environment_id: "environment-1" }],
+    };
+    const functionAction = {
+      ...session("session-1"),
+      status: "requires_action" as const,
+      required_actions: [{ type: "function_call" as const, call_id: "call-1", turn_id: "turn-1", name: "lookup", arguments: {} }],
+    };
+    const retrieveSession = vi.fn()
+      .mockResolvedValueOnce(session("session-1"))
+      .mockResolvedValueOnce({ ...session("session-1"), status: "failed", error: "The environment is no longer available for this input." })
+      .mockResolvedValueOnce(awaitingConnection)
+      .mockResolvedValueOnce(functionAction)
+      .mockRejectedValueOnce(new AgentCoreError("unavailable", 503));
+    const core = { deleteSession, cancelTurn, retrieveSession } as unknown as AgentCore;
+
+    for (const kind of ["session_input_pending", "session_input_pending", "session_input_pending", "session_busy", "session_busy"]) {
+      const failure = await requestSessionDelete(core, "session-1").catch((value: unknown) => value);
+      expect(failure).toMatchObject({ kind });
+      if (kind === "session_input_pending") {
+        expect((failure as Error).message).toContain("cannot be cancelled");
+        expect((failure as Error).message).toContain("starts, expires or fails");
+        expect((failure as Error).message).not.toContain("Cancel work and delete");
+      }
+    }
+    expect(deleteSession).toHaveBeenCalledTimes(5);
+    expect(retrieveSession).toHaveBeenCalledTimes(5);
     expect(cancelTurn).not.toHaveBeenCalled();
   });
 

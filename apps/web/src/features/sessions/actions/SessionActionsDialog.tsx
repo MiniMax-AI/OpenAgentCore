@@ -293,7 +293,9 @@ export function SessionActionsDialog({
           uncertainDeleteSessionRef.current = current.id;
           setDeleteRetryBlocked(true);
         }
+        // Offer cancellation only for work it can stop; pending input cannot be cancelled.
         if (error instanceof SessionActionError && error.kind === "session_busy") setDeleteBusy(true);
+        if (error instanceof SessionActionError && error.kind === "session_input_pending") setDeleteBusy(false);
         setActionError(errorMessage(error));
       }
     } finally {

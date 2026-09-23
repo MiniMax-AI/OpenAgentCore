@@ -20,6 +20,7 @@ export type SessionActionFailureKind =
   | "not_found"
   | "lifecycle_conflict"
   | "session_busy"
+  | "session_input_pending"
   | "core_unavailable"
   | "metadata_conflict"
   | "request_failed"
@@ -398,12 +399,42 @@ export async function requestSessionUpdate(
   }
 }
 
+/**
+ * A Session that reads idle or failed, or only awaits its Environment
+ * connection, yet cannot be deleted is holding input that has not started.
+ * Core rejects cancellation while that input is pending.
+ */
+function onlyInputPending(session: AgentSession): boolean {
+  if (session.status === "idle" || session.status === "failed") return true;
+  return session.status === "requires_action" &&
+    session.required_actions.length > 0 &&
+    session.required_actions.every((action) => action.type === "environment_connection");
+}
+
+// Reads the Session once after a busy conflict so the dialog only offers
+// cancellation when there is work that cancellation can stop.
+async function classifyBusyDelete(core: AgentCore, sessionId: string, busy: SessionActionError): Promise<SessionActionError> {
+  let latest: AgentSession;
+  try {
+    latest = await retrieveCanonicalSession(core, sessionId);
+  } catch {
+    return busy;
+  }
+  if (!onlyInputPending(latest)) return busy;
+  return new SessionActionError(
+    "Agent Core deletes a Session only when it is idle or failed without required actions. This Session has input waiting to start in its Environment, which cannot be cancelled, so nothing was changed. Delete it after that input starts, expires or fails; once it starts, cancel its work first.",
+    "session_input_pending",
+    { cause: busy.cause },
+  );
+}
+
 export async function requestSessionDelete(core: AgentCore, sessionId: string): Promise<SessionDeleted> {
   let deleted: SessionDeleted;
   try {
     deleted = await core.deleteSession(sessionId);
   } catch (error) {
-    throw normalizeSessionActionError(error, "delete", "write");
+    const failure = normalizeSessionActionError(error, "delete", "write");
+    throw failure.kind === "session_busy" ? await classifyBusyDelete(core, sessionId, failure) : failure;
   }
   if (
     deleted?.id !== sessionId ||
