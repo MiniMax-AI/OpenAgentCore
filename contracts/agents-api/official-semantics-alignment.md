@@ -315,6 +315,11 @@ Decisions:
   cannot be cancelled publicly (the pending reservation rejects new batches), so
   it stays undeletable until the input starts, its five-minute deadline expires
   or its Environment fails. The official behavior of that window is unobserved.
+- Capacity change: previously, deleting a provisioning hosted Session with
+  reserved input released its sandbox node placement immediately. Now the
+  deletion returns 409, and the placement keeps counting toward the node's
+  retained and reserved capacity until the input is admitted or its five-minute
+  deadline expires. A later allowed deletion releases an unallocated placement.
 - Earlier releases deleted busy Sessions after requesting cancellation. Their
   markers can remain in upgraded databases; hidden-work settlement, restart
   reconciliation and Runtime cleanup keep handling them unchanged.

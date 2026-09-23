@@ -1661,6 +1661,10 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   cancel first (`agent.session.input.cancel`), wait until the Session is idle and
   delete it. Core admits a Turn synchronously, so it also conflicts right after an
   `events.create` 202, where the official service was observed to return 200.
+  Deleting a provisioning hosted Session with reserved input used to release its
+  sandbox node placement at once; it now conflicts, and the placement counts
+  toward node capacity until the input is admitted or its five-minute deadline
+  expires. A later allowed deletion releases an unallocated placement.
   The owner's repeated deletion returns the same 200 confirmation without writing;
   foreign, missing and malformed identifiers keep the byte-identical 404. Public
   reads, metadata changes, event streams and input admission exclude deleted

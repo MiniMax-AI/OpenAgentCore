@@ -362,3 +362,73 @@ func TestSessionDeletionRacesAdmissionUnderSessionLock(t *testing.T) {
 		})
 	}
 }
+
+// A provisioning hosted Session with reserved initial input keeps its node
+// placement, and so its capacity, until the input settles. Earlier releases
+// released the placement immediately; now deletion conflicts until the input is
+// admitted or expires, and the later allowed deletion releases it once.
+func TestSessionDeletionKeepsProvisioningInputPlacementUntilSettled(t *testing.T) {
+	s, w, d := managerFixture(t, 2, 4)
+	ctx := t.Context()
+	tenant := uuid.NewString()
+	input := managerSessionInput("reserved-input", d.LocalNodeID)
+	input.InitialInputs = []Input{messageInput("reserved")}
+	session, err := s.CreateSession(ctx, tenant, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type state struct {
+		deleted, released pgtype.Timestamptz
+		retained, reserved int64
+	}
+	read := func() state {
+		t.Helper()
+		var current state
+		if err := s.pool.QueryRow(ctx, `SELECT s.deleted_at, p.released_at FROM sessions s
+			JOIN environments e ON e.session_id=s.id JOIN runtime_placements p ON p.environment_id=e.id
+			WHERE s.id=$1 AND p.node_id=$2`, session.ID, d.LocalNodeID).Scan(&current.deleted, &current.released); err != nil {
+			t.Fatal("missing placement", err)
+		}
+		nodes, err := s.ListRuntimeNodes(ctx)
+		if err != nil || len(nodes) != 1 {
+			t.Fatal(nodes, err)
+		}
+		current.retained, current.reserved = nodes[0].Retained, nodes[0].Reserved
+		return current
+	}
+	before := read()
+	if before.deleted.Valid || before.released.Valid || before.retained != 1 || before.reserved != 1 {
+		t.Fatal("unexpected reserved placement", before)
+	}
+	if err := s.DeleteSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatal("foreign deletion", err)
+	}
+	if err := s.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, ErrSessionNotIdle) {
+		t.Fatal("provisioning input deleted", err)
+	}
+	if after := read(); after != before {
+		t.Fatal("rejected deletion released capacity", before, after)
+	}
+	if _, err := s.pool.Exec(ctx, "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1", session.ID); err != nil {
+		t.Fatal(err)
+	}
+	if count, err := w.ExpireEnvironmentInputs(ctx); err != nil || count != 1 {
+		t.Fatal("initial input did not expire", count, err)
+	}
+	if err := s.DeleteSession(ctx, tenant, session.ID); err != nil {
+		t.Fatal(err)
+	}
+	deleted := read()
+	if !deleted.deleted.Valid || !deleted.released.Valid || deleted.retained != 0 || deleted.reserved != 0 {
+		t.Fatal("allowed deletion kept the placement", deleted)
+	}
+	if err := s.DeleteSession(ctx, tenant, session.ID); err != nil {
+		t.Fatal("repeated deletion", err)
+	}
+	if again := read(); again != deleted {
+		t.Fatal("repeated deletion changed timestamps", deleted, again)
+	}
+	if err := s.DeleteSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatal("foreign deletion of a deleted Session", err)
+	}
+}
