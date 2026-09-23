@@ -762,7 +762,7 @@ Decisions:
   from 1 to 255. The Store composes the reason from a fixed step label and
   integers, so commands, env values, package names, paths and process output
   cannot reach the reason, events, logs or responses.
-- **Storage.** The additive migration `000061_environment_failure.sql` adds the
+- **Storage.** The additive migration `000062_environment_failure.sql` adds the
   nullable `environments.failure_reason` and `failed_at`; a check ties them to
   `status = failed` and bounds the reason to 256 characters. Environments that
   failed earlier keep NULL and their previous projection and events; new input

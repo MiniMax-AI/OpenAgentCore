@@ -370,5 +370,5 @@ Evidence: campaign scan 6 HI-01..04 (private
   nullable `param` on stream errors. Core Web renders the failed Session and its
   error from the snapshot and ignores the error event.
 
-Environments that failed before migration `000061` have no recorded reason; they
+Environments that failed before migration `000062` have no recorded reason; they
 keep their earlier projection and events.
