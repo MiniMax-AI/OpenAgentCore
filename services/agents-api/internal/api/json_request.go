@@ -22,8 +22,8 @@ func readJSONBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 }
 
 func readJSONBodyLimit(w http.ResponseWriter, r *http.Request, limit int64, message string) ([]byte, bool) {
-	// A doubling buffer allocates about twice the body in total; io.ReadAll's
-	// smaller growth steps allocate about five times a large body.
+	// A doubling buffer allocates two to four times the body in total, four near
+	// the limit; io.ReadAll's smaller growth steps allocate 4.4 to 6.1 times.
 	var body bytes.Buffer
 	_, err := body.ReadFrom(http.MaxBytesReader(w, r.Body, limit))
 	if err == nil {
@@ -356,13 +356,18 @@ func (s *keyScanner) text(position uint32) string {
 	return string(s.left)
 }
 
-// appendUnescaped decodes the contents of a valid JSON string whose surrogate
-// escapes are paired.
+// appendUnescaped decodes the contents of a JSON string. Like encoding/json,
+// it decodes an unpaired or mis-paired surrogate escape as U+FFFD, so such a
+// key matches no member name; the body gate rejects these escapes earlier. A
+// truncated escape, which valid JSON cannot contain, is kept as it is.
 func appendUnescaped(dst, s []byte) []byte {
 	for i := 0; i < len(s); i++ {
 		if s[i] != '\\' {
 			dst = append(dst, s[i])
 			continue
+		}
+		if i+1 == len(s) || s[i+1] == 'u' && i+6 > len(s) {
+			return append(dst, s[i:]...)
 		}
 		i++
 		switch s[i] {
@@ -380,8 +385,13 @@ func appendUnescaped(dst, s []byte) []byte {
 			r := hex4(s[i+1 : i+5])
 			i += 4
 			if utf16.IsSurrogate(r) {
-				r = utf16.DecodeRune(r, hex4(s[i+3:i+7]))
-				i += 6
+				low := rune(-1)
+				if r < 0xdc00 && i+7 <= len(s) && s[i+1] == '\\' && s[i+2] == 'u' {
+					low = hex4(s[i+3 : i+7])
+				}
+				if r = utf16.DecodeRune(r, low); r != utf8.RuneError {
+					i += 6
+				}
 			}
 			dst = utf8.AppendRune(dst, r)
 		default:

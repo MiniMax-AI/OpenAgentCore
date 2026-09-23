@@ -119,10 +119,12 @@ func TestCredentialCaseVariantsAreUnknown(t *testing.T) {
 	}
 }
 
-// A route rejects a body of unknown keys at the first one, before decoding:
-// reading the body, the gate and the member check allocate a small multiple of
-// the body in total. Before this batch, Session create allocated about 30 times
-// such a body, decoding every member and formatting an error for each key.
+// A route rejects a body of unknown top-level keys at the first one, before
+// decoding: reading the body, the gate and the member check allocate a small
+// multiple of the body in total. Before this batch, Session create allocated
+// about 30 times such a body, decoding every member and formatting an error for
+// each key. Unknown keys nested under agent or environment still pass the
+// existing object decoding and stay linear, at or below the earlier cost.
 func TestUnknownMembersRejectWithLinearAllocation(t *testing.T) {
 	h, s := validationHandler(t)
 	unknownKeys := func(prefix string, size int) []byte {
@@ -155,5 +157,50 @@ func TestUnknownMembersRejectWithLinearAllocation(t *testing.T) {
 	}
 	if s.writes != 0 {
 		t.Fatal("rejected body reached storage")
+	}
+}
+
+// Unpaired surrogate escapes, which the body gate rejects, decode as U+FFFD and
+// never panic, also at the end of an exact-capacity slice.
+func TestUnpairedSurrogatesNeverPanic(t *testing.T) {
+	exact := func(s string) []byte { return append(make([]byte, 0, len(s)), s...) }
+	for escaped, want := range map[string]string{
+		`\ud800`:         "\ufffd",
+		`\udc00`:         "\ufffd",
+		`a\ud83d`:        "a\ufffd",
+		`\ud83d\u0041`:   "\ufffdA",
+		`\ud83d\ud83d`:   "\ufffd\ufffd",
+		`\ude00\ud83d`:   "\ufffd\ufffd",
+		`\ud83d\n\ude00`: "\ufffd\n\ufffd",
+		`\ud83d\ude00`:   "😀",
+		`\ud83d\u`:       "\ufffd\\u",
+		`\u00`:           "\\u00",
+		`a\`:             "a\\",
+	} {
+		if got := string(appendUnescaped(nil, exact(escaped))); got != want {
+			t.Errorf("%s: got %q, want %q", escaped, got, want)
+		}
+	}
+	type inner struct {
+		Name string `json:"name"`
+	}
+	type outer struct {
+		X     inner   `json:"x"`
+		Items []inner `json:"items"`
+	}
+	typ := reflect.TypeFor[outer]()
+	for _, body := range []string{
+		`{"x":{"\ud800":1}}`,
+		`{"x":{"name\udc00":1}}`,
+		`{"items":[{"\ud83d\u0041":1}]}`,
+		`{"\ud83d":{"name":1}}`,
+		`{"x":{"n\ud83d\ud83d":1}}`,
+	} {
+		if !inexactMember(exact(body), typ) {
+			t.Errorf("%s: an unpaired surrogate key matched a member", body)
+		}
+	}
+	if inexactMember(exact(`{"x":{"n\u0061me":"\ud800"}}`), typ) {
+		t.Error("an unpaired surrogate value affected member names")
 	}
 }
