@@ -1,5 +1,6 @@
 """Pinned Files.list checks for a known, unchanged directory of regular files."""
 
+import base64
 from pathlib import PurePosixPath
 from urllib.parse import urlencode
 
@@ -199,6 +200,24 @@ def verify_file_create_rows(client, http, environment_id, directory):
     response = http.post(endpoint, headers=headers, json={"type": "inline", "data": "MjAx", "path": path})
     assert response.status_code == 201, "Files.create did not return 201"
     assert response.json() == {"environment_id": environment_id, "object": "agent.environment.file", "path": path, "size_bytes": 3}
+    return path
+
+
+def verify_file_write_rows(client, http, environment_id, directory):
+    """Files.create write rows FW1-FW6: parent creation, no replacement and the inline bound."""
+    endpoint = str(client.base_url).rstrip("/") + "/agents/environments/" + environment_id + "/files"
+    headers = {"Authorization": "Bearer " + client.api_key, "OpenAI-Beta": "agents=v1"}
+    path = directory + "/n1/n2/nested.txt"
+    response = http.post(endpoint, headers=headers, json={"type": "inline", "data": "bmVzdGVk", "path": path})
+    assert response.status_code == 201, "Files.create did not create missing parents"
+    assert response.json() == {"environment_id": environment_id, "object": "agent.environment.file", "path": path, "size_bytes": 6}
+    response = http.post(endpoint, headers=headers, json={"type": "inline", "data": "b3RoZXI=", "path": path})
+    assert_invalid_request(response, "environment.files paths must not traverse symlinks or overwrite existing files")
+    response = http.post(endpoint, headers=headers, json={"type": "inline", "data": "cg==", "path": directory + "/n1"})
+    assert_invalid_request(response, "file path conflicts with an existing environment file")
+    oversized = base64.b64encode(b"x" * ((5 << 20) + 1)).decode()
+    response = http.post(endpoint, headers=headers, json={"type": "inline", "data": oversized, "path": directory + "/oversized.bin"})
+    assert_invalid_request(response, "environment.files[0].data exceeds the 5 MiB decoded limit")
     return path
 
 

@@ -5,11 +5,19 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
+)
+
+// Known Files.create destination refusals reported by the Runtime installer.
+// They wrap store.ErrInvalidInput; the rejected write installed nothing.
+var (
+	ErrEnvironmentFileDirectory = fmt.Errorf("%w: environment file destination is a directory", store.ErrInvalidInput)
+	ErrEnvironmentFileUnsafe    = fmt.Errorf("%w: environment file destination exists or traverses a link", store.ErrInvalidInput)
 )
 
 type fileWriteResult struct {
@@ -117,7 +125,12 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 		return unavailable
 	}
 	if state == "rejected" {
-		if result.ErrorCode == "invalid_request" || result.ErrorCode == "write_rejected" {
+		switch {
+		case result.ErrorCode == "write_rejected" && result.Reason == proto.WorkspaceWriteReasonDirectory:
+			return fileWriteResult{err: ErrEnvironmentFileDirectory}
+		case result.ErrorCode == "write_rejected" && result.Reason == proto.WorkspaceWriteReasonUnsafe:
+			return fileWriteResult{err: ErrEnvironmentFileUnsafe}
+		case result.ErrorCode == "invalid_request" || result.ErrorCode == "write_rejected":
 			return fileWriteResult{err: store.ErrInvalidInput}
 		}
 		return unavailable

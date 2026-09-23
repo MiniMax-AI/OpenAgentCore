@@ -16,7 +16,7 @@ sys.dont_write_bytecode = True
 import httpx2
 from openai import OpenAI
 from official_environment_files import (verify_environment_files, verify_file_create_rows, verify_file_list_rows,
-                                        verify_file_tenant_isolation)
+                                        verify_file_tenant_isolation, verify_file_write_rows)
 from official_environment_files_native import caller_token
 from official_source_files import verify_source_files
 
@@ -37,9 +37,11 @@ def main():
         "empty.bin": b"",
         "binary.bin": bytes(range(256)),
         "chunked.bin": bytes(range(256)) * 8193,
-        "large.bin": b"x" * (50 << 20),
+        # Inline data is bounded at 5 MiB decoded; source copies keep 50 MiB.
+        "large.bin": b"x" * (5 << 20),
         "model-input.txt": settings["model_input"].encode(),
     }
+    source_cases = {**cases, "large.bin": b"x" * (50 << 20)}
     expected, receipts = {}, []
     with httpx2.Client(trust_env=False, timeout=215) as http:
         client = OpenAI(api_key=token, base_url=base, max_retries=0, _strict_response_validation=True, http_client=http)
@@ -57,7 +59,7 @@ def main():
             assert receipt == {"environment_id": environment, "object": "agent.environment.file", "path": path, "size_bytes": len(content)}, "Wrong upload metadata"
             expected[path] = len(content)
             receipts.append({"path": path, "size": len(content), "sha256": hashlib.sha256(content).hexdigest()})
-        source_expected, source_receipts, source_proof = verify_source_files(client, foreign, http, environment, directory, cases)
+        source_expected, source_receipts, source_proof = verify_source_files(client, foreign, http, environment, directory, source_cases)
         expected.update(source_expected)
         receipts.extend(source_receipts)
         pages, continuation = verify_environment_files(client, http, environment, directory, expected)
@@ -69,6 +71,8 @@ def main():
             "symlink": "/workspace/stage-link"})
         created = verify_file_create_rows(client, http, environment, directory)
         receipts.append({"path": created, "size": 3, "sha256": hashlib.sha256(b"201").hexdigest()})
+        nested = verify_file_write_rows(client, http, environment, directory)
+        receipts.append({"path": nested, "size": 6, "sha256": hashlib.sha256(b"nested").hexdigest()})
         for body in (
             {"type": "inline", "data": "?", "path": target},
             {"type": "inline", "data": "", "path": "/workspace/../escape"},
@@ -84,8 +88,8 @@ def main():
         assert response.status_code == 404, "Foreign tenant upload accepted"
         assert token not in response.text and foreign_token not in response.text, "Credential leaked in error"
     print(json.dumps({"sdk": pin["sdk_version"], "commit": pin["commit"], "uploads": receipts, "listing": pages, "sources": source_proof,
-                      "wire_rows": wire_rows + ["create_201_and_field_errors"],
-                      "limits": ["Private Environment setup", "Other source purposes/expiration/listing unimplemented", "Overwrite metadata/error parity unverified", "Real-model consumption verified by invoking fixture"]}))
+                      "wire_rows": wire_rows + ["create_201_and_field_errors", "create_parents_no_replace_inline_bound"],
+                      "limits": ["Private Environment setup", "Other source purposes/expiration/listing unimplemented", "Tracked and untracked existing files share the untracked message", "Real-model consumption verified by invoking fixture"]}))
 
 
 if __name__ == "__main__":
