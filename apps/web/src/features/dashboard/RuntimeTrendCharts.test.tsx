@@ -17,8 +17,8 @@ function sample(sampledAt: number, cpuRatio: number | null): RuntimeTrendSample 
     memoryUsageBytes: 512,
     memoryLimitBytes: 1_024,
     tokenTotals: [],
-    inputTokensPerMinute: null,
-    outputTokensPerMinute: null,
+    inputTokensPerMinute: 100,
+    outputTokensPerMinute: 50,
   };
 }
 
@@ -30,5 +30,17 @@ describe("Runtime live-window chart accessibility", () => {
 
     expect(html).toContain("Runtime worker</th><td>Unavailable</td><td>1</td>");
     expect(html).not.toContain("Runtime worker</th><td>50%</td><td>1</td>");
+  });
+
+  it("renders smooth honest paths and a memory area only after two real samples", () => {
+    const html = renderToStaticMarkup(
+      <RuntimeTrendCharts samples={[sample(60_000, .25), sample(120_000, .5)]} />,
+    );
+
+    expect(html).toContain("dashboard-runtime-trend-line");
+    expect(html).toContain(" C ");
+    expect(html).toContain("dashboard-runtime-trend-area dashboard-runtime-trend-fill-purple");
+    expect(html).toContain("dashboard-runtime-trend-latest");
+    expect(html).not.toContain("Collecting live samples");
   });
 });

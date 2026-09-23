@@ -35,6 +35,7 @@ import {
   type RuntimeDashboardRow,
 } from "./dashboard-model";
 import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";
+import { RUNTIME_SNAPSHOT_REFRESH_MS } from "./runtime-snapshot";
 import { RuntimeTrendCharts } from "./RuntimeTrendCharts";
 import {
   appendRuntimeTrendSample,
@@ -299,6 +300,7 @@ export function RuntimeObservabilityContent({
     () => runtimeTrendRange(trendSamples, selectedTrendRange),
     [selectedTrendRange, trendSamples],
   );
+  const latestTrendSample = visibleTrendSamples.at(-1);
 
   useEffect(() => {
     setTrendSamples((current) => appendRuntimeTrendSample(current, snapshot));
@@ -319,17 +321,31 @@ export function RuntimeObservabilityContent({
             <h3 id="dashboard-runtime-live-heading">Live resource trends</h3>
             <p>Browser-local samples · no durable history</p>
           </div>
-          <div className="dashboard-runtime-range" role="group" aria-label="Runtime live range">
-            {RUNTIME_TREND_RANGES.map((range) => (
-              <button
-                key={range.label}
-                type="button"
-                aria-pressed={selectedTrendRange === range.milliseconds}
-                onClick={() => setSelectedTrendRange(range.milliseconds)}
-              >
-                {range.label}
-              </button>
-            ))}
+          <div className="dashboard-runtime-live-controls">
+            <span
+              className={stale ? "dashboard-runtime-live-status dashboard-runtime-live-status-stale" : "dashboard-runtime-live-status"}
+              aria-label={stale
+                ? "Runtime sampling refresh failed; showing retained samples"
+                : `Live Runtime sampling every ${RUNTIME_SNAPSHOT_REFRESH_MS / 1_000} seconds`}
+            >
+              <i aria-hidden="true" />{stale ? "Stale · retrying" : `Live · ${RUNTIME_SNAPSHOT_REFRESH_MS / 1_000}s`}
+            </span>
+            <span className="dashboard-runtime-sample-count">
+              {visibleTrendSamples.length} {visibleTrendSamples.length === 1 ? "sample" : "samples"}
+              {latestTrendSample ? <> · <time dateTime={new Date(latestTrendSample.sampledAt).toISOString()}>{new Date(latestTrendSample.sampledAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time></> : null}
+            </span>
+            <div className="dashboard-runtime-range" role="group" aria-label="Runtime live range">
+              {RUNTIME_TREND_RANGES.map((range) => (
+                <button
+                  key={range.label}
+                  type="button"
+                  aria-pressed={selectedTrendRange === range.milliseconds}
+                  onClick={() => setSelectedTrendRange(range.milliseconds)}
+                >
+                  {range.label}
+                </button>
+              ))}
+            </div>
           </div>
         </header>
         <RuntimeTrendCharts samples={visibleTrendSamples} />

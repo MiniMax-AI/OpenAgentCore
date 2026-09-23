@@ -2524,6 +2524,7 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
   await expect(dashboard.getByRole("heading", { name: "Memory usage" })).toBeVisible();
   await expect(dashboard.getByRole("heading", { name: "Compute uptime" })).toBeVisible();
   await expect(dashboard.getByRole("heading", { name: "Token throughput" })).toBeVisible();
+  await expect(dashboard.getByLabel("Live Runtime sampling every 30 seconds")).toBeVisible();
   const liveRange = dashboard.getByRole("group", { name: "Runtime live range" });
   await expect(liveRange.getByRole("button", { name: "1h" })).toHaveAttribute("aria-pressed", "true");
   await liveRange.getByRole("button", { name: "15m" }).click();
@@ -2536,6 +2537,7 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
   await expect(dashboard.getByLabel("Memory usage: 3 live samples")).toBeVisible();
   await expect(dashboard.getByLabel("Compute uptime: 3 live samples")).toBeVisible();
   await expect(dashboard.getByLabel("Token throughput: 3 live samples")).toBeVisible();
+  await expect(dashboard.locator(".dashboard-runtime-sample-count")).toContainText("3 samples");
   await expect(dashboard.getByText("CPU usage live trend available")).toBeAttached();
   await expect(dashboard).not.toContainText("Collecting live samples");
   await expect(dashboard.getByRole("table", { name: "Runtime targets" })).not.toBeVisible();
@@ -2637,9 +2639,11 @@ test("publishes Dashboard counts only after every top-level Agent and Session pa
   await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Agents" })).toContainText("3");
   await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Sessions" })).toContainText("2");
   expect(agentAfters).toEqual([null, "agent_b"]);
-  expect(sessionAfters).toHaveLength(4);
-  expect(sessionAfters.filter((after) => after === null)).toHaveLength(2);
-  expect(sessionAfters.filter((after) => after === "session_snapshot")).toHaveLength(2);
+  // Session collection loads once for the page and once per Runtime snapshot.
+  // Returning to Dashboard refreshes Runtime immediately instead of waiting 30 seconds.
+  expect(sessionAfters).toHaveLength(6);
+  expect(sessionAfters.filter((after) => after === null)).toHaveLength(3);
+  expect(sessionAfters.filter((after) => after === "session_snapshot")).toHaveLength(3);
 });
 
 test("keeps the previous Dashboard result when pagination exceeds the safety limit", async ({ page, request }) => {

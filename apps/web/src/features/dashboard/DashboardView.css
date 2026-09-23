@@ -1003,6 +1003,59 @@
   margin: 0;
 }
 
+.dashboard-runtime-live-controls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.dashboard-runtime-live-status,
+.dashboard-runtime-sample-count {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-runtime-live-status {
+  gap: 6px;
+  color: var(--success);
+  font-weight: 650;
+}
+
+.dashboard-runtime-live-status-stale {
+  color: var(--warning);
+}
+
+.dashboard-runtime-live-status i {
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+  border-radius: 999px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 13%, transparent);
+  animation: dashboard-runtime-live-pulse 2.4s ease-out infinite;
+}
+
+.dashboard-runtime-live-status-stale i {
+  animation: none;
+}
+
+@keyframes dashboard-runtime-live-pulse {
+  0%, 55% { box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 13%, transparent); }
+  80%, 100% { box-shadow: 0 0 0 7px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-runtime-live-status i {
+    animation: none;
+  }
+}
+
 .dashboard-runtime-live-toolbar h3 {
   font-size: 12px;
   font-weight: 650;
@@ -1109,9 +1162,13 @@
 
 .dashboard-runtime-trend-legend span {
   display: inline-flex;
+  max-width: 104px;
   min-width: 0;
   align-items: center;
   gap: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dashboard-runtime-trend-legend i {
@@ -1194,6 +1251,21 @@
   stroke-width: 2.25;
   stroke-linecap: round;
   stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.dashboard-runtime-trend-area {
+  stroke: none;
+  opacity: .14;
+}
+
+.dashboard-runtime-trend-fill-purple {
+  fill: #b998f4;
+}
+
+.dashboard-runtime-trend-latest {
+  fill: var(--surface);
+  stroke-width: 1.75;
   vector-effect: non-scaling-stroke;
 }
 
@@ -1957,6 +2029,16 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 7px;
+  }
+
+  .dashboard-runtime-live-controls {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .dashboard-runtime-range {
+    margin-left: auto;
   }
 
   .dashboard-runtime-trend-legend {

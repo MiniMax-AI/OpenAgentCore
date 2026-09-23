@@ -13,6 +13,7 @@ interface TrendSeries {
   label: string;
   tone: "orange" | "green" | "blue" | "purple";
   points: TrendPoint[];
+  fill?: boolean;
 }
 
 interface TrendBand {
@@ -46,6 +47,21 @@ function segments(points: readonly TrendPoint[]): TrendPoint[][] {
   return result;
 }
 
+function linePath(points: readonly TrendPoint[], x: (value: number) => number, y: (value: number) => number): string {
+  if (points.length === 0) return "";
+  const first = points[0]!;
+  let result = `M ${x(first.sampledAt)} ${y(first.value ?? 0)}`;
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1]!;
+    const current = points[index]!;
+    const previousX = x(previous.sampledAt);
+    const currentX = x(current.sampledAt);
+    const controlOffset = (currentX - previousX) / 3;
+    result += ` C ${previousX + controlOffset} ${y(previous.value ?? 0)} ${currentX - controlOffset} ${y(current.value ?? 0)} ${currentX} ${y(current.value ?? 0)}`;
+  }
+  return result;
+}
+
 function TrendChart({
   title,
   subtitle,
@@ -54,6 +70,7 @@ function TrendChart({
   maximum,
   formatValue,
   bands = [],
+  ticks = [1, .66, .33, 0],
 }: {
   title: string;
   subtitle: string;
@@ -62,6 +79,7 @@ function TrendChart({
   maximum: number;
   formatValue: (value: number) => string;
   bands?: TrendBand[];
+  ticks?: number[];
 }) {
   const timestamps = samples.map((sample) => sample.sampledAt);
   const start = timestamps[0] ?? 0;
@@ -76,7 +94,6 @@ function TrendChart({
   const validPoints = Math.max(0, ...series.map((entry) => entry.points.filter((point) => (
     point.value !== null && Number.isFinite(point.value)
   )).length));
-  const ticks = [1, .66, .33, 0];
   const xTicks = [start, start + range / 2, end];
 
   return (
@@ -84,7 +101,7 @@ function TrendChart({
       <header>
         <div><h3>{title}</h3><p>{subtitle}</p></div>
         <div className="dashboard-runtime-trend-legend">
-          {series.map((entry) => <span key={entry.id}><i className={`dashboard-runtime-trend-${entry.tone}`} />{entry.label}</span>)}
+          {series.map((entry) => <span key={entry.id} title={entry.label}><i className={`dashboard-runtime-trend-${entry.tone}`} />{entry.label}</span>)}
         </div>
       </header>
       <div className="dashboard-runtime-chart-frame">
@@ -104,11 +121,24 @@ function TrendChart({
           {samples.length > 0 ? xTicks.map((tick, index) => (
             <text key={`${tick}:${index}`} className="dashboard-runtime-trend-axis" x={x(tick)} y={HEIGHT - 8} textAnchor={index === 0 ? "start" : index === 2 ? "end" : "middle"}>{timeLabel(tick)}</text>
           )) : null}
-          {series.flatMap((entry) => segments(entry.points).map((segment, index) => {
-            const points = segment.map((point) => `${x(point.sampledAt)},${y(point.value ?? 0)}`).join(" ");
-            return segment.length === 1
-              ? <circle key={`${entry.id}:${index}`} className={`dashboard-runtime-trend-dot dashboard-runtime-trend-stroke-${entry.tone}`} cx={x(segment[0]!.sampledAt)} cy={y(segment[0]!.value ?? 0)} r="3" />
-              : <polyline key={`${entry.id}:${index}`} className={`dashboard-runtime-trend-line dashboard-runtime-trend-stroke-${entry.tone}`} points={points} />;
+          {series.flatMap((entry) => segments(entry.points).flatMap((segment, index) => {
+            const key = `${entry.id}:${index}`;
+            if (segment.length === 1) {
+              return <circle key={key} className={`dashboard-runtime-trend-dot dashboard-runtime-trend-stroke-${entry.tone}`} cx={x(segment[0]!.sampledAt)} cy={y(segment[0]!.value ?? 0)} r="3" />;
+            }
+            const path = linePath(segment, x, y);
+            const last = segment.at(-1)!;
+            return [
+              entry.fill ? (
+                <path
+                  key={`${key}:area`}
+                  className={`dashboard-runtime-trend-area dashboard-runtime-trend-fill-${entry.tone}`}
+                  d={`${path} L ${x(last.sampledAt)} ${y(0)} L ${x(segment[0]!.sampledAt)} ${y(0)} Z`}
+                />
+              ) : null,
+              <path key={`${key}:line`} className={`dashboard-runtime-trend-line dashboard-runtime-trend-stroke-${entry.tone}`} d={path} />,
+              <circle key={`${key}:latest`} className={`dashboard-runtime-trend-latest dashboard-runtime-trend-stroke-${entry.tone}`} cx={x(last.sampledAt)} cy={y(last.value ?? 0)} r="2.75" />,
+            ];
           }))}
         </svg>
         {!hasLine ? <div className="dashboard-runtime-chart-collecting"><strong>Collecting live samples</strong><span>{validPoints}/2 valid points · {samples.length} snapshots · no history is synthesized</span></div> : null}
@@ -171,7 +201,7 @@ export function RuntimeTrendCharts({ samples }: { samples: readonly RuntimeTrend
     return {
       cpu,
       memory: [
-        { id: "used", label: "used", tone: "purple", points: memoryUsed },
+        { id: "used", label: "used", tone: "purple", points: memoryUsed, fill: true },
         { id: "limit", label: "configured limit", tone: "green", points: memoryLimit },
       ] satisfies TrendSeries[],
       uptime,
@@ -188,7 +218,7 @@ export function RuntimeTrendCharts({ samples }: { samples: readonly RuntimeTrend
 
   return (
     <div className="dashboard-runtime-trend-grid" aria-label="Runtime live-window charts">
-      <TrendChart title="CPU usage" subtitle="reported or cumulative-delta utilization · live window" samples={samples} series={charts.cpu} maximum={cpuMaximum} formatValue={(value) => `${Math.round(value)}%`} bands={[{ from: 0, to: 30, tone: "safe" }, { from: 30, to: 70, tone: "warning" }, { from: 70, to: 100, tone: "danger" }]} />
+      <TrendChart title="CPU usage" subtitle="reported or cumulative-delta utilization · live window" samples={samples} series={charts.cpu} maximum={cpuMaximum} formatValue={(value) => `${Math.round(value)}%`} bands={[{ from: 0, to: 30, tone: "safe" }, { from: 30, to: 70, tone: "warning" }, { from: 70, to: 100, tone: "danger" }]} ticks={[1, .7, .3, 0]} />
       <TrendChart title="Memory usage" subtitle="working set / configured limit · live window" samples={samples} series={charts.memory} maximum={memoryMaximum} formatValue={(value) => formatDashboardBytes(Math.round(value))} />
       <TrendChart title="Compute uptime" subtitle="provider started_at → observed_at · current incarnation" samples={samples} series={charts.uptime} maximum={uptimeMaximum} formatValue={(value) => formatDashboardDuration(value)} />
       <TrendChart title="Token throughput" subtitle="Session Usage deltas · missing usage excluded" samples={samples} series={charts.tokens} maximum={tokenMaximum} formatValue={(value) => `${formatDashboardTokens(Math.round(value))}/min`} />

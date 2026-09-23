@@ -973,12 +973,12 @@ export function App() {
     void refreshSessions();
     void refreshVaults();
     void refreshEnvironmentTemplates();
-    void refreshRuntimeSnapshot();
-  }, [refreshAgents, refreshEnvironmentTemplates, refreshRuntimeSnapshot, refreshSessions, refreshVaults]);
+  }, [refreshAgents, refreshEnvironmentTemplates, refreshSessions, refreshVaults]);
 
   useEffect(() => {
     if (view !== "dashboard") return;
     let timer: number | null = null;
+    void refreshRuntimeSnapshot();
     const schedule = () => {
       const jitter = Math.floor(Math.random() * 5_000);
       timer = window.setTimeout(() => {

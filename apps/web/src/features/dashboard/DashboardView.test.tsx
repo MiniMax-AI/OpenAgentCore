@@ -248,6 +248,8 @@ describe("Dashboard loaded-result presentation", () => {
     expect(html).toContain('aria-label="Runtime live-window charts"');
     expect(html).toContain("Live resource trends");
     expect(html).toContain("Browser-local samples · no durable history");
+    expect(html).toContain("Live · 30s");
+    expect(html).toContain("1 sample");
     expect(html).toContain('aria-label="Runtime live range"');
     expect(html).toContain('aria-pressed="true">1h</button>');
     expect(html).toContain("CPU usage");
@@ -318,6 +320,48 @@ describe("Dashboard loaded-result presentation", () => {
     expect(html).toContain("Last loaded");
     expect(html).toContain("Saved definitions");
     expect(html).toContain("In this snapshot");
+  });
+
+  it("does not present retained Runtime samples as live after a refresh failure", () => {
+    const runtimeSession = session("runtime-stale", {
+      environment: {
+        type: "openai_hosted",
+        id: "22222222-2222-4222-8222-222222222222",
+        capability_directories: [],
+        network: { access: "enabled", allowed_domains: [] },
+        packages: { npm: [], python: [], system: [] },
+        files: [],
+        plugins: [],
+        skills: [],
+      },
+    });
+    const observation: RuntimeObservation = {
+      id: runtimeSession.id,
+      object: "agent.runtime_observation",
+      session_id: runtimeSession.id,
+      environment_id: "22222222-2222-4222-8222-222222222222",
+      mode: "openai_hosted",
+      provider_type: "docker",
+      instance: { kind: "managed_allocation", allocation_id: "33333333-3333-4333-8333-333333333333", device_id: null, connection_generation: null },
+      status: "observed",
+      reason: null,
+      allocation_created_at: 1_700_000_000,
+      resolved_at: 1_700_000_100,
+      observed_at: 1_700_000_090,
+      started_at: 1_700_000_010,
+      cpu: null,
+      memory: null,
+    };
+    const html = render({
+      runtimeSnapshot: { sessions: [runtimeSession], observations: [observation], loadedAt: 1_700_000_100_000 },
+      runtimeCollectionState: "failed",
+      runtimeCollectionError: "Runtime refresh failed",
+      runtimeCollectionHasSnapshot: true,
+    });
+
+    expect(html).toContain("Stale · retrying");
+    expect(html).toContain("Runtime sampling refresh failed; showing retained samples");
+    expect(html).not.toContain("Live · 30s");
   });
 
   it("keeps an existing snapshot visible during a refresh and disables duplicate refresh", () => {
