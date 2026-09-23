@@ -188,11 +188,14 @@ Decisions:
   unsafe entry names inside a directory, and `not_found` also covers a missing
   workspace root and an entry removed during observation; mapping either would hide
   a failure as an empty listing. A missing or replaced root keeps 404 or 503. A
-  root removed after it was opened fails every lookup, so the helper checks that
-  the opened root still has a link before reporting `not_directory` and otherwise
-  keeps 404. Permission denial, observation errors, transport loss and uncertain
-  output keep 503, and tenant and Environment authorization run first. The shared workspace path
-  code and the write installer are unchanged.
+  root removed or replaced after it was opened fails lookups or reads as empty.
+  So before reporting `not_directory` or an empty listing, the helper reopens the
+  root path without following links and compares device and inode with the held
+  root; a removed or replaced root keeps 404. Link counts are not used, because
+  overlayfs can keep a nonzero count for a removed lower-layer directory.
+  Permission denial, observation errors, transport loss and uncertain output keep
+  503, and tenant and Environment authorization run first. The shared workspace
+  path code and the write installer are unchanged.
 - The list path is rejected instead of normalized. `..` and other non-clean forms
   use the F7 message. Outside paths, backslash, control characters, invalid UTF-8
   and paths over 4096 bytes use the F8 absolute-directory message; only the
