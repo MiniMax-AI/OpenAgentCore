@@ -894,9 +894,8 @@ export function App() {
   }, [refreshAgents, refreshEnvironmentTemplates, refreshFilteredSessions, refreshSessions, refreshVaults]);
 
   const refreshSystem = useCallback(() => {
-    refreshDashboard();
     void refreshStartupConfiguration();
-  }, [refreshDashboard, refreshStartupConfiguration]);
+  }, [refreshStartupConfiguration]);
 
   const changeSessionAgentFilter = useCallback((agentId: string | null) => {
     if (sessionAgentFilterRef.current === agentId) return;
@@ -2248,21 +2247,12 @@ export function App() {
           {view === "system" ? (
             <SystemView
               key={`system:${coreGeneration}`}
-              coreState={coreState}
-              coreBaseUrl={connection.baseUrl}
               startupConfiguration={startupConfiguration}
               startupConfigurationState={startupConfigurationState}
               startupConfigurationSupported={startupConfigurationSupported}
-              vaultCollectionState={vaultCollectionState}
-              vaultSupported={vaultSupported}
               selfHostedWebEnabled={__AGENTS_CORE_WEB_SELF_HOSTED_SESSIONS__}
               managedWebEnabled={__AGENTS_CORE_WEB_OPENAI_HOSTED_SESSIONS__}
-              refreshing={
-                agentCollectionState === "connecting" ||
-                sessionCollectionState === "connecting" ||
-                vaultCollectionState === "connecting" ||
-                startupConfigurationState === "connecting"
-              }
+              refreshing={startupConfigurationState === "connecting"}
               onRefresh={refreshSystem}
             />
           ) : null}

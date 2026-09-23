@@ -2371,15 +2371,13 @@ test("presents Dashboard page-chain results and System boundaries without extra 
 
   await page.getByRole("button", { name: "System", exact: true }).click();
   const system = page.locator(".system-page");
-  await expect(system.getByRole("listitem").filter({ hasText: "Core API" })).toContainText("Available");
-  await expect(system.getByRole("listitem").filter({ hasText: "Vaults" })).toContainText("Available");
-  await expect(system.getByRole("listitem").filter({ hasText: "Default adapter" })).toContainText("Codex");
+  await expect(system.getByRole("listitem").filter({ hasText: "Harnesses" })).toContainText("Claude SDK, Codex");
   await expect(system.getByRole("listitem").filter({ hasText: "Managed sandbox" })).toContainText("Docker");
   await expect(system.getByRole("listitem").filter({ hasText: "Endpoint overrides" })).toContainText("Configured");
-  await expect(system.getByRole("listitem")).toHaveCount(5);
+  await expect(system.getByRole("listitem")).toHaveCount(3);
   await expect(system).toContainText("Configured for this process");
   await expect(system).toContainText("Daemon gateway");
-  await expect(system).toContainText("Used by Agents created in this Web UI");
+  await expect(system).toContainText("Codex is used by Agents created in this Web UI");
   await expect(system).toContainText("This UI does not expose adapter selection");
   await expect(system).not.toContainText("Enabled · default");
   await expect(system).toContainText("Operator endpoint override: configured");
@@ -2392,16 +2390,13 @@ test("presents Dashboard page-chain results and System boundaries without extra 
   const beforeSystemRefresh = await fixtureRequests(request);
   const systemRefresh = system.getByRole("button", { name: "Refresh System status" });
   await systemRefresh.click();
-  await expect.poll(async () => {
-    const entries = await fixtureRequests(request);
-    return [count(entries, "/v1/agents"), count(entries, "/v1/agents/sessions")];
-  }).toEqual([
-    count(beforeSystemRefresh, "/v1/agents") + 1,
-    count(beforeSystemRefresh, "/v1/agents/sessions") + 1,
-  ]);
+  await expect.poll(async () => count(await fixtureRequests(request), "/v1/agents/core/startup-configuration")).toBe(
+    count(beforeSystemRefresh, "/v1/agents/core/startup-configuration") + 1,
+  );
   const afterSystemRefresh = await fixtureRequests(request);
-  expect(count(afterSystemRefresh, "/v1/agents")).toBe(count(beforeSystemRefresh, "/v1/agents") + 1);
-  expect(count(afterSystemRefresh, "/v1/agents/sessions")).toBe(count(beforeSystemRefresh, "/v1/agents/sessions") + 1);
+  expect(count(afterSystemRefresh, "/v1/agents")).toBe(count(beforeSystemRefresh, "/v1/agents"));
+  expect(count(afterSystemRefresh, "/v1/agents/sessions")).toBe(count(beforeSystemRefresh, "/v1/agents/sessions"));
+  expect(count(afterSystemRefresh, "/v1/vaults")).toBe(count(beforeSystemRefresh, "/v1/vaults"));
   expect(count(afterSystemRefresh, "/v1/agents/core/startup-configuration")).toBe(
     count(beforeSystemRefresh, "/v1/agents/core/startup-configuration") + 1,
   );

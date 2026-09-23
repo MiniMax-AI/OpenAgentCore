@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { CoreStartupConfiguration } from "@agents-core-web/agents-client";
 
-import { safeCoreBaseUrlLabel, SystemView } from "./SystemView";
+import { SystemView } from "./SystemView";
 
 const startup: CoreStartupConfiguration = {
   object: "agents.core.startup_configuration",
@@ -28,13 +28,9 @@ const startup: CoreStartupConfiguration = {
 function render(overrides: Partial<Parameters<typeof SystemView>[0]> = {}): string {
   return renderToStaticMarkup(
     <SystemView
-      coreState="ready"
-      coreBaseUrl="https://user:pass@core.example/v1?token=secret#fragment"
       startupConfiguration={startup}
       startupConfigurationState="ready"
       startupConfigurationSupported
-      vaultCollectionState="ready"
-      vaultSupported
       selfHostedWebEnabled
       managedWebEnabled
       refreshing={false}
@@ -49,9 +45,11 @@ describe("SystemView", () => {
     const html = render();
 
     expect(html).toContain("Core startup configuration");
-    expect(html.match(/role="listitem"/g)).toHaveLength(5);
-    expect(html).toContain("Vault catalog loaded");
-    expect(html).toContain("Default adapter");
+    expect(html.match(/role="listitem"/g)).toHaveLength(3);
+    expect(html).not.toContain("Core API");
+    expect(html).not.toContain("Vault catalog loaded");
+    expect(html).toContain("Harnesses");
+    expect(html).toContain("Claude SDK, Codex");
     expect(html).toContain("Managed sandbox");
     expect(html).toContain("Endpoint overrides");
     expect(html).toContain("<strong>Configured</strong>");
@@ -63,7 +61,7 @@ describe("SystemView", () => {
     expect(html).toContain("Claude SDK");
     expect(html).toContain("MiniMax Code");
     expect(html).toContain("Execution adapters");
-    expect(html).toContain("Used by Agents created in this Web UI");
+    expect(html).toContain("Codex is used by Agents created in this Web UI");
     expect(html).toContain("This UI does not expose adapter selection. API requests can select any enabled adapter");
     expect(html).not.toContain("Enabled · default");
     expect(html).toContain("Operator endpoint override: configured");
@@ -110,7 +108,7 @@ describe("SystemView", () => {
     expect(html).toContain("<strong>Not configured</strong>");
     expect(html).not.toContain("0 explicit");
     expect(html).toContain("No execution adapters are enabled for this Core process");
-    expect(html).toContain("Configured default; not active for execution in this Core process");
+    expect(html).toContain("Codex is configured as the default, but no harness is active");
     expect(html).toContain("This Core process has no daemon gateway, so no execution adapters are active");
     expect(html.match(/Build only/g)).toHaveLength(3);
     expect(html).not.toContain("Enabled · default");
@@ -159,9 +157,4 @@ describe("SystemView", () => {
     expect(html).not.toContain("Configured for this process");
   });
 
-  it("sanitizes Core labels independently from connection storage", () => {
-    expect(safeCoreBaseUrlLabel("/v1")).toBe("/v1");
-    expect(safeCoreBaseUrlLabel("https://user:pass@core.example/v1?secret=1#token")).toBe("https://core.example/v1");
-    expect(safeCoreBaseUrlLabel("not a URL")).toBe("Configured Core");
-  });
 });

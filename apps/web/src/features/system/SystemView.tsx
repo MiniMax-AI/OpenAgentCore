@@ -13,12 +13,6 @@ function stateKind(state: CoreConnectionState): StatusKind {
   return "running";
 }
 
-function stateLabel(state: CoreConnectionState): string {
-  if (state === "ready") return "Available";
-  if (state === "failed") return "Unavailable";
-  return "Checking…";
-}
-
 function harnessLabel(harness: string): string {
   if (harness === "claude_sdk") return "Claude SDK";
   if (harness === "mcode") return "MiniMax Code";
@@ -30,21 +24,6 @@ function providerLabel(provider: string | null): string {
   if (provider === "microsandbox") return "Microsandbox";
   if (provider === "docker") return "Docker";
   return "None";
-}
-
-export function safeCoreBaseUrlLabel(value: string): string {
-  const candidate = value.trim() || "/v1";
-  if (candidate.startsWith("/")) return candidate;
-  try {
-    const url = new URL(candidate);
-    url.username = "";
-    url.password = "";
-    url.search = "";
-    url.hash = "";
-    return url.toString().replace(/\/$/, "");
-  } catch {
-    return "Configured Core";
-  }
 }
 
 interface SystemStatusCard {
@@ -64,25 +43,17 @@ function StartupStatus({ enabled, label }: { enabled: boolean; label?: string })
 }
 
 export function SystemView({
-  coreState,
-  coreBaseUrl,
   startupConfiguration,
   startupConfigurationState,
   startupConfigurationSupported,
-  vaultCollectionState,
-  vaultSupported,
   selfHostedWebEnabled,
   managedWebEnabled,
   refreshing,
   onRefresh,
 }: {
-  coreState: CoreConnectionState;
-  coreBaseUrl: string;
   startupConfiguration: CoreStartupConfiguration | null;
   startupConfigurationState: CoreConnectionState;
   startupConfigurationSupported: boolean | null;
-  vaultCollectionState: CoreConnectionState;
-  vaultSupported: boolean | null;
   selfHostedWebEnabled: boolean;
   managedWebEnabled: boolean;
   refreshing: boolean;
@@ -93,6 +64,7 @@ export function SystemView({
     : null;
   const endpointOverrideConfigured = configuration?.configured.model_providers.some((provider) => provider.endpoint_configured) ?? false;
   const executionAdaptersEnabled = (configuration?.configured.enabled_harnesses.length ?? 0) > 0;
+  const enabledHarnessLabels = configuration?.configured.enabled_harnesses.map(harnessLabel).join(", ") ?? "";
   const startupUnavailable = startupConfigurationSupported === false;
 
   const startupValue = (value: string): string => {
@@ -111,36 +83,15 @@ export function SystemView({
     : startupConfigurationState === "failed"
       ? "The startup configuration request failed. No configuration is inferred."
       : "Reported by the safe Core startup configuration extension.";
-  const vaultStatus: SystemStatusCard = vaultSupported === false
-    ? { label: "Vaults", status: "interrupted", value: "Unavailable", detail: "This Core does not expose the Vaults API." }
-    : vaultCollectionState === "failed"
-      ? { label: "Vaults", status: "failed", value: vaultSupported === true ? "Refresh failed" : "Check failed", detail: "The Vault catalog request failed." }
-      : vaultSupported === true && vaultCollectionState === "ready"
-        ? { label: "Vaults", status: "completed", value: "Available", detail: "Vault catalog loaded." }
-        : { label: "Vaults", status: "running", value: "Checking…", detail: "Checking whether this Core exposes the Vaults API." };
-
   const cards: SystemStatusCard[] = [
     {
-      label: "Core API",
-      status: stateKind(coreState),
-      value: stateLabel(coreState),
-      detail: `${safeCoreBaseUrlLabel(coreBaseUrl)} · ${
-        coreState === "ready"
-          ? "confirmed by an Agent or Session API request"
-          : coreState === "failed"
-            ? "Agent and Session API requests failed"
-            : "checking Agent and Session APIs"
-      }.`,
-    },
-    vaultStatus,
-    {
-      label: "Default adapter",
+      label: "Harnesses",
       status: startupStatus,
-      value: startupValue(configuration ? harnessLabel(configuration.configured.default_harness) : ""),
+      value: startupValue(configuration ? executionAdaptersEnabled ? enabledHarnessLabels : "None enabled" : ""),
       detail: configuration
         ? executionAdaptersEnabled
-          ? "Used by Agents created in this Web UI."
-          : "Configured default; not active for execution in this Core process."
+          ? `${harnessLabel(configuration.configured.default_harness)} is used by Agents created in this Web UI.`
+          : `${harnessLabel(configuration.configured.default_harness)} is configured as the default, but no harness is active.`
         : startupDetail,
     },
     {
