@@ -6,15 +6,21 @@ import (
 	"errors"
 	"fmt"
 
+	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
-// UpdateAgentInput contains validated top-level replacements, not a full snapshot.
-// A nil metadata pointer preserves the existing map; a supplied map replaces it.
+// UpdateAgentInput contains validated field replacements, not a full snapshot.
+// Core extension subfields merge independently. A nil metadata pointer preserves
+// the existing map; a supplied map replaces it. ModelProviderSet distinguishes
+// omission from replacement or an explicit nil provider, which clears the secret.
 type UpdateAgentInput struct {
-	Configuration json.RawMessage
-	Metadata      *map[string]string
+	ModelProvider    *v1.ModelProviderInput
+	ModelProviderSet bool
+	Configuration    json.RawMessage
+	Metadata         *map[string]string
 }
 
 func (s *Store) UpdateAgent(ctx context.Context, tenantID, agentID string, input UpdateAgentInput) (SavedAgent, error) {
@@ -62,8 +68,8 @@ func (s *Store) UpdateAgent(ctx context.Context, tenantID, agentID string, input
 		if err := json.Unmarshal(row.Configuration, &configuration); err != nil {
 			return err
 		}
-		for field, value := range patch {
-			configuration[field] = value
+		if err := mergeAgentConfiguration(configuration, patch); err != nil {
+			return err
 		}
 		merged, err := json.Marshal(configuration)
 		if err != nil {
@@ -75,6 +81,14 @@ func (s *Store) UpdateAgent(ctx context.Context, tenantID, agentID string, input
 		}
 		if len(merged) > 512*1024 {
 			return ErrInvalidInput
+		}
+		if err := validateAgentModelExecution(merged, input.ModelProvider); err != nil {
+			return err
+		}
+		if input.ModelProviderSet {
+			if err := s.saveAgentModelExecution(ctx, q, uuid.UUID(tenant.Bytes).String(), id, input.ModelProvider); err != nil {
+				return err
+			}
 		}
 		if input.Metadata == nil {
 			metadata = row.Metadata

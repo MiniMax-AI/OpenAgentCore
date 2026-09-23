@@ -211,7 +211,7 @@ func run() error {
 			}
 		}()
 		options = append(options, api.WithExecution(worker), api.WithEnvironmentDirectoryReader(worker), api.WithEnvironmentFileWriter(worker))
-		options = append(options, api.WithHarnesses(kinds))
+		options = append(options, api.WithHarnesses(kinds), api.WithModelProviderDefaults(deploymentModelDefaults(transientOptions)))
 		if managed != nil {
 			options = append(options, api.WithHostedEnvironments())
 		}

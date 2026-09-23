@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
@@ -11,14 +12,21 @@ func (d *Dispatcher) sessionModelOptions(ctx context.Context, session store.Sess
 	if d.Store == nil {
 		return nil, errors.New("session model configuration is unavailable")
 	}
-	provider, err := d.Store.SessionModelExecution(ctx, session.TenantID, session.ID)
+	provider, frozenOptions, err := d.Store.SessionModelExecutionWithOptions(ctx, session.TenantID, session.ID)
 	if err != nil {
 		return nil, err
 	}
-	if err := provider.ValidateHarness(session.Engine); err != nil {
+	return resolvedSessionModelOptions(provider, frozenOptions, session.Engine, model)
+}
+
+func resolvedSessionModelOptions(provider *v1.ModelProviderInput, frozenOptions map[string]any, engine, model string) (map[string]any, error) {
+	if err := provider.ValidateHarness(engine); err != nil {
 		return nil, err
 	}
-	switch session.Engine {
+	if frozenOptions != nil {
+		return frozenOptions, nil
+	}
+	switch engine {
 	case "codex":
 		return map[string]any{"codex_provider": map[string]any{"base_url": provider.BaseURL, "bearer_token": provider.APIKey, "wire_api": "responses"}}, nil
 	case "claude_sdk":

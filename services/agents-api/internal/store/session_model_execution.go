@@ -11,11 +11,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (s *Store) saveSessionModelExecution(ctx context.Context, q *sqlc.Queries, tenant string, session pgtype.UUID, provider *v1.ModelProviderInput) error {
+// The embedded provider preserves the original flat ciphertext format. Native
+// options are private deployment defaults and never enter public configuration.
+type sessionModelExecution struct {
+	v1.ModelProviderInput
+	NativeOptions map[string]any `json:"native_options,omitempty"`
+}
+
+func (s *Store) saveSessionModelExecution(ctx context.Context, q *sqlc.Queries, tenant string, session pgtype.UUID, provider *v1.ModelProviderInput, options map[string]any) error {
 	if provider == nil {
 		return nil
 	}
-	raw, err := json.Marshal(provider)
+	raw, err := json.Marshal(sessionModelExecution{ModelProviderInput: *provider, NativeOptions: options})
 	if err != nil {
 		return err
 	}
@@ -27,25 +34,33 @@ func (s *Store) saveSessionModelExecution(ctx context.Context, q *sqlc.Queries, 
 }
 
 func (s *Store) SessionModelExecution(ctx context.Context, tenant, session string) (*v1.ModelProviderInput, error) {
+	provider, _, err := s.SessionModelExecutionWithOptions(ctx, tenant, session)
+	return provider, err
+}
+
+func (s *Store) SessionModelExecutionWithOptions(ctx context.Context, tenant, session string) (*v1.ModelProviderInput, map[string]any, error) {
 	tenantID, err := parseID(tenant)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	sessionID, err := parseID(session)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	ciphertext, err := s.queries.GetSessionModelExecution(ctx, sqlc.GetSessionModelExecutionParams{TenantID: tenantID, SessionID: sessionID})
 	if err != nil {
-		return nil, errors.New("session model execution configuration is unavailable")
+		return nil, nil, errors.New("session model execution configuration is unavailable")
 	}
 	raw, err := s.credentialCipher.OpenModelExecution(ciphertext, tenant, session)
 	if err != nil {
-		return nil, errors.New("session model execution decryption is unavailable")
+		return nil, nil, errors.New("session model execution decryption is unavailable")
 	}
-	var provider v1.ModelProviderInput
-	if json.Unmarshal(raw, &provider) != nil {
-		return nil, errors.New("invalid stored model execution configuration")
+	var frozen sessionModelExecution
+	if json.Unmarshal(raw, &frozen) != nil {
+		return nil, nil, errors.New("invalid stored model execution configuration")
 	}
-	return &provider, provider.Validate()
+	if err := frozen.ModelProviderInput.Validate(); err != nil {
+		return nil, nil, err
+	}
+	return &frozen.ModelProviderInput, frozen.NativeOptions, nil
 }

@@ -54,3 +54,6 @@ and depends on `openai-agents-python`, not this client package.
 `services/agents-api/tests/official_client.py` runs `TestService` with fresh tenants
 and a dedicated PostgreSQL database. It validates Go-created Sessions through the
 official Python SDK as well. No product database or model calls are involved.
+
+The TypeScript client also supports [saved Agent execution defaults](saved-agent-defaults.md),
+with separate write-only provider inputs and safe read types.

@@ -13,6 +13,12 @@ import toolProfiles from "./fixtures/parsar-2b34ea46/tool-profiles.json";
 import type {
   AnonymousHttpMcpToolInput,
   AgentsCoreSelection,
+  SavedAgentCoreInput,
+  SavedAgentCore,
+  SavedAgent,
+  AgentSnapshot,
+  ModelProviderInput,
+  ModelProviderView,
   AgentCore,
   AgentSession,
   AgentEnvironmentResource,
@@ -179,9 +185,14 @@ describe("Parsar 2b34ea46 bounded tool profiles", () => {
 });
 
 describe("Core harness selection extension", () => {
-  it("uses the same nullable selection shape for saved, create, update, and inline Agents", () => {
-    expectTypeOf<CreateAgentInput["x_agents_core"]>().toEqualTypeOf<AgentsCoreSelection | null | undefined>();
-    expectTypeOf<UpdateAgentInput["x_agents_core"]>().toEqualTypeOf<AgentsCoreSelection | null | undefined>();
+  it("separates saved provider inputs and safe reads from Session harness selection", () => {
+    expectTypeOf<CreateAgentInput["x_agents_core"]>().toEqualTypeOf<SavedAgentCoreInput | null | undefined>();
+    expectTypeOf<UpdateAgentInput["x_agents_core"]>().toEqualTypeOf<SavedAgentCoreInput | null | undefined>();
+    expectTypeOf<SavedAgent["x_agents_core"]>().toEqualTypeOf<SavedAgentCore | null | undefined>();
+    expectTypeOf<AgentSnapshot["x_agents_core"]>().toEqualTypeOf<AgentsCoreSelection | null | undefined>();
+    expectTypeOf<ModelProviderView>().not.toExtend<ModelProviderInput>();
+    expectTypeOf<ModelProviderInput>().not.toExtend<ModelProviderView>();
+    expectTypeOf<SavedAgentCore>().not.toExtend<SavedAgentCoreInput>();
     expectTypeOf<InlineAgentInput["x_agents_core"]>().toEqualTypeOf<AgentsCoreSelection | null | undefined>();
   });
 });

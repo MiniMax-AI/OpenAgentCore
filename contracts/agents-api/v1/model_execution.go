@@ -13,9 +13,9 @@ type SessionExecutionInput struct {
 }
 
 type ModelProviderInput struct {
-	Protocol        string `json:"protocol" enums:"anthropic,responses"`
-	BaseURL         string `json:"base_url"`
-	APIKey          string `json:"api_key"`
+	Protocol        string `json:"protocol" enums:"anthropic,responses" binding:"required"`
+	BaseURL         string `json:"base_url" binding:"required"`
+	APIKey          string `json:"api_key" binding:"required"`
 	ContextWindow   int32  `json:"context_window,omitempty"`
 	MaxOutputTokens int32  `json:"max_output_tokens,omitempty"`
 }
@@ -44,13 +44,7 @@ func (p *ModelProviderInput) ValidateHarness(harness string) error {
 	if err := p.Validate(); err != nil {
 		return err
 	}
-	if err := ValidateModelProtocol(p.Protocol, harness); err != nil {
-		return err
-	}
-	if harness == "mcode" && (p.ContextWindow == 0 || p.MaxOutputTokens == 0) {
-		return errors.New("MiniMax Code requires model context_window and max_output_tokens")
-	}
-	return nil
+	return p.SafeView().ValidateHarness(harness)
 }
 
 func ValidateModelProtocol(protocol, harness string) error {

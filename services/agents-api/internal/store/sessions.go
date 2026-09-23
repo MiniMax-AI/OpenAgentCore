@@ -54,8 +54,10 @@ type Session struct {
 }
 
 type CreateSessionInput struct {
-	SandboxNodeID   string
-	ModelProvider   *v1.ModelProviderInput
+	SandboxNodeID string
+	ModelProvider *v1.ModelProviderInput
+	// ModelOptions is a private snapshot of trusted deployment execution options.
+	ModelOptions    map[string]any
 	Initialization  EnvironmentSetup
 	InitialFiles    []InitialFile
 	Creator         identity.Subject
@@ -125,6 +127,9 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 			return SessionCreation{}, err
 		}
 	}
+	if input.ModelOptions != nil && input.ModelProvider == nil {
+		return SessionCreation{}, fmt.Errorf("%w: model options require a provider", ErrInvalidInput)
+	}
 	if input.ModelProvider != nil {
 		if err := input.ModelProvider.ValidateHarness(input.Engine); err != nil {
 			return SessionCreation{}, fmt.Errorf("%w: %s", ErrInvalidInput, err)
@@ -151,13 +156,14 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 	canonical, err := json.Marshal(struct {
 		SandboxNodeID  string                 `json:",omitempty"`
 		ModelProvider  *v1.ModelProviderInput `json:",omitempty"`
+		ModelOptions   map[string]any         `json:",omitempty"`
 		Engine         string
 		Metadata       map[string]string
 		Configuration  json.RawMessage   `json:",omitempty"`
 		InitialInputs  json.RawMessage   `json:",omitempty"`
 		InitialFiles   []InitialFile     `json:",omitempty"`
 		Initialization *EnvironmentSetup `json:",omitempty"`
-	}{input.SandboxNodeID, input.ModelProvider, input.Engine, input.Metadata, configuration, encodedInput, input.InitialFiles, initialization})
+	}{input.SandboxNodeID, input.ModelProvider, input.ModelOptions, input.Engine, input.Metadata, configuration, encodedInput, input.InitialFiles, initialization})
 	if err != nil {
 		return SessionCreation{}, fmt.Errorf("%w: input: %v", ErrInvalidInput, err)
 	}
@@ -172,7 +178,7 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 		Configuration: configuration, CreationRequestHash: creationHash,
 		CreatorKind: pgtype.Text{String: input.Creator.Kind, Valid: true}, CreatorID: pgtype.Text{String: input.Creator.ID, Valid: true},
 	}
-	row, environment, err := s.createSessionResources(ctx, tenantID, params, batch, encodedInput, input.InitialFiles, input.Initialization, input.ModelProvider, input.SandboxNodeID)
+	row, environment, err := s.createSessionResources(ctx, tenantID, params, batch, encodedInput, input.InitialFiles, input.Initialization, input.ModelProvider, input.ModelOptions, input.SandboxNodeID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SessionCreation{}, ErrIdempotencyConflict
 	}

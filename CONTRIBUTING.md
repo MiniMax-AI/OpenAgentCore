@@ -1908,6 +1908,29 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   binding failures never fall back to anonymous execution. Exact URL equality,
   immutable selection timing, implicit response population and hosted error/redirect
   semantics remain local decisions or unverified gaps. No new MCP loop is permitted.
+- Saved Agent execution defaults use separate input and safe-output Core extensions.
+  Keep model-provider bundles whole at every replacement boundary: endpoint, key,
+  protocol and limits must never be independently inherited. Ordinary Agent JSON
+  contains only safe provider fields and an output-only configured flag; encrypt the
+  complete bundle separately with tenant/Agent binding and a distinct purpose.
+  Commit configuration and secret changes together under the Agent row lock. Merge
+  only the extension's supplied members; omission preserves, provider null clears
+  its bundle, and extension null clears both defaults and secret. Model-only edits
+  require no key. Validate the merged harness/protocol/limits without reading keys.
+  Read safe defaults and ciphertext in one database snapshot for Session creation;
+  a complete Session override need not decrypt the inherited bundle.
+- Hosted Session provider selection resolves explicit bundle, saved bundle, then
+  deployment bundle, and freezes it in the existing encrypted Session-owned row.
+  Convert existing native operator options only at server composition, never in
+  scheduling. Retain the complete selected operator options in the private encrypted
+  Session snapshot for deployment fallback, preserving headers, query parameters
+  and native settings; do not reconstruct them from a smaller public input type. Keep runtime dispatch on the common adapter path and fail closed for
+  missing/decryption-failed snapshots. Agent edits/deletion, restart and idle
+  suspend/resume never resolve defaults again. Record caller intent for every new
+  hosted Session before resolving defaults, including inline deployment fallback;
+  matching retries return committed state without replay. No Turn-level overrides,
+  provider catalog or self-hosted/none credential expansion is included. Public
+  input/null semantics and examples live in `contracts/agents-api/model-execution.md`.
 - Public Agent updates use `POST /v1/agents/{agent_id}` with the same tenant/Beta
   boundary and shared saved-field validation. Preserve omission separately from
   null; only supplied fields replace saved values. Metadata is a separate whole-map
@@ -1915,7 +1938,8 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   merging validated fields and enforcing the complete configuration bound, then
   commit configuration, metadata and update timestamp together. Never write a stale
   full snapshot over another update. No-field updates read without changing timestamps.
-  Supplied nested fields currently replace the whole field and explicit null uses
+  Except for the Core execution-default extension described above, supplied nested
+  fields replace the whole field and explicit null uses
   existing saved defaults; exact hosted nested/null and no-op timestamp semantics
   remain unverified. Model-derived reasoning defaults remain a separate gap.
   Neither updates nor retries modify existing Session snapshots or execution state.

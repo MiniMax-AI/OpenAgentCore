@@ -17,6 +17,11 @@ type Agent struct {
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AgentModelExecution struct {
+	AgentID         pgtype.UUID `json:"agent_id"`
+	EncryptedConfig []byte      `json:"encrypted_config"`
+}
+
 type Device struct {
 	ID             pgtype.UUID        `json:"id"`
 	TenantID       pgtype.UUID        `json:"tenant_id"`
