@@ -16,6 +16,7 @@ const sessionsCallbacks = {
   onCancel: async () => undefined,
   onCreateSession: async () => undefined,
   onDeleteSession: async () => true,
+  onCancelAndDeleteSession: async () => true,
   onFunctionResult: async () => undefined,
   onRefresh: () => undefined,
   onRetrySession: () => undefined,

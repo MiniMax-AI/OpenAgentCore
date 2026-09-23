@@ -513,9 +513,16 @@ upstream.
   Environment observation, send failure, and draft, then selects the next item at the
   deleted position or the previous item at the end. Deleting an inactive Session does
   not change the selected ID, stream epoch, composer, or current conversation state.
+- Core deletes only a durably idle or failed Session without required actions or
+  pending input; otherwise it returns 409 `conflict_error` and changes nothing. The
+  dialog then explains the conflict and replaces its action with Cancel work and
+  delete. Only that explicit choice sends one `agent.session.input.cancel`, reads the
+  Session until it is idle or failed without required actions (at most 30 seconds)
+  and sends one deletion. A rejected or uncertain cancellation, a timeout, a
+  connection change or another 409 stops without a retry; other 409 responses keep
+  the generic lifecycle-conflict message.
 - Parsar deletion is a public server lifecycle operation. It hides the durable public
-  Session/Items/Turns, closes its stream, cancels queued work, and requests asynchronous
-  cancellation of active work. It does not prove immediate native executor quiescence,
+  Session/Items/Turns and closes its stream. It does not prove immediate native executor quiescence,
   physical SQL/native-history erasure, or deletion of executor Workspace files.
 
 ## Live stream and recovery

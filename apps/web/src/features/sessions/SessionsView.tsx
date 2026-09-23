@@ -102,6 +102,7 @@ interface SessionsViewProps {
   onCreateEnvironmentTemplate?: (input: CreateEnvironmentTemplateInput) => Promise<EnvironmentTemplate>;
   onCreateSession: (input: SessionStartInput) => Promise<void>;
   onDeleteSession: (sessionId: string) => Promise<boolean>;
+  onCancelAndDeleteSession: (sessionId: string) => Promise<boolean>;
   onFunctionResult: (input: FunctionResultInput) => Promise<void>;
   onListEnvironmentFiles?: ListEnvironmentFiles;
   onCreateEnvironmentFile?: AgentCore["createEnvironmentFile"];
@@ -305,6 +306,7 @@ export function SessionsView({
   onCreateEnvironmentTemplate,
   onCreateSession,
   onDeleteSession,
+  onCancelAndDeleteSession,
   onFunctionResult,
   onListEnvironmentFiles,
   onCreateEnvironmentFile,
@@ -1000,6 +1002,7 @@ export function SessionsView({
         session={actionSession}
         onClose={() => setActionSession(null)}
         onDelete={onDeleteSession}
+        onCancelAndDelete={onCancelAndDeleteSession}
         onDeleted={(sessionId) => {
           draftsBySessionRef.current.delete(sessionId);
           if (selectedIdRef.current === sessionId) setMessage("");

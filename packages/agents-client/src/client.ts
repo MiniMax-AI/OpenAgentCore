@@ -118,6 +118,16 @@ export class CreationStreamRetryError extends AgentCoreError {
   }
 }
 
+/**
+ * Core deletes only a durably idle or failed Session without required actions
+ * or pending input. Any other Session is rejected with HTTP 409 and code
+ * `conflict_error` and left unchanged: cancel its work, wait until it is idle,
+ * then delete it.
+ */
+export function isSessionDeletionConflict(error: unknown): error is AgentCoreError {
+  return error instanceof AgentCoreError && error.status === 409 && error.code === "conflict_error";
+}
+
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
@@ -2466,6 +2476,11 @@ export class OpenAIAgentsClient implements AgentCore {
     return projectAgentSession(value, undefined, sessionId);
   }
 
+  /**
+   * Deletes a durably idle or failed Session. The owner's repeated deletion of
+   * a deleted Session returns the same confirmation. A busy Session rejects with
+   * an error matched by `isSessionDeletionConflict`.
+   */
   deleteSession(sessionId: string): Promise<SessionDeleted> {
     return this.request(`/agents/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
   }
