@@ -29,7 +29,7 @@ sampling or export to an existing OTLP receiver. Sampling-only example:
 ```
 
 Sampling accepts 5–300 seconds; omitted or zero selects 30. Queue capacity defaults
-to 256 (maximum 4096); write/export timeout defaults to two seconds (maximum30).
+to 256 (maximum 4096); write/export timeout defaults to two seconds (maximum 30).
 A server without an execution worker advertises on-read collection and does not
 claim periodic coverage. Retained queries remain available through Core.
 

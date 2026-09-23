@@ -186,7 +186,10 @@ measurement or lifecycle state.
 | Busy duration | Turn `started_at` to `completed_at` or now | Time model work has been active. |
 | Idle duration | future durable `idle_since` | Not available in the current design. |
 
-Container restart resets compute uptime but not allocation age. Dashboard labels
+Container restart resets compute uptime but not allocation age. Live CPU deltas
+require the same known compute start as well as the same allocation. Retained
+charts show CPU, memory and tokens; uptime stays in the current/Live view because
+the history contract does not supply each bucket's compute start. Dashboard labels
 must not collapse these values into one generic Runtime duration.
 
 ## 9. Collection behavior
@@ -341,7 +344,7 @@ Environment scope plus a bounded start, exclusive end, server-selected step,
 and total point budget. Provider-native identity is never a query input.
 
 Reader results remain divided by allocation. Provider `started_at` values are
-retained only as compatible display metadata and never split one durable allocation
+retained as metadata and never split one durable allocation
 into multiple Dashboard series.
 Every bucket reports explicit observation coverage and nullable CPU/memory
 values. CPU utilization may be derived only from ordered cumulative counters

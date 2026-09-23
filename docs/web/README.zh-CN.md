@@ -33,7 +33,8 @@ Dashboard 是默认首页，集中展示当前 Agent 和 Session 结果，并加
 Core 默认将周期采样存入现有 PostgreSQL，无需额外监控服务。页面通过 Core 查询
 1 小时、6 小时和 24 小时历史，刷新后仍可读取。未启用执行 worker 的部署保留
 浏览器本地 Live 视图。Token 速率来自 Session 的实际用量快照，缺失数据不按零计算。
-Web 不直接访问数据库，也不接收监控凭据。
+Web 不直接访问数据库，也不接收监控凭据。运行时长只在当前/Live 视图展示；
+历史图表保留 CPU、内存和 Token。
 
 ![Runtime 监控实时趋势](images/runtime-dashboard.png)
 

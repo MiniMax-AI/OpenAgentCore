@@ -38,7 +38,8 @@ PostgreSQL database, with no separate monitoring stack. Web discovers periodic
 history and offers 1-hour, 6-hour and 24-hour ranges; reload restores data through
 Core. API-only deployments without a sampler retain the browser-local Live view.
 Token throughput uses snapshots of canonical Session Usage, preserving missing data.
-Web never connects to a database or receives telemetry credentials.
+Web never connects to a database or receives telemetry credentials. Compute uptime
+is shown only in current/Live observations; History keeps CPU, memory and tokens.
 When a provider reports only
 cumulative CPU time, Web derives interval utilization only across adjacent samples
 from the same verified Runtime incarnation; restarts and counter regressions create

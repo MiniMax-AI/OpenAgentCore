@@ -91,7 +91,7 @@ period and only from qualified periodic cadence.
 Resource `series` are keyed only by `allocation_id`. This keeps one continuous
 Dashboard lifecycle when a provider pauses, restores, restarts, or replaces its
 underlying compute without replacing the durable allocation. `started_at` remains
-the earliest retained provider start estimate for compatible uptime display; it is
+the earliest retained provider start estimate; it is
 not series identity:
 
 ```json
@@ -168,3 +168,7 @@ or malformed data reject the entire response with a 502 client projection error.
 - History availability does not imply current Runtime readiness.
 - Current observations and Durable history have separate freshness and retention
   semantics and must remain separately labelled in Web.
+
+Compute uptime is available from current observations only. Retained allocation
+series can span compute restarts and unavailable intervals; their earliest start
+is not a per-bucket compute start and must not be used to draw an uptime history.
