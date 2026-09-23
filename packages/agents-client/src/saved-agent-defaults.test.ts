@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { OpenAIAgentsClient } from "./client";
-import type { ModelProviderInput, SavedAgentCore } from "./types";
+import type { ModelProviderInput, SavedAgentCore, WebSearchToolInput } from "./types";
 
 describe("saved Agent execution defaults", () => {
   it("sends complete replacement inputs and preserves omission versus null", async () => {
@@ -39,6 +39,28 @@ describe("saved Agent execution defaults", () => {
       { x_agents_core: { model_provider: provider } },
       { x_agents_core: { model_provider: null } },
       { x_agents_core: null },
+    ]);
+  });
+
+  it("sends saved web_search modes unchanged", async () => {
+    const calls: unknown[] = [];
+    const client = new OpenAIAgentsClient({
+      token: "tenant-token",
+      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+        calls.push(JSON.parse(String(init?.body)));
+        return new Response(JSON.stringify({ id: "saved-agent", object: "agent" }), {
+          status: 200, headers: { "Content-Type": "application/json" },
+        });
+      }) as typeof fetch,
+    });
+    const cached: WebSearchToolInput = {
+      type: "web_search", mode: "cached", context_size: "high", allowed_domains: [], location: { country: "FR" },
+    };
+    await client.createAgent({ model: "example-model", tools: [{ type: "web_search" }] });
+    await client.updateAgent("saved-agent", { tools: [{ type: "web_search", mode: null }, cached] });
+    expect(calls).toEqual([
+      { model: "example-model", tools: [{ type: "web_search" }] },
+      { tools: [{ type: "web_search", mode: null }, cached] },
     ]);
   });
 });

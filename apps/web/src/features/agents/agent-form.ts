@@ -169,6 +169,10 @@ function readOnlyToolLabel(value: unknown): string {
     && hasOnlyKeys(value, ["type", "enabled"])
     && (value.enabled === undefined || typeof value.enabled === "boolean")
   ) return "programmatic_tool_calling is saved-only and cannot run in a Session";
+  if (
+    value.type === "web_search"
+    && hasOnlyKeys(value, ["type", "mode", "context_size", "allowed_domains", "location"])
+  ) return "web_search is saved-only and cannot run in a Session";
   if (value.type === "function" && value.defer_loading === true) return "Deferred Function is saved-only";
   if (value.type === "mcp" && value.credential_id != null) return "Credentialed MCP is unresolved or URL-mismatched in the current Vault catalog";
   if (value.type === "function") return "Unsupported Function tool definition";

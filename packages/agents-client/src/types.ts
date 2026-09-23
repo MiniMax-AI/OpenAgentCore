@@ -84,7 +84,34 @@ export interface ProgrammaticToolCallingInput {
   enabled?: boolean;
 }
 
-export type SavedAgentToolInput = FunctionToolInput | ServiceHttpMcpToolInput | ToolSearchInput | ProgrammaticToolCallingInput;
+export interface WebSearchLocationInput {
+  city?: string | null;
+  country?: string | null;
+  region?: string | null;
+  timezone?: string | null;
+}
+
+/**
+ * Saved Agents keep every pinned mode; omitted or null `mode` is saved as `live`
+ * and omitted or null `context_size` as `medium`. Session admission executes only
+ * `disabled` and rejects the other modes unless the Session replaces its tools.
+ */
+export interface WebSearchToolInput {
+  type: "web_search";
+  mode?: "disabled" | "cached" | "live" | null;
+  context_size?: "low" | "medium" | "high" | null;
+  /** null and [] are saved distinctly. */
+  allowed_domains?: string[] | null;
+  /** A saved location includes all four keys, with null for omitted ones. */
+  location?: WebSearchLocationInput | null;
+}
+
+export type SavedAgentToolInput =
+  | FunctionToolInput
+  | ServiceHttpMcpToolInput
+  | ToolSearchInput
+  | ProgrammaticToolCallingInput
+  | WebSearchToolInput;
 export type SessionFunctionToolInput = Omit<FunctionToolInput, "defer_loading"> & { defer_loading?: false };
 export type ConfigurableAgentToolInput = SessionFunctionToolInput | ServiceHttpMcpToolInput;
 

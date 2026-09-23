@@ -146,6 +146,14 @@ describe("Parsar 2b34ea46 bounded tool profiles", () => {
     expectTypeOf<NonNullable<InlineAgentInput["tools"]>[number]>().not.toEqualTypeOf<SavedAgentToolInput>();
   });
 
+  it("saves every pinned web_search mode without adding it to inline execution profiles", () => {
+    type SavedSearch = Extract<SavedAgentToolInput, { type: "web_search" }>;
+    expectTypeOf<SavedSearch["mode"]>().toEqualTypeOf<"disabled" | "cached" | "live" | null | undefined>();
+    expectTypeOf<SavedSearch["context_size"]>().toEqualTypeOf<"low" | "medium" | "high" | null | undefined>();
+    expectTypeOf<SavedSearch["allowed_domains"]>().toEqualTypeOf<string[] | null | undefined>();
+    expectTypeOf<Extract<NonNullable<InlineAgentInput["tools"]>[number], { type: "web_search" }>>().toEqualTypeOf<never>();
+  });
+
   it("captures the two Web-configurable write shapes without credentials or browser MCP", () => {
     const functionTool = toolProfiles.write_profiles.function;
     const mcpTool = toolProfiles.write_profiles.anonymous_http_mcp as AnonymousHttpMcpToolInput;

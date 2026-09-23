@@ -160,6 +160,7 @@ export function knownSessionAdmissionBlockers(agent: SavedAgent): string[] {
         break;
       case "tool_search":
       case "programmatic_tool_calling":
+      case "web_search":
         blockers.push(`${String(tool.type)} is saved-only`);
         break;
       default:
