@@ -374,7 +374,8 @@ function canonicalInputMessage(value: unknown): InputMessage {
     text += part.text;
     return { type: "input_text" as const, text: part.text };
   });
-  if (goWhitespaceOnlyPattern.test(text)) return invalidSessionInputBatch();
+  // Core admits whitespace-only text verbatim; only all-empty text rejects.
+  if (text === "") return invalidSessionInputBatch();
   return hasOwn(value, "type")
     ? { type: "message", role: "user", content }
     : { role: "user", content };
