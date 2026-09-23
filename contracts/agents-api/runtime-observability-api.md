@@ -182,9 +182,9 @@ Use the existing Agents API error envelope.
 | HTTP | Code | When |
 | --- | --- | --- |
 | 400 | `unsupported_parameter` | Unknown or duplicate query fields. |
-| 400 | `invalid_request` | Empty or invalid limits, order, or malformed cursor. |
+| 400 | `invalid_request` | Empty or invalid limits or order. |
 | 401 | `authentication_error` | Missing or invalid API authentication. |
-| 404 | `not_found` | Missing or foreign Session/cursor, indistinguishably. |
+| 404 | `not_found` | Missing, malformed or foreign Session/cursor, indistinguishably, as for the [Session list cursor](list-query-semantics.md#list-cursor-errors--september-23-2026). |
 | 500 | `internal_error` | Integrity, ownership, or invalid provider evidence. |
 | 503 | `execution_unavailable` | Required Runtime observation service is not configured. |
 

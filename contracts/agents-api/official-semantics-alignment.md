@@ -175,10 +175,11 @@ Decisions:
   assigns because it only generates version 4 and 5 UUIDs. The request then
   follows exactly the missing-identifier path, including body, query and storage
   checks. Routes whose lookup is the next check keep their direct not-found
-  response. Malformed list cursors and request-body references are unchanged:
-  Session, Turn, Item, Subagent, Artifact, Agent, Vault and Credential cursors
-  still return 400 `invalid_request`, and Template cursors keep their existing
-  not-found response.
+  response. Request-body references are unchanged. Malformed list cursors were
+  later aligned by the [list cursor error batch](list-query-semantics.md#list-cursor-errors--september-23-2026):
+  Agent, Session, Turn, Template, Vault and Credential cursors take the same
+  missing-cursor path, and Item, Subagent, Artifact and Skill version cursors
+  return their list's official cursor error.
 - Network messages are Core wording; the official prose is not copied.
 - Documented message difference for M2: the official message abbreviated a
   65-character key as `'KKK...KKK'`. That single sample of identical characters
@@ -258,9 +259,11 @@ devices and device crossings still reject the whole capture and fail the Turn
 with `artifact_capture_failed`; there is no official evidence for them yet.
 Republication after changed bytes is inferred rather than observed, and the
 deleted-newest case above is unobserved. The unknown `after` cursor (HE-57)
-belongs to ERROR-PROTOCOL-001. Subagent lists keep their `data`/`has_more`
-envelope until there is official Subagent evidence. Artifact IDs keep the Core
-UUID format. Paths removed from the workspace keep their Artifacts.
+was later aligned by the
+[list cursor error batch](list-query-semantics.md#list-cursor-errors--september-23-2026).
+Subagent lists keep their `data`/`has_more` envelope until there is official
+Subagent evidence. Artifact IDs keep the Core UUID format. Paths removed from
+the workspace keep their Artifacts.
 
 Rust tests cover every link kind, including absolute links to a secret outside
 the workspace and a relative link to a workspace file outside `outputs/`; an

@@ -95,8 +95,12 @@ keep their local codes; do not grow it into a JSON Schema engine. A malformed pa
 identifier must produce exactly the response of a well-formed missing one on that
 route, including invalid bodies, queries and storage availability: resolve it to
 the never-assigned maximum UUID and let the missing path run, or reject it
-directly only where the lookup is the next check. Malformed list cursors and
-request-body references keep their own errors. Reject U+0000 in metadata
+directly only where the lookup is the next check. Request-body references keep
+their own errors. An `after` cursor that does not resolve inside its already
+resolved parent, malformed ones included, returns that list family's observed
+error: the missing-resource 404 on lookup lists, otherwise the typed store cursor
+error. Foreign and missing cursors stay identical; see
+`contracts/agents-api/list-query-semantics.md`. Reject U+0000 in metadata
 explicitly with its `metadata.<key>` param; other stored strings rely on the
 PostgreSQL error mapping, so keep each request's writes in one transaction. See
 `contracts/agents-api/official-semantics-alignment.md`.
