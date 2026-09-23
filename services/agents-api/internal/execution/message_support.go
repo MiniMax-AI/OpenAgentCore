@@ -24,7 +24,7 @@ func validateMessageTextProfile(profile engine.Profile, input proto.MessageInput
 	for _, message := range input {
 		meaningful := false
 		for _, part := range message.Content {
-			if part.Type == "input_image" || (part.Text != nil && strings.TrimSpace(*part.Text) != "") {
+			if part.Type == "input_image" || (part.Text != nil && strings.TrimFunc(*part.Text, blankTextRune) != "") {
 				meaningful = true
 				break
 			}
@@ -34,6 +34,17 @@ func validateMessageTextProfile(profile engine.Profile, input proto.MessageInput
 		}
 	}
 	return nil
+}
+
+// blankTextRune is the explicit union of Go unicode.IsSpace and ECMAScript
+// String.prototype.trim (WhiteSpace and LineTerminator). The Claude bridge uses
+// the same set, so admission rejects every message the bridge would reject.
+func blankTextRune(r rune) bool {
+	switch r {
+	case '\t', '\n', '\v', '\f', '\r', ' ', '\u0085', '\u00a0', '\u1680', '\u2028', '\u2029', '\u202f', '\u205f', '\u3000', '\ufeff':
+		return true
+	}
+	return r >= '\u2000' && r <= '\u200a'
 }
 
 func validateMessageImageProfile(profile engine.Profile, placement string, input proto.MessageInput) error {

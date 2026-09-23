@@ -113,7 +113,7 @@ test("native UUID capacity rejects a whole batch and partial consumption does no
   assert.equal(partial.complete, false);
 });
 
-test("reject whitespace-only steering without ending the active Turn", () => {
+test("report whitespace-only steering as a rejected input", () => {
   const inputs = new Inputs([{ content: [{ type: "input_text", text: "first" }] }]);
   inputs.start("native");
   assert.deepEqual(inputs.submit(steer("blank", " \n\t")), [{ type: "input_rejected", input_id: "blank" }]);

@@ -1,0 +1,42 @@
+{
+  "description": "Characters treated as whitespace when deciding whether Claude SDK user text is blank: the union of Go unicode.IsSpace and ECMAScript String.prototype.trim. Core admission and the Claude bridge must both match this list.",
+  "members": [
+    "U+0009",
+    "U+000A",
+    "U+000B",
+    "U+000C",
+    "U+000D",
+    "U+0020",
+    "U+0085",
+    "U+00A0",
+    "U+1680",
+    "U+2000",
+    "U+2001",
+    "U+2002",
+    "U+2003",
+    "U+2004",
+    "U+2005",
+    "U+2006",
+    "U+2007",
+    "U+2008",
+    "U+2009",
+    "U+200A",
+    "U+2028",
+    "U+2029",
+    "U+202F",
+    "U+205F",
+    "U+3000",
+    "U+FEFF"
+  ],
+  "non_members": [
+    "U+0000",
+    "U+0041",
+    "U+180E",
+    "U+200B",
+    "U+200C",
+    "U+200D",
+    "U+2060",
+    "U+FFFE",
+    "U+1F600"
+  ]
+}

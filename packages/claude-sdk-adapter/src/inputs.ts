@@ -41,8 +41,8 @@ export class Inputs implements AsyncIterable<SDKUserMessage> {
     try {
       messages = parseMessageInput(input.input);
     } catch (error) {
-      // Admission rejects whitespace-only text first. If one arrives anyway,
-      // reject this input only; the active Turn keeps running.
+      // Core admission rejects blank text for this harness, so this is
+      // unreachable. A rejected steering input still ends the Turn in Core.
       if (error instanceof EmptyUserMessageError) return [{ type: "input_rejected", input_id: input.input_id }];
       throw error;
     }
