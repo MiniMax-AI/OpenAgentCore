@@ -198,3 +198,75 @@ invalid bodies and queries, and replay U+0000 on every create/update family with
 a database digest proving no writes. The pinned-SDK acceptance scripts assert the
 new codes, params and messages. Independent real-Core acceptance is recorded
 separately by the coordinator.
+
+## Artifact capture and listing — September 23
+
+This batch aligns Session Artifact capture and listing with the first official
+Artifact observations. Evidence comes from the hosted-environment campaign scan
+recorded privately in `~/.parsar/remediation/20260923/campaign-scan-2/hosted-env/`
+(`findings.json` HE-50..62, raw records under `official/` and `run1/`). The probe
+used three owned Sessions and two tiny `gpt-6-astra` Turns; all three Sessions
+were deleted. Official Turn 1 created regular, nested and empty outputs plus
+`outputs/link.txt -> a.txt`; Turn 2 only wrote `outputs/c.txt` after one Artifact
+was deleted.
+
+| Row | Case | Core behavior |
+| --- | --- | --- |
+| A1 | A symlink below `outputs/` at Turn completion: to a file or directory, dangling, or pointing outside the workspace (HE-51) | Skipped by its `lstat` type: never followed, opened or resolved, and no Artifact. Every regular file is still captured and the Turn completes. |
+| A2 | Later Turns in the same Session (HE-52) | A path is published again only when it has no remaining published Artifact in the Session, or its bytes (sha256) differ from the newest remaining one. Unchanged paths keep their existing Artifact IDs. The first Turn is unchanged. |
+| A3 | List envelope (HE-53) | `object: list`, `data`, `first_id`, `last_id`, `has_more`, with null first/last IDs on an empty page, like the Session, Turn and Item lists. Paging and cursors are unchanged. |
+| A4 | Malformed `environment_id` filter (HE-56) | 200 with an empty page, as for another existing Environment. Session lookup still runs first, so foreign and missing Sessions remain 404; cursor and limit errors are unchanged. |
+
+Decisions:
+
+- The Rust export helper handles every link kind the same way. Official evidence
+  shows one relative link to a file; telling the other kinds apart would require
+  resolving the link, which the confinement rules forbid. A link still counts as
+  a directory entry, so creating or removing one during export is a concurrent
+  change.
+- The republication decision runs in the Turn's terminal transaction, not in the
+  private capture transaction. Capture commits and releases the Session lock
+  before the Turn completes, so an Artifact deletion can commit in between. The
+  terminal transaction holds the Session lock that also orders Artifact deletion,
+  and only one Turn per Session can be active, so the decision sees exactly the
+  Artifacts that remain at completion. Unchanged staged rows are deleted and their
+  private large objects unlinked in that transaction; published rows are never
+  modified.
+- "Newest" follows the producing Turn's database creation time, then its ID.
+  Publication time can come from the Runtime's reported completion and is not a
+  reliable order between Turns.
+- Known difference from the batch plan's wording, accepted as a local decision:
+  the plan republishes a path whose newest Artifact was deleted, but Core compares
+  against the newest *remaining* published Artifact. Deletion is physical and
+  leaves no record, and adding one would need a schema change outside this batch.
+  Example: Turn 1 publishes `b.txt` as `bravo`, Turn 2 publishes `bravo-v2`, and
+  the Turn 2 Artifact is then deleted. A later Turn whose `b.txt` is `bravo-v2`
+  republishes it, because the remaining Turn 1 version differs. A later Turn whose
+  `b.txt` is `bravo` publishes nothing, because the remaining Turn 1 Artifact
+  already has those bytes. The official behavior for this case is unobserved.
+- A malformed filter resolves to the never-assigned maximum UUID, as for
+  malformed path identifiers, so it matches nothing without a database text
+  comparison. An empty `environment_id=` still means no filter.
+
+Deferred and unchanged: a linked `outputs` root, hard links, FIFOs, sockets,
+devices and device crossings still reject the whole capture and fail the Turn
+with `artifact_capture_failed`; there is no official evidence for them yet.
+Republication after changed bytes is inferred rather than observed, and the
+deleted-newest case above is unobserved. The unknown `after` cursor (HE-57)
+belongs to ERROR-PROTOCOL-001. Subagent lists keep their `data`/`has_more`
+envelope until there is official Subagent evidence. Artifact IDs keep the Core
+UUID format. Paths removed from the workspace keep their Artifacts.
+
+Rust tests cover every link kind, including absolute links to a secret outside
+the workspace and a relative link to a workspace file outside `outputs/`; an
+inotify watch proves no target is opened or read, with a positive control. They
+also keep the hard-link, socket, FIFO, linked-root and concurrent-change
+rejections. Real-PostgreSQL store tests cover new, unchanged, changed,
+changed-back, deleted-then-unchanged and deleted-during-capture paths, a deletion
+that holds the Session lock while Turn completion waits, Turn-ordered newest
+versions with inverted publication times, Session scoping and private object
+accounting. Handler and real-PostgreSQL HTTP tests
+cover the envelope, other, foreign and malformed filters, and foreign or missing
+Sessions. The pinned-SDK and raw HTTP verifier used by live acceptance runs
+against PostgreSQL across three Turns. Real Core, daemon and model acceptance is
+recorded separately by the coordinator.

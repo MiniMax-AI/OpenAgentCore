@@ -31,13 +31,13 @@ func (h *Handler) artifactsReady(w http.ResponseWriter) bool {
 }
 
 // @Summary List immutable Session artifacts
-// @Description Lists published outputs independently of Environment availability. Sorting uses publication time and ID. The local default page size is 20; exact upstream defaults and error parity remain unverified.
+// @Description Lists published outputs independently of Environment availability. Sorting uses publication time and ID. A later Turn publishes a path again only when it is new, its bytes changed, or no Artifact remains for it. A malformed environment_id matches nothing. The local default page size is 20; exact upstream defaults and error parity remain unverified.
 // @Tags Artifacts
 // @Produce json
 // @Security BearerAuth
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param session_id path string true "Session ID"
-// @Param environment_id query string false "Producing Environment ID"
+// @Param environment_id query string false "Producing Environment ID; an unknown or malformed ID returns an empty page"
 // @Param after query string false "Last immutable artifact ID"
 // @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
 // @Param order query string false "Publication order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
@@ -57,11 +57,12 @@ func (h *Handler) listSessionArtifacts(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	response := v1.SessionArtifactList{Data: make([]v1.SessionArtifact, 0, len(page.Artifacts)), HasMore: page.NextCursor != ""}
+	data := make([]v1.SessionArtifact, 0, len(page.Artifacts))
 	for _, artifact := range page.Artifacts {
-		response.Data = append(response.Data, artifactResponse(artifact))
+		data = append(data, artifactResponse(artifact))
 	}
-	writeJSON(w, http.StatusOK, response)
+	first, last := listBounds(data, func(value v1.SessionArtifact) string { return value.ID })
+	writeJSON(w, http.StatusOK, v1.SessionArtifactList{Object: "list", Data: data, HasMore: page.NextCursor != "", FirstID: first, LastID: last})
 }
 
 // @Summary Retrieve immutable artifact metadata
