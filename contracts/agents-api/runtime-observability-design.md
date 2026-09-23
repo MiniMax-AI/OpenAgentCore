@@ -294,8 +294,8 @@ The OTLP request uses standard protobuf metrics and these instruments:
 | `agents.runtime.cpu.capacity` | gauge, cores | configured provider capacity |
 | `agents.runtime.memory.usage` | gauge, bytes | provider memory usage |
 | `agents.runtime.memory.limit` | gauge, bytes | configured provider limit |
-| `agents.session.tokens.input` | gauge, tokens | canonical cumulative Session Usage |
-| `agents.session.tokens.output` | gauge, tokens | canonical cumulative Session Usage |
+| `agents.session.tokens.input` | gauge, tokens | measured cumulative Session usage (`MeasuredSessionUsage`) |
+| `agents.session.tokens.output` | gauge, tokens | measured cumulative Session usage (`MeasuredSessionUsage`) |
 | `agents.runtime.sample` | monotonic delta sum | one validated result, including unavailable/unsupported |
 | `agents.runtime.sample.duration` | delta histogram, seconds | bounded provider read duration |
 
@@ -452,13 +452,17 @@ persisted by Core.
 ## 12. Token usage boundary
 
 Provider Runtime sources do not own or report token usage. During a periodic
-history sweep, the Core resolver reads the existing canonical cumulative Session
-Usage snapshot from the execution store alongside Runtime identity. The exporter
+history sweep, the Core resolver reads the cumulative measured Session usage
+(`MeasuredSessionUsage`: every recorded root Turn snapshot, active Turns
+included) from the execution store alongside Runtime identity. Public Session
+usage follows the stricter official rule and can be null meanwhile
+([item serialization](history-events-usage.md#item-serialization-2026-09-23)). The exporter
 emits Session-scoped input/output token gauges with the same Session and sampling
 time, independently of Docker, microsandbox, Kubernetes, or another provider.
 PostgreSQL retains those cumulative snapshots alongside the sample; query results
 keep Session token points separate from allocation series. Web derives throughput from adjacent nondecreasing points. Missing or
-incomplete native usage and counter regressions remain gaps, never zero.
+incomplete native usage, counter regressions and intervals where the live trend
+holds a Session's last public total remain gaps, never zero.
 
 The current snapshot API still does not duplicate Usage fields: Web joins its
 existing Session collection by exact `session_id`. The Dashboard reports measured
@@ -532,7 +536,7 @@ Implemented for the browser-local current-snapshot live window.
 - Execution-owner sampling with bounded pages, concurrency and source deadlines.
 - Tenant-scoped history queries with input/output limits, explicit gaps and CPU fences.
 - Seven-day retention and bounded cleanup independent of active Runtime count.
-- Core Web history restoration after refresh, including canonical token snapshots.
+- Core Web history restoration after refresh, including measured token snapshots.
 - Real Docker/microsandbox and PostgreSQL acceptance remains mandatory for delivery.
 - Exporter queue/drop/error coverage counters remain outside this batch.
 

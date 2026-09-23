@@ -287,7 +287,10 @@ model output text and never fills a model-derived default or counter.
   failed or cancelled) with known usage; otherwise it is null. A later measured
   Turn does not restore the sum after an unmeasured one. The official samples did
   not read a queued Turn; Core treats queued Turns like active ones, since their
-  consumption is not yet known. A usage snapshot that an active Codex Turn
+  consumption is not yet known. A root Turn cancelled while still queued ends
+  without usage, so public Session usage stays null afterwards. That follows
+  from the terminal rule; ST-03 has no official sample of the case, so it is an
+  inference. A usage snapshot that an active Codex Turn
   records stays readable on that Turn but does not count in the Session until the
   Turn ends. Claude and MiniMax Turns remain unmeasured, so their Sessions stay
   null. Official reads also lagged settlement by seconds; Core does not copy that
@@ -300,11 +303,12 @@ model output text and never fills a model-derived default or counter.
   token series stays continuous while Turns run and after an unmeasured Turn.
   Public Session usage (retrieve, list, update and every Session event snapshot,
   including the function-action and Environment-input snapshots) keeps the rule
-  above. The Core Web live token trend and the Runtime summary's reported token
-  total read public Session usage and keep a listed Session's last reported
-  totals while its usage is null, so they neither drop to zero nor break; usage
-  measured meanwhile appears once it is reported again. Rows still show the
-  current public value.
+  above. Core Web reads public Session usage. Its Runtime summary's reported
+  token total keeps a listed Session's last reported total while the usage is
+  null, so it does not drop; rows still show the current public value. Its live
+  token trend keeps that Session in the series but treats the held total as
+  unknown: those intervals are gaps, never zero, and the rate once usage is
+  reported again is spread over the time since its last report.
 - **Cancelled Codex usage (S8, EVT-24).** The all-zero counters on a cancelled
   Codex Turn came from the Codex adapter, not from Core or storage. The Turn was
   the second of its Session, on a resumed native thread, and was cancelled
@@ -331,6 +335,6 @@ Session and stream rendering, real-PostgreSQL store tests for the event sequence
 stored-payload presence and the Session usage rule, the Codex adapter usage tests
 (with `-race`), the pinned-SDK official client suite against a local server and
 the TypeScript client and Web unit tests. `make openapi` adds only `x-nullable` to
-Item `phase` and event `output_index`; `make sqlc-generate` changes only
-`SessionTokenUsage`. The native pinned-SDK scripts updated for these shapes run
+Item `phase` and event `output_index`; `make sqlc-generate` changes
+`SessionTokenUsage` and adds the internal `SessionMeasuredTokenUsage`. The native pinned-SDK scripts updated for these shapes run
 only with a native daemon, and live model acceptance is recorded separately.
