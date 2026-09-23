@@ -890,7 +890,7 @@ export interface RuntimeHistoryPoint extends RuntimeHistoryCoveragePoint {
 export interface RuntimeHistorySeries {
   environment_id: string;
   allocation_id: string;
-  /** Lossless compute-incarnation identity fence. */
+  /** Earliest retained provider start estimate for compatible uptime display. */
   started_at: RuntimeHistoryTime;
   provider_type: string;
   points: RuntimeHistoryPoint[];

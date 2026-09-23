@@ -83,13 +83,16 @@ query inputs.
 ```
 
 `coverage` describes all resolved samples, including unavailable observations that
-cannot safely be attached to one compute incarnation. `retained_start` is the
+cannot safely be attached to one allocation series. `retained_start` is the
 latest of the requested start, configured retention boundary, and backend-reported
 retention boundary. Expected coverage is calculated only over that retained
 period and only from qualified periodic cadence.
 
-Resource `series` are split by `allocation_id` plus the lossless compute
-`started_at` fence:
+Resource `series` are keyed only by `allocation_id`. This keeps one continuous
+Dashboard lifecycle when a provider pauses, restores, restarts, or replaces its
+underlying compute without replacing the durable allocation. `started_at` remains
+the earliest retained provider start estimate for compatible uptime display; it is
+not series identity:
 
 ```json
 {
@@ -101,11 +104,11 @@ Resource `series` are split by `allocation_id` plus the lossless compute
 ```
 
 The two integers are JSON-safe, nonnegative Unix seconds and a 0–999,999,999
-nanosecond remainder. They are identity, not merely a display timestamp. CPU
-utilization is derived only from ordered cumulative counters inside that fence;
-successive counter intervals are assigned to the bucket containing their right
-endpoint and combined by CPU-capacity time. Memory values are the last observed
-values in a bucket. Every point contains
+nanosecond remainder. CPU utilization is derived from ordered cumulative counters
+inside the allocation. A counter regression resets the baseline, so no interval
+is derived across a compute replacement. Successive valid counter intervals are
+assigned to the bucket containing their right endpoint and combined by CPU-capacity
+time. Memory values are the last observed values in a bucket. Every point contains
 observation and contributor counts. Missing values are null and gaps remain gaps.
 Numeric zero is retained as an observed value. The endpoint does not return token
 history: token throughput remains sourced from canonical Session Usage and is
@@ -149,7 +152,7 @@ interface AgentCore {
 ```
 
 The client validates exact fields, capability consistency, requested-range echo,
-Session identity, half-open bucket ordering, coverage totals, incarnation identity,
+Session identity, half-open bucket ordering, coverage totals, allocation identity,
 contributor counts, nullability, finite numbers, and response size. Unknown fields
 or malformed data reject the entire response with a 502 client projection error.
 

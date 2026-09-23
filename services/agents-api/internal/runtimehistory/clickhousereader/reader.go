@@ -54,7 +54,7 @@ GROUP BY
     provider_type,
     status,
     metric_name
-ORDER BY resolved_at_unix_nano, allocation_id, started_at_unix_nano, metric_name
+ORDER BY resolved_at_unix_nano, allocation_id, metric_name
 LIMIT {row_limit:UInt64}`
 
 type Config struct {
@@ -279,17 +279,19 @@ func readSamples(resultRows rows, rawStart, end time.Time) ([]*rawSample, int, e
 		if err := validateProjectedRow(parsedStatus, metric, minimum, observedAt, startedAt); err != nil {
 			return nil, rowCount, err
 		}
-		startedKey := ""
-		if startedAt != nil {
-			startedKey = fmt.Sprintf("%d", startedNano.value)
-		}
-		key := fmt.Sprintf("%d\x00%s\x00%s", resolvedNano, allocation, startedKey)
+		// Allocation identity is the durable Dashboard series boundary. Provider
+		// start-time estimates are sample metadata and may jitter between reads.
+		key := fmt.Sprintf("%d\x00%s", resolvedNano, allocation)
 		sample := byKey[key]
 		if sample == nil {
 			sample = &rawSample{resolvedAt: resolvedAt, observedAt: observedAt, allocation: allocation, startedAt: startedAt, provider: provider, status: parsedStatus, metrics: map[string]float64{}}
 			byKey[key] = sample
 		} else if sample.provider != provider || sample.status != parsedStatus || !sameOptionalTime(sample.observedAt, observedAt) {
 			return nil, rowCount, errors.New("conflicting Runtime history sample identity")
+		} else if startedAt != nil && (sample.startedAt == nil || startedAt.Before(*sample.startedAt)) {
+			// Retain the earliest estimate for compatible display metadata without
+			// allowing it to split one allocation into multiple series.
+			sample.startedAt = startedAt
 		}
 		if previous, ok := sample.metrics[metric]; ok && previous != minimum {
 			return nil, rowCount, errors.New("conflicting Runtime history metric value")
@@ -311,9 +313,6 @@ func readSamples(resultRows rows, rawStart, end time.Time) ([]*rawSample, int, e
 	}
 	sort.Slice(result, func(i, j int) bool {
 		if result[i].resolvedAt.Equal(result[j].resolvedAt) {
-			if result[i].allocation == result[j].allocation {
-				return timeValue(result[i].startedAt) < timeValue(result[j].startedAt)
-			}
 			return result[i].allocation < result[j].allocation
 		}
 		return result[i].resolvedAt.Before(result[j].resolvedAt)
@@ -342,13 +341,6 @@ func validateProjectedRow(status runtimeobs.Status, metric string, value float64
 
 func sameOptionalTime(left, right *time.Time) bool {
 	return left == nil && right == nil || left != nil && right != nil && left.Equal(*right)
-}
-
-func timeValue(value *time.Time) int64 {
-	if value == nil {
-		return -1
-	}
-	return value.UnixNano()
 }
 
 type coverageAggregate struct {
@@ -397,13 +389,15 @@ func aggregate(query runtimehistory.Query, generatedAt time.Time, raw []*rawSamp
 		if allocationErr != nil || parsedAllocation == uuid.Nil || parsedAllocation.String() != sample.allocation {
 			return runtimehistory.Result{}, errors.New("invalid Runtime history allocation")
 		}
-		key := sample.allocation + "\x00" + sample.startedAt.Format(time.RFC3339Nano)
+		key := sample.allocation
 		value := series[key]
 		if value == nil {
 			value = &seriesAggregate{allocation: sample.allocation, startedAt: *sample.startedAt, provider: sample.provider}
 			series[key] = value
 		} else if value.provider != sample.provider {
 			return runtimehistory.Result{}, errors.New("conflicting Runtime history provider")
+		} else if sample.startedAt.Before(value.startedAt) {
+			value.startedAt = *sample.startedAt
 		}
 		value.samples = append(value.samples, sample)
 	}
