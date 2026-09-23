@@ -104,6 +104,42 @@ def preflight():
             'Docker access through /var/run/docker.sock is required')
 
 
+def inspect_prior_launch(root, state):
+    docker = 'docker --host unix:///var/run/docker.sock'
+    filters = (' --filter label=io.parsar.agents-api.installation=' + state['installation_id']
+               + ' --filter label=io.parsar.agents-api.environment=' + state['environment_id'])
+    guidance = (' Inspect retained resources with: ' + docker + ' ps -a' + filters
+                + '; ' + docker + ' volume ls' + filters
+                + '. Do not delete the receipt or create replacement history.')
+    receipt = root / 'started.json'
+    if not receipt.exists():
+        raise InstallError('A Runtime launch was already attempted without confirmed startup.' + guidance)
+    prior = json.loads(private_read(receipt))
+    name = prior.get('container', '') if isinstance(prior, dict) else ''
+    if not re.fullmatch(r'parsar-selfhost-[0-9a-f]{32}', name) or prior.get('status') != 'started':
+        raise InstallError('Invalid retained Runtime startup receipt.' + guidance)
+    try:
+        raw = checked(['docker', '--host', 'unix:///var/run/docker.sock', 'container', 'inspect', name,
+                       '--format', '{{json .Config.Labels}} {{.State.Status}}'], 'Cannot inspect retained Runtime')
+        labels, status = raw.strip().rsplit(' ', 1)
+        labels = json.loads(labels)
+    except (InstallError, ValueError):
+        raise InstallError('The prior Runtime cannot be confirmed.' + guidance) from None
+    expected = {'io.parsar.agents-api.installation': state['installation_id'],
+                'io.parsar.agents-api.environment': state['environment_id'],
+                'io.parsar.agents-api.user-owned': 'true'}
+    if not isinstance(labels, dict) or any(labels.get(key) != value for key, value in expected.items()):
+        raise InstallError('The retained container does not match this installation and Environment.' + guidance)
+    if status == 'running':
+        print('Runtime already running: ' + name)
+        print('Read the Session to confirm connection; a running container does not establish it.')
+        return
+    if status == 'exited':
+        raise InstallError('The existing Runtime is stopped. Preserve its history and resume that same container with: '
+                           + docker + ' start ' + name + '. Then read the Session to confirm connection.')
+    raise InstallError('The retained Runtime requires inspection before continuing.' + guidance)
+
+
 def install(args, root):
     target = identity(args.environment_id, args.remote)
     manifest = load_manifest(source_url=args.source_url, offline_root=args.offline_root)
@@ -124,7 +160,8 @@ def install(args, root):
         state = dict(target, installation_id=str(uuid.uuid4()))
         write_private(state_file, state)
     if (root / 'launch.json').exists() or (root / 'launch.json').is_symlink():
-        raise InstallError('A Runtime launch was already attempted. Inspect its retained container and volumes; do not repeat enrollment with new history')
+        inspect_prior_launch(root, state)
+        return
     key_file = root / 'executor-key.json'
     if key_file.exists():
         key = credential(private_read(key_file), args.environment_id)
@@ -138,11 +175,17 @@ def install(args, root):
         write_private(key_file, key)
     launcher = obtain_artifact(manifest, 'native/bin/parsar-runtime', root / 'native/bin/parsar-runtime', args.offline_root)
     seccomp = obtain_artifact(manifest, 'runtime/seccomp.json', root / 'runtime/seccomp.json', args.offline_root)
-    archive = runtime_archive(manifest, root, args.offline_root)
-    checked(['docker', '--host', 'unix:///var/run/docker.sock', 'image', 'load', '--input', str(archive)],
-            'Cannot load the matched Runtime image; retry after checking Docker', timeout=600)
-    image = checked(['docker', '--host', 'unix:///var/run/docker.sock', 'image', 'inspect', runtime_image,
-                     '--format', '{{.Id}} {{.Os}}/{{.Architecture}}'], 'Cannot verify the loaded Runtime image').strip()
+    inspect = ['docker', '--host', 'unix:///var/run/docker.sock', 'image', 'inspect', runtime_image,
+               '--format', '{{.Id}} {{.Os}}/{{.Architecture}}']
+    try:
+        image = checked(inspect, 'Runtime image is not installed').strip()
+    except InstallError:
+        image = None
+    if image != runtime_image + ' linux/amd64':
+        archive = runtime_archive(manifest, root, args.offline_root)
+        checked(['docker', '--host', 'unix:///var/run/docker.sock', 'image', 'load', '--input', str(archive)],
+                'Cannot load the matched Runtime image; retry after checking Docker', timeout=600)
+        image = checked(inspect, 'Cannot verify the loaded Runtime image').strip()
     if image != runtime_image + ' linux/amd64':
         raise InstallError('Loaded Runtime image does not match the distribution')
     command = [str(launcher), '--installation-id', state['installation_id'],

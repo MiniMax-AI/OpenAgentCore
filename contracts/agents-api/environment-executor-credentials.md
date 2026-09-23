@@ -50,3 +50,9 @@ no sandbox node or Core-managed allocation. Workspace, credential and native
 history volumes belong to the operator. Failed or uncertain launches retain
 their volumes and installation receipt for inspection instead of replacing
 history or retrying enrollment. Session deletion does not reclaim these volumes.
+Rerunning the installer inspects a previously started container only after its
+installation and Environment labels match. It reports running separately from
+Session connection, or gives a command to start the same stopped container.
+An uncertain launch without a success receipt gives label-filtered container
+and volume inspection commands and never creates a replacement. A cached image
+with the exact distribution digest and platform skips image download and import.

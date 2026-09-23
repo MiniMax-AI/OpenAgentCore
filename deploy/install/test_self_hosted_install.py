@@ -65,10 +65,70 @@ class SelfHostedInstallTests(unittest.TestCase):
                 patch.object(installer, 'runtime_archive', return_value=self.root/'runtime.tar'), \
                 patch.object(installer, 'checked', side_effect=checked), contextlib.redirect_stdout(io.StringIO()):
             installer.install(self.args, self.root)
-            self.assertEqual(len(commands), 3)
+            self.assertEqual(len(commands), 2)
             self.assertEqual(json.loads(installer.private_read(self.root/'executor-key.json')), self.key)
             with self.assertRaises(installer.InstallError): installer.install(self.args, self.root)
             self.assertEqual(len(commands), 3)
+
+    def test_cached_runtime_avoids_archive_download_and_load(self):
+        def checked(command, message, timeout=30):
+            self.assertNotIn('load', command)
+            if 'inspect' in command: return self.manifest['images']['runtime'] + ' linux/amd64'
+            return json.dumps({'container': 'parsar-selfhost-'+'c'*32, 'status': 'started'})
+        with patch.object(installer, 'load_manifest', return_value=self.manifest), \
+                patch.object(installer, 'obtain_artifact', side_effect=lambda m, n, dest, o: dest), \
+                patch.object(installer, 'runtime_archive') as archive, \
+                patch.object(installer, 'checked', side_effect=checked), contextlib.redirect_stdout(io.StringIO()):
+            installer.install(self.args, self.root)
+            archive.assert_not_called()
+
+    def test_missing_runtime_loads_and_verifies_before_launch(self):
+        commands = []
+        def checked(command, message, timeout=30):
+            commands.append(command)
+            if len(commands) == 1: raise installer.InstallError('image missing')
+            if 'inspect' in command: return self.manifest['images']['runtime'] + ' linux/amd64'
+            if command[0].endswith('parsar-runtime'):
+                return json.dumps({'container': 'parsar-selfhost-'+'c'*32, 'status': 'started'})
+            return ''
+        with patch.object(installer, 'load_manifest', return_value=self.manifest), \
+                patch.object(installer, 'obtain_artifact', side_effect=lambda m, n, dest, o: dest), \
+                patch.object(installer, 'runtime_archive', return_value=self.root/'runtime.tar') as archive, \
+                patch.object(installer, 'checked', side_effect=checked), contextlib.redirect_stdout(io.StringIO()):
+            installer.install(self.args, self.root)
+            archive.assert_called_once()
+            self.assertIn('load', commands[1])
+            self.assertIn('inspect', commands[2])
+            self.assertTrue(commands[3][0].endswith('parsar-runtime'))
+
+    def test_existing_launch_verifies_labels_and_reports_state(self):
+        name = 'parsar-selfhost-'+'c'*32
+        state = {'installation_id': str(uuid.uuid4()), 'environment_id': self.environment}
+        labels = {'io.parsar.agents-api.installation': state['installation_id'],
+                  'io.parsar.agents-api.environment': self.environment,
+                  'io.parsar.agents-api.user-owned': 'true'}
+        installer.write_private(self.root/'started.json', {'container': name, 'status': 'started'})
+        with patch.object(installer, 'checked', return_value=json.dumps(labels)+' running'), \
+                contextlib.redirect_stdout(io.StringIO()) as output:
+            installer.inspect_prior_launch(self.root, state)
+            self.assertIn('already running', output.getvalue())
+            self.assertIn('Read the Session to confirm connection', output.getvalue())
+        with patch.object(installer, 'checked', return_value=json.dumps(labels)+' exited'):
+            with self.assertRaisesRegex(installer.InstallError, 'start '+name):
+                installer.inspect_prior_launch(self.root, state)
+        labels['io.parsar.agents-api.environment'] = str(uuid.uuid4())
+        with patch.object(installer, 'checked', return_value=json.dumps(labels)+' running'):
+            with self.assertRaisesRegex(installer.InstallError, 'does not match'):
+                installer.inspect_prior_launch(self.root, state)
+
+    def test_uncertain_launch_has_specific_safe_inspection_commands(self):
+        state = {'installation_id': str(uuid.uuid4()), 'environment_id': self.environment}
+        with self.assertRaises(installer.InstallError) as failure:
+            installer.inspect_prior_launch(self.root, state)
+        message = str(failure.exception)
+        self.assertIn('ps -a --filter label=io.parsar.agents-api.installation='+state['installation_id'], message)
+        self.assertIn('volume ls --filter', message)
+        self.assertIn('Do not delete the receipt', message)
 
     def test_failed_launch_is_not_replayed(self):
         def checked(command, message, timeout=30):
