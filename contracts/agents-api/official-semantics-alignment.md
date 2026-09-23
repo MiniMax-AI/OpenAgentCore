@@ -757,8 +757,10 @@ Decisions:
 - **No output.** The shared Runtime initializer adds only an integer `exit_code`
   to its failed receipt, and only for a step run inside its bwrap isolation;
   Runtime helpers, signals and other errors keep the generic receipt, and the
-  exception is never serialized. Core accepts the status only from a strict
-  version-1 failed receipt with process status 1 and no stderr, as an integer
+  exception is never serialized. Core confirms a failed step only when the
+  process exits 1 with empty stderr and a version-1 `failed` receipt. The
+  decoder is deliberately lenient for older images and ignores other fields; the
+  only value ever taken from the receipt is `exit_code`, and only as an integer
   from 1 to 255. The Store composes the reason from a fixed step label and
   integers, so commands, env values, package names, paths and process output
   cannot reach the reason, events, logs or responses.

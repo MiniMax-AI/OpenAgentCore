@@ -458,11 +458,15 @@ The reason names only the failed step and its exit status:
 "Anything else" covers timeouts, the thirty-minute budget, unknown effects,
 missing or malformed receipts, receipts without `exit_code` from Runtime images
 built before this change, Plugin and capability installation, bootstrap
-rejection and Core restart during initialization. Core accepts an exit status
-only from a strict version-1 failed receipt with process status 1 and no stderr,
-as an integer from 1 to 255, and the Store composes the reason from a fixed label
-and integers. Commands, env values, package names, paths and any process output
-therefore never reach the reason, events, logs or responses. The failed step is
+rejection and Core restart during initialization. Core treats a step as
+confirmed failed only when the process exits 1 with empty stderr and stdout
+decodes as a version-1 receipt whose `outcome` is `failed`. The decoder is
+deliberately lenient so older images keep working: other receipt fields are
+ignored and never read. The only value ever taken from the receipt is
+`exit_code`, used only when it is an integer from 1 to 255. The Store composes the
+reason from a fixed label and integers, so commands, env values, package names,
+paths and any process output never reach the reason, events, logs or responses.
+The failed step is
 not retried and later steps do not run.
 
 ## System packages
