@@ -1,10 +1,15 @@
 """Core confirmation is independent of Docker launch and never recreates history."""
 import contextlib
 import io
+import http.server
 import json
+import signal
+import threading
+import time
 import unittest
 from unittest.mock import patch
 import urllib.error
+import urllib.request
 
 import self_hosted_install as installer
 
@@ -45,7 +50,7 @@ class ConnectionTests(unittest.TestCase):
 
     def test_deadline_retains_container_and_has_retry_guidance(self):
         with patch.object(installer, 'open_connection', return_value=self.response('disconnected')), \
-                patch.object(installer.time, 'monotonic', side_effect=[0, 0, 0, 60, 60]), \
+                patch.object(installer.time, 'monotonic', side_effect=[0, 0, 0, 0, 60, 60]), \
                 patch.object(installer, 'checked') as mutation:
             with self.assertRaisesRegex(installer.InstallError, 'timed out.*disconnected') as failure:
                 self.wait()
@@ -58,6 +63,67 @@ class ConnectionTests(unittest.TestCase):
             with patch.object(installer, 'open_connection', return_value=response):
                 with self.assertRaisesRegex(installer.InstallError, 'invalid connection response'):
                     self.wait()
+
+    def test_slow_response_cannot_outlive_deadline_or_report_success(self):
+        body = self.response().getvalue()
+        class SlowResponse(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                try:
+                    for offset in range(0, len(body), 10):
+                        self.wfile.write(body[offset:offset + 10])
+                        self.wfile.flush()
+                        time.sleep(0.07)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+
+            def log_message(self, *_args):
+                pass
+
+        server = http.server.HTTPServer(('127.0.0.1', 0), SlowResponse)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        previous_handler = signal.getsignal(signal.SIGALRM)
+        try:
+            def open_local(request, timeout):
+                local = urllib.request.Request('http://127.0.0.1:' + str(server.server_port),
+                                               headers=dict(request.header_items()))
+                return urllib.request.urlopen(local, timeout=timeout)
+            with patch.object(installer, 'open_connection', side_effect=open_local), \
+                    contextlib.redirect_stdout(io.StringIO()) as output:
+                started = time.monotonic()
+                with self.assertRaisesRegex(installer.InstallError, 'connection timed out'):
+                    installer.wait_connected(self.remote, self.environment, self.key, self.container, timeout=0.2)
+                elapsed = time.monotonic() - started
+            self.assertLess(elapsed, 0.5)
+            self.assertNotIn('Runtime connected', output.getvalue())
+            self.assertEqual(signal.getitimer(signal.ITIMER_REAL), (0, 0))
+            self.assertEqual(signal.getsignal(signal.SIGALRM), previous_handler)
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=2)
+
+    def test_timer_and_handler_are_restored_on_success_and_rejection(self):
+        previous_handler = signal.getsignal(signal.SIGALRM)
+        try:
+            signal.setitimer(signal.ITIMER_REAL, 30)
+            for response in (self.response(), io.BytesIO(b'{}')):
+                with patch.object(installer, 'open_connection', return_value=response), \
+                        contextlib.redirect_stdout(io.StringIO()):
+                    try:
+                        self.wait()
+                    except installer.InstallError:
+                        pass
+                remaining, interval = signal.getitimer(signal.ITIMER_REAL)
+                self.assertGreater(remaining, 20)
+                self.assertLessEqual(remaining, 30)
+                self.assertEqual(interval, 0)
+                self.assertEqual(signal.getsignal(signal.SIGALRM), previous_handler)
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
 
     def test_redirect_never_forwards_bearer(self):
         for target in ('https://other.example/connection', 'https://core.example/new'):

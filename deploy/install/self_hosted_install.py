@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import signal
 import stat
 import subprocess
 import sys
@@ -117,6 +118,10 @@ def open_connection(request, timeout):
     return urllib.request.build_opener(NoRedirect()).open(request, timeout=timeout)
 
 
+class _ConnectionDeadline(Exception):
+    pass
+
+
 def wait_connected(remote, environment, key, container, timeout=60):
     # Only the validated daemon origin receives the restricted credential.
     identity(environment, remote)
@@ -127,37 +132,57 @@ def wait_connected(remote, environment, key, container, timeout=60):
     guidance = (' Inspect with: docker --host unix:///var/run/docker.sock logs --tail 100 ' + container
                 + '. Check the Runtime network, TLS and executor credential, then rerun the same installation command.'
                 + ' Keep the existing container, volumes and installation state; do not replace history.')
-    deadline = time.monotonic() + timeout
+    started_at = time.monotonic()
+    deadline = started_at + timeout
     detail = 'Core has not confirmed this Environment connection'
-    while time.monotonic() < deadline:
-        try:
-            with open_connection(request, min(10, max(0.1, deadline - time.monotonic()))) as response:
-                raw = response.read(4097)
-            if len(raw) > 4096:
-                raise ValueError()
-            result = json.loads(raw)
-            if (not isinstance(result, dict) or set(result) != {'environment_id', 'status'}
-                    or result['environment_id'] != environment
-                    or result['status'] not in ('connected', 'disconnected')):
-                raise ValueError()
-            if result['status'] == 'connected':
-                print('Runtime connected to Environment ' + environment + ': ' + container)
-                return
-            detail = 'Core reports this Environment disconnected'
-        except urllib.error.HTTPError as error:
-            if error.code not in (408, 429, 500, 502, 503, 504):
-                raise InstallError('Core connection check rejected (HTTP ' + str(error.code)
-                                   + '); verify the exact Environment and active executor key.' + guidance) from None
-            detail = 'Core connection check unavailable (HTTP ' + str(error.code) + ')'
-        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead):
-            detail = 'Cannot reach the Core connection endpoint; check DNS, TLS and network access'
-        except (ValueError, TypeError, UnicodeError):
-            raise InstallError('Core returned an invalid connection response.' + guidance) from None
-        except InstallError as error:
-            raise InstallError(str(error) + guidance) from None
-        remaining = deadline - time.monotonic()
-        if remaining > 0:
-            time.sleep(min(2, remaining))
+
+    def deadline_expired(_signal, _frame):
+        raise _ConnectionDeadline()
+
+    # Socket timeouts only limit inactivity. The Linux CLI needs a process timer
+    # as well so a slow response cannot keep the overall deadline alive.
+    previous_handler = signal.signal(signal.SIGALRM, deadline_expired)
+    previous_timer = signal.setitimer(signal.ITIMER_REAL, max(0.001, timeout))
+    try:
+        while time.monotonic() < deadline:
+            try:
+                with open_connection(request, min(10, max(0.1, deadline - time.monotonic()))) as response:
+                    raw = response.read(4097)
+                if len(raw) > 4096:
+                    raise ValueError()
+                result = json.loads(raw)
+                if (not isinstance(result, dict) or set(result) != {'environment_id', 'status'}
+                        or result['environment_id'] != environment
+                        or result['status'] not in ('connected', 'disconnected')):
+                    raise ValueError()
+                if time.monotonic() >= deadline:
+                    raise _ConnectionDeadline()
+                if result['status'] == 'connected':
+                    print('Runtime connected to Environment ' + environment + ': ' + container)
+                    return
+                detail = 'Core reports this Environment disconnected'
+            except urllib.error.HTTPError as error:
+                if error.code not in (408, 429, 500, 502, 503, 504):
+                    raise InstallError('Core connection check rejected (HTTP ' + str(error.code)
+                                       + '); verify the exact Environment and active executor key.' + guidance) from None
+                detail = 'Core connection check unavailable (HTTP ' + str(error.code) + ')'
+            except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead):
+                detail = 'Cannot reach the Core connection endpoint; check DNS, TLS and network access'
+            except (ValueError, TypeError, UnicodeError):
+                raise InstallError('Core returned an invalid connection response.' + guidance) from None
+            except InstallError as error:
+                raise InstallError(str(error) + guidance) from None
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                time.sleep(min(2, remaining))
+    except _ConnectionDeadline:
+        pass
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        if previous_timer[0] > 0:
+            remaining_timer = max(0.001, previous_timer[0] - (time.monotonic() - started_at))
+            signal.setitimer(signal.ITIMER_REAL, remaining_timer, previous_timer[1])
     raise InstallError('Runtime connection timed out: ' + detail + '.' + guidance)
 
 
