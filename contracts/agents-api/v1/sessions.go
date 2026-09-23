@@ -74,6 +74,15 @@ type Reasoning struct {
 	Summary *string `json:"summary,omitempty" extensions:"x-nullable"`
 }
 
+// reasoningResponse renders both reasoning keys, null when unset, as pinned
+// Agent and Session responses do (SES-23, VA-11). Requests and stored
+// configuration keep the omitting Reasoning encoding. It does not resolve a
+// model-derived default effort.
+type reasoningResponse struct {
+	Effort  *string `json:"effort"`
+	Summary *string `json:"summary"`
+}
+
 type TextConfigInput struct {
 	Format    *TextFormat `json:"format,omitempty" extensions:"x-nullable"`
 	Verbosity *string     `json:"verbosity,omitempty" enums:"low,medium,high" extensions:"x-nullable"`
@@ -102,6 +111,24 @@ type Session struct {
 	Status          string             `json:"status" enums:"idle,in_progress,requires_action,failed" binding:"required"`
 	Usage           *TokenUsage        `json:"usage" extensions:"x-nullable"`
 	VaultIDs        []string           `json:"vault_ids" binding:"required"`
+}
+
+type agentWire Agent
+
+// agentResponse renders a Session Agent with explicit reasoning keys.
+type agentResponse struct {
+	agentWire
+	Reasoning reasoningResponse `json:"reasoning"`
+}
+
+// MarshalJSON renders the Session Agent's reasoning with explicit null keys.
+// The stored Session configuration keeps its original encoding.
+func (s Session) MarshalJSON() ([]byte, error) {
+	type wire Session
+	return json.Marshal(struct {
+		wire
+		Agent agentResponse `json:"agent"`
+	}{wire(s), agentResponse{agentWire(s.Agent), reasoningResponse(s.Agent.Reasoning)}})
 }
 
 type SessionList struct {

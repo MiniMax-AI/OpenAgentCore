@@ -1047,6 +1047,59 @@ describe("OpenAIAgentsClient", () => {
     expect(onEvent.mock.calls[2]?.[0]).toMatchObject({ item_id: "item_1", item: { id: "item_1", turn_id: "turn_1" } });
   });
 
+  it("projects explicit wire nulls and accepts older Cores that omit them", async () => {
+    const user = {
+      id: "user_1", turn_id: "turn_1", type: "message", status: "completed", role: "user",
+      phase: null, content: [{ type: "input_text", text: "question" }],
+    };
+    const result = {
+      id: "result_1", turn_id: "turn_1", type: "function_call_output", status: "completed",
+      call_id: "call_1", output: null, error: null,
+    };
+    const session = { ...sessionResource(), agent: { ...agentSnapshot(), reasoning: { effort: null, summary: null } } };
+    const { phase: _omitted, ...legacyUser } = user;
+    const events = [
+      { type: "agent.session.idle", event_id: "idle", session_id: "session", session },
+      { type: "agent.session.turn.item.added", event_id: "user", session_id: "session", turn_id: "turn_1", output_index: null, item: user },
+      { type: "agent.session.turn.item.added", event_id: "result", session_id: "session", turn_id: "turn_1", output_index: null, item: result },
+      { type: "agent.session.turn.item.added", event_id: "legacy", session_id: "session", turn_id: "turn_1", item: { ...legacyUser, id: "user_2" } },
+      {
+        type: "agent.session.turn.item.added", event_id: "answer", session_id: "session", turn_id: "turn_1",
+        output_index: 0, item: messageItem({ content: [], phase: "final_answer" }),
+      },
+    ];
+    const onEvent = vi.fn();
+    const client = new OpenAIAgentsClient({
+      fetch: recordingFetch(streamResponse(events.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)), []),
+    });
+
+    await client.streamEvents("session", { onEvent });
+
+    const projected = onEvent.mock.calls.map((call) => call[0] as SessionEvent);
+    expect(projected).toHaveLength(events.length);
+    expect(projected[0]?.session?.agent.reasoning).toEqual({ effort: null, summary: null });
+    expect(projected[1]).toMatchObject({ output_index: null, item: { role: "user", phase: null } });
+    expect(projected[2]).toMatchObject({ output_index: null, item: { output: null, error: null } });
+    expect(Object.prototype.hasOwnProperty.call(projected[2]?.item, "output")).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(projected[3], "output_index")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(projected[3]?.item, "phase")).toBe(false);
+    expect(projected[4]).toMatchObject({ output_index: 0, item: { status: "in_progress", content: [], phase: "final_answer" } });
+
+    for (const invalid of [{ ...events[1], output_index: "0" }, { ...events[1], output_index: -1 }, { ...events[1], item: { ...user, phase: "draft" } }]) {
+      const rejected = new OpenAIAgentsClient({
+        fetch: recordingFetch(streamResponse([`data: ${JSON.stringify(invalid)}\n\n`]), []),
+      });
+      await expect(rejected.streamEvents("session", { onEvent: vi.fn() }))
+        .rejects.toMatchObject({ status: 502, code: "invalid_stream_event" });
+    }
+
+    const calls: FetchCall[] = [];
+    const listed = await new OpenAIAgentsClient({
+      fetch: recordingFetch(jsonResponse({ object: "list", data: [user, result], first_id: "user_1", last_id: "result_1", has_more: false }), calls),
+    }).listItems("session");
+    expect(listed.data).toEqual([user, result]);
+  });
+
   const measuredUsage = {
     input_tokens: 7,
     input_tokens_details: { cached_tokens: 2 },

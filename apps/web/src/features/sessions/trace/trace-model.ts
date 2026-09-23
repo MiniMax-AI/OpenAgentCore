@@ -200,7 +200,7 @@ function validatedItemType(item: SessionItem): SessionItem["type"] | null {
   if (raw.type === "message") {
     return MESSAGE_ROLES.has(raw.role as string)
       && validContent(raw.content)
-      && (!hasOwn(raw, "phase") || raw.phase === undefined || MESSAGE_PHASES.has(raw.phase as string))
+      && (!hasOwn(raw, "phase") || raw.phase === undefined || raw.phase === null || MESSAGE_PHASES.has(raw.phase as string))
       ? raw.type
       : null;
   }

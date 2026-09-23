@@ -111,7 +111,8 @@ def run(sid, output=None, expected=None, cancel=False, failed_text=False, valida
     recovered = {i["call_id"]: i for i in items(sid) if i["type"] == "function_call_output"}
     for call in proof["calls"]:
         assert recovered[call["call"]]["output"] == call["output"]
-        assert ("error" not in recovered[call["call"]]) == call["success"]
+        assert "error" in recovered[call["call"]]
+        assert (recovered[call["call"]]["error"] is None) == call["success"]
 
 
 try:

@@ -64,7 +64,7 @@ def verify_hosted_functions(client, foreign, http, model, restart, evidence):
             return marker
 
         turn, result = invoke("Call lookup once with key success. Remember its returned string in conversation. Then use the native shell to create /workspace/outputs/function.txt containing exactly that string, with no newline. Do not call any other function.", "function-success", success)
-        assert result["output"] == marker and "error" not in result
+        assert result["output"] == marker and "error" in result and result["error"] is None
         artifacts = list(sessions.artifacts.list(session.id, limit=100))
         output = [a for a in artifacts if a.turn_id == turn and a.path == "/workspace/outputs/function.txt"]
         assert len(output) == 1

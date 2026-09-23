@@ -98,7 +98,7 @@ func projectRootCoordination(ctx context.Context, q *sqlc.Queries, session, turn
 	if err != nil {
 		return err
 	}
-	payload, err := json.Marshal(merged)
+	payload, err := merged.MarshalStored()
 	if err != nil {
 		return err
 	}

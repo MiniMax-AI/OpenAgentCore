@@ -301,6 +301,24 @@ describe("trace summary and search", () => {
     });
   });
 
+  it("accepts the explicit null phase, output and error fields of current Cores", () => {
+    const items: SessionItem[] = [
+      { id: "user", turn_id: "one", type: "message", status: "completed", role: "user", phase: null, content: [{ type: "input_text", text: "question" }] },
+      { id: "answer", turn_id: "one", type: "message", status: "completed", role: "assistant", phase: null, content: [{ type: "output_text", text: "answer" }] },
+      { id: "call", turn_id: "one", type: "function_call", status: "completed", call_id: "call-1", name: "lookup", arguments: {} },
+      { id: "result", turn_id: "one", type: "function_call_output", status: "failed", call_id: "call-1", output: null, error: "lookup failed" },
+    ];
+
+    const rows = buildTraceModel({ turns: [turn("one")], items, agent }).groups[1]?.rows;
+
+    expect(rows?.map((row) => [row.kind, row.title])).toEqual([
+      ["user_message", "User message"],
+      ["assistant_message", "Assistant message"],
+      ["tool_call", "lookup"],
+    ]);
+    expect(rows?.[2]?.tool?.result).toEqual({ state: "available", value: { output: null, error: "lookup failed" } });
+  });
+
   it("degrades malformed known variants without throwing or deriving a title from arguments", () => {
     const malformedSearch = {
       id: "search",

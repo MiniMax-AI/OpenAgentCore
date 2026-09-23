@@ -51,7 +51,7 @@ func projectSubagentItem(ctx context.Context, q *sqlc.Queries, session pgtype.UU
 }
 
 func putChildItem(ctx context.Context, q *sqlc.Queries, session, childID pgtype.UUID, turn sqlc.SubagentTurn, position int32, item v1.Item) error {
-	payload, err := json.Marshal(item)
+	payload, err := item.MarshalStored()
 	if err != nil {
 		return err
 	}

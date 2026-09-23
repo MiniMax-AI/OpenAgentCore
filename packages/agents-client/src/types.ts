@@ -561,7 +561,8 @@ export interface SessionItemBase {
   /** Inter-agent messages have no status; reasoning may have an unknown status. */
   status?: ItemStatus | null;
   role?: "user" | "assistant";
-  phase?: "commentary" | "final_answer";
+  /** Null on user messages and when the harness reports none; older Cores omit it. */
+  phase?: "commentary" | "final_answer" | null;
   content?: ItemContent[];
   command?: string;
   cwd?: string | null;
@@ -646,7 +647,8 @@ export interface SessionEventBase {
   turn?: AgentTurn;
   item?: SessionItem;
   item_id?: string;
-  output_index?: number;
+  /** Null on Item events for input Items; older Cores omit it. */
+  output_index?: number | null;
   content_index?: number;
   part?: ItemContent;
   delta?: string;

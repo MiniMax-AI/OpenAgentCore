@@ -67,9 +67,41 @@ type ReasoningItem struct {
 	Summary []SummaryText `json:"summary" binding:"required"`
 }
 
-// MarshalJSON preserves each coordination variant's required fields and nulls.
-// Existing execution Item variants retain their established serialization.
+// MarshalJSON renders the wire shape. Messages always carry content and a
+// nullable phase, and function results a nullable output and error, as in the
+// pinned responses (EVT-09, SES-25). Other variants use the stored encoding.
 func (i Item) MarshalJSON() ([]byte, error) {
+	type wire Item
+	switch i.Type {
+	case "message":
+		var phase *string
+		if i.Phase != "" {
+			phase = &i.Phase
+		}
+		content := i.Content
+		if content == nil {
+			content = []ItemContent{}
+		}
+		return json.Marshal(struct {
+			wire
+			Phase   *string       `json:"phase"`
+			Content []ItemContent `json:"content"`
+		}{wire(i), phase, content})
+	case "function_call_output":
+		return json.Marshal(struct {
+			wire
+			Output any `json:"output"`
+			Error  any `json:"error"`
+		}{wire(i), i.Output, i.Error})
+	}
+	return i.MarshalStored()
+}
+
+// MarshalStored encodes a persisted Item payload. It keeps the encoding used
+// before the wire nulls above, so stored payloads and the byte comparison of
+// replayed child Items do not change. Coordination variants keep their
+// required fields and nulls in both forms.
+func (i Item) MarshalStored() ([]byte, error) {
 	switch i.Type {
 	case "create_subagent_call", "send_subagent_input_call", "agent_message":
 		content, err := coordinationContent(i.Content)

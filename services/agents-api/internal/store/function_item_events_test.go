@@ -62,7 +62,7 @@ func TestFunctionResultItemsRetainSubmittedFields(t *testing.T) {
 		`{"success":false,"output":[{"type":"input_text","text":"before"},{"type":"input_image","image_url":"data:image/png;base64,AA=="}],"error":"failure"}`,
 	} {
 		t.Run(raw, func(t *testing.T) {
-			s, _ := testStore(t)
+			s, pool := testStore(t)
 			tenant, session := newTurnSession(t, s)
 			turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
 			transition(t, s, tenant, session.ID, turn, TurnQueued, TurnInProgress)
@@ -87,10 +87,10 @@ func TestFunctionResultItemsRetainSubmittedFields(t *testing.T) {
 				if json.Unmarshal([]byte(raw), &expected) != nil || json.Unmarshal(encoded, &actual) != nil {
 					t.Fatal(string(encoded))
 				}
+				// The wire always carries both fields, null when not submitted (EVT-09).
 				for _, field := range []string{"output", "error"} {
-					wanted, present := expected[field]
 					got, exists := actual[field]
-					if present != exists || !reflect.DeepEqual(wanted, got) {
+					if !exists || !reflect.DeepEqual(expected[field], got) {
 						t.Fatalf("%s changed: %s", field, encoded)
 					}
 				}
@@ -114,6 +114,19 @@ func TestFunctionResultItemsRetainSubmittedFields(t *testing.T) {
 				if change.Event.Item != nil && change.Event.Item.Type == "function_call_output" {
 					assertFields(change.Event.Item)
 					results++
+				}
+			}
+			// The stored payload keeps the submitted field presence.
+			var stored map[string]any
+			if err := pool.QueryRow(t.Context(), `SELECT payload FROM session_items WHERE turn_id = $1 AND payload->>'type' = 'function_call_output'`, turn).Scan(&stored); err != nil {
+				t.Fatal(err)
+			}
+			var submitted map[string]any
+			_ = json.Unmarshal([]byte(raw), &submitted)
+			for _, field := range []string{"output", "error"} {
+				_, present := submitted[field]
+				if _, exists := stored[field]; present != exists {
+					t.Fatalf("stored %s presence changed: %v", field, stored)
 				}
 			}
 			if results != 2 {

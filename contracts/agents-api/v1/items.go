@@ -12,7 +12,7 @@ type Item struct {
 	Type              string           `json:"type" binding:"required" enums:"message,command_execution,mcp_call,function_call,function_call_output,web_search_call,reasoning,agent_message,create_subagent_call,send_subagent_input_call,resume_subagent_call,wait_for_subagents_call,interrupt_subagent_call,close_subagent_call"`
 	Status            string           `json:"status" enums:"in_progress,completed,failed,incomplete"`
 	Role              string           `json:"role,omitempty" enums:"user,assistant"`
-	Phase             string           `json:"phase,omitempty" enums:"commentary,final_answer"`
+	Phase             string           `json:"phase,omitempty" enums:"commentary,final_answer" extensions:"x-nullable"`
 	Content           []ItemContent    `json:"content,omitempty"`
 	Command           string           `json:"command,omitempty"`
 	Cwd               *string          `json:"cwd,omitempty"`

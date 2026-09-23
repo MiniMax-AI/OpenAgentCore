@@ -47,7 +47,7 @@ func projectItemSource(ctx context.Context, q *sqlc.Queries, session, turn pgtyp
 		if err := restoreFunctionItemResult(ctx, q, session, turn, &item); err != nil {
 			return err
 		}
-		payload, err := json.Marshal(item)
+		payload, err := item.MarshalStored()
 		if err != nil {
 			return err
 		}

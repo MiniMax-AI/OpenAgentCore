@@ -90,6 +90,34 @@ func TestHTTPConfigurationAndTenantIdentity(t *testing.T) {
 	}
 }
 
+// Session responses carry both reasoning keys (SES-23); the stored
+// configuration and creation retry identity keep their original encoding.
+func TestSessionResponseReasoningKeysAreExplicit(t *testing.T) {
+	s := &recordingStore{}
+	h, _, _ := testHandler(t, WithExecution(&inputRecorder{ResourceStore: s}))
+	request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"requested-model"},"environment":{"type":"none"},"input":"hello"}`))
+	request.Header.Set("Authorization", "Bearer test-api-key")
+	request.Header.Set("OpenAI-Beta", "agents=v1")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, request)
+	var body struct {
+		Agent struct {
+			Reasoning json.RawMessage `json:"reasoning"`
+		} `json:"agent"`
+	}
+	if w.Code != http.StatusCreated || json.Unmarshal(w.Body.Bytes(), &body) != nil || string(body.Agent.Reasoning) != `{"effort":null,"summary":null}` {
+		t.Fatalf("response = %d %s", w.Code, w.Body)
+	}
+	var stored struct {
+		Agent struct {
+			Reasoning json.RawMessage `json:"reasoning"`
+		} `json:"agent"`
+	}
+	if json.Unmarshal(s.input.Configuration, &stored) != nil || string(stored.Agent.Reasoning) != `{}` {
+		t.Fatalf("stored configuration changed: %s", s.input.Configuration)
+	}
+}
+
 func TestHTTPRejectsUntrustedOrUnsupportedRequests(t *testing.T) {
 	valid := `{"agent":{"model":"example"},"environment":{"type":"none"},"input":"Run the configured request."}`
 	for _, test := range []struct {

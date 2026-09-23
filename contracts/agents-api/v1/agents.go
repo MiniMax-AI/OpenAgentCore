@@ -69,6 +69,16 @@ type SavedAgent struct {
 	UpdatedAt int64             `json:"updated_at" binding:"required"`
 }
 
+// MarshalJSON renders reasoning with explicit null keys. The stored
+// SavedAgentConfiguration keeps its original encoding.
+func (a SavedAgent) MarshalJSON() ([]byte, error) {
+	type wire SavedAgent
+	return json.Marshal(struct {
+		wire
+		Reasoning reasoningResponse `json:"reasoning"`
+	}{wire(a), reasoningResponse(a.Reasoning)})
+}
+
 type SavedAgentList struct {
 	Object  string       `json:"object" binding:"required" enums:"list"`
 	Data    []SavedAgent `json:"data" binding:"required"`

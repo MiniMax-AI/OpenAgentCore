@@ -982,6 +982,7 @@ definitions:
         - commentary
         - final_answer
         type: string
+        x-nullable: true
       reasoning_effort:
         type: string
       recipient_agent_id:
@@ -2148,6 +2149,7 @@ definitions:
         type: string
       output_index:
         type: integer
+        x-nullable: true
       part:
         $ref: '#/definitions/v1.ItemContent'
       session:

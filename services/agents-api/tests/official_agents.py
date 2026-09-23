@@ -27,6 +27,8 @@ def verify_agents(client, other, invalid, expect_error):
             assert body["name"] is None and body["instructions"] is None and body["metadata"] == {}
             assert body["multi_agent"] == {"enabled": False, "max_concurrent_subagents": None}
             assert body["text"] == {"format": {"type": "text"}, "verbosity": "medium"}
+            # Both reasoning keys are present; the model-derived effort stays unresolved.
+            assert body["reasoning"] == {"effort": None, "summary": None}
             assert body["tools"] == []
             assert agent.created_at == agent.updated_at and abs(agent.created_at - time.time()) < 10
             assert agents.retrieve(agent.id) == agent

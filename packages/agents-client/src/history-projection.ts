@@ -97,10 +97,11 @@ export function projectSessionItem(value: unknown, invalid: () => never): Sessio
     case "message":
       if (
         (value.role !== "user" && value.role !== "assistant") || !Array.isArray(value.content) ||
-        !(value.phase === undefined || value.phase === "commentary" || value.phase === "final_answer")
+        !(value.phase === undefined || value.phase === null || value.phase === "commentary" || value.phase === "final_answer")
       ) return invalid();
       projected.role = value.role;
       projected.content = Array.from(value.content, (part) => projectItemContent(part, invalid));
+      // Current Cores send null when there is no phase; older ones omit it.
       if (value.phase !== undefined) projected.phase = value.phase;
       break;
     case "command_execution":

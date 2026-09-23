@@ -41,12 +41,13 @@ with OpenAI(base_url=base+"/v1", api_key=token, max_retries=0, _strict_response_
             for event in stream:
                 if event.type in ("agent.session.turn.item.added", "agent.session.turn.item.done") and event.item.type == "function_call_output":
                     assert event.type == "agent.session.turn.item.added" and event.output_index is None
+                    assert "output_index" in event.to_dict()
                     submitted = event.item.to_dict()
                     assert submitted["output"] == output
                     if index == 1:
                         assert submitted["error"] == "synthetic failure"
                     else:
-                        assert "error" not in submitted
+                        assert "error" in submitted and submitted["error"] is None
                 if event.type == "agent.session.requires_action" and not handled:
                     assert event.session.agent.tools[0].to_dict() == expected
                     action = event.session.required_actions[0]
@@ -76,7 +77,7 @@ with OpenAI(base_url=base+"/v1", api_key=token, max_retries=0, _strict_response_
         if index == 1:
             assert results[call]["error"] == "synthetic failure"
         else:
-            assert "error" not in results[call]
+            assert "error" in results[call] and results[call]["error"] is None
     answers = [item for item in items if item.type=="message" and item.role=="assistant"]
     assert len(answers)==2 and all(item.content[0].text=="FUNCTION-EXECUTION-OK" for item in answers)
     assert sessions.retrieve(session.id).agent.tools[0].to_dict() == expected

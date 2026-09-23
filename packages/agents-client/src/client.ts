@@ -1375,7 +1375,8 @@ function projectStreamEventSession(
     if (!sameResourceId(item.turn_id, turnId)) return invalidStreamEvent();
     const itemId = value.item_id === undefined ? undefined : requiredEventString(value, "item_id");
     if (itemId !== undefined && !sameResourceId(item.id, itemId)) return invalidStreamEvent();
-    const outputIndex = optionalEventIndex(value, "output_index");
+    // Input Items carry a null output index; older Cores omit it.
+    const outputIndex = value.output_index === null ? null : optionalEventIndex(value, "output_index");
     return {
       ...base,
       session_id: sessionId,

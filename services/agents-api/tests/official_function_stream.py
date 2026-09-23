@@ -18,7 +18,8 @@ agent = {"model": "gpt-5.5", "tools": [{
     "parameters": {"type": "object", "properties": {"ticket": {"type": "string"}},
                    "required": ["ticket"], "additionalProperties": False},
 }]}
-expected = [{"output": '{"ticket":"42","status":"open"}'}, {"error": "Tool handler failed."}]
+# Function result Items always carry output and error, null when not submitted.
+expected = [{"output": '{"ticket":"42","status":"open"}', "error": None}, {"output": None, "error": "Tool handler failed."}]
 with OpenAI(base_url=base + "/v1", api_key=token, max_retries=0, _strict_response_validation=True,
             http_client=httpx2.Client(trust_env=False, timeout=30)) as client:
     sessions = client.beta.agents.sessions
@@ -70,7 +71,7 @@ with OpenAI(base_url=base + "/v1", api_key=token, max_retries=0, _strict_respons
         calls.append(call_id)
         results = [event for event in added if event["item"]["type"] == "function_call_output"]
         assert len(results) == 1 and results[0]["turn_id"] == turn_id, events
-        assert results[0].get("output_index") is None
+        assert "output_index" in results[0] and results[0]["output_index"] is None
         result = results[0]["item"]
         assert result["call_id"] == call_id
         assert {key: result[key] for key in ("output", "error") if key in result} == expected[index], result

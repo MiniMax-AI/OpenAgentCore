@@ -184,3 +184,56 @@ func TestTerminalTurnEventsMirrorTurnUsage(t *testing.T) {
 		}
 	}
 }
+
+// Item events carry output_index, null for input Items, and Session snapshots
+// carry both reasoning keys (EVT-09, SES-23).
+func TestStreamEventsCarryExplicitNullFields(t *testing.T) {
+	session := store.Session{ID: "session", Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[],"reasoning":{}},"environment":{"type":"none"}}`)}
+	text := "question"
+	user := &v1.Item{ID: "item", TurnID: "turn", Type: "message", Status: "completed", Role: "user", Content: []v1.ItemContent{{Type: "input_text", Text: &text}}}
+	result := &v1.Item{ID: "result", TurnID: "turn", Type: "function_call_output", Status: "completed", CallID: "call", Output: "value"}
+	index := int32(0)
+	for _, test := range []struct {
+		change store.SessionChange
+		want   map[string]string
+	}{
+		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.item.added", TurnID: "turn", Item: user}}, map[string]string{"output_index": "null"}},
+		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.item.added", TurnID: "turn", Item: result}}, map[string]string{"output_index": "null"}},
+		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.item.done", TurnID: "turn", OutputIndex: &index, Item: &v1.Item{ID: "answer", TurnID: "turn", Type: "message", Status: "completed", Role: "assistant", Content: []v1.ItemContent{{Type: "output_text", Text: &text}}}}}, map[string]string{"output_index": "0"}},
+		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.idle"}, Turn: &store.Turn{ID: "turn", Status: store.TurnCompleted}}, map[string]string{"output_index": ""}},
+	} {
+		event, err := streamResponse(session, test.change, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := json.Marshal(event)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			t.Fatal(err)
+		}
+		for key, want := range test.want {
+			if value, present := fields[key]; present != (want != "") || (present && string(value) != want) {
+				t.Fatalf("%s: %s", key, raw)
+			}
+		}
+		var item map[string]json.RawMessage
+		_ = json.Unmarshal(fields["item"], &item)
+		switch {
+		case test.change.Event.Item == result:
+			if string(item["output"]) != `"value"` || string(item["error"]) != "null" {
+				t.Fatalf("function result fields: %s", raw)
+			}
+		case test.change.Event.Item != nil:
+			if phase, present := item["phase"]; !present || string(phase) != "null" {
+				t.Fatalf("message phase: %s", raw)
+			}
+		default:
+			if !strings.Contains(string(fields["session"]), `"reasoning":{"effort":null,"summary":null}`) {
+				t.Fatalf("session reasoning: %s", raw)
+			}
+		}
+	}
+}
