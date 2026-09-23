@@ -83,10 +83,15 @@ class InstallerTests(unittest.TestCase):
         (bundle / "runtime").mkdir()
         (bundle / "manifest.json").write_text(json.dumps(self.manifest))
         (bundle / "runtime/seccomp.json").write_text('{"defaultAction":"SCMP_ACT_ERRNO"}')
-        for name in ("install.py", "configuration.py", "install.sh"):
+        for name in ("install.py", "configuration.py", "native_service.py", "install.sh"):
             shutil.copyfile(Path(__file__).with_name(name), bundle / name)
         for name in self.manifest["images"]:
             (bundle / "images" / (name + ".tar")).write_bytes(("synthetic " + name).encode())
+        for name in ("bin/agents-api", "bin/agents-api-migrate", "bin/agents-api-microsandbox-provider",
+                     "microsandbox/msb", "microsandbox/libkrunfw.so.5.6.1"):
+            path = bundle / "native" / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"synthetic native file")
         self.write_checksums(bundle)
         return bundle
 
@@ -126,32 +131,30 @@ class InstallerTests(unittest.TestCase):
             install.initialize(self.root, self.args(), changed)
         self.assertEqual(before, self.snapshot())
 
-    def test_default_microsandbox_exposes_only_kvm_to_core(self):
+    def test_default_microsandbox_keeps_core_and_vm_processes_outside_compose(self):
         state = self.initialize()
         self.assertEqual(state["provider"], "microsandbox")
         managed = self.document("config/managed-runtimes.json")
-        self.assertIn("microsandbox", managed)
         self.assertNotIn("docker", managed)
-        self.assertEqual(managed["microsandbox"]["network"]["default_ingress"], "deny")
-        self.assertEqual(managed["microsandbox"]["network"]["default_egress"], "deny")
-        self.assertEqual(managed["microsandbox"]["image"], self.manifest["runtime_ref"])
+        micro = managed["microsandbox"]
+        self.assertEqual(micro["network"]["default_ingress"], "deny")
+        self.assertEqual(micro["network"]["default_egress"], "deny")
+        self.assertEqual(micro["image"], self.manifest["runtime_ref"])
+        self.assertEqual(micro["runtime_home"], str(self.root / "state/msb"))
+        self.assertEqual(micro["helper_path"], str(self.root / "native/bin/agents-api-microsandbox-provider"))
         services = self.document("compose.json")["services"]
-        self.assertEqual(set(services), {"core", "database", "migrate", "web"})
-        self.assertEqual(services["core"]["devices"], ["/dev/kvm:/dev/kvm"])
-        self.assertIn("1234", services["core"]["group_add"])
-        for name, service in services.items():
+        self.assertEqual(set(services), {"database", "web"})
+        for service in services.values():
             self.assertFalse(service.get("privileged", False))
+            self.assertNotIn("devices", service)
             self.assertNotIn("docker.sock", json.dumps(service.get("volumes", [])))
-            if name != "core":
-                self.assertNotIn("devices", service)
-        self.assertNotIn("ports", services["database"])
-        for name in ("core", "migrate", "web"):
-            self.assertEqual(services[name]["user"], "1000:1000")
-            self.assertTrue(services[name]["read_only"])
-            self.assertIn("no-new-privileges:true", services[name]["security_opt"])
-        for name in ("core", "web"):
-            self.assertTrue(all(port.startswith("127.0.0.1:") for port in services[name]["ports"]))
-        self.assertEqual(services["core"]["depends_on"]["migrate"]["condition"], "service_completed_successfully")
+        self.assertEqual(services["database"]["ports"], [f'127.0.0.1:{state["database_port"]}:5432'])
+        web = services["web"]
+        self.assertEqual(web["network_mode"], "host")
+        self.assertEqual(web["environment"]["CORE_CONSOLE_ADDR"], "127.0.0.1:8080")
+        self.assertEqual(web["environment"]["CORE_CONSOLE_UPSTREAM"], "http://127.0.0.1:8091")
+        self.assertTrue(web["read_only"])
+        self.assertIn("no-new-privileges:true", web["security_opt"])
 
     def test_docker_provider_socket_and_runtime_network_belong_only_to_core(self):
         state = self.initialize("--provider", "docker", "--core-only")
@@ -325,14 +328,14 @@ class InstallerTests(unittest.TestCase):
                     mock.patch.object(install, "compose", return_value=SimpleNamespace(stdout=json.dumps(rows))), \
                     mock.patch.object(install, "wait_http", return_value=True), \
                     contextlib.redirect_stdout(io.StringIO()), self.assertRaises(install.InstallError):
-                install.status(self.root, {"mode": "all", "core_port": 8091, "web_port": 8080})
+                install.status(self.root, {"mode": "all", "provider": "docker", "core_port": 8091, "web_port": 8080})
 
     def test_status_accepts_web_only_without_database_or_core_services(self):
         rows = [{"Service": "web", "State": "running", "Health": ""}]
         with mock.patch.object(install, "compose", return_value=SimpleNamespace(stdout=json.dumps(rows))), \
                 mock.patch.object(install, "wait_http", return_value=True), \
                 contextlib.redirect_stdout(io.StringIO()):
-            install.status(self.root, {"mode": "web-only", "web_port": 8080})
+            install.status(self.root, {"mode": "web-only", "provider": "microsandbox", "web_port": 8080})
 
 
 if __name__ == "__main__":

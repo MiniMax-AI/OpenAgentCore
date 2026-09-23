@@ -6,7 +6,8 @@ def bind(source, target, readonly=True):
     return {"type": "bind", "source": str(source), "target": target, "read_only": readonly}
 
 
-def managed_config(state, manifest):
+def managed_config(root, state, manifest):
+    root = Path(root)
     result = {"installation_id": state["installation_id"], "provider": state["provider"],
               "maintenance": False}
     if state["provider"] == "docker":
@@ -16,18 +17,18 @@ def managed_config(state, manifest):
             "nested_sandbox": True,
         })
     else:
-        result.update(core_url="http://host.microsandbox.internal:8091/api/v1", microsandbox={
-            "helper_path": "/usr/local/bin/agents-api-microsandbox-provider",
-            "runtime_path": "/opt/microsandbox/msb",
-            "firmware_path": "/opt/microsandbox/libkrunfw.so.5.6.1",
+        result.update(core_url=f'http://host.microsandbox.internal:{state["core_port"]}/api/v1', microsandbox={
+            "helper_path": str(root / "native/bin/agents-api-microsandbox-provider"),
+            "runtime_path": str(root / "native/microsandbox/msb"),
+            "firmware_path": str(root / "native/microsandbox/libkrunfw.so.5.6.1"),
             "runtime_sha256": manifest["microsandbox"]["runtime_sha256"],
             "firmware_sha256": manifest["microsandbox"]["firmware_sha256"],
-            "runtime_home": "/state/msb", "image": manifest["runtime_ref"],
+            "runtime_home": str(root / "state/msb"), "image": manifest["runtime_ref"],
             "memory_mib": 4096, "cpus": 2, "root_disk_mib": 8192,
             "idle_seconds": 300, "retention_seconds": 86400,
             "max_active": 4, "max_retained": 16,
             "network": {"default_egress": "deny", "default_ingress": "deny", "rules": [
-                {"action": "allow", "direction": "egress", "destination": "host", "protocol": "tcp", "port": "8091"},
+                {"action": "allow", "direction": "egress", "destination": "host", "protocol": "tcp", "port": str(state["core_port"])},
                 {"action": "allow", "direction": "egress", "destination": "host", "protocol": "udp", "port": "53"},
                 {"action": "allow", "direction": "egress", "destination": "host", "protocol": "tcp", "port": "53"},
                 {"action": "allow", "direction": "egress", "destination": "public"},
@@ -36,12 +37,29 @@ def managed_config(state, manifest):
     return result
 
 
+def core_environment(root, state, database_password):
+    native = state["provider"] == "microsandbox"
+    config = str(Path(root) / "config") if native else "/config"
+    database = f'127.0.0.1:{state["database_port"]}' if native else "database:5432"
+    daemon_host = f'host.microsandbox.internal:{state["core_port"]}' if native else "core:8091"
+    return {
+        "AGENTS_API_DATABASE_URL": f"postgres://agents_api:{database_password}@{database}/agents_api?sslmode=disable",
+        "AGENTS_API_KEYS_FILE": config + "/keys.json",
+        "AGENTS_API_CREDENTIAL_KEY_FILE": config + "/credential.key",
+        "AGENTS_API_ADDR": f'127.0.0.1:{state["core_port"]}' if native else ":8091",
+        "AGENTS_API_ENGINE": "codex", "AGENTS_API_HARNESSES": "codex,claude_sdk,mcode",
+        "AGENTS_API_MANAGED_RUNTIMES_FILE": config + "/managed-runtimes.json",
+        "AGENTS_API_DAEMON_WS_URL": f"ws://{daemon_host}/api/v1/agent-daemon/ws",
+    }
+
+
 def compose_config(root, state, manifest, database_password):
     root = Path(root)
     config = root / "config"
     identity = f'{state["uid"]}:{state["gid"]}'
     doc = {"name": state["project"], "services": {}}
     services = doc["services"]
+    native = state["provider"] == "microsandbox" and state["mode"] != "web-only"
     if state["mode"] != "web-only":
         services["database"] = {
             "image": manifest["images"]["database"], "restart": "unless-stopped",
@@ -51,13 +69,7 @@ def compose_config(root, state, manifest, database_password):
             "healthcheck": {"test": ["CMD-SHELL", "pg_isready -U agents_api -d agents_api"],
                             "interval": "2s", "timeout": "5s", "retries": 30},
         }
-        env = {"AGENTS_API_DATABASE_URL": f"postgres://agents_api:{database_password}@database:5432/agents_api?sslmode=disable",
-               "AGENTS_API_KEYS_FILE": "/config/keys.json",
-               "AGENTS_API_CREDENTIAL_KEY_FILE": "/config/credential.key",
-               "AGENTS_API_ADDR": ":8091", "AGENTS_API_ENGINE": "codex",
-               "AGENTS_API_HARNESSES": "codex,claude_sdk,mcode",
-               "AGENTS_API_MANAGED_RUNTIMES_FILE": "/config/managed-runtimes.json",
-               "AGENTS_API_DAEMON_WS_URL": managed_config(state, manifest)["core_url"].replace("http:", "ws:") + "/agent-daemon/ws"}
+        env = core_environment(root, state, database_password)
         shared = {"image": manifest["images"]["core"], "user": identity,
                   "environment": env, "volumes": [bind(config, "/config")],
                   "read_only": True, "tmpfs": ["/tmp:mode=1777"], "init": True,
@@ -67,17 +79,15 @@ def compose_config(root, state, manifest, database_password):
         core = dict(shared, restart="unless-stopped", ports=[f'127.0.0.1:{state["core_port"]}:8091'],
                     depends_on={"migrate": {"condition": "service_completed_successfully"}})
         core["volumes"] = list(shared["volumes"])
-        if state["provider"] == "microsandbox":
-            core["volumes"].append(bind(root / "state", "/state", False))
-            core["environment"] = dict(env, HOME="/state", MSB_HOME="/state/msb")
-            core["devices"] = ["/dev/kvm:/dev/kvm"]
-            core["group_add"] = [str(state["device_gid"])]
+        if native:
+            services["database"]["ports"] = [f'127.0.0.1:{state["database_port"]}:5432']
+            services.pop("migrate")
         else:
             core["volumes"].append(bind("/var/run/docker.sock", "/var/run/docker.sock", False))
             core["group_add"] = [str(state["device_gid"])]
             core["networks"] = ["default", "runtime"]
             doc["networks"] = {"runtime": {"name": state["project"] + "-runtime"}}
-        services["core"] = core
+            services["core"] = core
         doc["volumes"] = {"database": {}}
     if state["mode"] != "core-only":
         services["web"] = {
@@ -87,11 +97,12 @@ def compose_config(root, state, manifest, database_password):
             "volumes": [bind(config / "caller.key", "/config/caller.key"),
                         bind(config / "console.password", "/config/console.password")],
             "environment": {"CORE_CONSOLE_ORIGIN": f'http://127.0.0.1:{state["web_port"]}',
-                "CORE_CONSOLE_UPSTREAM": state.get("core_url") or "http://core:8091",
+                "CORE_CONSOLE_UPSTREAM": (f'http://127.0.0.1:{state["core_port"]}' if native
+                                          else state.get("core_url") or "http://core:8091"),
                 "CORE_CONSOLE_TOKEN_FILE": "/config/caller.key",
                 "CORE_CONSOLE_PASSWORD_FILE": "/config/console.password"},
         }
-        if state["mode"] == "web-only":
+        if state["mode"] == "web-only" or native:
             services["web"].pop("ports")
             services["web"]["network_mode"] = "host"
             services["web"]["environment"]["CORE_CONSOLE_ADDR"] = f'127.0.0.1:{state["web_port"]}'

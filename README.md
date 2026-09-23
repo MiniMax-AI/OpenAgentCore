@@ -8,8 +8,8 @@ native harness keeps its own model and tool loop. Core runs independently of the
 Parsar product.
 
 Core and its Web console ship together. The installer prepares microsandbox by
-default; use `--provider docker` for Docker. Core provisions the colocated
-Runtime when a Session needs it. Model credentials are supplied through the
+default; use `--provider docker` for Docker. Core creates each required sandbox from the
+colocated Runtime image through its Provider, then initializes it. Model credentials are supplied through the
 existing write-only API extension, not during installation.
 
 ## Start here

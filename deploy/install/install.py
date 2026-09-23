@@ -17,7 +17,8 @@ import urllib.error
 import urllib.request
 import uuid
 
-from configuration import compose_config, managed_config
+from configuration import compose_config, core_environment, managed_config
+import native_service
 
 
 class InstallError(Exception):
@@ -59,8 +60,10 @@ def verify_bundle(bundle):
             raise InstallError("Invalid distribution path")
         if digest(path) != expected:
             raise InstallError("Distribution checksum mismatch: " + name)
-    required = {"manifest.json", "install.sh", "install.py", "configuration.py", "runtime/seccomp.json"}
+    required = {"manifest.json", "install.sh", "install.py", "configuration.py", "native_service.py", "runtime/seccomp.json"}
     required.update(f"images/{name}.tar" for name in ("core", "web", "runtime", "database"))
+    required.update("native/bin/" + name for name in ("agents-api", "agents-api-migrate", "agents-api-microsandbox-provider"))
+    required.update("native/microsandbox/" + name for name in ("msb", "libkrunfw.so.5.6.1"))
     if not required.issubset(covered):
         raise InstallError("Distribution checksum list is incomplete")
     manifest = json.loads((bundle / "manifest.json").read_text())
@@ -76,6 +79,12 @@ def free_port(port):
             sock.bind(("127.0.0.1", port))
         except OSError:
             raise InstallError(f"Port {port} is already in use; select another port") from None
+
+
+def database_port():
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
 
 
 def core_target(value):
@@ -144,6 +153,9 @@ def status(root, state):
     if state["mode"] == "all":
         required.add("web")
     observed = {row["Service"]: row for row in rows}
+    if native_service.is_native(state):
+        observed["core"] = {"State": "running" if native_service.active(state) else "stopped"}
+        print("Core service: " + observed["core"]["State"])
     healthy = all(name in observed and observed[name]["State"] == "running"
                   and observed[name].get("Health", "") in ("", "healthy") for name in required)
     for row in rows:
@@ -196,6 +208,8 @@ def initialize(root, args, manifest):
              "provider": args.provider, "installation_id": str(uuid.uuid4()),
              "project": "parsar-" + secrets.token_hex(5), "uid": os.getuid(), "gid": os.getgid(),
              "core_port": args.core_port, "web_port": args.web_port, "core_url": args.core_url}
+    if native_service.is_native(state):
+        state["database_port"] = database_port()
     config = root / "config"
     if mode != "web-only":
         state["device_gid"] = device_gid
@@ -204,7 +218,7 @@ def initialize(root, args, manifest):
             "token_sha256": hashlib.sha256(token.encode()).hexdigest()}])
         private_write(config / "credential.key", base64.b64encode(secrets.token_bytes(32)).decode())
         private_write(config / "database.password", secrets.token_hex(32))
-        write_json(config / "managed-runtimes.json", managed_config(state, manifest))
+        write_json(config / "managed-runtimes.json", managed_config(root, state, manifest))
     private_write(config / "caller.key", token)
     if mode != "core-only":
         private_write(config / "console.password", secrets.token_hex(24))
@@ -215,14 +229,13 @@ def initialize(root, args, manifest):
 
 
 def import_runtime(root, state, manifest, bundle):
-    if state["provider"] != "microsandbox" or state["mode"] == "web-only":
+    if not native_service.is_native(state):
         return
-    run(["docker", "run", "--rm", "--init", "--user", f'{state["uid"]}:{state["gid"]}',
-         "--env", "MSB_HOME=/state/msb", "--env", "HOME=/state",
-         "--mount", f'type=bind,source={root / "state"},target=/state',
-         "--mount", f'type=bind,source={bundle / "images/runtime.tar"},target=/runtime.tar,readonly',
-         "--entrypoint", "/opt/microsandbox/msb", manifest["images"]["core"],
-         "image", "load", "--input", "/runtime.tar", "--tag", manifest["runtime_ref"], "--quiet"])
+    runtime = root / "native/microsandbox"
+    env = dict(os.environ, MSB_BACKEND="local", MSB_HOME=str(root / "state/msb"),
+               MSB_PATH=str(runtime / "msb"), MSB_LIBKRUNFW_PATH=str(runtime / "libkrunfw.so.5.6.1"))
+    run([str(runtime / "msb"), "image", "load", "--input", str(bundle / "images/runtime.tar"),
+         "--tag", manifest["runtime_ref"], "--quiet"], env=env)
 
 
 def main(argv=None):
@@ -233,8 +246,10 @@ def main(argv=None):
     if args.status or args.stop:
         state = json.loads((root / "installation.json").read_text())
         if args.stop:
+            if native_service.is_native(state):
+                native_service.stop(root, state)
             compose(root, "stop")
-            print("Services stopped. Database and Runtime state retained.")
+            print("Control-plane services stopped. Sandbox resources and data retained; running sandbox work may continue.")
         else:
             status(root, state)
         return
@@ -246,18 +261,29 @@ def main(argv=None):
         raise InstallError("microsandbox requires host KVM; enable virtualization or explicitly choose --provider docker")
     bundle = Path(__file__).resolve().parent
     manifest = verify_bundle(bundle)
+    if args.provider == "microsandbox" and not args.web_only:
+        native_service.preflight(bundle)
     state = initialize(root, args, manifest)
     if state["mode"] != "web-only":
         seccomp = bundle / "runtime/seccomp.json"
         if not (root / "config/seccomp.json").exists():
             private_write(root / "config/seccomp.json", seccomp.read_text())
     images = ["web"] if state["mode"] == "web-only" else ["core", "runtime", "database"]
+    if native_service.is_native(state):
+        images = ["database"]
+        password = (root / "config/database.password").read_text()
+        environment = core_environment(root, state, password)
+        native_service.prepare(root, state, bundle, environment)
     if state["mode"] == "all":
         images.append("web")
     for name in images:
         run(["docker", "load", "--input", str(bundle / f"images/{name}.tar")], stdout=subprocess.DEVNULL)
     import_runtime(root, state, manifest, bundle)
-    compose(root, "up", "--detach")
+    compose(root, "up", "--detach", "--wait")
+    if native_service.is_native(state):
+        run([str(root / "native/bin/agents-api-migrate")], env=dict(os.environ, **environment),
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        native_service.start(root, state)
     if state["mode"] != "web-only" and not wait_http(f'http://127.0.0.1:{state["core_port"]}/healthz'):
         raise InstallError("Core did not become healthy. Use --status; retained state has not been removed")
     if state["mode"] != "core-only":
@@ -277,7 +303,7 @@ def main(argv=None):
 if __name__ == "__main__":
     try:
         main()
-    except (InstallError, OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:
+    except (InstallError, RuntimeError, OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:
         # Errors never include generated configuration or external process output.
-        print(str(error) if isinstance(error, InstallError) else "Installation failed; inspect prerequisites and private deployment files", file=sys.stderr)
+        print(str(error) if isinstance(error, (InstallError, RuntimeError)) else "Installation failed; inspect prerequisites and private deployment files", file=sys.stderr)
         sys.exit(1)

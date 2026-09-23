@@ -9,11 +9,14 @@ No model key, Environment wizard or sample task is required during installation.
 ## Host requirements
 
 The first distribution targets Linux amd64 with Python 3.9+, Docker and Docker
-Compose v2. Run the installer as a non-root user who can use Docker. The qualified
-Docker host version is 29.1.3. Default microsandbox also requires an available
-`/dev/kvm`; nested cloud hosts must expose hardware virtualization. The installer
-passes that device and its group to Core, without a privileged container.
-It does not silently fall back to Docker when KVM is missing.
+Compose v2. Run the installer as a non-root user who can use Docker.
+Default microsandbox also requires glibc, a running systemd user manager with
+linger enabled, and user read/write access to `/dev/kvm`. Nested cloud hosts must
+expose hardware virtualization. Core runs as a native user service so restarting
+it does not terminate the Provider's microVM processes. The installer checks these
+prerequisites; it does not grant host permissions or silently fall back to Docker.
+The explicit Docker option runs Core in Compose and requires neither KVM nor
+systemd user services.
 
 Reserve capacity for the native Runtime: the initial microsandbox profile uses
 4 GiB RAM, 2 CPUs and an 8 GiB root disk per active sandbox, with at most 4 active
@@ -37,8 +40,8 @@ cd "$HOME/.parsar/releases/parsar-core-<commit>-linux-amd64"
 ./install.sh
 ```
 
-The bundle contains the same-revision Core, unchanged Web build, production Web
-proxy and colocated Runtime. It includes microsandbox's pinned runtime and
+The bundle contains the same-revision native Core binaries and service image,
+unchanged Web build, production Web proxy and colocated Runtime. It includes microsandbox's pinned runtime and
 firmware. It also contains image archives, source provenance and checksums;
 installation does not need Go, Node, Rust or a product checkout.
 
@@ -66,8 +69,8 @@ the server holds the independent Core key. Model keys remain API execution input
 `--provider` selects the deployment's sandbox provider. It does not select a
 harness or alter the public `openai_hosted` discriminator. Both providers reuse
 one colocated Runtime containing the native harnesses. The Docker option grants
-only Core access to the Docker socket; microsandbox grants only Core access to
-KVM. Web receives neither.
+only Core access to the Docker socket; microsandbox uses the native service account's
+KVM access. Web receives neither.
 
 To install only Web on a Linux host, provide the existing Core origin and a
 private caller-key file. A loopback Core uses the same host network namespace;
@@ -85,7 +88,8 @@ the server, outside the static Web files. The input file must be private (0600).
 
 Use `--install-dir /absolute/path`, `--core-port 8092` and `--web-port 8081` for
 separate installations. Their database volumes, provider identities and Runtime
-state are independent. Repeating the same installation command retains its
+state are independent. Native Core connects to PostgreSQL through an automatically
+selected loopback-only port, recorded in its private installation state. Repeating the same installation command retains its
 identities, secrets and data. Conflicting mode/provider/revision changes refuse
 rather than silently replacing them.
 

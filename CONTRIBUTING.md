@@ -1317,7 +1317,7 @@ optional API examples and service diagnostics live in `docs/getting-started/`.
 `make build-core-distribution` builds from clean committed source and reuses the
 existing API, Runtime, SDK, helper and Web builders. Artifacts record source and
 immutable image identities, the actual Runtime manifest digest, checksums and
-microsandbox runtime/firmware hashes. Release generation is not publication or
+microsandbox runtime/firmware hashes and executable native payloads. Release generation is not publication or
 qualification. A release must be tested from fresh extraction with real models;
 no synthetic result may substitute for native execution acceptance.
 
@@ -1325,9 +1325,16 @@ The first installer targets a trusted Linux amd64 Docker host. It installs a
 private dedicated PostgreSQL service and separate Core and console services.
 Default sandbox placement is microsandbox; `--provider docker` selects the
 existing Docker provider. Missing KVM fails without changing that choice.
-The distribution Core image contains the native glibc helper and pinned msb
-runtime/firmware, with only KVM device access for microsandbox or the canonical
-Docker socket for Docker. This does not put a harness or model loop in Core.
+The distribution supplies native Core/helper binaries and pinned msb runtime and
+firmware. For microsandbox, Core is a native systemd user service with direct
+`ExecStart` and `KillMode=process`: its restart must preserve the Provider's resident
+microVM/helper processes. Never package those processes inside Core's container
+PID namespace, kill their process group on Core stop, or add recovery mechanisms to
+compensate for that packaging. User KVM access, the Linux runtime libraries and
+linger are explicit prerequisites. For Docker, Core runs in Compose with the
+canonical Docker socket. PostgreSQL/Web use Compose in either case; native Core
+and its Web proxy use loopback, with a private PostgreSQL port. This packaging
+choice does not change either Provider's execution contract.
 The basic distroless API image and binary builds remain independent artifacts.
 
 One Runtime image contains the existing daemon, shared helpers and three native
@@ -1354,7 +1361,10 @@ default. No credential enters build arguments, image layers, browser bundles or
 diagnostic output. Compose configuration is confidential. The generated database,
 caller/tenant/provider identities and encryption key survive reruns; automatic
 revision replacement and provider migration are outside this initial installer.
-Do not delete data or issue broad container/volume pruning as recovery.
+Stopping control-plane services does not stop all Provider resources; use Core's
+existing release operations for full cleanup. No native restart promise covers
+host reboot or a lost running microVM. Do not delete data or issue broad
+container/volume pruning as recovery.
 
 `make check-distribution` covers the production proxy, installation rules and
 release metadata. Real bundle validation covers default/provider selection,

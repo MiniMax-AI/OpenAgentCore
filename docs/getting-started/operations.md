@@ -16,7 +16,8 @@ Run from the extracted bundle:
 ```
 
 The command reads only this installation's service status and health endpoints.
-It prints service names, running/exit state and available Docker health state;
+It prints service names, running/exit state, the native Core service state when
+applicable, and available Docker health state;
 it does not print Compose configuration, environment variables, credentials or
 raw application logs. It never creates a Session or calls a model.
 
@@ -45,8 +46,13 @@ Settle active work before a planned restart. Then:
 ./install.sh  # Use the same component/provider/port flags as the initial install.
 ```
 
-Stopping services retains the database, Runtime state and credentials. It does not
-promise transparent continuation of an interrupted native tool. Query the same
+This stops the control-plane services and retains the database, Runtime state and
+credentials. For microsandbox, the systemd user unit uses `KillMode=process`:
+only Core stops; microVMs and their work may remain running. Docker-owned Runtime
+containers likewise remain Provider resources. The command does not promise to
+stop all compute. Release resources through the existing Core API before a full
+shutdown; do not kill Provider processes directly. A Core restart does not promise
+transparent continuation of an interrupted native tool. Query the same
 Session after reconnecting; do not create a replacement Session to replay uncertain
 work. The official SSE stream is live, and recovery uses durable resource queries.
 
@@ -86,11 +92,17 @@ The installer never migrates Sessions between providers or deletes old compute.
 
 ## Exposure and network policy
 
-API and console ports publish to host loopback. PostgreSQL has no published port.
+API and console bind to host loopback. With native Core, PostgreSQL publishes an
+installation-specific loopback port; with container Core it has no published port.
 The production Web proxy only forwards the public `/v1` surface to its configured
 Core; it never receives the Docker socket, KVM device or provider/model secrets.
 It requires an independent console password and rejects untrusted browser origins.
 This is a single-operator console deployment, not a multi-user identity system.
+
+A native Core restart preserves resident microVM processes. Host reboot, user
+manager termination and loss of a running microVM are not equivalent to that
+restart and are not qualified cold-recovery workflows. Completed idle snapshots
+retain their existing recovery contract.
 
 microsandbox uses an explicit policy: public egress, the Core/DNS host ports needed
 for the colocated Runtime, and denied inbound/private-network access. Private
