@@ -17,6 +17,18 @@ proves reads only, not the full lifecycle. Use --require-nested when the native
 profile supports nested delegation; absence is recorded, not fabricated. All/full acceptance requires observed spawn, nested, close and resume
 facts; model prose is never accepted as evidence of a native action.
 
+Child work must appear only where the official service shows it. Inspection
+records each of these visibility checks under "visibility" (per phase) and fails
+only after running all of them, so a baseline run reports every difference at once:
+Session Turn list/retrieve/cursor carry root Turns only and a child Turn ID
+answers like a missing one (also for the foreign project); child Turns carry the
+Session's Agent ID with their own subagent_id; every list uses the object/first_id/
+last_id envelope with null IDs on an empty page; child Item lists clamp limit 0
+and 101 while the Subagent and Subagent Turn lists reject them; and the Session
+stream observed while this script submitted input (the creation stream, or the
+GET stream for later input) carries no child Turn or Item event, and carries
+agent.session.subagent.created when children were spawned.
+
 Evidence contains only IDs, timestamps, counts and named checks. No HTTP bodies,
 model output, API keys or provider configuration are written. Sessions are left
 for the operator to inspect and clean up. This script starts no service/runtime.
@@ -29,6 +41,7 @@ import os
 from pathlib import Path
 import re
 import sys
+import threading
 import time
 from urllib.parse import quote, urlsplit
 import uuid
@@ -36,6 +49,44 @@ import uuid
 
 class AcceptanceFailure(Exception):
     pass
+
+
+class StreamObserver:
+    """Summarizes Session events without retaining bodies. The reader is a daemon
+    thread; stop() reads what was observed even if the live stream stays open."""
+
+    def __init__(self, stream, kind):
+        self.stream, self.kind = stream, kind
+        self.events, self.session_id, self.error, self.ended, self.stopping = [], None, None, False, False
+        self.thread = threading.Thread(target=self.run, daemon=True)
+        self.thread.start()
+
+    def run(self):
+        try:
+            for event in self.stream:
+                value = event.to_dict()
+                if value.get("type") == "agent.session.created":
+                    self.session_id = (value.get("session") or {}).get("id")
+                turn, item = value.get("turn") or {}, value.get("item") or {}
+                self.events.append({"type": value.get("type"), "turn_ids": {v for v in (
+                    value.get("turn_id"), turn.get("id"), item.get("turn_id")) if v},
+                    "child_turn": turn.get("subagent_id") is not None})
+        except Exception as error:
+            if not self.stopping:
+                self.error = type(error).__name__
+        finally:
+            self.ended = True
+
+    def stop(self):
+        if self.kind == "creation":
+            # The creation stream ends by itself once the Session settles.
+            self.thread.join(60)
+        if not self.ended:
+            # A GET stream stays open; closing it ends the reader with a connection error.
+            self.stopping = True
+            self.stream.close()
+            self.thread.join(5)
+        return list(self.events)
 
 
 def require(condition, code):
@@ -94,7 +145,7 @@ def main():
                 "invalid_base_url")
         require(token and foreign_token and token != foreign_token, "distinct_project_tokens_required")
         import httpx2
-        from openai import OpenAI
+        from openai import NotFoundError, OpenAI
         client = OpenAI(base_url=base, api_key=token, max_retries=0, timeout=30,
                         _strict_response_validation=True, http_client=httpx2.Client(trust_env=False))
         foreign = OpenAI(base_url=base, api_key=foreign_token, max_retries=0, timeout=30,
@@ -119,11 +170,10 @@ def main():
         def raw(suffix, params=None, expected=200, other=False):
             response = http.get(endpoint(suffix), headers=other_headers if other else headers, params=params)
             require(response.status_code == expected, "raw_status_" + str(expected) + "_expected")
-            if expected == 200:
-                return response.json()
             body = response.json()
-            require(isinstance(body.get("error"), dict), "error_envelope_missing")
-            return None
+            if expected != 200:
+                require(isinstance(body.get("error"), dict), "error_envelope_missing")
+            return body
 
         def sdk_list(resource, *pos, **keywords):
             values, seen = [], set()
@@ -158,6 +208,8 @@ def main():
             require(turn["status"] not in ("failed", "cancelled"), "root_execution_failed")
             return turn if turn["status"] == "completed" else False
 
+        observers = {}
+
         def submit(stage, prompt):
             require(report["phases"].get(stage) != "passed", "phase_already_passed")
             require(not report.get("pending_phase"), "pending_phase_requires_operator_reconciliation")
@@ -172,12 +224,18 @@ def main():
                 if harness:
                     agent["x_agents_core"] = {"harness": harness}
                 environment = json.loads(os.environ.get("AGENTS_API_ENVIRONMENT_JSON", '{"type":"none"}'))
-                session = sessions.create(agent=agent, environment=environment, input=prompt,
-                                          extra_headers={"Idempotency-Key": report["nonce"] + "-" + stage})
-                report["session_id"] = identifier(session.id)
+                # The creation stream is the Session stream observed for this phase.
+                observer = StreamObserver(sessions.create(agent=agent, environment=environment, input=prompt, stream=True,
+                                                          extra_headers={"Idempotency-Key": report["nonce"] + "-" + stage}), "creation")
+                observers[stage] = observer
+                wait_for(lambda: observer.session_id or observer.ended, "creation_stream_timeout", timeout=30)
+                require(observer.session_id, "creation_stream_missing_created_event")
+                report["session_id"] = identifier(observer.session_id)
                 save()
             else:
                 require(sessions.retrieve(sid()).agent.multi_agent.enabled, "existing_session_delegation_disabled")
+                # Open the live stream before submitting, as the stream is live-only.
+                observers[stage] = StreamObserver(sessions.events.stream(sid()), "events")
                 sessions.events.create(sid(), events=[{"type": "agent.session.input.message", "input": [
                     {"role": "user", "content": [{"type": "input_text", "text": prompt}]}]}],
                     idempotency_key=report["nonce"] + "-" + stage)
@@ -187,6 +245,7 @@ def main():
             save()
 
         def page_check(suffix, expected):
+            """Pagination and scope checks that predate the visibility batch."""
             expected_ids = [identifier(item["id"]) for item in expected]
             require(len(expected_ids) == len(set(expected_ids)), "duplicate_resource_id")
             for order in ("asc", "desc"):
@@ -208,24 +267,58 @@ def main():
                     require(observed == (expected if order == "asc" else list(reversed(expected))), "sdk_raw_or_pagination_mismatch")
             defaults = raw(suffix)
             require(defaults["data"] == list(reversed(expected))[:20], "pagination_defaults_mismatch")
+            # Unknown list keys are ignored (list query tolerance, row A1).
+            require(raw(suffix, {"unknown": "value"})["data"] == defaults["data"], "unknown_list_key_not_ignored")
             raw(suffix, {"after": str(uuid.uuid4())}, expected=404)
-            for params in ({"limit": 0}, {"limit": 101}, {"order": "invalid"}, {"unknown": "value"}):
-                raw(suffix, params, expected=400)
+            raw(suffix, {"order": "invalid"}, expected=400)
             raw(suffix, other=True, expected=404)
 
-        def inspect():
+        visibility = {}
+
+        def visible(name, check):
+            """Runs one visibility check to completion and records its result."""
+            try:
+                check()
+                result = "passed"
+            except AcceptanceFailure as error:
+                result = str(error)
+            # A check repeated per resource keeps its first failure.
+            if visibility.get(name, "passed") == "passed":
+                visibility[name] = result
+
+        def envelope_check(suffix, expected, clamped):
+            ids = [item["id"] for item in expected]
+            window = ids[:100]
+            first = raw(suffix, {"order": "asc", "limit": 100})
+            require(first.get("object") == "list" and first.get("first_id") == (window[0] if window else None) and
+                    first.get("last_id") == (window[-1] if window else None), "list_envelope_mismatch")
+            if ids:
+                empty = raw(suffix, {"order": "asc", "after": ids[-1]})
+                require(empty == {"object": "list", "data": [], "first_id": None, "last_id": None, "has_more": False},
+                        "empty_page_envelope_mismatch")
+            for limit, size in ((0, 1), (101, 100)):
+                if clamped:
+                    page = raw(suffix, {"order": "asc", "limit": limit})
+                    require([item["id"] for item in page["data"]] == ids[:size] and page["has_more"] == (len(ids) > size),
+                            "limit_" + str(limit) + "_not_clamped")
+                else:
+                    raw(suffix, {"limit": limit}, expected=400)
+
+        def inspect(stage=None):
+            visibility.clear()
             subs = children()
             require(subs, "fixture_not_observed_no_subagents")
             page_check("/subagents", subs)
+            visible("subagent_list_envelope_and_limit_rejection", lambda: envelope_check("/subagents", subs, False))
             root_items = sdk_list(sessions.items, sid())
             turns = all_turns()
             require(all("subagent_id" in turn for turn in turns), "turn_subagent_identity_field_missing")
             by_turn = {turn["id"]: turn for turn in turns}
             root_ids = {item["id"] for item in root_items}
-            require(all(by_turn.get(item["turn_id"], {}).get("subagent_id") is None and
-                        item["turn_id"] in by_turn for item in root_items), "root_items_include_child_work")
+            require(all(item["turn_id"] in by_turn for item in root_items), "root_items_include_child_work")
             known = {sub["id"] for sub in subs}
             root = sessions.retrieve(sid()).agent.id
+            child_turn_ids = set()
             require(all(sub["session_id"] == sid() and sub["parent_agent_id"] in known | {root} for sub in subs), "subagent_parent_scope_mismatch")
             parents = {sub["id"]: sub["parent_agent_id"] for sub in subs}
             for child in parents:
@@ -254,6 +347,8 @@ def main():
                             for item in child_items), "fixture_not_observed_child_model_output")
                 page_check(suffix + "/turns", child_turns)
                 page_check(suffix + "/items", child_items)
+                visible("child_turn_list_envelope_and_limit_rejection", lambda: envelope_check(suffix + "/turns", child_turns, False))
+                visible("child_item_list_envelope_and_limit_clamp", lambda: envelope_check(suffix + "/items", child_items, True))
                 own_turn_ids = {turn["id"] for turn in child_turns}
                 own_item_ids = {item["id"] for item in child_items}
                 require(not own_item_ids & seen_items and all(item["turn_id"] in own_turn_ids for item in child_items), "items_cross_agent_boundary")
@@ -261,13 +356,18 @@ def main():
                 collected = set()
                 for turn in child_turns:
                     tid = identifier(turn["id"])
-                    require(turn["subagent_id"] == child and turn["agent_id"] == child and turn["session_id"] == sid(), "child_turn_owner_mismatch")
+                    child_turn_ids.add(tid)
+                    require(turn["subagent_id"] == child and turn["session_id"] == sid(), "child_turn_owner_mismatch")
+                    # The official child Turn keeps the Session's Agent ID (SAT-08).
+                    visible("child_turn_session_agent_id", lambda: require(turn["agent_id"] == root, "child_turn_agent_id_not_session_agent"))
                     fetched = sessions.subagents.turns.retrieve(tid, session_id=sid(), subagent_id=child).to_dict()
-                    require(fetched == turn == by_turn.get(tid) == sessions.turns.retrieve(tid, session_id=sid()).to_dict(), "session_child_turn_identity_mismatch")
+                    require(fetched == turn, "subagent_turn_retrieve_mismatch")
                     require(raw(suffix + "/turns/" + tid) == turn, "raw_child_turn_mismatch")
                     raw(suffix + "/turns/" + tid, other=True, expected=404)
+                    visible("session_turn_routes_hide_child_turns", lambda: session_child_turn_check(tid))
                     items = sdk_list(sessions.subagents.turns.items, tid, session_id=sid(), subagent_id=child)
                     page_check(suffix + "/turns/" + tid + "/items", items)
+                    visible("child_turn_item_list_envelope_and_limit_clamp", lambda: envelope_check(suffix + "/turns/" + tid + "/items", items, True))
                     require(all(item["turn_id"] == tid for item in items), "turn_items_wrong_turn")
                     require(items == [item for item in child_items if item["turn_id"] == tid], "per_turn_items_mismatch")
                     collected.update(item["id"] for item in items)
@@ -286,15 +386,53 @@ def main():
             first, second = summaries[:2]
             raw("/subagents/" + first["id"] + "/turns/" + second["turn_ids"][0], expected=404)
             raw("/subagents/" + first["id"] + "/items", {"after": second["item_ids"][0]}, expected=404)
+            # Session Turn reads carry root work only (SAT-07).
+            visible("session_turns_root_only", lambda: require(
+                all(turn.get("subagent_id") is None and turn["agent_id"] == root for turn in turns) and
+                not child_turn_ids & set(by_turn), "session_turns_include_child_work"))
+            visible("session_turn_list_envelope_and_limit_rejection", lambda: envelope_check("/turns", turns, False))
+            if stage in observers:
+                visible("session_stream_root_work_only", lambda: stream_check(stage, set(by_turn), child_turn_ids))
             report.update(subagents=summaries, nested_ids=nested, root_item_count=len(root_items))
-            for name in ("six_get_sdk_and_raw", "root_child_item_isolation", "session_child_turn_identity",
-                         "pagination_asc_desc_after_limit", "invalid_and_wrong_scope_cursors", "foreign_project_scope"):
+            report.setdefault("visibility", {})[stage or "inspect"] = dict(sorted(visibility.items()))
+            for name in ("six_get_sdk_and_raw", "root_child_item_isolation", "pagination_asc_desc_after_limit",
+                         "invalid_and_wrong_scope_cursors", "foreign_project_scope"):
                 checked(name)
             if nested:
                 checked("nested_parentage")
+            failed = sorted(name for name, result in visibility.items() if result != "passed")
+            require(not failed, "visibility_failed_" + "_".join(failed))
+            for name in visibility:
+                checked(name)
             report["resources_passed"] = True
             report["phases"]["inspect"] = "passed"
             save()
+
+        def session_child_turn_check(tid):
+            # A child Turn ID answers exactly like a missing Turn, as a path and as a cursor.
+            missing = str(uuid.uuid4())
+            require(raw("/turns/" + tid, expected=404) == raw("/turns/" + missing, expected=404), "child_turn_retrieve_differs_from_missing")
+            require(raw("/turns", {"after": tid}, expected=404) == raw("/turns", {"after": missing}, expected=404), "child_turn_cursor_differs_from_missing")
+            raw("/turns/" + tid, other=True, expected=404)
+            try:
+                sessions.turns.retrieve(tid, session_id=sid())
+            except NotFoundError:
+                return
+            raise AcceptanceFailure("sdk_session_turn_retrieve_returned_child_turn")
+
+        def stream_check(stage, root_turn_ids, child_turn_ids):
+            observer = observers[stage]
+            events = observer.stop()
+            counts = {}
+            for event in events:
+                counts[event["type"]] = counts.get(event["type"], 0) + 1
+            report.setdefault("streams", {})[stage] = {"kind": observer.kind, "error": observer.error, "event_counts": dict(sorted(counts.items()))}
+            require(observer.error is None, "session_stream_failed")
+            referenced = set().union(*(event["turn_ids"] for event in events)) if events else set()
+            require(not referenced & child_turn_ids and not any(event["child_turn"] for event in events), "session_stream_carries_child_work")
+            require(referenced <= root_turn_ids, "session_stream_references_unknown_turn")
+            if stage in ("spawn", "spawn-direct"):
+                require(counts.get("agent.session.subagent.created", 0) >= 1, "fixture_not_observed_subagent_created_event")
 
         marker = "subagent-proof-" + report["nonce"][:12]
 
@@ -311,7 +449,7 @@ def main():
             direct = [sub for sub in children() if sub["parent_agent_id"] == root]
             require(len(direct) >= 2, "fixture_not_observed_two_direct_children")
             require(all(sub["status"] == "active" and sub["closed_at"] is None for sub in direct), "spawned_child_not_active")
-            inspect()
+            inspect("spawn")
             report["phases"]["spawn"] = "passed"
             save()
 
@@ -324,7 +462,7 @@ def main():
                    "Do not create nested children, close or interrupt either child. "
                    "Use no network or file tools.")
             wait_for(lambda: len(children()) >= 2, "fixture_not_observed_two_children", timeout=5)
-            inspect()
+            inspect("spawn-direct")
             report["phases"]["spawn-direct"] = "passed"
             save()
 
@@ -349,7 +487,7 @@ def main():
             require(closed["opened_at"] == before[child]["opened_at"] and isinstance(closed["closed_at"], int), "closed_lifecycle_mismatch")
             report.update(target_id=child, target_opened_at=closed["opened_at"], target_closed_at=closed["closed_at"],
                           before_close_turns=histories[child]["turns"], before_close_items=histories[child]["items"])
-            inspect()
+            inspect("close")
             report["phases"]["close"] = "passed"
             checked("close_preserves_identity_and_opened_at")
             save()
@@ -369,7 +507,7 @@ def main():
             require(any(turn["id"] not in report["before_close_turns"] and turn["status"] == "completed" for turn in own_turns),
                     "fixture_not_observed_resumed_turn_completion")
             require(set(report["before_close_items"]) <= {item["id"] for item in own_items}, "resume_lost_item_history")
-            inspect()
+            inspect("resume")
             report["phases"]["resume"] = "passed"
             checked("resume_same_id_opened_at_null_closed_at_and_retained_history")
             save()
