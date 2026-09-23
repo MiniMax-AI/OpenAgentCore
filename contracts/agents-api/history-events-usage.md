@@ -202,8 +202,8 @@ Deferred, with evidence retained in `findings.json`:
   them under native history ownership.
 - EVT-09 and EVT-10: null-valued `output_index`, `phase` and `error` fields and
   the initial assistant content belong to a separate serialization batch.
-- EVT-11 and EVT-12: unknown call/Turn result and conflict error codes belong to
-  ERROR-PROTOCOL-001.
+- EVT-11 and EVT-12: unknown call/Turn result and conflict error codes were
+  since aligned by the [input conflict batch](official-semantics-alignment.md#session-input-conflicts-and-result-targets--september-23).
 - EVT-13: official Session usage became null when any root Turn usage was
   unknown; Core sums the known Turns. The in-progress case is unverified.
 - EVT-19: the Core terminal sequence for a Turn cancelled mid-text is recorded by

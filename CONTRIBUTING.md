@@ -88,7 +88,10 @@ observed upstream server failures as compatibility behavior. See
 
 Report validation failures with official evidence through the typed field error,
 which emits `invalid_request_error` with the observed param and message; keep
-other local codes until their official fields are sampled. Agent configuration
+other local codes until their official fields are sampled. Every 409 has type
+`conflict_error`. Session input conflicts and changed tool results also use code
+`conflict_error`; documented Core-only conflicts, such as Idempotency-Key reuse,
+sandbox administration and Environment input states, keep their local codes. Agent configuration
 (saved create/update and the inline Session agent) uses one path-tracking
 validator of the pinned shapes before its parsers and harness admission, which
 keep their local codes; do not grow it into a JSON Schema engine. A malformed path
@@ -2295,7 +2298,9 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   Turn/call identity selects an existing call; admission never creates a Turn for
   a result. Save the complete result and its input retry record in the same Session
   transaction. Any invalid target, conflicting result or later batch error rolls
-  back the whole request. Identical saved results remain retryable after termination
+  back the whole request. Resolve targets only after the tenant Session lookup:
+  an unknown call or a call of another Turn is 400 `invalid_request_error`, and
+  missing or foreign Sessions keep one 404. Identical saved results remain retryable after termination
   without applying them again. The execution input cursor skips function results;
   their separate native receipts still determine application. Public result events
   validate variant-specific fields and required values before admission; retain

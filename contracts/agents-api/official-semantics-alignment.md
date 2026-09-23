@@ -520,3 +520,77 @@ test creates Sessions and submits events over HTTP, reads back the exact user
 Item text, and proves the W4 rejections write nothing; the pinned-SDK initial
 input script asserts the same. Real Core, daemon and model acceptance is recorded
 separately by the coordinator.
+
+## Session input conflicts and result targets — September 23
+
+This batch gives every 409 the official conflict type and aligns the conflict and
+tool result target errors of `events.create`, from Core main `c5cb6b5`. Evidence
+comes from the campaign scans recorded privately in
+`~/.parsar/remediation/20260923/campaign-scan-4/errors/findings.json` (ERR-22 and
+ERR-27, raw records in `official/results.json`: `sessB-message-while-running`,
+`sessA-delete-while-waiting`) and
+`~/.parsar/remediation/20260923/campaign-scan-2/events-tools/findings.json`
+(EVT-11, EVT-12 and EVT-14, raw records in `official/calls-s2.json`:
+`s2-result-unknown-call`, `s2-result-unknown-turn`,
+`s2-result-duplicate-after-terminal`, `s2-result-changed-after-terminal` and
+`s2-result-after-cancel`). Every observed official 409 has type and code
+`conflict_error` and a null param.
+
+| Row | Case | Core behavior |
+| --- | --- | --- |
+| CF1 | Every 409 response (ERR-27) | Type `conflict_error`. The code stays specific to the case (CF2–CF5). |
+| CF2 | `events.create` input that the Session cannot accept in its current state: a tool result after its Turn was cancelled, or ended without a saved result (EVT-12), and any other Turn conflict on this route; a batch while earlier input still waits for admission, such as the reserved initial input of a provisioning hosted Session or of a self-hosted Session awaiting its connection (ERR-22) | 409 with code `conflict_error` and a null param. Core keeps its message "The Turn cannot accept this input in its current state."; pending input reports "Earlier input to this Session is still pending." (official: "session initial input is still pending"). |
+| CF3 | A tool result that differs from the call's saved result, before or after its Turn ends (EVT-12) | 409 `conflict_error`, "The tool call already has a different result." |
+| CF4 | Idempotency-Key reuse with a different body on Session creation or `events.create` | Unchanged local code `idempotency_conflict` and message, with type `conflict_error`. Request idempotency is a documented Core extension of these operations. |
+| CF5 | Other Core-only conflicts: `sandbox_deployment_conflict`, `runtime_node_in_use`, `runtime_local_node_configured`, `environment_unavailable`, `environment_input_expired`, `environment_input_cancelled`, `runtime_history_unsupported`, and `turn_conflict` from an Environment file write while Session work or input is active | Codes and messages unchanged, with type `conflict_error`. |
+| CF6 | A tool result whose `call_id` names no function call of the caller's own Session, with any `turn_id` (EVT-11) | 400 with type and code `invalid_request_error`, param null, "Unknown pending tool call." Nothing is written and the pending action is unchanged. |
+| CF7 | A tool result for a call of the Session whose `turn_id` names another Turn, an unknown UUID or no UUID at all (EVT-11) | 400 `invalid_request_error`, param null, "The tool call belongs to a different Turn." Nothing is written. |
+| CF8 | Any input to a missing, malformed or foreign Session | Unchanged: the byte-identical 404 `not_found_error`, whatever the result target. |
+| CF9 | An identical tool result repeated before or after its Turn ends (EVT-14) | Unchanged: 202 without another application or event. The official repeated `item.added` is not copied. |
+
+Decisions:
+
+- The error writer selects type `conflict_error` from the 409 status, so later
+  conflicts cannot drift. The Session input writer maps Turn conflicts to code
+  `conflict_error`; other routes keep `turn_conflict`, because official conflicts
+  there, such as an Environment file write during work, are unsampled.
+- Result targets are resolved under the tenant Session lock after the Session
+  lookup. A well-formed Turn ID is looked up in that Session and must own the call;
+  otherwise the Session's own calls decide between CF6 and CF7. The `turn_id` is
+  therefore no longer rejected as a malformed UUID before the Session lookup, and
+  malformed, missing and foreign Sessions keep one 404. The decision reads only
+  the caller's Session, so it reveals nothing about other Sessions or tenants.
+- The official messages name the call or internal executor IDs ("Unknown pending
+  tool call: <call_id>", "function call exec-... belongs to a different managed
+  agent turn"). Core's messages are fixed and repeat neither caller input nor
+  internal identifiers.
+- Checks keep their order: request validation, the Session lookup, the retry
+  lookup (CF4), the pending input gate (CF2), then each event in batch order. A
+  batch sent while input is pending therefore returns the CF2 409 even when its
+  result target is unknown; the official order between these errors is
+  unobserved. An empty `turn_id` or a
+  blank `call_id` remains the generic 400 `invalid_request`.
+- The official pending-input sample is the asynchronous admission window of
+  `none` initial input (ERR-22). Core admits `none` input synchronously and does
+  not emulate that window; the same fields apply to Core's reserved hosted and
+  self-hosted input, initial or later.
+- The TypeScript client and Core Web did not branch on the old codes. The client
+  documents that `isSessionDeletionConflict` classifies only a `deleteSession`
+  failure, since input conflicts now share its code. Cores before this batch
+  returned 409 `turn_conflict` or `idempotency_conflict` with type
+  `invalid_request_error`, and 404 for unknown result targets; clients that span
+  both should branch on the HTTP status.
+
+Unchanged: the ERR-22 asynchronous admission window (an architectural difference),
+Idempotency-Key semantics, Session-level 404 isolation, admission timing and the
+schema. The pinned SDK still retries a 409 by default; the status did not change.
+
+Go API tests pin the exact CF2–CF9 bodies and the conflict type of every Core-only
+409 code. A real-PostgreSQL HTTP test replays CF2–CF4 and CF6–CF9 with tenant B
+requests, missing and malformed Sessions, a rolled-back mixed batch, a
+whole-database digest and Session reads proving that every rejection writes
+nothing and keeps the pending action. Store tests cover target classification and
+rollback. The pinned-SDK scripts `official_function_inputs.py`,
+`official_pending_actions_native.py` and `official_session_creators.py` assert the
+new fields, and TypeScript client and Core Web unit tests cover them. Real Core,
+daemon and model acceptance is recorded separately by the coordinator.
