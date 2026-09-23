@@ -1,11 +1,15 @@
 package api
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -559,4 +563,158 @@ func TestAgentsResponseHeaders(t *testing.T) {
 	if id := response.Header.Get("X-Request-Id"); !requestIDPattern.MatchString(id) || id != logged || response.Header.Get("Openai-Processing-Ms") == "" {
 		t.Fatalf("stream headers %v, logged %q", response.Header, logged)
 	}
+}
+
+// parseRaw parses a request line exactly as net/http's server does.
+func parseRaw(method, target string, header http.Header) (*http.Request, error) {
+	request, err := http.ReadRequest(bufio.NewReader(strings.NewReader(method + " " + target + " HTTP/1.1\r\nHost: example.test\r\n\r\n")))
+	if err != nil {
+		return nil, err
+	}
+	for name, values := range header {
+		request.Header[name] = values
+	}
+	return request, nil
+}
+
+// canonicalTarget returns the path CanonicalPaths routes a request on, after
+// checking that chi (RawPath, else Path), the ServeMux (EscapedPath) and the
+// decoded Path agree, that the path is clean and that a second pass keeps it.
+func canonicalTarget(t *testing.T, request *http.Request) string {
+	t.Helper()
+	var seen *url.URL
+	CanonicalPaths(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { seen = r.URL })).ServeHTTP(httptest.NewRecorder(), request)
+	escaped := seen.EscapedPath()
+	decoded, err := url.PathUnescape(escaped)
+	if err != nil || decoded != seen.Path || (seen.RawPath != "" && seen.RawPath != escaped) || cleanPath(escaped) != escaped {
+		t.Fatalf("%s: inconsistent canonical URL path %q raw %q escaped %q", request.RequestURI, seen.Path, seen.RawPath, escaped)
+	}
+	again, err := parseRaw(http.MethodGet, escaped, nil)
+	if err != nil {
+		t.Fatalf("%s: canonical path %q does not parse: %v", request.RequestURI, escaped, err)
+	}
+	var repeated *url.URL
+	CanonicalPaths(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { repeated = r.URL })).ServeHTTP(httptest.NewRecorder(), again)
+	if repeated.EscapedPath() != escaped || repeated.RawPath != seen.RawPath || repeated.Path != seen.Path {
+		t.Fatalf("%s: canonicalization is not idempotent: %q", request.RequestURI, repeated.EscapedPath())
+	}
+	return escaped
+}
+
+// outcome summarizes a response; a panic means a trap store was reached.
+func outcome(handler http.Handler, request *http.Request) (result string) {
+	defer func() {
+		if recover() != nil {
+			result = "handler reached"
+		}
+	}()
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	return fmt.Sprintf("%d %q allow=%q www-authenticate=%q", response.Code, response.Body.String(), response.Header().Get("Allow"), response.Header().Get("WWW-Authenticate"))
+}
+
+// Every spelling of a request reaches the route group and authentication of
+// its canonical form. Bytes that are invalid in an escaped path must not make
+// %2F or %5C a separator (the ServeMux and EscapedPath re-escape the decoded
+// Path in that case), in any case of hex digit or under double encoding.
+func TestRawPathsReachTheirCanonicalRouteGroup(t *testing.T) {
+	handler, _, _ := routingFixture(t)
+	for _, test := range []struct {
+		target, canonical string
+		status            int
+	}{
+		{"/v1/x{/..%2F..%2Fcore/v1/sandbox/nodes", "/v1/x%7B/..%2F..%2Fcore/v1/sandbox/nodes", http.StatusBadRequest},
+		{"/v1/x%7B/..%2F..%2Fcore/v1/sandbox/nodes", "/v1/x%7B/..%2F..%2Fcore/v1/sandbox/nodes", http.StatusBadRequest},
+		{"/v1/x\"/..%2f..%2fcore/v1/sandbox/nodes", "/v1/x%22/..%2f..%2fcore/v1/sandbox/nodes", http.StatusBadRequest},
+		{"/v1/x\\/..%5C..%5Ccore/v1/sandbox/nodes", "/v1/x%5C/..%5C..%5Ccore/v1/sandbox/nodes", http.StatusBadRequest},
+		{"/v1/\xc3\xa9/..%2F..%2Fcore/v1/sandbox/nodes", "/v1/%C3%A9/..%2F..%2Fcore/v1/sandbox/nodes", http.StatusBadRequest},
+		{"/v1/x|^`<>/..%252F..%252Fcore/v1/sandbox/nodes", "/v1/x%7C%5E%60%3C%3E/..%252F..%252Fcore/v1/sandbox/nodes", http.StatusBadRequest},
+		{"http://example.test/v1/x{/..%2F..%2Fcore/v1/sandbox/nodes", "/v1/x%7B/..%2F..%2Fcore/v1/sandbox/nodes", http.StatusBadRequest},
+		{"/0\"%2F", "/0%22%2F", http.StatusNotFound},
+		{"/core/v1/sandbox/nodes{%2F..%2F..%2F..%2Fv1/agents", "/core/v1/sandbox/nodes%7B%2F..%2F..%2F..%2Fv1/agents", http.StatusUnauthorized},
+		// Literal and unreserved-encoded dot segments do resolve.
+		{"/v1/x{/../../core/v1/sandbox/nodes", "/core/v1/sandbox/nodes", http.StatusUnauthorized},
+		{"/v1/x{/%2E%2E/%2e%2E/core/v1/sandbox/nodes", "/core/v1/sandbox/nodes", http.StatusUnauthorized},
+		{"http://example.test//v1/x{/..//../core/./v1/sandbox/nodes", "/core/v1/sandbox/nodes", http.StatusUnauthorized},
+	} {
+		request, err := parseRaw(http.MethodGet, test.target, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", test.target, err)
+		}
+		if got := canonicalTarget(t, request); got != test.canonical {
+			t.Errorf("%s: canonical %q, want %q", test.target, got, test.canonical)
+		}
+		canonical, _ := parseRaw(http.MethodGet, test.canonical, nil)
+		want := outcome(handler, canonical)
+		if got := outcome(handler, request); got != want || !strings.HasPrefix(got, strconv.Itoa(test.status)+" ") {
+			t.Errorf("%s = %s; canonical form gives %s", test.target, got, want)
+		}
+	}
+	// The same through a real listener, which reads the request line itself.
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	for target, status := range map[string]string{
+		"/v1/x{/..%2F..%2Fcore/v1/sandbox/nodes":                "400",
+		"/v1/\xe2\x98\x83/..%2F..%2Fcore/v1/sandbox/deployment": "400",
+		"/v1/x{/../../core/v1/sandbox/nodes":                    "401",
+	} {
+		if got := rawStatus(t, server.Listener.Addr().String(), target); got != status {
+			t.Errorf("raw %q = %s, want %s", target, got, status)
+		}
+	}
+}
+
+// rawStatus sends one request line over TCP and returns the response status code.
+func rawStatus(t *testing.T, address, target string) string {
+	t.Helper()
+	connection, err := net.Dial("tcp", address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Close()
+	if _, err := io.WriteString(connection, "GET "+target+" HTTP/1.1\r\nHost: example.test\r\nConnection: close\r\n\r\n"); err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.ReadResponse(bufio.NewReader(connection), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
+	return strconv.Itoa(response.StatusCode)
+}
+
+var canonicalPathSeeds = []string{
+	"v1/agents", "v1//agents/a", "v1/x{/..%2F..%2Fcore/v1/sandbox/nodes", "v1/x\"/..%2f..%2fcore/v1/sandbox/deployment",
+	"v1/x\\/..%5C..%5Ccore/v1/sandbox/nodes", "v1/\xc3\xa9/../../core/v1/sandbox/nodes", "v1/%2E%2E/core/v1/sandbox/nodes",
+	"v1/files/..%2F..%2Fv1/skills", "0\"%2F", "core/v1/sandbox/nodes{%2F..%2F..%2F..%2Fv1/agents", "v1/agents/%252F..",
+	"api/v1/agent-daemon/%2E%2E/%2E%2E/%2E%2E/v1/agents", "v1/x{/%2e./core/v1/sandbox/node/identity", "v1/agents/%7E%5F%2D%41",
+	"core/v1/environments/x/executor-credentials/%2E%2E/%2E%2E/%2E%2E/%2E%2E/core/v1/sandbox/nodes",
+}
+
+// Differential property over arbitrary request paths: the routed outcome for
+// no credentials, the Beta header and the administrator key equals that of
+// the canonical form, and every layer sees one consistent canonical path.
+func FuzzCanonicalPathsRouteLikeTheirCanonicalForm(f *testing.F) {
+	for _, seed := range canonicalPathSeeds {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, path string) {
+		if strings.ContainsAny(path, " ?#") || len(path) > 512 {
+			t.Skip()
+		}
+		handler, _, _ := routingFixture(t)
+		for _, header := range []http.Header{{}, withHeaders(beta), withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta)} {
+			request, err := parseRaw(http.MethodGet, "/"+path, header)
+			if err != nil {
+				t.Skip()
+			}
+			canonical, err := parseRaw(http.MethodGet, canonicalTarget(t, request), header)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, want := outcome(handler, request), outcome(handler, canonical); got != want {
+				t.Fatalf("%q = %s; canonical %q gives %s", path, got, canonical.RequestURI, want)
+			}
+		}
+	})
 }

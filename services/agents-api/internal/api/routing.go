@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"net/url"
 	"path"
@@ -18,32 +19,59 @@ import (
 // service does (HP-17/HP-18), instead of the ServeMux redirect, which made
 // clients resend a POST as a GET. It must wrap the complete server handler so
 // that every routing, authentication and middleware decision sees only the
-// rewritten path. Percent-encoded unreserved characters (RFC 3986 section 2.3)
-// are decoded first, so an encoded dot segment is resolved like a literal one.
-// Then empty and dot segments are resolved with ServeMux cleanPath semantics,
-// keeping a trailing slash. Other escapes, such as %2F, stay encoded and never
-// become separators, so every request reaches exactly the route and
-// authentication of its canonical path written literally. It is idempotent.
+// rewritten path. The canonical path is built from the raw request path: bytes
+// that are not valid in an escaped path are percent-encoded, percent-encoded
+// unreserved characters (RFC 3986 section 2.3) are decoded, so an encoded dot
+// segment resolves like a literal one, and empty and dot segments are resolved
+// with ServeMux cleanPath semantics, keeping a trailing slash. Other escapes,
+// such as %2F and %5C, stay encoded and never become separators. Path and
+// RawPath are then set consistently, so chi (which prefers RawPath), the
+// ServeMux (which uses EscapedPath) and every middleware see the same path, and
+// every spelling reaches exactly the route and authentication of its canonical
+// form written literally. It is idempotent.
 func CanonicalPaths(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		escaped := cleanPath(decodeUnreserved(r.URL.EscapedPath()))
+		// RawPath is the request's own spelling whenever it differs from the
+		// default encoding of Path; EscapedPath would re-escape the decoded Path
+		// when RawPath holds an invalid byte, turning %2F into a separator.
+		raw := r.URL.RawPath
+		if raw == "" {
+			raw = r.URL.EscapedPath()
+		}
+		escaped := cleanPath(decodeUnreserved(escapeInvalid(raw)))
 		decoded, err := url.PathUnescape(escaped)
 		if err != nil {
-			// EscapedPath is always validly escaped; this is unreachable.
+			// A parsed request path has only valid escapes; this is unreachable.
 			http.Error(w, "Invalid request path.", http.StatusBadRequest)
 			return
 		}
-		if decoded != r.URL.Path || escaped != r.URL.EscapedPath() {
+		rawPath := ""
+		if (&url.URL{Path: decoded}).EscapedPath() != escaped {
+			rawPath = escaped
+		}
+		if decoded != r.URL.Path || rawPath != r.URL.RawPath {
 			canonical := *r.URL
-			canonical.Path, canonical.RawPath = decoded, ""
-			if canonical.EscapedPath() != escaped {
-				canonical.RawPath = escaped
-			}
+			canonical.Path, canonical.RawPath = decoded, rawPath
 			r = r.WithContext(r.Context())
 			r.URL = &canonical
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// escapeInvalid percent-encodes every byte that may not appear literally in an
+// escaped path (RFC 3986 pchar, plus the '[' and ']' that net/url accepts), such
+// as '{', '"', a backslash, spaces and non-ASCII bytes. Existing escapes are kept.
+func escapeInvalid(raw string) string {
+	var escaped strings.Builder
+	for i := 0; i < len(raw); i++ {
+		if c := raw[i]; unreserved(c) || strings.IndexByte("!$&'()*+,;=:@/%[]", c) >= 0 {
+			escaped.WriteByte(c)
+		} else {
+			fmt.Fprintf(&escaped, "%%%02X", c)
+		}
+	}
+	return escaped.String()
 }
 
 // decodeUnreserved decodes percent-encoded ALPHA, DIGIT, '-', '.', '_' and '~',
