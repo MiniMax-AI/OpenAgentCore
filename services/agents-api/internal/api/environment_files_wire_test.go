@@ -170,6 +170,30 @@ func TestEnvironmentFileCreateFieldErrors(t *testing.T) {
 			t.Fatal("rejected body was written", body)
 		}
 	}
+	// Only a short, printable name is echoed; every response stays small.
+	for key, echoed := range map[string]bool{
+		strings.Repeat("<>", 64):   true,
+		strings.Repeat("<", 257):   false,
+		strings.Repeat("a", 4<<20): false,
+		`tab\tkey`:                 false,
+		`line\u2028separator`:      false,
+		`bell\u0007`:               false,
+		`caf\u00e9 \u5b57`:         true,
+	} {
+		h, f := environmentFileCreateHandler(t)
+		body := `{"type":"inline","path":"/workspace/a","data":"","` + key + `":1}`
+		w := requestCreateEnvironmentFile(h, f.environment.ID, body, "files-key")
+		if w.Body.Len() > 4096 || f.writes != 0 {
+			t.Fatal("unknown field response is unbounded", len(key), w.Body.Len())
+		}
+		if echoed {
+			var decoded string
+			_ = json.Unmarshal([]byte(`"`+key+`"`), &decoded)
+			assertListQueryError(t, w, "invalid_request_error", decoded, "Unknown parameter: '"+decoded+"'.")
+		} else {
+			assertListQueryError(t, w, "invalid_request", nil, "Invalid resource identifier or request limits.")
+		}
+	}
 	// Foreign Environments stay missing before any body inspection.
 	h, f := environmentFileCreateHandler(t)
 	body := `{"type":"inline","path":"/workspace/a","data":"","extra_field":1}`

@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
@@ -53,6 +54,10 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 	var request v1.EnvironmentFileCreateRequest
 	fields := []string{"type", "path", "data", "file_id"}
 	if field, found := unknownBodyField(raw, fields...); found {
+		if !echoableField(field) {
+			writeStoreError(w, r, store.ErrInvalidInput)
+			return
+		}
 		writeFieldError(w, &fieldError{param: field, message: "Unknown parameter: '" + field + "'."})
 		return
 	}
@@ -162,6 +167,20 @@ func environmentFileCreatePathError(value string) error {
 		return errEnvironmentFileCreatePath
 	}
 	return nil
+}
+
+// echoableField bounds the caller-supplied name that an unknown-field error
+// repeats in both message and param; JSON escaping can grow each byte sixfold.
+func echoableField(field string) bool {
+	if len(field) > 256 || !utf8.ValidString(field) {
+		return false
+	}
+	for _, r := range field {
+		if !unicode.IsPrint(r) {
+			return false
+		}
+	}
+	return true
 }
 
 // unknownBodyField returns the first top-level member outside allowed, in
