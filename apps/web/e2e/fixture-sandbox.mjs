@@ -28,7 +28,7 @@ export function handleSandboxFixture(request, response, url, sendJson, sendError
   if (path === "/__fixture/sandbox-add-node") { nodes.push({ ...node("node-enrolled", "Enrolled host"), provider }); sendJson(response, {}); return true; }
   const projectRoute = path === "/v1/sandbox/nodes" || /^\/v1\/agents\/sessions\/[^/]+\/sandbox-placement$/.test(path);
   if (projectRoute && request.headers["openai-beta"] !== "agents=v1") {
-    sendError(response, 400, "OpenAI-Beta: agents=v1 is required.", "invalid_beta"); return true;
+    sendError(response, 400, "To access the Agents API, set the 'OpenAI-Beta' header to 'agents=v1'.", "invalid_beta"); return true;
   }
   if (path === "/v1/sandbox/nodes") { sendJson(response, { data: nodes.map(({ id, name, online }) => ({ id, name, available: online })) }); return true; }
   if (/^\/v1\/agents\/sessions\/[^/]+\/sandbox-placement$/.test(path)) {

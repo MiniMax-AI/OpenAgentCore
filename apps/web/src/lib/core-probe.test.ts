@@ -128,7 +128,18 @@ describe("Core connection probe", () => {
   });
 
   it.each([
+    { type: "invalid_request_error", code: null, param: null, message: "A valid Agents API bearer key is required." },
+    { type: "authentication_error", code: "invalid_api_key", param: null, message: "Older Core envelope." },
+  ])("classifies the current and older Core 401 envelopes", async (error) => {
+    const result = await probeCore({ baseUrl: "/v1", fetch: recordingFetch(jsonResponse({ error }, 401), []) });
+
+    expect(result).toEqual({ kind: "unauthorized", executionReadiness: "unknown", httpStatus: 401 });
+  });
+
+  it.each([
     jsonResponse({ error: { code: "gateway_auth_required" } }, 401),
+    jsonResponse({ error: { type: "invalid_request_error", code: "gateway_auth_required" } }, 401),
+    jsonResponse({ error: { type: "invalid_request_error" } }, 401),
     new Response("proxy login required", { status: 401 }),
   ])("does not claim invalid_api_key for a non-canonical 401", async (response) => {
     const result = await probeCore({ baseUrl: "/v1", fetch: recordingFetch(response, []) });

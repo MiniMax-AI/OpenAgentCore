@@ -727,7 +727,10 @@ creation, `/healthz`, HTTP `204`, or `ws connected` alone is not.
 
 ## Troubleshooting
 
-### `401 invalid_api_key`
+### Core rejects the caller key (HTTP 401)
+
+Core reports the rejected key as `invalid_request_error` with a null code on the
+Agents API routes; older Core releases used code `invalid_api_key`.
 
 Check that:
 

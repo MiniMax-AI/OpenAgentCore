@@ -183,7 +183,7 @@ function resultCopy(result: CoreProbeResult): { title: string; detail: string } 
     case "unauthorized":
       return {
         title: "Authentication failed",
-        detail: "Core returned 401 invalid_api_key. Check the server-managed caller key or current-tab token.",
+        detail: "Core rejected the caller key (HTTP 401). Check the server-managed caller key or current-tab token.",
       };
     case "protocol_mismatch":
       return {

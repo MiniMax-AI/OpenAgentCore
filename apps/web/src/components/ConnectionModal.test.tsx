@@ -188,7 +188,7 @@ describe("Connection probe status", () => {
         status: "complete",
         result: { kind: "unauthorized", executionReadiness: "unknown", httpStatus: 401 },
       },
-      "401 invalid_api_key",
+      "rejected the caller key (HTTP 401)",
     ],
     [
       {

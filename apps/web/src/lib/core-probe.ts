@@ -103,10 +103,22 @@ function isAgentListPage(value: unknown): boolean {
   return value.first_id === value.data[0]?.id && value.last_id === value.data.at(-1)?.id;
 }
 
-async function readErrorCode(response: Response): Promise<string | undefined> {
+interface ProbeError {
+  type?: unknown;
+  code?: unknown;
+}
+
+async function readError(response: Response): Promise<ProbeError | undefined> {
   const envelope: unknown = await response.json();
   if (!isRecord(envelope) || !isRecord(envelope.error)) return undefined;
-  return typeof envelope.error.code === "string" ? envelope.error.code : undefined;
+  return envelope.error;
+}
+
+// Core reports a rejected Agents API caller as invalid_request_error with a
+// null code, as the official service does; older Core used invalid_api_key.
+// Other 401 bodies, such as an intermediary's login, are not Core's answer.
+function isCoreUnauthorized(error: ProbeError | undefined): boolean {
+  return error?.code === "invalid_api_key" || (error?.type === "invalid_request_error" && error.code === null);
 }
 
 function classifyBodyReadFailure(
@@ -192,19 +204,19 @@ export async function probeCore(options: CoreProbeOptions): Promise<CoreProbeRes
       };
     }
 
-    let errorCode: string | undefined;
+    let error: ProbeError | undefined;
     try {
-      errorCode = await readErrorCode(response);
-    } catch (error) {
-      if (classifyBodyReadFailure(error, options.signal, deadline.signal) === "unreachable") {
+      error = await readError(response);
+    } catch (reason) {
+      if (classifyBodyReadFailure(reason, options.signal, deadline.signal) === "unreachable") {
         return { kind: "unreachable", executionReadiness: "unknown" };
       }
     }
-    if (response.status === 401 && errorCode === "invalid_api_key") {
+    if (response.status === 401 && isCoreUnauthorized(error)) {
       return { kind: "unauthorized", executionReadiness: "unknown", httpStatus: response.status };
     }
     if (
-      (response.status === 400 && errorCode === "invalid_beta") ||
+      (response.status === 400 && error?.code === "invalid_beta") ||
       response.status === 404 ||
       response.status === 405
     ) {
