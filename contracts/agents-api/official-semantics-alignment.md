@@ -386,14 +386,21 @@ Decisions:
   local limits and codes, and before harness admission. It is not a JSON Schema
   engine: function and output schemas, `request_metadata` values, MCP `transport`
   members, `metadata` and `x_agents_core` stay with their existing parsers.
-- Members are checked in document order; a repeated key keeps its first position
-  and is checked with its last value, which is the value the parsers decode. A
-  union's `type` is checked first, and missing required members are reported after
-  the supplied ones, in the pinned order. The whole object is checked before the
-  C2/C3 conflicts, and tools before `text`. The official order between several
-  errors in one body was not observed.
-- Member names match exactly. Nested members that encoding/json previously matched
-  case-insensitively, such as `reasoning.Effort`, are now unknown parameters.
+- In each object, a union's `type` is checked first. Unknown and repeated members
+  are then reported in document order, followed by member values in document
+  order and missing required members in the pinned order. The whole object is
+  checked before the C2/C3 conflicts, and tools before `text`. The official order
+  between several errors in one body was not observed.
+- Member names match exactly, so a name that differs from a member only by case,
+  such as `reasoning.Effort`, is an unknown parameter. A member repeated anywhere
+  in the checked tree returns 400 `invalid_request_error` with its path as param
+  and the local message `Duplicate parameter: '<path>'.`; the official response
+  is unobserved. Both are needed because encoding/json matches names
+  case-insensitively and merges repeated objects into the decoded structs:
+  checking only the last copy let `"text"` given twice store an array-root schema,
+  and `{"reasoning":{"Effort":"high"},"reasoning":{}}` store `effort: high`.
+  Members left to their parsers are checked on the decoded values, so they cannot
+  differ from what is stored.
 - Observed expected-kind phrases are `an object`, `a boolean` and
   `an object with string keys and unknown value values`. At unsampled positions
   Core uses `a string` (also for enum members), `an integer` and `an array`, and
@@ -416,6 +423,12 @@ Decisions:
   Agents give the same response. Otherwise the lookup order (SES-33) is unchanged.
 - Validation of the update body precedes the Agent lookup, so owned, foreign,
   missing and malformed Agent IDs give the same response.
+- Inline agent validation runs before same-key creation recovery. A same-key
+  retry of an inline Session created before this batch therefore returns the new
+  400 if its original configuration is now invalid, instead of the original
+  Session. Saved-Agent retries still recover, because the resolved-configuration
+  checks run after recovery. Core is pre-release, so the order is not changed for
+  such retries.
 
 Deferred and unchanged: TV-05, saving `web_search` with mode `live`, `cached` or
 omitted (officially saved, omitted stored as `live`), needs a separate decision
