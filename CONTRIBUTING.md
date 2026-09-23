@@ -93,7 +93,7 @@ JSON (including unpaired surrogate escapes), repeated keys and non-object roots
 with the official messages; an empty body or null becomes `{}`. DELETE, multipart,
 Core extension and internal routes keep their own readers. Member names match
 exactly: decode request objects with `decodeInputObject`, or check
-`caseVariantMember` before another decoder, so that encoding/json never matches
+`inexactMember` before another decoder, so that encoding/json never matches
 a case variant to a field. See
 `contracts/agents-api/official-semantics-alignment.md#request-body-parsing--september-23`.
 Report validation failures with official evidence through the typed field error,

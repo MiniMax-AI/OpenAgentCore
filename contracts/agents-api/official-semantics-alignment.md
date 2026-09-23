@@ -911,13 +911,21 @@ Decisions:
 - The duplicate key and path are repeated only when each is at most 256 bytes of
   printable UTF-8, the shared `echotext` rule; otherwise the message is "Invalid
   body: duplicate JSON key. Duplicate JSON keys are not supported."
-- The gate scans each body once in linear time. It keeps key positions in the
+- The gate scans each body once in linear time and keeps key positions in the
   body, not copies: objects with more than 16 keys use an open-addressing set of
-  4-byte positions, so a body of many short keys allocates about its own size.
+  8-byte slots, a position and 32 hash bits that skip comparing unequal keys. A
+  body of many short keys allocates about twice its size in the gate. Bodies are
+  read into a doubling buffer, about twice their size in total.
 - Member names match exactly on every gated route. encoding/json would match a
   case variant such as `Metadata`, `Input` or a nested `Role` to the field and
   let the last copy win; such a key is now an unknown member at any depth,
-  rejected with the route's existing unknown-member error before any write.
+  rejected with the route's existing unknown-member error before any write. A
+  walk over the body bytes checks the member names before the route's decoder
+  runs and stops at the first unknown or case-variant key, and the Session
+  metadata check reads only the `metadata` member. A whole Session create of
+  16 MiB of unknown keys now allocates about 96 MiB in total and events about
+  six times a 1 MiB body, instead of 482 MiB and 9 MiB before this batch, when
+  the decoder formatted an error for every unknown key.
   Agent configuration already did this. On Agent create, a body with `Metadata`
   and no `model` still reports the unknown member first, while the official
   service reported the missing `model`; the official order between several
@@ -940,7 +948,8 @@ product repository does not call these routes.
 Go tests cover the gate on its own (B1–B5, surrogate escapes, the echo bound,
 media type parsing, deep bodies, a differential check of the duplicate-key scan
 against an encoding/json token walk on small and large objects, and an allocation
-bound on many short keys), case-variant members, and all eleven route families
+bound on many short keys), case-variant members, route-level allocation bounds for
+unknown keys on Session create and events, and all eleven route families
 (B1–B4, B6, the order against authentication, Beta and the body limit, B5/B7). A
 real-PostgreSQL test sends B1–B4, B6 and case-variant members to every route
 family as the owner and as tenant B under a whole-database digest, then checks
