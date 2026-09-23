@@ -37,6 +37,10 @@ or lifecycle decisions.
    Session token counters needed by the history API;
    provider receipts, native container identities, paths, and raw errors never
    enter the projection.
+   Keep both the `agents.runtime.*` family and the exact
+   `agents.session.tokens.input` / `agents.session.tokens.output` gauges in the
+   Collector allow-list, as shown in `otel-collector.example.yaml`; otherwise
+   the Collector discards Session usage before ClickHouse receives it.
    Grant the Collector identity the minimum source-column reads required when
    those views run:
 

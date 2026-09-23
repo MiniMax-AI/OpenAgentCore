@@ -13,6 +13,7 @@ processors:
         match_type: regexp
         metric_names:
           - '^agents\.runtime\..*$'
+          - '^agents\.session\.tokens\.(input|output)$'
   batch/runtime_history:
     timeout: 5s
     send_batch_size: 5000
