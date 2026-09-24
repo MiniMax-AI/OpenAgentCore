@@ -166,7 +166,11 @@ token. Build the private provider JSON from its `provider`, `installation_id`,
 schema for the host's socket, runtime paths and network policy. The Runtime image
 and resource limits must match the server specification. Docker needs access to its local
 Unix socket and pinned image. Microsandbox needs its qualified runtime, helper,
-firmware and KVM. A node never receives arbitrary host paths from the browser.
+firmware and KVM. The native Unix socket limit also requires
+`$HOME/.parsar/m/<12-character installation hash>` to fit within 48 encoded bytes.
+The installer rejects a longer path before creating node state; use a service
+account with a shorter persistent home. A node never receives arbitrary host
+paths from the browser.
 
 In Hosted Sandbox Manager, generate a single-use registration token. Save it in
 a `0600` file on the host. The token expires after the duration shown by Core.
