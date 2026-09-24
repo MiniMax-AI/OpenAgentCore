@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
@@ -48,6 +49,7 @@ func (s *managedSetup) load(ctx context.Context) (*execution.RuntimeProvider, er
 	}
 	provider, err := s.provider(setup)
 	if err != nil {
+		log.Warn("Hosted provider is unavailable; administrator recovery remains available", "provider", setup.Provider, "error", err)
 		return nil, fmt.Errorf("%w: %v", execution.ErrExecutionUnavailable, err)
 	}
 	selected := &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, Maintenance: setup.Maintenance,
