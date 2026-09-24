@@ -7,14 +7,35 @@
  * shared atom is defined here once; feature stylesheets only arrange them.
  */
 
-/* Brand ----------------------------------------------------------------- */
+/* Brand and palette ----------------------------------------------------- */
 
-/* Parsar indigo replaces Beautiful UI's blue: selection, links, focus and data. */
+/* Parsar indigo, a shade quieter than stock indigo, is the only accent. Status
+   and data colours share one lightness band and a moderate chroma, so a page
+   reads as one palette rather than a set of default hues. */
 :root {
-  --accent: #4f46e5;
-  --accent-ink: #4338ca;
-  --accent-tint: color-mix(in srgb, #4f46e5 9%, var(--surface));
+  --accent: oklch(0.52 0.165 277);
+  --accent-ink: oklch(0.47 0.16 277);
+  --accent-tint: oklch(0.965 0.018 277);
   --accent-fg: #ffffff;
+  --green: oklch(0.6 0.12 158);
+  --green-tint: oklch(0.965 0.022 158);
+  --orange: oklch(0.68 0.135 62);
+  --orange-tint: oklch(0.97 0.028 70);
+  --red: oklch(0.585 0.17 25);
+  --red-tint: oklch(0.965 0.02 20);
+  --series-1: oklch(0.56 0.14 277);
+  --series-2: oklch(0.7 0.09 195);
+  --series-3: oklch(0.78 0.11 80);
+  --series-4: oklch(0.66 0.12 20);
+  --series-5: oklch(0.62 0.06 250);
+  --series-6: oklch(0.72 0.08 145);
+  --series-other: oklch(0.82 0.008 264);
+  --status-running: var(--series-1);
+  --data: var(--series-1);
+  /* Inside the white page panel, frames are hairlines, not raised cards. */
+  --frame-line: color-mix(in oklch, var(--ink) 11%, transparent);
+  --shadow-card: 0 0 0 1px var(--frame-line);
+  --panel-shadow: 0 0 0 1px var(--line), 0 1px 2px oklch(0 0 0 / 3%), 0 8px 24px -12px oklch(0 0 0 / 8%);
   --control-height: 30px;
   --radius-chip: 6px;
   --radius-control: 8px;
@@ -24,10 +45,26 @@
 }
 
 html[data-theme="dark"] {
-  --accent: #8b90f6;
-  --accent-ink: #a5a9f8;
-  --accent-tint: rgb(139 144 246 / 16%);
-  --accent-fg: #14142b;
+  --accent: oklch(0.72 0.12 277);
+  --accent-ink: oklch(0.8 0.1 277);
+  --accent-tint: oklch(0.72 0.12 277 / 16%);
+  --accent-fg: oklch(0.2 0.03 277);
+  --green: oklch(0.72 0.12 158);
+  --green-tint: oklch(0.72 0.12 158 / 14%);
+  --orange: oklch(0.76 0.12 65);
+  --orange-tint: oklch(0.76 0.12 65 / 14%);
+  --red: oklch(0.68 0.15 25);
+  --red-tint: oklch(0.68 0.15 25 / 14%);
+  --series-1: oklch(0.68 0.13 277);
+  --series-2: oklch(0.74 0.09 195);
+  --series-3: oklch(0.8 0.1 80);
+  --series-4: oklch(0.72 0.11 20);
+  --series-5: oklch(0.7 0.06 250);
+  --series-6: oklch(0.76 0.08 145);
+  --series-other: oklch(0.45 0.01 264);
+  --frame-line: oklch(1 0 0 / 10%);
+  --shadow-card: 0 0 0 1px var(--frame-line);
+  --panel-shadow: 0 0 0 1px oklch(1 0 0 / 8%), 0 8px 28px -12px oklch(0 0 0 / 50%);
 }
 
 /* Browser surfaces ------------------------------------------------------ */
@@ -73,16 +110,32 @@ pre {
 
 /* Shell ----------------------------------------------------------------- */
 
-.app-main,
-.page-section {
+/* The gray canvas is the app frame; each page lives in one white panel. */
+.app-shell,
+.app-main {
   background: var(--canvas);
+}
+
+.app-main {
+  padding: 8px 8px 8px 0;
+}
+
+.app-main > .page-transition {
+  overflow: hidden;
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: var(--panel-shadow);
+}
+
+.page-section {
+  background: var(--surface);
 }
 
 .app-sidebar {
   padding: 10px 8px;
   color: var(--ink-2);
-  background: var(--page);
-  border-right: 1px solid var(--line);
+  background: var(--canvas);
+  border-right: 0;
 }
 
 .brand-lockup {
@@ -137,17 +190,19 @@ pre {
 
 .main-nav button:hover {
   color: var(--ink);
-  background: var(--hover);
+  background: var(--hover-2);
 }
 
 .main-nav button:active {
   transform: scale(0.98);
 }
 
+/* The current page is a white chip, the same surface as the panel it opens. */
 .main-nav button.active {
   color: var(--ink);
   font-weight: 500;
-  background: var(--hover-2);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--frame-line), 0 1px 2px oklch(0 0 0 / 4%);
 }
 
 .main-nav button.active svg,
@@ -174,26 +229,26 @@ pre {
 
 .console-page > .page-header,
 .page-header {
-  min-height: 60px;
+  min-height: 56px;
   flex-basis: auto;
   gap: 12px;
-  padding: 12px var(--page-gutter);
-  background: var(--canvas);
-  border-bottom: 0;
+  padding: 10px var(--page-gutter);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
 }
 
 .page-header h1,
 .page-header .console-page-heading h1 {
   color: var(--ink);
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 600;
-  line-height: 28px;
-  letter-spacing: -0.02em;
+  line-height: 24px;
+  letter-spacing: -0.015em;
 }
 
 .console-page-body {
-  gap: 24px;
-  padding: 8px var(--page-gutter) 48px;
+  gap: 28px;
+  padding: 20px var(--page-gutter) 48px;
 }
 
 /* A list toolbar belongs to the table under it: 12px apart, not a section gap. */
@@ -318,10 +373,20 @@ pre {
   opacity: 0.88;
 }
 
-.button.outline.danger {
+/* Destructive actions on a page are quiet (red text on a ringed button); the
+   solid red button belongs to the confirmation dialog. */
+.button.outline.danger,
+.page-actions .button.danger {
   color: var(--red);
   background: var(--surface);
   box-shadow: var(--shadow-btn);
+  opacity: 1;
+}
+
+.button.outline.danger:hover:not(:disabled),
+.page-actions .button.danger:hover:not(:disabled) {
+  background: var(--red-tint);
+  opacity: 1;
 }
 
 .button svg {
@@ -591,10 +656,11 @@ pre {
 
 .kpi dd {
   color: var(--ink);
-  font-size: 22px;
-  font-weight: 600;
-  line-height: 28px;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 30px;
   letter-spacing: -0.02em;
+  font-optical-sizing: auto;
 }
 
 /* Tables ---------------------------------------------------------------- */
@@ -895,4 +961,76 @@ pre {
   .skeleton-bar {
     animation: none;
   }
+}
+
+/* Detail pages ---------------------------------------------------------- */
+
+/* A resource's facts sit in one card on an even grid, labels above values. */
+.resource-facts,
+.template-facts {
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+  gap: 14px 24px;
+  padding: 14px 16px 15px;
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.resource-facts > div,
+.template-facts > div {
+  gap: 3px;
+}
+
+.resource-facts dt,
+.template-facts dt {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.resource-facts dd,
+.template-facts dd {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+/* Long configuration text reads as prose in an inset card. */
+.agent-instructions {
+  max-height: 360px;
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  color: var(--ink);
+  font-family: var(--font-console);
+  font-size: 13.5px;
+  line-height: 22px;
+  white-space: pre-wrap;
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+/* Overview figures: large, light and tabular, set in Inter's display cut. */
+.metric-tile-value {
+  color: var(--ink);
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  font-optical-sizing: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-tile-label,
+.overview-card-header h2 {
+  color: var(--ink);
+}
+
+/* A pill after a name keeps a small gap from it. */
+:where(span, strong, a, button, code) + .pill {
+  margin-left: 6px;
 }

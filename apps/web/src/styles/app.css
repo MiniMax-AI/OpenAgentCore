@@ -7,7 +7,8 @@
  * 5. Tailwind utilities last, generated only for the registry components.
  */
 @import "tailwindcss/theme.css" layer(theme);
-@import "@fontsource-variable/inter";
+@import "@fontsource-variable/inter/opsz.css";
+@import "@fontsource-variable/geist-mono";
 @import "../app/beautifui/foundation.css";
 @import "../style.css";
 @import "./console.css";
