@@ -3,6 +3,7 @@ package e2b
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -19,7 +20,7 @@ const ProtocolVersion = 1
 const SDKVersion = "2.51.0"
 const MaxOutputBytes = 1024 * 1024
 const MaxRequestBytes = 72 * 1024 * 1024
-const MaxResponseBytes = 3 * 1024 * 1024
+const MaxResponseBytes = 16 * 1024 * 1024
 
 // Config contains trusted deployment configuration; APIKey travels only on stdin.
 type Config struct {
@@ -94,12 +95,15 @@ func NewWithCaller(c Config, caller Caller) (*Provider, error) {
 func (p *Provider) call(ctx context.Context, operation string, r sandbox.Reference, b *sandbox.Bootstrap, command *sandbox.Command) (Response, error) {
 	deadline, ok := ctx.Deadline()
 	if !ok || !validReference(r) {
-		return Response{}, sandbox.ErrInvalid
+		return unstarted(operation, r), sandbox.ErrInvalid
 	}
 	if err := ctx.Err(); err != nil {
-		return Response{}, err
+		return unstarted(operation, r), err
 	}
 	out, err := p.caller.Call(ctx, Request{Version: ProtocolVersion, Operation: operation, Config: p.config, Reference: r, Bootstrap: b, Command: command, Deadline: deadline})
+	if errors.Is(err, errHelperNotStarted) {
+		return unstarted(operation, r), sandbox.ErrComputeUnconfirmed
+	}
 	if err != nil || out.Version != ProtocolVersion {
 		if operation == "command" {
 			return Response{}, sandbox.ErrCommandUnconfirmed
@@ -140,8 +144,13 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 	u, err := url.Parse(b.CoreURL)
 	policy := agentnetwork.Policy{Access: b.NetworkAccess, AllowedDomains: b.AllowedDomains}
 	if !validReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || policy.Validate() != nil || err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.TrimSpace(b.Credential) == "" {
-		return sandbox.Info{Reference: b.Reference}, sandbox.ErrInvalid
+		info := sandbox.Info{Reference: b.Reference}
+		if validReference(b.Reference) {
+			info.State, info.CreateSettled = "absent", true
+		}
+		return info, sandbox.ErrInvalid
 	}
+	b.AllowedDomains = policy.Hosts()
 	return p.info(ctx, "create", b.Reference, &b)
 }
 func (p *Provider) GetInfo(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {
@@ -174,4 +183,13 @@ func (p *Provider) RunCommand(ctx context.Context, r sandbox.Reference, c sandbo
 		return sandbox.CommandResult{}, sandbox.ErrCommandUnconfirmed
 	}
 	return *out.Command, nil
+}
+
+// A fresh allocation Create rejected before process startup has no cloud effects.
+// The common Provider contract forbids replaying an earlier unknown Create.
+func unstarted(operation string, r sandbox.Reference) Response {
+	if operation == "create" && validReference(r) {
+		return Response{Info: &sandbox.Info{Reference: r, State: "absent", CreateSettled: true}}
+	}
+	return Response{}
 }

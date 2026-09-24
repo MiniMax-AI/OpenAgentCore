@@ -25,6 +25,9 @@ func (f *fakeCaller) Call(_ context.Context, q Request) (Response, error) {
 func fixture(t *testing.T) (*Provider, *fakeCaller, sandbox.Reference) {
 	t.Helper()
 	root := t.TempDir()
+	if err := os.Chmod(root, 0700); err != nil {
+		t.Fatal(err)
+	}
 	binary := filepath.Join(root, "helper")
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
 		t.Fatal(err)
@@ -134,5 +137,24 @@ func TestDeadlineAndCommandAdmission(t *testing.T) {
 	}
 	if len(f.requests) != 0 {
 		t.Fatal("invalid operation reached helper")
+	}
+}
+
+func TestDefinitePreHelperCreateFailureCarriesAbsenceProof(t *testing.T) {
+	p, f, r := fixture(t)
+	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "private", NetworkAccess: "enabled"}
+	for _, err := range []error{errHelperNotStarted, context.DeadlineExceeded} {
+		f.err = err
+		info, gotErr := p.Create(bounded(t), b)
+		if gotErr == nil {
+			t.Fatal("failure lost")
+		}
+		if errors.Is(err, errHelperNotStarted) {
+			if !info.CreateSettled || info.State != "absent" {
+				t.Fatal("missing definite absence proof")
+			}
+		} else if info.CreateSettled {
+			t.Fatal("timeout proved absence")
+		}
 	}
 }

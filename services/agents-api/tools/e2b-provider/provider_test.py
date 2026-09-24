@@ -108,7 +108,7 @@ class ProviderTest(unittest.TestCase):
         self.assertFalse(result['Info']['BootstrapComplete'])
         self.assertEqual(self.call('inspect')['Info']['State'], 'running')
 
-    def test_mismatched_receipt_cannot_settle(self):
+    def test_mismatched_receipt_cannot_prove_bootstrap_complete(self):
         self.cloud.files.read.return_value = json.dumps({'identity': {}, 'status': 'daemon_started', 'daemon_pid': 2})
         self.assertEqual(self.call('create')['ErrorCode'], 'ownership')
         self.assertTrue(self.record()['settled'])

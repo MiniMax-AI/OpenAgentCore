@@ -51,6 +51,7 @@ class Provider:
     def info(self, cloud=None, absent=False):
         record = self.receipt.data or {}
         ids = record.get('ids', [])
+        absent = absent or record.get('status') == 'rejected' and record.get('settled') and not ids
         value = dict(self.reference, ProviderID=ids[0] if len(ids) == 1 else '', State='absent' if absent else 'unknown',
                      BootstrapComplete=False, CreateSettled=record.get('settled', False))
         if cloud is not None:

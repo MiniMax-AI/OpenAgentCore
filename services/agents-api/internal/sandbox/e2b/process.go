@@ -13,12 +13,14 @@ import (
 
 // ProcessCaller retains and drains an outstanding helper after caller timeout.
 // The helper keeps its allocation lock until its bounded SDK operation settles.
+var errHelperNotStarted = errors.New("helper did not start")
+
 type ProcessCaller struct{}
 
 func (*ProcessCaller) Call(ctx context.Context, q Request) (Response, error) {
 	data, err := json.Marshal(q)
 	if err != nil || len(data) > MaxRequestBytes {
-		return Response{}, errors.New("invalid helper request")
+		return Response{}, errHelperNotStarted
 	}
 	cmd := exec.Command(q.Config.Binary)
 	cmd.Stdin = bytes.NewReader(data)
@@ -31,8 +33,11 @@ func (*ProcessCaller) Call(ctx context.Context, q Request) (Response, error) {
 	cmd.Env = append(cmd.Env, "PYTHONNOUSERSITE=1", "PYTHONDONTWRITEBYTECODE=1")
 	stdout, stderr := &limitBuffer{limit: MaxResponseBytes}, &limitBuffer{limit: MaxOutputBytes}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
+	if ctx.Err() != nil {
+		return Response{}, errHelperNotStarted
+	}
 	if cmd.Start() != nil {
-		return Response{}, errors.New("helper unavailable")
+		return Response{}, errHelperNotStarted
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
