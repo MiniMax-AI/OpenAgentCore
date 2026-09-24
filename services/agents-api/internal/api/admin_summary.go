@@ -96,7 +96,7 @@ func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	keys, err := h.listAdminKeyBindings(ctx, options.after, options.limit, options.ascending)
+	var keys store.ProjectAPIKeyPage
 	if keyID := r.URL.Query().Get("key_id"); keyID != "" {
 		if options.after != "" {
 			writeStoreError(w, r, store.ErrInvalidInput)
@@ -105,6 +105,8 @@ func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
 		var binding store.ProjectAPIKeyBinding
 		binding, err = h.resolveAdminKey(ctx, keyID)
 		keys = store.ProjectAPIKeyPage{Data: []store.ProjectAPIKey{binding.Key}}
+	} else {
+		keys, err = h.listAdminKeyBindings(ctx, options.after, options.limit, options.ascending)
 	}
 	if err != nil {
 		writeStoreError(w, r, err)

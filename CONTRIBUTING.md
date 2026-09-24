@@ -28,18 +28,26 @@ fixes may use self-review, including focused corrections after a blind review;
 repeat independent review when a correction materially changes the design or risk.
 Fix in-scope blockers before delivery. Do not use `codex exec` as a substitute reviewer.
 
-The Core Web is an administrator console for execution and resource operations;
-business collaboration remains in Parsar. Environment Template management shares
-the Session creation catalog and uses the existing public client operations. Patch
-only edited fields, confirm deletion, and never automatically retry an uncertain
-write. When Core refuses to delete a busy Session, offer an explicit Cancel work
-and delete action that cancels once, reads until the Session is idle within a
-bounded wait and deletes once; never cancel without that confirmation. When only
-input waiting for its Environment blocks deletion, explain that it must start,
-expire or fail instead, because Core rejects its cancellation. A Core connection
-change must discard the previous connection's forms, pending results and notices.
-Saving a Template must not allocate a Runtime, call a model or imply execution
-readiness. Keep unsupported advanced profiles explicit.
+The Core Web is an administrator console. Its server authenticates to the explicit
+`/core/v1/admin` management surface and existing sandbox administration, never to
+`/v1` on behalf of a browser. Applications use their own API key. One stable key
+owns one execution tenant; secret reset preserves both and invalidates the old
+secret, while revocation retains assets. Do not add a separate Core user table,
+roles, memberships or shared resource spaces. Static configured keys also require
+independent spaces. Management provides safe reads, the same public deletion
+preconditions, independent copies and key operations; it cannot execute or edit
+arbitrary user assets. Keep administrator target scope separate from caller
+principals. See [design principles](docs/design-principles.md) and the
+[administrator contract](contracts/agents-api/admin-api.md).
+
+Administrator writes and their audit record share one PostgreSQL transaction.
+Reuse existing resource deletion and serialization code. Copies rebind encrypted
+content and rewrite included dependencies inside the same transaction, including
+large objects, `admin_asset_copies` retry receipts and `admin_resource_owners`
+creation anchors. Never call separately committing resource creators from a copy.
+These anchors identify administrator copies even when API-key provenance is null;
+unknown historical provenance remains unknown. No secrets or request bodies enter
+logs. A forwarded console actor name is only a label, never an authorization input.
 
 For subsequent alignment and milestone closure batches, the main thread coordinates
 design, shared interface agreements, file ownership, integration and merge. First
@@ -1784,31 +1792,15 @@ the static login UI, finite console authentication routes and the existing
 independently authenticated node/project transports. Authentication requests use
 same-origin JSON POSTs with bounded bodies and bounded password-hash work.
 
-Console-managed Agent API keys live in Core PostgreSQL, separate from console
-login state and model credentials. Only deployment administrator authentication
-can create, list or revoke them through the Core management extension. The console
-bridge derives the static parent binding digest from its private caller token;
-never accept a browser-supplied parent, tenant or subject. A static parent digest
-is a selector, not authentication. Freeze the complete configured principal with
-each derived key, and reject it whenever the current static binding is missing or
-changed. Never derive keys from another dynamic key. The issuer returns a random
-secret once and stores only its digest and safe metadata. Reads never return key
-material. Check revocation on each dynamic-key request without an auth cache;
-database failures fail closed. Static configured-key authentication remains
-independent of this lookup. Keep key management outside public `/v1` resources.
-
-A caller-supplied creation UUID identifies a single key issuance. A repeated UUID
-returns conflict without replaying or rotating a secret. After an uncertain create,
-read the safe list and explicitly revoke an inaccessible key before replacing it;
-any explicit retry uses the same UUID. The first-run UI reminds the operator to
-save the key and use it for subsequent Agent API calls. Never persist a displayed
-key in browser storage or carry it into the request code or URL. The console has
-one administrator role and no project/role editor.
-The `/console/config` `api_keys` capability controls whether key management is
-available. Paired consoles require an active saved key before continuing from the
-access step. Web-only consoles with `api_keys: false` instead explain how to use
-an existing Core key and allow the introduction to continue without key-management
-requests. A failed or malformed capability read must not imply either capability.
+Console-managed API keys live in Core PostgreSQL and own independent tenants.
+The administrator issuer creates the scope, key and audit atomically. It stores
+only a digest and safe metadata; creation and secret reset return plaintext once.
+Repeated issuance/reset IDs conflict instead of replaying a secret. Revocation is
+checked on every dynamic-key request, without an authentication cache. Database
+failures fail closed. Startup rejects static/issued tenant overlap and any API-key
+credential equal to a deployment credential. Static configuration keys are visible
+but cannot be reset or revoked through management. Fresh installation needs no
+project key: the administrator creates the first key after console login.
 
 First-run Home is a standalone full-screen, skippable/replayable tutorial after
 account setup, outside the console shell. Setup and the introduction have no

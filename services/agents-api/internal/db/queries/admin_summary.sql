@@ -1,10 +1,10 @@
 -- name: AdminAssetCounts :one
 SELECT
- (SELECT count(*) FROM agents WHERE tenant_id=sqlc.arg(tenant_id))::bigint AS agents,
- (SELECT count(*) FROM skills WHERE tenant_id=sqlc.arg(tenant_id))::bigint AS skills,
- (SELECT count(*) FROM environment_templates WHERE tenant_id=sqlc.arg(tenant_id))::bigint AS environment_templates,
- (SELECT count(*) FROM source_files WHERE tenant_id=sqlc.arg(tenant_id))::bigint AS files,
- (SELECT count(*) FROM vaults WHERE tenant_id=sqlc.arg(tenant_id))::bigint AS vaults,
+ (SELECT count(*) FROM agents count_source WHERE count_source.tenant_id=sqlc.arg(tenant_id))::bigint AS agents,
+ (SELECT count(*) FROM skills count_source WHERE count_source.tenant_id=sqlc.arg(tenant_id))::bigint AS skills,
+ (SELECT count(*) FROM environment_templates count_source WHERE count_source.tenant_id=sqlc.arg(tenant_id))::bigint AS environment_templates,
+ (SELECT count(*) FROM source_files count_source WHERE count_source.tenant_id=sqlc.arg(tenant_id))::bigint AS files,
+ (SELECT count(*) FROM vaults count_source WHERE count_source.tenant_id=sqlc.arg(tenant_id))::bigint AS vaults,
  (SELECT count(*) FROM vault_credentials c JOIN vaults v ON v.id=c.vault_id WHERE v.tenant_id=sqlc.arg(tenant_id))::bigint AS credentials;
 
 -- name: AdminSummarySessions :many
