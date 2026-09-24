@@ -113,8 +113,18 @@ func (s *Store) createSessionResources(ctx context.Context, tenant string, param
 		if err != nil {
 			return err
 		}
+		audit := func() error {
+			var created []AuditResource
+			if row.ID == params.ID {
+				created = append(created, AuditResource{Type: "session", ID: uuid.UUID(row.ID.Bytes).String()})
+				if environment != nil {
+					created = append(created, AuditResource{Type: "environment", ID: environment.ID, ParentID: uuid.UUID(row.ID.Bytes).String()})
+				}
+			}
+			return recordWriteAudit(ctx, q, tenant, "create", "session", uuid.UUID(row.ID.Bytes).String(), "", created...)
+		}
 		if row.ID != params.ID || len(inputs) == 0 {
-			return nil
+			return audit()
 		}
 		// Creation retries use the Session request hash. Keep the internal input key
 		// independent of caller-supplied keys at the events endpoint.
@@ -137,7 +147,10 @@ func (s *Store) createSessionResources(ctx context.Context, tenant string, param
 				}
 			}
 		}
-		return q.PruneSessionEvents(ctx, row.ID)
+		if err := q.PruneSessionEvents(ctx, row.ID); err != nil {
+			return err
+		}
+		return audit()
 	})
 	return row, environment, err
 }

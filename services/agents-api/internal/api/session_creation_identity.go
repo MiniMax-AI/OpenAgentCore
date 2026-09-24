@@ -54,13 +54,16 @@ func (h *Handler) recoverSessionCreation(w http.ResponseWriter, r *http.Request,
 			writeError(w, http.StatusServiceUnavailable, "stream_unavailable", "Live events are unavailable.")
 			return true
 		}
+		if !h.auditSessionOperation(w, r, result.Session.ID, "create") {
+			return true
+		}
 		// Recorded-intent lookup finds an existing creation, which sends no events.
 		h.respondSessionCreationStream(w, r, events, nil, result)
 	} else {
 		session, err := h.store.GetSession(r.Context(), tenantID(r), result.Session.ID)
 		if err != nil {
 			writeStoreError(w, r, err)
-		} else {
+		} else if h.auditSessionOperation(w, r, session.ID, "create") {
 			h.respondSessionStatus(w, r, session, http.StatusCreated)
 		}
 	}
