@@ -1,0 +1,132 @@
+/* Session log and one Session's read-only history. */
+
+.session-nowrap {
+  white-space: nowrap;
+}
+
+.session-log-table code {
+  display: inline;
+}
+
+/* Facts: stacked values (a name with its ID, several Vault IDs) share one column edge. */
+.session-fact-stack {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.session-fact-stack .copyable-id code,
+.session-facts .copyable-id code {
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.session-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.session-metadata code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.session-link {
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.session-link:hover {
+  color: var(--accent);
+}
+
+.session-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.session-detail-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Conversation: the thread reads at a comfortable measure inside one frame. */
+.session-thread-frame {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--frame-radius);
+}
+
+.session-thread-frame .thread-content {
+  min-height: 0;
+  padding: 24px 24px 28px;
+}
+
+/* Trace: ledger and detail scroll inside a frame of fixed height. */
+.session-trace-frame {
+  display: flex;
+  height: min(720px, calc(100vh - 200px));
+  min-height: 420px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--frame-radius);
+}
+
+.session-trace-frame .trace-workbench {
+  border-radius: inherit;
+}
+
+.trace-dt-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.session-turns-table .name-cell-title {
+  font-weight: 500;
+}
+
+/* The title sits in the shared page header, whose h1 spans are subtitles; keep it a title. */
+.page-header h1 .session-detail-title {
+  color: var(--fg);
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+}
+
+/* Runtime charts are divided by hairlines inside one frame. */
+.session-runtime-charts {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--frame-radius);
+}
+
+/* The order strip's explanation sits beside its label, behind the help tip. */
+.session-trace-frame .trace-order-overview > header {
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+}
+
+/* Five filters and the count share one row at desktop widths. */
+.session-log-page .list-toolbar .search-control.list-search {
+  width: 232px;
+}

@@ -4,8 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { Skill, SkillVersion, SkillVersionList } from "@agents-core-web/agents-client";
 
 import { SkillDetailPage, type SkillDetailPageProps, type SkillVersionsState } from "./SkillDetail";
-import { setSkillDefaultVersion } from "./skill-operations";
-import { SkillUploadDialog, SkillBundlePreviewView } from "./SkillUploadDialog";
 
 const noop = () => undefined;
 const skillId = "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c";
@@ -49,10 +47,8 @@ function render(props: Partial<SkillDetailPageProps>): string {
       downloading={null}
       onBack={noop}
       onRefresh={noop}
-      onUploadVersion={noop}
       onDownload={noop}
       onDeleteSkill={noop}
-      onSetDefault={noop}
       onDeleteVersion={noop}
       onLoadMoreVersions={noop}
       {...props}
@@ -74,12 +70,14 @@ describe("Skill detail page", () => {
     expect(html).toContain("Create the report.");
     expect(html).toContain(skillId);
     expect(html).toContain('aria-label="Back to Skills"');
-    for (const action of ["Upload new version", "Download", "Delete Skill"]) expect(html).toContain(action);
+    for (const action of ["Download", "Delete Skill"]) expect(html).toContain(action);
+    expect(html).not.toContain("Upload new version");
+    expect(html).not.toContain("Set as default");
     expect(html).toContain('title="Download default version"');
     expect(html).toContain("Default version");
     expect(html).toContain("Newer than default");
     expect(html.match(/status-dot-ok/g)).toHaveLength(1);
-    expect(html).toContain("Make v3 the default");
+    expect(html).not.toContain("Make v3 the default");
     expect(html).not.toContain("Make v2 the default");
     expect(html).toContain('aria-label="Download v1"');
   });
@@ -103,35 +101,13 @@ describe("Skill detail page", () => {
     expect(deleteControl(only, "1")).not.toContain("disabled");
   });
 
-  it("refreshes the name after the default version changes", async () => {
-    const before = render({});
-    expect(before).toContain(">report</h1>");
 
-    const renamed = { ...skill, name: "report-v3", description: "Create the quarterly report.", default_version: "3" };
-    const core = {
-      updateSkillDefaultVersion: vi.fn(async () => renamed),
-      listSkillVersions: vi.fn(async (): Promise<SkillVersionList> => ({
-        object: "list",
-        data: [version("3", { name: "report-v3" }), version("2"), version("1")],
-        has_more: false,
-        first_id: "skillver_3",
-        last_id: "skillver_1",
-      })),
-    };
-    const result = await setSkillDefaultVersion(core, skillId, "3");
-    const after = render({ skill: result.skill, versions: versions(result.versions, result.nextAfter) });
-    expect(after).toContain(">report-v3</h1>");
-    expect(after).toContain("Create the quarterly report.");
-    expect(after).not.toContain("Newer than default");
-    expect(after).toContain("Make v2 the default");
-    expect(after).not.toContain("Make v3 the default");
-  });
 
   it("shows loading, missing and failed states", () => {
     expect(render({ skill: null, status: "loading" })).toContain("Loading Skill…");
     const missing = render({ status: "missing" });
     expect(missing).toContain("This Skill no longer exists");
-    expect(missing).toMatch(/<button class="button primary" type="button" disabled="">/);
+    expect(missing).toMatch(/<button class="button danger" type="button" disabled="">/);
     expect(render({ skill: null, status: "failed", error: "boom" })).toContain("The Skill could not be loaded");
     expect(render({ versions: { ...versions([]), status: "failed", error: "timeout" } })).toContain("Versions could not be loaded");
     expect(render({ notice: "The default version cannot be deleted. Refresh and try again." })).toContain('role="alert">The default version cannot be deleted. Refresh and try again.');
@@ -143,44 +119,3 @@ describe("Skill detail page", () => {
   });
 });
 
-describe("Skill upload dialog", () => {
-  const core = { uploadSkill: vi.fn(), uploadSkillVersion: vi.fn() };
-
-  it("offers ZIP and folder uploads with the format requirements", () => {
-    const html = renderToStaticMarkup(<SkillUploadDialog open core={core} target={{ kind: "skill" }} onClose={noop} onUploaded={noop} />);
-    expect(html).toContain("Upload Skill");
-    expect(html).toContain('role="radiogroup" aria-label="Upload from"');
-    expect(html).toContain('accept=".zip,application/zip"');
-    expect(html).toContain("Format requirements");
-    expect(html).toContain("Hooks, permission controls and subagent directives are rejected.");
-    expect(html).not.toContain('type="checkbox"');
-    expect(html).toMatch(/<button class="button primary" type="button" disabled="">/);
-  });
-
-  it("offers an unchecked default choice for a new version", () => {
-    const html = renderToStaticMarkup(<SkillUploadDialog open core={core} target={{ kind: "version", skill }} onClose={noop} onUploaded={noop} />);
-    expect(html).toContain("Upload a new version of report");
-    expect(html).toContain('<input type="checkbox"/>');
-    expect(html).toContain("Make this the default version");
-  });
-
-  it("renders frontmatter values as plain text", () => {
-    const html = renderToStaticMarkup(<SkillBundlePreviewView preview={{
-      kind: "directory",
-      topLevel: "report",
-      fileCount: 2,
-      totalBytes: 2048,
-      archiveBytes: null,
-      name: "report",
-      description: "<img src=x onerror=alert(1)> **bold**",
-      errors: [{ code: "missing-manifest", folder: "report" }],
-      warnings: [{ code: "hidden-files", paths: ["report/.DS_Store"], more: 0 }],
-    }} />);
-    expect(html).toContain("&lt;img src=x onerror=alert(1)&gt; **bold**");
-    expect(html).not.toContain("<img");
-    expect(html).not.toContain("<strong>bold");
-    expect(html).toContain("2.0 KiB");
-    expect(html).toContain("report/SKILL.md is missing.");
-    expect(html).toContain("Hidden files are uploaded as they are: report/.DS_Store");
-  });
-});

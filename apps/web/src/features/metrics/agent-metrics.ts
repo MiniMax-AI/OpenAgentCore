@@ -1,9 +1,10 @@
 import type { AgentSession, AgentTurn, SessionItem } from "@agents-core-web/agents-client";
 
 /**
- * Agent metrics derived in the browser from the public Session, Turn and Item
- * lists. A Turn is one Agent run request. Core has no aggregate endpoint yet, so
- * every total states which Sessions it covers.
+ * Agent metrics derived in the browser from each project's Session, Turn and
+ * Item lists (read through the Web API). A Turn is one Agent run request.
+ * Core has no Turn aggregate endpoint yet, so every total states which
+ * Sessions it covers.
  */
 
 export type AgentMetricsRange = "1h" | "6h" | "24h" | "7d";
@@ -48,6 +49,8 @@ export function bucketIndex(window: MetricsWindow, seconds: number): number | nu
 }
 
 export interface SessionActivity {
+  /** The project that owns the Session, when several projects are aggregated. */
+  projectId?: string;
   session: AgentSession;
   /** Turns created inside the window. */
   turns: AgentTurn[];
@@ -93,6 +96,9 @@ export interface Breakdown {
 }
 
 export interface AgentBreakdown extends Breakdown {
+  /** The Agent's own ID (or the inline key); `id` also carries the project. */
+  agentId: string;
+  projectId: string | null;
   sessions: number;
   /** Completed, failed or cancelled Turns. */
   finished: number;
@@ -275,10 +281,13 @@ export function aggregateAgentMetrics(
   for (const activity of activities) {
     const model = modelOf(activity.session);
     const agent = agentOf(activity.session);
+    const projectId = activity.projectId ?? null;
+    // Agent IDs belong to one project; keep the same Agent name in two projects apart.
+    const agentKey = projectId ? `${projectId}/${agent.id}` : agent.id;
     const modelEntry = models.get(model) ?? emptyBreakdown(model, model);
     models.set(model, modelEntry);
-    const agentEntry = agents.get(agent.id) ?? { ...emptyBreakdown(agent.id, agent.label), sessions: 0, finished: 0, averageLatencySeconds: null, latencies: [], sessionIds: new Set<string>() };
-    agents.set(agent.id, agentEntry);
+    const agentEntry = agents.get(agentKey) ?? { ...emptyBreakdown(agentKey, agent.label), agentId: agent.id, projectId, sessions: 0, finished: 0, averageLatencySeconds: null, latencies: [], sessionIds: new Set<string>() };
+    agents.set(agentKey, agentEntry);
     const turnBucket = new Map<string, number>();
 
     for (const turn of activity.turns) {

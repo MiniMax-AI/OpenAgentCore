@@ -1,6 +1,5 @@
 import {
   Bot,
-  Clock3,
   FileJson,
   Search,
   Settings2,
@@ -26,12 +25,11 @@ import type {
   SessionItem,
 } from "@agents-core-web/agents-client";
 
+import { HelpTip } from "../../../components/console-ui";
 import { MessageMarkdown } from "../../../components/MessageMarkdown";
 import { StatusIcon, type StatusKind } from "../../../components/StatusIcon";
 import { ApplyPatchDiffViewer } from "../items/ApplyPatchDiffViewer";
 import { parseParsarApplyPatch } from "../items/apply-patch";
-import type { SessionDetailState } from "../SessionsView";
-import { TurnTimeline, type TurnTimelineLoadState } from "../turns/TurnTimeline";
 import {
   buildTraceModel,
   filterTraceModel,
@@ -40,15 +38,18 @@ import {
   type TraceValue,
 } from "./trace-model";
 
+/** Load state of one history part (Items or Turns). */
+export type HistoryLoadState = "idle" | "loading" | "ready" | "failed";
+
 interface TraceViewProps {
   id: string;
   labelledBy: string;
   session: AgentSession;
   turns: AgentTurn[];
   items: SessionItem[];
-  detailState: SessionDetailState;
+  detailState: HistoryLoadState;
   detailError: string | null;
-  turnState: TurnTimelineLoadState;
+  turnState: HistoryLoadState;
   turnError: string | null;
 }
 
@@ -236,7 +237,7 @@ function TraceSummaryPanel({ row, group, session }: { row: TraceRow; group: Trac
   return (
     <div className="trace-detail-summary">
       <dl>
-        <div><dt>{t("trace.source")}</dt><dd>{row.kind === "configured_instructions" ? t("trace.agentSnapshot") : t("trace.itemSnapshot")}</dd></div>
+        <div><dt className="trace-dt-help">{t("trace.source")}<HelpTip>{t("trace.scopeBoundary")}</HelpTip></dt><dd>{row.kind === "configured_instructions" ? t("trace.agentSnapshot") : t("trace.itemSnapshot")}</dd></div>
         <div><dt>{t("common.status")}</dt><dd>{row.status ? t(`status.${row.status}` as never) : t("trace.notApplicable")}</dd></div>
         <div><dt>{t("trace.group")}</dt><dd>{localizedGroupTitle(group, translate)}</dd></div>
         <div><dt>{t("trace.configuredModel")}</dt><dd><code>{configuredModel}</code></dd></div>
@@ -255,7 +256,6 @@ function TraceSummaryPanel({ row, group, session }: { row: TraceRow; group: Trac
           </dl>
         </section>
       ) : null}
-      <p className="trace-detail-boundary">{t("trace.scopeBoundary")}</p>
     </div>
   );
 }
@@ -278,11 +278,10 @@ function TraceTimingPanel({ row, group }: { row: TraceRow; group: TraceGroup }) 
         <div><dt>{t("trace.turnStarted")}</dt><dd>{formatTimestamp(group.turn?.started_at, locale, t("common.unknown"))}</dd></div>
         <div><dt>{t("trace.turnCompleted")}</dt><dd>{formatTimestamp(group.turn?.completed_at, locale, t("common.unknown"))}</dd></div>
         <div><dt>{t("trace.turnWallClock")}</dt><dd>{valueLabel(group.turnWallClockDurationMs, translate, (value) => formatDuration(value, locale))}</dd></div>
-        <div><dt>{t("trace.itemStarted")}</dt><dd>{t("trace.notProvidedByCore")}</dd></div>
+        <div><dt className="trace-dt-help">{t("trace.itemStarted")}<HelpTip>{t("trace.timingBoundary")}</HelpTip></dt><dd>{t("trace.notProvidedByCore")}</dd></div>
         <div><dt>{t("trace.itemCompleted")}</dt><dd>{t("trace.notProvidedByCore")}</dd></div>
         <div><dt>{t("trace.toolReportedDuration")}</dt><dd>{durationDetailLabel(row.durationMs, translate, locale)}</dd></div>
       </dl>
-      <p>{t("trace.timingBoundary")}</p>
     </div>
   );
 }
@@ -420,7 +419,7 @@ export function TraceView({
       <section className="trace-order-overview" aria-label={t("trace.durableExecutionOrder")}>
         <header>
           <strong>{t("trace.durableOrder")}</strong>
-          <span>{t("trace.equalWidth")}</span>
+          <HelpTip>{t("trace.equalWidth")}. {t("trace.contractNote")}</HelpTip>
         </header>
         <div className="trace-order-scroll">
           <div className="trace-order-grid" style={sequenceStyle}>
@@ -446,25 +445,6 @@ export function TraceView({
           </div>
         </div>
       </section>
-
-      <div className="trace-contract-note" role="note">
-        <Clock3 size={14} strokeWidth={1.5} aria-hidden="true" />
-        <span>{t("trace.contractNote")}</span>
-      </div>
-
-      <details className="trace-turn-diagnostics">
-        <summary>
-          <span><strong>{t("trace.turnDiagnostics")}</strong><small>{t("trace.turnDiagnosticsHint")}</small></span>
-          <span>{t("turns.observed", { count: turns.length })}</span>
-        </summary>
-        <TurnTimeline
-          turns={turns}
-          items={items}
-          sessionUsage={session.usage}
-          loadState={turnState}
-          error={turnError}
-        />
-      </details>
 
       {turnState === "loading" || detailState === "loading" ? (
         <p className="trace-load-state" role="status">{t("trace.loadingHistory")}</p>

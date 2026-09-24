@@ -1,4 +1,4 @@
-import { ArrowLeft, Download, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Copy, Download, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -15,11 +15,9 @@ import {
   isAbortError,
   isDefaultVersionConflict,
   readSkillVersionsPage,
-  setSkillDefaultVersion,
   versionDeleteState,
   type VersionDeleteState,
 } from "./skill-operations";
-import { SkillUploadDialog, type SkillUploadResult } from "./SkillUploadDialog";
 import "./skills.css";
 
 export type SkillLoadStatus = "loading" | "ready" | "missing" | "failed";
@@ -59,10 +57,10 @@ export interface SkillDetailPageProps {
   downloading: string | null;
   onBack: () => void;
   onRefresh: () => void;
-  onUploadVersion: () => void;
   onDownload: (version?: SkillVersion) => void;
   onDeleteSkill: () => void;
-  onSetDefault: (version: SkillVersion) => void;
+  /** Copies this Skill into another project; absent while unavailable. */
+  onCopy?: (skill: Skill) => void;
   onDeleteVersion: (version: SkillVersion, state: VersionDeleteState) => void;
   onLoadMoreVersions: () => void;
 }
@@ -70,9 +68,10 @@ export interface SkillDetailPageProps {
 /** One Skill: its facts, header actions and the version table. */
 export function SkillDetailPage({
   skill, status, error, versions, refreshing, notice, downloading,
-  onBack, onRefresh, onUploadVersion, onDownload, onDeleteSkill, onSetDefault, onDeleteVersion, onLoadMoreVersions,
+  onBack, onRefresh, onDownload, onDeleteSkill, onCopy, onDeleteVersion, onLoadMoreVersions,
 }: SkillDetailPageProps) {
   const { t, i18n } = useTranslation("skills");
+  const { t: tCommon } = useTranslation();
   const locale = i18n.resolvedLanguage;
   const available = skill !== null && status !== "missing";
   const busy = downloading !== null;
@@ -94,11 +93,13 @@ export function SkillDetailPage({
             <button className="button outline" type="button" disabled={!available || busy} title={t("actions.downloadDefault")} onClick={() => onDownload()}>
               <Download size={14} aria-hidden="true" />{t("actions.download")}
             </button>
+            {onCopy ? (
+              <button className="button outline" type="button" disabled={!available} onClick={() => { if (skill) onCopy(skill); }}>
+                <Copy size={14} aria-hidden="true" />{tCommon("copy.action")}
+              </button>
+            ) : null}
             <button className="button danger" type="button" disabled={!available} onClick={onDeleteSkill}>
               <Trash2 size={14} aria-hidden="true" />{t("actions.deleteSkill")}
-            </button>
-            <button className="button primary" type="button" disabled={!available} onClick={onUploadVersion}>
-              <Upload size={14} aria-hidden="true" />{t("actions.uploadVersion")}
             </button>
           </>
         )}
@@ -136,7 +137,6 @@ export function SkillDetailPage({
                 downloading={downloading}
                 onRetry={onRefresh}
                 onDownload={onDownload}
-                onSetDefault={onSetDefault}
                 onDeleteVersion={onDeleteVersion}
                 onLoadMore={onLoadMoreVersions}
               />
@@ -149,14 +149,13 @@ export function SkillDetailPage({
 }
 
 function SkillVersionsTable({
-  skill, versions, downloading, onRetry, onDownload, onSetDefault, onDeleteVersion, onLoadMore,
+  skill, versions, downloading, onRetry, onDownload, onDeleteVersion, onLoadMore,
 }: {
   skill: Skill;
   versions: SkillVersionsState;
   downloading: string | null;
   onRetry: () => void;
   onDownload: (version: SkillVersion) => void;
-  onSetDefault: (version: SkillVersion) => void;
   onDeleteVersion: (version: SkillVersion, state: VersionDeleteState) => void;
   onLoadMore: () => void;
 }) {
@@ -210,11 +209,6 @@ function SkillVersionsTable({
                     </span>
                   </td>
                   <td className="row-actions skill-row-actions">
-                    {isDefault ? null : (
-                      <button className="text-action" type="button" aria-label={t("actions.setDefaultVersion", { version: version.version })} onClick={() => onSetDefault(version)}>
-                        {t("actions.setDefault")}
-                      </button>
-                    )}
                     <button
                       className="text-action"
                       type="button"
@@ -269,9 +263,10 @@ export interface SkillDetailProps {
   onChanged: (skill: Skill) => void;
   /** Called once the Skill no longer exists because this page deleted it. */
   onDeleted: (skillId: string) => void;
+  onCopy?: (skill: Skill) => void;
 }
 
-export function SkillDetail({ core, skillId, initialSkill, onBack, onChanged, onDeleted }: SkillDetailProps) {
+export function SkillDetail({ core, skillId, initialSkill, onBack, onChanged, onDeleted, onCopy }: SkillDetailProps) {
   const { t } = useTranslation("skills");
   const { t: tCommon } = useTranslation();
   const toast = useToast();
@@ -290,7 +285,6 @@ export function SkillDetail({ core, skillId, initialSkill, onBack, onChanged, on
   const request = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const mounted = useRef(true);
-  const uploadKey = useRef(0);
   const dialogBusyRef = useRef(false);
   const callbacks = useRef({ onChanged, onDeleted });
   callbacks.current = { onChanged, onDeleted };
@@ -409,22 +403,6 @@ export function SkillDetail({ core, skillId, initialSkill, onBack, onChanged, on
     }
   };
 
-  const confirmSetDefault = (version: SkillVersion) => runDialogAction(async () => {
-    const result = await setSkillDefaultVersion(core, skillId, version.version);
-    if (!mounted.current) return;
-    // This result is newer than any read still in flight.
-    request.current += 1;
-    abortRef.current?.abort();
-    setRefreshing(false);
-    setSkill(result.skill);
-    setStatus("ready");
-    setVersions({ ...initialVersions, status: "ready", items: result.versions, nextAfter: result.nextAfter });
-    callbacks.current.onChanged(result.skill);
-    setDialog(null);
-    setNotice(null);
-    toast.show(t("setDefault.done", { version: version.version }), { tone: "success" });
-  });
-
   const confirmDeleteVersion = (version: SkillVersion, only: boolean) => runDialogAction(async () => {
     await core.deleteSkillVersion(skillId, version.version);
     if (!mounted.current) return;
@@ -448,12 +426,6 @@ export function SkillDetail({ core, skillId, initialSkill, onBack, onChanged, on
     callbacks.current.onDeleted(skillId);
   });
 
-  const uploaded = (result: SkillUploadResult) => {
-    setDialog(null);
-    if (result.kind === "version") toast.show(t("upload.versionCreated", { version: result.version.version }), { tone: "success" });
-    void load();
-  };
-
   // A closing dialog keeps its content while the exit animation runs.
   const shown = dialog ?? lastDialog;
 
@@ -474,54 +446,14 @@ export function SkillDetail({ core, skillId, initialSkill, onBack, onChanged, on
         downloading={downloading}
         onBack={onBack}
         onRefresh={() => { setNotice(null); void load(); }}
-        onUploadVersion={() => { uploadKey.current += 1; openDialog({ kind: "upload", key: uploadKey.current }); }}
         onDownload={(version) => void download(version)}
         onDeleteSkill={() => openDialog({ kind: "delete-skill" })}
-        onSetDefault={(version) => openDialog({ kind: "set-default", version })}
+        onCopy={onCopy}
         onDeleteVersion={(version, state) => {
           if (state !== "blocked-default") openDialog({ kind: "delete-version", version, only: state === "only-version" });
         }}
         onLoadMoreVersions={() => void loadMoreVersions()}
       />
-      {skill && dialog?.kind === "upload" ? (
-        <SkillUploadDialog
-          key={dialog.key}
-          open
-          core={core}
-          target={{ kind: "version", skill }}
-          onClose={() => setDialog(null)}
-          onUploaded={uploaded}
-          onInterrupted={() => void load()}
-        />
-      ) : null}
-      <Modal
-        open={dialog?.kind === "set-default"}
-        title={shown?.kind === "set-default" ? t("setDefault.title", { version: shown.version.version }) : ""}
-        onClose={closeDialog}
-        footer={shown?.kind === "set-default" ? (
-          <>
-            {cancelButton}
-            <button className="button primary" type="button" disabled={dialogBusy} onClick={() => void confirmSetDefault(shown.version)}>
-              {dialogBusy ? t("setDefault.saving") : t("setDefault.confirm")}
-            </button>
-          </>
-        ) : null}
-      >
-        {shown?.kind === "set-default" && skill ? (
-          <>
-            <ul className="skill-confirm-list">
-              <li>{t("setDefault.newSessions", { version: shown.version.version })}</li>
-              <li>{t("setDefault.existingSessions")}</li>
-              <li>
-                {shown.version.name !== skill.name || shown.version.description !== skill.description
-                  ? t("setDefault.metadataChange", { version: shown.version.version, name: shown.version.name })
-                  : t("setDefault.metadata", { version: shown.version.version })}
-              </li>
-            </ul>
-            {dialogErrorNote}
-          </>
-        ) : null}
-      </Modal>
       <Modal
         open={dialog?.kind === "delete-version"}
         title={shown?.kind === "delete-version"

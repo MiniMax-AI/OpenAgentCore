@@ -1,6 +1,7 @@
-import type { AgentSession, AgentTurn, ListPage, PageOptions, SessionItem } from "@agents-core-web/agents-client";
+import type { AgentSession, AgentTurn, ListPage, OpenAIAgentsClient, PageOptions, Project, ProjectSummary, SessionItem } from "@agents-core-web/agents-client";
 
 import type { MetricsCoverage, MetricsWindow, SessionActivity } from "./agent-metrics";
+import { readProjectsSessions, type InProject, type ProjectReadFailure, type SessionLister } from "./project-sessions";
 
 export interface AgentMetricsSource {
   listTurns(sessionId: string, options?: PageOptions): Promise<ListPage<AgentTurn>>;
@@ -192,5 +193,70 @@ export async function loadAgentMetricsActivity(
       truncatedSessions: activities.filter((activity) => activity.truncated).length,
       itemFailedSessions,
     },
+  };
+}
+
+/** Most Sessions listed per project when looking for Sessions active in the range. */
+export const PROJECT_SESSION_LIST_CAP = 2_000;
+
+type ProjectReader = SessionLister & Pick<OpenAIAgentsClient, "listTurns" | "listItems">;
+
+/** Routes each Session's Turn and Item reads to the admin scope of its project. */
+export function projectMetricsSource(sessions: readonly InProject<AgentSession>[], clientFor: (project: Project) => AgentMetricsSource): AgentMetricsSource {
+  const owners = new Map(sessions.map((entry) => [entry.value.id, entry.project]));
+  const client = (sessionId: string) => {
+    const project = owners.get(sessionId);
+    if (!project) throw new Error(`Session ${sessionId} has no project.`);
+    return clientFor(project);
+  };
+  return {
+    listTurns: (sessionId, options) => client(sessionId).listTurns(sessionId, options),
+    listItems: (sessionId, options) => client(sessionId).listItems(sessionId, options),
+  };
+}
+
+/**
+ * Whether a project can own a Turn in the window, judged from its summary row:
+ * it was active since the window started or still has unfinished Sessions.
+ */
+export function projectMayHaveActivity(row: ProjectSummary | undefined, window: MetricsWindow): boolean {
+  if (!row) return true;
+  if (row.sessions.total === 0) return false;
+  return row.sessions.in_progress + row.sessions.requires_action > 0 || (row.last_active_at ?? Number.POSITIVE_INFINITY) >= window.start;
+}
+
+export interface ProjectAgentMetricsLoad extends AgentMetricsLoad {
+  /** Projects whose Session list was longer than the list cap. */
+  truncatedLists: Project[];
+  listFailures: ProjectReadFailure[];
+  /** Listed Sessions the client could not recognize; their Turns are not counted. */
+  unrecognizedSessions: number;
+}
+
+/**
+ * Lists the Sessions of the chosen projects (skipping projects the summary
+ * shows as inactive in the range), then reads the bounded Turn and Item
+ * history of the most recently active ones through each project's scope.
+ */
+export async function loadProjectAgentMetrics(
+  projects: readonly Project[],
+  window: MetricsWindow,
+  deps: { clientFor: (project: Project) => ProjectReader; summary: ProjectSummary[] | null },
+  signal: AbortSignal,
+  options: { includeTools: boolean; limits?: AgentMetricsLoadLimits; listCap?: number },
+): Promise<ProjectAgentMetricsLoad> {
+  const rows = deps.summary ? new Map(deps.summary.filter((row) => row.agent_id === null && !row.key).map((row) => [row.project_id, row])) : null;
+  const targets = projects.filter((project) => !rows || projectMayHaveActivity(rows.get(project.id), window));
+  const { reads, failures } = await readProjectsSessions(targets, deps.clientFor, () => ({ signal, maxSessions: options.listCap ?? PROJECT_SESSION_LIST_CAP }));
+  if (signal.aborted) throw new DOMException("The metrics load was aborted.", "AbortError");
+  const owned = reads.flatMap((read) => read.sessions.map((value) => ({ project: read.project, value })));
+  const owners = new Map(owned.map((entry) => [entry.value.id, entry.project.id]));
+  const load = await loadAgentMetricsActivity(projectMetricsSource(owned, deps.clientFor), owned.map((entry) => entry.value), window, signal, options);
+  return {
+    activities: load.activities.map((activity) => ({ ...activity, projectId: owners.get(activity.session.id) })),
+    coverage: load.coverage,
+    truncatedLists: reads.filter((read) => !read.complete).map((read) => read.project),
+    listFailures: failures,
+    unrecognizedSessions: reads.reduce((sum, read) => sum + read.unrecognized, 0),
   };
 }

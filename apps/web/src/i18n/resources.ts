@@ -11,10 +11,7 @@ import { app as enApp } from "./locales/en/app";
 import { sessions as enSessions } from "./locales/en/sessions";
 import { overview as enOverview } from "./locales/en/overview";
 import { metrics as enMetrics } from "./locales/en/metrics";
-import { resources as enResources } from "./locales/en/resources";
 import { skills as enSkills } from "./locales/en/skills";
-import { workbench as enWorkbench } from "./locales/en/workbench";
-import { ownership as enOwnership } from "./locales/en/ownership";
 import { keys as enKeys } from "./locales/en/keys";
 import { system as enSystem } from "./locales/en/system";
 import { common as zhCNCommon } from "./locales/zh-CN/common";
@@ -30,15 +27,10 @@ import { app as zhCNApp } from "./locales/zh-CN/app";
 import { sessions as zhCNSessions } from "./locales/zh-CN/sessions";
 import { overview as zhCNOverview } from "./locales/zh-CN/overview";
 import { metrics as zhCNMetrics } from "./locales/zh-CN/metrics";
-import { resources as zhCNResources } from "./locales/zh-CN/resources";
 import { skills as zhCNSkills } from "./locales/zh-CN/skills";
-import { workbench as zhCNWorkbench } from "./locales/zh-CN/workbench";
-import { ownership as zhCNOwnership } from "./locales/zh-CN/ownership";
 import { keys as zhCNKeys } from "./locales/zh-CN/keys";
 import { system as zhCNSystem } from "./locales/zh-CN/system";
-import { apiKeyChinese } from "../lib/api-key-strings";
 import { consoleAuthChinese } from "../lib/console-auth-strings";
-import { firstRunChinese } from "../lib/first-run-strings";
 import { chinese as zhCNSandbox } from "../lib/locale-strings";
 
 const enSandbox = Object.fromEntries(
@@ -47,8 +39,6 @@ const enSandbox = Object.fromEntries(
 
 const zhCNFirstRun = {
   ...consoleAuthChinese,
-  ...apiKeyChinese,
-  ...firstRunChinese,
 } as const;
 
 const enFirstRun = Object.fromEntries(
@@ -72,10 +62,7 @@ export const resources = {
     sessions: enSessions,
     overview: enOverview,
     metrics: enMetrics,
-    resources: enResources,
     skills: enSkills,
-    workbench: enWorkbench,
-    ownership: enOwnership,
     keys: enKeys,
     system: enSystem,
     sandbox: enSandbox,
@@ -95,10 +82,7 @@ export const resources = {
     sessions: zhCNSessions,
     overview: zhCNOverview,
     metrics: zhCNMetrics,
-    resources: zhCNResources,
     skills: zhCNSkills,
-    workbench: zhCNWorkbench,
-    ownership: zhCNOwnership,
     keys: zhCNKeys,
     system: zhCNSystem,
     sandbox: zhCNSandbox,

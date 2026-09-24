@@ -1,0 +1,306 @@
+/* Overview: four figures, then Session activity beside the fleet (Core and
+   its sandbox hosts), then usage by project and the Sessions that need
+   attention. Every card sits on the page canvas; colour only marks data
+   (indigo) or a problem. */
+
+.overview-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.metric-tile {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  padding: 16px 18px 18px;
+  animation: overview-rise 520ms var(--ease-settle) both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
+.metric-tile-label {
+  color: var(--fg-muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.metric-tile-value {
+  display: flex;
+  height: 36px;
+  align-items: center;
+  margin-top: 10px;
+  color: var(--fg);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 36px;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.metric-tile-sub {
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The service status reads like the other figures: a dot and a word. */
+.metric-tile-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  margin-right: 10px;
+  border-radius: 50%;
+  background: var(--fg-subtle);
+}
+
+.metric-tile-dot-ok { background: var(--success); }
+.metric-tile-dot-warning { background: var(--warning); }
+.metric-tile-dot-danger { background: var(--danger); }
+.metric-tile-dot-pending { background: var(--status-running); }
+
+/* Cards ------------------------------------------------------------------ */
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+.overview-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.overview-activity,
+.overview-fleet,
+.overview-table-card {
+  animation: overview-rise 560ms var(--ease-settle) both;
+  animation-delay: 280ms;
+}
+
+.overview-card-header {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px 6px;
+}
+
+.overview-card-header h2 {
+  margin: 0;
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.overview-card-meta {
+  margin-left: 6px;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  font-weight: 400;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-card-body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  padding: 4px 18px 16px;
+}
+
+.overview-card-note {
+  padding: 8px 18px 18px;
+}
+
+.overview-activity .ts-chart {
+  flex: 1;
+}
+
+/* Fleet: Core, then one row per host, on one grid so columns line up. */
+
+.fleet-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content 116px max-content max-content;
+  column-gap: 20px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.fleet-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  min-height: 40px;
+  align-items: center;
+  border-top: 1px solid var(--line-muted);
+}
+
+.fleet-row .numeric {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.fleet-head {
+  min-height: 30px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 500;
+  border-top: 0;
+}
+
+/* Core is the deployment itself, the hosts sit under it. */
+.fleet-core + .fleet-host {
+  border-top-color: var(--line);
+}
+
+.fleet-name {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fleet-slots {
+  display: grid;
+  grid-template-columns: 56px auto;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.fleet-slots .meter {
+  min-width: 0;
+  height: 5px;
+}
+
+.fleet-unreported,
+.fleet-muted {
+  color: var(--fg-muted);
+}
+
+.fleet-list-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+.fleet-list-footer p {
+  margin: 0;
+}
+
+.fleet-list-footer p[role="alert"] {
+  color: var(--danger);
+}
+
+/* Tables inside cards ----------------------------------------------------- */
+
+.overview-table-scroll {
+  min-width: 0;
+  margin: 0 18px 16px;
+  overflow-x: auto;
+}
+
+.overview-table-card .data-table thead th {
+  background: transparent;
+}
+
+/* Inside a card, table text starts where the card title starts. */
+.overview-table-card .data-table thead tr:first-child > :first-child,
+.overview-table-card .data-table tbody tr > :first-child {
+  padding-left: 0;
+}
+
+.overview-table-card .data-table thead tr:first-child > :last-child,
+.overview-table-card .data-table tbody tr > :last-child {
+  padding-right: 0;
+}
+
+.overview-table-card .console-empty {
+  padding: 22px 16px;
+}
+
+/* Grouped headers: "Assets" and "Sessions" span their columns. */
+.overview-projects-table thead th {
+  height: 30px;
+}
+
+.overview-projects-table .data-table-groups th {
+  border-bottom-color: var(--line-muted);
+}
+
+.overview-projects-table .column-group {
+  text-align: center;
+}
+
+.overview-projects-table .column-group,
+.overview-projects-table .column-group-start {
+  box-shadow: inset 1px 0 var(--line-muted);
+}
+
+.overview-projects-table tbody th[scope="row"] {
+  min-width: 150px;
+}
+
+.overview-project-state {
+  margin-left: 8px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.overview-projects-table .table-link {
+  display: inline-flex;
+}
+
+@keyframes overview-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 1180px) {
+  .overview-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .overview-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .metric-tile,
+  .overview-activity,
+  .overview-fleet,
+  .overview-table-card {
+    animation: none;
+  }
+}
+
+.detail-note {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  line-height: 18px;
+}

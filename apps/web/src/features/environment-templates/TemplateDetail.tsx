@@ -1,4 +1,4 @@
-import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Copy, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -11,8 +11,8 @@ import type {
 
 import { PageBody, PageHeader, RefreshButton, Section, StatusDot } from "../../components/console-ui";
 import { formatBytes, formatDateTime, MISSING } from "../../lib/format";
-import { CopyableId, CopyIdButton } from "../files/CopyableId";
-import { templateName } from "./template-editor";
+import { CopyableId, CopyIdButton } from "../../components/list-ui";
+import { templateName } from "./template-name";
 
 export interface TemplateLinks {
   /** Opens the Files page for a referenced File ID. */
@@ -28,8 +28,11 @@ export interface TemplateDetailPageProps extends TemplateLinks {
   notice?: ReactNode;
   onBack: () => void;
   onRefresh: () => void;
-  onEdit: () => void;
   onDelete: () => void;
+  /** Copies the Template into another project; absent while unavailable. */
+  onCopy?: () => void;
+  /** Extra facts shown first, such as the owning project and creator. */
+  facts?: ReactNode;
 }
 
 const sectionKeys: Record<EnvironmentTemplateSection, string> = {
@@ -128,9 +131,10 @@ function SkillRow({ skill, onOpenSkill }: { skill: EnvironmentTemplateSkill } & 
 
 /** One Template with every safe configuration section Core returns. */
 export function TemplateDetailPage({
-  template, blocked, refreshing, notice, onBack, onRefresh, onEdit, onDelete, onOpenFile, onOpenSkill,
+  template, blocked, refreshing, notice, onBack, onRefresh, onDelete, onCopy, facts, onOpenFile, onOpenSkill,
 }: TemplateDetailPageProps) {
   const { t, i18n } = useTranslation("templates");
+  const { t: tCommon } = useTranslation();
   const locale = i18n.resolvedLanguage;
   const name = templateName(template);
   const unrecognized = unrecognizedLabels(template, t as never);
@@ -152,9 +156,11 @@ export function TemplateDetailPage({
         actions={(
           <>
             <RefreshButton onClick={onRefresh} refreshing={refreshing} disabled={blocked && !refreshing} />
-            <button className="button outline" type="button" disabled={blocked} aria-label={t("editLabel", { name })} onClick={onEdit}>
-              <Pencil size={14} aria-hidden="true" />{t("edit")}
-            </button>
+            {onCopy ? (
+              <button className="button outline" type="button" disabled={blocked} onClick={onCopy}>
+                <Copy size={14} aria-hidden="true" />{tCommon("copy.action")}
+              </button>
+            ) : null}
             <button className="button danger" type="button" disabled={blocked} aria-label={t("deleteLabel", { name })} onClick={onDelete}>
               <Trash2 size={14} aria-hidden="true" />{t("delete")}
             </button>
@@ -168,6 +174,7 @@ export function TemplateDetailPage({
         ) : null}
         <dl className="template-facts" aria-label={t("detail.facts")}>
           <div><dt>{t("detail.id")}</dt><dd><CopyableId id={template.id} /></dd></div>
+          {facts}
           <div><dt>{t("detail.created")}</dt><dd>{formatDateTime(template.created_at, locale)}</dd></div>
           <div><dt>{t("detail.updated")}</dt><dd>{formatDateTime(template.updated_at, locale)}</dd></div>
           <div>

@@ -1,14 +1,145 @@
+import type { Skill } from "@agents-core-web/agents-client";
+import { Puzzle } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { PageBody, PageHeader } from "../../components/console-ui";
+import { EmptyState, PageBody, PageHeader, RefreshButton } from "../../components/console-ui";
+import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
+import { useConsoleNavigation } from "../../lib/console-navigation";
+import { formatDateTime, MISSING } from "../../lib/format";
+import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, readAllPages, useCreators, useProjectCollection, useProjects } from "../../lib/projects";
+import { CopyDialog, type CopySource } from "../copy/CopyDialog";
+import { SkillDetail } from "./SkillDetail";
+import { LatestVersion } from "./skill-parts";
+import { filterSkills } from "./skill-operations";
+import "./skills.css";
 
-/** Placeholder until this page moves to the Web API. */
+/**
+ * Resources › Skills: every project's Skills. The console views, downloads,
+ * deletes and copies them; uploads and default-version changes belong to the
+ * project's own keys.
+ */
 export function SkillsPage() {
-  const { t } = useTranslation("navigation");
+  const { params, navigate } = useConsoleNavigation();
+  const { byId } = useProjects();
+  const project = params.project ? byId.get(params.project) : undefined;
+  const [copy, setCopy] = useState<CopySource | null>(null);
+
+  if (params.project && params.id) {
+    return (
+      <>
+        <SkillDetail
+          key={`${params.project}:${params.id}`}
+          core={projectClient(params.project)}
+          skillId={params.id}
+          initialSkill={null}
+          onBack={() => navigate("skills", { project: params.project })}
+          onChanged={() => undefined}
+          onDeleted={() => { forgetCreators(); navigate("skills", { project: params.project }); }}
+          onCopy={project ? (skill) => setCopy({ type: "skill", id: skill.id, name: skill.name, project }) : undefined}
+        />
+        <CopyDialog source={copy} onClose={() => setCopy(null)} />
+      </>
+    );
+  }
+  return <SkillsList />;
+}
+
+function SkillsList() {
+  const { t, i18n } = useTranslation("skills");
+  const { t: tCommon } = useTranslation();
+  const locale = i18n.resolvedLanguage;
+  const { params, navigate } = useConsoleNavigation();
+  const { byId } = useProjects();
+  const [filter, setFilter] = useState(params.project ?? "");
+  const [query, setQuery] = useState("");
+  const [copy, setCopy] = useState<CopySource | null>(null);
+  const collection = useProjectCollection<Skill>(filter, (client, signal) => readAllPages((after) => client.listSkills({ after, limit: 100, signal })));
+  const rows = useMemo(() => {
+    const visible = new Set(filterSkills(collection.items.map((row) => row.value), query));
+    return collection.items.filter((row) => visible.has(row.value)).sort((a, b) => b.value.created_at - a.value.created_at);
+  }, [collection.items, query]);
+  const creators = useCreators("skill", useMemo(() => collection.items.map((row) => ({ projectId: row.project.id, id: row.value.id })), [collection.items]));
+  const refresh = useCallback(() => { forgetCreators(); collection.refresh(); }, [collection]);
+  const showProject = !filter;
+
+  let body;
+  if (collection.status === "loading" && !collection.items.length) {
+    body = <p className="page-status" role="status">{t("list.loading")}</p>;
+  } else if (!collection.items.length && !collection.failures.length) {
+    body = <EmptyState icon={Puzzle} title={t("empty.title")} />;
+  } else {
+    body = (
+      <>
+        <ListToolbar label={t("list.filterLabel")} summary={listSummary(tCommon, rows.length, collection.items.length, { locale })}>
+          <ProjectFilter value={filter} onChange={setFilter} />
+          <SearchField value={query} onChange={setQuery} placeholder={t("list.filterPlaceholder")} label={t("list.filterLabel")} />
+        </ListToolbar>
+        {collection.failures.length ? (
+          <p className="list-failures" role="alert">{tCommon("project.partial", { names: collection.failures.map((failure) => failure.project.name).join(", ") })}</p>
+        ) : null}
+        {rows.length ? (
+          <div className="table-frame">
+            <table className="data-table skills-table" aria-label={t("list.label")}>
+              <thead>
+                <tr>
+                  <th scope="col">{t("list.name")}</th>
+                  {showProject ? <th scope="col">{tCommon("project.column")}</th> : null}
+                  <th scope="col">{t("list.description")}</th>
+                  <th scope="col">{t("list.defaultVersion")}</th>
+                  <th scope="col">{t("list.latestVersion")}</th>
+                  <th scope="col">{t("list.created")}</th>
+                  <th scope="col"><CreatorHeading /></th>
+                  <th scope="col"><span className="visually-hidden">{tCommon("list.actions")}</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const skill = row.value;
+                  const open = () => navigate("skills", { project: row.project.id, id: skill.id });
+                  return (
+                    <tr key={`${row.project.id}:${skill.id}`} className="clickable-row" onClick={open}>
+                      <th scope="row"><NameCell name={skill.name} id={skill.id} onOpen={open} openLabel={t("actions.open", { name: skill.name })} /></th>
+                      {showProject ? <td><ProjectName project={byId.get(row.project.id) ?? row.project} /></td> : null}
+                      <td><span className="skill-description" title={skill.description}>{skill.description || MISSING}</span></td>
+                      <td className="skill-nowrap">{t("version", { version: skill.default_version })}</td>
+                      <td className="skill-nowrap"><LatestVersion skill={skill} /></td>
+                      <td className="skill-nowrap">{formatDateTime(skill.created_at, locale)}</td>
+                      <td><CreatorCell creator={creators.creatorOf(row.project.id, skill.id)} /></td>
+                      <td className="actions-cell" onClick={(event) => event.stopPropagation()}>
+                        <RowActions>
+                          <button className="text-action" type="button" aria-label={tCommon("copy.actionLabel", { name: skill.name })} onClick={() => setCopy({ type: "skill", id: skill.id, name: skill.name, project: row.project })}>
+                            {tCommon("copy.action")}
+                          </button>
+                        </RowActions>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState
+            title={t("list.noMatchTitle")}
+            description={tCommon("list.noMatchesDescription")}
+            action={<button className="button outline" type="button" onClick={() => setQuery("")}>{tCommon("actions.clearSearch")}</button>}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
-    <section className="page-section console-page" aria-labelledby="page-heading">
-      <PageHeader headingId="page-heading" title={t("views.skills")} />
-      <PageBody><p className="page-status">…</p></PageBody>
+    <section className="page-section console-page skills-page" aria-labelledby="skills-heading">
+      <PageHeader
+        headingId="skills-heading"
+        title={t("title")}
+        help={t("help")}
+        actions={<RefreshButton onClick={refresh} refreshing={collection.status === "loading"} label={t("actions.refresh")} />}
+      />
+      <PageBody>{body}</PageBody>
+      <CopyDialog source={copy} onClose={() => setCopy(null)} />
     </section>
   );
 }

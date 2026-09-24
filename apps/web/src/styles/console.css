@@ -880,6 +880,37 @@ html[data-theme="dark"] .agent-preview-block pre {
   gap: 4px;
 }
 
+/* Key spaces: the API key a row belongs to. */
+.space-name {
+  white-space: nowrap;
+}
+
+.space-disabled {
+  color: var(--fg-muted);
+}
+
+.confirm-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.confirm-dialog-body p {
+  margin: 0;
+}
+
+.confirm-dialog-error {
+  color: var(--danger);
+}
+
+.list-failures {
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+}
+
 /* Row actions sit at the end of the row with even spacing. */
 .data-table .actions-cell {
   width: 1%;

@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { changeConsoleAuth, parseConsoleAuth, readConsoleAuth } from "./auth";
-import { parseProgress, progressKey } from "./progress";
 
 afterEach(() => vi.unstubAllGlobals());
 describe("console authentication boundary", () => {
@@ -24,12 +23,5 @@ describe("console authentication boundary", () => {
     vi.stubGlobal("fetch", fetcher);
     await changeConsoleAuth("login", { username: "admin", password: "private" });
     expect(fetcher.mock.calls[0]).toEqual(["/console/auth/login", expect.objectContaining({ method: "POST", credentials: "same-origin", body: '{"username":"admin","password":"private"}' })]);
-  });
-});
-describe("introduction progress", () => {
-  it("stores only a finite step and dismissal, namespaced by console and administrator", () => {
-    expect(parseProgress('{"step":2,"dismissed":true,"key":"never-return"}')).toEqual({ step: 2, dismissed: true });
-    for (const value of ["bad", '{"step":9,"dismissed":true}', "null"]) expect(parseProgress(value)).toEqual({ step: 0, dismissed: false });
-    expect(progressKey("https://one", "admin")).not.toBe(progressKey("https://two", "admin"));
   });
 });

@@ -2,12 +2,12 @@
  * Management-plane client for the Web console (`/core/v1/admin/**`).
  *
  * The console is an administration tool, not an Agents API caller: it never
- * calls `/v1`. Each API key owns one isolated asset space (Core models it as a
- * user with a tenant). Reads of a space's resources return objects that are
- * byte-identical to the public `/v1` responses, so `scopeClient()` reuses the
- * public client's strict projections and only rewrites paths. Only GET and
- * DELETE are admitted through a scope: the console views, deletes and copies
- * assets but never creates or edits them on a caller's behalf.
+ * calls `/v1`. A project owns an isolated set of assets (a Core tenant) shared
+ * by all of its named API keys. Reads of a project's resources return objects
+ * that are byte-identical to the public `/v1` responses, so `scopeClient()`
+ * reuses the public client's strict projections and only rewrites paths. Only
+ * GET and DELETE are admitted through a scope: the console views, deletes and
+ * copies assets but never creates or edits them on a caller's behalf.
  */
 import {
   AgentCoreError,
@@ -24,12 +24,13 @@ export interface AdminClientOptions {
   fetch?: typeof fetch;
 }
 
-export type KeySpaceStatus = "active" | "disabled";
+export type ProjectStatus = "active" | "archived";
+export type ProjectSource = "console" | "config";
 
-/** One issued key of a space. The plaintext is never listed. */
+/** One named API key of a project. The plaintext is never listed. */
 export interface AdminKey {
   id: string;
-  name: string | null;
+  name: string;
   prefix: string;
   /** Unix seconds. */
   created_at: number;
@@ -41,19 +42,20 @@ export interface AdminIssuedKey extends AdminKey {
   key: string;
 }
 
-/** An isolated asset space reached with one API key (Core's `api_users`). */
-export interface KeySpace {
+/** The unit of asset ownership: a Core tenant shared by all of its keys. */
+export interface Project {
   id: string;
-  /** The space's name; also the name shown for its key. Immutable. */
-  username: string;
-  status: KeySpaceStatus;
+  name: string;
+  /** `config` projects come from the static key file and cannot be renamed or archived here. */
+  source: ProjectSource;
+  status: ProjectStatus;
   created_at: number;
-  disabled_at: number | null;
-  /** Unrevoked keys. Usually one; two while a rotation is in progress. */
-  active_keys: AdminKey[];
+  archived_at: number | null;
+  active_key_count: number;
 }
 
-export interface WriteOperationKey {
+/** The key recorded by #87 for a write; also the "creator" of a resource. */
+export interface KeyRef {
   id: string;
   name: string | null;
   prefix: string | null;
@@ -65,7 +67,7 @@ export interface WriteOperation {
   id: string;
   created_at: number;
   /** null: an administrator copy or an unrecorded origin. */
-  api_key: WriteOperationKey | null;
+  api_key: KeyRef | null;
   action: string;
   resource_type: string;
   resource_id: string;
@@ -92,16 +94,19 @@ export interface WriteOperationQuery {
   signal?: AbortSignal;
 }
 
+export const ownerResourceTypes = ["agent", "session", "environment", "environment_template", "skill", "skill_version", "file", "vault", "credential", "artifact"] as const;
+export type OwnerResourceType = (typeof ownerResourceTypes)[number];
+
 export const copyableResourceTypes = ["agent", "skill", "environment_template", "file", "vault", "credential"] as const;
 export type CopyableResourceType = (typeof copyableResourceTypes)[number];
 
 export interface CopyRequest {
-  source_user_id: string;
-  target_user_id: string;
+  source_project_id: string;
+  target_project_id: string;
   resource_type: CopyableResourceType;
   resource_id: string;
   include_dependencies: boolean;
-  /** Required when copying a single Credential: the target space's Vault. */
+  /** Required when copying a single Credential: the target project's Vault. */
   target_vault_id?: string;
 }
 
@@ -118,11 +123,13 @@ export interface SpaceUsage {
   reasoning_tokens: number;
 }
 
-/** One row of `/summary`: a space, or one Agent of a space with `group_by=agent`. */
-export interface SpaceSummary {
-  user_id: string;
+/** One row of `/summary`: a project (default), one Agent (`group_by=agent`) or one creating key (`group_by=key`). */
+export interface ProjectSummary {
+  project_id: string;
   agent_id: string | null;
-  /** Asset counts; null for Agent rows. */
+  /** Key rows only: the creating key, or null when Sessions have no provenance ("unknown"). */
+  key: KeyRef | null;
+  /** Asset counts; null for Agent and key rows. */
   assets: { agents: number; skills: number; environment_templates: number; files: number; vaults: number } | null;
   sessions: { total: number; idle: number; in_progress: number; requires_action: number; failed: number };
   /** Sum over Sessions that reported usage; null when none did. */
@@ -135,18 +142,23 @@ export interface SpaceSummary {
 export interface SummaryQuery {
   created_after?: number;
   created_before?: number;
-  group_by?: "agent";
-  user_id?: string;
+  group_by?: "project" | "agent" | "key";
+  project_id?: string;
   signal?: AbortSignal;
 }
 
-export type OwnedRuntimeObservation = RuntimeObservation & { user_id: string };
+export type OwnedRuntimeObservation = RuntimeObservation & { project_id: string };
 
 const idPattern = /^[A-Za-z0-9_.:-]{1,128}$/;
-const usernamePattern = /^[a-z0-9._-]{1,64}$/;
 
-export function isKeySpaceName(value: string): boolean {
-  return usernamePattern.test(value);
+export function isProjectName(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed === value && trimmed.length >= 1 && [...trimmed].length <= 128 && !/[\u0000-\u001f]/.test(trimmed);
+}
+
+export function isKeyName(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed === value && trimmed.length >= 1 && [...trimmed].length <= 80 && !/[\u0000-\u001f]/.test(trimmed);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -179,28 +191,28 @@ function optionalText(value: unknown, max: number): string | null | undefined {
 
 export function projectAdminKey(value: unknown): AdminKey {
   if (!isRecord(value) || typeof value.id !== "string" || !idPattern.test(value.id)) invalid("Core returned an invalid API key.");
-  const name = optionalText(value.name, 80);
   const created = seconds(value.created_at);
   const revoked = seconds(value.revoked_at);
-  if (typeof value.prefix !== "string" || !value.prefix || value.prefix.length > 32 || name === undefined || created == null || revoked === undefined) {
+  if (typeof value.name !== "string" || !value.name || [...value.name].length > 80 || typeof value.prefix !== "string" || !value.prefix || value.prefix.length > 32 || created == null || revoked === undefined) {
     invalid("Core returned an invalid API key.");
   }
-  return { id: value.id, name, prefix: value.prefix, created_at: created, revoked_at: revoked };
+  return { id: value.id, name: value.name, prefix: value.prefix, created_at: created, revoked_at: revoked };
 }
 
-export function projectKeySpace(value: unknown): KeySpace {
-  if (!isRecord(value) || typeof value.id !== "string" || !idPattern.test(value.id)) invalid("Core returned an invalid key space.");
-  if (typeof value.username !== "string" || !isKeySpaceName(value.username)) invalid("Core returned an invalid key space name.");
+export function projectProject(value: unknown): Project {
+  if (!isRecord(value) || typeof value.id !== "string" || !idPattern.test(value.id)) invalid("Core returned an invalid project.");
+  if (typeof value.name !== "string" || !value.name.trim() || [...value.name].length > 128) invalid("Core returned an invalid project name.");
   const created = seconds(value.created_at);
-  const disabled = seconds(value.disabled_at);
-  if (created == null || disabled === undefined) invalid("Core returned an invalid key space.");
-  const status: KeySpaceStatus = value.status === "disabled" || disabled !== null ? "disabled" : "active";
-  if (value.status !== undefined && value.status !== "active" && value.status !== "disabled") invalid("Core returned an invalid key space status.");
-  const keys = value.active_keys === undefined ? [] : Array.isArray(value.active_keys) ? value.active_keys.map(projectAdminKey) : invalid("Core returned invalid active keys.");
-  return { id: value.id, username: value.username, status, created_at: created, disabled_at: disabled, active_keys: keys };
+  const archived = seconds(value.archived_at);
+  const keys = count(value.active_key_count);
+  if (created == null || archived === undefined || keys === undefined) invalid("Core returned an invalid project.");
+  if (value.source !== "console" && value.source !== "config") invalid("Core returned an invalid project source.");
+  if (value.status !== undefined && value.status !== "active" && value.status !== "archived") invalid("Core returned an invalid project status.");
+  const status: ProjectStatus = value.status === "archived" || archived !== null ? "archived" : "active";
+  return { id: value.id, name: value.name, source: value.source, status, created_at: created, archived_at: archived, active_key_count: keys };
 }
 
-function projectOperationKey(value: unknown): WriteOperationKey | null {
+function projectOperationKey(value: unknown): KeyRef | null {
   if (value === null) return null;
   if (!isRecord(value) || typeof value.id !== "string" || !value.id || value.id.length > 128) return invalid("Core returned an invalid write operation key.");
   const kind = value.kind === "issued" || value.kind === "static" || value.kind === "console" ? value.kind : invalid("Core returned an invalid key kind.");
@@ -248,12 +260,12 @@ function projectUsage(value: unknown): SpaceUsage | null {
   return usage;
 }
 
-export function projectSummary(value: unknown): SpaceSummary[] {
+export function projectSummary(value: unknown): ProjectSummary[] {
   if (!isRecord(value) || !Array.isArray(value.data)) invalid("Core returned an invalid summary.");
-  return value.data.map((entry): SpaceSummary => {
-    if (!isRecord(entry) || typeof entry.user_id !== "string" || !idPattern.test(entry.user_id)) invalid("Core returned an invalid summary row.");
+  return value.data.map((entry): ProjectSummary => {
+    if (!isRecord(entry) || typeof entry.project_id !== "string" || !idPattern.test(entry.project_id)) invalid("Core returned an invalid summary row.");
     const agentId = entry.agent_id === undefined || entry.agent_id === null ? null : typeof entry.agent_id === "string" && idPattern.test(entry.agent_id) ? entry.agent_id : invalid("Core returned an invalid summary row.");
-    let assets: SpaceSummary["assets"] = null;
+    let assets: ProjectSummary["assets"] = null;
     if (entry.assets !== undefined && entry.assets !== null) {
       if (!isRecord(entry.assets)) invalid("Core returned invalid asset counts.");
       const read = (field: string) => count((entry.assets as Record<string, unknown>)[field]) ?? invalid("Core returned invalid asset counts.");
@@ -268,8 +280,9 @@ export function projectSummary(value: unknown): SpaceSummary[] {
     const reported = count(coverage.reported);
     if (lastActive === undefined || covered === undefined || reported === undefined || reported > covered) invalid("Core returned an invalid summary row.");
     return {
-      user_id: entry.user_id,
+      project_id: entry.project_id,
       agent_id: agentId,
+      key: entry.key === undefined ? null : projectOperationKey(entry.key),
       assets,
       sessions: { total: sessionCount("total"), idle: sessionCount("idle"), in_progress: sessionCount("in_progress"), requires_action: sessionCount("requires_action"), failed: sessionCount("failed") },
       usage: projectUsage(entry.usage),
@@ -305,6 +318,23 @@ export function adminScopePath(path: string): string | null {
   return null;
 }
 
+/** #87 batch ownership for one project: resource ID → creating key (null: unknown). */
+export function projectResourceOwners(value: unknown, requested: readonly string[]): Map<string, KeyRef | null> {
+  if (!isRecord(value) || !Array.isArray(value.data)) invalid("Core returned an invalid ownership list.");
+  const wanted = new Set(requested);
+  const owners = new Map<string, KeyRef | null>();
+  for (const entry of value.data) {
+    if (!isRecord(entry) || typeof entry.resource_id !== "string" || !wanted.has(entry.resource_id)) continue;
+    try {
+      owners.set(entry.resource_id, projectOperationKey(entry.api_key ?? null));
+    } catch {
+      // One malformed owner stays unknown; the others still show.
+      owners.set(entry.resource_id, null);
+    }
+  }
+  return owners;
+}
+
 function scopedFetch(scopeBase: string, inner: typeof fetch): typeof fetch {
   return async (input, init) => {
     const raw = typeof input === "string" ? input : input instanceof URL ? input.pathname + input.search : input.url;
@@ -324,7 +354,7 @@ function scopedFetch(scopeBase: string, inner: typeof fetch): typeof fetch {
   };
 }
 
-const SCOPE_MARKER = "/__key_space__";
+const SCOPE_MARKER = "/__project_scope__";
 
 export class AdminClient {
   private readonly baseUrl: string;
@@ -335,10 +365,10 @@ export class AdminClient {
     this.fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
   }
 
-  /** A read/delete client over one key space, reusing the public projections. */
-  scopeClient(userId: string): OpenAIAgentsClient {
-    if (!idPattern.test(userId)) throw new TypeError("A key space ID is required.");
-    return new OpenAIAgentsClient({ baseUrl: SCOPE_MARKER, fetch: scopedFetch(`${this.baseUrl}/users/${encodeURIComponent(userId)}`, this.fetchImpl) });
+  /** A read/delete client over one project, reusing the public projections. */
+  scopeClient(projectId: string): OpenAIAgentsClient {
+    if (!idPattern.test(projectId)) throw new TypeError("A project ID is required.");
+    return new OpenAIAgentsClient({ baseUrl: SCOPE_MARKER, fetch: scopedFetch(`${this.baseUrl}/projects/${encodeURIComponent(projectId)}`, this.fetchImpl) });
   }
 
   private async request(path: string, init: RequestInit = {}, expected?: number): Promise<unknown> {
@@ -359,73 +389,93 @@ export class AdminClient {
     return response.json();
   }
 
-  async listKeySpaces(options: { signal?: AbortSignal } = {}): Promise<KeySpace[]> {
-    const spaces: KeySpace[] = [];
+  async listProjects(options: { signal?: AbortSignal } = {}): Promise<Project[]> {
+    const projects: Project[] = [];
     let after: string | null = null;
-    // Bounded walk: a deployment has a handful of spaces; stop at 10,000.
+    // Bounded walk: a deployment has a handful of projects; stop at 10,000.
     for (let page = 0; page < 100; page += 1) {
       const query: string = after ? `?limit=100&after=${encodeURIComponent(after)}` : "?limit=100";
-      const value = await this.request(`/users${query}`, { signal: options.signal });
-      if (!isRecord(value) || !Array.isArray(value.data)) invalid("Core returned an invalid key space list.");
-      spaces.push(...value.data.map(projectKeySpace));
-      const last = typeof value.last_id === "string" && value.last_id ? value.last_id : spaces.at(-1)?.id ?? null;
-      if (value.has_more !== true || !last) return spaces;
+      const value = await this.request(`/projects${query}`, { signal: options.signal });
+      if (!isRecord(value) || !Array.isArray(value.data)) invalid("Core returned an invalid project list.");
+      projects.push(...value.data.map(projectProject));
+      const last = typeof value.last_id === "string" && value.last_id ? value.last_id : projects.at(-1)?.id ?? null;
+      if (value.has_more !== true || !last) return projects;
       after = last;
     }
-    return spaces;
+    return projects;
   }
 
-  async createKeySpace(username: string, options: { signal?: AbortSignal } = {}): Promise<KeySpace> {
-    if (!isKeySpaceName(username)) throw new TypeError("Names use 1–64 characters from a–z, 0–9, dot, underscore and hyphen.");
-    return projectKeySpace(await this.request("/users", { method: "POST", body: JSON.stringify({ username }), signal: options.signal }));
+  async createProject(name: string, options: { signal?: AbortSignal } = {}): Promise<Project> {
+    if (!isProjectName(name)) throw new TypeError("A project name has 1–128 characters without leading or trailing spaces.");
+    return projectProject(await this.request("/projects", { method: "POST", body: JSON.stringify({ name }), signal: options.signal }));
   }
 
-  async disableKeySpace(userId: string, options: { signal?: AbortSignal } = {}): Promise<KeySpace> {
-    return projectKeySpace(await this.request(`/users/${encodeURIComponent(userId)}/disable`, { method: "POST", signal: options.signal }));
+  async renameProject(projectId: string, name: string, options: { signal?: AbortSignal } = {}): Promise<Project> {
+    if (!isProjectName(name)) throw new TypeError("A project name has 1–128 characters without leading or trailing spaces.");
+    return projectProject(await this.request(`/projects/${encodeURIComponent(projectId)}`, { method: "POST", body: JSON.stringify({ name }), signal: options.signal }));
   }
 
-  async listKeys(userId: string, options: { signal?: AbortSignal } = {}): Promise<AdminKey[]> {
-    const value = await this.request(`/users/${encodeURIComponent(userId)}/keys`, { signal: options.signal });
+  /** Revokes every key of the project; its assets stay viewable and copyable. */
+  async archiveProject(projectId: string, options: { signal?: AbortSignal } = {}): Promise<Project> {
+    return projectProject(await this.request(`/projects/${encodeURIComponent(projectId)}/archive`, { method: "POST", signal: options.signal }));
+  }
+
+  async listKeys(projectId: string, options: { signal?: AbortSignal } = {}): Promise<AdminKey[]> {
+    const value = await this.request(`/projects/${encodeURIComponent(projectId)}/keys`, { signal: options.signal });
     if (!isRecord(value) || !Array.isArray(value.data)) invalid("Core returned an invalid key list.");
     return value.data.map(projectAdminKey);
   }
 
-  /** Issues a key; the plaintext is in this response only and must not be stored. */
-  async issueKey(userId: string, options: { name?: string; signal?: AbortSignal } = {}): Promise<AdminIssuedKey> {
-    const value = await this.request(`/users/${encodeURIComponent(userId)}/keys`, { method: "POST", body: JSON.stringify(options.name ? { name: options.name } : {}), signal: options.signal });
+  /** Issues a named key; the plaintext is in this response only and must not be stored. */
+  async issueKey(projectId: string, options: { name: string; signal?: AbortSignal }): Promise<AdminIssuedKey> {
+    if (!isKeyName(options.name)) throw new TypeError("A key name has 1–80 characters without leading or trailing spaces.");
+    const value = await this.request(`/projects/${encodeURIComponent(projectId)}/keys`, { method: "POST", body: JSON.stringify({ name: options.name }), signal: options.signal });
     const key = projectAdminKey(value);
     const secret = isRecord(value) ? value.key : undefined;
     if (typeof secret !== "string" || secret.length < 20 || secret.length > 256 || /\s/.test(secret)) invalid("Core returned an invalid issued key.");
     return { ...key, key: secret };
   }
 
-  async revokeKey(userId: string, keyId: string, options: { signal?: AbortSignal } = {}): Promise<void> {
-    await this.request(`/users/${encodeURIComponent(userId)}/keys/${encodeURIComponent(keyId)}`, { method: "DELETE", signal: options.signal });
+  async revokeKey(projectId: string, keyId: string, options: { signal?: AbortSignal } = {}): Promise<void> {
+    await this.request(`/projects/${encodeURIComponent(projectId)}/keys/${encodeURIComponent(keyId)}`, { method: "DELETE", signal: options.signal });
   }
 
-  async listWriteOperations(userId: string, query: WriteOperationQuery = {}): Promise<WriteOperationPage> {
+  /** Creating keys of up to any number of resources, in batches of 100 IDs. */
+  async listResourceOwners(projectId: string, resourceType: OwnerResourceType, ids: readonly string[], options: { signal?: AbortSignal } = {}): Promise<Map<string, KeyRef | null>> {
+    const unique = [...new Set(ids)].filter((id) => idPattern.test(id));
+    const owners = new Map<string, KeyRef | null>();
+    for (let start = 0; start < unique.length; start += 100) {
+      const batch = unique.slice(start, start + 100);
+      const params = new URLSearchParams({ resource_type: resourceType, resource_ids: batch.join(",") });
+      const value = await this.request(`/projects/${encodeURIComponent(projectId)}/resource-owners?${params}`, { signal: options.signal });
+      for (const [id, owner] of projectResourceOwners(value, batch)) owners.set(id, owner);
+    }
+    return owners;
+  }
+
+  async listWriteOperations(projectId: string, query: WriteOperationQuery = {}): Promise<WriteOperationPage> {
     const params = new URLSearchParams();
     for (const field of ["key_id", "resource_type", "resource_id", "created_after", "created_before", "after"] as const) {
       const value = query[field];
       if (value) params.set(field, value);
     }
     params.set("limit", String(query.limit ?? 50));
-    return projectWriteOperationPage(await this.request(`/users/${encodeURIComponent(userId)}/write-operations?${params}`, { signal: query.signal }));
+    return projectWriteOperationPage(await this.request(`/projects/${encodeURIComponent(projectId)}/write-operations?${params}`, { signal: query.signal }));
   }
 
-  async summary(query: SummaryQuery = {}): Promise<SpaceSummary[]> {
+  async summary(query: SummaryQuery = {}): Promise<ProjectSummary[]> {
     const params = new URLSearchParams();
     if (query.created_after !== undefined) params.set("created_after", new Date(query.created_after * 1000).toISOString());
     if (query.created_before !== undefined) params.set("created_before", new Date(query.created_before * 1000).toISOString());
     if (query.group_by) params.set("group_by", query.group_by);
-    if (query.user_id) params.set("user_id", query.user_id);
+    if (query.project_id) params.set("project_id", query.project_id);
     const suffix = params.toString() ? `?${params}` : "";
     return projectSummary(await this.request(`/summary${suffix}`, { signal: query.signal }));
   }
 
-  /** Copies an asset (optionally with its dependencies) into another space as independent copies. */
+  /** Copies an asset (optionally with its dependencies) into another project as independent copies. */
   async copy(input: CopyRequest, options: { idempotencyKey: string; signal?: AbortSignal }): Promise<CopyResult> {
-    if (input.source_user_id === input.target_user_id) throw new TypeError("Choose a different target space.");
+    if (input.source_project_id === input.target_project_id) throw new TypeError("Choose a different target project.");
     return projectCopyResult(await this.request("/copies", {
       method: "POST",
       body: JSON.stringify(input),
@@ -434,14 +484,14 @@ export class AdminClient {
     }));
   }
 
-  /** Runtime snapshots of every space, each labelled with its space. */
+  /** Runtime snapshots of every project, each labelled with its project. */
   async listRuntimeObservations(options: { signal?: AbortSignal } = {}): Promise<OwnedRuntimeObservation[]> {
     const value = await this.request("/runtime-observations?limit=1000", { signal: options.signal });
     if (!isRecord(value) || !Array.isArray(value.data)) invalid("Core returned an invalid runtime observation list.");
     return value.data.map((entry) => {
-      if (!isRecord(entry) || typeof entry.user_id !== "string" || !idPattern.test(entry.user_id)) return invalid("Core returned an invalid runtime observation.");
-      const { user_id: userId, ...observation } = entry;
-      return { ...projectRuntimeObservation(observation), user_id: userId };
+      if (!isRecord(entry) || typeof entry.project_id !== "string" || !idPattern.test(entry.project_id)) return invalid("Core returned an invalid runtime observation.");
+      const { project_id: projectId, ...observation } = entry;
+      return { ...projectRuntimeObservation(observation), project_id: projectId };
     });
   }
 

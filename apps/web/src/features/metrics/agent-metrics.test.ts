@@ -13,7 +13,8 @@ import {
   topSeries,
   type MetricsCoverage,
 } from "./agent-metrics";
-import { candidateSessions, loadAgentMetricsActivity, type AgentMetricsSource } from "./agent-metrics-loader";
+import { candidateSessions, loadAgentMetricsActivity, loadProjectAgentMetrics, projectMayHaveActivity, projectMetricsSource, type AgentMetricsSource } from "./agent-metrics-loader";
+import { project, sessionLister, summary } from "../overview/test-fixtures";
 
 const NOW = 1_800_000_000;
 
@@ -304,5 +305,80 @@ describe("review regressions", () => {
     expect(requestIds).toEqual(tokenIds);
     expect(requestIds).toHaveLength(6);
     expect(requestIds.at(-1)).toBe(OTHER_SERIES_ID);
+  });
+});
+
+describe("Agent metrics across projects", () => {
+  const window = metricsWindow("1h", NOW);
+
+  it("keeps the same Agent of two projects apart and remembers each row's project", () => {
+    const shared = { id: "agent_same", name: "Reviewer", model: "model-a" } as AgentSession["agent"];
+    const metrics = aggregateAgentMetrics(window, [
+      { projectId: "p1", session: session("s1", { agent: shared }), turns: [turn("t1", "s1")], items: null, truncated: false },
+      { projectId: "p2", session: session("s2", { agent: shared }), turns: [turn("t2", "s2"), turn("t3", "s2")], items: null, truncated: false },
+    ], coverage);
+    expect(metrics.byAgent.map((entry) => [entry.id, entry.agentId, entry.projectId, entry.requests])).toEqual([
+      ["p2/agent_same", "agent_same", "p2", 2],
+      ["p1/agent_same", "agent_same", "p1", 1],
+    ]);
+  });
+
+  it("routes each Session's reads to its project", async () => {
+    const calls: string[] = [];
+    const reader = (name: string): AgentMetricsSource => ({
+      async listTurns(sessionId) { calls.push(`${name}:turns:${sessionId}`); return page([], false); },
+      async listItems(sessionId) { calls.push(`${name}:items:${sessionId}`); return page<SessionItem>([], false); },
+    });
+    const source = projectMetricsSource([
+      { project: project("p1"), value: session("a") },
+      { project: project("p2"), value: session("b") },
+    ], (target) => reader(target.id));
+    await source.listTurns("b");
+    await source.listItems("a");
+    expect(calls).toEqual(["p2:turns:b", "p1:items:a"]);
+    await expect(async () => source.listTurns("unknown")).rejects.toThrow();
+  });
+
+  it("skips projects the summary shows as inactive in the range", () => {
+    const idle = { total: 3, idle: 3, in_progress: 0, requires_action: 0, failed: 0 };
+    expect(projectMayHaveActivity(undefined, window)).toBe(true);
+    expect(projectMayHaveActivity(summary("p", { sessions: idle, last_active_at: window.start - 1 }), window)).toBe(false);
+    expect(projectMayHaveActivity(summary("p", { sessions: idle, last_active_at: window.start }), window)).toBe(true);
+    expect(projectMayHaveActivity(summary("p", { sessions: { ...idle, in_progress: 1 }, last_active_at: window.start - 1 }), window)).toBe(true);
+  });
+
+  it("lists active projects, tags activities with their project and reports capped lists and failures", async () => {
+    const reads: string[] = [];
+    const client = (id: string, sessions: AgentSession[]) => ({
+      ...sessionLister(sessions),
+      async listTurns(sessionId: string) { reads.push(`${id}:${sessionId}`); return page([turn(`t-${sessionId}`, sessionId)], false); },
+      async listItems() { return page<SessionItem>([], false); },
+    });
+    const clients: Record<string, ReturnType<typeof client>> = {
+      busy: client("busy", [session("b1"), session("b2"), session("b3")]),
+      idle: client("idle", [session("i1")]),
+    };
+    const load = await loadProjectAgentMetrics(
+      [project("busy"), project("idle"), project("down")],
+      window,
+      {
+        clientFor: (target) => {
+          if (target.id === "down") return { ...clients.busy!, listSessionsTolerant: async () => { throw new Error("HTTP 502"); } };
+          return clients[target.id]!;
+        },
+        summary: [
+          summary("busy", { sessions: { total: 3, idle: 3, in_progress: 0, requires_action: 0, failed: 0 }, last_active_at: NOW }),
+          summary("idle", { sessions: { total: 1, idle: 1, in_progress: 0, requires_action: 0, failed: 0 }, last_active_at: window.start - 10 }),
+          summary("down", { sessions: { total: 1, idle: 1, in_progress: 0, requires_action: 0, failed: 0 }, last_active_at: NOW }),
+        ],
+      },
+      new AbortController().signal,
+      { includeTools: false, listCap: 2 },
+    );
+    expect(clients.idle!.calls).toEqual([]);
+    expect(reads.sort()).toEqual(["busy:b1", "busy:b2"]);
+    expect(load.activities.every((activity) => activity.projectId === "busy")).toBe(true);
+    expect(load.truncatedLists.map((entry) => entry.id)).toEqual(["busy"]);
+    expect(load.listFailures.map((failure) => failure.project.id)).toEqual(["down"]);
   });
 });

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ConsoleSidebar } from "./components/ConsoleSidebar";
-import { FirstKeySetup } from "./features/api-keys/FirstKeySetup";
-import { ApiKeysPage } from "./features/api-keys/ApiKeysPage";
+import { FirstProjectSetup } from "./features/api-keys/FirstProjectSetup";
+import { ProjectsPage } from "./features/api-keys/ProjectsPage";
 import { AgentsPage } from "./features/agents/AgentsPage";
 import { TemplatesPage } from "./features/environment-templates/TemplatesPage";
 import { FilesPage } from "./features/files/FilesPage";
@@ -18,7 +18,7 @@ import { SystemPage } from "./features/system/SystemPage";
 import { VaultsPage } from "./features/vaults/VaultsPage";
 import { ConsoleNavigationContext, hashWithParams, routeParamsFromHash, type RouteParams } from "./lib/console-navigation";
 import { consoleHashForView, consoleNavParent, consoleViewFromHash, type ConsoleView } from "./lib/console-routes";
-import { KeySpacesProvider, useKeySpaces } from "./lib/key-spaces";
+import { ProjectsProvider, useProjects } from "./lib/projects";
 
 /** Sandbox administration stays on the paired console's `/core/v1/sandbox` routes. */
 const SANDBOX_BASE = "/v1";
@@ -40,7 +40,7 @@ function ConsolePage({ view }: { view: ConsoleView }) {
     case "skills": return <SkillsPage />;
     case "files": return <FilesPage />;
     case "vaults": return <VaultsPage />;
-    case "api-keys": return <ApiKeysPage />;
+    case "projects": return <ProjectsPage />;
     case "nodes": return <SandboxManagerView coreBaseUrl={SANDBOX_BASE} />;
     case "system": return <SystemPage />;
   }
@@ -48,7 +48,7 @@ function ConsolePage({ view }: { view: ConsoleView }) {
 
 function ConsoleShell() {
   const { t } = useTranslation("navigation");
-  const { state } = useKeySpaces();
+  const { state } = useProjects();
   const [location, setLocation] = useState(readLocation);
   const [setupDone, setSetupDone] = useState(false);
 
@@ -73,9 +73,9 @@ function ConsoleShell() {
 
   const navigation = useMemo(() => ({ ...location, navigate }), [location, navigate]);
 
-  // First run: an administrator who has no API key yet creates the first one.
-  if (state.status === "ready" && state.spaces.length === 0 && !setupDone) {
-    return <FirstKeySetup onDone={() => setSetupDone(true)} />;
+  // First run: an administrator with no project yet creates the first one and its key.
+  if (state.status === "ready" && state.projects.length === 0 && !setupDone) {
+    return <FirstProjectSetup onDone={() => setSetupDone(true)} />;
   }
 
   return (
@@ -84,7 +84,7 @@ function ConsoleShell() {
         <a className="skip-link" href="#main-content">{t("skipToContent")}</a>
         <ConsoleSidebar active={consoleNavParent(location.view)} onSelect={(view) => navigate(view)} />
         <main className="app-main" id="main-content" tabIndex={-1}>
-          <div className="page-transition" key={`${location.view}:${location.params.space ?? ""}:${location.params.id ?? ""}`}>
+          <div className="page-transition" key={`${location.view}:${location.params.project ?? ""}:${location.params.id ?? ""}`}>
             <ConsolePage view={location.view} />
           </div>
         </main>
@@ -96,8 +96,8 @@ function ConsoleShell() {
 /** The signed-in management console. It calls only the Web API, never `/v1`. */
 export function ConsoleApp() {
   return (
-    <KeySpacesProvider>
+    <ProjectsProvider>
       <ConsoleShell />
-    </KeySpacesProvider>
+    </ProjectsProvider>
   );
 }

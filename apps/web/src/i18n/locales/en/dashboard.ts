@@ -1,18 +1,4 @@
 export const dashboard = {
-  runtime: {
-    explorer: "Runtime target explorer", targets: "Runtime targets", resourceSnapshot: "Runtime resource snapshot",
-    search: "Search Runtime targets", searchPlaceholder: "Search Session, provider, or identity", visible: "{{value}} visible",
-    sortBy: "Sort by {{label}}", noResults: "No Runtime targets match these filters.",
-    page: "Page {{page}} of {{pages}}", previous: "Previous", next: "Next",
-    columns: { session: "Session", mode: "Mode", status: "Status", cpu: "CPU time", memory: "Memory", uptime: "Uptime", sessionState: "Session state", tokens: "Tokens" },
-    identity: "Identity", environment: "Environment", allocation: "Allocation", resolved: "Resolved", notApplicable: "Not applicable", notAvailable: "Not available",
-    filters: { allStatuses: "All statuses", allModes: "All modes", observed: "Observed", unavailable: "Unavailable", unsupported: "Unsupported", managed: "Managed", selfHosted: "Self-hosted", none: "None" },
-    status: { observed: "Observed", unsupported: "Unsupported", allocation_pending: "Allocation pending", runtime_not_running: "Not running", source_not_configured: "Source unavailable", sample_timeout: "Sample timeout", sample_unavailable: "Sample unavailable", idle: "Idle", in_progress: "In progress", requires_action: "Requires action", failed: "Failed", unknown: "Unavailable" },
-    managedProvider: "Managed {{provider}}", managed: "Managed", cores: "{{value}} cores", capacityUnknown: "Capacity unknown",
-    limitUnknown: "Limit unknown", ofLimit: "of {{limit}}", memoryUsed: "{{percent}}% memory used", allocationUnknown: "Allocation age unknown", allocated: "{{duration}} allocated", notReported: "Not reported", sessionReported: "Session reported",
-    metrics: { sandboxState: "Sandbox state", sandboxStateValue: "{{active}} active · {{sleeping}} sleeping", sandboxStateDetail: "{{total}} total · {{transitioning}} transitioning or pending", cpu: "Cumulative CPU / capacity", cpuDetail: "{{covered}}/{{total}} observed Runtimes report CPU time", memory: "Memory now", memoryDetail: "{{covered}}/{{total}} observed Runtimes report usage", tokens: "Reported tokens", tokenDetail: "{{covered}}/{{total}} Sessions report usage", noSample: "No current sample" },
-    explorerHint: "Search and inspect exact observations · unknown remains unknown, never zero", targetCount: "{{value}} targets · {{snapshot}}", retainedSnapshot: "retained snapshot", currentSnapshot: "current snapshot",
-  },
   trends: {
     title: "Resource trends", retained: "Retained samples · durable history", local: "Browser-local samples · reset on reload", source: "Runtime metric source", live: "Live", history: "History",
     historyStale: "History stale", historyLoading: "History · loading", durableResolution: "Durable · {{seconds}}s", liveRetrying: "Live · history retrying", liveUnavailable: "Live · history unavailable", liveLoading: "Live · loading history", staleRetrying: "Stale · retrying", liveInterval: "Live · {{seconds}}s",

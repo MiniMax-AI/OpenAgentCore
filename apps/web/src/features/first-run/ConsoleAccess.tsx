@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { ThemeMenu } from "../../components/ThemeMenu";
 import { setLanguage } from "../../i18n";
 import { changeConsoleAuth, ConsoleAuthError, readConsoleAuth, type ConsoleAuth } from "./auth";
-import { defaultProgress, progressKey, saveProgress } from "./progress";
 import "./console-access.css";
 
 const ConsoleAccountContext = createContext<{ username: string; logout: () => Promise<void> } | null>(null);
@@ -107,7 +106,6 @@ function AccountForm({ setup, onAuthenticated, onRefresh }: {
         username: String(data.get("username") ?? ""), password,
       }, request.signal);
       if (!request.signal.aborted) {
-        if (setup && next.mode === "authenticated") saveProgress(progressKey(window.location.origin, next.username), defaultProgress);
         onAuthenticated(next);
       }
     } catch (cause) {

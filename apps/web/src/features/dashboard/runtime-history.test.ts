@@ -1,19 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import type {
-  AgentCore,
-  AgentSession,
-  RuntimeHistory,
-  RuntimeHistoryCapabilities,
-  RuntimeObservation,
-} from "@agents-core-web/agents-client";
+import { AgentCoreError, type AgentSession, type RuntimeHistory, type RuntimeObservation } from "@agents-core-web/agents-client";
 
 import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";
 import {
   loadRuntimeDurableSnapshot,
   runtimeDurableTrendSamples,
-  runtimeTrendSourceAfterHistoryUnavailable,
   RuntimeDurableHistoryIncompleteError,
+  type RuntimeHistoryReader,
 } from "./runtime-history";
 
 const sessionID = "11111111-1111-4111-8111-111111111111";
@@ -52,19 +46,6 @@ const observation = {
   mode: "openai_hosted",
   status: "observed",
 } as RuntimeObservation;
-
-const capabilities: RuntimeHistoryCapabilities = {
-  object: "agent.runtime_history_capabilities",
-  available: true,
-  reason: null,
-  collection_mode: "periodic",
-  sample_interval_seconds: 30,
-  retention_seconds: 604_800,
-  minimum_step_seconds: 30,
-  maximum_range_seconds: 86_400,
-  maximum_points: 1_000,
-  metrics: ["cpu", "memory", "tokens"],
-};
 
 function history(overrides: Partial<RuntimeHistory> = {}): RuntimeHistory {
   return {
@@ -114,12 +95,6 @@ function history(overrides: Partial<RuntimeHistory> = {}): RuntimeHistory {
 }
 
 describe("Runtime Durable Dashboard history", () => {
-  it("returns an explicit History selection to Live when the capability disappears", () => {
-    expect(runtimeTrendSourceAfterHistoryUnavailable("durable")).toBe("live");
-    expect(runtimeTrendSourceAfterHistoryUnavailable("auto")).toBe("auto");
-    expect(runtimeTrendSourceAfterHistoryUnavailable("live")).toBe("live");
-  });
-
   it("projects persisted Runtime and canonical token history", () => {
     const samples = runtimeDurableTrendSamples([session], [history()]);
     expect(samples).toHaveLength(2);
@@ -302,25 +277,25 @@ describe("Runtime Durable Dashboard history", () => {
     expect(samples[1]).toMatchObject({ inputTokensPerMinute: null, outputTokensPerMinute: 20 });
   });
 
-  it("loads capability-gated Session histories with a bounded common range", async () => {
+  it("loads each hosted Session's history through its project with a bounded common range", async () => {
     const calls: Array<{ sessionID: string; start: number; end: number; maxPoints?: number }> = [];
-    const core: Pick<AgentCore, "getRuntimeHistoryCapabilities" | "retrieveRuntimeHistory"> = {
-      getRuntimeHistoryCapabilities: async () => capabilities,
+    const reader: RuntimeHistoryReader = {
       retrieveRuntimeHistory: async (id, query) => {
         calls.push({ sessionID: id, start: query.start, end: query.end, maxPoints: query.maxPoints });
         return history({ requested_range: { start: query.start, end: query.end } });
       },
     };
-    const snapshot: RuntimeDashboardSnapshot = { sessions: [session], observations: [observation], loadedAt: 1 };
-    const result = await loadRuntimeDurableSnapshot(core, snapshot, 60 * 60_000, undefined, () => 7_200_000);
+    const readers: string[] = [];
+    const snapshot: RuntimeDashboardSnapshot = { sessions: [session], observations: [observation], owners: new Map([[sessionID, "proj_a"]]), loadedAt: 1 };
+    const result = await loadRuntimeDurableSnapshot((id) => { readers.push(snapshot.owners?.get(id) ?? ""); return reader; }, snapshot, 60 * 60_000, undefined, () => 7_200_000);
+    expect(readers).toEqual(["proj_a"]);
     expect(calls).toEqual([{ sessionID, start: 3_600, end: 7_200, maxPoints: 120 }]);
     expect(result).toMatchObject({ rangeStart: 3_600_000, rangeEnd: 7_200_000, targetCount: 1, sampleCount: 2 });
   });
 
   it("queries each managed Session only once when observations contain duplicates", async () => {
     const queried: string[] = [];
-    const core: Pick<AgentCore, "getRuntimeHistoryCapabilities" | "retrieveRuntimeHistory"> = {
-      getRuntimeHistoryCapabilities: async () => capabilities,
+    const reader: RuntimeHistoryReader = {
       retrieveRuntimeHistory: async (id) => {
         queried.push(id);
         return history();
@@ -331,39 +306,47 @@ describe("Runtime Durable Dashboard history", () => {
       observations: [observation, { ...observation }],
       loadedAt: 1,
     };
-    await loadRuntimeDurableSnapshot(core, snapshot, 60 * 60_000);
+    await loadRuntimeDurableSnapshot(() => reader, snapshot, 60 * 60_000);
     expect(queried).toEqual([sessionID]);
   });
 
-  it("does not issue Session queries when Durable history is unavailable", async () => {
-    let queried = false;
-    const core: Pick<AgentCore, "getRuntimeHistoryCapabilities" | "retrieveRuntimeHistory"> = {
-      getRuntimeHistoryCapabilities: async () => ({
-        ...capabilities,
-        available: false,
-        reason: "not_configured",
-        collection_mode: null,
-        sample_interval_seconds: null,
-        retention_seconds: null,
-        minimum_step_seconds: null,
-        maximum_range_seconds: null,
-        maximum_points: null,
-        metrics: [],
-      }),
-      retrieveRuntimeHistory: async () => { queried = true; return history(); },
+  it("reports history as unavailable when Core keeps none for any Session", async () => {
+    const reader: RuntimeHistoryReader = {
+      retrieveRuntimeHistory: async () => { throw new AgentCoreError("No history.", 404); },
     };
     const snapshot: RuntimeDashboardSnapshot = { sessions: [session], observations: [observation], loadedAt: 1 };
-    await expect(loadRuntimeDurableSnapshot(core, snapshot, 60 * 60_000)).resolves.toBeNull();
-    expect(queried).toBe(false);
+    await expect(loadRuntimeDurableSnapshot(() => reader, snapshot, 60 * 60_000)).resolves.toBeNull();
   });
 
-  it("fails closed instead of publishing a partial oversized tenant Dashboard", async () => {
-    const core: Pick<AgentCore, "getRuntimeHistoryCapabilities" | "retrieveRuntimeHistory"> = {
-      getRuntimeHistoryCapabilities: async () => capabilities,
-      retrieveRuntimeHistory: async () => history(),
+  it("leaves out a Session without history and keeps the others", async () => {
+    const otherID = "44444444-4444-4444-8444-444444444444";
+    const other = { ...session, id: otherID } as AgentSession;
+    const reader: RuntimeHistoryReader = {
+      retrieveRuntimeHistory: async (id) => {
+        if (id === otherID) throw new AgentCoreError("No history.", 404);
+        return history();
+      },
+    };
+    const snapshot: RuntimeDashboardSnapshot = {
+      sessions: [session, other],
+      observations: [observation, { ...observation, id: otherID, session_id: otherID }],
+      loadedAt: 1,
+    };
+    await expect(loadRuntimeDurableSnapshot(() => reader, snapshot, 60 * 60_000)).resolves.toMatchObject({ targetCount: 1 });
+  });
+
+  it("propagates other history failures", async () => {
+    const reader: RuntimeHistoryReader = {
+      retrieveRuntimeHistory: async () => { throw new AgentCoreError("Unavailable.", 503); },
     };
     const snapshot: RuntimeDashboardSnapshot = { sessions: [session], observations: [observation], loadedAt: 1 };
-    await expect(loadRuntimeDurableSnapshot(core, snapshot, 60 * 60_000, undefined, Date.now, 0))
+    await expect(loadRuntimeDurableSnapshot(() => reader, snapshot, 60 * 60_000)).rejects.toMatchObject({ status: 503 });
+  });
+
+  it("fails closed instead of publishing a partial oversized Dashboard", async () => {
+    const reader: RuntimeHistoryReader = { retrieveRuntimeHistory: async () => history() };
+    const snapshot: RuntimeDashboardSnapshot = { sessions: [session], observations: [observation], loadedAt: 1 };
+    await expect(loadRuntimeDurableSnapshot(() => reader, snapshot, 60 * 60_000, undefined, Date.now, 0))
       .rejects.toBeInstanceOf(RuntimeDurableHistoryIncompleteError);
   });
 });

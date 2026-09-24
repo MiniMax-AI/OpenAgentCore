@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { AdminClient, adminScopePath, projectKeySpace, projectSummary, projectWriteOperationPage } from "./admin-client";
+import { AdminClient, adminScopePath, projectProject, projectResourceOwners, projectSummary, projectWriteOperationPage } from "./admin-client";
 
 const agent = {
   id: "agent_1", object: "agent", model: "provider/model", name: "Support", instructions: null, metadata: {},
@@ -38,10 +38,10 @@ describe("admin scope paths", () => {
 describe("AdminClient.scopeClient", () => {
   it("reads a space's resources through the admin route with the public projections", async () => {
     const { calls, fetchImpl } = recorder(agent);
-    const client = new AdminClient({ fetch: fetchImpl }).scopeClient("user_1");
+    const client = new AdminClient({ fetch: fetchImpl }).scopeClient("proj_1");
     const loaded = await client.retrieveAgent("agent_1");
     expect(loaded.name).toBe("Support");
-    expect(calls[0]!.url).toBe("/core/v1/admin/users/user_1/agents/agent_1");
+    expect(calls[0]!.url).toBe("/core/v1/admin/projects/proj_1/agents/agent_1");
     const headers = new Headers(calls[0]!.init.headers);
     expect(headers.has("OpenAI-Beta")).toBe(false);
     expect(headers.has("Authorization")).toBe(false);
@@ -50,7 +50,7 @@ describe("AdminClient.scopeClient", () => {
 
   it("admits deletes but never creates or edits assets", async () => {
     const { calls, fetchImpl } = recorder({ id: "agent_1", object: "agent.deleted", deleted: true });
-    const client = new AdminClient({ fetch: fetchImpl }).scopeClient("user_1");
+    const client = new AdminClient({ fetch: fetchImpl }).scopeClient("proj_1");
     await client.deleteAgent("agent_1");
     expect(calls[0]!.init.method).toBe("DELETE");
     await expect(client.createAgent({ model: "m" } as never)).rejects.toMatchObject({ status: 405 });
@@ -60,19 +60,30 @@ describe("AdminClient.scopeClient", () => {
 });
 
 describe("admin projections", () => {
-  it("normalises key spaces with either timestamp form", () => {
-    const space = projectKeySpace({
-      id: "user_1", username: "ci-pipeline", status: "active", created_at: "2026-09-24T00:00:00Z", disabled_at: null,
-      active_keys: [{ id: "key_1", name: null, prefix: "pc_live_Qm4", created_at: 1790208000, revoked_at: null }],
-    });
-    expect(space.created_at).toBe(1790208000);
-    expect(space.active_keys[0]!.prefix).toBe("pc_live_Qm4");
-    expect(() => projectKeySpace({ id: "user_1", username: "Bad Name", created_at: 1 })).toThrow();
-    expect(projectKeySpace({ id: "user_2", username: "old", created_at: 1, disabled_at: 5 }).status).toBe("disabled");
+  it("normalises projects with either timestamp form and marks archived ones", () => {
+    const project = projectProject({ id: "proj_1", name: "Production", source: "console", status: "active", created_at: "2026-09-24T00:00:00Z", archived_at: null, active_key_count: 2 });
+    expect(project.created_at).toBe(1790208000);
+    expect(project.active_key_count).toBe(2);
+    expect(projectProject({ id: "proj_2", name: "Ops", source: "config", created_at: 1, archived_at: 5, active_key_count: 0 }).status).toBe("archived");
+    expect(() => projectProject({ id: "proj_3", name: "", source: "console", created_at: 1, active_key_count: 0 })).toThrow();
+    expect(() => projectProject({ id: "proj_3", name: "X", source: "elsewhere", created_at: 1, active_key_count: 0 })).toThrow();
+  });
+
+  it("maps #87 owners and keeps a malformed owner unknown", () => {
+    const owners = projectResourceOwners({ data: [
+      { resource_id: "agent_1", api_key: { id: "key_1", name: "alice", prefix: "pc_a", kind: "issued", revoked_at: null } },
+      { resource_id: "agent_2", api_key: null },
+      { resource_id: "agent_3", api_key: { id: "key_3", kind: "unknown" } },
+      { resource_id: "agent_9", api_key: null },
+    ] }, ["agent_1", "agent_2", "agent_3"]);
+    expect(owners.get("agent_1")?.name).toBe("alice");
+    expect(owners.get("agent_2")).toBeNull();
+    expect(owners.get("agent_3")).toBeNull();
+    expect(owners.has("agent_9")).toBe(false);
   });
 
   it("keeps summary usage null when no Session reported it and rejects impossible coverage", () => {
-    const row = { user_id: "user_1", assets: { agents: 2, skills: 1, environment_templates: 0, files: 3, vaults: 1 }, sessions: { total: 4, idle: 3, in_progress: 1, requires_action: 0, failed: 0 }, usage: null, coverage: { sessions: 4, reported: 0 }, last_active_at: null };
+    const row = { project_id: "proj_1", assets: { agents: 2, skills: 1, environment_templates: 0, files: 3, vaults: 1 }, sessions: { total: 4, idle: 3, in_progress: 1, requires_action: 0, failed: 0 }, usage: null, coverage: { sessions: 4, reported: 0 }, last_active_at: null };
     expect(projectSummary({ data: [row] })[0]!.usage).toBeNull();
     expect(() => projectSummary({ data: [{ ...row, coverage: { sessions: 1, reported: 2 } }] })).toThrow();
   });
@@ -88,19 +99,21 @@ describe("admin projections", () => {
 
 describe("AdminClient key management", () => {
   it("returns the plaintext only from issuing and posts copies with an idempotency key", async () => {
-    const issued = recorder({ id: "key_2", name: null, prefix: "pc_live_Zz", created_at: 1, revoked_at: null, key: "pc_live_Zz000000000000000000000000" });
+    const issued = recorder({ id: "key_2", name: "ci", prefix: "pc_live_Zz", created_at: 1, revoked_at: null, key: "pc_live_Zz000000000000000000000000" });
     const admin = new AdminClient({ fetch: issued.fetchImpl });
-    const key = await admin.issueKey("user_1");
+    const key = await admin.issueKey("proj_1", { name: "ci" });
     expect(key.key).toMatch(/^pc_live_Zz/);
-    expect(issued.calls[0]!.url).toBe("/core/v1/admin/users/user_1/keys");
+    expect(issued.calls[0]!.url).toBe("/core/v1/admin/projects/proj_1/keys");
+    expect(JSON.parse(String(issued.calls[0]!.init.body))).toEqual({ name: "ci" });
+    await expect(admin.issueKey("proj_1", { name: " padded" })).rejects.toThrow();
 
     const copies = recorder({ mappings: [{ type: "agent", source_id: "agent_1", target_id: "agent_9" }], skipped: [] });
     const result = await new AdminClient({ fetch: copies.fetchImpl }).copy(
-      { source_user_id: "user_1", target_user_id: "user_2", resource_type: "agent", resource_id: "agent_1", include_dependencies: true },
+      { source_project_id: "proj_1", target_project_id: "proj_2", resource_type: "agent", resource_id: "agent_1", include_dependencies: true },
       { idempotencyKey: "idem-1" },
     );
     expect(result.mappings[0]!.target_id).toBe("agent_9");
     expect(new Headers(copies.calls[0]!.init.headers).get("Idempotency-Key")).toBe("idem-1");
-    await expect(new AdminClient({ fetch: copies.fetchImpl }).copy({ source_user_id: "u", target_user_id: "u", resource_type: "agent", resource_id: "a", include_dependencies: false }, { idempotencyKey: "x" })).rejects.toThrow();
+    await expect(new AdminClient({ fetch: copies.fetchImpl }).copy({ source_project_id: "p", target_project_id: "p", resource_type: "agent", resource_id: "a", include_dependencies: false }, { idempotencyKey: "x" })).rejects.toThrow();
   });
 });

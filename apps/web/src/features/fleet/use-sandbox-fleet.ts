@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SandboxAdminClient, type SandboxAllocation, type SandboxDeployment, type SandboxNode } from "@agents-core-web/agents-client";
 
-import { isLocalProxyBaseUrl } from "../../lib/connection";
 import { sandboxConsoleConfig } from "../sandbox/console-config";
 
 export interface FleetSnapshot {
@@ -13,10 +12,8 @@ export interface FleetSnapshot {
 }
 
 export type FleetState =
-  /** The console connects to another Core, so it cannot administer this deployment. */
-  | { status: "remote" }
   | { status: "checking" }
-  /** The paired console has no sandbox administration credential. */
+  /** The console has no sandbox administration credential. */
   | { status: "unconfigured" }
   | { status: "loading" }
   | { status: "ready"; snapshot: FleetSnapshot; refreshing: boolean; error: unknown | null }
@@ -25,25 +22,19 @@ export type FleetState =
 export const FLEET_REFRESH_MS = 30_000;
 
 /**
- * Read-only deployment fleet: sandbox deployment, nodes and their allocations
- * through the paired console's allowlisted admin routes. Writes stay in the
- * node manager.
+ * Read-only deployment fleet: the sandbox deployment, its nodes and their
+ * allocations (only when asked for) through the console's `/core/v1/sandbox`
+ * routes. Node writes stay on the Nodes page.
  */
-export function useSandboxFleet(coreBaseUrl: string, { poll = true }: { poll?: boolean } = {}) {
-  const local = isLocalProxyBaseUrl(coreBaseUrl);
+export function useSandboxFleet({ poll = true, allocations: readAllocations = false }: { poll?: boolean; allocations?: boolean } = {}) {
   const client = useMemo(() => new SandboxAdminClient({ baseUrl: "/core/v1/sandbox" }), []);
-  const [state, setState] = useState<FleetState>(local ? { status: "checking" } : { status: "remote" });
+  const [state, setState] = useState<FleetState>({ status: "checking" });
   const [revision, setRevision] = useState(0);
   const [adminAvailable, setAdminAvailable] = useState<boolean | null>(null);
   const snapshotRef = useRef<FleetSnapshot | null>(null);
 
   useEffect(() => {
-    if (!local) {
-      setState({ status: "remote" });
-      return;
-    }
     const controller = new AbortController();
-    setState({ status: "checking" });
     void sandboxConsoleConfig(controller.signal).then((config) => {
       if (controller.signal.aborted) return;
       const available = config?.sandbox_admin === true;
@@ -51,10 +42,10 @@ export function useSandboxFleet(coreBaseUrl: string, { poll = true }: { poll?: b
       if (!available) setState({ status: "unconfigured" });
     });
     return () => controller.abort();
-  }, [local]);
+  }, []);
 
   useEffect(() => {
-    if (!local || adminAvailable !== true) return;
+    if (adminAvailable !== true) return;
     const controller = new AbortController();
     const previous = snapshotRef.current;
     setState(previous ? { status: "ready", snapshot: previous, refreshing: true, error: null } : { status: "loading" });
@@ -63,7 +54,9 @@ export function useSandboxFleet(coreBaseUrl: string, { poll = true }: { poll?: b
         client.retrieveDeployment({ signal: controller.signal }),
         client.listNodes({ signal: controller.signal }),
       ]);
-      const allocations = await Promise.all(nodes.data.map((node) => client.listAllocations(node.id, { signal: controller.signal })));
+      const allocations = readAllocations
+        ? await Promise.all(nodes.data.map((node) => client.listAllocations(node.id, { signal: controller.signal })))
+        : [];
       if (controller.signal.aborted) return;
       const snapshot: FleetSnapshot = {
         deployment,
@@ -79,15 +72,15 @@ export function useSandboxFleet(coreBaseUrl: string, { poll = true }: { poll?: b
       setState(last ? { status: "ready", snapshot: last, refreshing: false, error } : { status: "failed", error });
     });
     return () => controller.abort();
-  }, [adminAvailable, client, local, revision]);
+  }, [adminAvailable, client, readAllocations, revision]);
 
   useEffect(() => {
-    if (!poll || !local || adminAvailable !== true) return;
+    if (!poll || adminAvailable !== true) return;
     const timer = window.setInterval(() => {
       if (!document.hidden) setRevision((value) => value + 1);
     }, FLEET_REFRESH_MS);
     return () => window.clearInterval(timer);
-  }, [adminAvailable, local, poll]);
+  }, [adminAvailable, poll]);
 
   const refresh = useCallback(() => setRevision((value) => value + 1), []);
   return { state, refresh };

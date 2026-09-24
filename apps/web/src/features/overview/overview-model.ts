@@ -1,130 +1,131 @@
-import type { AgentSession, RuntimeObservation, SandboxAllocation, SandboxNode } from "@agents-core-web/agents-client";
+import type { AgentSession, Project, ProjectSummary } from "@agents-core-web/agents-client";
 
-/** Pure projections behind the fleet overview. Missing inputs stay null, never zero. */
+import type { CapacitySummary } from "../fleet/fleet-model";
+import type { InProject } from "../metrics/project-sessions";
 
-export type NodeHealth = "available" | "degraded" | "offline";
+/** Pure projections behind the Overview. Missing inputs stay null, never zero. */
 
-export function nodeHealth(node: SandboxNode): NodeHealth {
-  if (!node.online) return "offline";
-  return node.provider_ready && !node.diagnostic ? "available" : "degraded";
-}
-
-export interface CapacitySummary {
-  nodes: number;
-  online: number;
-  available: number;
-  active: number;
-  /** Active-sandbox limit across online nodes. */
-  maxActive: number;
-  retained: number;
-  maxRetained: number;
-  reserved: number;
-  cleanupPending: number;
-  cpuCount: number | null;
-  availableMemoryBytes: number | null;
-  availableDiskBytes: number | null;
-}
-
-function sumKnown(values: ReadonlyArray<number | null>): number | null {
-  const known = values.filter((value): value is number => typeof value === "number");
-  return known.length ? known.reduce((sum, value) => sum + value, 0) : null;
-}
-
-export function capacitySummary(nodes: readonly SandboxNode[]): CapacitySummary {
-  const online = nodes.filter((node) => node.online);
-  return {
-    nodes: nodes.length,
-    online: online.length,
-    available: nodes.filter((node) => nodeHealth(node) === "available").length,
-    active: nodes.reduce((sum, node) => sum + node.active, 0),
-    maxActive: online.reduce((sum, node) => sum + node.max_active, 0),
-    retained: nodes.reduce((sum, node) => sum + node.retained, 0),
-    maxRetained: online.reduce((sum, node) => sum + node.max_retained, 0),
-    reserved: nodes.reduce((sum, node) => sum + node.reserved, 0),
-    cleanupPending: nodes.reduce((sum, node) => sum + node.cleanup_pending, 0),
-    cpuCount: sumKnown(online.map((node) => node.cpu_count)),
-    availableMemoryBytes: sumKnown(online.map((node) => node.available_memory_bytes)),
-    availableDiskBytes: sumKnown(online.map((node) => node.available_disk_bytes)),
-  };
-}
-
-export interface SessionStatusCounts {
+export interface SessionCounts {
+  total: number;
   idle: number;
   in_progress: number;
   requires_action: number;
   failed: number;
-  other: number;
-  total: number;
 }
 
-export function sessionStatusCounts(sessions: readonly AgentSession[]): SessionStatusCounts {
-  const counts: SessionStatusCounts = { idle: 0, in_progress: 0, requires_action: 0, failed: 0, other: 0, total: sessions.length };
-  for (const session of sessions) {
-    if (session.status === "idle" || session.status === "in_progress" || session.status === "requires_action" || session.status === "failed") counts[session.status] += 1;
-    else counts.other += 1;
+export type SummaryUsage = NonNullable<ProjectSummary["usage"]>;
+
+export interface ProjectUsageRow {
+  project: Project;
+  /** The project's `/summary` row, or null when Core returned none for it. */
+  summary: ProjectSummary | null;
+}
+
+/** Project rows of a `/summary` response (Agent and key rows are skipped). */
+export function projectRows(summary: readonly ProjectSummary[]): ProjectSummary[] {
+  return summary.filter((row) => row.agent_id === null && !row.key);
+}
+
+/**
+ * One row per project, joined with its `/summary` row. Active projects come
+ * first, then the most recently active.
+ */
+export function projectUsageRows(projects: readonly Project[], summary: readonly ProjectSummary[]): ProjectUsageRow[] {
+  const byProject = new Map(projectRows(summary).map((row) => [row.project_id, row]));
+  return projects
+    .map((project) => ({ project, summary: byProject.get(project.id) ?? null }))
+    .sort((a, b) => (
+      Number(a.project.status === "archived") - Number(b.project.status === "archived")
+      || (b.summary?.last_active_at ?? -1) - (a.summary?.last_active_at ?? -1)
+      || a.project.name.localeCompare(b.project.name)
+    ));
+}
+
+export interface SummaryTotals {
+  sessions: SessionCounts;
+  /** Sum over projects that reported usage; null when none did. */
+  usage: SummaryUsage | null;
+  coverage: { sessions: number; reported: number };
+}
+
+/** Totals over every project row. */
+export function summaryTotals(summary: readonly ProjectSummary[]): SummaryTotals {
+  const sessions: SessionCounts = { total: 0, idle: 0, in_progress: 0, requires_action: 0, failed: 0 };
+  const coverage = { sessions: 0, reported: 0 };
+  let usage: SummaryUsage | null = null;
+  for (const row of projectRows(summary)) {
+    sessions.total += row.sessions.total;
+    sessions.idle += row.sessions.idle;
+    sessions.in_progress += row.sessions.in_progress;
+    sessions.requires_action += row.sessions.requires_action;
+    sessions.failed += row.sessions.failed;
+    coverage.sessions += row.coverage.sessions;
+    coverage.reported += row.coverage.reported;
+    if (row.usage) {
+      usage ??= { input_tokens: 0, output_tokens: 0, total_tokens: 0, cached_tokens: 0, reasoning_tokens: 0 };
+      usage.input_tokens += row.usage.input_tokens;
+      usage.output_tokens += row.usage.output_tokens;
+      usage.total_tokens += row.usage.total_tokens;
+      usage.cached_tokens += row.usage.cached_tokens;
+      usage.reasoning_tokens += row.usage.reasoning_tokens;
+    }
   }
-  return counts;
+  return { sessions, usage, coverage };
 }
 
-export function activeSince(sessions: readonly AgentSession[], since: number): number {
-  return sessions.filter((session) => session.last_active_at >= since).length;
+/** Share of Sessions that reported usage; null when there are none. */
+export function coverageRatio(coverage: { sessions: number; reported: number }): number | null {
+  return coverage.sessions > 0 ? coverage.reported / coverage.sessions : null;
 }
 
-/** Sessions that need an operator: failed or waiting for a required action. */
-export function attentionSessions(sessions: readonly AgentSession[], limit = 8): AgentSession[] {
+export function attentionCount(counts: Pick<SessionCounts, "failed" | "requires_action">): number {
+  return counts.failed + counts.requires_action;
+}
+
+function needsAttention(session: AgentSession): boolean {
+  return session.status === "failed" || session.status === "requires_action";
+}
+
+/** Sessions that need an operator (failed or waiting for a required action), newest activity first. */
+export function attentionSessions(sessions: readonly InProject<AgentSession>[], limit = 8): InProject<AgentSession>[] {
   return sessions
-    .filter((session) => session.status === "failed" || session.status === "requires_action")
-    .sort((a, b) => b.last_active_at - a.last_active_at || a.id.localeCompare(b.id))
+    .filter((entry) => needsAttention(entry.value))
+    .sort((a, b) => b.value.last_active_at - a.value.last_active_at || a.value.id.localeCompare(b.value.id))
     .slice(0, limit);
 }
 
-export interface RuntimeUsage {
-  hosted: number;
-  active: number;
-  sleeping: number;
-  pending: number;
-  observed: number;
-  cpuUsageCores: number | null;
-  cpuCapacityCores: number | null;
-  memoryUsageBytes: number | null;
-  memoryLimitBytes: number | null;
+/**
+ * Whether one project's newest-first Session read may stop: it has passed the
+ * start of the activity window and found every Session the summary counts as
+ * needing attention.
+ */
+export function overviewReadDone(sessions: readonly AgentSession[], since: number, expectedAttention: number | null): boolean {
+  const oldest = sessions.at(-1);
+  if (!oldest || oldest.created_at >= since) return false;
+  if (expectedAttention === null) return true;
+  return sessions.filter(needsAttention).length >= expectedAttention;
 }
 
-/** Current hosted Runtime usage, optionally limited to the Sessions placed on one node. */
-export function runtimeUsage(observations: readonly RuntimeObservation[], sessionIds?: ReadonlySet<string>): RuntimeUsage {
-  const hosted = observations.filter((observation) => observation.mode === "openai_hosted" && (!sessionIds || sessionIds.has(observation.session_id)));
-  const observed = hosted.filter((observation) => observation.status === "observed");
-  return {
-    hosted: hosted.length,
-    active: hosted.filter((observation) => observation.lifecycle_state === "active").length,
-    sleeping: hosted.filter((observation) => observation.lifecycle_state === "sleeping").length,
-    pending: hosted.filter((observation) => observation.lifecycle_state === "pending" || observation.lifecycle_state === "transitioning").length,
-    observed: observed.length,
-    cpuUsageCores: sumKnown(observed.map((observation) => observation.cpu?.usage_cores ?? null)),
-    cpuCapacityCores: sumKnown(observed.map((observation) => observation.cpu?.capacity_cores ?? null)),
-    memoryUsageBytes: sumKnown(observed.map((observation) => observation.memory?.usage_bytes ?? null)),
-    memoryLimitBytes: sumKnown(observed.map((observation) => observation.memory?.limit_bytes ?? null)),
-  };
+/** A failure where the Web API itself did not answer: a gateway status or a network error. */
+export function isGatewayOrNetworkFailure(error: unknown): boolean {
+  const status = typeof error === "object" && error !== null && "status" in error ? (error as { status: unknown }).status : undefined;
+  if (typeof status === "number") return status === 502 || status === 503 || status === 504;
+  const message = typeof error === "string" ? error : error instanceof Error ? error.message : "";
+  return /HTTP 50[234]\b|\(50[234]\)|failed to fetch|networkerror|load failed|network request failed/i.test(message);
 }
 
-/** Sum of each Session's last reported cumulative usage; null when none reported. */
-export function reportedTokens(sessions: readonly AgentSession[]): { total: number | null; reporting: number } {
-  const reporting = sessions.filter((session) => session.usage !== null);
-  return {
-    total: reporting.length ? reporting.reduce((sum, session) => sum + (session.usage?.total_tokens ?? 0), 0) : null,
-    reporting: reporting.length,
-  };
-}
+export type ReadOutcome = { status: "pending" } | { status: "ready" } | { status: "failed"; error: unknown };
 
-export function allocationsByNode(allocations: readonly SandboxAllocation[]): Map<string, SandboxAllocation[]> {
-  const grouped = new Map<string, SandboxAllocation[]>();
-  for (const allocation of allocations) {
-    const list = grouped.get(allocation.node_id) ?? [];
-    list.push(allocation);
-    grouped.set(allocation.node_id, list);
-  }
-  for (const list of grouped.values()) list.sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));
-  return grouped;
+/**
+ * Whether the Web API answers, from the reads the page made: any success or
+ * any application error means it answered; only gateway or network failures
+ * mean it did not. Null while nothing has settled.
+ */
+export function webApiReachable(reads: readonly ReadOutcome[]): boolean | null {
+  if (reads.some((read) => read.status === "ready")) return true;
+  const failures = reads.flatMap((read) => (read.status === "failed" ? [read.error] : []));
+  if (failures.some((error) => !isGatewayOrNetworkFailure(error))) return true;
+  return failures.length ? false : null;
 }
 
 export type ServiceHealth = "healthy" | "degraded" | "down" | "unknown";
@@ -137,13 +138,13 @@ export function recentFailures(sessions: readonly AgentSession[], now: number): 
 }
 
 /**
- * Overall service verdict from evidence the console can read: the Core API,
- * the collections it serves, node availability and recently failing Sessions.
- * It never claims model readiness.
+ * Overall service verdict from evidence the console can read: whether the Web
+ * API answers, the reads it serves, node availability and recently failing
+ * Sessions. It never claims model readiness.
  */
 export function serviceHealth(input: {
   coreReachable: boolean | null;
-  /** A Core collection read (Agents or Sessions) failed. */
+  /** A Web API read (the summary or a project's Sessions) failed. */
   collectionFailed: boolean;
   capacity: CapacitySummary | null;
   recentFailedSessions: number | null;
@@ -166,8 +167,10 @@ export interface SessionActivity {
   failed: number[];
 }
 
+export const ACTIVITY_HOURS = 24;
+
 /** Hourly Session activity over the last `hours`, ending at the current hour. */
-export function sessionActivity(sessions: readonly AgentSession[], now: number, hours = 24): SessionActivity {
+export function sessionActivity(sessions: readonly AgentSession[], now: number, hours = ACTIVITY_HOURS): SessionActivity {
   const bucketSeconds = 3600;
   const end = Math.floor(now / bucketSeconds) * bucketSeconds + bucketSeconds;
   const start = end - hours * bucketSeconds;
@@ -184,4 +187,9 @@ export function sessionActivity(sessions: readonly AgentSession[], now: number, 
     }
   }
   return { buckets, bucketSeconds, created, failed };
+}
+
+/** Start (epoch seconds) of the first activity bucket. */
+export function activityStart(now: number, hours = ACTIVITY_HOURS): number {
+  return Math.floor(now / 3600) * 3600 + 3600 - hours * 3600;
 }

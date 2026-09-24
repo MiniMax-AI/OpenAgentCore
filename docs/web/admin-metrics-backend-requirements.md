@@ -1,46 +1,45 @@
 # Administrator metrics: backend requirements
 
 Status: proposal for discussion with Core owners. Nothing in this document is
-implemented. [简体中文](admin-metrics-backend-requirements.zh-CN.md)
+implemented beyond the Web API routes it names as existing.
+[简体中文](admin-metrics-backend-requirements.zh-CN.md)
 
-The redesigned console leads with operations: Overview, Agent metrics, Sandbox
-metrics and the Session log. Today it builds every figure in the browser from
-existing reads. This document records what that costs, where it is incomplete,
-and which Core endpoints would replace the browser work.
+The console is a management tool: Monitor (Overview, Agent metrics, Sandbox
+metrics, Session log) leads. It reads only the Web API (`/core/v1/admin/**`)
+and the sandbox administration routes (`/core/v1/sandbox/**`); it never calls
+`/v1`. Some figures come from Web API aggregates, others are still assembled
+in the browser from bounded reads of each project. This document records what
+that costs, where it is incomplete, and which Web API endpoints would replace
+the browser work.
 
 ## Two classes of Core interface
 
-1. **Public Agents API** (`/v1/agents/**`, `/v1/vaults/**`, `/v1/files**`,
-   `/v1/skills/**`): must stay identical to the pinned OpenAI Agents API and its
-   documented Core extensions. Metrics work must not add fields, routes or
-   behavior here.
-2. **Console-only administration** (`/core/v1/**`): deployment-level routes that
-   only the paired console calls, after console sign-in, with the server-side
-   deployment administrator token. `sandbox` and `project-api-keys` already live
-   here. Every endpoint proposed below belongs to this class and needs an entry
-   in the console allowlist (`services/core-console`).
-
-Existing Web-facing Core extensions under `/v1` (runtime observations, runtime
-history, startup configuration, execution configuration, sandbox placement) stay
-where they are; this proposal does not move them.
+1. **Public Agents API** (`/v1/**`): must stay identical to the pinned OpenAI
+   Agents API and its documented Core extensions. Metrics work must not add
+   fields, routes or behavior here.
+2. **Web API** (`/core/v1/admin/**`, plus `/core/v1/sandbox/**` for sandbox
+   administration): called only by the console server with the deployment
+   administrator credential. Every endpoint proposed below belongs here and is
+   forwarded by `services/core-console`.
 
 ## What the console computes today
 
 | Page | Source | Limit |
 | --- | --- | --- |
-| Overview, Session log, Agents | Complete Session list plus Runtime observations, re-read every 30 s | About 10,000 Sessions; project scope of the console credential only |
-| Agent metrics | Turns and Items of the most recently active Sessions in the range | 200 Sessions, 10 Turn pages and 5 Item pages per Session per load, 15 s per Session and 45 s per load; 1 to 15 requests per Session (about 3,000 in the worst case) on each refresh |
-| Sandbox metrics | `/core/v1/sandbox` nodes and allocations; Runtime history per hosted Session | Host figures are free memory/disk and CPU count only; history covers at most 24 hosted Sessions |
+| Overview | `GET /summary` (per project: asset counts, Sessions by status, usage, coverage, last activity); `/core/v1/sandbox` deployment and nodes; each project's Session list for the 24-hour activity chart and the Sessions needing attention | Session lists stop once they pass the 24-hour window and have found every Session the summary counts as needing attention, at most 1,000 per project; projects idle since before the window are not read |
+| Agent metrics | `GET /summary` to skip idle projects; each project's Session list, then Turns and Items of the most recently active Sessions through the project's scope; `GET /summary?group_by=key` for usage by API key | 2,000 Sessions listed per project; 200 Sessions read per load, 10 Turn pages and 5 Item pages per Session, 15 s per Session and 45 s per load |
+| Sandbox metrics | `/core/v1/sandbox` nodes and allocations; `GET /runtime-observations` (every project); each hosted Session read by ID through its project; Runtime history per hosted Session | 100 hosted Sessions read per refresh; history covers at most 24 hosted Sessions; host figures are free memory/disk and CPU count only |
 
 Consequences the console states in its help tips and warnings:
 
-- Totals cover one project (the console's project credential), not the whole
-  deployment.
 - A "request" is an Agent Turn. HTTP-level request counts, status codes and API
   latency are not available anywhere.
 - Model attribution uses the Session's Agent snapshot, not the effective
   execution configuration.
-- Busy deployments exceed the Session cap, so long ranges are partial.
+- Busy projects exceed the Session caps, so long ranges and old Sessions that
+  need attention can be partial; the page says which projects were cut short.
+- Usage by API key counts Sessions created in the range by their creating key
+  (#87 provenance); Sessions without a record are shown as "unknown".
 
 Other limits: browser and Core clocks can differ (the console tolerates 15
 minutes of skew without saying so), and Subagent Turns and deleted Sessions are
@@ -55,7 +54,7 @@ operational evidence, not billing.
 
 ### P0 — Agent run aggregates
 
-`GET /core/v1/metrics/agent-runs?start=&end=&step=&group_by=model|agent|harness|project&project_id=`
+`GET /core/v1/admin/metrics/agent-runs?start=&end=&step=&group_by=model|agent|harness|project|key&project_id=`
 
 Per bucket, and per group when `group_by` is set:
 
@@ -70,22 +69,44 @@ This replaces the Turn fan-out on Agent metrics and makes long ranges complete.
 
 ### P0 — Tool call aggregates
 
-`GET /core/v1/metrics/tool-calls?start=&end=&step=&group_by=tool|kind|agent&project_id=`
+`GET /core/v1/admin/metrics/tool-calls?start=&end=&step=&group_by=tool|kind|agent&project_id=`
 
 Per bucket and tool (`function` name, MCP `server_label` + name, shell command,
 web search, Subagent): calls, failures, and duration where the Item reports one.
 This replaces the Item fan-out.
 
-### P1 — Session summary
+### P1 — Core process and host status
 
-`GET /core/v1/metrics/sessions?project_id=`
+The Overview shows Core itself beside its sandbox hosts. Core runs no
+sandboxes, so it has no slots; the operator asked for its CPU and memory
+instead. Nothing reports them, so the console shows the Web API's reachability
+and maintenance state and "Not reported" for CPU and memory.
 
-Counts by status, environment type and Agent, plus Sessions created and active
-per bucket. Lets the Overview stop reading the full Session list.
+`GET /core/v1/admin/core-status`
+
+- Core version and process uptime.
+- Process CPU utilization (ratio of one core, averaged over a short window) and
+  the host's CPU cores and utilization.
+- Process resident memory, host memory total and available.
+- Database reachability and connection-pool use.
+- `null` for any figure the platform cannot read (for example inside a
+  restricted container), never zero.
+
+### P1 — Session activity and attention
+
+`GET /summary` already gives Session counts by status per project, Agent and
+key. Two Overview parts still read Session lists:
+
+- Sessions created and failed per bucket:
+  `GET /core/v1/admin/metrics/sessions?start=&end=&step=&project_id=`.
+- Sessions needing attention across projects:
+  `GET /core/v1/admin/sessions?status=failed,requires_action&order=last_active_desc&limit=`
+  (each entry labelled with its project), or a `status` filter on the per-project
+  Session list.
 
 ### P1 — Agents API request metrics
 
-`GET /core/v1/metrics/api-requests?start=&end=&step=&group_by=route|status_class|project`
+`GET /core/v1/admin/metrics/api-requests?start=&end=&step=&group_by=route|status_class|project|key`
 
 Recorded by the API router middleware: request count, 4xx/5xx counts and latency
 percentiles per route family (Sessions, events stream, Turns, Items, files …).
@@ -100,19 +121,25 @@ history pattern, with the optional OTLP exporter as a secondary sink.
 - `GET /core/v1/sandbox/nodes/{id}/history?start=&end=&step=` for active,
   retained and reserved sandboxes and host utilization over time.
 
+### P2 — Hosted Runtime rows with their Sessions
+
+`GET /runtime-observations` labels each observation with its project but not
+its Session's title, Agent, status or usage, so Sandbox metrics reads every
+hosted Session by ID (bounded at 100 per refresh). An `expand=session` option
+returning those fields would remove the reads.
+
 ### P2 — Deployment configuration writes
 
 The console can only read whether each harness has a model endpoint configured
-at startup. A console-only write API (for example
-`PUT /core/v1/deployment/model-providers/{harness}`, write-only credentials)
-would let operators set deployment defaults in Web. It must keep the precedence
+at startup. A Web API write (for example
+`PUT /core/v1/admin/deployment/model-providers/{harness}`, write-only credentials)
+would let operators set deployment defaults. It must keep the precedence
 Session → Agent → deployment and never return secrets.
 
-### P2 — Keys and projects
+### P2 — Keys
 
-- API key `last_used_at` and per-key request counts.
-- A project list (`GET /core/v1/projects`) if a deployment serves more than one
-  project, so metrics can be filtered by project in Web.
+- API key `last_used_at` and per-key request counts (with the API request
+  metrics above).
 
 ## Open questions
 
@@ -120,6 +147,6 @@ Session → Agent → deployment and never return secrets.
    large deployments) or from periodic rollups (like Runtime history)?
 2. Retention and maximum range for each family; is 7 days enough for the console?
 3. Which percentile method and bucket alignment should all metric families share?
-4. Is a deployment ever multi-project in practice, and who may see other
-   projects' Session identifiers in node allocations?
-5. Should API request metrics exclude the console's own polling traffic?
+4. Should API request metrics exclude the console's own polling traffic?
+5. Should Core's own status include the executor gateway and model endpoint
+   reachability, or stay limited to the process and host?

@@ -17,7 +17,7 @@ export const navigation = {
     skills: "Skills",
     files: "Files",
     vaults: "Vaults",
-    "api-keys": "API keys",
+    projects: "Projects and keys",
     nodes: "Nodes",
     system: "System",
   },

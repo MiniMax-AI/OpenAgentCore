@@ -1,85 +1,111 @@
 import { describe, expect, it } from "vitest";
 
-import type { AgentSession, RuntimeObservation, SandboxAllocation, SandboxNode } from "@agents-core-web/agents-client";
+import { AgentCoreError } from "@agents-core-web/agents-client";
 
-import { environmentKind, filterSessions } from "../resources/SessionsLogView";
+import { capacitySummary } from "../fleet/fleet-model";
+import { project, session, summary } from "./test-fixtures";
 import {
-  allocationsByNode,
+  activityStart,
+  attentionCount,
   attentionSessions,
-  capacitySummary,
-  nodeHealth,
+  coverageRatio,
+  isGatewayOrNetworkFailure,
+  overviewReadDone,
+  projectUsageRows,
   recentFailures,
-  reportedTokens,
-  runtimeUsage,
   serviceHealth,
   sessionActivity,
-  sessionStatusCounts,
+  summaryTotals,
+  webApiReachable,
 } from "./overview-model";
 
-function node(id: string, overrides: Partial<SandboxNode> = {}): SandboxNode {
-  return {
-    id, name: id, provider: "docker", online: true, provider_ready: true, diagnostic: "",
-    cpu_count: 8, available_memory_bytes: 1024, available_disk_bytes: 2048,
-    running: 1, snapshots: 0, last_seen_at: "2026-09-24T00:00:00Z",
-    max_active: 4, max_retained: 8, active: 1, reserved: 0, retained: 0, cleanup_pending: 0,
-    created_at: "2026-09-01T00:00:00Z",
-    ...overrides,
-  };
-}
+const usage = (total: number) => ({ input_tokens: total, output_tokens: 0, total_tokens: total, cached_tokens: 0, reasoning_tokens: 0 });
 
-function session(id: string, overrides: Partial<AgentSession> = {}): AgentSession {
-  return {
-    id, object: "agent.session",
-    agent: { id: "agent_a", name: "Reviewer", model: "model-a" } as AgentSession["agent"],
-    environment: { type: "none" } as AgentSession["environment"],
-    status: "idle", error: null, metadata: {}, required_actions: [], vault_ids: [], usage: null,
-    created_at: 100, last_active_at: 200,
-    ...overrides,
-  };
-}
+describe("project usage rows", () => {
+  it("joins every project with its summary row, active and recent first, missing rows as null", () => {
+    const rows = projectUsageRows(
+      [project("old"), project("archived", { status: "archived" }), project("recent"), project("silent")],
+      [
+        summary("old", { last_active_at: 100 }),
+        summary("recent", { last_active_at: 500 }),
+        summary("archived", { last_active_at: 900 }),
+        // Agent rows never stand in for a project row.
+        summary("silent", { agent_id: "agent_x", last_active_at: 999 }),
+      ],
+    );
+    expect(rows.map((row) => row.project.id)).toEqual(["recent", "old", "silent", "archived"]);
+    expect(rows.find((row) => row.project.id === "silent")?.summary).toBeNull();
+  });
 
-const usage = (total: number) => ({ input_tokens: total, output_tokens: 0, total_tokens: total, input_tokens_details: { cached_tokens: 0 }, output_tokens_details: { reasoning_tokens: 0 } });
-
-describe("capacity and node health", () => {
-  it("counts limits only on online nodes and keeps missing host metrics null", () => {
-    const summary = capacitySummary([
-      node("a", { active: 3, max_active: 4, retained: 1, max_retained: 8 }),
-      node("b", { online: false, active: 0, max_active: 4, cpu_count: null, available_memory_bytes: null, available_disk_bytes: null }),
-      node("c", { provider_ready: false, cpu_count: null }),
+  it("adds up Session counts and keeps usage unknown when no project reported any", () => {
+    const withUsage = summaryTotals([
+      summary("a", { sessions: { total: 3, idle: 1, in_progress: 1, requires_action: 0, failed: 1 }, usage: usage(10), coverage: { sessions: 3, reported: 2 } }),
+      summary("b", { sessions: { total: 2, idle: 1, in_progress: 0, requires_action: 1, failed: 0 }, coverage: { sessions: 2, reported: 0 } }),
+      summary("a", { agent_id: "agent_a", sessions: { total: 50, idle: 50, in_progress: 0, requires_action: 0, failed: 0 }, usage: usage(99) }),
     ]);
-    expect(summary).toMatchObject({ nodes: 3, online: 2, available: 1, active: 4, maxActive: 8, retained: 1, maxRetained: 16, cpuCount: 8 });
-    expect(capacitySummary([]).cpuCount).toBeNull();
+    expect(withUsage.sessions).toEqual({ total: 5, idle: 2, in_progress: 1, requires_action: 1, failed: 1 });
+    expect(withUsage.usage?.total_tokens).toBe(10);
+    expect(withUsage.coverage).toEqual({ sessions: 5, reported: 2 });
+    expect(attentionCount(withUsage.sessions)).toBe(2);
+    expect(summaryTotals([summary("b")]).usage).toBeNull();
   });
 
-  it("classifies node health", () => {
-    expect(nodeHealth(node("a"))).toBe("available");
-    expect(nodeHealth(node("a", { diagnostic: "provider_unavailable" }))).toBe("degraded");
-    expect(nodeHealth(node("a", { online: false }))).toBe("offline");
+  it("reports coverage only when there are Sessions", () => {
+    expect(coverageRatio({ sessions: 4, reported: 3 })).toBe(0.75);
+    expect(coverageRatio({ sessions: 0, reported: 0 })).toBeNull();
+  });
+});
+
+describe("Sessions needing attention", () => {
+  it("lists failed and waiting Sessions of every project by recent activity", () => {
+    const a = project("a");
+    const b = project("b");
+    const listed = attentionSessions([
+      { project: a, value: session("s1", { status: "failed", last_active_at: 300 }) },
+      { project: b, value: session("s2", { status: "requires_action", last_active_at: 400 }) },
+      { project: b, value: session("s3", { status: "in_progress", last_active_at: 500 }) },
+    ]);
+    expect(listed.map((entry) => [entry.project.id, entry.value.id])).toEqual([["b", "s2"], ["a", "s1"]]);
   });
 
-  it("groups allocations by node, newest first", () => {
-    const allocation = (id: string, nodeId: string, created: string): SandboxAllocation => ({
-      id, node_id: nodeId, tenant_id: "t", session_id: `s_${id}`, environment_id: "e", state: "active",
-      compute_phase: "running", diagnostic: "" as SandboxAllocation["diagnostic"], initialization: "ready", created_at: created,
-    });
-    const grouped = allocationsByNode([allocation("1", "a", "2026-01-01"), allocation("2", "a", "2026-02-01"), allocation("3", "b", "2026-01-01")]);
-    expect(grouped.get("a")?.map((entry) => entry.id)).toEqual(["2", "1"]);
-    expect(grouped.get("b")).toHaveLength(1);
+  it("stops a project's read once the window is passed and every attention Session was found", () => {
+    const since = 1_000;
+    const recent = [session("new", { created_at: 1_500 })];
+    expect(overviewReadDone(recent, since, 0)).toBe(false);
+    const passed = [...recent, session("old", { created_at: 900 })];
+    expect(overviewReadDone(passed, since, 0)).toBe(true);
+    expect(overviewReadDone(passed, since, 1)).toBe(false);
+    expect(overviewReadDone([...passed, session("failed", { created_at: 10, status: "failed" })], since, 1)).toBe(true);
+    // Without a summary the read stops at the window.
+    expect(overviewReadDone(passed, since, null)).toBe(true);
   });
 });
 
 describe("service health", () => {
-  const healthy = capacitySummary([node("a")]);
-  it("reports unknown while checking and down when Core is unreachable", () => {
+  const healthy = capacitySummary([]);
+  it("treats only gateway and network failures as an unreachable Web API", () => {
+    expect(isGatewayOrNetworkFailure(new AgentCoreError("Core returned HTTP 502.", 502))).toBe(true);
+    expect(isGatewayOrNetworkFailure(new AgentCoreError("Not found.", 404))).toBe(false);
+    expect(isGatewayOrNetworkFailure(new TypeError("Failed to fetch"))).toBe(true);
+    expect(isGatewayOrNetworkFailure("Core returned HTTP 503.")).toBe(true);
+    expect(isGatewayOrNetworkFailure("Core returned HTTP 500.")).toBe(false);
+  });
+
+  it("decides reachability from any settled read", () => {
+    expect(webApiReachable([{ status: "pending" }, { status: "pending" }])).toBeNull();
+    expect(webApiReachable([{ status: "failed", error: new TypeError("Failed to fetch") }, { status: "pending" }])).toBe(false);
+    expect(webApiReachable([{ status: "failed", error: new TypeError("Failed to fetch") }, { status: "ready" }])).toBe(true);
+    expect(webApiReachable([{ status: "failed", error: new AgentCoreError("Bad request.", 400) }])).toBe(true);
+  });
+
+  it("reports unknown while checking, down when unreachable and degraded on problems", () => {
     expect(serviceHealth({ coreReachable: null, collectionFailed: false, capacity: null, recentFailedSessions: null })).toBe("unknown");
     expect(serviceHealth({ coreReachable: false, collectionFailed: true, capacity: healthy, recentFailedSessions: 0 })).toBe("down");
-  });
-  it("degrades on failed collections, unavailable nodes or recent failures", () => {
     expect(serviceHealth({ coreReachable: true, collectionFailed: false, capacity: healthy, recentFailedSessions: 0 })).toBe("healthy");
     expect(serviceHealth({ coreReachable: true, collectionFailed: true, capacity: healthy, recentFailedSessions: null })).toBe("degraded");
-    expect(serviceHealth({ coreReachable: true, collectionFailed: false, capacity: capacitySummary([node("a"), node("b", { online: false })]), recentFailedSessions: 0 })).toBe("degraded");
     expect(serviceHealth({ coreReachable: true, collectionFailed: false, capacity: null, recentFailedSessions: 2 })).toBe("degraded");
   });
+
   it("counts only failures from the last hour", () => {
     const now = 10_000;
     expect(recentFailures([
@@ -87,57 +113,6 @@ describe("service health", () => {
       session("new", { status: "failed", last_active_at: now - 60 }),
       session("idle", { last_active_at: now }),
     ], now)).toBe(1);
-  });
-});
-
-describe("Session projections", () => {
-  const sessions = [
-    session("s1", { status: "failed", error: "boom", last_active_at: 300, usage: usage(10) }),
-    session("s2", { status: "requires_action", required_actions: [], last_active_at: 400 }),
-    session("s3", { status: "in_progress", last_active_at: 500 }),
-    session("s4", { usage: usage(5), agent: { id: "agent_b", name: "Writer", model: "model-b" } as AgentSession["agent"], environment: { type: "openai_hosted" } as AgentSession["environment"] }),
-  ];
-
-  it("counts statuses and sorts attention by recency", () => {
-    expect(sessionStatusCounts(sessions)).toMatchObject({ idle: 1, in_progress: 1, requires_action: 1, failed: 1, total: 4 });
-    expect(attentionSessions(sessions).map((entry) => entry.id)).toEqual(["s2", "s1"]);
-  });
-
-  it("sums only reported token usage", () => {
-    expect(reportedTokens(sessions)).toEqual({ total: 15, reporting: 2 });
-    expect(reportedTokens([session("x")])).toEqual({ total: null, reporting: 0 });
-  });
-
-  it("filters the Session log", () => {
-    expect(filterSessions(sessions, { status: "all", agentId: "", environment: "", query: "" }).map((entry) => entry.id)).toEqual(["s3", "s2", "s1", "s4"]);
-    expect(filterSessions(sessions, { status: "failed", agentId: "", environment: "", query: "" }).map((entry) => entry.id)).toEqual(["s1"]);
-    expect(filterSessions(sessions, { status: "all", agentId: "agent_b", environment: "", query: "" }).map((entry) => entry.id)).toEqual(["s4"]);
-    expect(filterSessions(sessions, { status: "all", agentId: "", environment: "openai_hosted", query: "" }).map((entry) => entry.id)).toEqual(["s4"]);
-    expect(filterSessions(sessions, { status: "all", agentId: "", environment: "", query: "BOOM" }).map((entry) => entry.id)).toEqual(["s1"]);
-    expect(environmentKind(session("x", { environment: { type: "future" } as unknown as AgentSession["environment"] }))).toBe("other");
-  });
-
-});
-
-describe("runtimeUsage", () => {
-  const hosted = (sessionId: string, lifecycle: "active" | "sleeping", cpu: number | null): RuntimeObservation => ({
-    id: sessionId, object: "agent.runtime_observation", session_id: sessionId, resolved_at: 1,
-    environment_id: "env", mode: "openai_hosted", provider_type: "docker",
-    instance: { kind: "managed_allocation", allocation_id: "alloc", device_id: null, connection_generation: null },
-    lifecycle_state: lifecycle, status: "observed", reason: null, allocation_created_at: 1, observed_at: 1, started_at: 1,
-    cpu: cpu === null ? null : { usage_seconds_total: 1, capacity_cores: 2, usage_cores: cpu, utilization_ratio: null },
-    memory: { usage_bytes: 100, limit_bytes: 400 },
-  });
-  const none: RuntimeObservation = {
-    id: "n", object: "agent.runtime_observation", session_id: "n", resolved_at: 1, environment_id: null, mode: "none", provider_type: null,
-    instance: { kind: "none", allocation_id: null, device_id: null, connection_generation: null }, lifecycle_state: null,
-    status: "unsupported", reason: "runtime_mode_not_observable", allocation_created_at: null, observed_at: null, started_at: null, cpu: null, memory: null,
-  };
-
-  it("aggregates hosted observations and can scope to a node's Sessions", () => {
-    const observations = [hosted("a", "active", 0.5), hosted("b", "sleeping", null), none];
-    expect(runtimeUsage(observations)).toMatchObject({ hosted: 2, active: 1, sleeping: 1, observed: 2, cpuUsageCores: 0.5, cpuCapacityCores: 2, memoryUsageBytes: 200, memoryLimitBytes: 800 });
-    expect(runtimeUsage(observations, new Set(["b"]))).toMatchObject({ hosted: 1, cpuUsageCores: null });
   });
 });
 
@@ -150,6 +125,7 @@ describe("sessionActivity", () => {
       session("c", { created_at: now - 30 * 3600 }),
     ], now);
     expect(activity.buckets).toHaveLength(24);
+    expect(activity.buckets[0]).toBe(activityStart(now));
     expect(activity.buckets.at(-1)).toBe(100 * 3600);
     expect(activity.created.at(-1)).toBe(1);
     expect(activity.created.at(-4)).toBe(1);

@@ -7,14 +7,10 @@ import {
   downloadSkillArchive,
   filterSkills,
   isDefaultVersionConflict,
-  mapSkillUploadError,
-  probeSkillsSupport,
   readSkillsPage,
-  setSkillDefaultVersion,
   skillArchiveFilename,
   versionDeleteState,
 } from "./skill-operations";
-import { skillUploadFailureText } from "./SkillUploadDialog";
 
 const skillId = "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c";
 
@@ -48,52 +44,7 @@ function coreError(status: number, code: string | null = null, param: string | n
   return new AgentCoreError(message, status, code, param);
 }
 
-describe("Skill navigation support", () => {
-  it("classifies the first list request", async () => {
-    const probe = (result: () => Promise<SkillList>) => probeSkillsSupport({ listSkills: vi.fn(result) });
-    await expect(probe(async () => ({ object: "list", data: [], has_more: false, first_id: null, last_id: null }))).resolves.toBe("supported");
-    await expect(probe(async () => { throw coreError(404); })).resolves.toBe("unsupported");
-    await expect(probe(async () => { throw coreError(405); })).resolves.toBe("unsupported");
-    await expect(probe(async () => { throw coreError(503, "skill_storage_unavailable"); })).resolves.toBe("storage-unavailable");
-    await expect(probe(async () => { throw coreError(503, "credential_storage_unavailable"); })).resolves.toBe("error");
-    await expect(probe(async () => { throw coreError(500); })).resolves.toBe("error");
-    await expect(probe(async () => { throw new TypeError("Failed to fetch"); })).resolves.toBe("error");
-  });
 
-  it("asks for one entry and propagates cancellation", async () => {
-    const listSkills = vi.fn(async () => { throw new DOMException("Aborted", "AbortError"); });
-    const controller = new AbortController();
-    await expect(probeSkillsSupport({ listSkills }, controller.signal)).rejects.toMatchObject({ name: "AbortError" });
-    expect(listSkills).toHaveBeenCalledWith({ limit: 1, signal: controller.signal });
-  });
-});
-
-describe("Skill upload error mapping", () => {
-  const t = i18n.getFixedT("en", "skills");
-
-  it("maps each documented Core answer to its message", () => {
-    const cases: Array<[unknown, string]> = [
-      [coreError(400, "invalid_request", null, "Invalid resource identifier or request limits."), "Core rejected the Skill: Invalid resource identifier or request limits."],
-      [coreError(413, "request_too_large"), "The files exceed the size limit."],
-      [coreError(503, "skill_storage_unavailable"), "Core has no Skill storage configured."],
-      [new TypeError("Failed to fetch"), "The upload did not finish. Your selection is kept; Core may have stored it anyway, so check the list before trying again."],
-      [new DOMException("Aborted", "AbortError"), "Upload cancelled. Your selection is kept; Core may have stored it anyway, so check the list before trying again."],
-      [coreError(404, null, null, "Resource not found."), "The upload failed: Resource not found."],
-    ];
-    for (const [error, message] of cases) expect(skillUploadFailureText(t, mapSkillUploadError(error))).toBe(message);
-  });
-
-  it("treats any failure after the user cancelled as a cancellation", () => {
-    expect(mapSkillUploadError(new TypeError("network"), true)).toEqual({ kind: "interrupted", cancelled: true });
-    expect(mapSkillUploadError(coreError(400))).toEqual({ kind: "invalid", message: "Core said no." });
-  });
-
-  it("recognizes the default-version deletion rule", () => {
-    expect(isDefaultVersionConflict(coreError(400, "invalid_value", "version"))).toBe(true);
-    expect(isDefaultVersionConflict(coreError(400, "invalid_value", "after"))).toBe(false);
-    expect(isDefaultVersionConflict(coreError(404))).toBe(false);
-  });
-});
 
 describe("Skill version deletion states", () => {
   const skill = skillFixture({ default_version: "2", latest_version: "3" });
@@ -155,22 +106,3 @@ describe("Skill list helpers", () => {
   });
 });
 
-describe("Making a version the default", () => {
-  it("moves the pointer, then reloads the versions so the new name and marks show", async () => {
-    const updated = skillFixture({ name: "report-v2", description: "Create the quarterly report.", default_version: "2", latest_version: "2" });
-    const calls: string[] = [];
-    const core = {
-      updateSkillDefaultVersion: vi.fn(async () => { calls.push("update"); return updated; }),
-      listSkillVersions: vi.fn(async (): Promise<SkillVersionList> => {
-        calls.push("list");
-        return { object: "list", data: [version("2", { name: "report-v2" }), version("1")], has_more: false, first_id: "skillver_2", last_id: "skillver_1" };
-      }),
-    };
-    const result = await setSkillDefaultVersion(core, skillId, "2");
-    expect(calls).toEqual(["update", "list"]);
-    expect(core.updateSkillDefaultVersion).toHaveBeenCalledWith(skillId, "2", { signal: undefined });
-    expect(result.skill.name).toBe("report-v2");
-    expect(result.versions.map((entry) => entry.version)).toEqual(["2", "1"]);
-    expect(result.nextAfter).toBeNull();
-  });
-});

@@ -17,7 +17,7 @@ export const navigation = {
     skills: "Skills",
     files: "文件",
     vaults: "Vault",
-    "api-keys": "API 密钥",
+    projects: "项目与 key",
     nodes: "节点",
     system: "系统",
   },

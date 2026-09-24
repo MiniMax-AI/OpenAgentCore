@@ -25,23 +25,6 @@ export function classifySkillsError(error: unknown): Exclude<SkillsSupport, "sup
   return "error";
 }
 
-/**
- * Probes whether the connected Core offers Skills, independent of the hosted
- * Session build flag: administrators must see Skills uploaded through the API.
- * Cancellation rejects with the AbortError so callers can ignore it.
- */
-export async function probeSkillsSupport(
-  client: Pick<AgentCore, "listSkills">,
-  signal?: AbortSignal,
-): Promise<SkillsSupport> {
-  try {
-    await client.listSkills({ limit: 1, signal });
-    return "supported";
-  } catch (error) {
-    if (isAbortError(error) || signal?.aborted) throw error;
-    return classifySkillsError(error);
-  }
-}
 
 export function coreErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
@@ -55,19 +38,6 @@ export type SkillUploadFailure =
   | { kind: "interrupted"; cancelled: boolean }
   | { kind: "other"; message: string };
 
-/** Maps an upload failure to what the dialog shows; the selection is always kept. */
-export function mapSkillUploadError(error: unknown, cancelled = false): SkillUploadFailure {
-  if (cancelled || isAbortError(error)) return { kind: "interrupted", cancelled: true };
-  if (error instanceof AgentCoreError) {
-    if (error.status === 413) return { kind: "too-large" };
-    if (error.status === 503 && error.code === "skill_storage_unavailable") return { kind: "storage-unavailable" };
-    if (error.status === 400) return { kind: "invalid", message: error.message };
-    return { kind: "other", message: error.message };
-  }
-  // fetch rejects with a TypeError when the request never completes.
-  if (error instanceof TypeError) return { kind: "interrupted", cancelled: false };
-  return { kind: "other", message: coreErrorMessage(error) };
-}
 
 /** Core rejects deleting the default while other versions remain (400 invalid_value on `version`). */
 export function isDefaultVersionConflict(error: unknown): boolean {
@@ -162,18 +132,3 @@ export async function readSkillVersionsPage(
   return appendCollectionPage(loaded, page, after);
 }
 
-/**
- * Moves the default pointer, then reloads the first version page so the
- * Default and Latest marks match Core. The returned Skill carries the new
- * default version's name and description.
- */
-export async function setSkillDefaultVersion(
-  core: Pick<AgentCore, "updateSkillDefaultVersion" | "listSkillVersions">,
-  skillId: string,
-  version: string,
-  signal?: AbortSignal,
-): Promise<{ skill: Skill; versions: SkillVersion[]; nextAfter: string | null }> {
-  const skill = await core.updateSkillDefaultVersion(skillId, version, { signal });
-  const page = await readSkillVersionsPage(core, skillId, [], undefined, signal);
-  return { skill, versions: page.values, nextAfter: page.nextAfter };
-}

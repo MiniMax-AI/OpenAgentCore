@@ -1,0 +1,71 @@
+/* Platform › System: read-only deployment facts in hairline ledgers. */
+
+.system-facts {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--frame-radius);
+}
+
+/* The label column matches the first column of the harness table, so values line up. */
+.system-fact {
+  display: grid;
+  min-height: 44px;
+  grid-template-columns: 240px minmax(0, 1fr);
+  align-items: center;
+  font-size: 13px;
+  line-height: 18px;
+  border-bottom: 1px solid var(--line-muted);
+}
+
+.system-fact > dt,
+.system-fact > dd {
+  padding: 6px 12px;
+}
+
+.system-fact:last-child {
+  border-bottom: 0;
+}
+
+.system-fact dt {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  color: var(--fg-muted);
+}
+
+.system-fact dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--fg);
+}
+
+.system-harnesses th[scope="row"],
+.system-harnesses thead th:first-child {
+  width: 240px;
+}
+
+.system-harness {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.system-flag {
+  padding: 0 5px;
+  color: var(--fg-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.system-code {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

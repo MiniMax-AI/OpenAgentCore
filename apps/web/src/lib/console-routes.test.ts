@@ -9,18 +9,19 @@ describe("console routes", () => {
     expect(consoleNavGroups.flatMap((group) => group.views)).toEqual([
       "overview", "agent-metrics", "sandbox-metrics", "sessions",
       "agents", "templates", "skills", "files", "vaults",
-      "api-keys", "nodes", "system",
+      "projects", "nodes", "system",
     ]);
   });
 
   it("routes hashes, keeps old bookmarks and falls back to the overview", () => {
     expect(consoleViewFromHash("")).toBe("overview");
     expect(consoleViewFromHash("#vaults")).toBe("vaults");
-    expect(consoleViewFromHash("#session?space=user_1&id=s1")).toBe("session");
+    expect(consoleViewFromHash("#session?project=proj_1&id=s1")).toBe("session");
     expect(consoleViewFromHash("#builder")).toBe("agents");
     expect(consoleViewFromHash("#playground")).toBe("sessions");
     expect(consoleViewFromHash("#workbench")).toBe("overview");
     expect(consoleViewFromHash("#sandbox")).toBe("nodes");
+    expect(consoleViewFromHash("#api-keys")).toBe("projects");
     expect(consoleViewFromHash("#unknown")).toBe("overview");
     expect(consoleHashForView("overview")).toBe("");
     expect(consoleHashForView("system")).toBe("#system");
@@ -31,10 +32,10 @@ describe("console routes", () => {
     expect(consoleNavParent("files")).toBe("files");
   });
 
-  it("carries only well-formed space and resource parameters", () => {
-    expect(routeParamsFromHash("#session?space=user_1&id=s-1")).toEqual({ space: "user_1", id: "s-1" });
-    expect(routeParamsFromHash("#session?space=bad%20id")).toEqual({ space: undefined, id: undefined });
-    expect(hashWithParams("#session", { space: "user_1", id: "s1" })).toBe("#session?space=user_1&id=s1");
+  it("carries only well-formed project and resource parameters", () => {
+    expect(routeParamsFromHash("#session?project=proj_1&id=s-1")).toEqual({ project: "proj_1", id: "s-1" });
+    expect(routeParamsFromHash("#session?project=bad%20id")).toEqual({ project: undefined, id: undefined });
+    expect(hashWithParams("#session", { project: "proj_1", id: "s1" })).toBe("#session?project=proj_1&id=s1");
     expect(hashWithParams("#files")).toBe("#files");
   });
 });

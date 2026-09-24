@@ -1,8 +1,8 @@
 /**
  * Console information architecture: every signed-in page, its hash route and
  * its navigation group. The console is a management tool over the Web API:
- * Monitor leads; Resources shows each API key's assets; Platform holds keys,
- * nodes and deployment configuration. There is no Agents API playground.
+ * Monitor leads; Resources shows each project's assets; Platform holds
+ * projects and their keys, nodes and deployment configuration. There is no Agents API playground.
  */
 export type ConsoleView =
   | "overview"
@@ -15,7 +15,7 @@ export type ConsoleView =
   | "skills"
   | "files"
   | "vaults"
-  | "api-keys"
+  | "projects"
   | "nodes"
   | "system";
 
@@ -24,7 +24,7 @@ export type ConsoleNavGroup = "monitor" | "resources" | "platform";
 export const consoleNavGroups: ReadonlyArray<{ id: ConsoleNavGroup; views: readonly ConsoleView[] }> = [
   { id: "monitor", views: ["overview", "agent-metrics", "sandbox-metrics", "sessions"] },
   { id: "resources", views: ["agents", "templates", "skills", "files", "vaults"] },
-  { id: "platform", views: ["api-keys", "nodes", "system"] },
+  { id: "platform", views: ["projects", "nodes", "system"] },
 ];
 
 /**
@@ -52,6 +52,7 @@ const legacyHashes: Readonly<Record<string, ConsoleView>> = {
   builder: "agents",
   playground: "sessions",
   workbench: "overview",
+  "api-keys": "projects",
 };
 
 export function consoleViewFromHash(hash: string): ConsoleView {

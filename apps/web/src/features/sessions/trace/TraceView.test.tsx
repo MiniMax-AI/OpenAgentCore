@@ -101,9 +101,9 @@ describe("Trace workbench presentation", () => {
     expect(html).toContain("Durable order");
     expect(html).toContain("Equal-width sequence · not time-scaled");
     expect(html).toContain("Core reports Turn wall-clock time, but not per-item timing");
-    expect(html).toContain("Turn diagnostics");
-    expect(html).toContain("Usage, timestamps, errors, and live elapsed");
-    expect(html).toContain("Session aggregate usage");
+    // Turns have their own table on the Session page; the trace no longer embeds them.
+    expect(html).not.toContain("Turn diagnostics");
+    expect(html).not.toContain("Session aggregate usage");
     expect(html).toContain('data-duration-state="unavailable"');
     expect(html).toContain('title="Core does not provide per-item timing."');
     expect(html).toContain('<span aria-hidden="true">—</span>');

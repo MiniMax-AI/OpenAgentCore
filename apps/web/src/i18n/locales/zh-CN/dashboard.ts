@@ -1,18 +1,4 @@
 export const dashboard = {
-  runtime: {
-    explorer: "运行时目标浏览器", targets: "运行时目标", resourceSnapshot: "运行时资源快照",
-    search: "搜索 运行时目标", searchPlaceholder: "搜索 Session、提供方 或标识", visible: "显示 {{value}} 项",
-    sortBy: "按{{label}}排序", noResults: "没有符合当前筛选条件的 运行时目标。",
-    page: "第 {{page}} / {{pages}} 页", previous: "上一页", next: "下一页",
-    columns: { session: "Session", mode: "模式", status: "状态", cpu: "CPU 时间", memory: "内存", uptime: "运行时长", sessionState: "Session 状态", tokens: "Token" },
-    identity: "标识", environment: "环境", allocation: "分配", resolved: "解析时间", notApplicable: "不适用", notAvailable: "不可用",
-    filters: { allStatuses: "所有状态", allModes: "所有模式", observed: "已观测", unavailable: "不可用", unsupported: "不支持", managed: "托管", selfHosted: "自托管", none: "无" },
-    status: { observed: "已观测", unsupported: "不支持", allocation_pending: "等待分配", runtime_not_running: "未运行", source_not_configured: "数据源不可用", sample_timeout: "采样超时", sample_unavailable: "采样不可用", idle: "空闲", in_progress: "进行中", requires_action: "需要操作", failed: "失败", unknown: "不可用" },
-    managedProvider: "托管 {{provider}}", managed: "托管", cores: "{{value}} 核", capacityUnknown: "容量未知",
-    limitUnknown: "上限未知", ofLimit: "上限 {{limit}}", memoryUsed: "已使用 {{percent}}% 内存", allocationUnknown: "分配时间未知", allocated: "已分配 {{duration}}", notReported: "未上报", sessionReported: "Session 已上报",
-    metrics: { sandboxState: "沙箱状态", sandboxStateValue: "{{active}} 个活跃 · {{sleeping}} 个休眠", sandboxStateDetail: "共 {{total}} 个 · {{transitioning}} 个正在转换或等待", cpu: "累计 CPU / 容量", cpuDetail: "{{covered}}/{{total}} 个已观测运行时 上报了 CPU 时间", memory: "当前内存", memoryDetail: "{{covered}}/{{total}} 个已观测运行时 上报了用量", tokens: "已上报 Token", tokenDetail: "{{covered}}/{{total}} 个 Session 上报了用量", noSample: "无当前采样" },
-    explorerHint: "搜索并检查准确观测值 · 未知始终保持未知，不会视为零", targetCount: "{{value}} 个目标 · {{snapshot}}", retainedSnapshot: "保留快照", currentSnapshot: "当前快照",
-  },
   trends: {
     title: "资源趋势", retained: "保留采样 · 持久历史", local: "浏览器本地采样 · 重新加载后重置", source: "运行时指标数据源", live: "实时", history: "历史",
     historyStale: "历史数据已过期", historyLoading: "历史 · 加载中", durableResolution: "持久数据 · {{seconds}}秒", liveRetrying: "实时 · 正在重试历史数据", liveUnavailable: "实时 · 历史数据不可用", liveLoading: "实时 · 正在加载历史数据", staleRetrying: "已过期 · 正在重试", liveInterval: "实时 · {{seconds}}秒",

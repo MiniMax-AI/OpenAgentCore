@@ -1,5 +1,52 @@
 import type { system as english } from "../en/system";
 type TranslationShape<T> = { [K in keyof T]: T[K] extends string ? string : TranslationShape<T[K]> };
 export const system: TranslationShape<typeof english> = {
-  placeholder: "",
+  help: "所有项目共用的部署级配置，来自 Core 启动时加载的配置和沙箱部署。“已配置”不代表可以连通或已经就绪。修改请在 Core 的配置里进行。",
+  refresh: "刷新系统配置",
+  loading: "正在加载…",
+  startupFailed: "无法加载 Core 的启动配置。",
+  harnesses: {
+    title: "执行引擎",
+    help: "这个 Core 版本支持的执行引擎。Agent 在已启用的执行引擎上运行；Agent 没有指定时使用默认执行引擎。",
+    harness: "执行引擎",
+    status: "状态",
+    endpoint: "模型端点",
+    endpointHelp: "部署是否为这个执行引擎配置了模型端点。没有配置时，使用它的 Agent 需要自带模型服务。Core 不会返回端点本身。",
+    default: "默认",
+  },
+  sandbox: {
+    title: "沙箱",
+    help: "托管沙箱在哪里运行，来自启动配置和沙箱部署。节点在“节点”页面管理。",
+    deploymentFailed: "无法加载沙箱部署。",
+    managed: "托管沙箱",
+    managedHelp: "Core 是否为 Session 创建和管理沙箱。",
+    provider: "提供方",
+    mode: "运行模式",
+    modes: {
+      nodes: "节点",
+      direct: "直连",
+    },
+    maintenance: "维护模式",
+    maintenanceHelp: "开启时暂停分配新沙箱。",
+    installation: "安装 ID",
+    coreOrigin: "Core 地址",
+    coreOriginHelp: "节点和沙箱访问 Core 使用的地址。",
+    e2bTemplate: "E2B 模板",
+  },
+  gateway: {
+    title: "Daemon 网关",
+    daemon: "网关",
+    daemonHelp: "执行引擎 daemon 连接 Core 的通道，托管沙箱和已接入的机器都通过它连接。没有网关时不会启用任何执行引擎。",
+    selfHosted: "自托管环境",
+    selfHostedHelp: "Session 是否可以在已接入机器的 self_hosted 环境中运行。",
+  },
+  values: {
+    enabled: "已启用",
+    disabled: "未启用",
+    notEnabled: "未启用",
+    configured: "已配置",
+    notConfigured: "未配置",
+    on: "开启",
+    off: "关闭",
+  },
 };

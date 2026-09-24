@@ -3,7 +3,7 @@ import {
   Bot,
   Cpu,
   FileText,
-  KeyRound,
+  FolderKanban,
   Layers3,
   LayoutDashboard,
   ListTree,
@@ -30,7 +30,7 @@ const viewIcons: Record<ConsoleView, LucideIcon> = {
   skills: Puzzle,
   files: FileText,
   vaults: Vault,
-  "api-keys": KeyRound,
+  projects: FolderKanban,
   nodes: Server,
   system: Settings2,
 };

@@ -1,9 +1,4 @@
-import type {
-  AgentCore,
-  AgentSession,
-  RuntimeHistory,
-  RuntimeHistoryCapabilities,
-} from "@agents-core-web/agents-client";
+import { AgentCoreError, type AgentCore, type AgentSession, type RuntimeHistory } from "@agents-core-web/agents-client";
 
 import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";
 import { deriveTokenThroughput, type RuntimeTrendSample, type RuntimeTrendTarget } from "./runtime-trends";
@@ -19,7 +14,6 @@ export const RUNTIME_DURABLE_RANGES = [
 export type RuntimeDurableRange = typeof RUNTIME_DURABLE_RANGES[number]["milliseconds"];
 
 export interface RuntimeDurableSnapshot {
-  capabilities: RuntimeHistoryCapabilities;
   samples: RuntimeTrendSample[];
   rangeStart: number;
   rangeEnd: number;
@@ -52,12 +46,6 @@ function durableTargets(snapshot: RuntimeDashboardSnapshot): AgentSession[] {
     if (session) targets.set(session.id, session);
   }
   return [...targets.values()];
-}
-
-export function runtimeTrendSourceAfterHistoryUnavailable(
-  selection: "auto" | "live" | "durable",
-): "auto" | "live" {
-  return selection === "durable" ? "live" : selection;
 }
 
 async function mapBounded<T, R>(
@@ -172,17 +160,26 @@ export function runtimeDurableTrendSamples(
   return deriveTokenThroughput(samples);
 }
 
+export type RuntimeHistoryReader = Pick<AgentCore, "retrieveRuntimeHistory">;
+
+function isNotFound(error: unknown): boolean {
+  return error instanceof AgentCoreError && error.status === 404;
+}
+
+/**
+ * Reads the retained Runtime history of each hosted Session in the snapshot
+ * through the reader of the Session's project. The Web API has no
+ * deployment-wide capability read: a 404 for every Session means Core keeps
+ * no history (null), and a 404 for one Session only leaves that Session out.
+ */
 export async function loadRuntimeDurableSnapshot(
-  core: Pick<AgentCore, "getRuntimeHistoryCapabilities" | "retrieveRuntimeHistory">,
+  readerFor: (sessionId: string) => RuntimeHistoryReader | null,
   snapshot: RuntimeDashboardSnapshot,
   range: RuntimeDurableRange,
   signal?: AbortSignal,
   now: () => number = Date.now,
   targetLimit = RUNTIME_DURABLE_TARGET_LIMIT,
 ): Promise<RuntimeDurableSnapshot | null> {
-  const capabilities = await core.getRuntimeHistoryCapabilities({ signal });
-  signal?.throwIfAborted();
-  if (!capabilities.available) return null;
   const targets = durableTargets(snapshot);
   if (targets.length > targetLimit) {
     throw new RuntimeDurableHistoryIncompleteError(
@@ -191,25 +188,35 @@ export async function loadRuntimeDurableSnapshot(
   }
   const rangeEndSeconds = Math.floor(now() / 1_000);
   const rangeStartSeconds = rangeEndSeconds - range / 1_000;
-  const maximumPoints = Math.min(capabilities.maximum_points ?? RUNTIME_DURABLE_MAX_POINTS, RUNTIME_DURABLE_MAX_POINTS);
-  const histories = await mapBounded(targets, 4, (session) => core.retrieveRuntimeHistory(session.id, {
-    start: rangeStartSeconds,
-    end: rangeEndSeconds,
-    maxPoints: maximumPoints,
-    signal,
-  }));
+  const results = await mapBounded(targets, 4, async (session): Promise<RuntimeHistory | null> => {
+    const reader = readerFor(session.id);
+    if (!reader) return null;
+    try {
+      return await reader.retrieveRuntimeHistory(session.id, {
+        start: rangeStartSeconds,
+        end: rangeEndSeconds,
+        maxPoints: RUNTIME_DURABLE_MAX_POINTS,
+        signal,
+      });
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw error;
+    }
+  });
   signal?.throwIfAborted();
+  if (targets.length > 0 && results.every((history) => history === null)) return null;
+  const histories = results.filter((history): history is RuntimeHistory => history !== null);
+  const covered = targets.filter((_, index) => results[index] !== null);
   const resolutions = new Set(histories.map((history) => history.resolution_seconds));
   if (resolutions.size > 1) {
     throw new RuntimeDurableHistoryIncompleteError("Durable Runtime histories returned inconsistent resolutions.");
   }
   return {
-    capabilities,
-    samples: runtimeDurableTrendSamples(targets, histories),
+    samples: runtimeDurableTrendSamples(covered, histories),
     rangeStart: rangeStartSeconds * 1_000,
     rangeEnd: rangeEndSeconds * 1_000,
-    resolutionSeconds: histories[0]?.resolution_seconds ?? capabilities.minimum_step_seconds ?? 30,
-    targetCount: targets.length,
+    resolutionSeconds: histories[0]?.resolution_seconds ?? 30,
+    targetCount: covered.length,
     sampleCount: histories.reduce((total, history) => total + history.coverage.sample_count, 0),
     expectedSampleCount: histories.reduce((total, history) => total + history.coverage.expected_sample_count, 0),
     loadedAt: now(),
