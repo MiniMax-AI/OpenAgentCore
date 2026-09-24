@@ -26,6 +26,7 @@ func Enroll(ctx context.Context, coreURL, dir, token string, input EnrollmentReq
 	if stored.CoreURL != coreURL {
 		return StoredIdentity{}, errors.New("Core URL differs from retained identity")
 	}
+	input.SpecificationDigest, input.DeploymentGeneration = stored.Identity.SpecificationDigest, stored.Identity.DeploymentGeneration
 	input.NodeID, input.Credential = stored.Identity.NodeID, stored.Credential
 	input.Provider, input.BackendFingerprint = stored.Identity.Provider, stored.Identity.BackendFingerprint
 	input.MaxActive, input.MaxRetained = stored.Identity.MaxActive, stored.Identity.MaxRetained
@@ -84,7 +85,7 @@ func readEnrollment(r *http.Response) (EnrollmentResponse, error) {
 	return out, nil
 }
 func verifyEnrollment(s StoredIdentity, out EnrollmentResponse) (StoredIdentity, error) {
-	if out.NodeID != s.Identity.NodeID || out.InstallationID != s.Identity.InstallationID || out.Provider != s.Identity.Provider {
+	if out.SpecificationDigest != s.Identity.SpecificationDigest || out.DeploymentGeneration != s.Identity.DeploymentGeneration || out.NodeID != s.Identity.NodeID || out.InstallationID != s.Identity.InstallationID || out.Provider != s.Identity.Provider {
 		return StoredIdentity{}, errors.New("enrolled node identity mismatch")
 	}
 	return s, nil

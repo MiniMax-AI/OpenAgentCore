@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"time"
 )
 
@@ -13,21 +14,25 @@ var (
 )
 
 type RuntimeNodeIdentity struct {
-	NodeID             string `json:"node_id"`
-	InstallationID     string `json:"installation_id"`
-	Provider           string `json:"provider"`
-	BackendFingerprint string `json:"-"`
-	MaxActive          int    `json:"-"`
-	MaxRetained        int    `json:"-"`
+	SpecificationDigest  string `json:"specification_digest"`
+	DeploymentGeneration uint64 `json:"deployment_generation"`
+	NodeID               string `json:"node_id"`
+	InstallationID       string `json:"installation_id"`
+	Provider             string `json:"provider"`
+	BackendFingerprint   string `json:"-"`
+	MaxActive            int    `json:"-"`
+	MaxRetained          int    `json:"-"`
 }
 type RuntimeNodeEnrollment struct {
-	NodeID             string `json:"node_id"`
-	Credential         string `json:"credential"`
-	Name               string `json:"name"`
-	Provider           string `json:"provider"`
-	BackendFingerprint string `json:"backend_fingerprint"`
-	MaxActive          int    `json:"max_active"`
-	MaxRetained        int    `json:"max_retained"`
+	SpecificationDigest  string `json:"specification_digest"`
+	DeploymentGeneration uint64 `json:"deployment_generation"`
+	NodeID               string `json:"node_id"`
+	Credential           string `json:"credential"`
+	Name                 string `json:"name"`
+	Provider             string `json:"provider"`
+	BackendFingerprint   string `json:"backend_fingerprint"`
+	MaxActive            int    `json:"max_active"`
+	MaxRetained          int    `json:"max_retained"`
 }
 type RuntimeNodeHealth struct {
 	Diagnostic           string `json:"diagnostic,omitempty"`
@@ -75,15 +80,17 @@ type SandboxE2BView struct {
 	CredentialConfigured bool   `json:"credential_configured"`
 }
 type RuntimeDeploymentView struct {
-	Generation     uint64                     `json:"generation"`
-	Mode           string                     `json:"mode"`
-	Resources      SandboxDeploymentResources `json:"resources"`
-	E2B            *SandboxE2BView            `json:"e2b,omitempty"`
-	CoreURL        string                     `json:"core_url"`
-	InstallationID string                     `json:"installation_id"`
-	Provider       string                     `json:"provider"`
-	Maintenance    bool                       `json:"maintenance"`
-	OwnerEpoch     uint64                     `json:"owner_epoch"`
+	Specification       *sandbox.DeploymentSpec    `json:"specification,omitempty"`
+	SpecificationDigest string                     `json:"specification_digest,omitempty"`
+	Generation          uint64                     `json:"generation"`
+	Mode                string                     `json:"mode"`
+	Resources           SandboxDeploymentResources `json:"resources"`
+	E2B                 *SandboxE2BView            `json:"e2b,omitempty"`
+	CoreURL             string                     `json:"core_url"`
+	InstallationID      string                     `json:"installation_id"`
+	Provider            string                     `json:"provider"`
+	Maintenance         bool                       `json:"maintenance"`
+	OwnerEpoch          uint64                     `json:"owner_epoch"`
 }
 type RuntimeNodeAllocation struct {
 	Diagnostic     string    `json:"diagnostic"`

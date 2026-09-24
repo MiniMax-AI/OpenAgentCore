@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"math"
 	"strings"
 	"unicode"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -31,6 +33,9 @@ type SandboxMaintenanceRequest struct {
 }
 
 func validateSandboxSelection(input SandboxDeploymentSetupRequest) error {
+	if err := input.DeploymentSpec.Validate(input.Provider); err != nil {
+		return &SandboxConfigurationError{Message: err.Error()}
+	}
 	if ValidateSandboxCoreURL(input.CoreURL) != nil {
 		return ErrInvalidInput
 	}
@@ -60,6 +65,13 @@ func validateSandboxSelection(input SandboxDeploymentSetupRequest) error {
 }
 
 func (s *Store) sandboxSelectionEqual(d sqlc.RuntimeDeployment, input SandboxDeploymentSetupRequest) (bool, error) {
+	var spec sandbox.DeploymentSpec
+	if json.Unmarshal(d.Specification, &spec) != nil {
+		return false, ErrSandboxDeploymentConflict
+	}
+	if spec.Digest(d.ProviderKind) != input.DeploymentSpec.Digest(input.Provider) {
+		return false, nil
+	}
 	if d.ProviderKind != input.Provider || d.CoreUrl != input.CoreURL {
 		return false, nil
 	}
@@ -89,6 +101,7 @@ func (s *Store) saveSandboxSelection(ctx context.Context, q *sqlc.Queries, d sql
 	}
 	digest := sha256.Sum256([]byte(input.Provider + "\x00" + namespace))
 	params := sqlc.InitializeSandboxDeploymentParams{ProviderKind: input.Provider, CoreUrl: input.CoreURL, BackendFingerprint: hex.EncodeToString(digest[:]), Generation: generation, Mode: mode}
+	params.Specification, _ = json.Marshal(input.DeploymentSpec)
 	if input.Provider == "microsandbox" {
 		params.IdleSeconds, params.RetentionSeconds = 300, 86400
 	}

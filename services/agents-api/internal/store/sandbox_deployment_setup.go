@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"net"
 	"net/url"
 	"strconv"
@@ -15,6 +17,7 @@ import (
 var ErrSandboxDeploymentConflict = errors.New("sandbox deployment is already configured differently")
 
 type SandboxDeploymentSetupRequest struct {
+	sandbox.DeploymentSpec
 	Provider string                   `json:"provider"`
 	CoreURL  string                   `json:"core_url"`
 	E2B      *SandboxE2BConfiguration `json:"e2b,omitempty"`
@@ -23,6 +26,7 @@ type SandboxDeploymentSetupRequest struct {
 // SandboxSetup is the immutable configuration selected by the deployment admin.
 // An empty Provider means that Web setup has not yet selected an adapter.
 type SandboxSetup struct {
+	Specification                                         sandbox.DeploymentSpec
 	InstallationID, Provider, CoreURL, BackendFingerprint string
 	Generation                                            uint64
 	Mode                                                  string
@@ -42,6 +46,14 @@ func (s *Store) GetSandboxSetup(ctx context.Context) (SandboxSetup, error) {
 		return SandboxSetup{}, ErrSandboxDeploymentConflict
 	}
 	result := SandboxSetup{InstallationID: runtimeUUID(d.InstallationID), Provider: d.ProviderKind, CoreURL: d.CoreUrl, BackendFingerprint: d.BackendFingerprint, IdleSeconds: d.IdleSeconds, RetentionSeconds: d.RetentionSeconds, Generation: uint64(d.Generation), Mode: d.Mode, Maintenance: d.Maintenance}
+	if err := json.Unmarshal(d.Specification, &result.Specification); err != nil {
+		return SandboxSetup{}, err
+	}
+	if d.ProviderKind != "" {
+		if err := result.Specification.Validate(d.ProviderKind); err != nil {
+			return SandboxSetup{}, err
+		}
+	}
 	if d.ProviderKind == "e2b" {
 		credential, err := s.credentialCipher.OpenSandboxDeployment(d.E2bCredential, result.InstallationID, result.Generation)
 		if err != nil {
@@ -126,6 +138,13 @@ func ValidateSandboxCoreURL(value string) error {
 
 func runtimeDeploymentView(d sqlc.RuntimeDeployment) RuntimeDeploymentView {
 	result := RuntimeDeploymentView{InstallationID: runtimeUUID(d.InstallationID), Provider: d.ProviderKind, CoreURL: d.CoreUrl, Maintenance: d.Maintenance, OwnerEpoch: uint64(d.OwnerEpoch), Generation: uint64(d.Generation), Mode: d.Mode}
+	if len(d.Specification) > 0 && string(d.Specification) != "{}" {
+		var spec sandbox.DeploymentSpec
+		if json.Unmarshal(d.Specification, &spec) == nil {
+			result.Specification = &spec
+			result.SpecificationDigest = spec.Digest(d.ProviderKind)
+		}
+	}
 	if d.ProviderKind == "e2b" {
 		result.E2B = &SandboxE2BView{Template: d.E2bTemplate, CredentialConfigured: len(d.E2bCredential) > 0}
 	}

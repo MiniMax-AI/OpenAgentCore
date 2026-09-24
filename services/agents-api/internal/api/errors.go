@@ -85,7 +85,12 @@ func writeFieldError(w http.ResponseWriter, err error) bool {
 func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFoundParam ...string) {
 	var cursor *store.InvalidCursorError
 	var selection *store.MCPCredentialSelectionError
+	var sandboxConfiguration *store.SandboxConfigurationError
 	switch {
+	case errors.As(err, &sandboxConfiguration):
+		writeError(w, http.StatusBadRequest, "invalid_sandbox_configuration", sandboxConfiguration.Message)
+	case errors.Is(err, store.ErrRuntimeSpecificationMismatch):
+		writeError(w, http.StatusConflict, "sandbox_specification_mismatch", "The node resource limits or Runtime release do not match the active deployment. Restore its installed configuration or remove and enroll the node again after a drained deployment change.")
 	case errors.Is(err, store.ErrProjectArchived):
 		writeError(w, http.StatusConflict, "project_archived", "The target Project is archived.")
 	case errors.Is(err, store.ErrProjectExists):
@@ -97,7 +102,7 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 	case errors.Is(err, store.ErrSandboxCredentialUnavailable):
 		writeError(w, http.StatusServiceUnavailable, "sandbox_credential_unavailable", "Sandbox credentials are unavailable. Check the service credential encryption configuration.")
 	case errors.Is(err, store.ErrSandboxDeploymentConflict):
-		writeError(w, http.StatusConflict, "sandbox_deployment_conflict", "The sandbox deployment cannot change in its current state. Refresh the configuration, enter maintenance and finish resource cleanup before switching. File-managed deployments must use their configuration file.")
+		writeError(w, http.StatusConflict, "sandbox_deployment_conflict", "The sandbox deployment cannot change in its current state. Refresh the configuration, enter maintenance and finish resource cleanup before switching.")
 	case errors.Is(err, store.ErrRuntimeNodeCredential):
 		writeError(w, http.StatusUnauthorized, "invalid_node_credential", "A valid sandbox node enrollment or node credential is required.")
 	case errors.Is(err, store.ErrRuntimeNodeInUse):

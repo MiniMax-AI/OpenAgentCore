@@ -34,6 +34,7 @@ func (h *Handler) registerSandboxManagerRoutes(r chi.Router) {
 	}
 	r.Post("/core/v1/sandbox/enroll", h.enrollSandboxNode)
 	r.Get("/core/v1/sandbox/node/identity", h.sandboxNodeIdentity)
+	r.Get("/core/v1/sandbox/node/configuration", h.sandboxNodeConfiguration)
 	if h.deploymentAuth == nil {
 		return
 	}
@@ -199,7 +200,7 @@ func (h *Handler) enrollSandboxNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input store.RuntimeNodeEnrollment
-	if decodeInputObject(raw, &input, "node_id", "credential", "name", "provider", "backend_fingerprint", "max_active", "max_retained") != nil {
+	if decodeInputObject(raw, &input, "node_id", "credential", "name", "provider", "backend_fingerprint", "max_active", "max_retained", "deployment_generation", "specification_digest") != nil {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}

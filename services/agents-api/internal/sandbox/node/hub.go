@@ -255,7 +255,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func sameBackend(a, b Identity) bool {
-	return a.NodeID == b.NodeID && a.InstallationID == b.InstallationID && a.Provider == b.Provider && a.BackendFingerprint == b.BackendFingerprint
+	return a.SpecificationDigest == b.SpecificationDigest && a.DeploymentGeneration == b.DeploymentGeneration && a.NodeID == b.NodeID && a.InstallationID == b.InstallationID && a.Provider == b.Provider && a.BackendFingerprint == b.BackendFingerprint
 }
 
 func (h *Hub) call(ctx context.Context, id string, q request) (response, error) {

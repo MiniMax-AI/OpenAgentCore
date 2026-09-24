@@ -5,8 +5,8 @@ UPDATE runtime_deployment SET provider_kind=$1, local_node_id=$2, mode='nodes', 
 SELECT * FROM runtime_deployment WHERE singleton=true;
 
 -- name: InsertRuntimeNode :one
-INSERT INTO runtime_nodes(id,installation_id,name,backend_fingerprint,credential_sha256,max_active,max_retained)
-VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *;
+INSERT INTO runtime_nodes(id,installation_id,name,backend_fingerprint,credential_sha256,max_active,max_retained,specification_digest,deployment_generation)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *;
 
 -- name: GetRuntimeNode :one
 SELECT * FROM runtime_nodes WHERE id=$1 AND removed_at IS NULL;

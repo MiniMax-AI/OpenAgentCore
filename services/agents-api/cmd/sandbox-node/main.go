@@ -73,7 +73,7 @@ func run(ctx context.Context, args []string) error {
 			return errors.New("node capacity exceeds configured provider limits")
 		}
 	}
-	expected := node.Identity{InstallationID: built.InstallationID, Provider: config.Provider, BackendFingerprint: built.BackendFingerprint, MaxActive: *maxActive, MaxRetained: *maxRetained}
+	expected := node.Identity{SpecificationDigest: built.SpecificationDigest, DeploymentGeneration: config.Generation, InstallationID: built.InstallationID, Provider: config.Provider, BackendFingerprint: built.BackendFingerprint, MaxActive: *maxActive, MaxRetained: *maxRetained}
 	probe := func(ctx context.Context) (node.Health, error) {
 		err := built.Probe(ctx)
 		return node.Health{ProviderReady: err == nil}, err
@@ -118,14 +118,14 @@ func run(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		return json.NewEncoder(os.Stdout).Encode(node.EnrollmentResponse{NodeID: stored.Identity.NodeID, InstallationID: stored.Identity.InstallationID, Provider: stored.Identity.Provider})
+		return json.NewEncoder(os.Stdout).Encode(node.EnrollmentResponse{SpecificationDigest: stored.Identity.SpecificationDigest, DeploymentGeneration: stored.Identity.DeploymentGeneration, NodeID: stored.Identity.NodeID, InstallationID: stored.Identity.InstallationID, Provider: stored.Identity.Provider})
 	}
 	stored, err := node.LoadIdentity(*stateDir)
 	if err != nil {
 		return err
 	}
 	expected.NodeID = stored.Identity.NodeID
-	if expected.InstallationID != stored.Identity.InstallationID || expected.Provider != stored.Identity.Provider || expected.BackendFingerprint != stored.Identity.BackendFingerprint {
+	if expected.SpecificationDigest != stored.Identity.SpecificationDigest || expected.DeploymentGeneration != stored.Identity.DeploymentGeneration || expected.InstallationID != stored.Identity.InstallationID || expected.Provider != stored.Identity.Provider || expected.BackendFingerprint != stored.Identity.BackendFingerprint {
 		return errors.New("provider configuration differs from retained node identity")
 	}
 	if *coreURL != "" && *coreURL != stored.CoreURL {

@@ -21,13 +21,15 @@ import (
 )
 
 type Config struct {
-	Nodes          *Nodes        `json:"nodes,omitempty"`
-	CoreURL        string        `json:"core_url"`
-	Provider       string        `json:"provider"`
-	InstallationID string        `json:"installation_id"`
-	Maintenance    bool          `json:"maintenance"`
-	Docker         *Docker       `json:"docker,omitempty"`
-	Microsandbox   *Microsandbox `json:"microsandbox,omitempty"`
+	Specification  sandbox.DeploymentSpec `json:"specification"`
+	Generation     uint64                 `json:"generation"`
+	Nodes          *Nodes                 `json:"nodes,omitempty"`
+	CoreURL        string                 `json:"core_url"`
+	Provider       string                 `json:"provider"`
+	InstallationID string                 `json:"installation_id"`
+	Maintenance    bool                   `json:"maintenance"`
+	Docker         *Docker                `json:"docker,omitempty"`
+	Microsandbox   *Microsandbox          `json:"microsandbox,omitempty"`
 }
 
 // Nodes controls local participation and, for remote-only deployments, the
@@ -90,6 +92,7 @@ type Policy struct {
 	MaxActive, MaxRetained int
 }
 type Built struct {
+	SpecificationDigest                string
 	Provider                           sandbox.Provider
 	InstallationID, BackendFingerprint string
 	Suspension                         *Policy
@@ -98,6 +101,9 @@ type Built struct {
 
 func Build(config Config) (*Built, func(), error) {
 	closeProvider := func() {}
+	if err := validateSpecification(config); err != nil {
+		return nil, closeProvider, err
+	}
 	id, err := uuid.Parse(config.InstallationID)
 	if err != nil || id == uuid.Nil || id.String() != config.InstallationID {
 		return nil, closeProvider, errors.New("sandbox requires a canonical installation_id UUID")
@@ -130,7 +136,7 @@ func Build(config Config) (*Built, func(), error) {
 		}
 	}
 	hasDocker, hasMicrosandbox := config.Docker != nil, config.Microsandbox != nil
-	result := &Built{InstallationID: config.InstallationID}
+	result := &Built{InstallationID: config.InstallationID, SpecificationDigest: config.Specification.Digest(config.Provider)}
 	switch config.Provider {
 	case "docker":
 		if config.Docker == nil || !hasDocker || hasMicrosandbox {
@@ -150,7 +156,7 @@ func Build(config Config) (*Built, func(), error) {
 			return nil, closeProvider, errors.New("invalid managed Docker endpoint")
 		}
 		closeProvider = func() { _ = c.Close() }
-		provider, err := sandboxdocker.New(c, sandboxdocker.Config{InstallationID: config.InstallationID, Image: entry.Image, Network: entry.Network, Seccomp: string(seccomp), ExtraHosts: entry.ExtraHosts, NestedSandbox: entry.NestedSandbox})
+		provider, err := sandboxdocker.New(c, sandboxdocker.Config{InstallationID: config.InstallationID, Image: entry.Image, Network: entry.Network, Seccomp: string(seccomp), ExtraHosts: entry.ExtraHosts, NestedSandbox: entry.NestedSandbox, Resources: &config.Specification.Resources})
 		if err != nil {
 			closeProvider()
 			return nil, func() {}, errors.New("invalid managed Docker provider configuration")

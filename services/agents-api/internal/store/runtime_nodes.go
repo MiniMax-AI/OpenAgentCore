@@ -133,12 +133,16 @@ func (s *Store) EnrollRuntimeNode(ctx context.Context, token string, input Runti
 		if d.Mode != "nodes" || d.Maintenance || input.Provider != d.ProviderKind {
 			return ErrInvalidInput
 		}
+		spec, err := deploymentSpecification(d)
+		if err != nil || input.DeploymentGeneration != uint64(d.Generation) || input.SpecificationDigest != spec.Digest(d.ProviderKind) {
+			return ErrRuntimeSpecificationMismatch
+		}
 		if _, err := q.GetRuntimeNode(ctx, id); err == nil {
 			return ErrIdempotencyConflict
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		row, err := q.InsertRuntimeNode(ctx, sqlc.InsertRuntimeNodeParams{ID: id, InstallationID: d.InstallationID, Name: input.Name, BackendFingerprint: input.BackendFingerprint, CredentialSha256: runtimeTokenDigest(input.Credential), MaxActive: int32(input.MaxActive), MaxRetained: int32(input.MaxRetained)})
+		row, err := q.InsertRuntimeNode(ctx, sqlc.InsertRuntimeNodeParams{ID: id, InstallationID: d.InstallationID, Name: input.Name, BackendFingerprint: input.BackendFingerprint, CredentialSha256: runtimeTokenDigest(input.Credential), MaxActive: int32(input.MaxActive), MaxRetained: int32(input.MaxRetained), SpecificationDigest: input.SpecificationDigest, DeploymentGeneration: int64(input.DeploymentGeneration)})
 		if err != nil {
 			return err
 		}
@@ -155,7 +159,7 @@ func (s *Store) EnrollRuntimeNode(ctx context.Context, token string, input Runti
 	return result, err
 }
 func nodeIdentity(n sqlc.RuntimeNode, kind string) RuntimeNodeIdentity {
-	return RuntimeNodeIdentity{NodeID: runtimeUUID(n.ID), InstallationID: runtimeUUID(n.InstallationID), Provider: kind, BackendFingerprint: n.BackendFingerprint, MaxActive: int(n.MaxActive), MaxRetained: int(n.MaxRetained)}
+	return RuntimeNodeIdentity{SpecificationDigest: n.SpecificationDigest, DeploymentGeneration: uint64(n.DeploymentGeneration), NodeID: runtimeUUID(n.ID), InstallationID: runtimeUUID(n.InstallationID), Provider: kind, BackendFingerprint: n.BackendFingerprint, MaxActive: int(n.MaxActive), MaxRetained: int(n.MaxRetained)}
 }
 func (s *Store) AuthenticateRuntimeNode(ctx context.Context, nodeID, credential string) (RuntimeNodeIdentity, error) {
 	id, err := parseConnectionGeneration(nodeID)
@@ -178,6 +182,10 @@ func (s *Store) AuthenticateRuntimeNode(ctx context.Context, nodeID, credential 
 	}
 	if n.InstallationID != d.InstallationID || d.Mode != "nodes" {
 		return RuntimeNodeIdentity{}, ErrRuntimeNodeCredential
+	}
+	spec, err := deploymentSpecification(d)
+	if err != nil || n.SpecificationDigest != spec.Digest(d.ProviderKind) || n.DeploymentGeneration != d.Generation {
+		return RuntimeNodeIdentity{}, ErrRuntimeSpecificationMismatch
 	}
 	return nodeIdentity(n, d.ProviderKind), nil
 }
