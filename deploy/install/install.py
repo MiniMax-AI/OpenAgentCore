@@ -67,6 +67,7 @@ def verify_bundle(bundle):
     required = {"manifest.json", "install.sh", "install.py", "configuration.py", "native_service.py", "node-install.pyz", "self-hosted-install.pyz", "distribution.py", "runtime/seccomp.json"}
     required.update(f"images/{name}.tar" for name in ("core", "web", "database"))
     required.update("native/bin/" + name for name in ("agents-api", "agents-api-migrate"))
+    required.add("native/e2b/agents-api-e2b-provider")
     if not required.issubset(covered):
         raise InstallError("Distribution checksum list is incomplete")
     manifest = json.loads((bundle / "manifest.json").read_text())
@@ -213,6 +214,11 @@ def initialize(root, args, manifest):
             managed = json.loads((root / "config/managed-runtimes.json").read_text())
             if managed.get("docker", {}).get("image") != manifest["images"]["runtime"]:
                 raise InstallError("Retained Runtime image differs; preserve the installation and inspect its configuration")
+        if mode != "web-only":
+            directory = root / "state/e2b"
+            if (not directory.is_dir() or directory.is_symlink() or
+                    stat.S_IMODE(directory.stat().st_mode) & 0o077):
+                raise InstallError("Private provider receipts are missing or unsafe; restore the retained installation")
         if state.get("console_auth") == "account":
             # Never let Compose create replacement bind sources for lost auth
             # state. An existing install must retain its account directory.
@@ -247,8 +253,9 @@ def initialize(root, args, manifest):
     directories = ["config"]
     if mode != "web-only":
         directories.append("admin")
-    if args.provider or mode != "core-only":
-        directories.append("state")
+    directories.append("state")
+    if mode != "web-only":
+        directories.append("state/e2b")
     if args.provider:
         directories.append("state/sandbox-node")
     if mode != "core-only":

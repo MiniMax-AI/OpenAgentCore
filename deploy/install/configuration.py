@@ -55,6 +55,9 @@ def core_environment(root, state, database_password):
         "AGENTS_API_ADDR": f'127.0.0.1:{state["core_port"]}' if native else ":8091",
         "AGENTS_API_ENGINE": "codex", "AGENTS_API_HARNESSES": "codex,claude_sdk,mcode",
         "AGENTS_API_DAEMON_WS_URL": daemon_url,
+        "AGENTS_API_E2B_PROVIDER_BIN": (str(Path(root) / "native/e2b/agents-api-e2b-provider")
+                                         if native else "/opt/parsar/e2b/agents-api-e2b-provider"),
+        "AGENTS_API_E2B_STATE_DIR": str(Path(root) / "state/e2b") if native else "/state/e2b",
     }
     result["AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE"] = (
         str(Path(root) / "admin/digests.json") if native else "/admin/digests.json")
@@ -100,6 +103,7 @@ def compose_config(root, state, manifest, database_password):
             services.pop("migrate")
         else:
             core["volumes"].append(bind(root / "admin/digests.json", "/admin/digests.json"))
+            core["volumes"].append(bind(root / "state/e2b", "/state/e2b", False))
             if state["provider"] == "docker":
                 core["volumes"].append(bind("/var/run/docker.sock", "/var/run/docker.sock", False))
                 core["volumes"].append(bind(root / "state/sandbox-node", "/state/sandbox-node", False))

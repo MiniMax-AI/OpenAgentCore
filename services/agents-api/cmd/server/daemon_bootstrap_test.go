@@ -11,21 +11,25 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
-type bootstrapCredentialStore struct{ nodeID string }
+type bootstrapCredentialStore struct {
+	nodeID       string
+	allocationID string
+}
 
 func (s bootstrapCredentialStore) GetDeviceCredential(context.Context, string) (device.Credential, bool, error) {
 	return device.Credential{ID: "runtime", Type: gateway.RuntimeTypeAgentDaemon,
-		CredentialHash: device.HashCredential("synthetic-token"), RuntimeNodeID: s.nodeID}, true, nil
+		CredentialHash: device.HashCredential("synthetic-token"), RuntimeNodeID: s.nodeID, RuntimeAllocationID: s.allocationID}, true, nil
 }
 
 func TestBootstrapAddressFollowsAuthenticatedAllocation(t *testing.T) {
 	const publicURL = "wss://private-proxy.example/api/v1/agent-daemon/ws"
 	const selectedURL = "wss://selected-node-entry.example/api/v1/agent-daemon/ws"
 	local := &managedNodes{runtime: &execution.RuntimeProvider{LocalNodeID: "local-node", CoreURL: "http://host.microsandbox.internal:8091/api/v1"}}
-	remote := &managedNodes{setup: &managedSetup{}}
-	remote.setup.selected.Store(&execution.RuntimeProvider{CoreURL: "https://selected-node-entry.example/api/v1"})
+	remote := &managedNodes{setup: &managedSetup{store: &setupStore{value: store.SandboxSetup{Provider: "docker", Generation: 1}}}}
+	remote.setup.selected.Store(&execution.RuntimeProvider{CoreURL: "https://selected-node-entry.example/api/v1", Generation: 1})
 	zero := &managedNodes{setup: &managedSetup{}}
 	for _, tc := range []struct {
 		name, node, want string
@@ -71,5 +75,15 @@ func TestEmbeddedBootstrapDoesNotFallbackWhenInternalAddressIsInvalid(t *testing
 	h.Bootstrap(response, request)
 	if response.Code != http.StatusServiceUnavailable || strings.Contains(response.Body.String(), "public.example") {
 		t.Fatalf("bootstrap fell back after route failure: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestCloudBootstrapUsesAuthenticatedAllocationWithoutNode(t *testing.T) {
+	s := &managedSetup{store: &setupStore{value: store.SandboxSetup{Provider: "e2b", Generation: 1}}}
+	s.selected.Store(&execution.RuntimeProvider{ProviderKind: "e2b", Generation: 1, CoreURL: "https://cloud-entry.example/api/v1"})
+	m := &managedNodes{setup: s}
+	got, err := m.webSocketURL("wss://original.example/api/v1/agent-daemon/ws")(t.Context(), gateway.AuthenticatedRuntime{DeviceID: "device", RuntimeAllocationID: "allocation"})
+	if err != nil || got != "wss://cloud-entry.example/api/v1/agent-daemon/ws" {
+		t.Fatal("cloud allocation lost configured bootstrap address", err)
 	}
 }

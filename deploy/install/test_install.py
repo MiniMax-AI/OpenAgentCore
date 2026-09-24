@@ -118,10 +118,10 @@ class InstallerTests(unittest.TestCase):
         for name in self.manifest["images"]:
             (bundle / "images" / (name + ".tar")).write_bytes(("synthetic " + name).encode())
         for name in ("bin/agents-api", "bin/agents-api-migrate", "bin/agents-api-microsandbox-provider",
-                     "bin/parsar-sandbox-node", "microsandbox/msb", "microsandbox/libkrunfw.so.5.6.1"):
+                     "bin/parsar-sandbox-node", "microsandbox/msb", "microsandbox/libkrunfw.so.5.6.1", "e2b/agents-api-e2b-provider"):
             path = bundle / "native" / name
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(b"synthetic native file")
+            path.write_bytes(b"\x7fELFsynthetic native file")
         self.write_checksums(bundle)
         return bundle
 
@@ -131,6 +131,19 @@ class InstallerTests(unittest.TestCase):
         (bundle / "SHA256SUMS").write_text("".join(
             hashlib.sha256(path.read_bytes()).hexdigest() + "  " + str(path.relative_to(bundle)) + "\n"
             for path in files))
+
+    def test_provider_receipts_are_private_durable_core_state(self):
+        self.initialize()
+        receipt_dir = self.root / "state/e2b"
+        self.assertEqual(stat.S_IMODE(receipt_dir.stat().st_mode), 0o700)
+        services = self.document("compose.json")["services"]
+        mounts = {item["target"]: item for item in services["core"]["volumes"]}
+        self.assertEqual(mounts["/state/e2b"]["source"], str(receipt_dir))
+        self.assertFalse(mounts["/state/e2b"]["read_only"])
+        self.assertFalse(any(item["target"] == "/state/e2b" for item in services["web"]["volumes"]))
+        receipt_dir.rmdir()
+        with self.assertRaisesRegex(install.InstallError, "provider receipts"):
+            self.initialize()
 
     def test_thin_bundle_verifies_without_downloading_runtime(self):
         bundle = self.bundle()
@@ -219,7 +232,7 @@ class InstallerTests(unittest.TestCase):
         state = self.initialize()
         state.pop("console_auth")
         install.private_write(self.root / "config/console.password", "retained-console-password")
-        shutil.rmtree(self.root / "state")
+        shutil.rmtree(self.root / "state/console")
         (self.root / "installation.json").write_text(json.dumps(state))
         compose = install.compose_config(self.root, state, self.manifest, "retained-database-password")
         (self.root / "compose.json").write_text(json.dumps(compose))

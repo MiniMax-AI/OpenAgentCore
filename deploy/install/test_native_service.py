@@ -65,6 +65,11 @@ class NativeServiceTests(unittest.TestCase):
                     self.assertFalse(service.active(state))
         self.run.assert_not_called()
 
+    def test_cloud_helper_remains_executable_but_private(self):
+        self.prepare()
+        helper = self.root / "native/e2b/agents-api-e2b-provider"
+        self.assertEqual(stat.S_IMODE(helper.stat().st_mode), 0o700)
+
     def test_prepare_preserves_direct_core_and_runtime_process_lifetime(self):
         self.prepare()
         unit = configparser.ConfigParser(interpolation=None)

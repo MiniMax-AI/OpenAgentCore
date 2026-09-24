@@ -10,10 +10,10 @@ import (
 
 func (m *managedNodes) webSocketURL(publicURL string) func(context.Context, gateway.AuthenticatedRuntime) (string, error) {
 	return func(ctx context.Context, auth gateway.AuthenticatedRuntime) (string, error) {
-		if m == nil || auth.RuntimeNodeID == "" {
+		if m == nil || (auth.RuntimeNodeID == "" && auth.RuntimeAllocationID == "") {
 			return publicURL, nil
 		}
-		if m.runtime != nil && auth.RuntimeNodeID == m.runtime.LocalNodeID {
+		if m.runtime != nil && auth.RuntimeNodeID != "" && auth.RuntimeNodeID == m.runtime.LocalNodeID {
 			return runtimeWebSocketURL(m.runtime.CoreURL)
 		}
 		if m.setup != nil {

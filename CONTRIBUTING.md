@@ -613,8 +613,7 @@ batches. Resource reads need only tenant authorization, not a live Runtime.
 See the [Template coverage and unresolved semantics](contracts/agents-api/environment-templates.md).
 
 SandboxProvider has five operations: Create, GetInfo, Renew, Kill and RunCommand.
-Use maintained provider SDKs and thin adapters. Hosted deployments select Docker or
-the optional microsandbox profile on the assigned node.
+Use maintained provider SDKs and thin adapters. Hosted deployments select one deployment-wide Provider: E2B cloud, or Docker/microsandbox on administrator-owned nodes.
 Provider initialization creates the sandbox and starts its daemon/harness;
 RunCommand is for initialization only. Daily execution and Files use Runtime and
 native or bounded local capabilities. Docker's lack of a native renewable lease
@@ -631,13 +630,23 @@ executor process or additional execution architecture is required. Qualify
 principal/tenant ownership, credentials and connection lifecycle using the pinned
 client and actual execution; document our transport boundary explicitly.
 
-The Core-managed E2B Provider, including its custom HTTP/Connect and envd protocol
-implementation, is retired. User-side E2B tooling uses the official SDK and the
-shared Runtime, not an additional execution architecture. The
-[E2B guide](services/agents-api/deploy/e2b/README.md) owns packaging and user-managed
-allocation, renewal and cleanup. Historical Core-managed E2B acceptance retains
-only its original scope; it does not qualify the new enrollment path. Current
-public Template acceptance uses Docker.
+Core-managed E2B is a separate hosted deployment choice, using the official pinned
+Python SDK through a packaged private helper. Do not restore the retired custom
+HTTP/Connect or envd implementation. The adapter implements the same five operations;
+cloud allocations use direct placement with no synthetic node, while Runtime execution
+and file access keep the shared daemon contract. Its immutable Runtime template build
+is deployment configuration, not a public Environment Template. Keep the account API
+key encrypted in the database, write-only through admin input and absent from helper
+arguments, logs, metadata and receipts. SDK connection materials and attempted-create
+receipts belong in the private durable provider state directory; never replace missing
+state to make cleanup appear successful. Create runs once. Unknown control-plane
+outcomes remain blockers even if a listing is empty. Explicit matching-reference
+CreateSettled evidence proves that the original initialization cannot mutate further;
+confirmed absent compute may then be released. Ordinary 404 responses do not prove it.
+The helper's pinned SDK, dependencies and licenses ship with Core; users do not install
+Python packages after selecting E2B in Web. Application-managed self_hosted tooling
+remains independent and uses the same Runtime. Qualify each changed path using actual
+provider and model execution before claiming acceptance.
 
 The independent Docker Provider consumes an immutable Runtime image and retains
 one caller-owned allocation reference through partial creation and cleanup. Persist
@@ -667,14 +676,20 @@ of non-secret matched distribution artifacts for its node installation command;
 never serve private installation files or arbitrary paths. Node installation
 reuses the existing node process and Provider configuration, verifies downloaded
 files, retains private identity and uses a user service. It performs no SSH
-installation, Session creation or model call. PostgreSQL owns this immutable selection under
-the existing execution lease and deployment lock. Exact retries are idempotent;
-a changed selection conflicts. No provider migration or hot reload is implied.
+installation, Session creation or model call. PostgreSQL owns a generation-tagged
+selection under the existing execution lease and deployment lock. E2B setup needs an
+account key and a qualified immutable Runtime template, not node enrollment. Changing
+selection requires maintenance, the current generation and verified zero retained or
+pending resources. Retire old nodes and enrollment credentials in the same transaction;
+keep history. Do not automatically delete resources or retry uncertain writes.
 
 Web-managed startup claims the stable installation identity and a new owner epoch
 even before provider selection. The existing runtime manager stays present and
-loads one immutable configuration when selection becomes available, before any
-node lifecycle is created. Admission refuses uninitialized hosted work without
+loads an immutable configuration for the selected generation. A clean switch pauses
+new manager operations, drains old lifecycle calls and loops, commits the new selection
+and activates it through the existing loader. Keep the Worker and runtime manager as
+single owners. Failed activation stays in maintenance and can be retried; resume only
+when the committed generation is active. Observation and bootstrap share this selection. Admission refuses uninitialized hosted work without
 creating Session state. File-managed and Web-managed configuration are mutually
 exclusive. Node registration, observation and daemon bootstrap reuse existing
 contracts. Derive Runtime bootstrap and daemon WebSocket addresses from the saved
@@ -683,23 +698,23 @@ configuration API a startup snapshot; use the live deployment endpoint in setup.
 
 
 A Core deployment may run without a sandbox provider. When enabled, exactly one
-sandbox provider is selected at setup: Docker or microsandbox. Keep both adapters but reject multiple provider entries,
+sandbox provider is selected at setup: E2B, Docker or microsandbox. Keep both adapters but reject multiple provider entries,
 legacy default-provider maps and engine-based placement. Harness selection is
 independent. The configuration has one installation UUID and one provider kind.
 A local node has one explicit backend object; a remote-only Core has none. No mixed-provider or engine-based provider route is supported.
 
 The execution database pins the selected installation and backend namespace.
 Under the existing execution lease, startup validates that identity before
-reconciling work. Changing an installation or backend requires a previous startup
-of the old configuration in maintenance, with new configuration still in
-maintenance. Maintenance prevents fresh hosted Sessions and fresh allocations,
+reconciling work. File-managed backend changes require starting the old and new configurations in
+maintenance. Web-managed changes use the generation-checked maintenance and deployment
+endpoints; the Core origin remains unchanged within this operation. Maintenance prevents fresh hosted Sessions and fresh allocations,
 while retaining known receipts, existing Session use and explicit cleanup.
 Unreleased allocation receipts include live/stopped compute, snapshots, uncertain
 operations and pending cleanup; all must be released before a switch. Pending
 hosted Environments that have not yet received an allocation also block a switch.
 A failed check reports why and performs no resource deletion or provider change.
-After a successful switch, restart the same configuration with maintenance off to
-admit new sandboxes. Retain immutable historical allocation ownership; never
+After a successful Web switch, explicitly resume through the maintenance endpoint.
+File-managed deployments restart the same configuration with maintenance off. Retain immutable historical allocation ownership; never
 migrate an existing Session to another provider or recreate a released allocation.
 Fresh adoption of a deployment with unverified retained allocations fails closed.
 

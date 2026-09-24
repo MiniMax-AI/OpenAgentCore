@@ -206,7 +206,7 @@ func run() error {
 			return err
 		}
 		if managedNodes != nil && managedNodes.setup != nil {
-			options = append(options, api.WithSandboxDeploymentSetup(worker.InitializeSandboxDeployment))
+			options = append(options, api.WithSandboxDeploymentSetup(worker.InitializeSandboxDeployment), api.WithSandboxDeploymentChanges(worker.UpdateSandboxDeployment, worker.SetSandboxMaintenance))
 		}
 		workerDone = make(chan error, 1)
 		go func() { workerDone <- worker.Run(ctx) }()
