@@ -30,6 +30,33 @@ definitions:
           $ref: '#/definitions/store.RuntimeNodeAllocation'
         type: array
     type: object
+  api.SandboxDeploymentChangeInput:
+    properties:
+      core_url:
+        type: string
+      e2b:
+        $ref: '#/definitions/api.SandboxE2BInput'
+      expected_generation:
+        type: integer
+      provider:
+        type: string
+    type: object
+  api.SandboxDeploymentInput:
+    properties:
+      core_url:
+        type: string
+      e2b:
+        $ref: '#/definitions/api.SandboxE2BInput'
+      provider:
+        type: string
+    type: object
+  api.SandboxE2BInput:
+    properties:
+      api_key:
+        type: string
+      template:
+        type: string
+    type: object
   api.SandboxEnrollmentToken:
     properties:
       expires_at:
@@ -96,14 +123,22 @@ definitions:
     properties:
       core_url:
         type: string
+      e2b:
+        $ref: '#/definitions/store.SandboxE2BView'
+      generation:
+        type: integer
       installation_id:
         type: string
       maintenance:
         type: boolean
+      mode:
+        type: string
       owner_epoch:
         type: integer
       provider:
         type: string
+      resources:
+        $ref: '#/definitions/store.SandboxDeploymentResources'
     type: object
   store.RuntimeNode:
     properties:
@@ -217,12 +252,26 @@ definitions:
       name:
         type: string
     type: object
-  store.SandboxDeploymentSetupRequest:
+  store.SandboxDeploymentResources:
     properties:
-      core_url:
+      allocations:
+        type: integer
+      pending:
+        type: integer
+    type: object
+  store.SandboxE2BView:
+    properties:
+      credential_configured:
+        type: boolean
+      template:
         type: string
-      provider:
-        type: string
+    type: object
+  store.SandboxMaintenanceRequest:
+    properties:
+      expected_generation:
+        type: integer
+      maintenance:
+        type: boolean
     type: object
   v1.APIError:
     properties:
@@ -512,14 +561,14 @@ paths:
     post:
       consumes:
         - application/json
-      description: Selects one immutable provider and public Core origin. Exact retries return the existing selection; differing selections and file-managed deployments reject. This does not create a node or execute work.
+      description: Selects a provider and public Core origin. E2B credentials are write-only. Exact retries return the existing selection; differing selections and file-managed deployments reject. This does not create compute or execute work.
       parameters:
         - description: Deployment selection
           in: body
           name: body
           required: true
           schema:
-            $ref: '#/definitions/store.SandboxDeploymentSetupRequest'
+            $ref: '#/definitions/api.SandboxDeploymentInput'
       produces:
         - application/json
       responses:
@@ -549,7 +598,94 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Initialize the deployment sandbox provider once
+      summary: Initialize the deployment sandbox provider
+      tags:
+        - Sandbox Manager
+    put:
+      consumes:
+        - application/json
+      description: Requires maintenance, the current generation and verified cleanup of all old resources. Credentials are write-only. The public Core origin stays unchanged. Historical records are retained; old node credentials and enrollments are retired. Explicitly resume after success. Never automatically retry an uncertain write.
+      parameters:
+        - description: Replacement deployment selection
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/api.SandboxDeploymentChangeInput'
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.RuntimeDeploymentView'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Change a fully drained deployment's sandbox provider
+      tags:
+        - Sandbox Manager
+  /core/v1/sandbox/deployment/maintenance:
+    patch:
+      consumes:
+        - application/json
+      description: Requires the current generation. Maintenance preserves execution, cleanup and history. Resume requires successfully activated provider configuration.
+      parameters:
+        - description: Maintenance state
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/store.SandboxMaintenanceRequest'
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.RuntimeDeploymentView'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Pause or resume new hosted allocations
       tags:
         - Sandbox Manager
   /core/v1/sandbox/enroll:
