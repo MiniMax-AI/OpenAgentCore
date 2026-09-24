@@ -1,8 +1,11 @@
-import { Boxes, Plus, Search } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Boxes, Plus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { AgentCore, EnvironmentTemplateResource } from "@agents-core-web/agents-client";
 import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, StatusDot } from "../../components/console-ui";
+import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
+import { OwnerCell, OwnerHeading } from "../ownership/OwnerCell";
+import { useOwners } from "../ownership/use-owners";
 import { Modal } from "../../components/Modal";
 import { useToast } from "../../components/Toast";
 import { formatDateTime, MISSING } from "../../lib/format";
@@ -62,8 +65,10 @@ export function EnvironmentTemplatesView({ catalog, operations, onRefresh, onCon
 
   const ready = catalog?.state === "ready";
   const blocked = busy || refreshing || needsRefresh || !ready;
-  const templates = ready ? catalog.templates : [];
+  const templates = useMemo(() => ready ? catalog.templates : [], [catalog, ready]);
   const visible = filterTemplates(templates, query);
+  const templateIds = useMemo(() => templates.map((template) => template.id), [templates]);
+  const owners = useOwners("environment_template", templateIds, ready);
   const selected = selectedId ? templates.find((template) => template.id === selectedId) ?? null : null;
 
   useEffect(() => {
@@ -159,15 +164,11 @@ export function EnvironmentTemplatesView({ catalog, operations, onRefresh, onCon
   } else {
     body = (
       <>
-        <div className="filter-bar">
-          <label className="search-control templates-search">
-            <Search size={14} strokeWidth={1.5} aria-hidden="true" />
-            <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("filterPlaceholder")} aria-label={t("filterLabel")} />
-          </label>
-          <span className="filter-count" role="status">{t("count", { visible: visible.length, total: templates.length })}</span>
-        </div>
+        <ListToolbar label={t("filterLabel")} summary={listSummary(tCommon, visible.length, templates.length, { locale })}>
+          <SearchField value={query} onChange={setQuery} placeholder={t("filterPlaceholder")} label={t("filterLabel")} />
+        </ListToolbar>
         {visible.length === 0 ? (
-          <EmptyState title={t("noMatch")} action={<button className="button outline" type="button" onClick={() => setQuery("")}>{t("clearFilter")}</button>} />
+          <EmptyState title={t("noMatch")} description={tCommon("list.noMatchesDescription")} action={<button className="button outline" type="button" onClick={() => setQuery("")}>{t("clearFilter")}</button>} />
         ) : (
           <div className="table-frame">
             <table className="data-table templates-table" aria-label={t("listLabel")}>
@@ -180,6 +181,7 @@ export function EnvironmentTemplatesView({ catalog, operations, onRefresh, onCon
                   <th scope="col" className="numeric">{t("columns.skills")}</th>
                   <th scope="col" className="numeric">{t("columns.plugins")}</th>
                   <th scope="col">{t("columns.updated")}</th>
+                  {owners.available ? <th scope="col"><OwnerHeading /></th> : null}
                   <th scope="col"><span className="visually-hidden">{t("columns.actions")}</span></th>
                 </tr>
               </thead>
@@ -190,16 +192,14 @@ export function EnvironmentTemplatesView({ catalog, operations, onRefresh, onCon
                   return (
                     <tr key={template.id} className="clickable-row" onClick={() => setSelectedId(template.id)}>
                       <th scope="row">
-                        <button className="table-link" type="button" aria-label={t("open", { name })} onClick={(event) => { event.stopPropagation(); setSelectedId(template.id); }}>
-                          <strong>{name}</strong>
-                          <code>{template.id}</code>
-                        </button>
-                        {template.unrecognized ? (
-                          <span className="status-with-help template-flag" onClick={(event) => event.stopPropagation()}>
-                            <StatusDot tone="warning" label={t("unrecognized")} />
-                            <HelpTip>{t("unrecognizedHelp")}</HelpTip>
-                          </span>
-                        ) : null}
+                        <NameCell name={name} id={template.id} onOpen={() => setSelectedId(template.id)} openLabel={t("open", { name })}>
+                          {template.unrecognized ? (
+                            <span className="status-with-help template-flag" onClick={(event) => event.stopPropagation()}>
+                              <StatusDot tone="warning" label={t("unrecognized")} />
+                              <HelpTip>{t("unrecognizedHelp")}</HelpTip>
+                            </span>
+                          ) : null}
+                        </NameCell>
                       </th>
                       <td className="template-nowrap" title={template.network?.allowed_domains.join("\n") || undefined}>
                         {template.network ? (
@@ -214,9 +214,12 @@ export function EnvironmentTemplatesView({ catalog, operations, onRefresh, onCon
                       <td className="numeric">{count(template.skills)}</td>
                       <td className="numeric">{count(template.plugins)}</td>
                       <td className="template-nowrap">{formatDateTime(template.updated_at, locale)}</td>
-                      <td className="row-actions">
-                        <button className="text-action" type="button" disabled={blocked} aria-label={t("editLabel", { name })} onClick={(event) => { event.stopPropagation(); setDialog({ kind: "edit", template }); }}>{t("edit")}</button>
-                        <button className="text-action" type="button" disabled={blocked} aria-label={t("deleteLabel", { name })} onClick={(event) => { event.stopPropagation(); setDialog({ kind: "delete", template }); }}>{t("delete")}</button>
+                      {owners.available ? <td><OwnerCell record={owners.ownerOf(template.id)} /></td> : null}
+                      <td className="actions-cell">
+                        <RowActions>
+                          <button className="text-action" type="button" disabled={blocked} aria-label={t("editLabel", { name })} onClick={(event) => { event.stopPropagation(); setDialog({ kind: "edit", template }); }}>{t("edit")}</button>
+                          <button className="text-action danger" type="button" disabled={blocked} aria-label={t("deleteLabel", { name })} onClick={(event) => { event.stopPropagation(); setDialog({ kind: "delete", template }); }}>{t("delete")}</button>
+                        </RowActions>
                       </td>
                     </tr>
                   );

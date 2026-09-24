@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import i18n from "../../i18n";
 import {
-  AgentUsageCaveat,
   type AgentUsageModel,
   AgentUsagePanel,
   AgentUsageRangeControl,
@@ -74,7 +73,7 @@ describe("Agent usage presentation", () => {
   });
 
   it("states the range basis and the fixed caveat", () => {
-    const html = renderToStaticMarkup(<><AgentUsageRangeControl usage={model()} /><AgentUsageCaveat /></>);
+    const html = renderToStaticMarkup(<AgentUsageRangeControl usage={model()} />);
     expect(html).toContain("Sessions created");
     expect(html).toContain('role="radiogroup" aria-label="Sessions created"');
     for (const label of ["All time", "Last 7 days", "Last 30 days"]) expect(html).toContain(label);

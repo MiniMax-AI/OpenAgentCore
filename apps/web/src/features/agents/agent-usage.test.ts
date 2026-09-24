@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import type { AgentSession, ListPage, PageOptions, TokenUsage } from "@agents-core-web/agents-client";
+import type { AgentSession, PageOptions, TokenUsage, TolerantSessionList, UnrecognizedSession } from "@agents-core-web/agents-client";
 
 import {
   aggregateAgentUsage,
   type AgentUsageSource,
   continueUsageLoad,
   createUsageLoadCursor,
+  unrecognizedInUsageRange,
   usageCoverage,
   usageCursorCovers,
+  usageLoadProgress,
   usageRangeStart,
   usageRecord,
 } from "./agent-usage";
@@ -169,25 +171,56 @@ describe("per-Agent usage aggregation", () => {
   });
 });
 
+/**
+ * A listed Session the client could not recognize. `key` is the ID Core
+ * paginates by; `reportedId` is what the client could report of it.
+ */
+interface MalformedEntry {
+  malformed: true;
+  key: string;
+  reportedId: string | null;
+}
+
+type ListedEntry = AgentSession | MalformedEntry;
+
+function malformed(key: string, reportedId: string | null = key): MalformedEntry {
+  return { malformed: true, key, reportedId };
+}
+
+function entryKey(entry: ListedEntry): string {
+  return "malformed" in entry ? entry.key : entry.id;
+}
+
+/** A tolerant page as the client returns it for these entries. */
+function tolerantPage(entries: ListedEntry[], hasMore: boolean): TolerantSessionList {
+  const data: AgentSession[] = [];
+  const unrecognized: UnrecognizedSession[] = [];
+  entries.forEach((entry, index) => {
+    if ("malformed" in entry) unrecognized.push({ index, id: entry.reportedId });
+    else data.push(entry);
+  });
+  return {
+    object: "list",
+    data,
+    unrecognized,
+    has_more: hasMore,
+    first_id: entries[0] ? entryKey(entries[0]) : null,
+    last_id: entries.at(-1) ? entryKey(entries.at(-1)!) : null,
+  };
+}
+
 /** A newest-first Session collection with Core's cursor semantics. */
-function fakeSource(sessions: AgentSession[], hooks: {
+function fakeSource(entries: ListedEntry[], hooks: {
   beforePage?: (call: number, options: PageOptions) => Promise<void> | void;
 } = {}) {
   const calls: PageOptions[] = [];
   const source: AgentUsageSource = {
-    async listSessions(options = {}) {
+    async listSessionsTolerant(options = {}) {
       calls.push({ after: options.after, limit: options.limit, order: options.order });
       await hooks.beforePage?.(calls.length, options);
-      const start = options.after ? sessions.findIndex((candidate) => candidate.id === options.after) + 1 : 0;
-      const data = sessions.slice(start, start + (options.limit ?? 20));
-      const page: ListPage<AgentSession> = {
-        object: "list",
-        data,
-        has_more: start + data.length < sessions.length,
-        first_id: data[0]?.id ?? null,
-        last_id: data.at(-1)?.id ?? null,
-      };
-      return page;
+      const start = options.after ? entries.findIndex((candidate) => entryKey(candidate) === options.after) + 1 : 0;
+      const slice = entries.slice(start, start + (options.limit ?? 20));
+      return tolerantPage(slice, start + slice.length < entries.length);
     },
   };
   return { source, calls };
@@ -285,11 +318,108 @@ describe("per-Agent usage loading", () => {
 
   it("rejects duplicate identities and cursors that cannot advance", async () => {
     const duplicate: AgentUsageSource = {
-      listSessions: async () => ({ data: [session("same", "agent_a", NOW), session("same", "agent_a", NOW - 1)], has_more: false }),
+      listSessionsTolerant: async () => tolerantPage([session("same", "agent_a", NOW), session("same", "agent_a", NOW - 1)], false),
     };
     await expect(continueUsageLoad(duplicate, createUsageLoadCursor(), null)).rejects.toThrow("duplicate or invalid Session identities");
 
-    const stuck: AgentUsageSource = { listSessions: async () => ({ data: [], has_more: true }) };
+    const repeated: AgentUsageSource = {
+      listSessionsTolerant: async () => tolerantPage([session("same", "agent_a", NOW), malformed("same")], false),
+    };
+    await expect(continueUsageLoad(repeated, createUsageLoadCursor(), null)).rejects.toThrow("duplicate or invalid Session identities");
+
+    const stuck: AgentUsageSource = { listSessionsTolerant: async () => tolerantPage([], true) };
     await expect(continueUsageLoad(stuck, createUsageLoadCursor(), null)).rejects.toThrow("invalid Session pagination cursor");
+  });
+
+  it.each([
+    ["out of page order", [{ index: 1, id: null }, { index: 0, id: null }]],
+    ["past the end of the page", [{ index: 2, id: null }]],
+    ["without an index", [{ id: null }]],
+  ])("rejects unrecognized entries %s", async (_label, unrecognized) => {
+    const source: AgentUsageSource = {
+      listSessionsTolerant: async () => ({
+        ...tolerantPage([session("s1", "agent_a", NOW)], false),
+        unrecognized: unrecognized as UnrecognizedSession[],
+      }),
+    };
+    const cursor = createUsageLoadCursor();
+
+    await expect(continueUsageLoad(source, cursor, null)).rejects.toThrow("invalid Session page");
+    expect(cursor.pages).toBe(0);
+  });
+});
+
+describe("unrecognized Sessions in per-Agent usage", () => {
+  it("excludes an unrecognized Session from every total and reports it instead", async () => {
+    const { source } = fakeSource([
+      session("s1", "agent_a", NOW - 10, tokens(70, 30)),
+      malformed("bad_1"),
+      session("s2", "agent_a", NOW - 20, tokens(5, 5)),
+      malformed("opaque_key", null),
+    ]);
+
+    const cursor = await continueUsageLoad(source, createUsageLoadCursor(), null);
+
+    expect(cursor.records.map((record) => record.id)).toEqual(["s1", "s2"]);
+    expect(cursor.unrecognized).toEqual([{ id: "bad_1", position: 1 }, { id: null, position: 2 }]);
+    expect(usageLoadProgress(cursor)).toEqual({ pages: 1, sessions: 4 });
+    const report = aggregateAgentUsage(cursor.records, ["agent_a"], null);
+    const totals = report.byAgent.get("agent_a")!;
+    expect(totals.sessions).toBe(2);
+    expect(totals.reported).toBe(2);
+    expect(usageCoverage(totals)).toBe(1);
+    expect(totals.tokens.total).toBe(110);
+    expect(report.total.sessions).toBe(2);
+    expect(report.other).toEqual([]);
+    expect(unrecognizedInUsageRange(cursor.records, cursor.unrecognized, null)).toEqual(cursor.unrecognized);
+  });
+
+  it("continues paging after a page that ends in an unrecognized Session", async () => {
+    const entries: ListedEntry[] = hourly(150);
+    entries[99] = malformed("s0099");
+    const { source, calls } = fakeSource(entries);
+
+    const cursor = await continueUsageLoad(source, createUsageLoadCursor(), null);
+
+    expect(calls.map((call) => call.after)).toEqual([undefined, "s0099"]);
+    expect(cursor.records).toHaveLength(149);
+    expect(cursor.unrecognized).toEqual([{ id: "s0099", position: 99 }]);
+    expect(cursor.exhausted).toBe(true);
+  });
+
+  it("keeps a page of only unrecognized Sessions from ending the read", async () => {
+    const entries: ListedEntry[] = [
+      ...Array.from({ length: 100 }, (_, index) => malformed(`bad_${index}`, null)),
+      session("s1", "agent_a", NOW - 10, tokens(1, 1)),
+    ];
+    const { source, calls } = fakeSource(entries);
+
+    const cursor = await continueUsageLoad(source, createUsageLoadCursor(), usageRangeStart("7d", NOW));
+
+    expect(calls).toHaveLength(2);
+    expect(cursor.records.map((record) => record.id)).toEqual(["s1"]);
+    expect(cursor.unrecognized).toHaveLength(100);
+    expect(cursor.unrecognized.every((entry) => entry.position === 0 && entry.id === null)).toBe(true);
+  });
+
+  it("leaves out unrecognized Sessions listed after one created before the range", () => {
+    const start = usageRangeStart("7d", NOW)!;
+    const loaded = records([
+      session("recent", "agent_a", NOW - DAY),
+      session("inside", "agent_a", NOW - 3 * DAY),
+      session("before", "agent_a", start - DAY),
+    ]);
+    const unrecognized = [
+      { id: "between_recent_and_inside", position: 1 },
+      { id: "between_inside_and_before", position: 2 },
+      { id: null, position: 3 },
+    ];
+
+    expect(unrecognizedInUsageRange(loaded, unrecognized, start).map((entry) => entry.id)).toEqual([
+      "between_recent_and_inside",
+      "between_inside_and_before",
+    ]);
+    expect(unrecognizedInUsageRange(loaded, unrecognized, usageRangeStart("30d", NOW))).toEqual(unrecognized);
+    expect(unrecognizedInUsageRange(loaded, unrecognized, null)).toEqual(unrecognized);
   });
 });

@@ -1,13 +1,16 @@
-import { Puzzle, Search, Upload } from "lucide-react";
+import { Puzzle, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AgentCoreError, type AgentCore, type Skill } from "@agents-core-web/agents-client";
 
 import { EmptyState, PageBody, PageHeader, RefreshButton } from "../../components/console-ui";
+import { ListToolbar, listSummary, NameCell, SearchField } from "../../components/list-ui";
+import { OwnerCell, OwnerHeading } from "../ownership/OwnerCell";
+import { useOwners } from "../ownership/use-owners";
 import { useToast } from "../../components/Toast";
 import { formatDateTime, MISSING } from "../../lib/format";
-import { CopyableId, LatestVersion } from "./skill-parts";
+import { LatestVersion } from "./skill-parts";
 import { classifySkillsError, coreErrorMessage, filterSkills, isAbortError, readSkillsPage } from "./skill-operations";
 import { SkillDetail } from "./SkillDetail";
 import { SkillUploadDialog, type SkillUploadResult } from "./SkillUploadDialog";
@@ -62,9 +65,11 @@ export interface SkillsListPageProps {
 /** The Skill list: header, local filter, table and cursor pagination. */
 export function SkillsListPage({ state, query, onQueryChange, onRefresh, onLoadMore, onOpen, onUpload }: SkillsListPageProps) {
   const { t, i18n } = useTranslation("skills");
+  const { t: tCommon } = useTranslation();
   const locale = i18n.resolvedLanguage;
   const visible = useMemo(() => filterSkills(state.skills, query), [query, state.skills]);
-  const filtering = query.trim().length > 0;
+  const skillIds = useMemo(() => state.skills.map((skill) => skill.id), [state.skills]);
+  const owners = useOwners("skill", skillIds, state.status === "ready");
   const uploadButton = (
     <button className="button primary" type="button" disabled={state.status !== "ready"} onClick={onUpload}>
       <Upload size={14} aria-hidden="true" />{t("actions.upload")}
@@ -105,21 +110,12 @@ export function SkillsListPage({ state, query, onQueryChange, onRefresh, onLoadM
     body = (
       <>
         {state.error ? <p className="coverage-note coverage-note-error" role="alert">{t("list.refreshFailed", { reason: state.error })}</p> : null}
-        <div className="skills-toolbar">
-          <label className="search-control">
-            <Search size={14} strokeWidth={1.5} aria-hidden="true" />
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => onQueryChange(event.target.value)}
-              placeholder={t("list.filterPlaceholder")}
-              aria-label={t("list.filterLabel")}
-            />
-          </label>
-          <span className="filter-count" role="status">
-            {filtering ? t("list.count", { shown: visible.length, loaded: state.skills.length }) : t("list.loaded", { count: state.skills.length })}
-          </span>
-        </div>
+        <ListToolbar
+          label={t("list.filterLabel")}
+          summary={listSummary(tCommon, visible.length, state.skills.length, { hasMore: Boolean(state.nextAfter), locale })}
+        >
+          <SearchField value={query} onChange={onQueryChange} placeholder={t("list.filterPlaceholder")} label={t("list.filterLabel")} />
+        </ListToolbar>
         {visible.length ? (
           <div className="table-frame">
             <table className="data-table skills-table" aria-label={t("list.label")}>
@@ -130,27 +126,20 @@ export function SkillsListPage({ state, query, onQueryChange, onRefresh, onLoadM
                   <th scope="col">{t("list.defaultVersion")}</th>
                   <th scope="col">{t("list.latestVersion")}</th>
                   <th scope="col">{t("list.created")}</th>
-                  <th scope="col">{t("list.id")}</th>
+                  {owners.available ? <th scope="col"><OwnerHeading /></th> : null}
                 </tr>
               </thead>
               <tbody>
                 {visible.map((skill) => (
                   <tr key={skill.id} className="clickable-row" onClick={() => onOpen(skill)}>
                     <th scope="row">
-                      <button
-                        className="table-link"
-                        type="button"
-                        aria-label={t("actions.open", { name: skill.name })}
-                        onClick={(event) => { event.stopPropagation(); onOpen(skill); }}
-                      >
-                        <strong>{skill.name}</strong>
-                      </button>
+                      <NameCell name={skill.name} id={skill.id} onOpen={() => onOpen(skill)} openLabel={t("actions.open", { name: skill.name })} />
                     </th>
                     <td><span className="skill-description" title={skill.description}>{skill.description || MISSING}</span></td>
                     <td className="skill-nowrap">{t("version", { version: skill.default_version })}</td>
                     <td className="skill-nowrap"><LatestVersion skill={skill} /></td>
                     <td className="skill-nowrap">{formatDateTime(skill.created_at, locale)}</td>
-                    <td className="skill-nowrap"><CopyableId id={skill.id} compact /></td>
+                    {owners.available ? <td><OwnerCell record={owners.ownerOf(skill.id)} /></td> : null}
                   </tr>
                 ))}
               </tbody>
@@ -165,8 +154,7 @@ export function SkillsListPage({ state, query, onQueryChange, onRefresh, onLoadM
         )}
         {state.moreError ? <p className="coverage-note coverage-note-error" role="alert">{t("list.moreFailed", { reason: state.moreError })}</p> : null}
         {state.nextAfter ? (
-          <footer className="table-footer skills-footer">
-            <span />
+          <footer className="table-footer">
             <button className="button outline" type="button" disabled={state.loadingMore} onClick={onLoadMore}>
               {state.loadingMore ? t("actions.loadingMore") : t("actions.loadMore")}
             </button>
@@ -199,15 +187,17 @@ export interface SkillsViewProps {
   core: AgentCore;
   /** Called when Core answers the Skill list with 404 or 405, so the entry can be hidden. */
   onUnsupported?: () => void;
+  /** Opens this Skill's detail directly, for example from an Environment Template. */
+  initialSkillId?: string;
 }
 
 /** Skills: every Skill of the project, with upload, versions, default pointer, download and deletion. */
-export function SkillsView({ core, onUnsupported }: SkillsViewProps) {
+export function SkillsView({ core, onUnsupported, initialSkillId }: SkillsViewProps) {
   const { t } = useTranslation("skills");
   const toast = useToast();
   const [state, setState] = useState<SkillsListState>(initialSkillsListState);
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<{ id: string; skill: Skill | null } | null>(null);
+  const [selected, setSelected] = useState<{ id: string; skill: Skill | null } | null>(initialSkillId ? { id: initialSkillId, skill: null } : null);
   const [upload, setUpload] = useState({ open: false, key: 0 });
   const request = useRef(0);
   const abortRef = useRef<AbortController | null>(null);

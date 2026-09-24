@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { AgentCoreError, OpenAIAgentsClient } from "./client";
 import { isRecognizedEnvironmentTemplate } from "./environment-template-projection";
+import { isOpenAIHostedSessionEnvironment } from "./session-environment-projection";
 import templates from "./fixtures/parsar-d3f55046/environment-templates.json";
 
 interface FetchCall {
@@ -446,6 +447,40 @@ describe("Sessions created from an advanced Template", () => {
     const page = await client.listSessions();
 
     expect(page.data[0]?.environment).toEqual(environment);
+  });
+
+  it("classifies exactly the managed Session Environment shapes the client projects", async () => {
+    const { client } = recordingClient(jsonResponse(session));
+    const projected = await client.retrieveSession(session.id);
+    const basic = {
+      type: "openai_hosted",
+      id: environment.id,
+      capability_directories: [],
+      network: { access: "enabled", allowed_domains: [] },
+      packages: { npm: [], python: [], system: [] },
+      files: [],
+      plugins: [],
+      skills: [],
+    };
+
+    expect(isOpenAIHostedSessionEnvironment(projected.environment)).toBe(true);
+    expect(isOpenAIHostedSessionEnvironment(environment)).toBe(true);
+    expect(isOpenAIHostedSessionEnvironment(basic)).toBe(true);
+    for (const unknown of [
+      { ...environment, environment_template_id: "future" },
+      { ...environment, network: { access: "restricted", allowed_domains: [] } },
+      { ...environment, network: { access: "enabled", allowed_domains: ["pypi.org"] } },
+      { ...environment, network: { access: "future", allowed_domains: [] } },
+      { ...environment, packages: { ...environment.packages, cargo: [] } },
+      { ...environment, packages: { npm: [], python: [] } },
+      { ...environment, capability_directories: [1] },
+      { ...environment, files: ["settings.json"] },
+      { ...environment, skills: null },
+      { ...environment, id: " " },
+      { type: "openai_hosted", id: environment.id },
+      { ...basic, type: "self_hosted" },
+      null,
+    ]) expect(isOpenAIHostedSessionEnvironment(unknown)).toBe(false);
   });
 
   it("still rejects a restricted Session network without domains", async () => {

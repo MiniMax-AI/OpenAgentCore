@@ -82,7 +82,7 @@ describe("Skills list page", () => {
     expect(html).toContain(`title="${report.id}"`);
     expect(html).toContain('aria-label="Copy ID"');
     expect(html).toContain(new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(report.created_at * 1000)));
-    expect(html).toContain("2 loaded");
+    expect(html).toContain("2 total");
   });
 
   it("offers Load more only while Core reports more pages", () => {
@@ -97,7 +97,8 @@ describe("Skills list page", () => {
     expect(filtered).toContain('placeholder="Filter loaded Skills by name or description"');
     expect(filtered).toContain("triage");
     expect(filtered).not.toContain(">report<");
-    expect(filtered).toContain("1 of 2 loaded");
+    expect(filtered).toContain("1 of 2");
+    expect(render({ status: "ready", skills: [report, triage], nextAfter: triage.id }, "issues")).toContain("1 of 2 loaded");
 
     const none = render({ status: "ready", skills: [report], nextAfter: report.id }, "missing");
     expect(none).toContain("No loaded Skill matches");

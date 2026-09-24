@@ -76,20 +76,21 @@ function Values({ values }: { values: string[] }) {
   ) : <None />;
 }
 
-function ReferenceLink({ id, label, onOpen }: { id: string; label: string; onOpen?: (id: string) => void }) {
-  if (!onOpen) return <CopyableId id={id} />;
+function ReferenceLink({ id, label, copyLabel, onOpen }: { id: string; label: string; copyLabel?: string; onOpen?: (id: string) => void }) {
+  if (!onOpen) return <CopyableId id={id} label={copyLabel} />;
   return (
     <span className="copyable-id">
       <button type="button" className="table-link template-reference" aria-label={label} title={label} onClick={() => onOpen(id)}>
         <code>{id}</code>
       </button>
-      <CopyIdButton id={id} />
+      <CopyIdButton id={id} label={copyLabel} />
     </span>
   );
 }
 
 function FileRow({ file, locale, onOpenFile }: { file: EnvironmentTemplateFile; locale?: string } & TemplateLinks) {
   const { t } = useTranslation("templates");
+  const { t: tFiles } = useTranslation("files");
   return (
     <tr>
       <th scope="row"><code className="template-path">{file.path}</code></th>
@@ -97,7 +98,7 @@ function FileRow({ file, locale, onOpenFile }: { file: EnvironmentTemplateFile; 
       <td>
         {file.type === "inline" ? (
           <span className="template-nowrap" title={`${file.size_bytes.toLocaleString(locale)} B`}>{formatBytes(file.size_bytes)}</span>
-        ) : <ReferenceLink id={file.file_id} label={t("detail.openFile", { id: file.file_id })} onOpen={onOpenFile} />}
+        ) : <ReferenceLink id={file.file_id} label={t("detail.openFile", { id: file.file_id })} copyLabel={tFiles("actions.copyId")} onOpen={onOpenFile} />}
       </td>
     </tr>
   );

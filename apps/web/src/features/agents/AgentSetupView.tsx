@@ -1,10 +1,11 @@
-import { Check, ChevronRight, Circle, Code2, MessageSquare, Trash2 } from "lucide-react";
+import { Check, ChevronRight, Code2, MessageSquare, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "../../i18n";
 
 import type { CoreHarnessKind, CreateAgentInput, SavedAgent, UpdateAgentInput } from "@agents-core-web/agents-client";
 
+import { HelpTip } from "../../components/console-ui";
 import { buildModelOptionGroups } from "../../lib/model-options";
 import type { VaultCatalog } from "../vaults/vault-catalog";
 import { AgentForm } from "./AgentForm";
@@ -27,10 +28,8 @@ function AgentRequestPreview({
     <section className="agent-request-preview" aria-labelledby="agent-request-preview-title">
       <header>
         <Code2 size={15} strokeWidth={1.5} aria-hidden="true" />
-        <div>
-          <h2 id="agent-request-preview-title">{t("setup.requestPreview")}</h2>
-          <p>{t("setup.previewHelp")}</p>
-        </div>
+        <h2 id="agent-request-preview-title">{t("setup.requestPreview")}</h2>
+        <HelpTip>{t("setup.previewHelp")}</HelpTip>
       </header>
       <div className="agent-preview-block">
         <span>curl</span>
@@ -54,29 +53,6 @@ function SavedDefinitionSummary({ agent }: { agent: SavedAgent }) {
         <div><dt>{t("setup.updated")}</dt><dd><time dateTime={new Date(agent.updated_at * 1000).toISOString()}>{new Intl.DateTimeFormat(i18n.resolvedLanguage ?? "en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(agent.updated_at * 1000))}</time></dd></div>
         <div><dt>{t("setup.multiAgent")}</dt><dd>{agent.multi_agent.enabled ? t("setup.enabledSaved") : t("setup.disabled")}</dd></div>
       </dl>
-    </section>
-  );
-}
-
-function SetupGuide({ saved }: { saved: boolean }) {
-  const { t } = useTranslation("agents");
-  const steps = [
-    [t("setup.steps.define"), t("setup.steps.defineHelp"), true],
-    [t("setup.steps.save"), t("setup.steps.saveHelp"), saved],
-    [t("setup.steps.start"), t("setup.steps.startHelp"), false],
-    [t("setup.steps.exchange"), t("setup.steps.exchangeHelp"), false],
-  ] as const;
-  return (
-    <section className="agent-setup-guide" aria-labelledby="agent-setup-guide-title">
-      <h2 id="agent-setup-guide-title">{t("setup.guideTitle")}</h2>
-      <ol>
-        {steps.map(([title, description, complete]) => (
-          <li className={complete ? "complete" : ""} key={title}>
-            {complete ? <Check size={13} aria-hidden="true" /> : <Circle size={10} aria-hidden="true" />}
-            <div><strong>{title}</strong><span>{description}</span></div>
-          </li>
-        ))}
-      </ol>
     </section>
   );
 }
@@ -228,7 +204,6 @@ export function AgentSetupView({
           {isEditing ? usagePanel : null}
           <AgentRequestPreview agentId={isEditing ? savedAgent?.id ?? agent?.id : undefined} baseUrl={baseUrl} values={draft} />
           {isEditing && savedAgent ? <SavedDefinitionSummary agent={savedAgent} /> : null}
-          <SetupGuide saved={Boolean(savedAgent)} />
         </aside>
       </div>
     </section>

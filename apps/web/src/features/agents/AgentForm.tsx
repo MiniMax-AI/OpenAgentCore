@@ -1,4 +1,3 @@
-import { Info } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -10,6 +9,7 @@ import {
   modelIdFromOption,
   modelOptionValue,
 } from "../../lib/model-options";
+import { HelpTip } from "../../components/console-ui";
 import type { VaultCatalog } from "../vaults/vault-catalog";
 import { vaultName } from "../vaults/vault-catalog";
 import { type AgentFormSubmitInput, type AgentFormValues, type AgentToolDraft, validateAgentForm, valuesFromAgent } from "./agent-form";
@@ -145,7 +145,7 @@ export function AgentForm({
     <form id={formId} className="form-stack" onSubmit={(event) => void submit(event)} noValidate>
       <fieldset className="agent-form-fields" disabled={disabled}>
       <label className="field">
-        <span>{t("form.name")}</span>
+        <span className="field-label-row">{t("form.name")}<HelpTip id={`${formId}-name-help`}>{t("form.nameHelp")}</HelpTip></span>
         <input
           ref={nameRef}
           value={name}
@@ -158,7 +158,6 @@ export function AgentForm({
           aria-describedby={`${formId}-name-help${nameError ? ` ${formId}-name-error` : ""}`}
           aria-invalid={Boolean(nameError)}
         />
-        <small id={`${formId}-name-help`}>{t("form.nameHelp")}</small>
         {nameError ? <small className="field-error" id={`${formId}-name-error`} role="alert">{nameError}</small> : null}
       </label>
       <label className="field">
@@ -173,8 +172,7 @@ export function AgentForm({
       {enabledHarnesses !== null ? (
         <div className="field">
           <label className="field-label" htmlFor={`${formId}-harness`}>
-            <span>{t("form.harness")}</span>
-            <span className="field-optional">{t("form.coreStartup")}</span>
+            <span className="field-label-row">{t("form.harness")}<HelpTip id={`${formId}-harness-help`}>{t("form.harnessHelp")}</HelpTip></span>
           </label>
           <select
             id={`${formId}-harness`}
@@ -199,21 +197,20 @@ export function AgentForm({
             ))}
             {enabledHarnesses.length === 0 ? <option value="">{t("form.noHarness")}</option> : null}
           </select>
-          <small id={`${formId}-harness-help`}>
-            {t("form.harnessHelp")}
-          </small>
         </div>
       ) : null}
       <div className="field">
         <label className="field-label" htmlFor={`${formId}-model`}>
-          <span>{t("form.model")}</span>
-          <span className="field-optional">{t("form.webSuggestions")}</span>
+          <span className="field-label-row">
+            {t("form.model")}
+            <HelpTip id={`${formId}-model-help`}>{t("form.modelHelp")} {t("form.modelNote", { model: model || t("form.modelFallback") })}</HelpTip>
+          </span>
         </label>
         <select
           id={`${formId}-model`}
           value={modelChoice}
           onChange={(event) => setModelChoice(event.target.value)}
-          aria-describedby={`${formId}-model-help ${formId}-model-note${modelError ? ` ${formId}-model-error` : ""}`}
+          aria-describedby={`${formId}-model-help${modelError ? ` ${formId}-model-error` : ""}`}
           aria-invalid={Boolean(modelError)}
           required
         >
@@ -233,9 +230,6 @@ export function AgentForm({
           ) : null}
           <option value={CUSTOM_MODEL_OPTION}>{t("form.customModel")}</option>
         </select>
-        <small id={`${formId}-model-help`}>
-          {t("form.modelHelp")}
-        </small>
         {modelError ? <small className="field-error" id={`${formId}-model-error`} role="alert">{modelError}</small> : null}
       </div>
       {modelChoice === CUSTOM_MODEL_OPTION ? (
@@ -246,33 +240,24 @@ export function AgentForm({
             onChange={(event) => setCustomModel(event.target.value)}
             placeholder="provider/model-name"
             spellCheck={false}
-            aria-describedby={`${formId}-model-note`}
+            aria-describedby={`${formId}-model-help`}
             required
           />
         </label>
       ) : null}
-      <div className="model-picker-note" id={`${formId}-model-note`} role="note">
-        <Info size={14} strokeWidth={1.5} aria-hidden="true" />
-        <span>
-          {t("form.modelNote", { model: model || t("form.modelFallback") })}
-        </span>
-      </div>
       <section className="agent-form-section" aria-labelledby={`${formId}-generation-title`}>
         <div className="agent-form-section-heading">
           <h3 id={`${formId}-generation-title`}>{t("form.generation")}</h3>
-          <span>{agent ? t("form.advancedSettings") : t("form.compatibleDefaults")}</span>
+          <HelpTip id={`${formId}-generation-profile-help`}>{agent ? t("form.existingProfileHelp") : t("form.createProfileHelp")}</HelpTip>
         </div>
         <div className="agent-form-grid">
           <label className="field">
-            <span>{t("form.textFormat")}</span>
+            <span className="field-label-row">{t("form.textFormat")}<HelpTip id={`${formId}-text-format-help`}>{t("form.textFormatHelp")}</HelpTip></span>
             <input
               value={textFormat.type === "text" ? t("form.text") : t("form.jsonPreserved")}
               readOnly
               aria-describedby={`${formId}-text-format-help`}
             />
-            <small id={`${formId}-text-format-help`}>
-              {t("form.textFormatHelp")}
-            </small>
           </label>
           <label className="field">
             <span>{t("form.reasoningEffort")}</span>
@@ -329,29 +314,17 @@ export function AgentForm({
             </select>
           </label>
         </div>
-        <p className="agent-form-capability-note" id={`${formId}-generation-profile-help`}>
-          {agent
-            ? t("form.existingProfileHelp")
-            : t("form.createProfileHelp")}
-        </p>
         {configurationError ? <p className="field-error" role="alert">{configurationError}</p> : null}
       </section>
       <section className="agent-form-section agent-tools-section" aria-labelledby={`${formId}-tools-title`}>
         <div className="agent-form-section-heading">
           <h3 id={`${formId}-tools-title`}>{t("form.tools")}</h3>
-          <span>{t("form.coreExecution")}</span>
+          <HelpTip>{t("form.functionBoundary")} {t("form.mcpBoundary")}</HelpTip>
         </div>
-        <p className="agent-form-capability-note">
-          {t("form.functionBoundary")}
-        </p>
-        <p className="agent-form-capability-note">
-          {t("form.mcpBoundary")}
-        </p>
         <div className="agent-tools-list">
           {tools.map((tool, index) => tool.kind === "read-only" ? (
             <article className="agent-tool-card agent-tool-read-only" key={`read-only-${index}`} aria-label={t("form.readOnlyToolLabel")}>
-              <div><strong>{t("form.readOnlyTool")}</strong><span>{tool.label}</span></div>
-              <small>{t("form.readOnlyHelp")}</small>
+              <div><strong className="field-label-row">{t("form.readOnlyTool")}<HelpTip>{t("form.readOnlyHelp")}</HelpTip></strong><span>{tool.label}</span></div>
             </article>
           ) : tool.kind === "function" ? (
             <article className="agent-tool-card" key={`function-${index}`}>
@@ -360,14 +333,14 @@ export function AgentForm({
                 <label className="field"><span>{t("form.name")}</span><input value={tool.name} onChange={(event) => updateTools((current) => current.map((candidate, position) => position === index ? { ...tool, name: event.target.value } : candidate))} placeholder="lookup_customer" /></label>
                 <label className="field"><span>{t("form.description")}</span><input value={tool.description} onChange={(event) => updateTools((current) => current.map((candidate, position) => position === index ? { ...tool, description: event.target.value } : candidate))} placeholder={t("form.descriptionPlaceholder")} /></label>
               </div>
-              <label className="field"><span>{t("form.parameters")}</span><textarea value={tool.parameters} onChange={(event) => updateTools((current) => current.map((candidate, position) => position === index ? { ...tool, parameters: event.target.value } : candidate))} rows={7} spellCheck={false} /><small>{t("form.parametersHelp")}</small></label>
+              <label className="field"><span className="field-label-row">{t("form.parameters")}<HelpTip>{t("form.parametersHelp")}</HelpTip></span><textarea value={tool.parameters} onChange={(event) => updateTools((current) => current.map((candidate, position) => position === index ? { ...tool, parameters: event.target.value } : candidate))} rows={7} spellCheck={false} /></label>
             </article>
           ) : (
             <article className="agent-tool-card" key={`mcp-${index}`}>
-              <header><strong>{tool.credentialId ? t("form.vaultMcp") : t("form.anonymousMcp")}</strong><button className="button outline" type="button" onClick={() => updateTools((current) => current.filter((_, candidate) => candidate !== index))}>{t("form.remove")}</button></header>
+              <header><strong className="field-label-row">{tool.credentialId ? t("form.vaultMcp") : t("form.anonymousMcp")}<HelpTip>{t("form.mcpWriteHelp")}</HelpTip></strong><button className="button outline" type="button" onClick={() => updateTools((current) => current.filter((_, candidate) => candidate !== index))}>{t("form.remove")}</button></header>
               <div className="agent-tool-grid">
                 <label className="field"><span>{t("form.serverLabel")}</span><input value={tool.serverLabel} onChange={(event) => updateTools((current) => current.map((candidate, position) => position === index ? { ...tool, serverLabel: event.target.value } : candidate))} placeholder="docs" /></label>
-                <label className="field"><span>{t("form.authentication")}</span><select value={tool.credentialId ?? ""} onChange={(event) => {
+                <label className="field"><span className="field-label-row">{t("form.authentication")}<HelpTip>{vaultCatalog ? t("form.selectedCredentialHelp") : t("form.catalogUnavailable")}</HelpTip></span><select value={tool.credentialId ?? ""} onChange={(event) => {
                   const credentialId = event.target.value || null;
                   const credential = credentialId ? vaultCatalog?.credentials.find((candidate) => candidate.id === credentialId) : null;
                   updateTools((current) => current.map((candidate, position) => position === index ? {
@@ -381,18 +354,16 @@ export function AgentForm({
                     const credentials = vaultCatalog.credentials.filter((credential) => credential.vault_id === vault.id);
                     return credentials.length ? <optgroup label={vaultName(vault)} key={vault.id}>{credentials.map((credential) => <option value={credential.id} key={credential.id}>{credential.name} · {credential.auth.mcp_server_url}</option>)}</optgroup> : null;
                   })}
-                </select><small>{vaultCatalog ? t("form.selectedCredentialHelp") : t("form.catalogUnavailable")}</small></label>
+                </select></label>
                 <label className="field"><span>{t("form.serverUrl")}</span><input value={tool.serverUrl} onChange={(event) => updateTools((current) => current.map((candidate, position) => position === index ? { ...tool, serverUrl: event.target.value } : candidate))} placeholder="https://mcp.example/tools" inputMode="url" spellCheck={false} readOnly={Boolean(tool.credentialId)} /></label>
               </div>
               <fieldset className="agent-mcp-allowed-tools">
-                <legend>{t("form.allowedTools")}</legend>
+                <legend className="field-label-row">{t("form.allowedTools")}<HelpTip>{t("form.allowedToolsHelp")}</HelpTip></legend>
                 <label><input type="radio" checked={tool.allowedToolsMode === "all"} onChange={() => updateTools((current) => current.map((candidate, position) => position === index ? { ...tool, allowedToolsMode: "all", allowedToolsValue: null } : candidate))} /> {t("form.allTools")}</label>
                 <label><input type="radio" checked={tool.allowedToolsMode === "list"} onChange={() => updateTools((current) => current.map((candidate, position) => position === index ? { ...tool, allowedToolsMode: "list" } : candidate))} /> {t("form.listedTools")}</label>
                 {tool.allowedToolsMode === "list" ? <textarea value={tool.allowedTools} onChange={(event) => updateTools((current) => current.map((candidate, position) => position === index ? { ...tool, allowedTools: event.target.value } : candidate))} rows={4} placeholder={'search\nread_document'} spellCheck={false} aria-label={t("form.allowedToolsLabel", { name: tool.serverLabel || t("form.mcpServer") })} /> : null}
-                <small>{t("form.allowedToolsHelp")}</small>
               </fieldset>
               <label className="agent-mcp-required"><input type="checkbox" checked={tool.required === true} onChange={(event) => updateTools((current) => current.map((candidate, position) => position === index ? { ...tool, required: event.target.checked } : candidate))} /> {t("form.required")}</label>
-              <small>{t("form.mcpWriteHelp")}</small>
             </article>
           ))}
         </div>
@@ -403,7 +374,7 @@ export function AgentForm({
         {toolsError ? <p className="field-error" role="alert">{toolsError}</p> : null}
       </section>
       <label className="field">
-        <span>{t("form.metadata")}</span>
+        <span className="field-label-row">{t("form.metadata")}<HelpTip id={`${formId}-metadata-help`}>{t("form.metadataHelp")}</HelpTip></span>
         <textarea
           className="agent-metadata-input"
           value={metadata}
@@ -416,7 +387,6 @@ export function AgentForm({
           aria-describedby={`${formId}-metadata-help${metadataError ? ` ${formId}-metadata-error` : ""}`}
           aria-invalid={Boolean(metadataError)}
         />
-        <small id={`${formId}-metadata-help`}>{t("form.metadataHelp")}</small>
         {metadataError ? <small className="field-error" id={`${formId}-metadata-error`} role="alert">{metadataError}</small> : null}
       </label>
       </fieldset>

@@ -95,7 +95,7 @@ export function AgentUsageRangeControl({ usage }: { usage: AgentUsageModel }) {
         options={AGENT_USAGE_RANGES.map((range) => ({ value: range, label: t(`usage.ranges.${range}`) }))}
         onChange={usage.controller.setRange}
       />
-      <HelpTip>{t("usage.help")}</HelpTip>
+      <HelpTip>{t("usage.help")} {t("usage.caveat")}</HelpTip>
     </div>
   );
 }
@@ -138,13 +138,21 @@ export function AgentUsageStatus({ usage }: { usage: AgentUsageModel }) {
       </div>
     );
   }
+  if (controller.status === "ready" && controller.unrecognized.length) {
+    const known = controller.unrecognized.flatMap((entry) => entry.id ? [entry.id] : []);
+    const count = controller.unrecognized.length;
+    return (
+      <div className="agent-usage-status">
+        <span role="status">
+          {controller.range === "all"
+            ? t("usage.unrecognized", { count, formattedCount: formatInteger(count, locale) })
+            : t("usage.unrecognizedUpTo", { count, formattedCount: formatInteger(count, locale) })}
+        </span>
+        <HelpTip>{t("usage.unrecognizedHelp")}{known.length ? ` ${known.join(", ")}` : ""}</HelpTip>
+      </div>
+    );
+  }
   return null;
-}
-
-/** The fixed statement of what the statistics are, shown beside them. */
-export function AgentUsageCaveat() {
-  const { t } = useTranslation("agents");
-  return <p className="agent-usage-caveat">{t("usage.caveat")}</p>;
 }
 
 /** The four key figures of one saved Agent as numeric table cells. */
@@ -224,7 +232,6 @@ export function OtherAgentUsageSection({ usage, query = "" }: { usage: AgentUsag
       </div>
       {!normalized && hidden > 0 ? (
         <footer className="table-footer agent-usage-other-footer">
-          <span />
           <button className="button outline" type="button" aria-controls={tableId} aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
             {expanded ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
             {expanded ? t("usage.other.showLess") : t("usage.other.showAll", { formattedCount: formatInteger(groups.length, locale) })}
@@ -297,7 +304,6 @@ export function AgentUsagePanel({ usage, agentId }: { usage: AgentUsageModel; ag
           </div>
         </dl>
       ) : null}
-      <AgentUsageCaveat />
     </section>
   );
 }

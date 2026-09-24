@@ -111,7 +111,7 @@ describe("Environment Template full configuration", () => {
     expect(html).toContain("Unrecognized configuration");
     expect(html.match(/Unrecognized configuration/g)).toHaveLength(1);
     expect(html).toContain("Edit Future profile");
-    expect(html).toContain("3 of 3 Templates");
+    expect(html).toContain("3 total");
   });
 
   it("filters by name or ID", () => {

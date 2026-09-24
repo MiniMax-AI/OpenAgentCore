@@ -16,12 +16,14 @@ const TIP_WIDTH = 288;
  * small print. The tip opens on hover, keyboard focus or click and renders in a
  * portal so framed containers cannot clip it.
  */
-export function HelpTip({ children, label }: { children: ReactNode; label?: string }) {
+export function HelpTip({ children, label, id: fixedId }: { children: ReactNode; label?: string; id?: string }) {
   const { t } = useTranslation();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [position, setPosition] = useState<{ top: number; left: number; above: boolean } | null>(null);
   const [pinned, setPinned] = useState(false);
-  const id = useId();
+  const generatedId = useId();
+  // A fixed id lets a form control keep pointing at the explanation with aria-describedby.
+  const id = fixedId ?? generatedId;
 
   const show = useCallback(() => {
     const rect = buttonRef.current?.getBoundingClientRect();
@@ -269,7 +271,7 @@ export function SegmentedControl<T extends string>({
 }: {
   label: string;
   value: T;
-  options: ReadonlyArray<{ value: T; label: string }>;
+  options: ReadonlyArray<{ value: T; label: string; count?: string | number }>;
   onChange: (value: T) => void;
 }) {
   const groupRef = useRef<HTMLDivElement>(null);
@@ -302,6 +304,7 @@ export function SegmentedControl<T extends string>({
           onClick={() => onChange(option.value)}
         >
           {option.label}
+          {option.count !== undefined ? <span className="segmented-count">{option.count}</span> : null}
         </button>
       ))}
     </div>

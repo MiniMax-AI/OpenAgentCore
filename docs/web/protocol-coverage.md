@@ -19,9 +19,9 @@ OpenAI-hosted service compatibility.
   build-version resource. It exposes Codex-only, Session-scoped `self_hosted`
   creation; basic Codex/Docker `openai_hosted` creation when Core is explicitly
   configured with a qualified managed provider; Environment retrieval; bounded
-  Files.list; and Source Files. It still exposes no public Environment list or
-  standalone CRUD, Source Files list, browser-facing key route, or
-  managed-provider discovery/configuration route.
+  Files.list; and the Source Files lifecycle including its paginated list. It
+  still exposes no public Environment list or standalone CRUD, browser-facing key
+  route, or managed-provider discovery/configuration route.
 - Environment Template support was originally read at the immutable Parsar revision
   [`d8ed9d42`](https://github.com/MiniMax-AI-Dev/parsar/commit/d8ed9d4230dcda13293b262ad1dcb584842a6271),
   and is included in the current in-repository Core baseline. It adds the five

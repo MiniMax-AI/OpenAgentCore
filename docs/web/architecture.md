@@ -285,14 +285,16 @@ unsupported connected Core rather than an empty directory.
 
 The same revision adds a separate project-owned Source Files lifecycle: multipart
 `user_data` upload, metadata retrieve, complete binary download, and deletion by
-durable Source ID. Web exposes that lifecycle in System without storing a file ID or
-content in browser persistence. Core provides no Source Files list, so an upload
-whose response is lost cannot be located or safely replayed.
+durable Source ID. Core also lists Source Files (`GET /v1/files` with `after`,
+`limit`, `order` and `purpose`), and Web exposes the list, upload and deletion under
+Resources › Files without storing a file ID or content in browser persistence. An
+upload whose response is lost is never replayed; the operator refreshes the list to
+find out whether it landed.
 
 Environment Files.create accepts either strict inline Base64 or a Source `file_id`
 for a canonical path beneath `/workspace` in the qualified managed placement. Web
 exposes inline selection in the selected hosted Session and Source upload → returned
-`file_id` copy in System. Both write surfaces require the current complete basic
+`file_id` copy in Resources › Files. Both write surfaces require the current complete basic
 Session projection plus an exact same-ID `openai_hosted` resource read with a
 non-terminal status and empty files/plugins/skills installation metadata. Eligibility
 is never inferred from Docker, health, Files.list, a Session snapshot, or connection

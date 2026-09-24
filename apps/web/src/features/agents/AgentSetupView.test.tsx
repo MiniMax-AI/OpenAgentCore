@@ -39,7 +39,7 @@ describe("Agent setup page", () => {
     expect(html).toContain("New Agent");
     expect(html).toContain("Request preview");
     expect(html).toContain("${AGENTS_CORE_API_KEY}");
-    expect(html).toContain("Get started creating an Agent");
+    expect(html).not.toContain("Get started creating an Agent");
     expect(html).toContain("Text format");
     expect(html).toContain("Existing JSON schemas are preserved read-only and block Session start");
     expect(html).toContain("Reasoning effort");

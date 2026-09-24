@@ -43,7 +43,8 @@ html[data-theme="dark"] {
   --card-shadow: 0 1px 2px rgb(0 0 0 / 30%);
 }
 
-.visually-hidden {
+.visually-hidden,
+.sr-only {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -560,6 +561,13 @@ html[data-theme="dark"] .agent-preview-block pre {
   box-shadow: var(--shadow-control);
 }
 
+.segmented-count {
+  margin-left: 6px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 .filter-bar {
   display: flex;
   flex-wrap: wrap;
@@ -630,6 +638,264 @@ html[data-theme="dark"] .agent-preview-block pre {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* Lists --------------------------------------------------------------- */
+
+/* Every resource list: search first, then filters, the count on the right. */
+.list-toolbar {
+  display: flex;
+  min-height: 28px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+/* Page bodies space sections 28px apart; a toolbar belongs to the table below it. */
+.console-page-body > .list-toolbar {
+  margin-bottom: -16px;
+}
+
+.list-toolbar-controls {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.list-toolbar-summary {
+  margin: 0 0 0 auto;
+  color: var(--fg-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.list-toolbar .search-control.list-search {
+  width: 280px;
+  max-width: 100%;
+}
+
+.list-toolbar .search-control input[type="search"]::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.list-toolbar-label {
+  color: var(--fg-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.list-toolbar-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--line);
+}
+
+/* Name with its compact ID underneath. */
+.name-cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.name-cell-title {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.name-cell-title > span:first-child,
+.name-cell-link {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name-cell-link {
+  max-width: 100%;
+  padding: 0;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.name-cell-link:hover {
+  color: var(--accent);
+}
+
+.name-cell-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.name-cell .muted,
+.name-cell-link.muted {
+  color: var(--fg-muted);
+  font-weight: 400;
+}
+
+.name-cell .copyable-id code {
+  color: var(--fg-muted);
+  font-size: 11.5px;
+}
+
+.name-cell .copyable-id-button {
+  width: 20px;
+  height: 20px;
+  flex-basis: 20px;
+  opacity: 0;
+}
+
+.data-table tbody tr:hover .name-cell .copyable-id-button,
+.name-cell .copyable-id-button:focus-visible {
+  opacity: 1;
+}
+
+/* One ID with its copy button. */
+.copyable-id {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+}
+
+.copyable-id code {
+  overflow-wrap: anywhere;
+}
+
+.copyable-id-button {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
+  color: var(--fg-muted);
+}
+
+.copyable-id-button:hover:not(:disabled) {
+  color: var(--fg);
+}
+
+.column-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.owner-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.owner-revoked {
+  color: var(--fg-muted);
+}
+
+.owner-flag {
+  padding: 0 5px;
+  color: var(--fg-muted);
+  font-size: 11px;
+  line-height: 16px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.owner-missing {
+  color: var(--fg-muted);
+}
+
+/* Detail pages: a back arrow before the title and a row of facts under it. */
+.back-button,
+.template-back {
+  margin-left: -6px;
+  color: var(--fg-muted);
+}
+
+.back-button:hover:not(:disabled),
+.template-back:hover:not(:disabled) {
+  color: var(--fg);
+}
+
+.resource-facts,
+.template-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, max-content));
+  gap: 14px 40px;
+  margin: 0;
+}
+
+.resource-facts > div,
+.template-facts > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.resource-facts dt,
+.template-facts dt {
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+
+.resource-facts dd,
+.template-facts dd {
+  margin: 0;
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .resource-facts,
+  .template-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* API key activity */
+.activity-time {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-parent {
+  margin-left: 8px;
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+
+/* A form label with its help tip on the same line. */
+.field-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Row actions sit at the end of the row with even spacing. */
+.data-table .actions-cell {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.row-actions-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+}
+
+.row-actions-group .text-action.danger:hover {
+  color: var(--danger);
 }
 
 /* Tables -------------------------------------------------------------- */
@@ -776,10 +1042,11 @@ html[data-theme="dark"] .agent-preview-block pre {
   margin-left: 4px;
 }
 
+/* "Load more" sits centred under its table. */
 .table-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 12px;
   margin-top: -16px;
   color: var(--fg-muted);
@@ -803,15 +1070,17 @@ html[data-theme="dark"] .agent-preview-block pre {
   border-color: color-mix(in srgb, var(--danger) 22%, var(--line));
 }
 
+/* Empty lists read as an empty table card: same frame, no dashed outline. */
 .console-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding: 36px 24px;
+  padding: 40px 24px;
   color: var(--fg-muted);
   text-align: center;
-  border: 1px dashed var(--line-strong);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--frame-radius);
 }
 

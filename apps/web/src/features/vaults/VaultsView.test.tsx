@@ -13,8 +13,27 @@ const operations: VaultOperations = {
 };
 
 describe("Vaults view", () => {
+  it("lists Vaults as table rows with their Credential count", () => {
+    const html = renderToStaticMarkup(<VaultsView
+      busy={false}
+      coreError={null}
+      coreState="ready"
+      operations={operations}
+      catalog={{
+        vaults: [{ id: "11111111-1111-4111-8111-111111111111", object: "vault", created_at: 1, name: "Runtime", metadata: {} }],
+        credentials: [],
+      }}
+    />);
+    expect(html).toContain('<table class="data-table" aria-label="Vaults">');
+    expect(html).toContain("Runtime");
+    expect(html).toContain('aria-label="Delete Runtime"');
+    // The security note lives behind the page help tip, not as a banner.
+    expect(html).not.toContain("vault-security-note");
+  });
+
   it("shows safe Credential metadata without inventing status or token values", () => {
     const html = renderToStaticMarkup(<VaultsView
+      initialSelectedId="11111111-1111-4111-8111-111111111111"
       busy={false}
       coreError={null}
       coreState="ready"
@@ -36,7 +55,8 @@ describe("Vaults view", () => {
     expect(html).toContain("Runtime");
     expect(html).toContain("Internal MCP");
     expect(html).toContain("https://mcp.example/tools");
-    expect(html).toContain("token hidden");
+    expect(html).toContain("Static bearer");
+    expect(html).toContain("Static bearer tokens are write-only");
     expect(html).not.toContain("active");
     expect(html).not.toContain("archived");
   });
@@ -44,6 +64,7 @@ describe("Vaults view", () => {
   it("shows OAuth metadata with application guidance and only offers static token replacement", () => {
     const vaultId = "11111111-1111-4111-8111-111111111111";
     const html = renderToStaticMarkup(<VaultsView
+      initialSelectedId={vaultId}
       busy={false} coreError={null} coreState="ready" operations={operations}
       catalog={{
         vaults: [{ id: vaultId, object: "vault", created_at: 1, name: "Runtime", metadata: {} }],

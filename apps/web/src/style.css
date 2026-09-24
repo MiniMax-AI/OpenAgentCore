@@ -5327,10 +5327,10 @@ button.trace-step-row:hover {
 
 .agent-form-section-heading {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: flex-start;
   margin-bottom: 10px;
-  gap: 10px;
+  gap: 4px;
 }
 
 .agent-form-section-heading h3 {

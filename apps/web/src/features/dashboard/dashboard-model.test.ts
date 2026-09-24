@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import type { AgentSession, RuntimeObservation, SavedAgent, TokenUsage } from "@agents-core-web/agents-client";
+import {
+  type AgentSession,
+  OpenAIAgentsClient,
+  type RuntimeObservation,
+  type SavedAgent,
+  type TokenUsage,
+} from "@agents-core-web/agents-client";
 
 import {
   buildDashboardSnapshot,
@@ -198,6 +204,67 @@ describe("Dashboard loaded-snapshot model", () => {
     expect(dashboardEnvironmentLabel("self_hosted")).toBe("Self-hosted profile");
     expect(dashboardEnvironmentLabel("openai_hosted")).toBe("Managed hosted");
     expect(dashboardEnvironmentLabel("unsupported")).toBe("Unavailable");
+  });
+
+  it("counts Sessions created from an advanced Environment Template as managed", async () => {
+    // The environment of a Session created from the advanced Template fixture
+    // (packages/agents-client fixture session_environment_from_advanced_template).
+    const advanced = {
+      type: "openai_hosted",
+      id: "9d6b4c3f-5e70-4fb1-8c43-0d9e8f7a6b52",
+      capability_directories: ["/workspace/capabilities"],
+      network: { access: "restricted", allowed_domains: ["pypi.org", "files.pythonhosted.org"] },
+      packages: { npm: ["typescript@5.8.3"], python: ["packaging==26.0"], system: ["jq"] },
+      files: [
+        { id: "0e7c5d40-6f81-4ac2-9d54-1e0f9a8b7c63", type: "inline", path: "/workspace/config/settings.json", size_bytes: 128 },
+        {
+          id: "1f8d6e51-7092-4bd3-8e65-2f1a0b9c8d74",
+          type: "file_id",
+          path: "/workspace/data/input.csv",
+          file_id: "file-2b7c9d10-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+          size_bytes: 42,
+        },
+      ],
+      plugins: [{ type: "inline", name: "release-notes", description: "Draft release notes from merged changes." }],
+      skills: [
+        { type: "skill_reference", skill_id: "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c", version: "1", name: "report", description: "Create the report." },
+        { type: "inline", name: "triage", description: "Sort incoming issues." },
+      ],
+    };
+    const sessionId = "5f9c1d2e-4b5a-4c7d-8e9f-0a1b2c3d4e5f";
+    const client = new OpenAIAgentsClient({
+      fetch: (async () => new Response(
+        JSON.stringify({ ...session(sessionId), environment: advanced }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )) as typeof fetch,
+    });
+    const projected = await client.retrieveSession(sessionId);
+
+    expect(dashboardEnvironmentProfile(projected.environment)).toBe("openai_hosted");
+    expect(buildDashboardSnapshot([], [projected]).recentSessions[0]?.environmentProfile).toBe("openai_hosted");
+
+    const basic = {
+      type: "openai_hosted",
+      id: advanced.id,
+      capability_directories: [],
+      network: { access: "enabled", allowed_domains: [] },
+      packages: { npm: [], python: [], system: [] },
+      files: [],
+      plugins: [],
+      skills: [],
+    };
+    for (const section of ["capability_directories", "network", "packages", "files", "plugins", "skills"] as const) {
+      expect(dashboardEnvironmentProfile({ ...basic, [section]: advanced[section] })).toBe("openai_hosted");
+    }
+    for (const unknown of [
+      { ...advanced, environment_template_id: "future" },
+      { ...advanced, network: { access: "future", allowed_domains: [] } },
+      { ...advanced, network: { access: "disabled", allowed_domains: ["pypi.org"] } },
+      { ...advanced, packages: { npm: [], python: [] } },
+      { ...advanced, files: ["settings.json"] },
+      { ...advanced, skills: undefined },
+      { ...advanced, id: "" },
+    ]) expect(dashboardEnvironmentProfile(unknown)).toBe("unsupported");
   });
 
   it("uses safe UTC timestamps and sends malformed activity to the end", () => {

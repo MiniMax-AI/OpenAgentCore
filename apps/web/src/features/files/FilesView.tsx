@@ -1,13 +1,15 @@
-import { FileText, Search, Upload } from "lucide-react";
+import { FileText, Upload } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { PageOrder, SourceFileListEntry } from "@agents-core-web/agents-client";
 
-import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, SegmentedControl, StatusDot } from "../../components/console-ui";
+import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, SegmentedControl } from "../../components/console-ui";
+import { ListToolbar, listSummary, NameCell, SearchField } from "../../components/list-ui";
+import { OwnerCell, OwnerHeading } from "../ownership/OwnerCell";
+import { useOwners } from "../ownership/use-owners";
 import { useToast } from "../../components/Toast";
 import { formatBytes, formatDateTime, MISSING } from "../../lib/format";
-import { CopyableId } from "./CopyableId";
 import {
   classifyFilesListError,
   filesErrorReason,
@@ -86,8 +88,10 @@ export function FilesListPage({
   const { t, i18n } = useTranslation("files");
   const locale = i18n.resolvedLanguage;
   const inputRef = useRef<HTMLInputElement>(null);
+  const { t: tCommon } = useTranslation();
   const visible = useMemo(() => filterFiles(state.files, query), [query, state.files]);
-  const filtering = query.trim().length > 0;
+  const fileIds = useMemo(() => state.files.map((file) => file.id), [state.files]);
+  const owners = useOwners("file", fileIds, state.status === "ready");
   const uploading = upload.kind === "uploading";
   const canUpload = state.status === "ready" && !uploading;
 
@@ -124,29 +128,18 @@ export function FilesListPage({
           <EmptyState icon={FileText} title={t("empty.title")} description={t("empty.description")} />
         ) : (
           <>
-            <div className="filter-bar">
-              <div className="filter-controls">
-                <label className="search-control files-search">
-                  <Search size={14} strokeWidth={1.5} aria-hidden="true" />
-                  <input
-                    type="search"
-                    value={query}
-                    onChange={(event) => onQueryChange(event.target.value)}
-                    placeholder={t("list.filterPlaceholder")}
-                    aria-label={t("list.filterLabel")}
-                  />
-                </label>
-                <SegmentedControl
-                  label={t("order.label")}
-                  value={order}
-                  options={[{ value: "desc", label: t("order.desc") }, { value: "asc", label: t("order.asc") }]}
-                  onChange={onOrderChange}
-                />
-              </div>
-              <span className="filter-count" role="status">
-                {filtering ? t("list.count", { shown: visible.length, loaded: state.files.length }) : t("list.loaded", { count: state.files.length })}
-              </span>
-            </div>
+            <ListToolbar
+              label={t("list.filterLabel")}
+              summary={listSummary(tCommon, visible.length, state.files.length, { hasMore: Boolean(state.nextAfter), locale })}
+            >
+              <SearchField value={query} onChange={onQueryChange} placeholder={t("list.filterPlaceholder")} label={t("list.filterLabel")} />
+              <SegmentedControl
+                label={t("order.label")}
+                value={order}
+                options={[{ value: "desc", label: t("order.desc") }, { value: "asc", label: t("order.asc") }]}
+                onChange={onOrderChange}
+              />
+            </ListToolbar>
             {visible.length ? (
               <div className="table-frame">
                 <table className="data-table files-table" aria-label={t("list.label")}>
@@ -156,7 +149,7 @@ export function FilesListPage({
                       <th scope="col" className="numeric">{t("list.size")}</th>
                       <th scope="col">{t("list.created")}</th>
                       <th scope="col">{t("list.purpose")}</th>
-                      <th scope="col">{t("list.id")}</th>
+                      {owners.available ? <th scope="col"><OwnerHeading /></th> : null}
                       <th scope="col"><span className="visually-hidden">{t("list.actions")}</span></th>
                     </tr>
                   </thead>
@@ -169,23 +162,20 @@ export function FilesListPage({
                         <Fragment key={file.id}>
                           <tr className={highlightId === file.id ? "files-row-new" : undefined}>
                             <th scope="row">
-                              {isUnrecognizedFile(file) ? (
-                                <span className="status-with-help">
-                                  <StatusDot tone="warning" label={name} />
-                                  <HelpTip>{t("list.unrecognizedHelp")}</HelpTip>
-                                </span>
-                              ) : <span className="files-name" title={file.filename}>{file.filename}</span>}
+                              <NameCell name={isUnrecognizedFile(file) ? null : file.filename} id={file.id} fallback={name} idLabel={t("actions.copyId")}>
+                                {isUnrecognizedFile(file) ? <HelpTip>{t("list.unrecognizedHelp")}</HelpTip> : null}
+                              </NameCell>
                             </th>
                             <td className="numeric" title={isUnrecognizedFile(file) ? undefined : t("list.exactBytes", { bytes: file.bytes.toLocaleString(locale) })}>
                               {isUnrecognizedFile(file) ? MISSING : formatBytes(file.bytes)}
                             </td>
                             <td className="files-nowrap">{isUnrecognizedFile(file) ? MISSING : formatDateTime(file.created_at, locale)}</td>
                             <td>{isUnrecognizedFile(file) ? MISSING : <code>{file.purpose}</code>}</td>
-                            <td className="files-nowrap"><CopyableId id={file.id} compact /></td>
-                            <td className="row-actions">
+                            {owners.available ? <td><OwnerCell record={owners.ownerOf(file.id)} /></td> : null}
+                            <td className="actions-cell">
                               {!confirming ? (
                                 <button
-                                  className="text-action"
+                                  className="text-action danger"
                                   type="button"
                                   disabled={deletingId !== null}
                                   aria-label={t("actions.deleteLabel", { name })}
@@ -198,7 +188,7 @@ export function FilesListPage({
                           </tr>
                           {confirming ? (
                             <tr className="files-confirm-row">
-                              <td colSpan={6}>
+                              <td colSpan={owners.available ? 6 : 5}>
                                 <div className="files-confirm" role="group" aria-label={t("delete.prompt", { name })}>
                                   <span>
                                     <strong>{t("delete.prompt", { name })}</strong>{" "}
@@ -229,7 +219,7 @@ export function FilesListPage({
             )}
             {state.moreError ? <p className="coverage-note coverage-note-error" role="alert">{t("list.moreFailed", { reason: state.moreError })}</p> : null}
             {state.nextAfter ? (
-              <footer className="table-footer files-footer">
+              <footer className="table-footer">
                 <button className="button outline" type="button" disabled={state.loadingMore} onClick={onLoadMore}>
                   {state.loadingMore ? t("actions.loadingMore") : t("actions.loadMore")}
                 </button>

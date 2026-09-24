@@ -1,13 +1,13 @@
-import type {
-  AgentSession,
-  RuntimeObservation,
-  SavedAgent,
-  SessionStatus,
-  TokenUsage,
+import {
+  type AgentSession,
+  isOpenAIHostedSessionEnvironment,
+  type RuntimeObservation,
+  type SavedAgent,
+  type SessionStatus,
+  type TokenUsage,
 } from "@agents-core-web/agents-client";
 
 import { isSupportedSelfHostedEnvironmentProjection } from "../sessions/environment/environment-launcher";
-import { isSupportedOpenAIHostedEnvironmentProjection } from "../sessions/environment/environment-state";
 
 export type DashboardCollectionState = "connecting" | "ready" | "failed";
 export type DashboardEnvironmentProfile = "none" | "self_hosted" | "openai_hosted" | "unsupported";
@@ -130,6 +130,13 @@ function canonicalStatus(value: unknown): DashboardSessionStatus {
     : "unknown";
 }
 
+/**
+ * Classifies a Session Environment for the dashboards. Every managed shape the
+ * client projects is a Core-managed hosted Session, including one created from
+ * an advanced Environment Template with packages, files, Skills, Plugins,
+ * capability directories or restricted networking. Any other shape, including
+ * unknown fields or network modes, stays unsupported.
+ */
 export function dashboardEnvironmentProfile(value: unknown): DashboardEnvironmentProfile {
   const environment = record(value);
   if (!environment) return "unsupported";
@@ -143,7 +150,7 @@ export function dashboardEnvironmentProfile(value: unknown): DashboardEnvironmen
       environment.capability_directories,
     )
   ) return "self_hosted";
-  if (isSupportedOpenAIHostedEnvironmentProjection(environment)) return "openai_hosted";
+  if (isOpenAIHostedSessionEnvironment(environment)) return "openai_hosted";
   return "unsupported";
 }
 

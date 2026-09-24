@@ -24,40 +24,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-.template-back {
-  margin-left: -6px;
-  color: var(--fg-muted);
-}
-
-.template-back:hover:not(:disabled) {
-  color: var(--fg);
-}
-
 /* Detail */
 
-.template-facts {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, max-content));
-  gap: 14px 40px;
-  margin: 0;
-}
-
-.template-facts > div {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.template-facts dt {
-  color: var(--fg-muted);
-  font-size: 12px;
-}
-
-.template-facts dd {
-  margin: 0;
-  font-size: 13px;
-}
 
 .template-values {
   display: flex;
@@ -101,12 +69,6 @@
 
 .template-reference:hover code {
   color: var(--accent);
-}
-
-@media (max-width: 900px) {
-  .template-facts {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 /* Dialog */

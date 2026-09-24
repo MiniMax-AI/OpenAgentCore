@@ -1,11 +1,14 @@
-import { KeyRound, Plus, RotateCcw, ShieldCheck, Trash2, Vault as VaultIcon } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Vault as VaultIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "../../i18n";
 
 import type { Vault, VaultCredential } from "@agents-core-web/agents-client";
 
-import { HelpTip, RefreshButton } from "../../components/console-ui";
+import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, Section } from "../../components/console-ui";
+import { CopyableId, ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
+import { OwnerCell, OwnerHeading } from "../ownership/OwnerCell";
+import { forgetOwners, useOwners } from "../ownership/use-owners";
 import { ErrorState } from "../../components/ErrorState";
 import { Modal } from "../../components/Modal";
 import { Skeleton } from "../../components/Skeleton";
@@ -15,6 +18,7 @@ import { VaultCreateForm } from "./VaultCreateForm";
 import type { VaultCatalog } from "./vault-catalog";
 import { vaultName } from "./vault-catalog";
 import type { VaultMetadata } from "./vault-metadata";
+import "./vaults.css";
 
 export interface VaultOperations {
   createVault(name: string, metadata: VaultMetadata): Promise<void>;
@@ -27,6 +31,8 @@ export interface VaultOperations {
 
 interface VaultsViewProps {
   busy: boolean;
+  /** Opens a Vault's detail directly (tests and deep links). */
+  initialSelectedId?: string | null;
   catalog: VaultCatalog | null;
   coreError: string | null;
   coreState: CoreConnectionState;
@@ -44,6 +50,7 @@ type DeleteTarget =
   | null;
 
 function formatTimestamp(seconds: number): string {
+  // Same absolute format as every other resource table.
   return new Intl.DateTimeFormat(i18n.resolvedLanguage ?? "en", { dateStyle: "medium", timeStyle: "short" })
     .format(new Date(seconds * 1000));
 }
@@ -55,28 +62,33 @@ function mutationError(): string {
 function VaultsLoadingSkeleton() {
   const { t } = useTranslation("vaults");
   return (
-    <div className="vault-grid" aria-busy="true" aria-label={t("loading")}>
-      {Array.from({ length: 3 }).map((_, index) => (
-        <article className="vault-card" key={index}>
-          <Skeleton className="skeleton-agent-name" />
-          <Skeleton />
-          <Skeleton className="skeleton-model" />
-        </article>
-      ))}
+    <div className="table-frame" aria-busy="true" aria-label={t("loading")}>
+      <div className="vault-skeleton">
+        {Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} />)}
+      </div>
     </div>
   );
 }
 
-export function VaultsView({ busy, catalog, coreError, coreState, operations }: VaultsViewProps) {
+function filterVaults(vaults: readonly Vault[], query: string): Vault[] {
+  const needle = query.trim().toLocaleLowerCase();
+  if (!needle) return [...vaults];
+  return vaults.filter((vault) => [vault.name ?? "", vault.id].some((value) => value.toLocaleLowerCase().includes(needle)));
+}
+
+export function VaultsView({ busy, catalog, coreError, coreState, operations, initialSelectedId = null }: VaultsViewProps) {
   const { t } = useTranslation("vaults");
   const { t: tPages } = useTranslation("pages");
   const { t: tCommon } = useTranslation("common");
-  const count = (value: number) => new Intl.NumberFormat(i18n.resolvedLanguage ?? "en").format(value);
+  const locale = i18n.resolvedLanguage ?? "en";
+  const count = (value: number) => new Intl.NumberFormat(locale).format(value);
   const [createOpen, setCreateOpen] = useState(false);
   const [credentialDialog, setCredentialDialog] = useState<CredentialDialogState>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
   const credentialsByVault = useMemo(() => {
     const result = new Map<string, VaultCredential[]>();
     for (const credential of catalog?.credentials ?? []) {
@@ -86,14 +98,34 @@ export function VaultsView({ busy, catalog, coreError, coreState, operations }: 
     }
     return result;
   }, [catalog]);
+  const vaults = useMemo(() => catalog?.vaults ?? [], [catalog]);
+  const visible = filterVaults(vaults, query);
+  const selected = selectedId ? vaults.find((vault) => vault.id === selectedId) ?? null : null;
+  const selectedCredentials = selected ? credentialsByVault.get(selected.id) ?? [] : [];
+  const vaultIds = useMemo(() => vaults.map((vault) => vault.id), [vaults]);
+  const credentialIds = useMemo(() => selectedCredentials.map((credential) => credential.id), [selectedCredentials]);
+  const vaultOwners = useOwners("vault", vaultIds, Boolean(catalog));
+  const credentialOwners = useOwners("vault_credential", credentialIds, Boolean(selected));
+
+  const refresh = () => {
+    forgetOwners("vault");
+    forgetOwners("vault_credential");
+    operations.refresh();
+  };
+  const openCreateCredential = (vault: Vault) => { setActionError(null); setCredentialDialog({ mode: "create", vault }); };
+  const openDeleteVault = (vault: Vault) => { setActionError(null); setDeleteTarget({ kind: "vault", vault }); };
 
   const confirmDelete = async () => {
     if (!deleteTarget || submitting) return;
     setSubmitting(true);
     setActionError(null);
     try {
-      if (deleteTarget.kind === "vault") await operations.deleteVault(deleteTarget.vault.id);
-      else await operations.deleteCredential(deleteTarget.vault.id, deleteTarget.credential.id);
+      if (deleteTarget.kind === "vault") {
+        await operations.deleteVault(deleteTarget.vault.id);
+        if (selectedId === deleteTarget.vault.id) setSelectedId(null);
+      } else {
+        await operations.deleteCredential(deleteTarget.vault.id, deleteTarget.credential.id);
+      }
       setDeleteTarget(null);
     } catch {
       setActionError(mutationError());
@@ -102,76 +134,207 @@ export function VaultsView({ busy, catalog, coreError, coreState, operations }: 
     }
   };
 
+  const status = (
+    <>
+      {actionError ? <div className="session-action-error" role="alert"><strong>{t("actionNotConfirmed")}</strong><span>{actionError}</span></div> : null}
+      {coreState === "failed" ? (
+        <ErrorState
+          title={catalog ? t("refreshFailed") : t("loadFailed")}
+          description={catalog ? t("staleDescription") : t("failedDescription")}
+          detail={coreError ?? undefined}
+          hint={t("failedHint")}
+          onRetry={refresh}
+        />
+      ) : null}
+    </>
+  );
+
+  let page;
+  if (selected) {
+    const name = vaultName(selected);
+    const metadata = Object.entries(selected.metadata);
+    page = (
+      <section className="page-section console-page vaults-page" aria-labelledby="vault-detail-heading">
+        <PageHeader
+          headingId="vault-detail-heading"
+          title={(
+            <>
+              <button type="button" className="icon-button ghost back-button" aria-label={t("detail.back")} title={t("detail.back")} onClick={() => setSelectedId(null)}>
+                <ArrowLeft size={16} strokeWidth={1.6} aria-hidden="true" />
+              </button>
+              {name}
+            </>
+          )}
+          actions={(
+            <>
+              <RefreshButton onClick={refresh} refreshing={coreState === "connecting"} disabled={busy} label={tPages("vaults.refresh")} />
+              <button className="button outline" type="button" onClick={() => openCreateCredential(selected)} disabled={busy || coreState !== "ready"}>
+                <Plus size={14} aria-hidden="true" />{t("detail.addCredential")}
+              </button>
+              <button className="button danger" type="button" aria-label={t("deleteVaultLabel", { name })} onClick={() => openDeleteVault(selected)} disabled={busy}>
+                <Trash2 size={14} aria-hidden="true" />{t("detail.deleteVault")}
+              </button>
+            </>
+          )}
+        />
+        <PageBody>
+          {status}
+          <dl className="resource-facts" aria-label={t("detail.facts")}>
+            <div><dt>{t("detail.id")}</dt><dd><CopyableId id={selected.id} /></dd></div>
+            <div><dt>{t("detail.created")}</dt><dd>{formatTimestamp(selected.created_at)}</dd></div>
+            {vaultOwners.available ? <div><dt><OwnerHeading /></dt><dd><OwnerCell record={vaultOwners.ownerOf(selected.id)} /></dd></div> : null}
+            {metadata.length ? (
+              <div>
+                <dt>{t("detail.metadata")}</dt>
+                <dd className="vault-metadata">{metadata.map(([key, value]) => <code key={key}>{key}={value}</code>)}</dd>
+              </div>
+            ) : null}
+          </dl>
+          <Section
+            headingId="vault-credentials-heading"
+            title={<>{t("detail.credentials")} <span className="heading-count">{count(selectedCredentials.length)}</span></>}
+            help={<>{t("detail.credentialsHelp")} {t("oauthHelp")}</>}
+          >
+            {selectedCredentials.length ? (
+              <div className="table-frame">
+                <table className="data-table" aria-label={t("credentialsIn", { name })}>
+                  <thead>
+                    <tr>
+                      <th scope="col">{t("detail.name")}</th>
+                      <th scope="col">{t("detail.url")}</th>
+                      <th scope="col">{t("detail.auth")}</th>
+                      <th scope="col">{t("detail.updated")}</th>
+                      {credentialOwners.available ? <th scope="col"><OwnerHeading /></th> : null}
+                      <th scope="col"><span className="visually-hidden">{t("list.actions")}</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedCredentials.map((credential) => (
+                      <tr key={credential.id}>
+                        <th scope="row"><NameCell name={credential.name} id={credential.id} /></th>
+                        <td><code className="vault-url" title={credential.auth.mcp_server_url}>{credential.auth.mcp_server_url}</code></td>
+                        <td className="vault-nowrap">
+                          {credential.auth.type === "static_bearer" ? t("detail.staticBearer") : <span className="column-help">{t("detail.oauth")}<HelpTip>{t("oauthHelp")}</HelpTip></span>}
+                        </td>
+                        <td className="vault-nowrap">{formatTimestamp(credential.updated_at)}</td>
+                        {credentialOwners.available ? <td><OwnerCell record={credentialOwners.ownerOf(credential.id)} /></td> : null}
+                        <td className="actions-cell">
+                          <RowActions>
+                            {credential.auth.type === "static_bearer" ? (
+                              <button className="text-action" type="button" aria-label={t("replaceTokenLabel", { name: credential.name })} onClick={() => { setActionError(null); setCredentialDialog({ mode: "replace", vault: selected, credential }); }} disabled={busy}>
+                                {t("replaceToken")}
+                              </button>
+                            ) : null}
+                            <button className="text-action danger" type="button" aria-label={t("deleteCredentialLabel", { name: credential.name })} onClick={() => { setActionError(null); setDeleteTarget({ kind: "credential", vault: selected, credential }); }} disabled={busy}>
+                              {t("delete")}
+                            </button>
+                          </RowActions>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyState
+                title={t("noCredentials")}
+                action={<button className="button outline" type="button" onClick={() => openCreateCredential(selected)} disabled={busy || coreState !== "ready"}>{t("detail.addCredential")}</button>}
+              />
+            )}
+          </Section>
+        </PageBody>
+      </section>
+    );
+  } else {
+    let body;
+    if (coreState === "connecting" && !catalog) body = <VaultsLoadingSkeleton />;
+    else if (!catalog || (coreState !== "ready" && !vaults.length)) body = null;
+    else if (!vaults.length) {
+      body = (
+        <EmptyState
+          icon={VaultIcon}
+          title={t("noVaults")}
+          description={t("noVaultsDescription")}
+          action={<button className="button outline" type="button" onClick={() => setCreateOpen(true)} disabled={busy}>{t("createVault")}</button>}
+        />
+      );
+    } else {
+      body = (
+        <>
+          <ListToolbar label={t("list.filterLabel")} summary={listSummary(tCommon, visible.length, vaults.length, { locale })}>
+            <SearchField value={query} onChange={setQuery} placeholder={t("list.filterPlaceholder")} label={t("list.filterLabel")} />
+          </ListToolbar>
+          {visible.length ? (
+            <div className="table-frame">
+              <table className="data-table" aria-label={t("list.label")}>
+                <thead>
+                  <tr>
+                    <th scope="col">{t("list.name")}</th>
+                    <th scope="col" className="numeric">{t("list.credentials")}</th>
+                    <th scope="col">{t("list.created")}</th>
+                    {vaultOwners.available ? <th scope="col"><OwnerHeading /></th> : null}
+                    <th scope="col"><span className="visually-hidden">{t("list.actions")}</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((vault) => {
+                    const name = vaultName(vault);
+                    return (
+                      <tr key={vault.id} className="clickable-row" onClick={() => setSelectedId(vault.id)}>
+                        <th scope="row">
+                          <NameCell name={vault.name} id={vault.id} fallback={name} onOpen={() => setSelectedId(vault.id)} openLabel={t("list.open", { name })} />
+                        </th>
+                        <td className="numeric">{count((credentialsByVault.get(vault.id) ?? []).length)}</td>
+                        <td className="vault-nowrap">{formatTimestamp(vault.created_at)}</td>
+                        {vaultOwners.available ? <td><OwnerCell record={vaultOwners.ownerOf(vault.id)} /></td> : null}
+                        <td className="actions-cell" onClick={(event) => event.stopPropagation()}>
+                          <RowActions>
+                            <button className="text-action" type="button" onClick={() => openCreateCredential(vault)} disabled={busy}>{t("detail.addCredential")}</button>
+                            <button className="text-action danger" type="button" aria-label={t("deleteVaultLabel", { name })} onClick={() => openDeleteVault(vault)} disabled={busy}>{t("delete")}</button>
+                          </RowActions>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState
+              title={t("list.noMatch")}
+              description={tCommon("list.noMatchesDescription")}
+              action={<button className="button outline" type="button" onClick={() => setQuery("")}>{tCommon("actions.clearSearch")}</button>}
+            />
+          )}
+        </>
+      );
+    }
+    page = (
+      <section className="page-section console-page vaults-page" aria-labelledby="vaults-heading">
+        <PageHeader
+          headingId="vaults-heading"
+          title={tPages("vaults.title")}
+          help={<>{tPages("vaults.subtitle")} {t("securityNote")}</>}
+          actions={(
+            <>
+              <RefreshButton onClick={refresh} refreshing={coreState === "connecting"} disabled={busy} label={tPages("vaults.refresh")} />
+              <button className="button primary" type="button" onClick={() => { setActionError(null); setCreateOpen(true); }} disabled={coreState !== "ready" || busy}>
+                <Plus size={14} aria-hidden="true" />{tPages("vaults.create")}
+              </button>
+            </>
+          )}
+        />
+        <PageBody>
+          {status}
+          {body}
+        </PageBody>
+      </section>
+    );
+  }
+
   return (
-    <section className="page-section vaults-page">
-      <header className="page-header">
-        <div className="console-page-heading">
-          <h1>{tPages("vaults.title")}</h1>
-          <HelpTip>{tPages("vaults.subtitle")}</HelpTip>
-        </div>
-        <div className="page-actions">
-          <RefreshButton onClick={operations.refresh} refreshing={coreState === "connecting"} disabled={busy} label={tPages("vaults.refresh")} />
-          <button className="button primary" type="button" onClick={() => { setActionError(null); setCreateOpen(true); }} disabled={coreState !== "ready" || busy}>
-            <Plus size={14} strokeWidth={1.5} /> {tPages("vaults.create")}
-          </button>
-        </div>
-      </header>
-
-      <div className="vaults-content">
-        <div className="notice warning vault-security-note" role="note">
-          <ShieldCheck size={15} aria-hidden="true" />
-          <span>{t("securityNote")}</span>
-        </div>
-
-        {actionError ? <div className="session-action-error" role="alert"><strong>{t("actionNotConfirmed")}</strong><span>{actionError}</span></div> : null}
-        {coreState === "connecting" && !catalog ? <VaultsLoadingSkeleton /> : null}
-        {coreState === "failed" ? (
-          <ErrorState
-            title={catalog ? t("refreshFailed") : t("loadFailed")}
-            description={catalog ? t("staleDescription") : t("failedDescription")}
-            detail={coreError ?? undefined}
-            hint={t("failedHint")}
-            onRetry={operations.refresh}
-          />
-        ) : null}
-
-        {catalog && (coreState === "ready" || catalog.vaults.length > 0) ? catalog.vaults.length ? (
-          <div className="vault-grid">
-            {catalog.vaults.map((vault) => {
-              const credentials = credentialsByVault.get(vault.id) ?? [];
-              return (
-                <article className="vault-card" key={vault.id}>
-                  <header>
-                    <div className="vault-card-title"><VaultIcon size={17} strokeWidth={1.5} aria-hidden="true" /><div><h2>{vaultName(vault)}</h2><code>{vault.id}</code></div></div>
-                    <div className="vault-card-actions">
-                      <button className="button outline" type="button" onClick={() => { setActionError(null); setCredentialDialog({ mode: "create", vault }); }} disabled={busy}><Plus size={13} /> {t("credential")}</button>
-                      <button className="icon-button danger" type="button" aria-label={t("deleteVaultLabel", { name: vaultName(vault) })} onClick={() => { setActionError(null); setDeleteTarget({ kind: "vault", vault }); }} disabled={busy}><Trash2 size={14} /></button>
-                    </div>
-                  </header>
-                  <div className="vault-metadata-row"><span>{t("created")}</span><time dateTime={new Date(vault.created_at * 1000).toISOString()}>{formatTimestamp(vault.created_at)}</time></div>
-                  {Object.keys(vault.metadata).length ? <pre className="agent-structured-value">{JSON.stringify(vault.metadata, null, 2)}</pre> : null}
-                  <section className="vault-credentials" aria-label={t("credentialsIn", { name: vaultName(vault) })}>
-                    <h3>{t("credential")} <span>{count(credentials.length)}</span></h3>
-                    {credentials.length ? credentials.map((credential) => (
-                      <article className="credential-row" key={credential.id}>
-                        <KeyRound size={15} strokeWidth={1.5} aria-hidden="true" />
-                        <div><strong>{credential.name}</strong><code>{credential.auth.mcp_server_url}</code><small>{t("updatedHidden", { date: formatTimestamp(credential.updated_at) })}</small>{credential.auth.type === "mcp_oauth" ? <small>{t("oauthHelp")}</small> : null}</div>
-                        <div className="credential-actions">
-                          {credential.auth.type === "static_bearer" ? <button className="icon-button outline" type="button" aria-label={t("replaceTokenLabel", { name: credential.name })} title={t("replaceToken")} onClick={() => { setActionError(null); setCredentialDialog({ mode: "replace", vault, credential }); }} disabled={busy}><RotateCcw size={13} /></button> : null}
-                          <button className="icon-button danger" type="button" aria-label={t("deleteCredentialLabel", { name: credential.name })} onClick={() => { setActionError(null); setDeleteTarget({ kind: "credential", vault, credential }); }} disabled={busy}><Trash2 size={13} /></button>
-                        </div>
-                      </article>
-                    )) : <p className="vault-empty-credentials">{t("noCredentials")}</p>}
-                  </section>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="empty-state"><VaultIcon size={24} strokeWidth={1.5} /><h2>{t("noVaults")}</h2><p>{t("noVaultsDescription")}</p><button className="button primary" type="button" onClick={() => setCreateOpen(true)} disabled={busy}>{t("createVault")}</button></div>
-        ) : null}
-      </div>
-
+    <>
+      {page}
       <Modal
         open={createOpen}
         onClose={() => { if (!busy) setCreateOpen(false); }}
@@ -204,6 +367,6 @@ export function VaultsView({ busy, catalog, coreError, coreState, operations }: 
       >
         {deleteTarget?.kind === "vault" ? <p>{t("deleteVaultPrompt", { name: vaultName(deleteTarget.vault) })}</p> : deleteTarget ? <p>{t("deleteCredentialPrompt", { name: deleteTarget.credential.name })}</p> : null}
       </Modal>
-    </section>
+    </>
   );
 }

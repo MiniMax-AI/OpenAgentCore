@@ -1,4 +1,4 @@
-import type { AgentSession, ListPage, PageOptions, SessionStatus } from "@agents-core-web/agents-client";
+import type { AgentSession, SessionListOptions, SessionStatus, TolerantSessionList } from "@agents-core-web/agents-client";
 
 import { canonicalUsage } from "../dashboard/dashboard-model";
 
@@ -8,7 +8,8 @@ import { canonicalUsage } from "../dashboard/dashboard-model";
  * Usage on a Session is Core's cumulative total for that Session, so it is
  * attributed whole to the range the Session was created in. A Session whose
  * usage is missing or invalid counts toward the coverage denominator but never
- * toward token sums; missing is not zero.
+ * toward token sums; missing is not zero. A listed Session the client cannot
+ * recognize at all is kept apart as unrecognized and excluded from every total.
  */
 
 export type AgentUsageRange = "all" | "7d" | "30d";
@@ -211,7 +212,22 @@ export function usageCoverage(totals: Pick<AgentUsageTotals, "sessions" | "repor
 // Loading ------------------------------------------------------------------
 
 export interface AgentUsageSource {
-  listSessions(options?: PageOptions & { agentId?: string }): Promise<ListPage<AgentSession>>;
+  listSessionsTolerant(options?: SessionListOptions): Promise<TolerantSessionList>;
+}
+
+/**
+ * A listed Session the client could not recognize. Its Agent, status, usage
+ * and creation time are unknown, so it is excluded from every total and
+ * count instead of being counted as zero.
+ */
+export interface UnrecognizedUsageSession {
+  /** Raw Session ID when Core returned one in Session ID form; otherwise null. */
+  id: string | null;
+  /**
+   * Number of recognized records listed before this entry, so it lies between
+   * `records[position - 1]` and `records[position]` in newest-first order.
+   */
+  position: number;
 }
 
 /**
@@ -221,6 +237,9 @@ export interface AgentUsageSource {
  */
 export interface UsageLoadCursor {
   records: UsageSessionRecord[];
+  /** Listed Sessions the client could not recognize, in list order. */
+  unrecognized: UnrecognizedUsageSession[];
+  /** Every known Session ID read, recognized or not. */
   ids: Set<string>;
   after: string | undefined;
   pages: number;
@@ -232,11 +251,33 @@ export interface UsageLoadCursor {
 
 export interface UsageLoadProgress {
   pages: number;
+  /** Sessions read, including unrecognized ones. */
   sessions: number;
 }
 
 export function createUsageLoadCursor(): UsageLoadCursor {
-  return { records: [], ids: new Set(), after: undefined, pages: 0, exhausted: false, oldestCreatedAt: null };
+  return { records: [], unrecognized: [], ids: new Set(), after: undefined, pages: 0, exhausted: false, oldestCreatedAt: null };
+}
+
+export function usageLoadProgress(cursor: UsageLoadCursor): UsageLoadProgress {
+  return { pages: cursor.pages, sessions: cursor.records.length + cursor.unrecognized.length };
+}
+
+/**
+ * Unrecognized Sessions that may have been created in the range; all of them
+ * for all time. Their creation time is unknown, but the list is newest first:
+ * an entry listed after a recognized Session created before the range start is
+ * older than the range and left out. Any other entry may belong to the range,
+ * so for a bounded range this is an upper bound.
+ */
+export function unrecognizedInUsageRange(
+  records: readonly UsageSessionRecord[],
+  unrecognized: readonly UnrecognizedUsageSession[],
+  rangeStart: number | null,
+): UnrecognizedUsageSession[] {
+  if (rangeStart === null) return [...unrecognized];
+  const boundary = records.findIndex((record) => record.createdAt !== null && record.createdAt < rangeStart);
+  return boundary === -1 ? [...unrecognized] : unrecognized.filter((entry) => entry.position <= boundary);
 }
 
 /** Whether the cursor already holds every Session created at or after the range start. */
@@ -247,9 +288,10 @@ export function usageCursorCovers(cursor: UsageLoadCursor, rangeStart: number | 
 
 /**
  * Reads newest-first Session pages into the cursor until the range is covered.
- * Each page is committed only after it is fully validated, so after a failure
- * or cancellation the cursor still ends on a page boundary and a later call
- * resumes without re-reading earlier pages.
+ * A malformed Session is kept as unrecognized instead of failing its page; a
+ * malformed page still fails. Each page is committed only after it is fully
+ * validated, so after a failure or cancellation the cursor still ends on a
+ * page boundary and a later call resumes without re-reading earlier pages.
  */
 export async function continueUsageLoad(
   source: AgentUsageSource,
@@ -259,36 +301,52 @@ export async function continueUsageLoad(
 ): Promise<UsageLoadCursor> {
   while (!usageCursorCovers(cursor, rangeStart)) {
     signal?.throwIfAborted();
-    const page = await source.listSessions({ after: cursor.after, limit: USAGE_PAGE_LIMIT, order: "desc", signal });
+    const page = await source.listSessionsTolerant({ after: cursor.after, limit: USAGE_PAGE_LIMIT, order: "desc", signal });
     signal?.throwIfAborted();
-    if (!page || !Array.isArray(page.data) || typeof page.has_more !== "boolean") {
+    if (!page || !Array.isArray(page.data) || !Array.isArray(page.unrecognized) || typeof page.has_more !== "boolean") {
       throw new Error("Agent Core returned an invalid Session page.");
     }
     const pageIds = new Set<string>();
-    const records: UsageSessionRecord[] = [];
-    let oldest = cursor.oldestCreatedAt;
-    for (const session of page.data) {
-      const id = session && typeof session.id === "string" && session.id.length > 0 ? session.id : null;
-      if (id === null || cursor.ids.has(id) || pageIds.has(id)) {
+    const claim = (id: unknown) => {
+      if (typeof id !== "string" || id.length === 0 || cursor.ids.has(id) || pageIds.has(id)) {
         throw new Error("Agent Core returned duplicate or invalid Session identities.");
       }
       pageIds.add(id);
+    };
+    const records: UsageSessionRecord[] = [];
+    let oldest = cursor.oldestCreatedAt;
+    for (const session of page.data) {
+      claim(session?.id);
       const record = usageRecord(session);
       if (record.createdAt !== null && (oldest === null || record.createdAt < oldest)) oldest = record.createdAt;
       records.push(record);
     }
-    const nextAfter = page.has_more ? page.last_id ?? page.data.at(-1)?.id : undefined;
+    const unrecognized: UnrecognizedUsageSession[] = [];
+    let previousIndex = -1;
+    page.unrecognized.forEach((entry, order) => {
+      const index = entry?.index;
+      // Recognized Sessions keep page order, so this many were listed before the entry.
+      const recognizedBefore = index - order;
+      if (!Number.isSafeInteger(index) || index <= previousIndex || recognizedBefore > records.length) {
+        throw new Error("Agent Core returned an invalid Session page.");
+      }
+      previousIndex = index;
+      if (entry.id !== null) claim(entry.id);
+      unrecognized.push({ id: entry.id, position: cursor.records.length + recognizedBefore });
+    });
+    const nextAfter = page.has_more ? page.last_id ?? undefined : undefined;
     if (page.has_more && (!nextAfter || nextAfter === cursor.after)) {
       throw new Error("Agent Core returned an invalid Session pagination cursor.");
     }
 
     cursor.records.push(...records);
+    cursor.unrecognized.push(...unrecognized);
     for (const id of pageIds) cursor.ids.add(id);
     cursor.pages += 1;
     cursor.oldestCreatedAt = oldest;
     cursor.after = nextAfter;
     cursor.exhausted = !page.has_more;
-    onProgress?.({ pages: cursor.pages, sessions: cursor.records.length });
+    onProgress?.(usageLoadProgress(cursor));
   }
   return cursor;
 }

@@ -1,10 +1,13 @@
-import { Bot, Check, Copy, MessageSquare, SearchX } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { Bot, MessageSquare, SearchX } from "lucide-react";
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { SavedAgent } from "@agents-core-web/agents-client";
 
 import { EmptyState, HelpTip } from "../../components/console-ui";
+import { NameCell } from "../../components/list-ui";
+import { OwnerCell, OwnerHeading } from "../ownership/OwnerCell";
+import type { OwnersState } from "../ownership/use-owners";
 import { formatDateTime, formatInteger, formatRelative } from "../../lib/format";
 import type { VaultCatalog } from "../vaults/vault-catalog";
 import { harnessLabel } from "./AgentForm";
@@ -54,31 +57,6 @@ function AgentSessionStartAction({
   );
 }
 
-function CopyAgentId({ id }: { id: string }) {
-  const { t } = useTranslation("agents");
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    if (!copied) return;
-    const timer = window.setTimeout(() => setCopied(false), 1_500);
-    return () => window.clearTimeout(timer);
-  }, [copied]);
-  const label = copied ? t("catalog.copied") : t("catalog.copyId", { id });
-  return (
-    <button
-      className="icon-button ghost agent-copy-id"
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={(event) => {
-        event.stopPropagation();
-        void navigator.clipboard?.writeText(id).then(() => setCopied(true), () => undefined);
-      }}
-    >
-      {copied ? <Check size={13} aria-hidden="true" /> : <Copy size={13} strokeWidth={1.6} aria-hidden="true" />}
-    </button>
-  );
-}
-
 /** Saved Agents as one table row each; a row opens the Agent's setup view. */
 export function AgentCatalog({
   agents,
@@ -88,6 +66,7 @@ export function AgentCatalog({
   isFiltering,
   openingAgentId,
   usage = null,
+  owners = null,
   vaultCatalog,
   onClearSearch,
   onCreate,
@@ -101,6 +80,7 @@ export function AgentCatalog({
   isFiltering: boolean;
   openingAgentId: string | null;
   usage?: AgentUsageModel | null;
+  owners?: OwnersState | null;
   vaultCatalog: VaultCatalog | null;
   onClearSearch: () => void;
   onCreate: () => void;
@@ -151,6 +131,7 @@ export function AgentCatalog({
               </>
             ) : null}
             <th scope="col" className="numeric">{t("catalog.columns.updated")}</th>
+            {owners?.available ? <th scope="col"><OwnerHeading /></th> : null}
             <th scope="col"><span className="visually-hidden">{t("catalog.columns.actions")}</span></th>
           </tr>
         </thead>
@@ -165,24 +146,16 @@ export function AgentCatalog({
             return (
               <tr key={agent.id} className="clickable-row" onClick={open} aria-busy={opening || undefined}>
                 <th scope="row">
-                  <span className="agent-table-name">
-                    <button
-                      className="table-link"
-                      type="button"
-                      title={agent.id}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        open();
-                      }}
-                      disabled={busy || opening}
-                      aria-label={t("catalog.editLabel", { name, id: agent.id })}
-                      data-agent-id={agent.id}
-                    >
-                      <strong className={agent.name ? undefined : "agent-null-value"}>{name}</strong>
-                    </button>
-                    <CopyAgentId id={agent.id} />
-                  </span>
-                  {opening ? <span className="agent-table-opening" role="status">{t("catalog.opening")}</span> : null}
+                  <NameCell
+                    name={agent.name}
+                    id={agent.id}
+                    fallback={t("catalog.untitled")}
+                    onOpen={open}
+                    openLabel={t("catalog.editLabel", { name, id: agent.id })}
+                    openProps={{ disabled: busy || opening, "data-agent-id": agent.id }}
+                  >
+                    {opening ? <span className="agent-table-opening" role="status">{t("catalog.opening")}</span> : null}
+                  </NameCell>
                 </th>
                 <td><code className="agent-table-model" title={agent.model}>{agent.model}</code></td>
                 <td className={harness ? undefined : "table-muted"}>{harness ? harnessLabel(harness) : t("catalog.coreDefaultHarness")}</td>
@@ -191,7 +164,8 @@ export function AgentCatalog({
                 <td className="numeric" title={formatDateTime(agent.updated_at, locale)}>
                   <time dateTime={new Date(agent.updated_at * 1_000).toISOString()}>{formatRelative(agent.updated_at, now, locale)}</time>
                 </td>
-                <td className="row-actions" onClick={(event) => event.stopPropagation()}>
+                {owners?.available ? <td><OwnerCell record={owners.ownerOf(agent.id)} /></td> : null}
+                <td className="actions-cell" onClick={(event) => event.stopPropagation()}>
                   <AgentSessionStartAction agent={agent} busy={busy} onStart={onStartSession} vaultCatalog={vaultCatalog} />
                 </td>
               </tr>

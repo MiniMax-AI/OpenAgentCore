@@ -126,7 +126,7 @@ describe("Agents view", () => {
         onCreate={async () => undefined}
         onRefresh={() => undefined}
         onStartSession={async () => undefined}
-        usageSource={{ listSessions: async () => ({ data: [], has_more: false }) }}
+        usageSource={{ listSessionsTolerant: async () => ({ object: "list", data: [], unrecognized: [], has_more: false, first_id: null, last_id: null }) }}
       />,
     );
 

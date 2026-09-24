@@ -1129,6 +1129,12 @@ export function App() {
   const [skillsSupport, setSkillsSupport] = useState<SkillsSupport | null>(null);
   // A template's file reference opens the Files page filtered to that ID.
   const [filesFocus, setFilesFocus] = useState<string | null>(null);
+  const [skillsFocus, setSkillsFocus] = useState<string | null>(null);
+  // A link from a Template opens one File or Skill; leaving the page forgets it.
+  useEffect(() => {
+    if (view !== "files") setFilesFocus(null);
+    if (view !== "skills") setSkillsFocus(null);
+  }, [view]);
   useEffect(() => {
     setSkillsSupport(null);
     const controller = new AbortController();
@@ -2383,7 +2389,7 @@ export function App() {
               onRefresh={refreshEnvironmentTemplates}
               onConfigureConnection={() => setConnectionOpen(true)}
               onOpenFile={(id) => { setFilesFocus(id); setView("files"); }}
-              onOpenSkill={() => setView("skills")}
+              onOpenSkill={(id) => { setSkillsFocus(id); setView("skills"); }}
             />
           ) : null}
           {view === "workbench" ? (
@@ -2394,6 +2400,9 @@ export function App() {
               agents={agents}
               sessions={monitorSessions}
               harnesses={startupConfigurationState === "ready" && startupConfiguration ? startupConfiguration.configured.enabled_harnesses : []}
+              defaultHarness={startupConfigurationState === "ready" && startupConfiguration ? startupConfiguration.configured.default_harness : undefined}
+              vaultCatalog={sessionVaultCatalog}
+              environmentTemplates={environmentTemplates}
               onOpenSession={openSession}
               onChanged={refreshDashboard}
             />
@@ -2473,7 +2482,7 @@ export function App() {
             />
           ) : null}
           {view === "skills" && skillsSupport !== null && skillsSupport !== "unsupported" ? (
-            <SkillsView key={`skills:${coreGeneration}`} core={core} onUnsupported={() => setSkillsSupport("unsupported")} />
+            <SkillsView key={`skills:${coreGeneration}:${skillsFocus ?? ""}`} core={core} initialSkillId={skillsFocus ?? undefined} onUnsupported={() => setSkillsSupport("unsupported")} />
           ) : null}
           {view === "files" ? <FilesView key={`files:${coreGeneration}:${filesFocus ?? ""}`} core={core} initialQuery={filesFocus ?? undefined} /> : null}
           {view === "vaults" && vaultSupported === true ? (

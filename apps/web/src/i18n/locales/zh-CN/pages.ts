@@ -6,6 +6,6 @@ export const pages = {
   agents: { title: "Agent", subtitle: "这个项目里保存的 Agent。调用方可以用 Agent ID 创建 Session；在这里可以新建、编辑和试运行。" },
   sessions: { title: "Session", subtitle: "对话", recover: "恢复持久状态" },
   templates: { title: "环境模板", subtitle: "用于托管 Session 的可复用配置。", newTemplate: "新建模板" },
-  vaults: { title: "Vault", subtitle: "由 Core 管理、仅用于精确 HTTPS MCP 目标的静态 bearer 凭据。", refresh: "刷新 Vault", create: "新建 Vault" },
+  vaults: { title: "Vault", subtitle: "由 Core 管理、仅用于精确 HTTPS MCP 目标的静态 bearer Credential。", refresh: "刷新 Vault", create: "新建 Vault" },
   sandbox: { title: "托管沙箱管理", subtitle: "管理部署 provider、运行时节点和 Session 分配。", disconnect: "断开管理员连接" },
 } as const;

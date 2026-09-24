@@ -1,0 +1,51 @@
+import type { ownership as english } from "../en/ownership";
+type TranslationShape<T> = { [K in keyof T]: T[K] extends string ? string : TranslationShape<T[K]> };
+export const ownership: TranslationShape<typeof english> = {
+  column: "API key",
+  columnHelp: "创建此资源的 API key，由 Core 记录。Core 开始记录之前创建的资源显示为“—”。",
+  owner: {
+    loading: "加载中",
+    noneTitle: "没有创建记录：该资源创建于 Core 开始记录 API key 操作之前。",
+  },
+  actor: {
+    console: "控制台",
+    static: "部署密钥",
+    revoked: "已撤销",
+    revokedTitle: "此 API key 已撤销",
+  },
+  activity: {
+    title: "操作记录",
+    help: "每把 API key 的成功写操作，由 Core 记录，按时间倒序。读操作不记录，也不保存请求内容和密钥。",
+    filterLabel: "筛选操作记录",
+    allKeys: "全部 API key",
+    allTypes: "全部资源",
+    columns: { time: "时间", key: "API key", action: "操作", type: "资源", resource: "ID" },
+    empty: "暂无操作记录",
+    emptyDescription: "使用 API key 进行的写操作会显示在这里。",
+    unavailable: "操作记录不可用",
+    unavailableDescription: "当前控制台或所连接的 Core 不记录 API key 操作。",
+    failed: "无法加载操作记录。",
+    loading: "正在加载操作记录…",
+    view: "操作记录",
+    viewLabel: "查看 {{name}} 的操作记录",
+    parent: "属于 {{id}}",
+  },
+  actions: {
+    create: "创建",
+    update: "修改",
+    delete: "删除",
+    send: "发送输入",
+  },
+  types: {
+    agent: "Agent",
+    session: "Session",
+    environment_template: "环境模板",
+    skill: "Skill",
+    skill_version: "Skill 版本",
+    file: "文件",
+    vault: "Vault",
+    vault_credential: "Credential",
+    environment_file: "环境文件",
+    session_artifact: "Session 产物",
+  },
+};

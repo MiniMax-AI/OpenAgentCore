@@ -83,25 +83,4 @@
   justify-content: flex-end;
 }
 
-/* One ID with its copy button; shared by Files and Environment Templates. */
-.copyable-id {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 2px;
-}
 
-.copyable-id code {
-  overflow-wrap: anywhere;
-}
-
-.copyable-id-button {
-  width: 24px;
-  height: 24px;
-  flex-basis: 24px;
-  color: var(--fg-muted);
-}
-
-.copyable-id-button:hover:not(:disabled) {
-  color: var(--fg);
-}

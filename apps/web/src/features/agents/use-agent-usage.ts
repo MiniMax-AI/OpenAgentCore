@@ -5,10 +5,13 @@ import {
   type AgentUsageSource,
   continueUsageLoad,
   createUsageLoadCursor,
+  type UnrecognizedUsageSession,
+  unrecognizedInUsageRange,
   type UsageLoadCursor,
   type UsageLoadProgress,
   type UsageSessionRecord,
   usageCursorCovers,
+  usageLoadProgress,
   usageRangeStart,
 } from "./agent-usage";
 
@@ -23,6 +26,14 @@ export interface AgentUsageState {
   error: string | null;
   /** Everything read so far; only meaningful for statistics when status is ready. */
   records: readonly UsageSessionRecord[];
+  /**
+   * Listed Sessions the client could not recognize that may belong to the
+   * selected range (every one read for all time), with their raw IDs where
+   * known. They are excluded from every total and count, never counted as zero
+   * usage; for a bounded range the count is an upper bound. Only meaningful
+   * when status is ready.
+   */
+  unrecognized: readonly UnrecognizedUsageSession[];
   /** Browser time of the last completed load, in milliseconds. */
   loadedAt: number | null;
 }
@@ -43,6 +54,7 @@ export const initialAgentUsageState: AgentUsageState = {
   progress: { pages: 0, sessions: 0 },
   error: null,
   records: [],
+  unrecognized: [],
   loadedAt: null,
 };
 
@@ -68,11 +80,12 @@ export function useAgentUsage(source: AgentUsageSource | undefined, enabled: boo
     controllerRef.current?.abort();
     controllerRef.current = null;
     cursorRef.current = cursor;
-    const progress = { pages: cursor.pages, sessions: cursor.records.length };
+    const progress = usageLoadProgress(cursor);
     if (!source) return;
     if (usageCursorCovers(cursor, rangeStart)) {
       setState((current) => ({
         ...current, range, rangeStart, status: "ready", progress, error: null, records: [...cursor.records],
+        unrecognized: unrecognizedInUsageRange(cursor.records, cursor.unrecognized, rangeStart),
         loadedAt: current.loadedAt ?? Date.now(),
       }));
       return;
@@ -91,8 +104,9 @@ export function useAgentUsage(source: AgentUsageSource | undefined, enabled: boo
       setState((current) => ({
         ...current,
         status: "ready",
-        progress: { pages: cursor.pages, sessions: cursor.records.length },
+        progress: usageLoadProgress(cursor),
         records: [...cursor.records],
+        unrecognized: unrecognizedInUsageRange(cursor.records, cursor.unrecognized, rangeStart),
         loadedAt: Date.now(),
       }));
     }, (error: unknown) => {
@@ -101,7 +115,7 @@ export function useAgentUsage(source: AgentUsageSource | undefined, enabled: boo
       setState((current) => ({
         ...current,
         status: "failed",
-        progress: { pages: cursor.pages, sessions: cursor.records.length },
+        progress: usageLoadProgress(cursor),
         error: errorText(error),
       }));
     });
@@ -131,7 +145,7 @@ export function useAgentUsage(source: AgentUsageSource | undefined, enabled: boo
     setState((current) => ({
       ...current,
       status: "cancelled",
-      progress: { pages: cursor.pages, sessions: cursor.records.length },
+      progress: usageLoadProgress(cursor),
     }));
   }, []);
 
@@ -140,7 +154,7 @@ export function useAgentUsage(source: AgentUsageSource | undefined, enabled: boo
   }, [load]);
 
   const reload = useCallback(() => {
-    setState((current) => ({ ...current, records: [], loadedAt: null }));
+    setState((current) => ({ ...current, records: [], unrecognized: [], loadedAt: null }));
     load(stateRef.current.range, usageRangeStart(stateRef.current.range, nowSeconds()), createUsageLoadCursor());
   }, [load]);
 

@@ -3,6 +3,7 @@ import { exactFields, onlyFields, isRecord, hasOwn, canonicalUuid, isNonnegative
 import { projectTokenUsage } from "./usage-projection";
 import { projectAgentTurn, projectSessionItem, projectItemContent, projectHistoryPage, validateHistoryPageOptions } from "./history-projection";
 import { projectRuntimeHistory, projectRuntimeHistoryCapabilities } from "./runtime-history-projection";
+import { projectOpenAIHostedSessionEnvironment } from "./session-environment-projection";
 import { createSSEDecoder } from "./sse";
 import { projectVaultCredentialAuth, validCredentialURL } from "./vault-credential-auth";
 import {
@@ -59,10 +60,12 @@ import type {
   InputMessage,
   ListPage,
   PageOptions,
+  PageOrder,
   ReadOptions,
   SavedAgent,
   SessionDeleted,
   SessionEvent,
+  SessionListOptions,
   SessionInputEvent,
   SessionMessageInputEvent,
   SessionToolResultInputEvent,
@@ -86,6 +89,8 @@ import type {
   SkillVersionUploadOptions,
   StreamOptions,
   StreamError,
+  TolerantSessionList,
+  UnrecognizedSession,
   UpdateAgentInput,
   ReplaceVaultCredentialTokenInput,
   RuntimeObservation,
@@ -324,11 +329,10 @@ const sessionFields = new Set([
   "id", "object", "agent", "environment", "status", "error", "metadata",
   "required_actions", "vault_ids", "usage", "created_at", "last_active_at",
 ]);
-const hostedSessionEnvironmentFields = new Set([
-  "type", "id", "capability_directories", "network", "packages", "files", "plugins", "skills",
-]);
-const environmentNetworkFields = new Set(["access", "allowed_domains"]);
-const environmentPackagesFields = new Set(["npm", "python", "system"]);
+const sessionListFields = new Set(["object", "data", "has_more", "first_id", "last_id"]);
+// Core's Session list bound; it defaults to 20.
+const maxSessionListLimit = 100;
+const defaultSessionListLimit = 20;
 const agentSnapshotFields = new Set([
   "id", "model", "name", "instructions", "multi_agent", "reasoning",
   "service_tier", "text", "tools",
@@ -761,34 +765,7 @@ function projectSessionEnvironment(value: unknown): AgentSession["environment"] 
     };
   }
   if (value.type === "openai_hosted") {
-    // A Session created from an advanced Template carries its frozen, safe
-    // installation metadata; it is admitted structurally and kept as returned.
-    const network = value.network;
-    const packages = value.packages;
-    const strings = (list: unknown): list is string[] => Array.isArray(list) && list.every((entry) => typeof entry === "string");
-    const records = (list: unknown): list is Record<string, unknown>[] => Array.isArray(list) && list.every(isRecord);
-    if (
-      !exactFields(value, hostedSessionEnvironmentFields) ||
-      typeof value.id !== "string" || value.id.trim() === "" ||
-      !strings(value.capability_directories) ||
-      !isRecord(network) || !exactFields(network, environmentNetworkFields) ||
-      !strings(network.allowed_domains) ||
-      !(((network.access === "enabled" || network.access === "disabled") && network.allowed_domains.length === 0) ||
-        (network.access === "restricted" && network.allowed_domains.length > 0)) ||
-      !isRecord(packages) || !exactFields(packages, environmentPackagesFields) ||
-      !strings(packages.npm) || !strings(packages.python) || !strings(packages.system) ||
-      !records(value.files) || !records(value.plugins) || !records(value.skills)
-    ) return invalidSessionResource();
-    return {
-      type: "openai_hosted",
-      id: value.id,
-      capability_directories: [...value.capability_directories],
-      network: { access: network.access, allowed_domains: [...network.allowed_domains] },
-      packages: { npm: [...packages.npm], python: [...packages.python], system: [...packages.system] },
-      files: value.files.map((entry) => ({ ...entry })),
-      plugins: value.plugins.map((entry) => ({ ...entry })),
-      skills: value.skills.map((entry) => ({ ...entry })),
-    };
+    return projectOpenAIHostedSessionEnvironment(value) ?? invalidSessionResource();
   }
   return { ...value } as AgentSession["environment"];
 }
@@ -1025,6 +1002,60 @@ function projectAgentSession(
     return invalidSessionResource("Agent Core changed immutable Session configuration in the event stream.");
   }
   return session;
+}
+
+function invalidSessionList(): never {
+  throw new AgentCoreError("Agent Core returned an invalid Session list.", 502, "invalid_session_list");
+}
+
+/**
+ * Projects a Session page tolerantly. Each entry is projected exactly as a
+ * retrieved Session; an entry that fails is reported by its page index, with
+ * its raw ID only when that has Core's Session ID (UUID) form, and nothing
+ * else of it is kept. The page itself stays strict: its envelope, size, IDs,
+ * cursors and creation order must be consistent, or the whole page fails.
+ */
+function projectTolerantSessionList(value: unknown, limit: number, order: PageOrder): TolerantSessionList {
+  if (
+    !isRecord(value) || !exactFields(value, sessionListFields) || value.object !== "list" ||
+    !Array.isArray(value.data) || typeof value.has_more !== "boolean" || value.data.length > limit
+  ) return invalidSessionList();
+  const data: AgentSession[] = [];
+  const unrecognized: UnrecognizedSession[] = [];
+  // Each entry's ID in page order; null when an unrecognized entry has none.
+  const ids: Array<string | null> = [];
+  value.data.forEach((entry: unknown, index) => {
+    try {
+      const session = projectAgentSession(entry);
+      data.push(session);
+      ids.push(session.id);
+    } catch (error) {
+      if (!(error instanceof AgentCoreError)) throw error;
+      const id = isRecord(entry) && typeof entry.id === "string" && canonicalUuid(entry.id) !== null ? entry.id : null;
+      unrecognized.push({ index, id });
+      ids.push(id);
+    }
+  });
+  const knownIds = ids.filter((id): id is string => id !== null);
+  // A cursor must be an ID; it must equal its entry's ID whenever that is known.
+  const boundary = (cursor: unknown, id: string | null | undefined) =>
+    typeof cursor === "string" && cursor.trim() !== "" && (id === null || id === undefined || cursor === id);
+  if (
+    (ids.length === 0
+      ? value.first_id !== null || value.last_id !== null || value.has_more
+      : !boundary(value.first_id, ids[0]) || !boundary(value.last_id, ids.at(-1))) ||
+    new Set(knownIds).size !== knownIds.length ||
+    // Public timestamps are whole seconds, so equal values cannot prove the ID tie-break.
+    data.some((session, index) => index > 0 && compareCreatedResource(data[index - 1]!, session, order) > 0)
+  ) return invalidSessionList();
+  return {
+    object: "list",
+    data,
+    unrecognized,
+    has_more: value.has_more,
+    first_id: value.first_id as string | null,
+    last_id: value.last_id as string | null,
+  };
 }
 
 function invalidRuntimeObservation(message = "Agent Core returned an invalid Runtime observation."): never {
@@ -2168,6 +2199,27 @@ export class OpenAIAgentsClient implements AgentCore {
       return invalidVaultResponse("invalid_session_vaults", "Agent Core returned invalid Session Vault attachments.");
     }
     return { ...page, data: page.data.map((session) => projectAgentSession(session)) };
+  }
+
+  /**
+   * Reads one Session page without letting a malformed Session fail it.
+   * Recognized Sessions are projected exactly as by listSessions and returned
+   * in page order; every other entry is reported in `unrecognized`. A
+   * malformed envelope, cursor or page still fails the whole request, so
+   * callers paginate with the returned `last_id` and `has_more`.
+   */
+  async listSessionsTolerant(options?: SessionListOptions): Promise<TolerantSessionList> {
+    if (
+      (options?.limit !== undefined && (
+        !Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > maxSessionListLimit
+      )) ||
+      (options?.order !== undefined && options.order !== "asc" && options.order !== "desc")
+    ) throw new TypeError("Session list limit must be an integer from 1 through 100 and order asc or desc.");
+    const params = new URLSearchParams();
+    addPageOptions(params, options);
+    if (options?.agentId) params.set("agent_id", options.agentId);
+    const value = await this.request<unknown>(withQuery("/agents/sessions", params), { signal: options?.signal }, 200);
+    return projectTolerantSessionList(value, options?.limit ?? defaultSessionListLimit, options?.order ?? "desc");
   }
 
   async listRuntimeObservations(options?: PageOptions): Promise<RuntimeObservationList> {

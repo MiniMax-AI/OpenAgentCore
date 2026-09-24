@@ -680,6 +680,38 @@ export interface AgentSession {
   last_active_at: number;
 }
 
+/** Session list query. Pages hold 1–100 Sessions (default 20), newest first by default. */
+export interface SessionListOptions extends PageOptions {
+  /** Root Agent ID whose Sessions to return; omission lists every Agent. */
+  agentId?: string;
+}
+
+/**
+ * A listed Session this client does not recognize, for example one with an
+ * unknown field or value. Nothing of it is kept or guessed beyond its position
+ * and, when it has Core's Session ID form, its raw ID.
+ */
+export interface UnrecognizedSession {
+  /** Position of the entry in the page as Core returned it. */
+  index: number;
+  /** Raw ID when it is a Session ID (a UUID); otherwise null. */
+  id: string | null;
+}
+
+/**
+ * One Session page read tolerantly: `data` holds the recognized Sessions in
+ * page order and `unrecognized` every other entry. The envelope and cursors
+ * are Core's own; `first_id` and `last_id` may name an unrecognized entry.
+ */
+export interface TolerantSessionList {
+  object: "list";
+  data: AgentSession[];
+  unrecognized: UnrecognizedSession[];
+  has_more: boolean;
+  first_id: string | null;
+  last_id: string | null;
+}
+
 export interface CreateSessionInput {
   x_agents_core?: { sandbox_node_id?: string; model_provider?: ModelProviderInput | null };
   agent_id?: string;
@@ -1268,6 +1300,8 @@ export interface AgentCore {
   replaceVaultCredentialToken(vaultId: string, credentialId: string, input: ReplaceVaultCredentialTokenInput): Promise<VaultCredential>;
   deleteVaultCredential(vaultId: string, credentialId: string): Promise<VaultCredentialDeleted>;
   listSessions(options?: PageOptions & { agentId?: string }): Promise<ListPage<AgentSession>>;
+  /** Like listSessions, but a malformed Session is reported instead of failing the page. */
+  listSessionsTolerant(options?: SessionListOptions): Promise<TolerantSessionList>;
   listRuntimeObservations(options?: PageOptions): Promise<RuntimeObservationList>;
   retrieveRuntimeObservation(sessionId: string, options?: ReadOptions): Promise<RuntimeObservation>;
   getRuntimeHistoryCapabilities(options?: ReadOptions): Promise<RuntimeHistoryCapabilities>;

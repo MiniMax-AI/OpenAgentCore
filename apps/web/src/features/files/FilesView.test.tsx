@@ -67,14 +67,15 @@ describe("Files page", () => {
       expect(html).toContain(value);
     }
     expect(html).toContain(`title="${notes.id}"`);
-    expect(html).toContain("2 loaded");
+    expect(html).toContain("2 total");
   });
 
   it("says the filter covers loaded rows only", () => {
     const html = render({ status: "ready", files: [notes, input] }, { query: "csv" });
     expect(html).toContain('placeholder="Filter loaded files by name or ID"');
-    expect(html).toContain("1 of 2 loaded");
+    expect(html).toContain("1 of 2");
     expect(html).not.toContain("notes.txt");
+    expect(render({ status: "ready", files: [notes, input], nextAfter: input.id }, { query: "csv" })).toContain("1 of 2 loaded");
   });
 
   it("explains an empty filter result and keeps Load more", () => {

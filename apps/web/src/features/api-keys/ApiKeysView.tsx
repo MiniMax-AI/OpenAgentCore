@@ -2,6 +2,8 @@ import { Check, Copy, Plus } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { EmptyState, PageBody, PageHeader, RefreshButton, StatusDot } from "../../components/console-ui";
+import { RowActions } from "../../components/list-ui";
+import { ActivityLog, type ActivityKeyFilter } from "../ownership/ActivityLog";
 import { Modal } from "../../components/Modal";
 import { formatRelative } from "../../lib/format";
 import { useApiKeyCapability, useManagedApiKeys, type ManagedApiKeys } from "./use-api-keys";
@@ -43,6 +45,13 @@ function ManagedApiKeysView() {
   const { t } = useTranslation("firstRun");
   const keys = useManagedApiKeys();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [activityKey, setActivityKey] = useState<ActivityKeyFilter>("");
+  const [refreshToken, setRefreshToken] = useState(0);
+  const refresh = () => { keys.refresh(); setRefreshToken((value) => value + 1); };
+  const showActivity = (id: string) => {
+    setActivityKey(id);
+    document.getElementById("api-key-activity-heading")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   const { issued, busy, loading, fresh, uncertain } = keys;
   const locked = busy || loading || !fresh || Boolean(uncertain) || Boolean(issued);
   // Closing the dialog never discards a key shown only once: it stays on the
@@ -51,7 +60,7 @@ function ManagedApiKeysView() {
   return (
     <ApiKeysPage
       actions={<>
-        <RefreshButton onClick={keys.refresh} refreshing={loading} disabled={busy} label={t("Refresh keys")} />
+        <RefreshButton onClick={refresh} refreshing={loading} disabled={busy} label={t("Refresh keys")} />
         <button type="button" className="button primary" disabled={locked || dialogOpen} onClick={() => setDialogOpen(true)}>
           <Plus size={14} aria-hidden="true" />{t("Create API key")}
         </button>
@@ -63,7 +72,8 @@ function ManagedApiKeysView() {
       {keys.canRetryCreation ? (
         <div><button type="button" className="button outline" onClick={keys.retryCreation}>{t("Retry this creation")}</button></div>
       ) : null}
-      <KeyTable keys={keys} />
+      <KeyTable keys={keys} onShowActivity={showActivity} />
+      <ActivityLog keys={keys.keys} keyFilter={activityKey} onKeyFilterChange={setActivityKey} refreshToken={refreshToken} />
       <CreateKeyDialog keys={keys} open={dialogOpen} onClose={closeDialog} />
     </ApiKeysPage>
   );
@@ -133,8 +143,9 @@ function IssuedKey({ keys }: { keys: ManagedApiKeys }) {
   );
 }
 
-function KeyTable({ keys }: { keys: ManagedApiKeys }) {
+function KeyTable({ keys, onShowActivity }: { keys: ManagedApiKeys; onShowActivity: (id: string) => void }) {
   const { t, i18n } = useTranslation("firstRun");
+  const { t: tOwnership } = useTranslation("ownership");
   const locale = i18n.resolvedLanguage;
   const now = Math.floor(Date.now() / 1000);
   if (!keys.keys.length) {
@@ -165,10 +176,13 @@ function KeyTable({ keys }: { keys: ManagedApiKeys }) {
                   <StatusDot tone={revoked ? "neutral" : "ok"} label={t(revoked ? "Revoked" : "Active")} />
                 </td>
                 <td title={new Date(key.created_at).toLocaleString(locale)}>{formatRelative(Date.parse(key.created_at) / 1000, now, locale)}</td>
-                <td className="numeric">
-                  {!revoked && !confirming ? (
-                    <button className="text-action" type="button" disabled={keys.busy || !keys.fresh} onClick={() => keys.setConfirm(key.id)}>{t("Revoke")}</button>
-                  ) : null}
+                <td className="actions-cell">
+                  <RowActions>
+                    <button className="text-action" type="button" aria-label={tOwnership("activity.viewLabel", { name: key.name })} onClick={() => onShowActivity(key.id)}>{tOwnership("activity.view")}</button>
+                    {!revoked && !confirming ? (
+                      <button className="text-action danger" type="button" disabled={keys.busy || !keys.fresh} onClick={() => keys.setConfirm(key.id)}>{t("Revoke")}</button>
+                    ) : null}
+                  </RowActions>
                 </td>
               </tr>,
               confirming ? (

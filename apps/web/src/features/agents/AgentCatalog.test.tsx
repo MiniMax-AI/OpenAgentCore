@@ -66,7 +66,7 @@ describe("Agent catalog", () => {
     for (const column of ["Agent", "Model", "Harness", "Tools", "Updated"]) expect(html).toContain(`<th scope="col"${column === "Tools" || column === "Updated" ? ' class="numeric"' : ""}>${column}</th>`);
     expect(html.match(/<tr class="clickable-row"/g)).toHaveLength(12);
     expect(html).toContain('aria-label="Edit Agent 11 (agent_11)" data-agent-id="agent_11"');
-    expect(html).toContain('aria-label="Copy Agent ID agent_0"');
+    expect(html).toContain('<code title="agent_0">agent_0</code><button type="button" class="icon-button ghost copyable-id-button" aria-label="Copy ID"');
     expect(html).toContain("Claude SDK");
     expect(html).toContain("Core default");
     expect(html).toContain('aria-label="Start a Session with Agent 0 (agent_0)"');

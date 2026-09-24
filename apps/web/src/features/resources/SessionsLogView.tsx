@@ -1,12 +1,15 @@
-import { MessageSquareText, Search } from "lucide-react";
+import { MessageSquareText } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { AgentSession } from "@agents-core-web/agents-client";
 
-import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, StatusDot, type Tone } from "../../components/console-ui";
+import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, SegmentedControl, StatusDot, type Tone } from "../../components/console-ui";
+import { ListToolbar, listSummary, NameCell, SearchField } from "../../components/list-ui";
+import { OwnerCell, OwnerHeading } from "../ownership/OwnerCell";
+import { useOwners } from "../ownership/use-owners";
 import type { CoreConnectionState } from "../../lib/connection";
-import { formatCompact, formatDateTime, formatRelative, MISSING, shortId } from "../../lib/format";
+import { formatCompact, formatDateTime, formatRelative, MISSING } from "../../lib/format";
 
 const statuses = ["in_progress", "requires_action", "failed", "idle"] as const;
 type StatusFilter = "all" | (typeof statuses)[number];
@@ -73,6 +76,8 @@ export function SessionsLogView({
   }, [sessions]);
   const filtered = useMemo(() => filterSessions(sessions, { status, agentId, environment, query }), [agentId, environment, query, sessions, status]);
   const visible = filtered.slice(0, limit);
+  const visibleIds = useMemo(() => visible.map((session) => session.id), [visible]);
+  const owners = useOwners("session", visibleIds, state === "ready");
 
   return (
     <section className="page-section console-page" aria-labelledby="sessions-log-heading">
@@ -83,44 +88,31 @@ export function SessionsLogView({
         actions={<RefreshButton refreshing={state === "connecting"} onClick={onRefresh} />}
       />
       <PageBody>
-        <div className="filter-bar" role="group" aria-label={t("filters.label")}>
-          <div className="filter-tabs" role="group" aria-label={t("filters.status")}>
-            {(["all", ...statuses] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={status === value}
-                className={status === value ? "active" : undefined}
-                onClick={() => { setStatus(value); setLimit(PAGE_SIZE); }}
-              >
-                {t(`status.${value}`)}
-                <span className="filter-count">{counts[value]}</span>
-              </button>
-            ))}
-          </div>
-          <div className="filter-controls">
-            <label className="select-control">
-              <span className="visually-hidden">{t("filters.agent")}</span>
-              <select value={agentId} onChange={(event) => { setAgentId(event.target.value); setLimit(PAGE_SIZE); }}>
-                <option value="">{t("filters.allAgents")}</option>
-                {agents.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-              </select>
-            </label>
-            <label className="select-control">
-              <span className="visually-hidden">{t("filters.environment")}</span>
-              <select value={environment} onChange={(event) => { setEnvironment(event.target.value); setLimit(PAGE_SIZE); }}>
-                <option value="">{t("filters.allEnvironments")}</option>
-                <option value="openai_hosted">{t("environment.openai_hosted")}</option>
-                <option value="self_hosted">{t("environment.self_hosted")}</option>
-                <option value="none">{t("environment.none")}</option>
-              </select>
-            </label>
-            <label className="search-control">
-              <Search size={14} strokeWidth={1.5} aria-hidden="true" />
-              <input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setLimit(PAGE_SIZE); }} placeholder={t("sessions.search")} aria-label={t("sessions.search")} />
-            </label>
-          </div>
-        </div>
+        <ListToolbar label={t("filters.label")} summary={sessions.length ? listSummary(tCommon, filtered.length, sessions.length, { locale }) : undefined}>
+          <SearchField value={query} onChange={(value) => { setQuery(value); setLimit(PAGE_SIZE); }} placeholder={t("sessions.search")} />
+          <SegmentedControl
+            label={t("filters.status")}
+            value={status}
+            options={(["all", ...statuses] as const).map((value) => ({ value, label: t(`status.${value}`), count: counts[value] }))}
+            onChange={(value) => { setStatus(value); setLimit(PAGE_SIZE); }}
+          />
+          <label className="select-control">
+            <span className="visually-hidden">{t("filters.agent")}</span>
+            <select value={agentId} onChange={(event) => { setAgentId(event.target.value); setLimit(PAGE_SIZE); }}>
+              <option value="">{t("filters.allAgents")}</option>
+              {agents.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            </select>
+          </label>
+          <label className="select-control">
+            <span className="visually-hidden">{t("filters.environment")}</span>
+            <select value={environment} onChange={(event) => { setEnvironment(event.target.value); setLimit(PAGE_SIZE); }}>
+              <option value="">{t("filters.allEnvironments")}</option>
+              <option value="openai_hosted">{t("environment.openai_hosted")}</option>
+              <option value="self_hosted">{t("environment.self_hosted")}</option>
+              <option value="none">{t("environment.none")}</option>
+            </select>
+          </label>
+        </ListToolbar>
 
         {state === "failed" && !sessions.length ? (
           <EmptyState title={t("sessions.loadFailed")} description={error ?? undefined} action={<button className="button outline" type="button" onClick={onRefresh}>{tCommon("actions.retry")}</button>} />
@@ -137,21 +129,19 @@ export function SessionsLogView({
                   <tr>
                     <th scope="col">{t("sessions.session")}</th>
                     <th scope="col">{t("sessions.status")}</th>
-                    <th scope="col">{t("sessions.id")}</th>
                     <th scope="col">{t("sessions.model")}</th>
                     <th scope="col">{t("sessions.environment")}</th>
                     <th scope="col" className="numeric">{t("sessions.tokens")}</th>
                     <th scope="col" className="numeric">{t("sessions.created")}</th>
                     <th scope="col" className="numeric">{t("sessions.lastActive")}</th>
+                    {owners.available ? <th scope="col"><OwnerHeading /></th> : null}
                   </tr>
                 </thead>
                 <tbody>
                   {visible.map((session) => (
                     <tr key={session.id} className="clickable-row" onClick={() => onOpenSession(session.id)}>
                       <th scope="row">
-                        <button className="table-link" type="button" title={session.id} onClick={(event) => { event.stopPropagation(); onOpenSession(session.id); }}>
-                          <strong>{session.agent?.name || t("sessions.inlineAgent")}</strong>
-                        </button>
+                        <NameCell name={session.agent?.name} id={session.id} fallback={t("sessions.inlineAgent")} onOpen={() => onOpenSession(session.id)} />
                       </th>
                       <td>
                         <span className="status-with-help" onClick={(event) => event.stopPropagation()}>
@@ -159,21 +149,22 @@ export function SessionsLogView({
                           {session.status === "failed" && session.error ? <HelpTip label={t("sessions.errorLabel")}>{session.error}</HelpTip> : null}
                         </span>
                       </td>
-                      <td><code title={session.id}>{shortId(session.id)}</code></td>
                       <td><code>{session.agent?.model || MISSING}</code></td>
                       <td>{t(`environment.${environmentKind(session)}`)}</td>
                       <td className="numeric">{session.usage ? formatCompact(session.usage.total_tokens, locale) : MISSING}</td>
                       <td className="numeric" title={formatDateTime(session.created_at, locale)}>{formatRelative(session.created_at, now, locale)}</td>
                       <td className="numeric" title={formatDateTime(session.last_active_at, locale)}>{formatRelative(session.last_active_at, now, locale)}</td>
+                      {owners.available ? <td><OwnerCell record={owners.ownerOf(session.id)} /></td> : null}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <footer className="table-footer">
-              <span>{t("sessions.showing", { shown: visible.length, total: filtered.length })}</span>
-              {visible.length < filtered.length ? <button className="button outline" type="button" onClick={() => setLimit((value) => value + PAGE_SIZE)}>{t("sessions.more")}</button> : null}
-            </footer>
+            {visible.length < filtered.length ? (
+              <footer className="table-footer">
+                <button className="button outline" type="button" onClick={() => setLimit((value) => value + PAGE_SIZE)}>{t("sessions.more")}</button>
+              </footer>
+            ) : null}
           </>
         )}
       </PageBody>

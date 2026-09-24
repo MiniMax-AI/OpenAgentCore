@@ -1,4 +1,4 @@
-import { Plus, Search } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "../../i18n";
@@ -6,6 +6,8 @@ import i18n from "../../i18n";
 import type { CoreStartupConfiguration, CreateAgentInput, SavedAgent, UpdateAgentInput } from "@agents-core-web/agents-client";
 
 import { PageBody, PageHeader, RefreshButton } from "../../components/console-ui";
+import { ListToolbar, listSummary, SearchField } from "../../components/list-ui";
+import { forgetOwners, useOwners } from "../ownership/use-owners";
 import { ErrorState } from "../../components/ErrorState";
 import { Skeleton } from "../../components/Skeleton";
 import type { CoreConnectionState } from "../../lib/connection";
@@ -14,7 +16,6 @@ import { AgentCatalog } from "./AgentCatalog";
 import { AgentDialog } from "./AgentDialog";
 import { AgentSetupView } from "./AgentSetupView";
 import {
-  AgentUsageCaveat,
   type AgentUsageModel,
   AgentUsagePanel,
   AgentUsageRangeControl,
@@ -176,6 +177,7 @@ export function AgentsView({
 }: AgentsViewProps) {
   const { t } = useTranslation("agents");
   const { t: tPages } = useTranslation("pages");
+  const { t: tCommon } = useTranslation();
   const [mode, setMode] = useState<ViewMode>("closed");
   const [selectedAgent, setSelectedAgent] = useState<SavedAgent | null>(null);
   const [openingAgentId, setOpeningAgentId] = useState<string | null>(null);
@@ -202,6 +204,7 @@ export function AgentsView({
     [agentIds, usageController.records, usageController.rangeStart, usageController.status],
   );
   const usage: AgentUsageModel | null = usageSource ? { controller: usageController, report: usageReport } : null;
+  const owners = useOwners("agent", agentIds, coreState === "ready");
 
   const restoreCatalogFocus = (target: ReturnFocusTarget | null) => {
     window.requestAnimationFrame(() => {
@@ -401,6 +404,7 @@ export function AgentsView({
   }
 
   const refresh = () => {
+    forgetOwners("agent");
     onRefresh();
     if (usage) usageController.reload();
   };
@@ -425,24 +429,14 @@ export function AgentsView({
         </>}
       />
       <PageBody>
-        <div className="agents-toolbar">
-          <div className="filter-bar agents-filter-bar" role="group" aria-label={t("filtersLabel")}>
-            <label className="search-control">
-              <Search size={14} strokeWidth={1.5} aria-hidden="true" />
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={t("searchPlaceholder")}
-                aria-label={t("searchLabel")}
-                disabled={coreState !== "ready" && !agents.length}
-              />
-            </label>
-            {usage ? <AgentUsageRangeControl usage={usage} /> : null}
-          </div>
+        <ListToolbar
+          label={t("filtersLabel")}
+          summary={agents.length ? listSummary(tCommon, filteredAgents.length, agents.length, { locale: i18n.resolvedLanguage }) : undefined}
+        >
+          <SearchField value={query} onChange={setQuery} placeholder={t("searchPlaceholder")} label={t("searchLabel")} />
+          {usage ? <AgentUsageRangeControl usage={usage} /> : null}
           {usage ? <AgentUsageStatus usage={usage} /> : null}
-          {usage ? <AgentUsageCaveat /> : null}
-        </div>
+        </ListToolbar>
 
         {coreState === "connecting" && !agents.length ? <AgentsLoadingSkeleton /> : null}
 
@@ -477,6 +471,7 @@ export function AgentsView({
             isFiltering={Boolean(normalizedQuery)}
             openingAgentId={openingAgentId}
             usage={usage}
+            owners={owners}
             vaultCatalog={vaultCatalog}
             onClearSearch={() => setQuery("")}
             onCreate={() => openCreateSetup({ kind: "create" })}
