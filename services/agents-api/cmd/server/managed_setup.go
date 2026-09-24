@@ -67,6 +67,10 @@ func (s *managedSetup) prepare(ctx context.Context, setup store.SandboxSetup) (e
 	}
 	provider, err := s.provider(ctx, setup)
 	if err != nil {
+		var invalid *store.SandboxConfigurationError
+		if errors.As(err, &invalid) {
+			return execution.PreparedRuntimeDeployment{}, invalid
+		}
 		return execution.PreparedRuntimeDeployment{}, fmt.Errorf("%w: %v", execution.ErrExecutionUnavailable, err)
 	}
 	selected := &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, Maintenance: setup.Maintenance,
@@ -136,7 +140,10 @@ func (s *managedSetup) provider(ctx context.Context, setup store.SandboxSetup) (
 			return nil, errors.New("E2B provider cannot load; check the installed helper and private state directory")
 		}
 		if err := provider.ValidateDeployment(ctx); err != nil {
-			return nil, errors.New("E2B template build does not satisfy the deployment configuration")
+			if errors.Is(err, sandbox.ErrInvalid) {
+				return nil, &store.SandboxConfigurationError{Message: "E2B configuration was rejected; select a ready fixed template build whose CPU and memory match the deployment specification"}
+			}
+			return nil, errors.New("E2B validation could not be confirmed; verify the helper, credential, network and fixed template build before retrying")
 		}
 		return provider, nil
 	default:

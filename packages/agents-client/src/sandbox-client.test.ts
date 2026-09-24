@@ -34,6 +34,14 @@ describe("Core sandbox credential boundaries", () => {
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer admin-only");
     expect(new Headers(init?.headers).has("OpenAI-Beta")).toBe(false);
   });
+  it("forwards one specification with generation and preserves backend conflict details", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: { code: "sandbox_specification_mismatch", message: "Node specification differs" } }, 409));
+    const admin = new SandboxAdminClient({ token: "admin-only", fetch });
+    const input = { provider: "e2b" as const, core_url: "https://core.example", resources: { cpus: 2, memory_mib: 2048 }, e2b: { template: "runtime:build", api_key: "synthetic-test-secret" }, expected_generation: 3 };
+    await expect(admin.updateDeployment(input)).rejects.toMatchObject({ status: 409, code: "sandbox_specification_mismatch" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual(input);
+  });
   it.each([409, 503])("does not retry initialization after HTTP %s", async (status) => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: { message: "Setup failed", code: "sandbox_deployment_conflict" } }, status));
     const admin = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", token: "admin", fetch });

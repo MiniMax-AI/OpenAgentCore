@@ -130,6 +130,10 @@ definitions:
         type: integer
       provider:
         type: string
+      resources:
+        $ref: '#/definitions/sandbox.Resources'
+      runtime:
+        $ref: '#/definitions/sandbox.RuntimeRelease'
     type: object
   api.SandboxDeploymentInput:
     properties:
@@ -139,6 +143,10 @@ definitions:
         $ref: '#/definitions/api.SandboxE2BInput'
       provider:
         type: string
+      resources:
+        $ref: '#/definitions/sandbox.Resources'
+      runtime:
+        $ref: '#/definitions/sandbox.RuntimeRelease'
     type: object
   api.SandboxE2BInput:
     properties:
@@ -171,6 +179,39 @@ definitions:
         items:
           $ref: '#/definitions/store.RuntimeNode'
         type: array
+    type: object
+  sandbox.DeploymentSpec:
+    properties:
+      resources:
+        $ref: '#/definitions/sandbox.Resources'
+      runtime:
+        $ref: '#/definitions/sandbox.RuntimeRelease'
+    type: object
+  sandbox.Resources:
+    properties:
+      cpus:
+        type: integer
+      environment_disk_mib:
+        type: integer
+      memory_mib:
+        type: integer
+      root_disk_mib:
+        type: integer
+    type: object
+  sandbox.RuntimeRelease:
+    properties:
+      firmware_sha256:
+        type: string
+      image_id:
+        type: string
+      image_manifest_digest:
+        type: string
+      microsandbox_ref:
+        type: string
+      runtime_sha256:
+        type: string
+      source_commit:
+        type: string
     type: object
   store.AdminAssetCounts:
     properties:
@@ -370,6 +411,10 @@ definitions:
         type: string
       resources:
         $ref: '#/definitions/store.SandboxDeploymentResources'
+      specification:
+        $ref: '#/definitions/sandbox.DeploymentSpec'
+      specification_digest:
+        type: string
     type: object
   store.RuntimeNode:
     properties:
@@ -435,12 +480,29 @@ definitions:
       tenant_id:
         type: string
     type: object
+  store.RuntimeNodeConfiguration:
+    properties:
+      core_url:
+        type: string
+      generation:
+        type: integer
+      installation_id:
+        type: string
+      provider:
+        type: string
+      specification:
+        $ref: '#/definitions/sandbox.DeploymentSpec'
+      specification_digest:
+        type: string
+    type: object
   store.RuntimeNodeEnrollment:
     properties:
       backend_fingerprint:
         type: string
       credential:
         type: string
+      deployment_generation:
+        type: integer
       max_active:
         type: integer
       max_retained:
@@ -451,20 +513,28 @@ definitions:
         type: string
       provider:
         type: string
+      specification_digest:
+        type: string
     type: object
   store.RuntimeNodeIdentity:
     properties:
+      deployment_generation:
+        type: integer
       installation_id:
         type: string
       node_id:
         type: string
       provider:
         type: string
+      specification_digest:
+        type: string
     type: object
   store.RuntimeNodeStatus:
     properties:
       connected:
         type: boolean
+      deployment_generation:
+        type: integer
       installation_id:
         type: string
       node_id:
@@ -473,6 +543,8 @@ definitions:
         type: string
       provider_ready:
         type: boolean
+      specification_digest:
+        type: string
     type: object
   store.RuntimeNodeUpdate:
     properties:
@@ -5061,7 +5133,7 @@ paths:
     post:
       consumes:
         - application/json
-      description: Selects a provider and public Core origin. E2B credentials are write-only. Exact retries return the existing selection; differing selections and file-managed deployments reject. This does not create compute or execute work.
+      description: Selects a provider, enforced resource limits, pinned Runtime release and public Core origin. E2B credentials are write-only. Exact retries return the existing selection; differing selections and file-managed deployments reject. This does not create compute or execute work.
       parameters:
         - description: Deployment selection
           in: body
@@ -5141,7 +5213,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Change a fully drained deployment's sandbox provider
+      summary: Change a fully drained deployment's sandbox configuration
       tags:
         - Sandbox Manager
   /core/v1/sandbox/deployment/maintenance:
@@ -5282,6 +5354,46 @@ paths:
       security:
         - DeploymentAdminAuth: []
       summary: Create a ten-minute one-use node enrollment token
+      tags:
+        - Sandbox Manager
+  /core/v1/sandbox/node/configuration:
+    get:
+      description: Authenticates with an unconsumed enrollment token, or a retained node credential with X-Parsar-Node-ID. Does not consume the token or expose E2B credentials. Node files cannot override this specification.
+      parameters:
+        - description: Retained node UUID
+          in: header
+          name: X-Parsar-Node-ID
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.RuntimeNodeConfiguration'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - NodeEnrollmentAuth: []
+      summary: Read the active configuration for node installation
       tags:
         - Sandbox Manager
   /core/v1/sandbox/node/identity:
