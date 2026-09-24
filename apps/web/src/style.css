@@ -1,45 +1,44 @@
 :root {
   color: var(--fg);
   background: var(--surface);
-  font-family:
-    -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
-    "Segoe UI", "Microsoft YaHei", "Noto Sans SC", "Helvetica Neue",
-    Helvetica, Arial, sans-serif;
+  font-family: var(--font-console);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 
-  /* Parsar design system — The Issue Ledger. */
-  --fg: #37352f;
-  --fg-muted: #787774;
-  --sidebar-fg: #5f5e5a;
-  --fg-on-emphasis: #ffffff;
-  --surface: #ffffff;
-  --surface-subtle: #fafafa;
-  --surface-muted: #f1f1f0;
-  --surface-emphasis: #37352f;
-  --surface-inverse: #191919;
-  --line: #e9e9ec;
-  --line-muted: #efeff1;
-  --line-strong: #d6d7dc;
-  --accent: #4f46e5;
-  --accent-emphasis: #4338ca;
+  /* Console tokens are aliases of Beautiful UI's foundation
+     (src/app/beautifui/foundation.css), which owns the light and dark values of
+     --canvas, --surface, --ink*, --line*, --hover*, --accent* and the semantic
+     colours. Only what the foundation does not define is set here. */
+  --font-inter: "Inter Variable";
+  --font-console:
+    "Inter Variable", -apple-system, BlinkMacSystemFont, "PingFang SC",
+    "Hiragino Sans GB", "Segoe UI", "Microsoft YaHei", "Noto Sans SC",
+    "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --fg: var(--ink);
+  --fg-muted: var(--ink-2);
+  --fg-subtle: var(--ink-3);
+  --sidebar-fg: var(--ink-2);
+  --fg-on-emphasis: var(--surface);
+  --surface-subtle: var(--inset);
+  --surface-muted: var(--field);
+  --surface-emphasis: var(--ink);
+  --surface-inverse: var(--tooltip-bg);
+  --line-muted: var(--line-soft);
+  --accent-emphasis: var(--accent-ink);
   --accent-fg: #ffffff;
-  --danger: #dc2626;
-  --warning: #d97706;
-  --success: #16a34a;
-  --status-queued: #9a9ca4;
-  --status-interrupted: #ea580c;
-  --status-track: #d4d4d8;
-  --selection-bg: rgb(79 70 229 / 18%);
-  --hover: rgb(55 53 47 / 3%);
-  --pressed: rgb(55 53 47 / 6%);
-  --selected: rgb(79 70 229 / 3%);
-  --tile: rgb(55 53 47 / 7%);
-  --overlay: rgb(25 25 25 / 30%);
-  --shadow-control: 0 1px 2px rgb(0 0 0 / 6%);
-  --shadow-floating:
-    0 1px 2px rgb(24 24 27 / 4%),
-    0 8px 24px -12px rgb(24 24 27 / 18%);
+  --danger: var(--red);
+  --warning: var(--orange);
+  --success: var(--green);
+  --status-queued: var(--ink-3);
+  --status-interrupted: var(--orange);
+  --status-track: var(--line-strong);
+  --selection-bg: var(--accent-tint);
+  --pressed: var(--hover-2);
+  --selected: var(--accent-tint);
+  --tile: var(--hover-2);
+  --overlay: rgb(20 22 28 / 28%);
+  --shadow-control: var(--shadow-btn);
+  --shadow-floating: var(--shadow-overlay);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-settle: cubic-bezier(0.22, 1, 0.36, 1);
   --font-mono:
@@ -49,37 +48,7 @@
 
 html[data-theme="dark"] {
   color-scheme: dark;
-  --fg: #d4d4d4;
-  --fg-muted: #9b9b9b;
-  --sidebar-fg: #bdbdbd;
-  --fg-on-emphasis: #191919;
-  --surface: #191919;
-  --surface-subtle: #202020;
-  --surface-muted: #2a2a2a;
-  --surface-emphasis: #d4d4d4;
-  --surface-inverse: #ededed;
-  --line: rgb(255 255 255 / 9%);
-  --line-muted: rgb(255 255 255 / 6%);
-  --line-strong: rgb(255 255 255 / 16%);
-  --accent: #8b90f6;
-  --accent-emphasis: #a5a9f8;
-  --accent-fg: #14142b;
-  --danger: #f05252;
-  --warning: #f5a524;
-  --success: #3fb950;
-  --status-queued: #71737b;
-  --status-interrupted: #fb8a3c;
-  --status-track: #3f3f3f;
-  --selection-bg: rgb(139 144 246 / 28%);
-  --hover: rgb(255 255 255 / 5.5%);
-  --pressed: rgb(255 255 255 / 10%);
-  --selected: rgb(139 144 246 / 4%);
-  --tile: rgb(255 255 255 / 10%);
-  --overlay: rgb(237 237 237 / 30%);
-  --shadow-control: 0 1px 2px rgb(0 0 0 / 40%);
-  --shadow-floating:
-    0 1px 2px rgb(0 0 0 / 30%),
-    0 8px 24px -12px rgb(0 0 0 / 55%);
+  --overlay: rgb(0 0 0 / 50%);
 }
 
 * {

@@ -1,10 +1,13 @@
 /*
- * The console's single stylesheet entry. Tailwind v4 contributes its theme
- * variables and utilities only (no preflight: the console keeps its own base
- * rules), Beautiful UI contributes the design tokens every surface uses, and
- * the console grammar follows.
+ * The console's single stylesheet entry, in cascade order:
+ * 1. Tailwind's theme variables (no preflight: the console keeps its base rules);
+ * 2. Inter and Beautiful UI's foundation — the design tokens every surface uses;
+ * 3. the console's own base and grammar, whose variables alias those tokens;
+ * 4. Tailwind utilities last, so a utility on an element wins over legacy rules.
  */
 @import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css";
+@import "@fontsource-variable/inter";
+@import "../app/beautifui/foundation.css";
 @import "../style.css";
 @import "./console.css";
+@import "tailwindcss/utilities.css";

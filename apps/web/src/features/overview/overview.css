@@ -233,7 +233,7 @@
   font: inherit;
   text-align: left;
   background: var(--surface);
-  border: 1px solid var(--card-border);
+  border: 0;
   border-radius: 10px;
   box-shadow: var(--card-shadow);
   cursor: pointer;
