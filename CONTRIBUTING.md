@@ -891,6 +891,12 @@ root-disk size because it inherits the verified full snapshot. Accept that omiss
 only with matching snapshot resource proof and exact source/target identity; inspect
 other native limits before retaining the inherited proof on the restored target.
 Never treat a missing root size as unlimited capacity or resize retained state.
+Snapshot receipt observation uses ownership and artifact integrity checks, so a
+resource mismatch cannot hide an existing snapshot from authorized cleanup.
+Restore recovery may finish a missing derived resource proof on the exact target
+of the verified snapshot, after checking its native limits. It must not repeat
+Restore, start stopped compute or alter resource limits; reread the same target
+strictly before returning success.
 
 Suspend only after at least one Turn is terminal, no queued/in-progress/waiting
 root or subagent Turn, pending input/file operation or initialization remains,

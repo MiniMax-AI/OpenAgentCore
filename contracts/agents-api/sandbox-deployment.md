@@ -78,6 +78,10 @@ requires the original resource proof and exact snapshot/target identity; it does
 not resize a restored root or treat a missing size as arbitrary capacity. Other
 native limits must still match. A failed readiness or configuration check retains
 ownership and cleanup records.
+An interrupted restore can finish the derived proof on its existing, verified
+target; it cannot create another instance or change limits. Snapshot observation
+for cleanup verifies ownership and artifact identity without requiring that the
+source still qualify for execution.
 
 ### Runtime release
 
