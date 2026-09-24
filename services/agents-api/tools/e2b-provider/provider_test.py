@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
+from e2b import SandboxState
 from e2b.exceptions import AuthenticationException, SandboxNotFoundException
 
 from provider import Provider
@@ -79,6 +80,9 @@ class ProviderTest(unittest.TestCase):
         missing = self.call('inspect')
         self.assertEqual(missing['ErrorCode'], 'not_found')
         self.assertFalse(missing['Info']['CreateSettled'])
+        self.assertEqual(self.api.list.call_args.kwargs['query'].state,
+                         [SandboxState.RUNNING, SandboxState.PAUSED])
+        self.assertEqual([value.value for value in self.api.list.call_args.kwargs['query'].state], ['running', 'paused'])
         self.assertEqual(self.call('kill')['ErrorCode'], 'unconfirmed')
         self.assertEqual(self.call('create')['ErrorCode'], 'exists')
         self.api.create.assert_called_once()
@@ -144,7 +148,8 @@ class ProviderTest(unittest.TestCase):
         other = SimpleNamespace(sandbox_id='other-owned-id', metadata=self.cloud.metadata, state='running')
         pages = iter([[self.cloud], [other]])
         paginator = SimpleNamespace(has_next=True)
-        def next_items():
+        def next_items(**options):
+            self.assertEqual(options["retries"], 0)
             page = next(pages)
             if page == [other]:
                 paginator.has_next = False

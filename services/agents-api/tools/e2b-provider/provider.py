@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timezone
 from uuid import UUID
 
-from e2b import Sandbox, SandboxQuery
+from e2b import Sandbox, SandboxQuery, SandboxState
 from e2b.exceptions import FileNotFoundException, SandboxNotFoundException
 
 from sdk import connection_material, definitely_rejected, restore, run
@@ -76,10 +76,10 @@ class Provider:
                     pass
             return found
         paginator = Sandbox.list(query=SandboxQuery(metadata=self.metadata,
-                                                     state=['running', 'paused']), **self.options())
+                                                     state=[SandboxState.RUNNING, SandboxState.PAUSED]), **self.options())
         while paginator.has_next:
             self.remaining()
-            for cloud in paginator.next_items():
+            for cloud in paginator.next_items(**self.options()):
                 found.append(self.owns(cloud))
         # Retain every candidate; never pick one of several for initialization.
         if found:
