@@ -1737,16 +1737,14 @@ existing write-only model execution extension, with the installation's persisten
 credential encryption key. Provider identity/backend namespace and native history
 must not change on a repeated install.
 
-`services/core-console` serves the production Web build and forwards public `/v1`
-requests to one configured Core using its project bearer after administrator
-authentication. New installations use a console-local single administrator account;
-existing installations without explicit account mode retain Basic authentication. The paired console uses the same login for allowlisted sandbox
-management routes and supplies its private server-side administrator token from
-`CORE_CONSOLE_SANDBOX_ADMIN_TOKEN_FILE`. The browser receives only capability
-flags through `/console/config`, never the deployment bearer. Project API keys
-retain their separate authority. The installer mounts only the administrator
-key file into Web and only its digest file into Core. Node/daemon transport uses
-its own authenticated finite routes and credentials, never that admin token.
+`services/core-console` serves the production Web build and proxies only finite
+administrator and sandbox-management routes after console login. It requires a
+private `CORE_CONSOLE_ADMIN_TOKEN_FILE` and holds no project caller credential.
+Every `/v1` request returns 404, including explicit Bearer requests. The installer
+mounts only the administrator key into Web and only its digest into Core. The
+browser receives safe capability flags, never that key. Node/daemon transport
+keeps its own authenticated finite routes and credentials. External API clients
+reach Core directly through the deployment's TLS routing.
 
 The Web manager offers no manual administrator-key fallback. A console without
 paired management configuration shows setup guidance; direct remote project API
@@ -1771,15 +1769,12 @@ The command verifies the installer checksum before execution, retains normal TLS
 verification, and passes the enrollment credential only to the installer process.
 
 
-Both proxy paths retain fixed-origin, cross-site, safe-path, redirect and Upgrade
+Management proxy paths retain fixed-origin, cross-site, safe-path, redirect and Upgrade
 restrictions through the standard Go reverse proxy with streaming/cancellation.
 The console implements no product identity, resource semantics, Runtime discovery
 or execution loop. Its local administrator account grants the complete console
 surface; do not introduce Web roles, invitations or per-project Web identities.
 Agent API caller keys remain independent of the administrator password and cookie.
-Explicit, unambiguous caller Bearer requests to public `/v1` routes pass through
-unchanged to Core, without borrowing the console's caller or administrator key.
-The same origin, path, method and transport restrictions still apply.
 
 Account mode is explicit (`CORE_CONSOLE_AUTH_MODE=account`) and requires a private
 writable state directory. The first visitor registers the sole administrator with
@@ -1802,24 +1797,12 @@ credential equal to a deployment credential. Static configuration keys are visib
 but cannot be reset or revoked through management. Fresh installation needs no
 project key: the administrator creates the first key after console login.
 
-First-run Home is a standalone full-screen, skippable/replayable tutorial after
-account setup, outside the console shell. Setup and the introduction have no
-sidebar. Respect reduced-motion preferences throughout. The introduction does not
-change public Core resource semantics or block ordinary administration.
-Keep new onboarding state and components outside the oversized `App.tsx`. Persist
-only non-secret presentation progress; password and model provider key
-must not enter browser storage or generated code samples. Creating a saved Agent
-is an explicit write through the existing API. Reconcile uncertain results before
-another write, and associate external examples with their exact metadata marker,
-not arbitrary new resources or name matches. The request workbench generates code
-from its real form fields; local execution obtains caller and model keys separately.
-Generated examples reject redirects so credentials stay at the selected API origin.
-A registered host supplies sandbox resources only for hosted Sessions; self-hosted
-execution remains application-managed. Reuse the existing enrollment and topology
-contracts. Show actual confirmed resources, no simulated work or Agent-to-node
-ownership. Use nonlinear motion for transitions and success emphasis, preserve
-keyboard focus, and honor reduced motion. Compatibility scope and caveats belong
-in documentation, not in the introduction.
+Administrator onboarding covers console login, key creation and optional node
+enrollment. Model execution belongs in an external API example using an issued
+key. Keep secrets out of browser persistence, generated examples and URLs. Observe
+confirmed resources through the management API; do not infer Agent-to-node ownership
+or execution readiness from a host connection. Preserve keyboard focus, reduced
+motion and the existing node enrollment/topology contract.
 The console has neither KVM nor Docker authority; its static root contains no
 secrets. Installation exposes only loopback API/console ports. Remote exposure
 requires an operator-configured HTTPS/access boundary. Web-only mode can connect
@@ -1828,7 +1811,8 @@ to a loopback existing Core on the same Linux host or a remote HTTPS Core.
 Installation state and secrets live in a private directory under `~/.parsar/` by
 default. No credential enters build arguments, image layers, browser bundles or
 diagnostic output. Compose configuration is confidential. The generated database,
-caller/tenant/provider identities and encryption key survive reruns; automatic
+configured static identities, issued key spaces, provider identity and encryption
+key survive reruns; automatic
 revision replacement and provider migration are outside this initial installer.
 Reruns also refuse enabling or disabling a sandbox provider on an existing
 installation, including adding one to the default zero-node installation.

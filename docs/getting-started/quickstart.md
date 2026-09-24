@@ -12,16 +12,18 @@ python3 -m venv .venv
 pip install openai==3.13.0
 ```
 
-Read the generated caller key from the private installation directory. For an
-installation on another machine, use its authenticated HTTPS API endpoint.
+Obtain an API key from the deployment administrator and supply it through private
+application configuration as `PARSAR_API_KEY`. Each key owns an independent asset
+space. The installer does not generate a caller key. For a remote installation,
+use its HTTPS API endpoint routed directly to Core; the console does not proxy `/v1`.
 
 ```python
-from pathlib import Path
+import os
 from openai import OpenAI
 
 client = OpenAI(
     base_url="http://127.0.0.1:8091/v1",
-    api_key=Path.home().joinpath(".parsar/core/config/caller.key").read_text().strip(),
+    api_key=os.environ["PARSAR_API_KEY"],
     default_headers={"OpenAI-Beta": "agents=v1"},
 )
 print(client.beta.agents.list().data)

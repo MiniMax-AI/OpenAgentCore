@@ -9,7 +9,8 @@ owns Sessions, environments, files, credentials and execution history; each
 native harness keeps its own model and tool loop. Core runs independently of the
 Parsar product.
 
-Core and its Web console ship together. The default installation runs Core, Web
+Core and its administrator Web console ship together. Each API key owns an
+independent asset space; management credentials cannot call the Agent API. The default installation runs Core, Web
 and PostgreSQL with zero execution nodes. Add execution nodes through Web when
 you are ready. Core creates each required sandbox from the shared Runtime image. Model
 credentials are supplied through the existing write-only API extension.
@@ -20,6 +21,9 @@ Sessions use automatic placement by default or an explicitly selected node;
 existing Sessions retain their node across disconnects and resume.
 
 ## Start here
+
+The current management branch requires the coordinated Web screen switch before
+release; see [console integration status](docs/web/README.md).
 
 1. **Install Core and Web.** Obtain and verify a matching Linux amd64 bundle,
    then run its installer. For node access, choose a reachable HTTPS address
@@ -35,8 +39,9 @@ existing Sessions retain their node across disconnects and resume.
 2. **Sign in to Web.** Open the console address printed by the installer and
    register your administrator account with a username and password. Keep them safe.
    Existing installations retain their `admin` / `console.password` login.
-   The console connects to Core automatically. During first-run, create and save
-   an Agent API key for requests from your own machine or application.
+   The console connects to Core automatically. Create and save an Agent API key
+   for requests from your own machine or application. Its secret is shown once;
+   resetting it retains the same asset space.
 3. **Add a node.** Open **Hosted Sandbox Manager**, choose Docker or microsandbox,
    and initialize the deployment. The paired console address is used by default;
    advanced network settings allow a different reachable HTTPS origin. Select

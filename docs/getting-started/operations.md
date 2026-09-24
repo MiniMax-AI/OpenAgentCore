@@ -113,12 +113,14 @@ The installer never migrates Sessions between providers or deletes old compute.
 
 API and console bind to host loopback. With native Core, PostgreSQL publishes an
 installation-specific loopback port; with container Core it has no published port.
-The production Web proxy forwards the public `/v1` surface and allowlisted sandbox
-administration routes to its configured Core after console login. It keeps the
-separate project and administrator credentials on the server. Fixed node/daemon
-transport routes use their own authentication; `/node-install/` serves only the
-matched non-secret node payload. Web has no Docker or KVM authority and does not
-expose its server-held credentials to the browser.
+The production Web proxy forwards only allowlisted administrator and sandbox
+management routes after console login. Its deployment credential stays on the
+server. All `/v1` requests, including requests with an explicit API key, return 404
+at the console. Route public `/v1` and project executor-credential requests directly
+to Core through the TLS reverse proxy. Route console pages, authentication,
+administration and the existing node/daemon transport paths to Web. Those fixed
+transport paths retain their own authentication. `/node-install/` serves only the
+matched non-secret node payload. Web has no Docker or KVM authority.
 It requires an independent administrator login and rejects untrusted browser origins.
 New installations store the administrator password hash in private console state;
 legacy installations retain Basic authentication. There is only one Web role,
@@ -153,7 +155,8 @@ Core records committed public resource writes and their key ownership for the
 administrator console. Configure `AGENTS_API_WRITE_AUDIT_RETENTION` (Go duration,
 minimum `1h`, default `2160h`) to control non-creation history. Creation ownership
 remains permanently; removing keys or resources does not cascade-delete records.
-Static key bindings may set a safe `name` and `kind: "console"` for console-owned
-credentials. Existing resources without recorded provenance return null. See the
+Static key bindings may set a safe `name`; each binding needs its own space.
+Console credentials are separate administrator credentials. Existing resources without recorded provenance return null. See the
 [query contract](../../contracts/agents-api/write-audit.md) for deployment-authenticated
-batch ownership and cursor history endpoints. These APIs do not log bodies or secrets.
+key-scoped batch ownership and cursor history endpoints. Administrator mutations
+have a separate [audit log](../../contracts/agents-api/admin-api.md#monitoring-and-audit). These APIs do not log bodies or secrets.

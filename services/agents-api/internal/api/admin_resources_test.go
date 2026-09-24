@@ -53,7 +53,11 @@ func TestAdminResourcesHaveExplicitTargetWithoutCallerImpersonation(t *testing.T
 		{"POST", base + "/sessions/known/events", 404}, {"GET", base + "/sessions/known/events", 404},
 		{"GET", base + "/files/known/content", 404}, {"POST", base + "/vaults/v/credentials", 405},
 	} {
-		w := projectKeyHTTP(h, test.method, test.path, "admin", `{}`)
+		body := ""
+		if test.method == http.MethodPost {
+			body = `{}`
+		}
+		w := projectKeyHTTP(h, test.method, test.path, "admin", body)
 		if w.Code != test.status {
 			t.Errorf("%s %s: %d %s", test.method, test.path, w.Code, w.Body)
 		}
