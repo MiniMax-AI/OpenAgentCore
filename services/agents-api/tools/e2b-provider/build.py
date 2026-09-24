@@ -37,7 +37,10 @@ def main():
         checked([python, '-m', 'unittest', 'discover', '-s', str(source), '-p', '*_test.py', '-v'])
         checked([python, '-m', 'PyInstaller', '--noconfirm', '--clean', '--onedir', '--noupx',
                  '--name', NAME, '--distpath', str(root / 'dist'), '--workpath', str(root / 'work'),
-                 '--specpath', str(root), '--recursive-copy-metadata', 'e2b', str(source / 'main.py')])
+                 '--specpath', str(root), '--recursive-copy-metadata', 'e2b',
+                 # The SDK's native pyqwest transport imports tracing modules
+                 # dynamically; Python bytecode analysis cannot discover them.
+                 '--collect-submodules', 'opentelemetry', str(source / 'main.py')])
         exported = root / 'export' / NAME
         # PyInstaller uses library aliases. Native payloads deliberately contain
         # only regular files/directories so the installer can reject all links.

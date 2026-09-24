@@ -24,6 +24,11 @@ def main():
         if importlib.metadata.version('e2b') != SDK_VERSION:
             raise Failure('invalid')
         if sys.argv[1:] == ['--check']:
+            # Construct the SDK's native transport without sending any request.
+            # This also verifies its dynamically imported dependencies survived
+            # freezing; importing e2b alone does not exercise that boundary.
+            from pyqwest import SyncHTTPTransport
+            SyncHTTPTransport(tls_include_system_certs=True)
             print(json.dumps({'Version': 1, 'SDKVersion': SDK_VERSION}))
             return
         if len(sys.argv) != 1:
