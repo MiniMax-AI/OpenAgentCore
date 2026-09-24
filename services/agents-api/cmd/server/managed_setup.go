@@ -46,7 +46,7 @@ func (s *managedSetup) load(ctx context.Context) (*execution.RuntimeProvider, er
 	candidate, err := s.prepare(ctx, setup)
 	if err != nil {
 		log.Warn(ctx, "Hosted provider is unavailable; administrator recovery remains available", "provider", setup.Provider, "error", err)
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", execution.ErrExecutionUnavailable, err)
 	}
 	// A slower read cannot replace a generation that committed while provider
 	// validation was in flight. Publication itself performs no external work.
