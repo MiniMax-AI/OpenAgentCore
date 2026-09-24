@@ -5,16 +5,16 @@ import {
 } from "./client";
 import { projectExecutionConfiguration } from "./execution-configuration-projection";
 import { projectAgentTurn, projectSessionItem, projectHistoryPage, validateHistoryPageOptions } from "./history-projection";
-import { projectRuntimeHistory } from "./runtime-history-projection";
+import { projectRuntimeHistory, projectRuntimeHistoryCapabilities } from "./runtime-history-projection";
 import { canonicalUuid, isNonnegativeInteger, isRecord } from "./response-projection";
 import {
-  invalidAdminResponse, projectAdminKey, projectIssuedAdminKey, projectAdminPage, projectAdminDeleted,
+  invalidAdminResponse, projectAdminProject, projectAdminKey, projectIssuedAdminKey, projectAdminPage, projectAdminDeleted,
   projectResourcePage, projectSavedAgent, projectSkill, projectSkillVersion, projectArtifact, projectCopyResult, projectSummary, projectAdminRuntimePage, projectResourceOwners, projectWriteOperations, projectAdminAudit,
 } from "./admin-projection";
 import type { PageOptions, ReadOptions, RuntimeHistoryQuery, VaultListOptions } from "./types";
 import type {
-  AdminClientOptions, AdminAuditOptions, AdminCopyInput, AdminContent, AdminWriteOptions, CreateAdminAPIKeyInput,
-  ResetAdminAPIKeyInput, AdminSummaryOptions, AdminResourceType, AdminResourceOwner, AdminWriteOperationOptions, AdminWriteOperationPage,
+  AdminClientOptions, AdminAuditOptions, AdminCopyInput, AdminContent, AdminWriteOptions, CreateAdminProjectInput, RenameAdminProjectInput,
+  IssueAdminAPIKeyInput, AdminSummaryOptions, AdminResourceType, AdminResourceOwner, AdminWriteOperationOptions, AdminWriteOperationPage,
 } from "./admin-types";
 
 function segment(value: string): string {
@@ -22,7 +22,7 @@ function segment(value: string): string {
   if (!value || value === "." || value === "..") throw new TypeError("A resource ID is required.");
   return encodeURIComponent(value);
 }
-function scope(keyId: string): string { return `/api-keys/${segment(keyId)}`; }
+function scope(projectId: string): string { return `/projects/${segment(projectId)}`; }
 function pageQuery(path: string, options?: PageOptions, extra: Record<string, string | undefined> = {}): string {
   const params = new URLSearchParams();
   if (options?.after !== undefined) params.set("after", options.after);
@@ -90,26 +90,32 @@ export class AdminClient {
     return { blob: await response.blob(), contentType: response.headers.get("Content-Type"), contentDisposition: response.headers.get("Content-Disposition") };
   }
 
-  async listAPIKeys(options?: PageOptions) {
-    return projectAdminPage(await this.#json(pageQuery("/api-keys", options), options), (value) => projectAdminKey(value));
+  async listProjects(options?: PageOptions) {
+    return projectAdminPage(await this.#json(pageQuery("/projects", options), options), (value) => projectAdminProject(value));
   }
-  async retrieveAPIKey(keyId: string, options?: ReadOptions) {
-    return projectAdminKey(await this.#json(scope(keyId), options), keyId);
+  async createProject(input: CreateAdminProjectInput, options?: ReadOptions) {
+    return projectAdminProject(await this.#json("/projects", options, "POST", { name: input.name }));
   }
-  async createAPIKey(input: CreateAdminAPIKeyInput, options?: ReadOptions) {
-    return projectIssuedAdminKey(await this.#json("/api-keys", options, "POST", { id: input.id, name: input.name }), input.id);
+  async renameProject(projectId: string, input: RenameAdminProjectInput, options?: ReadOptions) {
+    return projectAdminProject(await this.#json(scope(projectId), options, "POST", { name: input.name }), projectId);
   }
-  async resetAPIKey(keyId: string, input: ResetAdminAPIKeyInput, options?: ReadOptions) {
-    return projectIssuedAdminKey(await this.#json(`${scope(keyId)}/reset`, options, "POST", { request_id: input.request_id }), keyId);
+  async archiveProject(projectId: string, options?: ReadOptions) {
+    return projectAdminProject(await this.#json(`${scope(projectId)}/archive`, options, "POST"), projectId);
   }
-  async revokeAPIKey(keyId: string, options?: ReadOptions): Promise<{ id: string; deleted: true }> {
-    const value = await this.#json(scope(keyId), options, "DELETE");
+  async listAPIKeys(projectId: string, options?: PageOptions) {
+    return projectAdminPage(await this.#json(pageQuery(`${scope(projectId)}/keys`, options), options), (value) => projectAdminKey(value, projectId));
+  }
+  async issueAPIKey(projectId: string, input: IssueAdminAPIKeyInput, options?: ReadOptions) {
+    return projectIssuedAdminKey(await this.#json(`${scope(projectId)}/keys`, options, "POST", { name: input.name }), projectId);
+  }
+  async revokeAPIKey(projectId: string, keyId: string, options?: ReadOptions): Promise<{ id: string; deleted: true }> {
+    const value = await this.#json(`${scope(projectId)}/keys/${segment(keyId)}`, options, "DELETE");
     if (!isRecord(value) || Object.keys(value).length !== 2 || value.id !== keyId || value.deleted !== true) return invalidAdminResponse();
     return { id: keyId, deleted: true };
   }
   async copyResources(input: AdminCopyInput, options?: AdminWriteOptions) {
     const body = {
-      source_key_id: input.source_key_id, target_key_id: input.target_key_id,
+      source_project_id: input.source_project_id, target_project_id: input.target_project_id,
       resource_type: input.resource_type, resource_id: input.resource_id, include_dependencies: input.include_dependencies,
       ...(input.target_vault_id === undefined ? {} : { target_vault_id: input.target_vault_id }),
     };
@@ -117,7 +123,7 @@ export class AdminClient {
   }
   async retrieveSummary(options?: AdminSummaryOptions) {
     const path = pageQuery("/summary", options, {
-      key_id: options?.key_id, group_by: options?.group_by,
+      project_id: options?.project_id, group_by: options?.group_by,
       created_after: options?.created_after, created_before: options?.created_before,
     });
     return projectSummary(await this.#json(path, options));
@@ -125,146 +131,149 @@ export class AdminClient {
   async listRuntimeObservations(options?: PageOptions) {
     return projectAdminRuntimePage(await this.#json(pageQuery("/runtime-observations", options), options));
   }
+  async getRuntimeHistoryCapabilities(options?: ReadOptions) {
+    return projectRuntimeHistoryCapabilities(await this.#json("/runtime-history/capabilities", options), invalidAdminResponse);
+  }
   async retrieveStartupConfiguration(options?: ReadOptions) {
     return projectStartupConfiguration(await this.#json("/startup-configuration", options));
   }
 
-  async listAgents(keyId: string, options?: PageOptions) {
-    return projectResourcePage(await this.#json(pageQuery(`${scope(keyId)}/agents`, options), options), (value) => projectSavedAgent(value));
+  async listAgents(projectId: string, options?: PageOptions) {
+    return projectResourcePage(await this.#json(pageQuery(`${scope(projectId)}/agents`, options), options), (value) => projectSavedAgent(value));
   }
-  async retrieveAgent(keyId: string, agentId: string, options?: ReadOptions) {
-    return projectSavedAgent(await this.#json(`${scope(keyId)}/agents/${segment(agentId)}`, options), agentId);
+  async retrieveAgent(projectId: string, agentId: string, options?: ReadOptions) {
+    return projectSavedAgent(await this.#json(`${scope(projectId)}/agents/${segment(agentId)}`, options), agentId);
   }
-  deleteAgent(keyId: string, agentId: string, options?: ReadOptions) {
-    return this.#delete(`${scope(keyId)}/agents/${segment(agentId)}`, agentId, "agent.deleted", options);
+  deleteAgent(projectId: string, agentId: string, options?: ReadOptions) {
+    return this.#delete(`${scope(projectId)}/agents/${segment(agentId)}`, agentId, "agent.deleted", options);
   }
-  async listSkills(keyId: string, options?: PageOptions) {
-    return projectResourcePage(await this.#json(pageQuery(`${scope(keyId)}/skills`, options), options), (value) => projectSkill(value));
+  async listSkills(projectId: string, options?: PageOptions) {
+    return projectResourcePage(await this.#json(pageQuery(`${scope(projectId)}/skills`, options), options), (value) => projectSkill(value));
   }
-  async retrieveSkill(keyId: string, skillId: string, options?: ReadOptions) {
-    return projectSkill(await this.#json(`${scope(keyId)}/skills/${segment(skillId)}`, options), skillId);
+  async retrieveSkill(projectId: string, skillId: string, options?: ReadOptions) {
+    return projectSkill(await this.#json(`${scope(projectId)}/skills/${segment(skillId)}`, options), skillId);
   }
-  deleteSkill(keyId: string, skillId: string, options?: ReadOptions) {
-    return this.#delete(`${scope(keyId)}/skills/${segment(skillId)}`, skillId, "skill.deleted", options);
+  deleteSkill(projectId: string, skillId: string, options?: ReadOptions) {
+    return this.#delete(`${scope(projectId)}/skills/${segment(skillId)}`, skillId, "skill.deleted", options);
   }
-  async listSkillVersions(keyId: string, skillId: string, options?: PageOptions) {
-    return projectResourcePage(await this.#json(pageQuery(`${scope(keyId)}/skills/${segment(skillId)}/versions`, options), options), (value) => projectSkillVersion(value, skillId));
+  async listSkillVersions(projectId: string, skillId: string, options?: PageOptions) {
+    return projectResourcePage(await this.#json(pageQuery(`${scope(projectId)}/skills/${segment(skillId)}/versions`, options), options), (value) => projectSkillVersion(value, skillId));
   }
-  async retrieveSkillVersion(keyId: string, skillId: string, version: string, options?: ReadOptions) {
-    return projectSkillVersion(await this.#json(`${scope(keyId)}/skills/${segment(skillId)}/versions/${segment(version)}`, options), skillId, version);
+  async retrieveSkillVersion(projectId: string, skillId: string, version: string, options?: ReadOptions) {
+    return projectSkillVersion(await this.#json(`${scope(projectId)}/skills/${segment(skillId)}/versions/${segment(version)}`, options), skillId, version);
   }
-  async deleteSkillVersion(keyId: string, skillId: string, version: string, options?: ReadOptions) {
-    const value = await this.#json(`${scope(keyId)}/skills/${segment(skillId)}/versions/${segment(version)}`, options, "DELETE");
+  async deleteSkillVersion(projectId: string, skillId: string, version: string, options?: ReadOptions) {
+    const value = await this.#json(`${scope(projectId)}/skills/${segment(skillId)}/versions/${segment(version)}`, options, "DELETE");
     if (!isRecord(value) || value.version !== version || typeof value.id !== "string") return invalidAdminResponse();
     const { version: deletedVersion, ...receipt } = value;
     return { ...projectAdminDeleted(receipt, value.id, "skill.version.deleted"), version: deletedVersion };
   }
-  downloadSkill(keyId: string, skillId: string, options?: ReadOptions) {
-    return this.#content(`${scope(keyId)}/skills/${segment(skillId)}/content`, options);
+  downloadSkill(projectId: string, skillId: string, options?: ReadOptions) {
+    return this.#content(`${scope(projectId)}/skills/${segment(skillId)}/content`, options);
   }
-  downloadSkillVersion(keyId: string, skillId: string, version: string, options?: ReadOptions) {
-    return this.#content(`${scope(keyId)}/skills/${segment(skillId)}/versions/${segment(version)}/content`, options);
-  }
-
-  async listEnvironmentTemplates(keyId: string, options?: PageOptions) {
-    return projectEnvironmentTemplateList(await this.#json(pageQuery(`${scope(keyId)}/environment-templates`, options), options), options);
-  }
-  async retrieveEnvironmentTemplate(keyId: string, templateId: string, options?: ReadOptions) {
-    return projectEnvironmentTemplate(await this.#json(`${scope(keyId)}/environment-templates/${segment(templateId)}`, options), templateId);
-  }
-  deleteEnvironmentTemplate(keyId: string, templateId: string, options?: ReadOptions) {
-    return this.#delete(`${scope(keyId)}/environment-templates/${segment(templateId)}`, templateId, "agent.environment.template.deleted", options);
-  }
-  async listSourceFiles(keyId: string, options?: PageOptions & { purpose?: string }) {
-    return projectResourcePage(await this.#json(pageQuery(`${scope(keyId)}/files`, options, { purpose: options?.purpose }), options), (value) => projectSourceFile(value));
-  }
-  async retrieveSourceFile(keyId: string, fileId: string, options?: ReadOptions) {
-    return projectSourceFile(await this.#json(`${scope(keyId)}/files/${segment(fileId)}`, options), fileId);
-  }
-  async deleteSourceFile(keyId: string, fileId: string, options?: ReadOptions) {
-    return projectSourceFileDeleted(await this.#json(`${scope(keyId)}/files/${segment(fileId)}`, options, "DELETE"), fileId);
-  }
-  async listVaults(keyId: string, options?: VaultListOptions) {
-    return projectVaultList(await this.#json(vaultQuery(`${scope(keyId)}/vaults`, options), options), options);
-  }
-  async retrieveVault(keyId: string, vaultId: string, options?: ReadOptions) {
-    return projectVault(await this.#json(`${scope(keyId)}/vaults/${segment(vaultId)}`, options), vaultId);
-  }
-  deleteVault(keyId: string, vaultId: string, options?: ReadOptions) {
-    return this.#delete(`${scope(keyId)}/vaults/${segment(vaultId)}`, vaultId, "vault.deleted", options);
-  }
-  async listVaultCredentials(keyId: string, vaultId: string, options?: VaultListOptions) {
-    return projectVaultCredentialList(await this.#json(vaultQuery(`${scope(keyId)}/vaults/${segment(vaultId)}/credentials`, options), options), vaultId, options);
-  }
-  async retrieveVaultCredential(keyId: string, vaultId: string, credentialId: string, options?: ReadOptions) {
-    return projectVaultCredential(await this.#json(`${scope(keyId)}/vaults/${segment(vaultId)}/credentials/${segment(credentialId)}`, options), vaultId, credentialId);
-  }
-  deleteVaultCredential(keyId: string, vaultId: string, credentialId: string, options?: ReadOptions) {
-    return this.#delete(`${scope(keyId)}/vaults/${segment(vaultId)}/credentials/${segment(credentialId)}`, credentialId, "vault.credential.deleted", options);
+  downloadSkillVersion(projectId: string, skillId: string, version: string, options?: ReadOptions) {
+    return this.#content(`${scope(projectId)}/skills/${segment(skillId)}/versions/${segment(version)}/content`, options);
   }
 
-  async listSessions(keyId: string, options?: PageOptions & { agentId?: string }) {
-    return projectResourcePage(await this.#json(pageQuery(`${scope(keyId)}/sessions`, options, { agent_id: options?.agentId }), options), (value) => projectAgentSession(value));
+  async listEnvironmentTemplates(projectId: string, options?: PageOptions) {
+    return projectEnvironmentTemplateList(await this.#json(pageQuery(`${scope(projectId)}/environment-templates`, options), options), options);
   }
-  async retrieveSession(keyId: string, sessionId: string, options?: ReadOptions) {
-    return projectAgentSession(await this.#json(`${scope(keyId)}/sessions/${segment(sessionId)}`, options), undefined, sessionId);
+  async retrieveEnvironmentTemplate(projectId: string, templateId: string, options?: ReadOptions) {
+    return projectEnvironmentTemplate(await this.#json(`${scope(projectId)}/environment-templates/${segment(templateId)}`, options), templateId);
   }
-  deleteSession(keyId: string, sessionId: string, options?: ReadOptions) {
-    return this.#delete(`${scope(keyId)}/sessions/${segment(sessionId)}`, sessionId, "agent.session.deleted", options);
+  deleteEnvironmentTemplate(projectId: string, templateId: string, options?: ReadOptions) {
+    return this.#delete(`${scope(projectId)}/environment-templates/${segment(templateId)}`, templateId, "agent.environment.template.deleted", options);
   }
-  async listTurns(keyId: string, sessionId: string, options?: PageOptions) {
+  async listSourceFiles(projectId: string, options?: PageOptions & { purpose?: string }) {
+    return projectResourcePage(await this.#json(pageQuery(`${scope(projectId)}/files`, options, { purpose: options?.purpose }), options), (value) => projectSourceFile(value));
+  }
+  async retrieveSourceFile(projectId: string, fileId: string, options?: ReadOptions) {
+    return projectSourceFile(await this.#json(`${scope(projectId)}/files/${segment(fileId)}`, options), fileId);
+  }
+  async deleteSourceFile(projectId: string, fileId: string, options?: ReadOptions) {
+    return projectSourceFileDeleted(await this.#json(`${scope(projectId)}/files/${segment(fileId)}`, options, "DELETE"), fileId);
+  }
+  async listVaults(projectId: string, options?: VaultListOptions) {
+    return projectVaultList(await this.#json(vaultQuery(`${scope(projectId)}/vaults`, options), options), options);
+  }
+  async retrieveVault(projectId: string, vaultId: string, options?: ReadOptions) {
+    return projectVault(await this.#json(`${scope(projectId)}/vaults/${segment(vaultId)}`, options), vaultId);
+  }
+  deleteVault(projectId: string, vaultId: string, options?: ReadOptions) {
+    return this.#delete(`${scope(projectId)}/vaults/${segment(vaultId)}`, vaultId, "vault.deleted", options);
+  }
+  async listVaultCredentials(projectId: string, vaultId: string, options?: VaultListOptions) {
+    return projectVaultCredentialList(await this.#json(vaultQuery(`${scope(projectId)}/vaults/${segment(vaultId)}/credentials`, options), options), vaultId, options);
+  }
+  async retrieveVaultCredential(projectId: string, vaultId: string, credentialId: string, options?: ReadOptions) {
+    return projectVaultCredential(await this.#json(`${scope(projectId)}/vaults/${segment(vaultId)}/credentials/${segment(credentialId)}`, options), vaultId, credentialId);
+  }
+  deleteVaultCredential(projectId: string, vaultId: string, credentialId: string, options?: ReadOptions) {
+    return this.#delete(`${scope(projectId)}/vaults/${segment(vaultId)}/credentials/${segment(credentialId)}`, credentialId, "vault.credential.deleted", options);
+  }
+
+  async listSessions(projectId: string, options?: PageOptions & { agentId?: string }) {
+    return projectResourcePage(await this.#json(pageQuery(`${scope(projectId)}/sessions`, options, { agent_id: options?.agentId }), options), (value) => projectAgentSession(value));
+  }
+  async retrieveSession(projectId: string, sessionId: string, options?: ReadOptions) {
+    return projectAgentSession(await this.#json(`${scope(projectId)}/sessions/${segment(sessionId)}`, options), undefined, sessionId);
+  }
+  deleteSession(projectId: string, sessionId: string, options?: ReadOptions) {
+    return this.#delete(`${scope(projectId)}/sessions/${segment(sessionId)}`, sessionId, "agent.session.deleted", options);
+  }
+  async listTurns(projectId: string, sessionId: string, options?: PageOptions) {
     validateHistoryPageOptions(options);
-    const value = await this.#json(pageQuery(`${scope(keyId)}/sessions/${segment(sessionId)}/turns`, options), options);
+    const value = await this.#json(pageQuery(`${scope(projectId)}/sessions/${segment(sessionId)}/turns`, options), options);
     return projectHistoryPage(value, options, (entry) => projectAgentTurn(entry, sessionId, invalidAdminResponse), invalidAdminResponse);
   }
-  async retrieveTurn(keyId: string, sessionId: string, turnId: string, options?: ReadOptions) {
-    return projectAgentTurn(await this.#json(`${scope(keyId)}/sessions/${segment(sessionId)}/turns/${segment(turnId)}`, options), sessionId, invalidAdminResponse, turnId);
+  async retrieveTurn(projectId: string, sessionId: string, turnId: string, options?: ReadOptions) {
+    return projectAgentTurn(await this.#json(`${scope(projectId)}/sessions/${segment(sessionId)}/turns/${segment(turnId)}`, options), sessionId, invalidAdminResponse, turnId);
   }
-  async listItems(keyId: string, sessionId: string, options?: PageOptions) {
+  async listItems(projectId: string, sessionId: string, options?: PageOptions) {
     validateHistoryPageOptions(options);
-    const value = await this.#json(pageQuery(`${scope(keyId)}/sessions/${segment(sessionId)}/items`, options), options);
+    const value = await this.#json(pageQuery(`${scope(projectId)}/sessions/${segment(sessionId)}/items`, options), options);
     return projectHistoryPage(value, options, (entry) => projectSessionItem(entry, invalidAdminResponse), invalidAdminResponse);
   }
-  async listArtifacts(keyId: string, sessionId: string, options?: PageOptions) {
-    return projectResourcePage(await this.#json(pageQuery(`${scope(keyId)}/sessions/${segment(sessionId)}/artifacts`, options), options), (entry) => projectArtifact(entry, sessionId));
+  async listArtifacts(projectId: string, sessionId: string, options?: PageOptions) {
+    return projectResourcePage(await this.#json(pageQuery(`${scope(projectId)}/sessions/${segment(sessionId)}/artifacts`, options), options), (entry) => projectArtifact(entry, sessionId));
   }
-  async retrieveArtifact(keyId: string, sessionId: string, artifactId: string, options?: ReadOptions) {
-    return projectArtifact(await this.#json(`${scope(keyId)}/sessions/${segment(sessionId)}/artifacts/${segment(artifactId)}`, options), sessionId, artifactId);
+  async retrieveArtifact(projectId: string, sessionId: string, artifactId: string, options?: ReadOptions) {
+    return projectArtifact(await this.#json(`${scope(projectId)}/sessions/${segment(sessionId)}/artifacts/${segment(artifactId)}`, options), sessionId, artifactId);
   }
-  deleteArtifact(keyId: string, sessionId: string, artifactId: string, options?: ReadOptions) {
-    return this.#delete(`${scope(keyId)}/sessions/${segment(sessionId)}/artifacts/${segment(artifactId)}`, artifactId, "agent.session.artifact.deleted", options);
+  deleteArtifact(projectId: string, sessionId: string, artifactId: string, options?: ReadOptions) {
+    return this.#delete(`${scope(projectId)}/sessions/${segment(sessionId)}/artifacts/${segment(artifactId)}`, artifactId, "agent.session.artifact.deleted", options);
   }
-  downloadArtifact(keyId: string, sessionId: string, artifactId: string, options?: ReadOptions) {
-    return this.#content(`${scope(keyId)}/sessions/${segment(sessionId)}/artifacts/${segment(artifactId)}/content`, options);
+  downloadArtifact(projectId: string, sessionId: string, artifactId: string, options?: ReadOptions) {
+    return this.#content(`${scope(projectId)}/sessions/${segment(sessionId)}/artifacts/${segment(artifactId)}/content`, options);
   }
-  async retrieveSessionExecutionConfiguration(keyId: string, sessionId: string, options?: ReadOptions) {
-    return projectExecutionConfiguration(await this.#json(`${scope(keyId)}/sessions/${segment(sessionId)}/execution-configuration`, options), sessionId, invalidAdminResponse);
+  async retrieveSessionExecutionConfiguration(projectId: string, sessionId: string, options?: ReadOptions) {
+    return projectExecutionConfiguration(await this.#json(`${scope(projectId)}/sessions/${segment(sessionId)}/execution-configuration`, options), sessionId, invalidAdminResponse);
   }
-  async retrieveRuntimeObservation(keyId: string, sessionId: string, options?: ReadOptions) {
-    return projectRuntimeObservation(await this.#json(`${scope(keyId)}/sessions/${segment(sessionId)}/runtime-observation`, options), sessionId);
+  async retrieveRuntimeObservation(projectId: string, sessionId: string, options?: ReadOptions) {
+    return projectRuntimeObservation(await this.#json(`${scope(projectId)}/sessions/${segment(sessionId)}/runtime-observation`, options), sessionId);
   }
-  async retrieveRuntimeHistory(keyId: string, sessionId: string, query: RuntimeHistoryQuery) {
+  async retrieveRuntimeHistory(projectId: string, sessionId: string, query: RuntimeHistoryQuery) {
     if (canonicalUuid(sessionId) === null || !isNonnegativeInteger(query.start) || !isNonnegativeInteger(query.end) || query.end <= query.start ||
       (query.maxPoints !== undefined && (!Number.isSafeInteger(query.maxPoints) || query.maxPoints < 2 || query.maxPoints > 10_000))) throw new TypeError("Runtime history query is invalid.");
-    const path = pageQuery(`${scope(keyId)}/sessions/${segment(sessionId)}/runtime-history`, undefined, {
+    const path = pageQuery(`${scope(projectId)}/sessions/${segment(sessionId)}/runtime-history`, undefined, {
       start: String(query.start), end: String(query.end), max_points: query.maxPoints === undefined ? undefined : String(query.maxPoints),
     });
     return projectRuntimeHistory(await this.#json(path, query), sessionId, query, invalidAdminResponse);
   }
 
-  async retrieveResourceOwners(keyId: string, resourceType: AdminResourceType, resourceIds: string[], options?: ReadOptions): Promise<{ data: AdminResourceOwner[] }> {
-    const path = pageQuery(`${scope(keyId)}/resource-owners`, undefined, { resource_type: resourceType, resource_ids: resourceIds.join(",") });
+  async retrieveResourceOwners(projectId: string, resourceType: AdminResourceType, resourceIds: string[], options?: ReadOptions): Promise<{ data: AdminResourceOwner[] }> {
+    const path = pageQuery(`${scope(projectId)}/resource-owners`, undefined, { resource_type: resourceType, resource_ids: resourceIds.join(",") });
     return projectResourceOwners(await this.#json(path, options), resourceIds);
   }
   async listAuditLog(options?: AdminAuditOptions) {
     const path = pageQuery("/audit-log", options, {
-      key_id: options?.key_id, resource_type: options?.resource_type, resource_id: options?.resource_id,
+      project_id: options?.project_id, resource_type: options?.resource_type, resource_id: options?.resource_id,
       action: options?.action, created_after: options?.created_after, created_before: options?.created_before,
     });
     return projectAdminAudit(await this.#json(path, options));
   }
-  async listWriteOperations(keyId: string, options?: AdminWriteOperationOptions): Promise<AdminWriteOperationPage> {
-    const path = pageQuery(`${scope(keyId)}/write-operations`, options, {
+  async listWriteOperations(projectId: string, options?: AdminWriteOperationOptions): Promise<AdminWriteOperationPage> {
+    const path = pageQuery(`${scope(projectId)}/write-operations`, options, {
       key_id: options?.key_id, resource_type: options?.resource_type, resource_id: options?.resource_id,
       created_after: options?.created_after, created_before: options?.created_before,
     });

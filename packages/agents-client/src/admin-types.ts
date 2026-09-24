@@ -7,26 +7,33 @@ export interface AdminClientOptions {
   fetch?: typeof fetch;
 }
 
-export interface AdminAPIKey {
+export interface AdminProject {
   id: string;
   name: string;
+  source: "console" | "config";
+  created_at: string;
+  archived_at: string | null;
+  active_key_count: number;
+}
+export interface CreateAdminProjectInput { name: string }
+export interface RenameAdminProjectInput { name: string }
+export interface AdminAPIKey {
+  id: string;
+  project_id: string;
+  name: string;
   prefix: string;
+  kind: "issued" | "static";
   created_at: string | null;
   revoked_at: string | null;
-  tenant_id: string;
-  organization_id: string;
-  project_id: string;
-  kind: "issued" | "static";
 }
 export interface AdminIssuedAPIKey extends AdminAPIKey { key: string }
-export interface CreateAdminAPIKeyInput { id: string; name: string }
-export interface ResetAdminAPIKeyInput { request_id: string }
+export interface IssueAdminAPIKeyInput { name: string }
 export interface AdminPage<T> { data: T[]; has_more: boolean }
 export interface AdminDeleted<O extends string = string> { id: string; object: O; deleted: true }
 export type AdminCopyResourceType = "agent" | "skill" | "environment_template" | "file" | "vault" | "credential";
 export interface AdminCopyInput {
-  source_key_id: string;
-  target_key_id: string;
+  source_project_id: string;
+  target_project_id: string;
   resource_type: AdminCopyResourceType;
   resource_id: string;
   include_dependencies: boolean;
@@ -101,13 +108,15 @@ export interface AdminWriteOperationOptions extends Omit<PageOptions, "order"> {
 export interface AdminWriteOperationPage extends AdminPage<AdminWriteOperation> { next_cursor: string }
 
 export interface AdminSummaryOptions extends PageOptions {
-  key_id?: string;
-  group_by?: "key" | "agent";
+  project_id?: string;
+  group_by?: "project" | "agent" | "key";
   created_after?: string;
   created_before?: string;
 }
 export interface AdminSummaryEntry {
-  key_id: string;
+  project_id: string;
+  /** Session creation provenance for key grouping; null includes unknown creators. */
+  key_id: string | null;
   agent_id: string | null;
   assets: { agents: number; skills: number; environment_templates: number; files: number; vaults: number; credentials: number } | null;
   sessions: { total: number; idle: number; in_progress: number; requires_action: number; failed: number };
@@ -116,16 +125,20 @@ export interface AdminSummaryEntry {
   last_active_at: number | null;
 }
 export interface AdminSummary extends AdminPage<AdminSummaryEntry> { next_cursor: string }
-export interface AdminRuntimeObservation { key_id: string; observation: import("./types").RuntimeObservation }
+export interface AdminRuntimeObservation { project_id: string; observation: import("./types").RuntimeObservation }
 
-export interface AdminAuditOptions extends Omit<AdminWriteOperationOptions, "resource_type"> { action?: string; resource_type?: string }
+export interface AdminAuditOptions extends Omit<AdminWriteOperationOptions, "resource_type" | "key_id"> {
+  project_id?: string;
+  action?: string;
+  resource_type?: string;
+}
 export interface AdminAuditEntry {
   id: string;
   created_at: string;
   admin_credential_id: string;
   actor_label: string;
   action: string;
-  target_key_id: string;
+  project_id: string;
   resource_type: string;
   resource_id: string;
   result_ids: AdminCopyResult["mappings"];

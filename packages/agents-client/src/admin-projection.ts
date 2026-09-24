@@ -2,7 +2,7 @@ import { AgentCoreError, projectAgentSnapshot, projectRuntimeObservation } from 
 import { projectTokenUsage } from "./usage-projection";
 import { exactFields, isNonnegativeInteger, isRecord, sameResourceId } from "./response-projection";
 import type { ListPage, SavedAgent } from "./types";
-import type { AdminAPIKey, AdminAuditPage, AdminSummary, AdminRuntimeObservation, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperationPage, AdminCopyResult, AdminDeleted, AdminIssuedAPIKey, AdminPage, SessionArtifact, Skill, SkillVersion } from "./admin-types";
+import type { AdminAPIKey, AdminProject, AdminAuditPage, AdminSummary, AdminRuntimeObservation, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperationPage, AdminCopyResult, AdminDeleted, AdminIssuedAPIKey, AdminPage, SessionArtifact, Skill, SkillVersion } from "./admin-types";
 
 export function invalidAdminResponse(): never {
   throw new AgentCoreError("Core returned an invalid administration response.", 502, "invalid_admin_response");
@@ -17,17 +17,25 @@ function strings(value: Record<string, unknown>, fields: string[]): void {
 function date(value: unknown): boolean {
   return value === null || (typeof value === "string" && Number.isFinite(Date.parse(value)));
 }
-export function projectAdminKey(value: unknown, expectedId?: string): AdminAPIKey {
-  const key = record(value, ["id", "name", "prefix", "created_at", "revoked_at", "tenant_id", "organization_id", "project_id", "kind"]);
-  strings(key, ["id", "name", "prefix", "tenant_id", "organization_id", "project_id"]);
+export function projectAdminProject(value: unknown, expectedId?: string): AdminProject {
+  const project = record(value, ["id", "name", "source", "created_at", "archived_at", "active_key_count"]);
+  strings(project, ["id", "name", "created_at"]);
+  if ((project.source !== "console" && project.source !== "config") || !date(project.created_at) ||
+    !date(project.archived_at) || !isNonnegativeInteger(project.active_key_count) ||
+    (expectedId !== undefined && !sameResourceId(project.id as string, expectedId))) return invalidAdminResponse();
+  return { ...project } as unknown as AdminProject;
+}
+export function projectAdminKey(value: unknown, projectId: string): AdminAPIKey {
+  const key = record(value, ["id", "project_id", "name", "prefix", "kind", "created_at", "revoked_at"]);
+  strings(key, ["id", "project_id", "name", "prefix"]);
   if ((key.kind !== "issued" && key.kind !== "static") || !date(key.created_at) || !date(key.revoked_at) ||
-    (expectedId !== undefined && !sameResourceId(key.id as string, expectedId))) return invalidAdminResponse();
+    !sameResourceId(key.project_id as string, projectId)) return invalidAdminResponse();
   return { ...key } as unknown as AdminAPIKey;
 }
-export function projectIssuedAdminKey(value: unknown, expectedId: string): AdminIssuedAPIKey {
+export function projectIssuedAdminKey(value: unknown, projectId: string): AdminIssuedAPIKey {
   if (!isRecord(value) || typeof value.key !== "string" || value.key.length === 0) return invalidAdminResponse();
   const { key, ...metadata } = value;
-  const projected = projectAdminKey(metadata, expectedId);
+  const projected = projectAdminKey(metadata, projectId);
   if (projected.kind !== "issued" || projected.revoked_at !== null) return invalidAdminResponse();
   return { ...projected, key };
 }
@@ -127,9 +135,10 @@ export function projectSummary(value: unknown): AdminSummary {
   const page = record(value, ["data", "has_more", "next_cursor"]);
   if (!Array.isArray(page.data) || typeof page.has_more !== "boolean" || typeof page.next_cursor !== "string") return invalidAdminResponse();
   const data = page.data.map((entry) => {
-    const summary = record(entry, ["key_id", "agent_id", "assets", "sessions", "usage", "coverage", "last_active_at"]);
-    strings(summary, ["key_id"]);
-    if (!(summary.agent_id === null || typeof summary.agent_id === "string") ||
+    const summary = record(entry, ["project_id", "key_id", "agent_id", "assets", "sessions", "usage", "coverage", "last_active_at"]);
+    strings(summary, ["project_id"]);
+    if (!(summary.key_id === null || typeof summary.key_id === "string") ||
+      !(summary.agent_id === null || typeof summary.agent_id === "string") ||
       !(summary.last_active_at === null || isNonnegativeInteger(summary.last_active_at))) return invalidAdminResponse();
     const assets = summary.assets === null ? null : record(summary.assets, ["agents", "skills", "environment_templates", "files", "vaults", "credentials"]);
     const sessions = record(summary.sessions, ["total", "idle", "in_progress", "requires_action", "failed"]);
@@ -147,9 +156,9 @@ export function projectAdminRuntimePage(value: unknown): ListPage<AdminRuntimeOb
   const page = record(value, ["object", "data", "has_more", "first_id", "last_id"]);
   if (page.object !== "list" || !Array.isArray(page.data) || typeof page.has_more !== "boolean") return invalidAdminResponse();
   const data = page.data.map((entry) => {
-    const item = record(entry, ["key_id", "observation"]);
-    strings(item, ["key_id"]);
-    return { key_id: item.key_id as string, observation: projectRuntimeObservation(item.observation) };
+    const item = record(entry, ["project_id", "observation"]);
+    strings(item, ["project_id"]);
+    return { project_id: item.project_id as string, observation: projectRuntimeObservation(item.observation) };
   });
   if (page.first_id !== (data[0]?.observation.id ?? null) || page.last_id !== (data.at(-1)?.observation.id ?? null) ||
     new Set(data.map((entry) => entry.observation.id)).size !== data.length || (page.has_more && data.length === 0)) return invalidAdminResponse();
@@ -160,8 +169,8 @@ export function projectAdminAudit(value: unknown): AdminAuditPage {
   const page = record(value, ["data", "has_more", "next_cursor"]);
   if (!Array.isArray(page.data) || typeof page.has_more !== "boolean" || typeof page.next_cursor !== "string") return invalidAdminResponse();
   const data = page.data.map((entry) => {
-    const audit = record(entry, ["id", "created_at", "admin_credential_id", "actor_label", "action", "target_key_id", "resource_type", "resource_id", "result_ids", "request_id", "trace_id"]);
-    strings(audit, ["id", "created_at", "admin_credential_id", "actor_label", "action", "target_key_id", "resource_type", "resource_id", "request_id", "trace_id"]);
+    const audit = record(entry, ["id", "created_at", "admin_credential_id", "actor_label", "action", "project_id", "resource_type", "resource_id", "result_ids", "request_id", "trace_id"]);
+    strings(audit, ["id", "created_at", "admin_credential_id", "actor_label", "action", "project_id", "resource_type", "resource_id", "request_id", "trace_id"]);
     if (!date(audit.created_at)) return invalidAdminResponse();
     const result = projectCopyResult({ mappings: audit.result_ids, skipped: [] });
     return { ...audit, result_ids: result.mappings };
