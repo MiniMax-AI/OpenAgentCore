@@ -61,6 +61,15 @@ mode `0700`. The standard distribution prepares both. Back up this private state
 with the database and credential-encryption key; losing it can leave an uncertain
 allocation that cannot safely be reclaimed. Do not mount it into Web or Runtime.
 
+Drain and confirm cleanup before revoking the configured E2B account key. Replacing
+that key currently uses the same zero-resource configuration guard; in-place key
+rotation with retained resources is not supported. If the key is revoked early,
+Core keeps unverifiable allocations and blocks switching, even if compute was
+removed through the provider console. Do not clear database allocations or private
+receipts to bypass this check. A future credential-repair operation must verify
+account/resource ownership before accepting a replacement key; an inaccessible
+sandbox or empty listing from another account is not proof of cleanup.
+
 For own machines, click **Add node**, copy the installation command from the dialog, and run it on
 the target Linux amd64 host. The command uses the saved deployment origin, or the
 paired console origin for file-managed deployments, without a routine URL field.
