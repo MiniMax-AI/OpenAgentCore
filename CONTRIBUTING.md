@@ -3379,3 +3379,17 @@ Core Session or container creation. One conversation/Agent binding freezes the
 request on first execution; later messages and observer retries reuse it. Separate
 conversations get independent Sessions and environments. Edits affect future
 Sessions only. Keep the existing product navigation and direct empty-chat composer.
+
+### API-key write provenance
+
+Public resource writes carry authenticated key provenance separately from the
+execution principal. Persist their operation record and genuine creation ownership
+in the same business transaction; no best-effort response middleware or async audit
+queue. A failed audit must roll back the write. Internal lifecycle/refresh work does
+not acquire public provenance. Retries never replace ownership. Environment uploads
+persist safe request origin before dispatch and record success with the confirmed
+receipt, not the native filesystem call. Never put payloads, paths or secrets in
+audit metadata. Read models are deployment-authenticated `/core/v1` extensions;
+keep `/v1` wire contracts unchanged. See
+[write-audit.md](contracts/agents-api/write-audit.md) for coverage, retention and
+console integration. Do not confuse key identity with Session creator identity.

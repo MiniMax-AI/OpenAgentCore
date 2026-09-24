@@ -106,6 +106,17 @@ func run() error {
 	if err := executionStore.EnsureProjectScopes(ready, auth.ProjectScopes()); err != nil {
 		return err
 	}
+	auditRetention, err := writeAuditRetention()
+	if err != nil {
+		return err
+	}
+	auditCleanupCtx, cancelAuditCleanup := context.WithCancel(ctx)
+	auditCleanupDone := make(chan struct{})
+	go func() {
+		defer close(auditCleanupDone)
+		runWriteAuditCleanup(auditCleanupCtx, executionStore, auditRetention)
+	}()
+	defer func() { cancelAuditCleanup(); <-auditCleanupDone }()
 	var workerDone chan error
 	var worker *execution.Worker
 	managedNodes, err := configureManagedNodes(executionStore, func(ctx context.Context) error {
@@ -175,7 +186,7 @@ func run() error {
 			return err
 		}
 	}
-	options = append(options, api.WithProjectAPIKeys(executionStore, keyAdmin))
+	options = append(options, api.WithProjectAPIKeys(executionStore, keyAdmin), api.WithWriteAudit(executionStore, keyAdmin))
 	if history.Reader != nil {
 		historyResolver, resolverErr := historystoreresolver.NewResolver(executionStore)
 		if resolverErr != nil {

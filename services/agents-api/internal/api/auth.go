@@ -8,6 +8,11 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
+
+	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/writeaudit"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
@@ -16,6 +21,8 @@ import (
 // APIKey binds a service credential to an execution principal, not a product user.
 // Configuration stores the SHA-256 hex digest, never the plaintext key.
 type APIKey struct {
+	Name           string `json:"name,omitempty"`
+	Kind           string `json:"kind,omitempty"`
 	TokenSHA256    string `json:"token_sha256"`
 	TenantID       string `json:"tenant_id"`
 	OrganizationID string `json:"organization_id"`
@@ -27,13 +34,14 @@ type APIKey struct {
 type Authenticator struct {
 	principals map[[32]byte]identity.Principal
 	projects   []identity.ProjectScope
+	sources    map[[32]byte]writeaudit.Source
 }
 
 func NewAuthenticator(keys []APIKey) (*Authenticator, error) {
 	if len(keys) == 0 {
 		return nil, errors.New("at least one Agents API key is required")
 	}
-	a := &Authenticator{principals: make(map[[32]byte]identity.Principal, len(keys))}
+	a := &Authenticator{principals: make(map[[32]byte]identity.Principal, len(keys)), sources: make(map[[32]byte]writeaudit.Source, len(keys))}
 	for _, key := range keys {
 		principal := identity.Principal{ProjectScope: identity.ProjectScope{TenantID: key.TenantID, OrganizationID: key.OrganizationID, ProjectID: key.ProjectID}, SubjectKind: key.SubjectKind, SubjectID: key.SubjectID}
 		if err := principal.Validate(); err != nil {
@@ -47,6 +55,17 @@ func NewAuthenticator(keys []APIKey) (*Authenticator, error) {
 		if _, exists := a.principals[hash]; exists {
 			return nil, errors.New("duplicate API key digest")
 		}
+		if key.Kind == "" {
+			key.Kind = "static"
+		}
+		if key.Kind != "static" && key.Kind != "console" {
+			return nil, errors.New("configured API key kind must be static or console")
+		}
+		if !utf8.ValidString(key.Name) || utf8.RuneCountInString(key.Name) > 80 || strings.ContainsFunc(key.Name, unicode.IsControl) {
+			return nil, errors.New("configured API key name must contain at most 80 characters without controls")
+		}
+		digestID := hex.EncodeToString(hash[:])
+		a.sources[hash] = writeaudit.Source{KeyID: "static:" + digestID, Name: strings.TrimSpace(key.Name), Prefix: digestID[:8], Kind: key.Kind, TenantID: principal.TenantID}
 		a.principals[hash] = principal
 		a.projects = append(a.projects, principal.ProjectScope)
 	}
@@ -84,30 +103,36 @@ func principalScopeHeaders(r *http.Request, principal identity.Principal) bool {
 }
 
 func (h *Handler) resolvePrincipal(r *http.Request) (identity.Principal, bool, error) {
+	principal, _, ok, err := h.resolveCaller(r)
+	return principal, ok, err
+}
+
+func (h *Handler) resolveCaller(r *http.Request) (identity.Principal, writeaudit.Source, bool, error) {
 	digest, valid := projectBearerDigest(r)
 	if !valid {
-		return identity.Principal{}, false, nil
+		return identity.Principal{}, writeaudit.Source{}, false, nil
 	}
 	if principal, ok := h.auth.principals[digest]; ok {
-		return principal, principalScopeHeaders(r, principal), nil
+		return principal, h.auth.sources[digest], principalScopeHeaders(r, principal), nil
 	}
 	if h.projectKeys == nil {
-		return identity.Principal{}, false, nil
+		return identity.Principal{}, writeaudit.Source{}, false, nil
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	binding, err := h.projectKeys.ResolveProjectAPIKey(ctx, hex.EncodeToString(digest[:]))
 	if errors.Is(err, store.ErrNotFound) {
-		return identity.Principal{}, false, nil
+		return identity.Principal{}, writeaudit.Source{}, false, nil
 	}
 	if err != nil {
-		return identity.Principal{}, false, err
+		return identity.Principal{}, writeaudit.Source{}, false, err
 	}
 	parent, ok := h.auth.staticBinding(binding.BindingDigest)
 	if !ok || parent != binding.Principal || !principalScopeHeaders(r, parent) {
-		return identity.Principal{}, false, nil
+		return identity.Principal{}, writeaudit.Source{}, false, nil
 	}
-	return parent, true, nil
+	source := writeaudit.Source{KeyID: binding.Key.ID, Name: binding.Key.Name, Prefix: binding.Key.Prefix, Kind: "issued", TenantID: parent.TenantID}
+	return parent, source, true, nil
 }
 
 func matchesScopeHeader(r *http.Request, name, expected string) bool {
@@ -145,7 +170,7 @@ func (h *Handler) authenticateProject(next http.Handler) http.Handler {
 
 func (h *Handler) authenticateCaller(next http.Handler, reportInvalidKey bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		principal, ok, err := h.resolvePrincipal(r)
+		principal, source, ok, err := h.resolveCaller(r)
 		if err != nil {
 			writeError(w, http.StatusServiceUnavailable, "authentication_unavailable", "API key authentication is temporarily unavailable.")
 			return
@@ -161,7 +186,15 @@ func (h *Handler) authenticateCaller(next http.Handler, reportInvalidKey bool) h
 			writeError(w, http.StatusUnauthorized, code, "A valid Agents API bearer key is required.")
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalContextKey{}, principal)))
+		ctx := context.WithValue(r.Context(), principalContextKey{}, principal)
+		if strings.HasPrefix(r.URL.Path, "/v1/") && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch || r.Method == http.MethodDelete) {
+			source.RequestID, _ = log.RequestIDFromContext(ctx)
+			if carrier, ok := log.TraceFromContext(ctx); ok {
+				source.TraceID = carrier.Trace.String()
+			}
+			ctx = writeaudit.WithSource(ctx, source)
+		}
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 

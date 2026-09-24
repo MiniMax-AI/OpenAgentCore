@@ -276,6 +276,7 @@ def initialize(root, args, manifest):
             state["device_gid"] = device_gid
         write_json(config / "keys.json", [{"tenant_id": str(uuid.uuid4()), "organization_id": "installation",
             "project_id": "default", "subject_kind": "service_account", "subject_id": "operator",
+            "name": "Console", "kind": "console",
             "token_sha256": hashlib.sha256(token.encode()).hexdigest()}])
         private_write(config / "credential.key", base64.b64encode(secrets.token_bytes(32)).decode())
         private_write(config / "database.password", secrets.token_hex(32))

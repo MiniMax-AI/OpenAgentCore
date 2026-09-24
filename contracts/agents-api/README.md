@@ -905,3 +905,7 @@ Session or Environment observations and is not a readiness endpoint.
 Model endpoints and credentials may be supplied at Session creation through the
 [write-only execution extension](model-execution.md). Provider catalogs and their
 business permissions remain client/product responsibilities.
+
+API-key ownership and write history are documented in
+[write-audit.md](write-audit.md). These are deployment-authenticated Core console
+extensions; the pinned public `/v1` schema is unchanged.
