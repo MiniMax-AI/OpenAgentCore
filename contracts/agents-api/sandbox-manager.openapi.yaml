@@ -184,13 +184,16 @@ definitions:
         type: array
       size_bytes:
         type: integer
+        x-nullable: true
     type: object
   coremetrics.DatabaseBucket:
     properties:
       ping_p95_ms:
         type: number
+        x-nullable: true
       pool_in_use:
         type: integer
+        x-nullable: true
       start:
         type: string
     type: object
@@ -198,37 +201,49 @@ definitions:
     properties:
       connected_daemons:
         type: integer
+        x-nullable: true
       in_progress_turns:
         type: integer
+        x-nullable: true
       interrupted:
         type: integer
+        x-nullable: true
       oldest_queued_seconds:
         type: number
+        x-nullable: true
       queue_wait_ms:
         $ref: '#/definitions/coremetrics.Latency'
       queued_turns:
         type: integer
+        x-nullable: true
       series:
         items:
           $ref: '#/definitions/coremetrics.ExecutionBucket'
         type: array
       slots_in_use:
         type: integer
+        x-nullable: true
       slots_total:
         type: integer
+        x-nullable: true
       unavailable:
         type: integer
+        x-nullable: true
       waiting_for_daemon:
         type: integer
+        x-nullable: true
     type: object
   coremetrics.ExecutionBucket:
     properties:
       in_progress:
         type: integer
+        x-nullable: true
       queue_wait_p95_ms:
         type: number
+        x-nullable: true
       queued:
         type: integer
+        x-nullable: true
       start:
         type: string
     type: object
@@ -236,12 +251,15 @@ definitions:
     properties:
       failed:
         type: integer
+        x-nullable: true
       id:
         type: string
       last_run_at:
         type: string
+        x-nullable: true
       processed:
         type: integer
+        x-nullable: true
       status:
         type: string
     type: object
@@ -249,24 +267,31 @@ definitions:
     properties:
       p50:
         type: number
+        x-nullable: true
       p95:
         type: number
+        x-nullable: true
     type: object
   coremetrics.Pool:
     properties:
       idle:
         type: integer
+        x-nullable: true
       in_use:
         type: integer
+        x-nullable: true
       max:
         type: integer
+        x-nullable: true
     type: object
   coremetrics.Process:
     properties:
       goroutines:
         type: integer
+        x-nullable: true
       memory_bytes:
         type: integer
+        x-nullable: true
     type: object
   coremetrics.Range:
     properties:
@@ -281,10 +306,13 @@ definitions:
     properties:
       execution_owner:
         type: boolean
+        x-nullable: true
       revision:
         type: string
+        x-nullable: true
       started_at:
         type: string
+        x-nullable: true
       status:
         type: string
     type: object
