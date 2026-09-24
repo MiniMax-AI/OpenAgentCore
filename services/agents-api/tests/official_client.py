@@ -91,26 +91,31 @@ def main():
         address.bind(("127.0.0.1", 0))
         port = address.getsockname()[1]
     base = f"http://127.0.0.1:{port}"
-    tokens = [secrets.token_hex(32) for _ in range(4)]
-    bindings = [{"tenant_id": str(uuid.uuid4()), "token_sha256": hashlib.sha256(token.encode()).hexdigest(),
-                 "organization_id": "test-org", "project_id": str(uuid.uuid4()),
-                 "subject_kind": "service_account", "subject_id": "test-runner"} for token in tokens]
-    same_principal, peer_principal, same_subject_id = [secrets.token_hex(32) for _ in range(3)]
-    bindings.extend([{**bindings[0], "token_sha256": hashlib.sha256(same_principal.encode()).hexdigest()},
-                     {**bindings[0], "token_sha256": hashlib.sha256(peer_principal.encode()).hexdigest(),
-                      "subject_kind": "user", "subject_id": "test-peer"},
-                     {**bindings[0], "token_sha256": hashlib.sha256(same_subject_id.encode()).hexdigest(),
-                      "subject_kind": "user"}])
+    admin_token = secrets.token_hex(32)
+    tokens = []
+    project_ids = []
+    bindings = []
+
+    def project_bindings(directory):
+        # Only fixture setup reads internal scope; public clients use issued keys.
+        path = Path(directory) / "project-identities.json"
+        path.touch(mode=0o600)
+        path.write_text(json.dumps({"project_ids": project_ids}))
+        subprocess.run(["go", "run", "./services/agents-api/tests/fixtures"], cwd=root,
+                       env=dict(os.environ, AGENTS_API_PROJECT_IDENTITIES_FIXTURE=str(path)),
+                       check=True, timeout=120)
+        return json.loads(path.read_text())["bindings"]
+
     process = None
     credential_canary = secrets.token_hex(32)
     with tempfile.TemporaryDirectory(prefix="agents-api-test-") as directory:
-        keys = Path(directory) / "keys.json"
-        keys.write_text(json.dumps(bindings))
-        keys.chmod(0o600)
+        admin_digests = Path(directory) / "admin-digests.json"
+        admin_digests.touch(mode=0o600)
+        admin_digests.write_text(json.dumps([hashlib.sha256(admin_token.encode()).hexdigest()]))
         credential_key = Path(directory) / "credential-key.txt"
         credential_key.touch(mode=0o600)
         credential_key.write_text(base64.b64encode(secrets.token_bytes(32)).decode() + "\n")
-        env = dict(os.environ, AGENTS_API_DATABASE_URL=dsn, AGENTS_API_KEYS_FILE=str(keys), AGENTS_API_ADDR=f"127.0.0.1:{port}", AGENTS_API_ENGINE="codex")
+        env = dict(os.environ, AGENTS_API_DATABASE_URL=dsn, AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE=str(admin_digests), AGENTS_API_ADDR=f"127.0.0.1:{port}", AGENTS_API_ENGINE="codex")
         env["AGENTS_API_CREDENTIAL_KEY_FILE"] = str(credential_key)
         # Enable the real Worker/gateway admission path without connecting a daemon.
         # Synthetic fixture inputs remain queued; this is not live model acceptance.
@@ -151,8 +156,27 @@ def main():
 
             try:
                 process = start()
+                with httpx2.Client(base_url=base + "/core/v1/admin/", trust_env=False, timeout=10,
+                                   headers={"Authorization": "Bearer " + admin_token}) as admin:
+                    def issue_key(project_id, name):
+                        response = admin.post(f"projects/{project_id}/keys", json={"name": name})
+                        assert response.status_code == 201, "Fixture key issuance failed"
+                        issued = response.json()
+                        assert issued["project_id"] == project_id
+                        return issued["key"]
+
+                    for index in range(4):
+                        response = admin.post("projects", json={"name": f"Official SDK fixture {index}"})
+                        assert response.status_code == 201, "Fixture Project creation failed"
+                        project_id = response.json()["id"]
+                        project_ids.append(project_id)
+                        tokens.append(issue_key(project_id, "SDK fixture"))
+                    bindings.extend(project_bindings(directory))
+                    replacement_key, peer_key, additional_key = [
+                        issue_key(project_ids[0], name) for name in ("Replacement", "Peer", "Additional")]
+                    tokens.extend([replacement_key, peer_key, additional_key])
                 with client(tokens[0]) as a, client(tokens[1]) as b, client("invalid-key") as invalid:
-                    with client(peer_principal, organization=bindings[0]["organization_id"],
+                    with client(peer_key, organization=bindings[0]["organization_id"],
                                 project=bindings[0]["project_id"]) as peer:
                         saved_vaults = verify_vaults(a, b, invalid, peer, bindings[0], expect_error)
                         saved_credentials = verify_credentials(a, b, invalid, peer, saved_vaults, credential_canary, expect_error)
@@ -180,7 +204,7 @@ def main():
                     assert replay == first
                     assert sessions.retrieve(first.id) == first
                     from official_auth import verify_caller_principals
-                    verify_caller_principals(client, base, bindings[0], tokens[0], same_principal, peer_principal, first)
+                    verify_caller_principals(client, base, bindings[0], tokens[0], replacement_key, peer_key, first)
                     changed = {**spec, "agent": {**spec["agent"], "instructions": "Changed"}}
                     expect_error(ConflictError, lambda: sessions.create(**changed, metadata={"workspace": "untrusted-reference"}, extra_headers=headers))
                     others = [sessions.create(**spec) for _ in range(2)]
@@ -256,13 +280,13 @@ def main():
                     referenced, reference_retry = verify_agent_references(a, b, expect_error)
                     request_sessions.extend(referenced)
                     creator_retries = verify_session_creators(
-                        client, a, b, same_principal, peer_principal, same_subject_id, spec, expect_error)
+                        client, a, b, replacement_key, peer_key, additional_key, spec, expect_error)
                     request_sessions.extend(result for _, _, result in creator_retries)
                     from official_mcp import verify_mcp_configuration
                     mcp_sessions, mcp_agents = verify_mcp_configuration(a, b, expect_error)
                     request_sessions.extend(mcp_sessions)
                     saved_agents.extend(mcp_agents)
-                    with client(peer_principal) as peer:
+                    with client(peer_key) as peer:
                         mcp_credentials = verify_mcp_credentials(a, b, peer, credential_canary, expect_error)
                         credential_rotation = verify_credential_rotation(
                             a, b, invalid, peer, saved_vaults, saved_credentials, credential_canary, expect_error)
@@ -271,7 +295,7 @@ def main():
                     process.terminate()
                     process.wait(timeout=15)
                     process = start()
-                    with client(peer_principal) as peer:
+                    with client(peer_key) as peer:
                         verify_vault_recovery(a, b, peer, saved_vaults)
                         verify_vault_list_recovery(a, b, peer, listed_vaults)
                         verify_credential_recovery(a, b, peer, saved_credentials)
@@ -304,7 +328,7 @@ def main():
                     assert list(turns.list(turn_session.id, order="asc")) == [initial_turn, *recovered]
                     assert sessions.retrieve(first.id) == first
                     assert sessions.create(**spec, metadata={"workspace": "untrusted-reference"}, extra_headers=headers) == first
-                    verify_creator_recovery(client, same_principal, peer_principal, same_subject_id,
+                    verify_creator_recovery(client, replacement_key, peer_key, additional_key,
                                             creator_retries, expect_error)
                 go_env = dict(os.environ, AGENTS_API_CLIENT_TEST_BASE_URL=base + "/v1",
                               AGENTS_API_CLIENT_TEST_KEY=tokens[2], AGENTS_API_CLIENT_TEST_OTHER_KEY=tokens[3])
@@ -315,9 +339,11 @@ def main():
                     assert len(go_sessions) == 3 and all(item.agent.model == "go-client-test-model" for item in go_sessions)
                 process.terminate()
                 process.wait(timeout=15)
-                from official_auth import verify_scope_bootstrap
-                verify_scope_bootstrap(binary, env, keys, bindings, log)
                 process = start()
+                from official_auth import verify_scope_recovery
+                assert project_bindings(directory) == bindings
+                verify_scope_recovery(client, base, bindings[0],
+                                      (tokens[0], replacement_key, peer_key, additional_key), first)
                 with client(tokens[0]) as restored:
                     assert restored.beta.agents.sessions.retrieve(first.id) == first
                 process.terminate()
@@ -325,7 +351,7 @@ def main():
                 # Reuse the same credential contract with the second public engine.
                 env["AGENTS_API_ENGINE"] = "claude_sdk"
                 process = start()
-                with client(tokens[0]) as a, client(tokens[1]) as b, client(peer_principal) as peer:
+                with client(tokens[0]) as a, client(tokens[1]) as b, client(peer_key) as peer:
                     claude_credentials = verify_mcp_credentials(a, b, peer, credential_canary, expect_error)
                 process.terminate()
                 process.wait(timeout=15)
@@ -337,13 +363,13 @@ def main():
                 env["AGENTS_API_ENGINE"] = "codex"
                 env.pop("AGENTS_API_CREDENTIAL_KEY_FILE")
                 process = start()
-                with client(tokens[0]) as without_key, client(tokens[1]) as other, client(peer_principal) as peer:
+                with client(tokens[0]) as without_key, client(tokens[1]) as other, client(peer_key) as peer:
                     verify_credential_storage_disabled(without_key, saved_credentials[0][0], credential_canary, expect_error)
                     verify_keyless_credential_deletion(without_key, credential_deletion, expect_error)
                     verify_keyless_vault_deletion(without_key, vault_deletion, expect_error)
                     verify_credential_list_recovery(without_key, other, peer, listed_credentials,
                                                     credential_canary, phase="restart without the storage key")
-                print("Caller principal: SDK/raw HTTP scope checks, shared project access and persistent startup conflict passed.")
+                print("Caller principal: SDK/raw HTTP scope checks, shared Project access and persistent scope recovery passed.")
                 print("Official Turn client: lifecycle, Agent identity, safe errors, restart recovery, pagination and tenant/Session isolation passed.")
                 print("Official Go client: creation/retries, retrieval, bidirectional pagination and tenant isolation passed.")
                 print("Official client: upstream and generated response schemas, persistence/restart, retries, pagination, tenant isolation and explicit unsupported options passed.")
@@ -354,6 +380,8 @@ def main():
                 log.flush()
                 log.seek(0)
                 output = log.read()
+                assert admin_token not in output, "Administrator token leaked into the service log"
+                assert all(token not in output for token in tokens), "API key leaked into the service log"
                 assert credential_canary not in output, "Credential token leaked into the service log"
                 assert credential_key.read_text().strip() not in output, "Credential key leaked into the service log"
 
