@@ -371,10 +371,10 @@ func TestEveryRouteAuthenticatesItsCanonicalPath(t *testing.T) {
 		{"/core/v1/sandbox/%2E%2E/%2E%2E/%2E%2E/v1/agents", withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta), http.StatusUnauthorized, ""},
 		{"/core/v1/sandbox/nodes%2F..%2F..%2F..%2Fv1%2Fagents", withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta), http.StatusNotFound, ""},
 		// Project API key management keeps deployment administrator authority.
-		{"/v1/%2E%2E/core/v1/project-api-keys/" + device.HashCredential(routingKey), withHeaders(project, beta), http.StatusUnauthorized, "invalid_admin_key"},
-		{"/v1/agents//../../core/v1/project-api-keys/" + device.HashCredential(routingKey), withHeaders([]string{"Authorization", "Bearer " + routingDerivedKey}, beta), http.StatusUnauthorized, "invalid_admin_key"},
+		{"/v1/%2E%2E/core/v1/admin/api-keys/" + device.HashCredential(routingKey), withHeaders(project, beta), http.StatusUnauthorized, "invalid_admin_key"},
+		{"/v1/agents//../../core/v1/admin/api-keys/" + device.HashCredential(routingKey), withHeaders([]string{"Authorization", "Bearer " + routingDerivedKey}, beta), http.StatusUnauthorized, "invalid_admin_key"},
 		{"/v1/x{/..%2F..%2Fcore/v1/project-api-keys/" + device.HashCredential(routingKey), http.Header{}, http.StatusBadRequest, "invalid_beta"},
-		{"/core/v1/project-api-keys/" + device.HashCredential(routingKey) + "/%2E%2E/%2E%2E/%2E%2E/%2E%2E/v1/agents", withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta), http.StatusUnauthorized, ""},
+		{"/core/v1/admin/api-keys/" + device.HashCredential(routingKey) + "/%2E%2E/%2E%2E/%2E%2E/%2E%2E/%2E%2E/v1/agents", withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta), http.StatusUnauthorized, ""},
 	} {
 		got := serve(handler, http.MethodGet, test.target, "", test.header)
 		if got.Code != test.status || (test.code != "" && !strings.Contains(got.Body.String(), `"code":"`+test.code+`"`)) {
@@ -759,7 +759,7 @@ var canonicalPathSeeds = []string{
 	"api/v1/agent-daemon/%2E%2E/%2E%2E/%2E%2E/v1/agents", "v1/x{/%2e./core/v1/sandbox/node/identity", "v1/agents/%7E%5F%2D%41",
 	"core/v1/environments/x/executor-credentials/%2E%2E/%2E%2E/%2E%2E/%2E%2E/core/v1/sandbox/nodes",
 	"v1/x{/..%2F..%2Fcore/v1/project-api-keys/x", "core/v1/project-api-keys/x/%2E%2E/%2E%2E/%2E%2E/%2E%2E/v1/agents",
-	"v1/%2E%2E/core/v1/project-api-keys/x/", "core/v1/project-api-keys//x/y",
+	"v1/%2E%2E/core/v1/admin/api-keys/x/", "core/v1/project-api-keys//x/y",
 }
 
 // Differential property over arbitrary request paths: the routed outcome for
