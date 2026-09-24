@@ -23,15 +23,16 @@ type refusalSlot struct {
 	count int64
 }
 type Service struct {
-	mu       sync.Mutex
-	source   Source
-	started  time.Time
-	revision *string
-	now      func() time.Time
-	samples  [sampleCapacity]Sample
-	refusals [sampleCapacity]refusalSlot
-	latest   Sample
-	jobs     map[string]Job
+	mu         sync.Mutex
+	source     Source
+	started    time.Time
+	revision   *string
+	now        func() time.Time
+	samples    [sampleCapacity]Sample
+	nextSample int
+	refusals   [sampleCapacity]refusalSlot
+	latest     Sample
+	jobs       map[string]Job
 }
 
 func New(started time.Time, revision string, source Source) *Service {
@@ -97,10 +98,11 @@ func (s *Service) Run(ctx context.Context) {
 	}
 }
 func (s *Service) record(sample Sample) {
-	_, i := slot(sample.At)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.samples[i] = sample
+	// Consecutive probes can finish within the same wall-clock slot. Keep both.
+	s.samples[s.nextSample] = sample
+	s.nextSample = (s.nextSample + 1) % len(s.samples)
 	s.latest = sample
 }
 func Window(now time.Time, name string) (Range, error) {

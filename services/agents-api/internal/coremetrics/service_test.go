@@ -33,9 +33,10 @@ func fixtureService(t *testing.T) (*Service, *fixtureSource, time.Time) {
 func TestCompleteBucketsAndObservedPercentiles(t *testing.T) {
 	s, source, now := fixtureService(t)
 	end := now.Truncate(time.Minute)
+	// The first two probes finish in the same 30s slot after differing I/O delays.
 	for _, sample := range []Sample{
-		{At: end.Add(-55 * time.Second), Queued: ptr(int64(3)), InProgress: ptr(int64(1)), PingMS: ptr(2.0), PoolInUse: ptr(int64(2)), Healthy: true},
-		{At: end.Add(-15 * time.Second), Queued: ptr(int64(1)), InProgress: ptr(int64(4)), PingMS: ptr(6.0), PoolInUse: ptr(int64(3)), Healthy: true},
+		{At: end.Add(-27 * time.Second), Queued: ptr(int64(3)), InProgress: ptr(int64(1)), PingMS: ptr(2.0), PoolInUse: ptr(int64(2)), Healthy: true},
+		{At: end.Add(-time.Second), Queued: ptr(int64(1)), InProgress: ptr(int64(4)), PingMS: ptr(6.0), PoolInUse: ptr(int64(3)), Healthy: true},
 		{At: now, Queued: ptr(int64(99)), Healthy: true},
 	} {
 		s.record(sample)
