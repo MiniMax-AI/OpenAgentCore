@@ -39,6 +39,16 @@ func (w *Worker) InitializeSandboxDeployment(ctx context.Context, input store.Sa
 	if err != nil {
 		return store.RuntimeDeploymentView{}, err
 	}
+	// An idempotent setup retry can arrive after an interrupted replacement.
+	// It must not reopen admission while that replacement is still draining.
+	m.mu.Lock()
+	switching := m.switching
+	m.mu.Unlock()
+	if switching {
+		if err := m.pauseDeployment(ctx); err != nil {
+			return store.RuntimeDeploymentView{}, err
+		}
+	}
 	result, err := m.store.InitializeSandboxDeployment(ctx, m.setupInstallationID, input)
 	if err != nil {
 		return store.RuntimeDeploymentView{}, err
