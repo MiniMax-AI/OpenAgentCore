@@ -170,8 +170,6 @@ export const chinese = {
   "Node not found": "找不到此节点",
   "This node is not registered. It may have been removed.": "此节点未注册，可能已被移除。",
   "Capacity": "容量",
-  "Host": "主机",
-  "CPU cores": "CPU 核数",
   "Free memory": "可用内存",
   "Free disk": "可用磁盘",
   "Issue": "异常",
@@ -180,6 +178,5 @@ export const chinese = {
   "{{name}} will be removed from this deployment.": "{{name}} 将从此部署中移除。",
   "Open {{name}}": "打开 {{name}}",
   "Remove {{name}}": "移除 {{name}}",
-  "Host metrics are reported with each heartbeat. Offline nodes report none.": "主机指标随心跳上报；离线节点不上报。",
 } as const;
 export type MessageKey = keyof typeof chinese;

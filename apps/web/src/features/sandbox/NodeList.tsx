@@ -1,7 +1,7 @@
 import type { SandboxAllocation, SandboxNode } from "@agents-core-web/agents-client";
 import { useTranslation } from "react-i18next";
 
-import { Meter, StatusDot, type Tone } from "../../components/console-ui";
+import { StatusDot, type Tone } from "../../components/console-ui";
 import { NameCell, RowActions } from "../../components/list-ui";
 import { formatDateTime, formatRelative } from "../../lib/format";
 import type { MessageKey } from "../../lib/locale-strings";
@@ -56,9 +56,6 @@ export function NodeList({ nodes, allocations, stale, disabled, onOpen, onRemove
           <tr>
             <th scope="col">{t("Node")}</th>
             <th scope="col">{t("Status")}</th>
-            <th scope="col">{t("Active / limit")}</th>
-            <th scope="col" className="numeric">{t("Retained / limit")}</th>
-            <th scope="col" className="numeric">{t("Cleanup pending")}</th>
             <th scope="col" className="numeric">{t("Last seen")}</th>
             <th scope="col">{t("Added")}</th>
             <th scope="col"><span className="visually-hidden">{t("Actions")}</span></th>
@@ -73,14 +70,6 @@ export function NodeList({ nodes, allocations, stale, disabled, onOpen, onRemove
                   <NameCell name={node.name} id={node.id} onOpen={() => onOpen(node)} openLabel={t("Open {{name}}", { name })} idLabel={t("Node ID")} />
                 </th>
                 <td><NodeStatus state={nodeState(node, allocations, stale)} /></td>
-                <td>
-                  <span className="table-meter">
-                    <Meter value={node.active} limit={node.max_active} label={t("Active / limit")} />
-                    <span>{node.active} / {node.max_active}</span>
-                  </span>
-                </td>
-                <td className="numeric">{node.retained} / {node.max_retained}</td>
-                <td className="numeric">{node.cleanup_pending}</td>
                 <td className="numeric" title={node.last_seen_at ? formatDateTime(seconds(node.last_seen_at), locale) : undefined}>
                   {node.last_seen_at ? formatRelative(seconds(node.last_seen_at), now, locale) : t("Never")}
                 </td>

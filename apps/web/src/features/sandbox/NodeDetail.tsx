@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { EmptyState, HelpTip, Kpi, KpiStrip, Section } from "../../components/console-ui";
 import { CopyableId } from "../../components/list-ui";
-import { formatBytes, formatDateTime, formatInteger, formatRelative, MISSING } from "../../lib/format";
+import { formatDateTime, formatInteger, formatRelative, MISSING } from "../../lib/format";
 import { sandboxDiagnosticMessage } from "../../lib/sandbox-diagnostic";
 import { sandboxStateLabel } from "../../lib/sandbox-labels";
 import { nodeState, NodeStatus, seconds } from "./NodeList";
@@ -51,22 +51,13 @@ export function NodeDetail({ node, allocations, stale }: { node: SandboxNode; al
         <div><dt>{t("Added")}</dt><dd>{formatDateTime(seconds(node.created_at), locale)}</dd></div>
       </dl>
 
+      {/* Active slots, cleanup and host resources are on Sandbox metrics; only what it does not show is here. */}
       <Section headingId="node-capacity-heading" title={t("Capacity")}>
         <KpiStrip label={t("Capacity")}>
-          <Kpi label={t("Active / limit")} value={`${count(node.active)} / ${count(node.max_active)}`} />
           <Kpi label={t("Running")} value={reporting ? count(node.running) : MISSING} />
           <Kpi label={t("Retained / limit")} value={`${count(node.retained)} / ${count(node.max_retained)}`} />
           <Kpi label={t("Snapshots")} value={reporting ? count(node.snapshots) : MISSING} />
           <Kpi label={t("Reserved")} value={count(node.reserved)} />
-          <Kpi label={t("Cleanup pending")} value={count(node.cleanup_pending)} tone={node.cleanup_pending > 0 ? "warning" : undefined} />
-        </KpiStrip>
-      </Section>
-
-      <Section headingId="node-host-heading" title={t("Host")} help={t("Host metrics are reported with each heartbeat. Offline nodes report none.")}>
-        <KpiStrip label={t("Host")}>
-          <Kpi label={t("CPU cores")} value={reporting && node.cpu_count !== null ? count(node.cpu_count) : MISSING} />
-          <Kpi label={t("Free memory")} value={reporting ? formatBytes(node.available_memory_bytes) : MISSING} />
-          <Kpi label={t("Free disk")} value={reporting ? formatBytes(node.available_disk_bytes) : MISSING} />
         </KpiStrip>
       </Section>
 
