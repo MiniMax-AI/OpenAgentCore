@@ -39,8 +39,9 @@
   --control-height: 30px;
   --radius-chip: 6px;
   --radius-control: 8px;
-  --radius-card: 10px;
+  --radius-card: 12px;
   --radius-window: 14px;
+  --frame-radius: var(--radius-card);
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
@@ -123,7 +124,7 @@ pre {
 .app-main > .page-transition {
   overflow: hidden;
   background: var(--surface);
-  border-radius: 12px;
+  border-radius: var(--radius-window);
   box-shadow: var(--panel-shadow);
 }
 
@@ -287,7 +288,8 @@ pre {
 
 /* Buttons --------------------------------------------------------------- */
 
-/* Pills: ink primary, ringed surface secondary, quiet ghost, red danger. */
+/* Buttons share the 8px control radius with fields and selects: ink primary,
+   ringed surface secondary, quiet ghost, red danger. Only status badges are pills. */
 .button {
   height: var(--control-height);
   padding: 0 13px;
@@ -298,7 +300,7 @@ pre {
   line-height: 1;
   background: var(--surface);
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-control);
   box-shadow: var(--shadow-btn);
   transition:
     transform 150ms var(--ease-out-strong),
@@ -580,12 +582,12 @@ pre {
   color: var(--ink-3);
 }
 
-/* Filter pills (Beautiful UI's filter chips): the active one is a ringed surface. */
+/* Filter segments: an 8px track with 6px options; the active one is a ringed surface. */
 .segmented {
   padding: 2px;
   gap: 2px;
   background: var(--hover-2);
-  border-radius: 999px;
+  border-radius: var(--radius-control);
 }
 
 .segmented button {
@@ -594,7 +596,7 @@ pre {
   color: var(--ink-2);
   font-size: 12.5px;
   font-weight: 500;
-  border-radius: 999px;
+  border-radius: 6px;
   transition:
     color 150ms var(--ease-out-strong),
     background-color 150ms var(--ease-out-strong),
@@ -644,7 +646,7 @@ pre {
 
 .kpi {
   gap: 4px;
-  padding: 14px 16px 15px;
+  padding: 14px 16px 16px;
   box-shadow: inset -1px 0 var(--grid-line), inset 0 -1px var(--grid-line);
 }
 
@@ -1058,4 +1060,37 @@ pre {
 .message-markdown th {
   color: var(--ink-2);
   font-weight: 500;
+}
+
+
+/* Shape and spacing scale ------------------------------------------------ */
+
+/* Radii: 6 inner option, 8 control, 12 card, 14 panel and dialog; badges are
+   pills. Every card starts its content 16px in, so text in stacked cards and
+   the first table column share one left edge. */
+.data-table thead th:first-child,
+.data-table tbody th:first-child,
+.data-table tbody td:first-child {
+  padding-left: 16px;
+}
+
+.data-table thead th:last-child,
+.data-table tbody th:last-child,
+.data-table tbody td:last-child {
+  padding-right: 16px;
+}
+
+.fleet-node {
+  border-radius: 10px;
+}
+
+.fleet-core {
+  border-radius: var(--radius-card);
+}
+
+.copy-item,
+.coverage-note,
+.help-tip-popover,
+.chart-tooltip {
+  border-radius: var(--radius-control);
 }

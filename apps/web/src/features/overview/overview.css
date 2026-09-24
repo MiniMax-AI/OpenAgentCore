@@ -14,7 +14,7 @@
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-  padding: 16px 18px 18px;
+  padding: 16px;
   animation: overview-rise 520ms var(--ease-settle) both;
   animation-delay: calc(var(--i, 0) * 70ms);
 }
@@ -92,7 +92,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 18px 6px;
+  padding: 14px 16px 6px;
 }
 
 .overview-card-header h2 {
@@ -117,11 +117,11 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  padding: 4px 18px 16px;
+  padding: 4px 16px 16px;
 }
 
 .overview-card-note {
-  padding: 8px 18px 18px;
+  padding: 8px 16px 16px;
 }
 
 .overview-activity .ts-chart {
@@ -313,7 +313,7 @@
 
 .overview-table-scroll {
   min-width: 0;
-  margin: 0 18px 16px;
+  margin: 0 16px 16px;
   overflow-x: auto;
 }
 

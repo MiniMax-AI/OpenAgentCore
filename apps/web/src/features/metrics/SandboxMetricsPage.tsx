@@ -36,7 +36,6 @@ import {
   type HostedRuntimeRow,
 } from "./sandbox-runtime";
 import "./MetricsView.css";
-import { SandboxSummary } from "./SandboxSummary";
 import { hostedRuntimesQuery } from "./metrics-queries";
 
 const healthTone: Record<NodeHealth, Tone> = { available: "ok", degraded: "warning", offline: "danger" };
@@ -87,7 +86,6 @@ export function SandboxMetricsPage() {
   const refreshing = runtimeState.status === "loading" || (fleetState.status === "ready" && fleetState.refreshing);
   const updatedAt = runtimeState.load?.loadedAt ?? fleet?.loadedAt ?? null;
   const message = fleetMessage(fleetState, t);
-  const allUsage = useMemo(() => (runtimeState.load ? hostedRuntimeUsage(runtimeState.load.observations) : null), [runtimeState.load]);
 
   return (
     <section className="page-section console-page metrics-page" aria-labelledby="sandbox-metrics-heading">
@@ -98,15 +96,6 @@ export function SandboxMetricsPage() {
         actions={<RefreshButton refreshing={refreshing} updatedAt={updatedAt ? formatClock(updatedAt, locale) : null} onClick={() => { refreshRuntime(); refreshFleet(); }} />}
       />
       <PageBody>
-        <SandboxSummary
-          capacity={capacity}
-          nodes={fleet?.nodes ?? []}
-          allocations={fleet?.allocations ?? []}
-          observations={runtimeState.load?.observations ?? null}
-          usage={allUsage}
-          fleetMessage={message}
-        />
-
         <Section
           headingId="node-capacity-heading"
           title={t("sandbox.node")}
