@@ -2281,7 +2281,13 @@ export function App() {
   }, []);
 
   return (
-    <SandboxProvider connection={connection}><div className="app-shell">
+    <SandboxProvider connection={connection}>{showIntroduction ? <FirstRunHome
+            key={`intro:${coreGeneration}`}
+            connection={connection} core={core} username={introduction.username}
+            initialStep={introduction.step} onStepChange={introduction.setStep}
+            onDone={introduction.dismiss} onRefresh={() => { void refreshAgents(); }}
+            onOpenAgent={(id) => { setIntroductionAgentId(id); void refreshAgents(); setView("agents"); }}
+          /> : <div className="app-shell">
       <a className="skip-link" href="#main-content">{t("skipToContent")}</a>
       <aside className="app-sidebar">
         <div className="brand-lockup">
@@ -2346,13 +2352,6 @@ export function App() {
               onConfigureConnection={() => setConnectionOpen(true)}
             />
           ) : null}
-          {showIntroduction ? <FirstRunHome
-            key={`intro:${coreGeneration}`}
-            connection={connection} core={core} username={introduction.username}
-            initialStep={introduction.step} onStepChange={introduction.setStep}
-            onDone={introduction.dismiss} onRefresh={() => { void refreshAgents(); }}
-            onOpenAgent={(id) => { setIntroductionAgentId(id); void refreshAgents(); setView("agents"); }}
-          /> : null}
           <div className="cached-page-view" hidden={view !== "dashboard" || showIntroduction}>
             <DashboardView
               agents={agents}
@@ -2487,6 +2486,6 @@ export function App() {
         onClose={() => setConnectionOpen(false)}
         onSave={applyConnection}
       />
-    </div></SandboxProvider>
+    </div>}</SandboxProvider>
   );
 }

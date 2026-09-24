@@ -14,7 +14,6 @@ import (
 	"time"
 )
 
-const testSetupKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 const testAccountPassword = "correct-password-for-console"
 
 func accountConsoleConfig(t *testing.T, backend http.Handler) config {
@@ -36,7 +35,7 @@ func accountConsoleConfig(t *testing.T, backend http.Handler) config {
 		t.Fatal(err)
 	}
 	return config{origin: testOrigin, upstream: u, dist: dist, token: "project-token", adminToken: "deployment-token",
-		authMode: "account", stateDir: state, setupKey: testSetupKey}
+		authMode: "account", stateDir: state}
 }
 
 func accountConsole(t *testing.T, c config) *console {
@@ -63,14 +62,14 @@ func authRequest(h *console, method, path, body string, cookie *http.Cookie) *ht
 	return w
 }
 
-func accountInput(username, password, setupKey string) string {
-	body, _ := json.Marshal(map[string]string{"username": username, "password": password, "setup_key": setupKey})
+func accountInput(username, password string) string {
+	body, _ := json.Marshal(map[string]string{"username": username, "password": password})
 	return string(body)
 }
 
 func setupAccount(t *testing.T, h *console) *http.Cookie {
 	t.Helper()
-	w := authRequest(h, "POST", "/console/auth/setup", accountInput("owner", testAccountPassword, testSetupKey), nil)
+	w := authRequest(h, "POST", "/console/auth/setup", accountInput("owner", testAccountPassword), nil)
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"mode":"authenticated"`) {
 		t.Fatalf("setup failed: %d %s", w.Code, w.Body)
 	}
@@ -111,10 +110,6 @@ func TestAccountSetupLoginRestartAndLogout(t *testing.T) {
 	if calls.Load() != 0 {
 		t.Fatal("unauthenticated request reached Core")
 	}
-	wrong := authRequest(h, "POST", "/console/auth/setup", accountInput("owner", testAccountPassword, "wrong"), nil)
-	if wrong.Code != 401 {
-		t.Fatal("setup accepted an invalid initialization key")
-	}
 	cookie := setupAccount(t, h)
 	if !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode || cookie.Path != "/" || cookie.MaxAge != 43200 || cookie.Secure {
 		t.Fatalf("unsafe cookie: %+v", cookie)
@@ -128,11 +123,11 @@ func TestAccountSetupLoginRestartAndLogout(t *testing.T) {
 	if calls.Load() != 2 {
 		t.Fatal("authenticated public/admin requests did not reach Core")
 	}
-	if w := authRequest(h, "POST", "/console/auth/setup", accountInput("other", testAccountPassword, testSetupKey), nil); w.Code != 409 {
-		t.Fatal("setup key still grants registration after setup")
+	if w := authRequest(h, "POST", "/console/auth/setup", accountInput("other", testAccountPassword), nil); w.Code != 409 {
+		t.Fatal("registration remained open after setup")
 	}
 	stored, err := os.ReadFile(filepath.Join(c.stateDir, accountFilename))
-	if err != nil || strings.Contains(string(stored), testAccountPassword) || strings.Contains(string(stored), testSetupKey) {
+	if err != nil || strings.Contains(string(stored), testAccountPassword) {
 		t.Fatal("account was not persisted safely")
 	}
 	info, _ := os.Stat(filepath.Join(c.stateDir, accountFilename))
@@ -143,10 +138,10 @@ func TestAccountSetupLoginRestartAndLogout(t *testing.T) {
 	if w := authRequest(restarted, "GET", "/console/auth", "", cookie); w.Code != 200 || !strings.Contains(w.Body.String(), `"login"`) {
 		t.Fatal("restart lost the account or retained the old session")
 	}
-	if w := authRequest(restarted, "POST", "/console/auth/login", accountInput("owner", "incorrect-password", ""), nil); w.Code != 401 {
+	if w := authRequest(restarted, "POST", "/console/auth/login", accountInput("owner", "incorrect-password"), nil); w.Code != 401 {
 		t.Fatal("incorrect password accepted")
 	}
-	loggedIn := authRequest(restarted, "POST", "/console/auth/login", accountInput("owner", testAccountPassword, ""), nil)
+	loggedIn := authRequest(restarted, "POST", "/console/auth/login", accountInput("owner", testAccountPassword), nil)
 	if loggedIn.Code != 200 {
 		t.Fatalf("persistent account login failed: %d", loggedIn.Code)
 	}
@@ -173,7 +168,7 @@ func TestAccountOriginChecksAndRequestBounds(t *testing.T) {
 			func(r *http.Request) { r.Header.Set("Origin", "https://attacker.example") },
 			func(r *http.Request) { r.Header.Set("Sec-Fetch-Site", "cross-site") },
 		} {
-			r := httptest.NewRequest(method, path, strings.NewReader(accountInput("owner", testAccountPassword, testSetupKey)))
+			r := httptest.NewRequest(method, path, strings.NewReader(accountInput("owner", testAccountPassword)))
 			r.Host = h.host
 			r.Header.Set("Origin", testOrigin)
 			modify(r)
@@ -185,12 +180,12 @@ func TestAccountOriginChecksAndRequestBounds(t *testing.T) {
 		}
 	}
 	for _, body := range []string{
-		accountInput("invalid user", testAccountPassword, testSetupKey),
-		accountInput("owner", "short", testSetupKey),
-		accountInput("owner", strings.Repeat("界", 25), testSetupKey),
-		accountInput("owner", strings.Repeat("x", 4100), testSetupKey),
+		accountInput("invalid user", testAccountPassword),
+		accountInput("owner", "short"),
+		accountInput("owner", strings.Repeat("界", 25)),
+		accountInput("owner", strings.Repeat("x", 4100)),
 		`{"username":"owner","password":"valid-password","unexpected":true}`,
-		accountInput("owner", testAccountPassword, testSetupKey) + `{}`,
+		accountInput("owner", testAccountPassword) + `{}`,
 	} {
 		if w := authRequest(h, "POST", "/console/auth/setup", body, nil); w.Code != 400 {
 			t.Errorf("invalid body returned %d", w.Code)
@@ -201,7 +196,7 @@ func TestAccountOriginChecksAndRequestBounds(t *testing.T) {
 			t.Errorf("GET mutation %s returned %d", path, w.Code)
 		}
 	}
-	r := httptest.NewRequest("POST", "/console/auth/setup", strings.NewReader(accountInput("owner", testAccountPassword, testSetupKey)))
+	r := httptest.NewRequest("POST", "/console/auth/setup", strings.NewReader(accountInput("owner", testAccountPassword)))
 	r.Host = h.host
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -210,12 +205,12 @@ func TestAccountOriginChecksAndRequestBounds(t *testing.T) {
 		t.Fatal("mutation without browser origin evidence was accepted")
 	}
 	for attempt := 0; attempt < 10; attempt++ {
-		w := authRequest(h, "POST", "/console/auth/setup", accountInput("owner", testAccountPassword, "wrong"), nil)
-		if w.Code != 401 {
+		w := authRequest(h, "POST", "/console/auth/login", accountInput("owner", testAccountPassword), nil)
+		if w.Code != 409 {
 			t.Fatalf("attempt %d unexpectedly returned %d", attempt, w.Code)
 		}
 	}
-	if w := authRequest(h, "POST", "/console/auth/setup", accountInput("owner", testAccountPassword, testSetupKey), nil); w.Code != 429 {
+	if w := authRequest(h, "POST", "/console/auth/setup", accountInput("owner", testAccountPassword), nil); w.Code != 429 {
 		t.Fatal("authentication rate limit was not enforced")
 	}
 }
@@ -230,7 +225,7 @@ func TestConcurrentAccountSetupAcrossInstances(t *testing.T) {
 		go func() {
 			defer group.Done()
 			username := []string{"alice", "bob"}[index]
-			results <- authRequest(server, "POST", "/console/auth/setup", accountInput(username, testAccountPassword, testSetupKey), nil).Code
+			results <- authRequest(server, "POST", "/console/auth/setup", accountInput(username, testAccountPassword), nil).Code
 		}()
 	}
 	group.Wait()

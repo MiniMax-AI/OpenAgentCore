@@ -67,23 +67,12 @@ export function ConsoleAccess({ children }: { children: ReactNode }) {
   } }}>{children}</ConsoleAccountContext.Provider>;
 
   return <div className="app-shell console-access">
-    <aside className="app-sidebar">
-      <div className="brand-lockup"><span className="brand-mark-frame">
-        <img className="brand-mark brand-mark-light" src="/parsar-mark-light.png" width="18" height="18" alt="" />
-        <img className="brand-mark brand-mark-dark" src="/parsar-mark-dark.png" width="18" height="18" alt="" />
-      </span><span className="brand-name">Agents Core Web</span></div>
-      <div className="console-access-nav"><Cloud size={15} aria-hidden="true" />{t("Your cloud. Your workspace.")}</div>
-      <div className="sidebar-footer"><ThemeMenu /></div>
-    </aside>
     <main className="app-main console-access-main">
-      <header><ConsoleLanguage /></header>
+      <header><ThemeMenu /><ConsoleLanguage /></header>
       <section className="console-access-stage">
         <div className="console-access-story"><div className="console-cloud-symbol" aria-hidden="true"><Cloud size={34} strokeWidth={1} /></div>
-          <span className="console-eyebrow">PARSAR / CORE</span>
           <h1>{t("A place for your Agents to work.")}</h1>
           <p>{t("Connect your machines. Create Agents. Watch work happen.")}</p>
-          <div className="console-access-rule" aria-hidden="true" />
-          <span className="console-access-caption">01 — {t("You manage this cloud.")}</span>
         </div>
         {status && !failed ? <AccountForm key={`${status.mode}:${revision}`} setup={status.mode === "setup"} onAuthenticated={(next) => { generation.current++; setStatus(next); }} onRefresh={refresh} /> :
           <div className="console-auth-form" aria-live="polite"><p>{t(failed ? "Could not connect to your console." : "Connecting to your console…")}</p>
@@ -116,7 +105,6 @@ function AccountForm({ setup, onAuthenticated, onRefresh }: {
     try {
       const next = await changeConsoleAuth(setup ? "setup" : "login", {
         username: String(data.get("username") ?? ""), password,
-        ...(setup ? { setup_key: String(data.get("setup_key") ?? "").trim() } : {}),
       }, request.signal);
       if (!request.signal.aborted) {
         if (setup && next.mode === "authenticated") saveProgress(progressKey(window.location.origin, next.username), defaultProgress);
@@ -125,7 +113,7 @@ function AccountForm({ setup, onAuthenticated, onRefresh }: {
     } catch (cause) {
       if (request.signal.aborted) return;
       const status = cause instanceof ConsoleAuthError ? cause.status : 0;
-      if (status === 401 || status === 400) setError(t(setup ? "Check the setup key and account details." : "Check your sign-in details and try again."));
+      if (status === 401 || status === 400) setError(t(setup ? "Check the account details and try again." : "Check your sign-in details and try again."));
       else if (status === 429) setError(t("Too many attempts. Wait a moment before trying again."));
       else {
         setUncertain(true);
@@ -136,8 +124,6 @@ function AccountForm({ setup, onAuthenticated, onRefresh }: {
   return <form className="console-auth-form form-stack" onSubmit={(event) => void submit(event)}>
     <div><h2>{t(setup ? "Create your administrator account" : "Welcome back")}</h2>
       <p>{t(setup ? "You manage this cloud." : "Use your administrator account to continue.")}</p></div>
-    {setup ? <label className="field"><span>{t("Setup key")}</span><input name="setup_key" type="password" autoComplete="off" required disabled={busy || uncertain} />
-      <small>{t("Find it in config/console.setup.key in your installation directory.")}</small></label> : null}
     <label className="field"><span>{t("Administrator username")}</span><input name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={64} pattern={setup ? "[a-zA-Z0-9._\\-]+" : undefined} disabled={busy || uncertain} />
       {setup ? <small>{t("Letters, numbers, dots, underscores and hyphens.")}</small> : null}</label>
     <label className="field"><span>{t("Password")}</span><input name="password" type="password" autoComplete={setup ? "new-password" : "current-password"} required disabled={busy || uncertain} />

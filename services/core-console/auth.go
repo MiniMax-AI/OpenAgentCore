@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -26,14 +25,13 @@ type consoleSession struct {
 }
 
 type consoleAuth struct {
-	store     *accountStore
-	setupHash [sha256.Size]byte
-	secure    bool
-	mu        sync.Mutex
-	sessions  map[[sha256.Size]byte]consoleSession
-	attempts  int
-	window    time.Time
-	workers   chan struct{}
+	store    *accountStore
+	secure   bool
+	mu       sync.Mutex
+	sessions map[[sha256.Size]byte]consoleSession
+	attempts int
+	window   time.Time
+	workers  chan struct{}
 }
 
 func newConsoleAuth(c config) (*consoleAuth, error) {
@@ -41,7 +39,7 @@ func newConsoleAuth(c config) (*consoleAuth, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &consoleAuth{store: store, setupHash: sha256.Sum256([]byte(c.setupKey)),
+	return &consoleAuth{store: store,
 		secure: strings.HasPrefix(c.origin, "https://"), sessions: make(map[[sha256.Size]byte]consoleSession),
 		workers: make(chan struct{}, 2)}, nil
 }
@@ -177,7 +175,6 @@ func (a *consoleAuth) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		SetupKey string `json:"setup_key"`
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
@@ -212,11 +209,6 @@ func (a *consoleAuth) serve(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/console/auth/setup" {
 		if account != nil {
 			authError(w, http.StatusConflict, "Administrator already registered; sign in")
-			return
-		}
-		key := sha256.Sum256([]byte(input.SetupKey))
-		if subtle.ConstantTimeCompare(key[:], a.setupHash[:]) != 1 {
-			authError(w, http.StatusUnauthorized, "Invalid setup key")
 			return
 		}
 		hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)

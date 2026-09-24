@@ -58,7 +58,7 @@ func TestAccountStoreDoesNotReopenSetupAfterLiveDeletion(t *testing.T) {
 	if w := authRequest(h, "GET", "/console/auth", "", nil); w.Code != 503 {
 		t.Fatal("missing registered state reopened setup")
 	}
-	if w := authRequest(h, "POST", "/console/auth/setup", accountInput("other", testAccountPassword, testSetupKey), nil); w.Code != 503 {
+	if w := authRequest(h, "POST", "/console/auth/setup", accountInput("other", testAccountPassword), nil); w.Code != 503 {
 		t.Fatal("live state removal allowed administrator replacement")
 	}
 	if reopened, err := newConsole(c); err == nil {
@@ -69,11 +69,9 @@ func TestAccountStoreDoesNotReopenSetupAfterLiveDeletion(t *testing.T) {
 
 func TestAccountConfigurationIsExplicitAndPrivate(t *testing.T) {
 	work := t.TempDir()
-	token, setup := filepath.Join(work, "caller.key"), filepath.Join(work, "setup.key")
-	for name, value := range map[string]string{token: "private-core-token", setup: testSetupKey} {
-		if err := os.WriteFile(name, []byte(value), 0o600); err != nil {
-			t.Fatal(err)
-		}
+	token := filepath.Join(work, "caller.key")
+	if err := os.WriteFile(token, []byte("private-core-token"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 	state := filepath.Join(work, "state")
 	if err := os.Mkdir(state, 0o700); err != nil {
@@ -82,12 +80,12 @@ func TestAccountConfigurationIsExplicitAndPrivate(t *testing.T) {
 	t.Setenv("CORE_CONSOLE_TOKEN_FILE", token)
 	t.Setenv("CORE_CONSOLE_PASSWORD_FILE", filepath.Join(work, "missing-password"))
 	t.Setenv("CORE_CONSOLE_AUTH_MODE", "account")
-	t.Setenv("CORE_CONSOLE_SETUP_KEY_FILE", setup)
+	t.Setenv("CORE_CONSOLE_SETUP_KEY_FILE", filepath.Join(work, "obsolete-missing-setup-key"))
 	t.Setenv("CORE_CONSOLE_STATE_DIR", state)
 	t.Setenv("CORE_CONSOLE_DIST", work)
 	t.Setenv("CORE_CONSOLE_ORIGIN", testOrigin)
 	t.Setenv("CORE_CONSOLE_SANDBOX_ADMIN_TOKEN_FILE", "")
-	if c, err := loadConfig(); err != nil || c.password != "" || c.setupKey != testSetupKey {
+	if c, err := loadConfig(); err != nil || c.password != "" {
 		t.Fatalf("valid account configuration rejected: %v", err)
 	}
 	for _, mode := range []string{"", "unknown"} {

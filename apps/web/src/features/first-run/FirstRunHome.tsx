@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import type { CoreConnection } from "../../lib/connection";
 import { SandboxManagerView } from "../sandbox/SandboxManagerView";
 import { FirstRequest } from "./FirstRequest";
+import { AppearanceMenu } from "../../components/AppearanceMenu";
+import { ConsoleAccountMenu } from "./ConsoleAccess";
 import { ApiKeyPanel } from "../api-keys/ApiKeyPanel";
 import "./FirstRunHome.css";
 
@@ -33,7 +35,7 @@ function FirstRunBody({ connection, core, username, initialStep = 0, onStepChang
   const [copyFailed, setCopyFailed] = useState(false);
   const [created, setCreated] = useState(false);
   const [keyReady, setKeyReady] = useState(false);
-  const container = useRef<HTMLElement>(null);
+  const container = useRef<HTMLDivElement>(null);
   const stepHeading = useRef<HTMLHeadingElement>(null);
   const focusAfterStep = useRef<HTMLButtonElement | null>(null);
   const userChangedStep = useRef(false);
@@ -70,15 +72,18 @@ function FirstRunBody({ connection, core, username, initialStep = 0, onStepChang
     } catch { if (generation === lifetime.current) { setCopyFailed(true); setCopied(false); } }
   }
   function agentCreated(_agent: SavedAgent) { setCreated(true); onRefresh?.(); }
-  return <section ref={container} className="first-run-home" lang={locale}>
-    <header className="first-run-heading"><div><span className="first-run-eyebrow">PARSAR CORE</span><h1>{t("Your Agent cloud starts here.")}</h1><p>{t("One deployment. Your machines. Your Agents.")}</p></div><button className="first-run-skip" type="button" onClick={onDone}>{t("Skip introduction")}<ArrowRight size={14} /></button></header>
+  return <main className="first-run-home" lang={locale} aria-label={t("First steps")}>
+    <header className="first-run-toolbar">
+      <div className="first-run-toolbar-preferences"><ConsoleAccountMenu /><AppearanceMenu /></div>
+      <button className="first-run-skip" type="button" onClick={onDone}>{t("Skip introduction")}<ArrowRight size={14} /></button>
+    </header>
     <nav className="first-run-chapters" aria-label={t("First steps")}>
       {chapters.map((chapter, index) => {
         const Icon = icons[index as FirstRunStep];
         return <button type="button" key={chapter} disabled={step === 0 && index > 0 && !keyReady} onClick={(event) => go(index as FirstRunStep, event.currentTarget)} aria-current={step === index ? "step" : undefined} className={step === index ? "active" : ""}><span className="first-run-chapter-number">0{index + 1}</span><Icon size={15} strokeWidth={1.5} /><span>{t(chapter)}</span>{index === 1 ? <small>{t("Optional")}</small> : null}</button>;
       })}
     </nav>
-    <div className={`first-run-stage first-run-step-${step}`}>
+    <div ref={container} className={`first-run-stage first-run-step-${step}`}>
       <div className="first-run-stage-content" key={step}>
         {step === 0 ? <div className="first-run-access">
           <div className="first-run-story"><span className="first-run-section-number">01 / 03</span><h2 ref={stepHeading} tabIndex={-1}>{t("Keep your sign-in details.")}</h2><p>{t("Use this address and administrator account to return to your console.")}</p><button className="button primary" type="button" disabled={!keyReady} onClick={(event) => go(1, event.currentTarget)}>{t("I've saved it. Continue")}<ArrowRight size={15} /></button>{!keyReady ? <small className="first-run-key-reminder">{t("Save a key before continuing.")}</small> : null}</div>
@@ -94,5 +99,5 @@ function FirstRunBody({ connection, core, username, initialStep = 0, onStepChang
       </div>
     </div>
     <footer className="first-run-footer">{step > 0 ? <button className="first-run-text-button" type="button" onClick={(event) => go((step - 1) as FirstRunStep, event.currentTarget)}><ArrowLeft size={14} />{t("Back")}</button> : <span />}{step === 1 ? <button className="first-run-text-button" type="button" onClick={(event) => go(2, event.currentTarget)}>{t("Skip for now")}<ArrowRight size={14} /></button> : step === 2 ? <button className="first-run-text-button" type="button" onClick={onDone}>{t(created ? "Finish introduction" : "Skip introduction")}<ArrowRight size={14} /></button> : null}</footer>
-  </section>;
+  </main>;
 }

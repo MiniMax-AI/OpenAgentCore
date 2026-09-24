@@ -45,10 +45,14 @@ test.beforeEach(async ({ page, request }) => {
 
 test("validates administrator setup before sending credentials and keeps only nonsecret progress", async ({ page }) => {
   const writes = await mockAccount(page, { mode: "setup" });
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Create your administrator account" })).toBeVisible();
-  await page.getByLabel(/^Setup key/).fill("fixture-setup-secret");
+  await expect(page.locator(".app-sidebar")).toHaveCount(0);
+  await expect(page.getByLabel(/^Setup key/)).toHaveCount(0);
+  await expect(page.getByText("PARSAR / CORE", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("01 — You manage this cloud.", { exact: true })).toHaveCount(0);
   await fillAccount(page);
   await page.getByLabel("Confirm password", { exact: true }).fill("different-password");
   await page.getByRole("button", { name: "Create administrator account", exact: true }).click();
@@ -63,16 +67,19 @@ test("validates administrator setup before sending credentials and keeps only no
   await page.getByLabel("Confirm password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Create administrator account", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Keep your sign-in details." })).toBeVisible();
-  expect(writes).toEqual([{ action: "setup", body: { username, password, setup_key: "fixture-setup-secret" } }]);
+  await expect(page.locator(".app-sidebar")).toHaveCount(0);
+  expect(writes).toEqual([{ action: "setup", body: { username, password } }]);
+  await expect(page.locator(".app-shell")).toHaveCount(0);
+  await expect(page.locator(".first-run-home")).toHaveCSS("width", "1440px");
+  await expect(page.locator(".first-run-home")).toHaveCSS("height", "1000px");
+  await expect(page.getByRole("button", { name: "Skip introduction", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Copy sign-in details", exact: true }).click();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toContain(new URL(page.url()).origin);
   expect(copied).toContain(username);
   expect(copied).not.toContain(password);
-  expect(copied).not.toContain("fixture-setup-secret");
   const storage = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
   expect(storage).not.toContain(password);
-  expect(storage).not.toContain("fixture-setup-secret");
 });
 
 test("remembers the introduction step and dismissal across reloads and sign-in, and allows replay", async ({ page }) => {
@@ -86,6 +93,7 @@ test("remembers the introduction step and dismissal across reloads and sign-in, 
   await expect(page.getByRole("heading", { name: "Make your first API request." })).toBeVisible();
   await page.getByRole("button", { name: "Skip introduction", exact: true }).first().click();
   await expect(page.locator(".first-run-home")).toHaveCount(0);
+  await expect(page.locator(".app-sidebar")).toBeVisible();
   await page.reload();
   await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
   await expect(page.locator(".first-run-home")).toHaveCount(0);
@@ -99,6 +107,25 @@ test("remembers the introduction step and dismissal across reloads and sign-in, 
   await page.getByRole("button", { name: "Getting started", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Keep your sign-in details." })).toBeVisible();
   expect(writes.map(({ action }) => action)).toEqual(["logout", "login"]);
+});
+
+test("keeps tutorial preferences inside the viewport and restores console navigation when skipped", async ({ page }) => {
+  await mockAccount(page, { mode: "authenticated", username });
+  await page.goto("/");
+  await page.locator(".first-run-toolbar .appearance-menu-trigger").click();
+  const menu = page.getByRole("menu");
+  const bounds = await menu.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(bounds!.y).toBeGreaterThanOrEqual(0);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+  await page.getByRole("menuitemradio", { name: "Dark theme", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.locator(".first-run-toolbar .appearance-menu-trigger").click();
+  await page.getByRole("menuitemradio", { name: "简体中文", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "保存你的登录信息。" })).toBeVisible();
+  await page.getByRole("button", { name: "跳过导览", exact: true }).click();
+  await expect(page.locator(".app-sidebar")).toBeVisible();
+  await expect(page.locator(".first-run-home")).toHaveCount(0);
 });
 
 test("keeps private Core requests unmounted on an authentication network failure", async ({ page, request }) => {
@@ -124,7 +151,6 @@ test("does not replay an uncertain registration and reconciles the account befor
     return route.abort("failed");
   });
   await page.goto("/");
-  await page.getByLabel(/^Setup key/).fill("fixture-setup-secret");
   await fillAccount(page);
   await page.getByLabel("Confirm password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Create administrator account", exact: true }).click();
@@ -141,15 +167,14 @@ test("supports Chinese setup and reduced-motion introduction", async ({ page }) 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 1080, height: 900 });
   await page.goto("/");
-  await page.getByRole("combobox", { name: "Console language" }).selectOption("zh");
+  await page.getByRole("combobox", { name: "Console language" }).selectOption("zh-CN");
   await expect(page.getByRole("heading", { name: "创建管理员账户" })).toBeVisible();
-  await page.getByLabel(/^初始化密钥/).fill("fixture-setup-secret");
   await page.getByLabel(/^管理员用户名/).fill(username);
   await page.getByLabel(/^密码/).fill(password);
   await page.getByLabel("确认密码", { exact: true }).fill(password);
   await page.getByRole("button", { name: "创建管理员账户", exact: true }).click();
   await expect(page.getByRole("heading", { name: "保存你的登录信息。" })).toBeVisible();
-  await expect(page.locator(".first-run-home")).toHaveAttribute("lang", "zh");
+  await expect(page.locator(".first-run-home")).toHaveAttribute("lang", "zh-CN");
   const layout = await page.locator(".first-run-stage-content").evaluate((element) => ({
     animation: getComputedStyle(element).animationName,
     width: document.documentElement.scrollWidth,

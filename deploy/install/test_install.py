@@ -198,12 +198,11 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(state["console_auth"], "account")
         self.assertFalse((self.root / "config/console.password").exists())
         self.assertEqual(stat.S_IMODE((self.root / "state/console").stat().st_mode), 0o700)
-        setup = (self.root / "config/console.setup.key").read_text()
-        self.assertEqual(len(setup), 64)
+        self.assertFalse((self.root / "config/console.setup.key").exists())
         services = self.document("compose.json")["services"]
         web = services["web"]
         self.assertEqual(web["environment"]["CORE_CONSOLE_AUTH_MODE"], "account")
-        self.assertEqual(web["environment"]["CORE_CONSOLE_SETUP_KEY_FILE"], "/config/console.setup.key")
+        self.assertNotIn("CORE_CONSOLE_SETUP_KEY_FILE", web["environment"])
         self.assertEqual(web["environment"]["CORE_CONSOLE_STATE_DIR"], "/state/console")
         for name, service in services.items():
             mounts = [m for m in service.get("volumes", []) if isinstance(m, dict) and m["target"] == "/state/console"]
@@ -211,7 +210,6 @@ class InstallerTests(unittest.TestCase):
             if mounts:
                 self.assertEqual(mounts[0]["source"], str(self.root / "state/console"))
                 self.assertFalse(mounts[0]["read_only"])
-            self.assertNotIn(setup, json.dumps(service))
         install.private_write(self.root / "state/console/admin.json", '{"synthetic":"retained account"}')
         before = self.snapshot()
         self.initialize()
@@ -221,7 +219,6 @@ class InstallerTests(unittest.TestCase):
         state = self.initialize()
         state.pop("console_auth")
         install.private_write(self.root / "config/console.password", "retained-console-password")
-        (self.root / "config/console.setup.key").unlink()
         shutil.rmtree(self.root / "state")
         (self.root / "installation.json").write_text(json.dumps(state))
         compose = install.compose_config(self.root, state, self.manifest, "retained-database-password")
@@ -234,12 +231,6 @@ class InstallerTests(unittest.TestCase):
 
     def test_repeat_account_install_refuses_missing_authentication_sources(self):
         self.initialize()
-        (self.root / "config/console.setup.key").unlink()
-        before = self.snapshot()
-        with self.assertRaisesRegex(install.InstallError, "authentication state"):
-            self.initialize()
-        self.assertEqual(before, self.snapshot())
-        install.private_write(self.root / "config/console.setup.key", "retained-setup-key")
         shutil.rmtree(self.root / "state/console")
         before = self.snapshot()
         with self.assertRaisesRegex(install.InstallError, "authentication state"):
@@ -360,7 +351,6 @@ class InstallerTests(unittest.TestCase):
                 token = (admin / "sandbox-admin.key").read_text()
                 self.assertEqual(self.document("admin/digests.json"), [hashlib.sha256(token.encode()).hexdigest()])
                 self.assertNotEqual(token, (self.root / "config/caller.key").read_text())
-                self.assertNotEqual(token, (self.root / "config/console.setup.key").read_text())
                 self.assertEqual(stat.S_IMODE(admin.stat().st_mode), 0o700)
                 for path in admin.iterdir():
                     self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
@@ -401,7 +391,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(web["environment"]["CORE_CONSOLE_UPSTREAM"], "http://127.0.0.1:9091")
         self.assertNotIn("ports", web)
         self.assertNotIn("devices", web)
-        self.assertEqual({path.name for path in (self.root / "config").iterdir()}, {"caller.key", "console.setup.key"})
+        self.assertEqual({path.name for path in (self.root / "config").iterdir()}, {"caller.key"})
         self.assertEqual((self.root / "config/caller.key").read_bytes(), source.read_bytes())
         before = self.snapshot()
         self.assertEqual(state, self.initialize(*flags))
@@ -417,8 +407,6 @@ class InstallerTests(unittest.TestCase):
             with self.subTest(path=path.relative_to(self.root)):
                 expected = 0o700 if path.is_dir() else 0o600
                 self.assertEqual(stat.S_IMODE(path.stat().st_mode), expected)
-        self.assertNotEqual((self.root / "config/caller.key").read_bytes(),
-                            (self.root / "config/console.setup.key").read_bytes())
 
     def test_web_only_rejects_exposed_or_malformed_caller_files(self):
         for contents, mode in (("synthetic-token", 0o644), ("", 0o600), ("two tokens", 0o600),
@@ -608,8 +596,8 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse((self.root / "native").exists())
         self.assertFalse((self.root / "config/seccomp.json").exists())
         self.assertIn("No execution node installed", output.getvalue())
-        self.assertIn("Setup key file: " + str(self.root / "config/console.setup.key"), output.getvalue())
-        self.assertNotIn((self.root / "config/console.setup.key").read_text(), output.getvalue())
+        self.assertIn("Open Web to register the administrator with your chosen username and password.", output.getvalue())
+        self.assertNotIn("Setup key", output.getvalue())
 
     def test_main_web_only_never_imports_runtime_or_leaks_caller_password(self):
         source = self.caller_file()

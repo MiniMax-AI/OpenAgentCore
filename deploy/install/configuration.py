@@ -121,12 +121,10 @@ def compose_config(root, state, manifest, database_password):
         }
         if state.get("console_auth") == "account":
             services["web"]["volumes"].extend([
-                bind(config / "console.setup.key", "/config/console.setup.key"),
                 bind(root / "state/console", "/state/console", False),
             ])
             services["web"]["environment"].update(
                 CORE_CONSOLE_AUTH_MODE="account",
-                CORE_CONSOLE_SETUP_KEY_FILE="/config/console.setup.key",
                 CORE_CONSOLE_STATE_DIR="/state/console",
             )
         else:

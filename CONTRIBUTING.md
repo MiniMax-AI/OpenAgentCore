@@ -1750,10 +1750,10 @@ unchanged to Core, without borrowing the console's caller or administrator key.
 The same origin, path, method and transport restrictions still apply.
 
 Account mode is explicit (`CORE_CONSOLE_AUTH_MODE=account`) and requires a private
-setup-key file and a private writable state directory. Only the installation's
-one-time setup credential can claim the administrator account. The atomic durable
-account record stores a password hash; corruption or a missing required credential
-must never reopen registration. Account creation is race-safe. Cookie sessions are
+writable state directory. The first visitor registers the sole administrator with
+a username and password; no initialization key is required. The atomic durable
+account record stores a password hash; corruption or missing registered account
+state must never reopen registration. Account creation is race-safe. Cookie sessions are
 bounded, HttpOnly, SameSite Strict and Secure for HTTPS origins; a restart requires
 sign-in again, without deleting the account. Unauthenticated access is limited to
 the static login UI, finite console authentication routes and the existing
@@ -1786,10 +1786,12 @@ access step. Web-only consoles with `api_keys: false` instead explain how to use
 an existing Core key and allow the introduction to continue without key-management
 requests. A failed or malformed capability read must not imply either capability.
 
-First-run Home is a skippable/replayable console introduction after account setup.
-It does not change public Core resource semantics or block ordinary administration.
+First-run Home is a standalone full-screen, skippable/replayable tutorial after
+account setup, outside the console shell. Setup and the introduction have no
+sidebar. Respect reduced-motion preferences throughout. The introduction does not
+change public Core resource semantics or block ordinary administration.
 Keep new onboarding state and components outside the oversized `App.tsx`. Persist
-only non-secret presentation progress; password, setup key and model provider key
+only non-secret presentation progress; password and model provider key
 must not enter browser storage or generated code samples. Creating a saved Agent
 is an explicit write through the existing API. Reconcile uncertain results before
 another write, and associate external examples with their exact metadata marker,

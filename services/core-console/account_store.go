@@ -119,7 +119,7 @@ func (s *accountStore) create(account administrator) error {
 	}
 	s.registered = true
 	// Keep a durable consumed marker so losing just the account file never
-	// silently re-enables the installation's original setup credential.
+	// silently reopens administrator registration.
 	marker, err := os.OpenFile(filepath.Join(s.directory, registeredFilename), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return errors.New("cannot persist registration marker")

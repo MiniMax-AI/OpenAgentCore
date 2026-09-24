@@ -215,13 +215,10 @@ def initialize(root, args, manifest):
                 raise InstallError("Retained Runtime image differs; preserve the installation and inspect its configuration")
         if state.get("console_auth") == "account":
             # Never let Compose create replacement bind sources for lost auth
-            # state. An existing install must retain its account and setup key.
+            # state. An existing install must retain its account directory.
             directory = root / "state/console"
-            setup = root / "config/console.setup.key"
             if (not directory.is_dir() or directory.is_symlink() or
-                    stat.S_IMODE(directory.stat().st_mode) & 0o077 or
-                    not setup.is_file() or setup.is_symlink() or
-                    stat.S_IMODE(setup.stat().st_mode) & 0o077):
+                    stat.S_IMODE(directory.stat().st_mode) & 0o077):
                 raise InstallError("Private console authentication state is missing or unsafe; restore the retained installation")
             if (directory / "registered").exists() and not (directory / "admin.json").is_file():
                 raise InstallError("Registered console account is missing; restore its private state backup")
@@ -283,7 +280,6 @@ def initialize(root, args, manifest):
     private_write(config / "caller.key", token)
     if mode != "core-only":
         state["console_auth"] = "account"
-        private_write(config / "console.setup.key", secrets.token_hex(32))
     password = (config / "database.password").read_text() if mode != "web-only" else ""
     write_json(root / "compose.json", compose_config(root, state, manifest, password))
     write_json(root / "installation.json", state)
@@ -419,7 +415,7 @@ def main(argv=None):
             if (root / "state/console/admin.json").exists():
                 print("Sign in with your administrator account. Keep its password and private state backup safe.")
             else:
-                print("Open Web to register the administrator. Setup key file: " + str(root / "config/console.setup.key"))
+                print("Open Web to register the administrator with your chosen username and password.")
                 print("Keep your administrator username and password safe; there is no email password reset.")
         else:
             auth = base64.b64encode(("admin:" + (root / "config/console.password").read_text()).encode()).decode()

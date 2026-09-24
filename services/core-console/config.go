@@ -13,7 +13,7 @@ import (
 type config struct {
 	addr, origin, dist, token, password string
 	adminToken, nodePayloadDir          string
-	authMode, stateDir, setupKey        string
+	authMode, stateDir                  string
 	upstream                            *url.URL
 }
 
@@ -53,10 +53,6 @@ func loadConfig() (config, error) {
 		if err := validateAccountDirectory(c.stateDir); err != nil {
 			return config{}, err
 		}
-		c.setupKey, err = readSecret(os.Getenv("CORE_CONSOLE_SETUP_KEY_FILE"))
-		if err != nil || len(c.setupKey) < 32 || c.setupKey == c.token {
-			return config{}, errors.New("CORE_CONSOLE_SETUP_KEY_FILE must contain a separate private setup key of at least 32 bytes")
-		}
 	default:
 		return config{}, errors.New("CORE_CONSOLE_AUTH_MODE must be account or unset for legacy Basic authentication")
 	}
@@ -65,7 +61,7 @@ func loadConfig() (config, error) {
 		if err != nil {
 			return config{}, errors.New("CORE_CONSOLE_SANDBOX_ADMIN_TOKEN_FILE must name a private regular token file")
 		}
-		if c.adminToken == c.token || c.adminToken == c.password || c.adminToken == c.setupKey {
+		if c.adminToken == c.token || c.adminToken == c.password {
 			return config{}, errors.New("sandbox administrator credential must be separate")
 		}
 	}
