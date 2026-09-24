@@ -27,6 +27,7 @@ import "./sessions.css";
 import { type Project } from "../../lib/admin-view";
 import { collections } from "../../lib/queries";
 import { TableSkeleton } from "../../components/Skeleton";
+import { ConsoleSelect } from "../../components/console-select";
 
 const PAGE_SIZE = 50;
 
@@ -169,21 +170,25 @@ export function SessionLogPage() {
             options={(["all", ...sessionStatuses] as const).map((value) => ({ value, label: t(`sessionStatus.${value}`), count: formatInteger(counts[value], locale) }))}
             onChange={(status) => update({ status })}
           />
-          <label className="select-control">
-            <span className="visually-hidden">{t("log.agentFilter")}</span>
-            <select value={filters.agentId} onChange={(event) => update({ agentId: event.target.value })}>
-              <option value="">{t("log.allAgents")}</option>
-              {filters.agentId && !agents.some((agent) => agent.id === filters.agentId) ? <option value={filters.agentId}>{filters.agentId}</option> : null}
-              {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.label}</option>)}
-            </select>
-          </label>
-          <label className="select-control">
-            <span className="visually-hidden">{t("log.environmentFilter")}</span>
-            <select value={filters.environment} onChange={(event) => update({ environment: event.target.value })}>
-              <option value="">{t("log.allEnvironments")}</option>
-              {environmentKinds.map((kind) => <option key={kind} value={kind}>{t(`environment.${kind}`)}</option>)}
-            </select>
-          </label>
+          <ConsoleSelect
+            label={t("log.agentFilter")}
+            value={filters.agentId}
+            onChange={(agentId) => update({ agentId })}
+            options={[
+              { value: "", label: t("log.allAgents") },
+              ...(filters.agentId && !agents.some((agent) => agent.id === filters.agentId) ? [{ value: filters.agentId, label: filters.agentId }] : []),
+              ...agents.map((agent) => ({ value: agent.id, label: agent.label })),
+            ]}
+          />
+          <ConsoleSelect
+            label={t("log.environmentFilter")}
+            value={filters.environment}
+            onChange={(environment) => update({ environment })}
+            options={[
+              { value: "", label: t("log.allEnvironments") },
+              ...environmentKinds.map((kind) => ({ value: kind, label: t(`environment.${kind}`) })),
+            ]}
+          />
         </ListToolbar>
         {failures.length && !allFailed ? (
           <p className="list-failures" role="alert">{tCommon("project.partial", { names: failures.map((failure) => failure.project.name).join(", ") })}</p>

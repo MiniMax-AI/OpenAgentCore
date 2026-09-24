@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { ConsoleSelect } from "../../components/console-select";
 import { HelpTip } from "../../components/console-ui";
 import { CopyableId } from "../../components/list-ui";
 import { Modal } from "../../components/Modal";
@@ -141,26 +142,34 @@ export function CopyDialog({ source, onClose }: { source: CopySource | null; onC
                   <span className="copy-route-project" title={source.project.name}>{source.project.name}</span>
                 </div>
                 <ArrowRight className="copy-route-arrow" size={16} strokeWidth={1.6} aria-hidden="true" />
-                <label className="copy-route-end select-control">
+                <div className="copy-route-end">
                   <span className="copy-route-label">{t("copy.to")}<HelpTip>{t("copy.help")}</HelpTip></span>
                   {targets.length ? (
-                    <select value={targetId} onChange={(event) => setTargetId(event.target.value)} disabled={busy} aria-label={t("copy.target")}>
-                      <option value="">{t("copy.chooseTarget")}</option>
-                      {targets.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
-                    </select>
+                    <ConsoleSelect
+                      label={t("copy.target")}
+                      value={targetId}
+                      onChange={setTargetId}
+                      disabled={busy}
+                      className="w-full max-w-none"
+                      options={[{ value: "", label: t("copy.chooseTarget") }, ...targets.map((project) => ({ value: project.id, label: project.name }))]}
+                    />
                   ) : <span className="copy-empty">{t("copy.noTargets")}</span>}
-                </label>
+                </div>
               </div>
               {needsVault && targetId ? (
-                <label className="field">
-                  <span>{t("copy.targetVault")}</span>
-                  {vaults === null ? <select disabled><option>…</option></select> : vaults.length ? (
-                    <select value={vaultId} onChange={(event) => setVaultId(event.target.value)} disabled={busy}>
-                      <option value="">{t("copy.chooseVault")}</option>
-                      {vaults.map((vault) => <option key={vault.id} value={vault.id}>{vault.name ?? vault.id}</option>)}
-                    </select>
-                  ) : <p className="copy-empty">{t("copy.noVaults")}</p>}
-                </label>
+                <div className="copy-route-end">
+                  <span className="copy-route-label">{t("copy.targetVault")}</span>
+                  {vaults !== null && !vaults.length ? <p className="copy-empty">{t("copy.noVaults")}</p> : (
+                    <ConsoleSelect
+                      label={t("copy.targetVault")}
+                      value={vaultId}
+                      onChange={setVaultId}
+                      disabled={busy || vaults === null}
+                      className="w-full max-w-none"
+                      options={[{ value: "", label: vaults === null ? "…" : t("copy.chooseVault") }, ...(vaults ?? []).map((vault) => ({ value: vault.id, label: vault.name ?? vault.id }))]}
+                    />
+                  )}
+                </div>
               ) : null}
               {source.type !== "file" && source.type !== "credential" ? (
                 <label className="copy-check">

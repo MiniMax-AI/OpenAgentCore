@@ -12,6 +12,7 @@ import { prefixLabel } from "./key-flows";
 import { writeOperationsQuery } from "./project-queries";
 import { type AdminKey, type KeyRef, type OwnerResourceType, ownerResourceTypes } from "../../lib/admin-view";
 import { TableSkeleton } from "../../components/Skeleton";
+import { ConsoleSelect } from "../../components/console-select";
 
 export const operationActions = ["create", "update", "delete", "send_events", "upload_file", "upload_version", "update_default_version"] as const;
 type OperationAction = (typeof operationActions)[number];
@@ -120,22 +121,24 @@ export function WriteOperations({ projectId, keys }: { projectId: string; keys: 
         label={t("operations.filterLabel")}
         summary={entries?.length ? listSummary(tCommon, entries.length, entries.length, { hasMore: hasNextPage, locale }) : undefined}
       >
-        <label className="select-control">
-          <span className="visually-hidden">{t("operations.columns.key")}</span>
-          <select value={keyId} onChange={(event) => setKeyId(event.target.value)}>
-            <option value="">{t("operations.allKeys")}</option>
-            {(keys ?? []).map((key) => (
-              <option key={key.id} value={key.id}>{key.revoked_at !== null ? t("operations.revokedKeyOption", { name: key.name }) : key.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="select-control">
-          <span className="visually-hidden">{t("operations.columns.resource")}</span>
-          <select value={type} onChange={(event) => setType(isType(event.target.value) ? event.target.value : "")}>
-            <option value="">{t("operations.allTypes")}</option>
-            {ownerResourceTypes.map((value) => <option key={value} value={value}>{typeLabel(value)}</option>)}
-          </select>
-        </label>
+        <ConsoleSelect
+          label={t("operations.columns.key")}
+          value={keyId}
+          onChange={setKeyId}
+          options={[
+            { value: "", label: t("operations.allKeys") },
+            ...(keys ?? []).map((key) => ({ value: key.id, label: key.revoked_at !== null ? t("operations.revokedKeyOption", { name: key.name }) : key.name })),
+          ]}
+        />
+        <ConsoleSelect
+          label={t("operations.columns.resource")}
+          value={type}
+          onChange={(value) => setType(isType(value) ? value : "")}
+          options={[
+            { value: "", label: t("operations.allTypes") },
+            ...ownerResourceTypes.map((value) => ({ value, label: typeLabel(value) })),
+          ]}
+        />
       </ListToolbar>
       {body}
     </Section>
