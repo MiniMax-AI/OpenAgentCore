@@ -208,6 +208,20 @@
   transform: translate(-50%, -50%);
 }
 
+button.fleet-core {
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 160ms ease;
+}
+
+button.fleet-core:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+}
+
+button.fleet-core:disabled {
+  cursor: default;
+}
+
 .fleet-core strong {
   color: var(--fg);
   font-size: 16px;

@@ -7,6 +7,7 @@ import {
   Layers3,
   LayoutDashboard,
   ListTree,
+  Network,
   Puzzle,
   Server,
   Settings2,
@@ -21,6 +22,7 @@ import { ConsoleAccountMenu } from "../features/first-run/ConsoleAccess";
 
 const viewIcons: Record<ConsoleView, LucideIcon> = {
   overview: LayoutDashboard,
+  "core-metrics": Network,
   "agent-metrics": Activity,
   "sandbox-metrics": Cpu,
   sessions: ListTree,

@@ -8,6 +8,7 @@ export const navigation = {
   },
   views: {
     overview: "概览",
+    "core-metrics": "Core 监控",
     "agent-metrics": "Agent 监控",
     "sandbox-metrics": "沙箱监控",
     sessions: "Session 日志",

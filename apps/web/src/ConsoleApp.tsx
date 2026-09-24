@@ -8,6 +8,7 @@ import { AgentsPage } from "./features/agents/AgentsPage";
 import { TemplatesPage } from "./features/environment-templates/TemplatesPage";
 import { FilesPage } from "./features/files/FilesPage";
 import { AgentMetricsPage } from "./features/metrics/AgentMetricsPage";
+import { CoreMetricsPage } from "./features/metrics/CoreMetricsPage";
 import { SandboxMetricsPage } from "./features/metrics/SandboxMetricsPage";
 import { OverviewPage } from "./features/overview/OverviewPage";
 import { SandboxManagerView } from "./features/sandbox/SandboxManagerView";
@@ -40,6 +41,7 @@ function readLocation(): { view: ConsoleView; params: RouteParams } {
 function ConsolePage({ view }: { view: ConsoleView }) {
   switch (view) {
     case "overview": return <OverviewPage />;
+    case "core-metrics": return <CoreMetricsPage />;
     case "agent-metrics": return <AgentMetricsPage />;
     case "sandbox-metrics": return <SandboxMetricsPage />;
     case "sessions": return <SessionLogPage />;

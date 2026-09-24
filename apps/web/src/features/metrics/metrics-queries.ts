@@ -1,4 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
+import { CoreMetricsClient, type CoreMetricsRange } from "@agents-core-web/agents-client";
 
 import { listRuntimeObservations, loadSummary, type Project } from "../../lib/admin-view";
 import { projectClient } from "../../lib/projects";
@@ -61,5 +62,15 @@ export function keyUsageQuery(filter: string, range: AgentMetricsRange) {
       const window = metricsWindow(range, Math.floor(Date.now() / 1000));
       return keyUsageRows(await loadSummary({ group_by: "key", created_after: window.start, project_id: filter || undefined, signal }));
     },
+  });
+}
+
+const coreMetricsClient = new CoreMetricsClient({ baseUrl: "/core/v1/admin" });
+
+/** Core's own metrics over a range, aggregated by Core. */
+export function coreMetricsQuery(range: CoreMetricsRange) {
+  return queryOptions({
+    queryKey: ["core-metrics", range],
+    queryFn: ({ signal }) => coreMetricsClient.retrieveCoreMetrics(range, { signal }),
   });
 }

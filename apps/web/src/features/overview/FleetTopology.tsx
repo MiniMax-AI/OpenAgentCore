@@ -29,13 +29,15 @@ export function topologyNodes(nodes: readonly SandboxNode[]): SandboxNode[] {
  * animated for connected nodes and dashed for offline ones; a node opens its
  * page on the Nodes view.
  */
-export function FleetTopology({ nodes, coreLabel, coreTone, stale, onOpen }: {
+export function FleetTopology({ nodes, coreLabel, coreTone, stale, onOpen, onOpenCore }: {
   nodes: readonly SandboxNode[];
   coreLabel: string;
   coreTone: Tone;
   /** The last refresh failed: keep the picture, stop implying live traffic. */
   stale: boolean;
   onOpen: (node: SandboxNode) => void;
+  /** Core opens its own metrics page. */
+  onOpenCore?: () => void;
 }) {
   const { t, i18n } = useTranslation("overview");
   const locale = i18n.resolvedLanguage;
@@ -65,11 +67,11 @@ export function FleetTopology({ nodes, coreLabel, coreTone, stale, onOpen }: {
           );
         })}
       </svg>
-      <div className="fleet-core">
+      <button type="button" className="fleet-core" onClick={onOpenCore} disabled={!onOpenCore} aria-label={`${t("fleet.core")}, ${coreLabel}`}>
         <Network size={20} strokeWidth={1.4} aria-hidden="true" />
         <strong>{t("fleet.core")}</strong>
         <StatusDot tone={coreTone} label={coreLabel} />
-      </div>
+      </button>
       {placed.map(({ node, left, y, health }) => {
         const name = node.name || node.id;
         const state = t(`nodeHealth.${health}`);

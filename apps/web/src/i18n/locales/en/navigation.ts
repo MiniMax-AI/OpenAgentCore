@@ -8,6 +8,7 @@ export const navigation = {
   },
   views: {
     overview: "Overview",
+    "core-metrics": "Core metrics",
     "agent-metrics": "Agent metrics",
     "sandbox-metrics": "Sandbox metrics",
     sessions: "Session log",

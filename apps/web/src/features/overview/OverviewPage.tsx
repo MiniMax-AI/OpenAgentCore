@@ -216,7 +216,7 @@ export function OverviewPage() {
             ) : <p className="detail-note overview-card-note" role="status">{t("activity.loading")}</p>}
           </section>
 
-          <FleetCard fleetState={fleetState} core={core} onManage={() => navigate("nodes")} onOpen={(node) => navigate("nodes", { id: node.id })} />
+          <FleetCard fleetState={fleetState} core={core} onManage={() => navigate("nodes")} onOpen={(node) => navigate("nodes", { id: node.id })} onOpenCore={() => navigate("core-metrics")} />
         </div>
 
         <section className="overview-card overview-table-card" aria-labelledby="projects-heading">
@@ -268,7 +268,7 @@ function fleetDetail(state: FleetState, t: TFunction<"overview">): string {
 }
 
 /** Core and its sandbox nodes as a topology; a node opens on the Nodes page. */
-function FleetCard({ fleetState, core, onManage, onOpen }: { fleetState: FleetState; core: CoreStatus; onManage: () => void; onOpen: (node: SandboxNode) => void }) {
+function FleetCard({ fleetState, core, onManage, onOpen, onOpenCore }: { fleetState: FleetState; core: CoreStatus; onManage: () => void; onOpen: (node: SandboxNode) => void; onOpenCore: () => void }) {
   const { t } = useTranslation("overview");
   const fleet = fleetSnapshot(fleetState);
   const hosts = fleet?.nodes ?? [];
@@ -291,6 +291,7 @@ function FleetCard({ fleetState, core, onManage, onOpen }: { fleetState: FleetSt
           coreTone={coreTone[core]}
           stale={fleetState.status === "ready" && fleetState.error !== null}
           onOpen={onOpen}
+          onOpenCore={onOpenCore}
         />
         {hidden ? <button className="text-action fleet-more" type="button" onClick={onManage}>{t("fleet.more", { n: hidden })}</button> : null}
         <FleetFooter state={fleetState} empty={fleet ? hosts.length === 0 : false} />
