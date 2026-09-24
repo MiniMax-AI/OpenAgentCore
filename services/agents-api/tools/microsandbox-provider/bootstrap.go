@@ -52,6 +52,7 @@ func (b backend) create(ctx context.Context) (wire.State, error) {
 	labels[bootstrapLabel] = "pending"
 	live, e := sdk.CreateSandbox(ctx, c.Name,
 		sdk.WithImage(b.q.Config.Image), sdk.WithMemory(b.q.Config.MemoryMiB), sdk.WithCPUs(b.q.Config.CPUs),
+		sdk.WithMaxMemory(b.q.Config.MemoryMiB), sdk.WithMaxCPUs(b.q.Config.CPUs),
 		sdk.WithRootDisk(sdk.RootDisk.Managed(b.q.Config.RootDiskMiB)), sdk.WithUser("1000:1000"),
 		// A native owned disk keeps workspace and staging on one filesystem.
 		// Bootstrap creates their directories before starting the daemon.
@@ -70,6 +71,9 @@ func (b backend) create(ctx context.Context) (wire.State, error) {
 	}
 	defer live.Detach(context.Background())
 	c.ID = live.ID()
+	if _, _, e = b.inspect(ctx, c); e != nil {
+		return wire.State{}, e
+	}
 	data, e := json.Marshal(bootstrap)
 	if e != nil {
 		return wire.State{}, e

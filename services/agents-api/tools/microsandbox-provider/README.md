@@ -5,6 +5,15 @@ v0.7.2. Core stays a pure-Go binary and uses the provider-neutral
 `sandbox.CheckpointProvider` interface. There is no helper daemon, local lifecycle
 database, native agent adapter, or additional scheduler.
 
+Managed creation checks the native CPU, memory, root disk and owned Environment
+disk configuration before bootstrap. Inspection and restore reject resource or
+image drift while ownership-based compute and snapshot deletion remain available.
+Full snapshots record a resource proof only after the source's limits match.
+The pinned native restore leaves managed root size unspecified in its config;
+the verified snapshot ancestry and matching proof establish inherited capacity.
+The restored target keeps that proof after its CPU, memory and Environment disk
+are checked. This does not claim a new direct root-capacity measurement on restore.
+
 The supported first deployment profile is native Linux Core plus this local
 helper, under one dedicated service user with KVM access. PostgreSQL may continue
 to run in Docker. The current Core distroless/static image cannot execute this

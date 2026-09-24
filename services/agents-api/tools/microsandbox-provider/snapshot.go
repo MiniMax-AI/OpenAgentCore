@@ -17,6 +17,7 @@ func (b backend) snapshotLabels(operation string, source wire.Compute) map[strin
 	labels["io.parsar.operation"] = operation
 	labels["io.parsar.source_id"] = source.ID
 	labels["io.parsar.source_generation"] = strconv.FormatUint(source.Generation, 10)
+	labels[resourceProofLabel] = resourceProof(b.q.Config)
 	return labels
 }
 
@@ -31,6 +32,10 @@ func (b backend) inspectSnapshot(ctx context.Context, operation string, source w
 		return nil, wire.SnapshotIdentity{}, sandbox.ErrOwnership
 	}
 	for key, value := range b.snapshotLabels(operation, source) {
+		// Drift must never block ownership-based artifact deletion.
+		if key == resourceProofLabel {
+			continue
+		}
 		if artifact.Labels()[key] != value {
 			return nil, wire.SnapshotIdentity{}, sandbox.ErrOwnership
 		}
@@ -62,7 +67,7 @@ func (b backend) verifiedSnapshot(ctx context.Context, want wire.SnapshotIdentit
 func (b backend) suspend(ctx context.Context, q wire.SuspendRequest) (wire.State, error) {
 	// The host allocation flock spans pause, capture, verification and source kill.
 	// A surviving completed artifact is observed, never overwritten or recaptured.
-	_, snap, e := b.inspectSnapshot(ctx, q.OperationID, q.Source)
+	artifact, snap, e := b.inspectSnapshot(ctx, q.OperationID, q.Source)
 	if sdk.IsKind(e, sdk.ErrSnapshotNotFound) {
 		if q.ObserveOnly {
 			if q.Snapshot != nil {
@@ -96,9 +101,12 @@ func (b backend) suspend(ctx context.Context, q wire.SuspendRequest) (wire.State
 		if err != nil {
 			return wire.State{}, err
 		}
-		_, snap, e = b.inspectSnapshot(ctx, q.OperationID, q.Source)
+		artifact, snap, e = b.inspectSnapshot(ctx, q.OperationID, q.Source)
 	}
 	if e != nil {
+		return wire.State{}, e
+	}
+	if e = qualifySnapshotResources(b.q.Config, artifact.Labels()); e != nil {
 		return wire.State{}, e
 	}
 	if q.Snapshot != nil && snap != *q.Snapshot {
@@ -137,6 +145,9 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 	if e != nil {
 		return wire.State{}, e
 	}
+	if e = qualifySnapshotResources(b.q.Config, artifact.Labels()); e != nil {
+		return wire.State{}, e
+	}
 	_, state, e := b.inspect(ctx, q.Target)
 	if e == nil {
 		if state.Status != "running" || !state.BootstrapComplete {
@@ -167,6 +178,19 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 	}
 	target := q.Target
 	target.ID = live.ID()
+	// The verified snapshot proves the inherited root capacity. Persist that
+	// proof on the exact target only after its other native limits match.
+	h, _, err := b.inspectOwned(ctx, target)
+	if err == nil {
+		err = qualifyConfiguration(b.q.Config, target, h.ConfigJSON(), true)
+	}
+	if err == nil {
+		_, err = live.Modify(ctx, sdk.ModifyOptions{Labels: map[string]string{resourceProofLabel: resourceProof(b.q.Config)}, Policy: sdk.ModificationPolicyNextStart})
+	}
+	if err != nil {
+		_ = live.Detach(context.Background())
+		return wire.State{}, err
+	}
 	if e = live.Detach(context.Background()); e != nil {
 		return wire.State{}, e
 	}
