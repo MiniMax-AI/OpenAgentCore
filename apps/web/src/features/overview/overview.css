@@ -31,7 +31,7 @@
   align-items: center;
   margin-top: 10px;
   color: var(--fg);
-  font-size: 30px;
+  font-size: 20px;
   font-weight: 600;
   line-height: 36px;
   letter-spacing: -0.025em;
@@ -214,7 +214,8 @@ button.fleet-core {
   transition: border-color 160ms ease;
 }
 
-button.fleet-core:hover:not(:disabled) {
+button.fleet-core:hover:not(:disabled),
+button.fleet-core[data-popup-open] {
   border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
 }
 
@@ -224,7 +225,7 @@ button.fleet-core:disabled {
 
 .fleet-core strong {
   color: var(--fg);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -252,11 +253,12 @@ button.fleet-core:disabled {
   box-shadow: var(--card-shadow);
   cursor: pointer;
   transform: translateY(-50%);
-  transition: border-color 160ms ease;
+  transition: box-shadow 160ms ease;
 }
 
-.fleet-node:hover {
-  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+.fleet-node:hover,
+.fleet-node[data-popup-open] {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, var(--line)), var(--card-shadow);
 }
 
 .fleet-node:focus-visible {

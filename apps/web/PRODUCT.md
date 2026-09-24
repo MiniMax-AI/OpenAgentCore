@@ -55,8 +55,8 @@ workbench.
 ## Information Architecture
 
 - **Monitor**: Overview (service status, running Sessions, sandbox slots, Sessions
-  needing attention, 24-hour Session activity, the topology of Core and its nodes,
-  usage by project, the attention table), Agent metrics (requests, errors,
+  needing attention, 24-hour Session activity, the topology of Core and its nodes
+  with a popover glance at each, the attention table, usage by project), Agent metrics (requests, errors,
   duration, tokens, models, tools, Agents and API keys for 1 h / 6 h / 24 h / 7 d),
   Sandbox metrics (node capacity and hosted Runtimes across projects), Session log
   (every Session, read-only, opening one Session's history).

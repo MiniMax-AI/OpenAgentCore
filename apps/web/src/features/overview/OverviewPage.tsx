@@ -1,4 +1,4 @@
-import type { AgentSession, SandboxNode } from "@agents-core-web/agents-client";
+import type { AgentSession } from "@agents-core-web/agents-client";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -216,19 +216,9 @@ export function OverviewPage() {
             ) : <p className="detail-note overview-card-note" role="status">{t("activity.loading")}</p>}
           </section>
 
-          <FleetCard fleetState={fleetState} core={core} onManage={() => navigate("nodes")} onOpen={(node) => navigate("nodes", { id: node.id })} onOpenCore={() => navigate("core-metrics")} />
+          <FleetCard fleetState={fleetState} core={core} />
         </div>
 
-        <section className="overview-card overview-table-card" aria-labelledby="projects-heading">
-          <header className="overview-card-header">
-            <div className="console-section-title">
-              <h2 id="projects-heading">{t("projects.title")}</h2>
-              <HelpTip>{t("projects.help")}</HelpTip>
-            </div>
-            <button className="text-action" type="button" onClick={() => navigate("projects")}>{t("projects.manage")}</button>
-          </header>
-          <ProjectUsageTable rows={usageRows} failed={summaryError !== null || (state.status === "failed" && data === null)} now={now} onOpen={(project) => navigate("projects", { id: project.id })} />
-        </section>
 
         <section className="overview-card overview-table-card" aria-labelledby="attention-heading">
           <header className="overview-card-header">
@@ -245,6 +235,17 @@ export function OverviewPage() {
             <button className="text-action" type="button" onClick={() => navigate("sessions")}>{t("attention.viewLog")}</button>
           </header>
           <AttentionTable sessions={attention} now={now} onOpen={openSession} />
+        </section>
+
+        <section className="overview-card overview-table-card" aria-labelledby="projects-heading">
+          <header className="overview-card-header">
+            <div className="console-section-title">
+              <h2 id="projects-heading">{t("projects.title")}</h2>
+              <HelpTip>{t("projects.help")}</HelpTip>
+            </div>
+            <button className="text-action" type="button" onClick={() => navigate("projects")}>{t("projects.manage")}</button>
+          </header>
+          <ProjectUsageTable rows={usageRows} failed={summaryError !== null || (state.status === "failed" && data === null)} now={now} onOpen={(project) => navigate("projects", { id: project.id })} />
         </section>
       </PageBody>
     </section>
@@ -267,9 +268,10 @@ function fleetDetail(state: FleetState, t: TFunction<"overview">): string {
   return t("fleet.loading");
 }
 
-/** Core and its sandbox nodes as a topology; a node opens on the Nodes page. */
-function FleetCard({ fleetState, core, onManage, onOpen, onOpenCore }: { fleetState: FleetState; core: CoreStatus; onManage: () => void; onOpen: (node: SandboxNode) => void; onOpenCore: () => void }) {
+/** Core and its sandbox nodes as a topology; each opens a popover with the way onward. */
+function FleetCard({ fleetState, core }: { fleetState: FleetState; core: CoreStatus }) {
   const { t } = useTranslation("overview");
+  const { navigate } = useConsoleNavigation();
   const fleet = fleetSnapshot(fleetState);
   const hosts = fleet?.nodes ?? [];
   const hidden = Math.max(0, hosts.length - TOPOLOGY_LIMIT);
@@ -281,7 +283,7 @@ function FleetCard({ fleetState, core, onManage, onOpen, onOpenCore }: { fleetSt
           <HelpTip>{t("fleet.help")}</HelpTip>
         </div>
         {fleetState.status === "ready" ? (
-          <button className="text-action" type="button" onClick={onManage}>{hosts.length ? t("fleet.manageNodes") : t("fleet.addNode")}</button>
+          <button className="text-action" type="button" onClick={() => navigate("nodes")}>{hosts.length ? t("fleet.manageNodes") : t("fleet.addNode")}</button>
         ) : null}
       </header>
       <div className="overview-card-body fleet-body">
@@ -290,10 +292,11 @@ function FleetCard({ fleetState, core, onManage, onOpen, onOpenCore }: { fleetSt
           coreLabel={t(`coreStatus.${core}`)}
           coreTone={coreTone[core]}
           stale={fleetState.status === "ready" && fleetState.error !== null}
-          onOpen={onOpen}
-          onOpenCore={onOpenCore}
+          onOpenNode={(node) => navigate("nodes", { id: node.id })}
+          onOpenSandboxMetrics={() => navigate("sandbox-metrics")}
+          onOpenCoreMetrics={() => navigate("core-metrics")}
         />
-        {hidden ? <button className="text-action fleet-more" type="button" onClick={onManage}>{t("fleet.more", { n: hidden })}</button> : null}
+        {hidden ? <button className="text-action fleet-more" type="button" onClick={() => navigate("nodes")}>{t("fleet.more", { n: hidden })}</button> : null}
         <FleetFooter state={fleetState} empty={fleet ? hosts.length === 0 : false} />
       </div>
     </section>
@@ -340,30 +343,20 @@ function ProjectUsageTable({ rows, failed, now, onOpen }: { rows: ProjectUsageRo
     <div className="overview-table-scroll">
       <table className="data-table overview-projects-table">
         <thead>
-          <tr className="data-table-groups">
-            <th scope="col" rowSpan={2}>{tCommon("project.column")}</th>
-            <th scope="col" rowSpan={2} className="numeric">{t("projects.keys")}</th>
-            <th scope="colgroup" colSpan={5} className="column-group">{t("projects.assets")}</th>
-            <th scope="colgroup" colSpan={4} className="column-group">{t("projects.sessions")}</th>
-            <th scope="col" rowSpan={2} className="numeric column-group-start">{t("projects.tokens")}</th>
-            <th scope="col" rowSpan={2} className="numeric">{t("projects.coverage")}</th>
-            <th scope="col" rowSpan={2} className="numeric">{t("projects.lastActive")}</th>
-          </tr>
           <tr>
-            <th scope="col" className="numeric column-group-start">{t("projects.agents")}</th>
-            <th scope="col" className="numeric">{t("projects.templates")}</th>
-            <th scope="col" className="numeric">{t("projects.skills")}</th>
-            <th scope="col" className="numeric">{t("projects.files")}</th>
-            <th scope="col" className="numeric">{t("projects.vaults")}</th>
-            <th scope="col" className="numeric column-group-start">{t("projects.total")}</th>
+            <th scope="col">{tCommon("project.column")}</th>
+            <th scope="col" className="numeric">{t("projects.keys")}</th>
+            <th scope="col" className="numeric">{t("projects.sessions")}</th>
             <th scope="col" className="numeric">{t("projects.running")}</th>
             <th scope="col" className="numeric">{t("projects.waiting")}</th>
             <th scope="col" className="numeric">{t("projects.failed")}</th>
+            <th scope="col" className="numeric">{t("projects.tokens")}</th>
+            <th scope="col" className="numeric">{t("projects.coverage")}</th>
+            <th scope="col" className="numeric">{t("projects.lastActive")}</th>
           </tr>
         </thead>
         <tbody>
           {rows.map(({ project, summary }) => {
-            const assets = summary?.assets ?? null;
             const coverage = summary ? coverageRatio(summary.coverage) : null;
             return (
               <tr key={project.id} className="clickable-row" onClick={() => onOpen(project)}>
@@ -374,16 +367,11 @@ function ProjectUsageTable({ rows, failed, now, onOpen }: { rows: ProjectUsageRo
                   {project.status === "archived" ? <span className="pill">{t("projects.archived")}</span> : null}
                 </th>
                 <td className="numeric">{count(project.active_key_count)}</td>
-                <td className="numeric column-group-start">{count(assets?.agents)}</td>
-                <td className="numeric">{count(assets?.environment_templates)}</td>
-                <td className="numeric">{count(assets?.skills)}</td>
-                <td className="numeric">{count(assets?.files)}</td>
-                <td className="numeric">{count(assets?.vaults)}</td>
-                <td className="numeric column-group-start">{count(summary?.sessions.total)}</td>
+                <td className="numeric">{count(summary?.sessions.total)}</td>
                 <td className="numeric">{count(summary?.sessions.in_progress)}</td>
                 <td className="numeric">{count(summary?.sessions.requires_action)}</td>
                 <td className={summary?.sessions.failed ? "numeric numeric-danger" : "numeric"}>{count(summary?.sessions.failed)}</td>
-                <td className="numeric column-group-start" title={summary ? usageTitle(summary, t, locale) : undefined}>{summary?.usage ? formatCompact(summary.usage.total_tokens, locale) : MISSING}</td>
+                <td className="numeric" title={summary ? usageTitle(summary, t, locale) : undefined}>{summary?.usage ? formatCompact(summary.usage.total_tokens, locale) : MISSING}</td>
                 <td className="numeric" title={summary && summary.coverage.sessions ? t("projects.coverageDetail", { reported: summary.coverage.reported, total: summary.coverage.sessions }) : undefined}>
                   {formatPercent(coverage, locale)}
                 </td>

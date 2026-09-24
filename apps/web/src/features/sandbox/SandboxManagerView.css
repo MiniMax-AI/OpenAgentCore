@@ -1,7 +1,7 @@
 .sandbox-manager { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; padding: 32px; min-width: 0; min-height: 0; flex: 1; overflow-y: auto; }
 .sandbox-content { width: 100%; max-width: 1200px; margin: 0 auto; gap: 28px; }
 .sandbox-manager .form-stack, .sandbox-manager section { min-width: 0; }
-.sandbox-manager h1 { font-size: 24px; font-weight: 600; margin: 0 0 8px; letter-spacing: -.025em; }
+.sandbox-manager h1 { margin: 0 0 8px; }
 .sandbox-manager h2 { font-size: 15px; font-weight: 600; margin: 0; }
 .sandbox-manager .console-page-body p, .sandbox-add-node p { color: var(--fg-muted); line-height: 1.6; margin: 0; }
 .sandbox-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; flex-wrap: wrap; }
@@ -29,7 +29,6 @@
 .sandbox-maintenance { padding: 12px 16px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
 @media (max-width: 600px) {
   .sandbox-manager { padding: 22px 14px; }
-  .sandbox-manager h1 { font-size: 21px; }
   .sandbox-enrollment { padding: 18px; }
 }
 
@@ -38,7 +37,7 @@
 /* The node manager page uses the shared console header and body rhythm. */
 .sandbox-manager-page { display: flex; padding: 0; overflow: hidden; }
 .sandbox-manager-page > .console-page-body { max-width: none; margin: 0; }
-.sandbox-manager-page .page-header h1 { margin: 0; font-size: 20px; letter-spacing: -0.02em; }
+.sandbox-manager-page .page-header h1 { margin: 0; }
 .sandbox-provider-settings { padding: 16px; background: var(--surface); border: 0; border-radius: var(--frame-radius); box-shadow: var(--card-shadow); gap: 16px; }
 .sandbox-provider-settings h2 { margin: 0 0 8px; }
 .sandbox-provider-settings p, .sandbox-enrollment > p { font-size: 13px; line-height: 1.6; color: var(--fg-muted); }

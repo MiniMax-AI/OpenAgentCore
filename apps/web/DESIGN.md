@@ -368,9 +368,11 @@ The recurring shapes in the body are the KPI strip (auto-fit columns, min 158px;
 three per row below 1180px), chart grids (two equal columns, single below 1180px),
 full-width table cards, and a fact row on detail pages. Overview has its own
 arrangement: four metric tiles, Session activity beside the fleet topology (Core
-in the middle, nodes left and right, solid lines online and dashed offline; a node
-opens its detail on Nodes), then usage by project and the attention table, each
-on its own card with a 16px gap. Nodes itself is a plain list with a detail page.
+in the middle, nodes left and right, solid lines online and dashed offline; Core
+and each node open an anchored popover with a two-column glance and links to
+their pages), then the attention table and usage by project, each on its own
+card with a 16px gap. Popovers are the overlay card (14px radius, overlay shadow,
+16px padding): a 14px title, 12px labels over 13px values, links at a ruled foot. Nodes itself is a plain list with a detail page.
 
 Spacing follows a 4px base: 4, 8, 12, 16, 28 (page gutter and section gap).
 Controls are 28px tall, segmented options 24px, table rows 44px (32px compact),

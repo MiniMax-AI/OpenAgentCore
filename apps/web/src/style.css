@@ -1411,16 +1411,16 @@ html[data-theme="dark"] .brand-mark-dark {
 }
 
 .message-markdown h2 {
-  margin: 32px 0 16px;
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 28px;
+  margin: 24px 0 8px;
+  font-size: 16px;
+  line-height: 24px;
+  letter-spacing: -0.01em;
 }
 
 .message-markdown h3 {
-  margin: 28px 0 8px;
-  font-size: 18px;
-  line-height: 28px;
+  margin: 20px 0 6px;
+  font-size: 15px;
+  line-height: 22px;
 }
 
 .message-markdown h4 {
@@ -1678,12 +1678,12 @@ html[data-theme="dark"] .brand-mark-dark {
 
 .message-markdown h2 code {
   color: inherit;
-  font-size: 18px;
+  font-size: 14.5px;
 }
 
 .message-markdown h3 code {
   color: inherit;
-  font-size: 16px;
+  font-size: 13.5px;
 }
 
 .message-row.user .message-copy {

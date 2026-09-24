@@ -88,6 +88,7 @@ Resource-specific boundaries:
 | Summary | `GET /summary` | Overview (per project), the Agents list (`group_by=agent`), a project's page (per project and `group_by=key`), Agent metrics (to skip idle projects, and usage by creating key since the start of the range), the Projects list (last activity) |
 | Copies | `POST /copies` with `Idempotency-Key` | **Copy to…** on Agents, Environment templates, Skills, Files, Vaults and Credentials |
 | Runtime observations | `GET /runtime-observations` | Sandbox metrics: hosted Runtimes of every project, each labelled with its project |
+| Core metrics (proposed) | `GET /core-metrics?range=` | Core metrics page; the Core popover on Overview. Not served by Core yet: the page shows it as not reported and the popover shows only Core's status. See [Core metrics: backend requirements](core-metrics-requirements.md) |
 | Startup configuration | `GET /startup-configuration` | System: harnesses, default harness, model endpoint presence, managed sandbox, daemon gateway and self-hosted execution |
 
 Summary figures are cumulative per Session and are not billing records. Sessions
