@@ -95,9 +95,6 @@ function AgentsList() {
                   <th scope="col">{t("view.columns.model")}</th>
                   <th scope="col">{t("view.columns.harness")}</th>
                   <th scope="col" className="numeric">{t("view.columns.tools")}</th>
-                  <th scope="col" className="numeric">{t("view.columns.sessions")}</th>
-                  <th scope="col" className="numeric">{t("view.columns.tokens")}</th>
-                  <th scope="col" className="numeric">{t("view.coverage")}</th>
                   <th scope="col" className="numeric">{t("view.columns.lastActive")}</th>
                   <th scope="col"><CreatorHeading /></th>
                   <th scope="col"><span className="visually-hidden">{t("view.columns.actions")}</span></th>
@@ -117,9 +114,6 @@ function AgentsList() {
                       <td><code className="agent-table-model" title={agent.model}>{agent.model}</code></td>
                       <td className={harness ? undefined : "table-muted"}>{harness ? harnessLabel(harness) : t("view.coreDefault")}</td>
                       <td className="numeric">{formatInteger(agent.tools.length, locale)}</td>
-                      <td className="numeric">{summary ? formatInteger(summary.sessions.total, locale) : MISSING}</td>
-                      <td className="numeric">{summary?.usage ? formatCompact(summary.usage.total_tokens, locale) : MISSING}</td>
-                      <td className="numeric">{coverage(summary, locale)}</td>
                       <td className="numeric" title={formatDateTime(summary?.last_active_at, locale)}>{summary?.last_active_at ? formatRelative(summary.last_active_at, now, locale) : MISSING}</td>
                       <td><CreatorCell creator={creators.creatorOf(row.project.id, agent.id)} /></td>
                       <td className="actions-cell" onClick={(event) => event.stopPropagation()}>
