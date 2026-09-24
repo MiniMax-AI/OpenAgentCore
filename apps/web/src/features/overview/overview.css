@@ -355,8 +355,13 @@
   box-shadow: inset 1px 0 var(--line-muted);
 }
 
+/* The project column fits its names; spare width spreads over the figures
+   instead of opening a gap between a project and its numbers. */
+.overview-projects-table thead tr:first-child > th:first-child,
 .overview-projects-table tbody th[scope="row"] {
-  min-width: 150px;
+  width: 1%;
+  min-width: 120px;
+  white-space: nowrap;
 }
 
 .overview-project-state {
