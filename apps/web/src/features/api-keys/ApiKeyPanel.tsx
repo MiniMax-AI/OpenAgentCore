@@ -35,6 +35,24 @@ export function ApiKeyPanel({ onReady }: { onReady?: (ready: boolean) => void })
   </section>;
 }
 
+export function ApiKeyExample() {
+  const { t } = useTranslation("firstRun");
+  return <aside className="api-key-example" aria-label={t("How an API key works")}>
+    <div className="api-key-example-topline"><span className="api-key-example-live" />{t("A request in three beats")}</div>
+    <h2>{t("Create once. Call your API.")}</h2>
+    <p>{t("Your key connects a request from your machine to Agent Core.")}</p>
+    <div className="api-key-example-scene" aria-hidden="true">
+      <div className="api-key-example-terminal"><div className="api-key-example-terminal-top"><span /><span /><span /><code>terminal</code></div>
+        <div className="api-key-example-frame frame-one"><small>01 · {t("Create a key")}</small><code>pc_demo••••••••</code></div>
+        <div className="api-key-example-frame frame-two"><small>02 · {t("Send a request")}</small><code>Authorization: Bearer pc_demo•••</code></div>
+        <div className="api-key-example-frame frame-three"><small>03 · {t("See the result")}</small><code><span>200 OK</span> · {t("Agent created")}</code></div>
+      </div>
+      <div className="api-key-example-progress"><span /><span /><span /></div>
+    </div>
+    <p className="api-key-example-note">{t("The secret appears once when you create it. Save it before closing the message.")}</p>
+  </aside>;
+}
+
 function ManagedApiKeyPanel({ onReady }: { onReady?: (ready: boolean) => void }) {
   const { t } = useTranslation("firstRun");
   const defaultName = t("My API key");
@@ -115,9 +133,8 @@ function ManagedApiKeyPanel({ onReady }: { onReady?: (ready: boolean) => void })
     catch { if (!controller.signal.aborted) setCopyFailed(true); }
   }
   return <section className="api-key-panel" aria-label={t("API keys")}>
-    <header><div className="api-key-heading"><KeyRound size={18} strokeWidth={1.5} /><h3>{t("Create a key for your API requests.")}</h3></div>
-      <p>{t("Use this key when calling Agent API from your own machine or application.")}</p></header>
-    <p className="api-key-caption">{t("Your Web password is for signing in. This key is for API requests.")}</p>
+    <header><div className="api-key-heading"><KeyRound size={18} strokeWidth={1.5} /><h3>{t("Create a key")}</h3></div>
+      <p>{t("Name it so you can recognize it later.")}</p></header>
     {issued ? <div className="api-key-secret" role="status"><strong>{t("Keep this key somewhere safe. It is shown only now.")}</strong>
       <input aria-label={t("Your new API key")} value={issued.key} readOnly spellCheck={false} autoComplete="off" onFocus={(event) => event.target.select()} />
       <div className="api-key-actions"><button type="button" className="button outline" onClick={() => void copy()}>{copied ? <Check size={14} /> : <Copy size={14} />}{t(copied ? "Copied" : "Copy key")}</button>
@@ -128,7 +145,7 @@ function ManagedApiKeyPanel({ onReady }: { onReady?: (ready: boolean) => void })
     {error ? <p className="api-key-error" role="alert">{error}</p> : null}
     {uncertain && keys.some((key) => key.id === uncertain) ? <p className="api-key-error" role="alert">{t("This key was created, but its secret cannot be shown again. Revoke it and create a new key.")}</p> : null}
     {uncertain && fresh && !keys.some((key) => key.id === uncertain) ? <button type="button" className="button outline" onClick={() => { setUncertain(null); setError(null); }}>{t("Retry this creation")}</button> : null}
-    <div className="api-key-list-heading"><span>{t(hasKey ? "API key ready" : "API keys")}</span><button type="button" className="icon-button" aria-label={t("Refresh keys")} disabled={busy || loading} onClick={() => setRevision((current) => current + 1)}><RefreshCw size={14} /></button></div>
+    <div className="api-key-list-heading"><span>{t("Your keys")} <strong>{fresh ? keys.length : ""}</strong></span><button type="button" className="icon-button" aria-label={t("Refresh keys")} disabled={busy || loading} onClick={() => setRevision((current) => current + 1)}><RefreshCw size={14} /></button></div>
     {loading ? <p role="status">{t("Loading API keys…")}</p> : null}
     {!keys.length && fresh ? <p className="api-key-caption">{t("No API keys yet. Create one to get started.")}</p> : null}
     <ul className="api-key-list">{keys.map((key) => <li key={key.id}><div><strong>{key.name}</strong><span><code>{key.prefix}…</code> · {t(key.revoked_at ? "Revoked" : "Active")}</span></div>

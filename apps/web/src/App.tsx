@@ -19,7 +19,7 @@ import type {
 
 import { ConsoleNavigation } from "./features/first-run/ConsoleNavigation";
 import { isLocalProxyBaseUrl } from "./lib/connection";
-import { ApiKeyPanel } from "./features/api-keys/ApiKeyPanel";
+import { ApiKeyExample, ApiKeyPanel } from "./features/api-keys/ApiKeyPanel";
 import { FirstRunHome } from "./features/first-run/FirstRunHome";
 import { ConsoleAccountMenu } from "./features/first-run/ConsoleAccess";
 import { useIntroduction } from "./features/first-run/useIntroduction";
@@ -2463,7 +2463,7 @@ export function App() {
               operations={vaultOperations}
             />
           ) : null}
-          {view === "api-keys" && isLocalProxyBaseUrl(connection.baseUrl) ? <section className="page-section api-keys-page"><header className="page-header"><h1>{t("API keys", { ns: "firstRun" })}</h1></header><ApiKeyPanel /></section> : null}
+          {view === "api-keys" && isLocalProxyBaseUrl(connection.baseUrl) ? <section className="page-section api-keys-page"><header className="api-keys-intro"><span className="api-keys-eyebrow">AGENT CORE / {t("Your access", { ns: "firstRun" })}</span><h1>{t("API keys", { ns: "firstRun" })}</h1><p>{t("Give your machine a secure way to call Agent Core.", { ns: "firstRun" })}</p></header><div className="api-keys-layout"><ApiKeyPanel /><ApiKeyExample /></div></section> : null}
           {view === "sandbox" ? <SandboxManagerView key={`sandbox:${coreGeneration}`} coreBaseUrl={connection.baseUrl} /> : null}
           {view === "system" ? (
             <SystemView

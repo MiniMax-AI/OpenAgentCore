@@ -72,7 +72,7 @@ test("validates administrator setup before sending credentials and keeps only no
   await expect(page.locator(".app-shell")).toHaveCount(0);
   await expect(page.locator(".first-run-home")).toHaveCSS("width", "1440px");
   await expect(page.locator(".first-run-home")).toHaveCSS("height", "1000px");
-  await expect(page.getByRole("button", { name: "Skip introduction", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Go to console", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Copy sign-in details", exact: true }).click();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toContain(new URL(page.url()).origin);
@@ -85,11 +85,11 @@ test("validates administrator setup before sending credentials and keeps only no
 test("remembers the introduction step and dismissal across reloads and sign-in, and allows replay", async ({ page }) => {
   const writes = await mockAccount(page, { mode: "authenticated", username });
   await page.goto("/");
-  await page.getByRole("button", { name: "I've saved it. Continue", exact: true }).click();
+  await page.getByRole("button", { name: "Continue to machines", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Connect your own machine." })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("heading", { name: "Connect your own machine." })).toBeVisible();
-  await page.getByRole("button", { name: "Skip for now", exact: true }).click();
+  await page.getByRole("button", { name: "Continue to the API", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Make your first API request." })).toBeVisible();
   await page.getByRole("button", { name: "Skip introduction", exact: true }).first().click();
   await expect(page.locator(".first-run-home")).toHaveCount(0);
@@ -123,7 +123,7 @@ test("keeps tutorial preferences inside the viewport and restores console naviga
   await page.locator(".first-run-toolbar .appearance-menu-trigger").click();
   await page.getByRole("menuitemradio", { name: "简体中文", exact: true }).click();
   await expect(page.getByRole("heading", { name: "保存你的登录信息。" })).toBeVisible();
-  await page.getByRole("button", { name: "跳过导览", exact: true }).click();
+  await page.getByRole("button", { name: "进入控制台", exact: true }).click();
   await expect(page.locator(".app-sidebar")).toBeVisible();
   await expect(page.locator(".first-run-home")).toHaveCount(0);
 });
@@ -300,7 +300,7 @@ test("requires acknowledgement of a new API key and never recovers its secret fr
     return route.fulfill({ json: { data: metadata ? [metadata] : [] } });
   });
   await page.goto("/");
-  const next = page.getByRole("button", { name: "I've saved it. Continue", exact: true });
+  const next = page.getByRole("button", { name: "Continue to machines", exact: true });
   await expect(page.getByText("No API keys yet. Create one to get started.", { exact: true })).toBeVisible();
   await expect(next).toBeDisabled();
   await expect(page.getByRole("button", { name: /Your first Agent/ })).toBeDisabled();
@@ -340,9 +340,9 @@ test("lets a web-only console use an existing project connection without key man
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "API key management is not enabled", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Create API key", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "I've saved it. Continue", exact: true }).click();
+  await page.getByRole("button", { name: "Continue to machines", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Connect your own machine.", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Skip for now", exact: true }).click();
+  await page.getByRole("button", { name: "Continue to the API", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Make your first API request.", exact: true })).toBeVisible();
   await page.getByLabel("Model ID", { exact: true }).fill("fixture/web-only-model");
   await page.getByLabel("Set a model provider for this Agent", { exact: true }).uncheck();
@@ -371,7 +371,7 @@ test("rechecks key management without sending key requests while disabled", asyn
   enabled = true;
   await page.getByRole("button", { name: "Check again", exact: true }).click();
   await expect(page.getByRole("button", { name: "Create API key", exact: true })).toBeEnabled();
-  await expect(page.getByRole("button", { name: "I've saved it. Continue", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Continue to machines", exact: true })).toBeDisabled();
   expect(keyRequests).toBe(1);
 });
 
@@ -385,4 +385,20 @@ test("keeps the API key management page separate from introduction guidance", as
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("button", { name: "Check again", exact: true })).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("keeps all three introduction steps usable on a narrow screen", async ({ page }) => {
+  await mockAccount(page, { mode: "authenticated", username });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const withinViewport = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+  await expect(page.getByRole("heading", { name: "Keep your sign-in details." })).toBeVisible();
+  expect(await withinViewport()).toBe(true);
+  await page.getByRole("button", { name: "Continue to machines" }).click();
+  await expect(page.getByRole("heading", { name: "Connect your own machine." })).toBeVisible();
+  expect(await withinViewport()).toBe(true);
+  await page.getByRole("button", { name: "Continue to the API" }).click();
+  await expect(page.getByRole("heading", { name: "Make your first API request." })).toBeVisible();
+  expect(await withinViewport()).toBe(true);
+  await expect(page.getByRole("button", { name: "Go to console" })).toBeInViewport();
 });

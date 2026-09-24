@@ -142,3 +142,67 @@
   .first-request-form-row { grid-template-columns: minmax(0, 1fr); }
   .first-agent-card > code { max-width: 100%; margin-left: 0; }
 }
+
+/* A compact, shared frame for all three introduction steps. */
+.first-run-home { background: var(--surface); }
+.first-run-toolbar { min-height: 64px; padding: 0 clamp(20px, 4vw, 64px); background: var(--surface); }
+.first-run-toolbar-brand, .first-run-toolbar-actions { display: flex; align-items: center; gap: 12px; }
+.first-run-toolbar-brand strong { font-size: 14px; font-weight: 650; letter-spacing: -.02em; }
+.first-run-toolbar-brand > span:last-child { padding-left: 12px; border-left: 1px solid var(--line); color: var(--fg-muted); font-size: 12px; }
+.first-run-toolbar-mark { display: grid; place-items: center; width: 29px; height: 29px; border: 1px solid var(--line); border-radius: 8px; color: var(--accent); background: var(--surface-subtle); }
+.first-run-toolbar-actions { gap: 16px; }
+.first-run-toolbar-divider { width: 1px; height: 22px; background: var(--line); }
+.first-run-skip { color: var(--fg); font-size: 12px; font-weight: 550; }
+.first-run-chapters, .first-run-stage-content, .first-run-footer { max-width: 1060px; }
+.first-run-chapters { gap: 0; padding: 26px 24px 18px; border-bottom: 1px solid var(--line); }
+.first-run-chapters button { flex: 1; gap: 9px; min-height: 38px; padding: 4px 14px 4px 0; border: 0; border-radius: 0; background: transparent; font-size: 12px; font-weight: 500; }
+.first-run-chapters button + button { padding-left: 23px; border-left: 1px solid var(--line); }
+.first-run-chapters button.active { color: var(--fg); background: transparent; border-color: var(--line); font-weight: 650; }
+.first-run-chapters button.active::after { width: 100%; height: 2px; left: 0; bottom: -19px; }
+.first-run-chapter-number { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--fg-muted); font: 600 11px/1 var(--font-mono); }
+.first-run-chapters button.active .first-run-chapter-number { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.first-run-chapters button:disabled { opacity: .5; }
+.first-run-stage { padding: 42px 24px 48px; }
+.first-run-stage-content { gap: 26px; }
+.first-run-access { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: clamp(28px, 5vw, 72px); }
+.first-run-story { justify-content: flex-start; padding: 4px 0 0; }
+.first-run-section-number { margin-bottom: 12px; color: var(--accent); font-weight: 650; }
+.first-run-story h2, .first-run-step-heading h2 { max-width: 650px; font-size: clamp(26px, 3vw, 36px); font-weight: 620; line-height: 1.16; }
+.first-run-story p { max-width: 360px; font-size: 14px; line-height: 1.6; }
+.first-run-access-details-wrap { width: 100%; margin: 10px 0 24px; }
+.first-run-access-details { padding: 0; border: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); border-radius: 0; }
+.first-run-access-details > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; align-items: center; padding: 12px 0; }
+.first-run-access-details dt { margin: 0; font-size: 11px; }
+.first-run-access-details dd { font-size: 12px; }
+.first-run-copy-access { margin: 13px 0 0; }
+.first-run-access-scene { display: block; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.first-run-access-scene .api-key-panel { padding: 26px; border: 1px solid var(--line); border-radius: 12px; }
+.first-run-step-heading { align-items: center; padding: 0 0 10px; border-bottom: 1px solid var(--line); }
+.first-run-step-heading p { max-width: 620px; font-size: 14px; line-height: 1.6; }
+.first-run-optional { margin-top: 0; }
+.first-run-machine { max-width: 100%; }
+.first-run-machine-footer { padding: 18px 0 0; border-top: 1px solid var(--line); }
+.first-request { gap: 22px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.first-run-footer { min-height: 52px; padding-block: 8px; }
+@media (max-width: 900px) {
+  .first-run-access, .first-request { grid-template-columns: minmax(0, 1fr); }
+  .first-run-access { gap: 28px; }
+  .first-run-story { max-width: 620px; }
+}
+@media (max-width: 600px) {
+  .first-run-toolbar { min-height: 56px; padding-inline: 16px; }
+  .first-run-toolbar-brand > span:last-child { display: none; }
+  .first-run-toolbar-actions { gap: 9px; }
+  .first-run-toolbar-divider { display: none; }
+  .first-run-chapters { padding: 16px 16px 12px; }
+  .first-run-chapters button { flex-direction: row; align-items: center; gap: 5px; min-height: 34px; padding-right: 5px; font-size: 10px; }
+  .first-run-chapters button + button { padding-left: 8px; }
+  .first-run-chapters button > svg { display: none; }
+  .first-run-chapters button.active::after { bottom: -13px; }
+  .first-run-chapter-number { flex-basis: 21px; width: 21px; height: 21px; font-size: 9px; }
+  .first-run-stage { padding: 24px 16px; }
+  .first-run-story h2, .first-run-step-heading h2 { font-size: 26px; }
+  .first-run-step-heading { align-items: flex-start; }
+  .first-run-access-details > div { grid-template-columns: 95px minmax(0, 1fr); }
+  .first-run-access-scene .api-key-panel { padding: 20px; }
+}

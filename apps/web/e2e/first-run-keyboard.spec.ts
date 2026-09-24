@@ -19,7 +19,7 @@ test("moves focus from disappearing step actions to the new heading and retains 
   const accessHeading = page.getByRole("heading", { name: "Keep your sign-in details.", exact: true });
   await expect(accessHeading).toBeVisible();
   await expect(accessHeading).not.toBeFocused();
-  const continueButton = page.getByRole("button", { name: "I've saved it. Continue", exact: true });
+  const continueButton = page.getByRole("button", { name: "Continue to machines", exact: true });
   await expect(continueButton).toBeEnabled();
   await continueButton.focus();
   await page.keyboard.press("Enter");
@@ -29,7 +29,7 @@ test("moves focus from disappearing step actions to the new heading and retains 
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "Refresh sandbox state", exact: true })).toBeFocused();
 
-  await page.getByRole("button", { name: "Skip for now", exact: true }).focus();
+  await page.getByRole("button", { name: "Continue to the API", exact: true }).focus();
   await page.keyboard.press("Enter");
   const requestHeading = page.getByRole("heading", { name: "Make your first API request.", exact: true });
   await expect(requestHeading).toBeFocused();
