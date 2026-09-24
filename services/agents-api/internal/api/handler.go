@@ -47,6 +47,7 @@ type Handler struct {
 	auth                  *Authenticator
 	projectKeys           ProjectAPIKeyStore
 	writeAudit            WriteAuditStore
+	adminManagement       AdminManagementStore
 	harnesses             map[string]bool
 	modelProviderDefaults ModelProviderDefaults
 	engine                string
@@ -108,7 +109,7 @@ func (h *Handler) routes() *chi.Mux {
 	})
 	h.registerSandboxManagerRoutes(router)
 	h.registerProjectAPIKeyRoutes(router)
-	h.registerWriteAuditRoutes(router)
+	h.registerAdminResourceRoutes(router)
 	h.registerEnvironmentExecutorRoutes(router)
 	router.Route("/v1", func(r chi.Router) {
 		r.Use(h.authenticate)
