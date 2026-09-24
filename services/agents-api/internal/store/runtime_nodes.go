@@ -117,9 +117,6 @@ func (s *Store) EnrollRuntimeNode(ctx context.Context, token string, input Runti
 	}
 	var result RuntimeNodeIdentity
 	err = s.runtimeManagerTransaction(ctx, func(q *sqlc.Queries, d sqlc.RuntimeDeployment) error {
-		if d.Mode != "nodes" || d.Maintenance || input.Provider != d.ProviderKind {
-			return ErrInvalidInput
-		}
 		receipt, err := q.GetRuntimeEnrollment(ctx, runtimeTokenDigest(token))
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrRuntimeNodeCredential
@@ -129,6 +126,9 @@ func (s *Store) EnrollRuntimeNode(ctx context.Context, token string, input Runti
 		}
 		if receipt.ConsumedAt.Valid || !receipt.ExpiresAt.Time.After(time.Now()) || receipt.InstallationID != d.InstallationID {
 			return ErrRuntimeNodeCredential
+		}
+		if d.Mode != "nodes" || d.Maintenance || input.Provider != d.ProviderKind {
+			return ErrInvalidInput
 		}
 		if _, err := q.GetRuntimeNode(ctx, id); err == nil {
 			return ErrIdempotencyConflict

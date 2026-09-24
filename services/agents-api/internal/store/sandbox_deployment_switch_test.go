@@ -134,9 +134,29 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 	if _, err := w.SetSandboxMaintenance(t.Context(), id, SandboxMaintenanceRequest{Maintenance: true, ExpectedGeneration: 1}); err != nil {
 		t.Fatal(err)
 	}
+	// Maintenance rejects a valid enrollment without consuming it. Authentication
+	// still precedes deployment details for invalid or retired credentials.
+	spareNode := node
+	spareNode.NodeID = uuid.NewString()
+	if _, err := s.EnrollRuntimeNode(t.Context(), unused, spareNode); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("maintenance accepted enrollment", err)
+	}
+	var consumed bool
+	if err := pool.QueryRow(t.Context(), "SELECT consumed_at IS NOT NULL FROM runtime_node_enrollments WHERE token_sha256=$1", runtimeTokenDigest(unused)).Scan(&consumed); err != nil || consumed {
+		t.Fatal("maintenance consumed enrollment", err)
+	}
+	spareNode.Provider = "microsandbox"
+	if _, err := s.EnrollRuntimeNode(t.Context(), strings.Repeat("invalid", 8), spareNode); !errors.Is(err, ErrRuntimeNodeCredential) {
+		t.Fatal("invalid token disclosed deployment validation", err)
+	}
+	spareNode.Provider = "docker"
 	input := e2bSelection()
 	if _, err := w.UpdateSandboxDeployment(t.Context(), id, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: 1}); err != nil {
 		t.Fatal(err)
+	}
+
+	if _, err := s.EnrollRuntimeNode(t.Context(), unused, spareNode); !errors.Is(err, ErrRuntimeNodeCredential) {
+		t.Fatal("retired token did not reject before cloud deployment validation", err)
 	}
 	if _, err := s.AuthenticateRuntimeNode(t.Context(), node.NodeID, node.Credential); !errors.Is(err, ErrRuntimeNodeCredential) {
 		t.Fatal("old node credential survived", err)
