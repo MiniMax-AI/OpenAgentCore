@@ -227,7 +227,7 @@ def main():
                 a_client.beta.agents.update(agent.id, name=name)
                 a_client.beta.agents.environments.templates.update(template.id, name=name)
                 request("POST", f"/v1/vaults/{vault.id}/credentials/{static.id}", token=key["key"],
-                        json={"auth": {"type": "static_bearer", "mcp_server_url": "https://copy.example/mcp", "token": private}})
+                        json={"auth": {"type": "static_bearer", "token": private}})
             for kind, resource, creator in [("agent", agent.id, source), ("skill", skill.id, source),
                     ("file", file.id, source), ("environment_template", template.id, peer),
                     ("vault", vault.id, source), ("credential", static.id, source)]:
