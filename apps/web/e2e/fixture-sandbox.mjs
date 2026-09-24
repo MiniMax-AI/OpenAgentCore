@@ -10,7 +10,7 @@ let provider = "docker";
 let diagnostic = "";
 let coreUrl = "";
 export function resetSandboxFixture() {
-  nodes = [node("node-local", "Core server"), node("node-offline", "Offline host", false)]; calls = []; provider = "docker"; diagnostic = ""; coreUrl = "";
+  nodes = [node("node-local", "Core server"), node("node-offline", "Offline host", false)]; calls = []; provider = "docker"; diagnostic = ""; coreUrl = "https://core.example";
 }
 resetSandboxFixture();
 export function handleSandboxFixture(request, response, url, sendJson, sendError) {
