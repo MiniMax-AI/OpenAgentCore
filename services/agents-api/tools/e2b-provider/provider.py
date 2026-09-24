@@ -51,13 +51,18 @@ class Provider:
     def info(self, cloud=None, absent=False):
         record = self.receipt.data or {}
         ids = record.get('ids', [])
-        absent = absent or record.get('status') == 'rejected' and record.get('settled') and not ids
+        absent = absent or self.rejected_absence()
         value = dict(self.reference, ProviderID=ids[0] if len(ids) == 1 else '', State='absent' if absent else 'unknown',
                      BootstrapComplete=False, CreateSettled=record.get('settled', False))
         if cloud is not None:
             value.update(ProviderID=cloud.sandbox_id, State=cloud.state,
                          BootstrapComplete=record.get('bootstrap_complete', False))
         return value
+
+    def rejected_absence(self):
+        record = self.receipt.data or {}
+        return (record.get('status') == 'rejected' and record.get('settled') is True
+                and record.get('ids') == [])
 
     def owns(self, cloud):
         if any(cloud.metadata.get(key) != value for key, value in self.metadata.items()):
@@ -93,6 +98,8 @@ class Provider:
         return restore(material, self.options())
 
     def inspect(self):
+        if self.rejected_absence():
+            return None
         found = self.discover()
         if not found:
             if (self.receipt.data or {}).get('settled'):
@@ -155,6 +162,8 @@ class Provider:
         return self.owns(Sandbox.get_info(cloud.sandbox_id, **self.options()))
 
     def kill(self):
+        if self.rejected_absence():
+            return
         found = self.discover()
         # The allocation flock excludes any still-running local Create helper.
         # A matching actual VM proves the original request reached allocation.

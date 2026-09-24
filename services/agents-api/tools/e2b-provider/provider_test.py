@@ -14,7 +14,7 @@ from e2b.exceptions import AuthenticationException, SandboxNotFoundException
 
 from provider import Provider
 from sdk import restore, run
-from state import Failure
+from state import Failure, Receipt
 
 
 class ProviderTest(unittest.TestCase):
@@ -90,11 +90,51 @@ class ProviderTest(unittest.TestCase):
     def test_explicit_rejected_create_has_successful_absence_proof(self):
         self.api.create.side_effect = AuthenticationException('secret diagnostic')
         self.assertTrue(self.call('create')['Info']['CreateSettled'])
-        missing = self.call('inspect')
-        self.assertEqual(missing['ErrorCode'], '')
-        self.assertEqual(missing['Info']['State'], 'absent')
-        self.assertTrue(missing['Info']['CreateSettled'])
+        rejection = self.record()
+        self.api.reset_mock()
+        self.api.list.side_effect = AuthenticationException('revoked key')
+        self.api.get_info.side_effect = AuthenticationException('revoked key')
+        for operation in ('inspect', 'kill', 'inspect', 'kill'):
+            with self.subTest(operation=operation):
+                missing = self.call(operation)
+                self.assertEqual(missing['ErrorCode'], '')
+                self.assertEqual(missing['Info']['State'], 'absent')
+                self.assertEqual(missing['Info']['ProviderID'], '')
+                self.assertTrue(missing['Info']['CreateSettled'])
+                self.assertEqual(self.record(), rejection)
+        self.assertEqual(self.api.mock_calls, [])
+
+    def test_other_empty_receipts_still_require_cloud_discovery(self):
+        for status, settled in [('create_pending', False), ('rejected', False), ('killed', True)]:
+            with self.subTest(status=status, settled=settled):
+                with Receipt(self.request, lambda: 30) as receipt:
+                    receipt.save(status=status, settled=settled, ids=[])
+                self.api.reset_mock()
+                self.api.list.side_effect = AuthenticationException('revoked key')
+                for operation in ('inspect', 'kill'):
+                    self.assertEqual(self.call(operation)['ErrorCode'], 'unconfirmed')
+                self.assertEqual(self.api.list.call_count, 2)
+                self.api.kill.assert_not_called()
+
+    def test_rejected_receipt_with_ids_still_verifies_ownership(self):
+        with Receipt(self.request, lambda: 30) as receipt:
+            receipt.save(status='rejected', settled=True, ids=[self.cloud.sandbox_id])
+        self.cloud.metadata = {}
+        for operation in ('inspect', 'kill'):
+            self.assertEqual(self.call(operation)['ErrorCode'], 'ownership')
+        self.assertEqual(self.api.get_info.call_count, 2)
+        self.api.kill.assert_not_called()
+
+    def test_killed_known_vm_still_requires_cloud_absence_check(self):
+        self.call('create')
+        self.api.get_info.side_effect = SandboxNotFoundException()
         self.assertEqual(self.call('kill')['ErrorCode'], '')
+        self.api.reset_mock()
+        self.api.get_info.side_effect = AuthenticationException('revoked key')
+        for operation in ('inspect', 'kill'):
+            self.assertEqual(self.call(operation)['ErrorCode'], 'unconfirmed')
+        self.assertEqual(self.api.get_info.call_count, 2)
+        self.api.kill.assert_not_called()
 
     def test_unknown_bootstrap_only_settles_after_exact_kill(self):
         self.cloud.files.write.side_effect = TimeoutError()

@@ -29,6 +29,10 @@ every matching candidate and confirms exact-ID absence before writing a tombston
 independent of `BootstrapComplete`, which acknowledges the protected initializer's
 last step, not enrollment or native readiness. Explicitly settled absence returns
 successful Info with `State=absent`; ordinary missing compute has no such proof.
+An explicitly rejected Create with a settled receipt and no provider IDs proves
+absence without another cloud request. GetInfo and Kill retain that rejection
+receipt, so repeated recovery remains possible even when the API key is invalid.
+Other receipts still require cloud discovery and ownership checks.
 Unconfirmed initialization commands require reclaiming the whole allocation.
 
 ## Build
