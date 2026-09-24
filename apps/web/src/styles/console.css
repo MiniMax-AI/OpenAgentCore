@@ -700,14 +700,6 @@ html[data-theme="dark"] {
   color: var(--fg-muted);
 }
 
-.owner-flag {
-  padding: 0 5px;
-  color: var(--fg-muted);
-  font-size: 11px;
-  line-height: 16px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-}
 
 .owner-missing {
   color: var(--fg-muted);

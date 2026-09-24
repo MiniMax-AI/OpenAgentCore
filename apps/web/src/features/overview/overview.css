@@ -363,12 +363,6 @@
   white-space: nowrap;
 }
 
-.overview-project-state {
-  margin-left: 8px;
-  color: var(--fg-muted);
-  font-size: 12px;
-  font-weight: 400;
-}
 
 .overview-projects-table .table-link {
   display: inline-flex;

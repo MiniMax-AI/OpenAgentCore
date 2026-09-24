@@ -1,0 +1,821 @@
+/*
+ * The console's component system, in Beautiful UI's vocabulary
+ * (src/app/beautifui/foundation.css): cool canvas, white cards drawn by a
+ * hairline ring and a smooth shadow, an ink ramp for text, pill buttons with an
+ * ink primary, filled fields with a hairline ring, dark tooltips, and Parsar
+ * indigo as the only accent. Loaded after the legacy stylesheets, so every
+ * shared atom is defined here once; feature stylesheets only arrange them.
+ */
+
+/* Brand ----------------------------------------------------------------- */
+
+/* Parsar indigo replaces Beautiful UI's blue: selection, links, focus and data. */
+:root {
+  --accent: #4f46e5;
+  --accent-ink: #4338ca;
+  --accent-tint: color-mix(in srgb, #4f46e5 9%, var(--surface));
+  --accent-fg: #ffffff;
+  --control-height: 30px;
+  --radius-chip: 6px;
+  --radius-control: 8px;
+  --radius-card: 10px;
+  --radius-window: 14px;
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+html[data-theme="dark"] {
+  --accent: #8b90f6;
+  --accent-ink: #a5a9f8;
+  --accent-tint: rgb(139 144 246 / 16%);
+  --accent-fg: #14142b;
+}
+
+/* Browser surfaces ------------------------------------------------------ */
+
+html {
+  caret-color: var(--accent);
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+body {
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  font-feature-settings: "cv11", "ss01";
+}
+
+::selection {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--font-mono);
+}
+
+/* Shell ----------------------------------------------------------------- */
+
+.app-main,
+.page-section {
+  background: var(--canvas);
+}
+
+.app-sidebar {
+  padding: 10px 8px;
+  color: var(--ink-2);
+  background: var(--page);
+  border-right: 1px solid var(--line);
+}
+
+.brand-lockup {
+  min-height: 36px;
+  padding: 0 8px;
+}
+
+.brand-name {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.brand-product,
+.brand-lockup .brand-product {
+  color: var(--ink-3);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.console-nav .nav-label {
+  padding: 14px 8px 6px;
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.main-nav button {
+  height: 32px;
+  margin: 0 0 1px;
+  padding: 0 8px;
+  gap: 8px;
+  color: var(--ink-2);
+  border-radius: var(--radius-control);
+  transition:
+    color 150ms var(--ease-out-strong),
+    background-color 150ms var(--ease-out-strong),
+    transform 150ms var(--ease-out-strong);
+}
+
+.main-nav button span {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.main-nav button svg {
+  color: var(--ink-3);
+  transition: color 150ms var(--ease-out-strong);
+}
+
+.main-nav button:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.main-nav button:active {
+  transform: scale(0.98);
+}
+
+.main-nav button.active {
+  color: var(--ink);
+  font-weight: 500;
+  background: var(--hover-2);
+}
+
+.main-nav button.active svg,
+.main-nav button:hover svg {
+  color: var(--ink);
+}
+
+.main-nav button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.console-nav .nav-group:last-child {
+  border-top-color: var(--line);
+}
+
+.sidebar-footer {
+  border-top-color: var(--line);
+}
+
+/* Page frame ------------------------------------------------------------ */
+
+.console-page > .page-header,
+.page-header {
+  min-height: 60px;
+  flex-basis: auto;
+  gap: 12px;
+  padding: 12px var(--page-gutter);
+  background: var(--canvas);
+  border-bottom: 0;
+}
+
+.page-header h1,
+.page-header .console-page-heading h1 {
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.02em;
+}
+
+.console-page-body {
+  gap: 24px;
+  padding: 8px var(--page-gutter) 48px;
+}
+
+/* A list toolbar belongs to the table under it: 12px apart, not a section gap. */
+.console-page-body > .list-toolbar {
+  margin-bottom: -12px;
+}
+
+.list-toolbar-summary {
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.console-section {
+  gap: 10px;
+}
+
+.console-section-header h2 {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: -0.01em;
+}
+
+.heading-count {
+  min-width: 20px;
+  padding: 0 6px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 18px;
+  background: var(--field);
+  border-radius: 999px;
+  box-shadow: var(--shadow-hairline);
+}
+
+/* Buttons --------------------------------------------------------------- */
+
+/* Pills: ink primary, ringed surface secondary, quiet ghost, red danger. */
+.button {
+  height: var(--control-height);
+  padding: 0 13px;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  background: var(--surface);
+  border: 0;
+  border-radius: 999px;
+  box-shadow: var(--shadow-btn);
+  transition:
+    transform 150ms var(--ease-out-strong),
+    background-color 150ms var(--ease-out-strong),
+    opacity 150ms var(--ease-out-strong),
+    color 150ms var(--ease-out-strong);
+}
+
+.button:hover:not(:disabled),
+.button.outline:hover:not(:disabled) {
+  background: var(--inset);
+}
+
+.button:active:not(:disabled),
+.icon-button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.button:disabled,
+.icon-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.button.outline {
+  background: var(--surface);
+  border: 0;
+  box-shadow: var(--shadow-btn);
+}
+
+.button.primary {
+  color: var(--canvas);
+  background: var(--ink);
+  border: 0;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 14%), var(--shadow-xs);
+}
+
+.button.primary:hover:not(:disabled) {
+  background: var(--ink);
+  opacity: 0.88;
+}
+
+.button.secondary {
+  background: var(--hover-2);
+  box-shadow: none;
+}
+
+.button.secondary:hover:not(:disabled) {
+  background: var(--line-strong);
+}
+
+.button.ghost {
+  color: var(--ink-2);
+  background: transparent;
+  box-shadow: none;
+}
+
+.button.ghost:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.button.danger {
+  color: #fff;
+  background: var(--red);
+  border: 0;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 14%), var(--shadow-xs);
+}
+
+.button.danger:hover:not(:disabled) {
+  background: var(--red);
+  opacity: 0.88;
+}
+
+.button.outline.danger {
+  color: var(--red);
+  background: var(--surface);
+  box-shadow: var(--shadow-btn);
+}
+
+.button svg {
+  flex: 0 0 auto;
+}
+
+.icon-button {
+  width: var(--control-height);
+  height: var(--control-height);
+  flex: 0 0 var(--control-height);
+  color: var(--ink-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+  box-shadow: none;
+}
+
+.icon-button:hover:not(:disabled),
+.icon-button.ghost:hover:not(:disabled),
+.modal-header .icon-button:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--hover-2);
+}
+
+.icon-button.outline {
+  background: var(--surface);
+  border: 0;
+  box-shadow: var(--shadow-btn);
+}
+
+.refresh-button {
+  width: var(--control-height);
+  height: var(--control-height);
+  flex-basis: var(--control-height);
+  color: var(--ink-2);
+  border-radius: var(--radius-control);
+}
+
+.refresh-button:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--hover-2);
+}
+
+.button:focus-visible,
+.icon-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: transparent;
+  box-shadow: var(--shadow-btn);
+}
+
+.button.primary:focus-visible,
+.button.danger:focus-visible,
+.icon-button:focus-visible {
+  box-shadow: none;
+}
+
+/* Quiet row and card actions: ink-2 text that darkens; destructive ones turn red. */
+.text-action {
+  height: 24px;
+  padding: 0 6px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  border-radius: var(--radius-chip);
+  transition: color 120ms var(--ease-out-strong), background-color 120ms var(--ease-out-strong);
+}
+
+.text-action:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.text-action.danger:hover:not(:disabled) {
+  color: var(--red);
+  background: var(--red-tint);
+}
+
+.text-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Fields ---------------------------------------------------------------- */
+
+/* Filled fields with a hairline ring; focus adds an indigo ring. */
+.field input,
+.field textarea,
+.field select,
+.select-control select,
+.search-control {
+  min-height: var(--control-height);
+  color: var(--ink);
+  font-size: 13px;
+  background-color: var(--field);
+  border: 0;
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-hairline);
+  transition: box-shadow 120ms var(--ease-out-strong), background-color 120ms var(--ease-out-strong);
+}
+
+.field input,
+.field select {
+  height: var(--control-height);
+  padding: 0 10px;
+}
+
+.field textarea {
+  padding: 8px 10px;
+}
+
+.field input::placeholder,
+.field textarea::placeholder,
+.search-control input::placeholder {
+  color: var(--ink-3);
+}
+
+.field input:hover,
+.field textarea:hover,
+.field select:hover,
+.select-control select:hover,
+.search-control:hover {
+  background-color: var(--hover-2);
+}
+
+.field input:focus,
+.field textarea:focus,
+.field select:focus,
+.select-control select:focus-visible,
+.search-control:focus-within {
+  outline: none;
+  background-color: var(--surface);
+  border-color: transparent;
+  box-shadow: 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-tint);
+}
+
+.field > span,
+.field > .field-label {
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.select-control select {
+  height: var(--control-height);
+  padding: 0 30px 0 10px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='m1 1 4 4 4-4' stroke='%239096a2' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+}
+
+.search-control {
+  height: var(--control-height);
+  align-items: center;
+}
+
+.search-control input {
+  color: var(--ink);
+  font-size: 13px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.search-control svg {
+  color: var(--ink-3);
+}
+
+/* Filter pills (Beautiful UI's filter chips): the active one is a ringed surface. */
+.segmented {
+  padding: 2px;
+  gap: 2px;
+  background: var(--hover-2);
+  border-radius: 999px;
+}
+
+.segmented button {
+  height: 26px;
+  padding: 0 11px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  border-radius: 999px;
+  transition:
+    color 150ms var(--ease-out-strong),
+    background-color 150ms var(--ease-out-strong),
+    box-shadow 150ms var(--ease-out-strong);
+}
+
+.segmented button:hover {
+  color: var(--ink);
+}
+
+.segmented button[aria-pressed="true"],
+.segmented button[aria-checked="true"],
+.segmented button.active {
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: var(--shadow-btn);
+}
+
+.segmented-count {
+  margin-left: 6px;
+  padding: 0 4px;
+  color: var(--ink-3);
+  font-size: 11px;
+  line-height: 16px;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.segmented button[aria-checked="true"] .segmented-count,
+.segmented button[aria-pressed="true"] .segmented-count {
+  color: var(--ink-2);
+  background: var(--field);
+}
+
+/* Cards ----------------------------------------------------------------- */
+
+.kpi-strip,
+.table-frame,
+.chart-grid,
+.overview-card,
+.console-empty {
+  background: var(--surface);
+  border: 0;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.kpi {
+  gap: 4px;
+  padding: 14px 16px 15px;
+  box-shadow: inset -1px 0 var(--grid-line), inset 0 -1px var(--grid-line);
+}
+
+.kpi dt {
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.kpi dd {
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.02em;
+}
+
+/* Tables ---------------------------------------------------------------- */
+
+.table-frame {
+  overflow: auto;
+}
+
+.data-table {
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.data-table thead th {
+  height: 36px;
+  padding: 0 12px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.data-table tbody th,
+.data-table tbody td {
+  color: var(--ink);
+  border-bottom: 1px solid var(--grid-line);
+}
+
+.data-table tbody tr {
+  transition: background-color 100ms linear;
+}
+
+.data-table tbody tr:hover {
+  background: var(--hover);
+}
+
+.data-table code,
+.console-section-header code {
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
+.table-muted {
+  color: var(--ink-3);
+}
+
+.name-cell-link,
+.table-link {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.name-cell-link:hover,
+.table-link:hover strong {
+  color: var(--accent-ink);
+}
+
+/* Status ---------------------------------------------------------------- */
+
+.status-dot {
+  gap: 6px;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.status-dot-mark {
+  width: 6px;
+  height: 6px;
+  flex-basis: 6px;
+}
+
+.status-dot-ok .status-dot-mark { background: var(--green); }
+.status-dot-warning .status-dot-mark { background: var(--orange); }
+.status-dot-danger .status-dot-mark { background: var(--red); }
+.status-dot-neutral .status-dot-mark { background: var(--ink-3); }
+
+.kpi-ok .kpi-tone { background: var(--green); }
+.kpi-warning .kpi-tone { background: var(--orange); }
+.kpi-danger .kpi-tone { background: var(--red); }
+
+/* Value pills (Beautiful UI's ValuePill): a quiet badge beside a value. */
+.pill {
+  display: inline-flex;
+  height: 20px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  background: var(--field);
+  border-radius: 999px;
+  box-shadow: var(--shadow-hairline);
+}
+
+.pill-green { color: var(--green); background: var(--green-tint); box-shadow: 0 0 0 1px color-mix(in oklch, var(--green) 28%, transparent); }
+.pill-orange { color: var(--orange); background: var(--orange-tint); box-shadow: 0 0 0 1px color-mix(in oklch, var(--orange) 28%, transparent); }
+.pill-red { color: var(--red); background: var(--red-tint); box-shadow: 0 0 0 1px color-mix(in oklch, var(--red) 28%, transparent); }
+.pill-accent { color: var(--accent-ink); background: var(--accent-tint); box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent) 28%, transparent); }
+
+.meter {
+  height: 5px;
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px var(--grid-line);
+}
+
+/* Overlays -------------------------------------------------------------- */
+
+/* Help tips and chart tooltips read as one dark tooltip. */
+.help-tip {
+  color: var(--ink-3);
+}
+
+.help-tip:hover,
+.help-tip[aria-expanded="true"] {
+  color: var(--ink);
+  background: var(--hover-2);
+}
+
+.help-tip-popover,
+.chart-tooltip {
+  color: var(--tooltip-fg);
+  font-size: 12px;
+  line-height: 18px;
+  background: var(--tooltip-bg);
+  border: 1px solid var(--tooltip-border);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-overlay);
+}
+
+.chart-tooltip-time,
+.chart-tooltip-row span {
+  color: var(--tooltip-muted);
+}
+
+.chart-tooltip-row strong {
+  color: var(--tooltip-fg);
+}
+
+.modal-backdrop {
+  background: var(--overlay);
+}
+
+.modal-card {
+  background: var(--surface);
+  border: 0;
+  border-radius: var(--radius-window);
+  box-shadow: var(--shadow-overlay);
+}
+
+.modal-header {
+  min-height: 52px;
+  padding: 0 12px 0 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-header h2 {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.modal-body {
+  padding: 18px;
+}
+
+.modal-footer {
+  min-height: 56px;
+  padding: 0 14px;
+  background: var(--inset);
+  border-top: 1px solid var(--line);
+}
+
+/* Empty states: a hairline icon tile, a title and one line. */
+.console-empty {
+  gap: 4px;
+  padding: 36px 24px;
+  color: var(--ink-3);
+}
+
+.console-empty > svg {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 6px;
+  padding: 7px;
+  color: var(--ink-3);
+  background: var(--inset);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-hairline);
+}
+
+.console-empty-title {
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.console-empty-description {
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+/* Notices keep to one quiet line inside the page rhythm. */
+.coverage-note {
+  color: var(--ink-2);
+  background: var(--inset);
+  border: 0;
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-hairline);
+}
+
+.coverage-note-error {
+  color: var(--red);
+  background: var(--red-tint);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--red) 28%, transparent);
+}
+
+/* Charts ---------------------------------------------------------------- */
+
+.chart-gridline line {
+  stroke: var(--grid-line);
+}
+
+.chart-gridline text,
+.chart-axis-label {
+  fill: var(--ink-3);
+}
+
+/* Values in a table read at ink-2; IDs under a name stay quieter at ink-3. */
+.data-table td > code {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.owner-name,
+.space-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.owner-revoked,
+.space-disabled {
+  color: var(--ink-3);
+}

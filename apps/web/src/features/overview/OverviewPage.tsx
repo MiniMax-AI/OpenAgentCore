@@ -376,7 +376,7 @@ function ProjectUsageTable({ rows, failed, now, onOpen }: { rows: ProjectUsageRo
                   <button className="table-link" type="button" onClick={(event) => { event.stopPropagation(); onOpen(project); }} aria-label={t("projects.open", { name: project.name })}>
                     <strong><ProjectName project={project} /></strong>
                   </button>
-                  {project.status === "archived" ? <span className="overview-project-state">{t("projects.archived")}</span> : null}
+                  {project.status === "archived" ? <span className="pill">{t("projects.archived")}</span> : null}
                 </th>
                 <td className="numeric">{count(project.active_key_count)}</td>
                 <td className="numeric column-group-start">{count(assets?.agents)}</td>

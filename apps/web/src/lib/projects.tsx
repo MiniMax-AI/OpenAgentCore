@@ -288,7 +288,7 @@ export function CreatorCell({ creator }: { creator: Creator | undefined }) {
   return (
     <span className={key.revoked_at ? "owner-name owner-revoked" : "owner-name"} title={key.prefix ? `${key.prefix}…` : undefined}>
       {label}
-      {key.revoked_at ? <span className="owner-flag">{t("creator.revoked")}</span> : null}
+      {key.revoked_at ? <span className="pill">{t("creator.revoked")}</span> : null}
     </span>
   );
 }

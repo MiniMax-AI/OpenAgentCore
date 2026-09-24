@@ -2,12 +2,14 @@
  * The console's single stylesheet entry, in cascade order:
  * 1. Tailwind's theme variables (no preflight: the console keeps its base rules);
  * 2. Inter and Beautiful UI's foundation — the design tokens every surface uses;
- * 3. the console's own base and grammar, whose variables alias those tokens;
- * 4. Tailwind utilities last, so a utility on an element wins over legacy rules.
+ * 3. the console's legacy base and grammar, whose variables alias those tokens;
+ * 4. system.css, the component system in Beautiful UI's vocabulary;
+ * 5. Tailwind utilities last, so a utility on an element wins over legacy rules.
  */
 @import "tailwindcss/theme.css" layer(theme);
 @import "@fontsource-variable/inter";
 @import "../app/beautifui/foundation.css";
 @import "../style.css";
 @import "./console.css";
+@import "./system.css";
 @import "tailwindcss/utilities.css";

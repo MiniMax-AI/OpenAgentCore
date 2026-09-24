@@ -28,12 +28,6 @@
 }
 
 /* A quiet state beside a name (revoked key), on the same line. */
-.metrics-key-state {
-  margin-left: 8px;
-  color: var(--fg-muted);
-  font-size: 12px;
-  font-weight: 400;
-}
 
 .metrics-page th[scope="row"] .table-primary {
   display: inline;

@@ -440,7 +440,7 @@ function KeyUsageTableRow({ row, showProject, project, now, locale }: { row: Pro
     <tr>
       <th scope="row">
         <span className={key ? "table-primary" : "table-primary table-muted"} title={key?.prefix ? `${key.prefix}…` : t("keys.unknownHelp")}>{keyLabel(key, t)}</span>
-        {key?.revoked_at ? <span className="metrics-key-state">{t("keys.revoked")}</span> : null}
+        {key?.revoked_at ? <span className="pill">{t("keys.revoked")}</span> : null}
       </th>
       {showProject ? <td><ProjectName project={project} /></td> : null}
       <td className="numeric">{formatInteger(row.sessions.total, locale)}</td>
