@@ -18,7 +18,6 @@ type managedNodes struct {
 	runtime       *execution.RuntimeProvider
 	hub           *node.Hub
 	admin         *api.DeploymentAuthenticator
-	local         *node.AgentConfig
 	closeProvider func()
 }
 
@@ -86,6 +85,13 @@ func configureManagedNodes(s *store.Store, owner func(context.Context) error) (*
 	result.runtime = execution.NewDeferredRuntimeProvider(setupID, result.setup.load, result.setup.prepare)
 	success = true
 	return result, nil
+}
+
+func (m *managedNodes) close() {
+	if m != nil {
+		m.hub.Close()
+		m.closeProvider()
+	}
 }
 
 func deploymentAdminAuthenticator() (*api.DeploymentAuthenticator, error) {

@@ -30,7 +30,7 @@ func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer m.close()
-	if m.setup == nil || m.admin == nil || m.hub == nil || m.runtime == nil || m.local != nil || m.runtime.Provider != nil {
+	if m.setup == nil || m.admin == nil || m.hub == nil || m.runtime == nil || m.runtime.Provider != nil {
 		t.Fatal("zero-node setup unexpectedly instantiated local compute or omitted management")
 	}
 	t.Setenv("AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE", "")
@@ -142,5 +142,12 @@ func TestManagedSetupRejectedCandidateRetainsSelection(t *testing.T) {
 		E2B: &store.SandboxE2BConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}})
 	if !errors.Is(err, execution.ErrExecutionUnavailable) || s.selected.Load() != previous {
 		t.Fatal("rejected candidate lost the previous selection", err)
+	}
+}
+
+func TestCoreRejectsFileManagedSandboxConfiguration(t *testing.T) {
+	t.Setenv("AGENTS_API_MANAGED_RUNTIMES_FILE", "/retained/config.json")
+	if _, err := configureManagedNodes(nil, nil); err == nil {
+		t.Fatal("accepted a second configuration source")
 	}
 }

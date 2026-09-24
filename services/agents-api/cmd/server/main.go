@@ -40,7 +40,6 @@ import (
 	historystoreresolver "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimehistory/storeresolver"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
 	observationstoreresolver "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs/storeresolver"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/node"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -272,26 +271,8 @@ func run() error {
 	server := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	done := make(chan error, 1)
 	go func() { done <- server.ListenAndServe() }()
-	var localDone chan error
-	if managedNodes != nil && managedNodes.local != nil {
-		localDone = make(chan error, 1)
-		go func() { localDone <- node.Run(ctx, *managedNodes.local) }()
-		defer func() {
-			stop()
-			if localDone != nil {
-				<-localDone
-			}
-		}()
-	}
 	select {
 	case err := <-done:
-		return err
-	case err := <-localDone:
-		localDone = nil
-		stop()
-		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		_ = server.Shutdown(shutdown)
 		return err
 	case err := <-workerDone:
 		workerDone = nil

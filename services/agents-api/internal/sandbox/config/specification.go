@@ -5,6 +5,9 @@ import "errors"
 // Local paths and reservation capacity belong to the node. Execution resources
 // and binaries must match the immutable deployment selection it enrolled with.
 func validateSpecification(c Config) error {
+	if c.Provider != "docker" && c.Provider != "microsandbox" {
+		return errors.New("nodes support Docker or microsandbox; E2B is managed by Core")
+	}
 	if c.Generation == 0 {
 		return errors.New("node requires a deployment generation; obtain configuration from Core")
 	}
