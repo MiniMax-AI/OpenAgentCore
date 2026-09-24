@@ -11,6 +11,7 @@ import { formatBytes } from "../../lib/format";
 import { HelpTip } from "../../components/console-ui";
 import { useTranslation } from "react-i18next";
 import uPlot from "uplot";
+import { axisLabelWidth } from "../../components/charts/TimeSeriesChart";
 import "uplot/dist/uPlot.min.css";
 
 import { formatDashboardTokens } from "./dashboard-model";
@@ -239,12 +240,16 @@ function TrendChart({
         {
           stroke: axisColor,
           grid: { stroke: gridColor, width: 1 },
-          ticks: { stroke: gridColor, width: 1 },
           splits: () => ticks.map((tick) => Math.max(1, maximumRef.current) * tick).sort((left, right) => left - right),
           values: (_plot, values) => values.map((value) => formatRef.current(value)),
           font: "11px -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Segoe UI\", \"Microsoft YaHei\", sans-serif",
-          // Fit the longest tick label (for example "1,844/min") instead of clipping it.
-          size: (_plot, values) => Math.max(52, Math.max(0, ...(values ?? []).map((value) => String(value).length)) * 7 + 18),
+          // Labels start at the card's content edge, under the title, and the
+          // gutter fits the longest one (for example "1,844/min").
+          align: 1,
+          alignTo: 2,
+          ticks: { show: false },
+          gap: 0,
+          size: (_plot, values) => Math.max(24, Math.ceil(Math.max(0, ...(values ?? []).map((value) => axisLabelWidth(String(value))))) + 12),
         },
       ],
       cursor: {

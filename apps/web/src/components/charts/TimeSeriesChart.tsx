@@ -29,7 +29,10 @@ export interface TimeSeriesChartProps {
   tooltipOnly?: readonly TimeSeries[];
 }
 
-const MARGIN = { top: 10, right: 12, bottom: 24, left: 44 };
+/** `left` is a floor: the axis gutter grows to the widest tick label. */
+const MARGIN = { top: 10, right: 12, bottom: 24, left: 20 };
+/** Space between the tick labels and the plot. */
+const AXIS_GAP = 10;
 const COLUMN_MAX = 24;
 const GAP = 2;
 const RADIUS = 4;
@@ -37,6 +40,13 @@ const RADIUS = 4;
 function topRoundedRect(x: number, y: number, width: number, height: number, radius: number): string {
   const r = Math.min(radius, width / 2, height);
   return `M${x},${y + height}V${y + r}Q${x},${y} ${x + r},${y}H${x + width - r}Q${x + width},${y} ${x + width},${y + r}V${y + height}Z`;
+}
+
+/** Approximate width of an 11px tick label: tabular digits and Latin, full-width CJK. */
+export function axisLabelWidth(text: string): number {
+  let width = 0;
+  for (const char of text) width += /[\u2e80-\u9fff\uf900-\ufaff\uff00-\uffef]/.test(char) ? 11 : char === " " ? 3 : 6.4;
+  return width;
 }
 
 function linePath(points: ReadonlyArray<[number, number] | null>): string {
@@ -85,8 +95,6 @@ export function TimeSeriesChart({
   }, []);
 
   const count = buckets.length;
-  const plotWidth = Math.max(40, width - MARGIN.left - MARGIN.right);
-  const band = count ? plotWidth / count : plotWidth;
   const bucketAt = (index: number) => buckets[index] ?? 0;
   const spanSeconds = count ? bucketAt(count - 1) - bucketAt(0) + bucketSeconds : 0;
 
@@ -103,8 +111,13 @@ export function TimeSeriesChart({
   }, [count, kind, series, stacked]);
   const ticks = niceTicks(maximum);
   const top = ticks[ticks.length - 1] || 1;
+  // Tick labels start at the card's content edge, under the title and legend;
+  // the plot begins after the widest label, so every chart lines up the same way.
+  const left = Math.max(MARGIN.left, Math.ceil(Math.max(0, ...ticks.map((tick) => axisLabelWidth(formatAxis(tick))))) + AXIS_GAP);
+  const plotWidth = Math.max(40, width - left - MARGIN.right);
+  const band = count ? plotWidth / count : plotWidth;
   const y = (value: number) => MARGIN.top + height - (value / top) * height;
-  const xCenter = (index: number) => MARGIN.left + band * index + band / 2;
+  const xCenter = (index: number) => left + band * index + band / 2;
   const hasData = series.some((entry) => entry.values.some((value) => value !== null && value !== undefined));
 
   const columnWidth = Math.max(2, Math.min(COLUMN_MAX, band * 0.64));
@@ -158,8 +171,8 @@ export function TimeSeriesChart({
         <svg width={width} height={height + MARGIN.top + MARGIN.bottom} aria-hidden="true">
           {ticks.map((tick) => (
             <g key={tick} className="chart-gridline">
-              <line x1={MARGIN.left} x2={width - MARGIN.right} y1={y(tick)} y2={y(tick)} />
-              <text x={MARGIN.left - 8} y={y(tick)} dy="0.32em" textAnchor="end">{formatAxis(tick)}</text>
+              <line x1={left} x2={width - MARGIN.right} y1={y(tick)} y2={y(tick)} />
+              <text x={0} y={y(tick)} dy="0.32em" textAnchor="start">{formatAxis(tick)}</text>
             </g>
           ))}
           {tickIndices(count, Math.max(2, Math.min(7, Math.floor(plotWidth / 90)))).map((index) => (
@@ -169,7 +182,7 @@ export function TimeSeriesChart({
           ))}
           {active !== null ? (
             kind === "columns"
-              ? <rect className="chart-band-highlight" x={MARGIN.left + band * active} y={MARGIN.top} width={band} height={height} />
+              ? <rect className="chart-band-highlight" x={left + band * active} y={MARGIN.top} width={band} height={height} />
               : <line className="chart-crosshair" x1={xCenter(active)} x2={xCenter(active)} y1={MARGIN.top} y2={MARGIN.top + height} />
           ) : null}
           {kind === "columns" ? buckets.map((_, index) => {
@@ -213,7 +226,7 @@ export function TimeSeriesChart({
           })}
           <rect
             className="chart-hit"
-            x={MARGIN.left}
+            x={left}
             y={MARGIN.top}
             width={plotWidth}
             height={height}

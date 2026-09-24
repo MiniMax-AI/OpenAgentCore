@@ -237,7 +237,7 @@ question mark, so the page stays a ledger rather than a leaflet.
 
 **Key Characteristics:**
 - White cards with a faint border and shadow on a light-gray canvas, beside a white
-  sidebar; the page header is translucent canvas.
+  sidebar; the page header is solid canvas.
 - One indigo voice for selection, primary actions and single-series data (`--data`).
 - Meters are neutral ink; green, amber and red appear only when something is wrong
   or a state needs reporting.
@@ -360,7 +360,7 @@ Skill, Vault, Credential, API key). Time ranges read "1 小时 / 6 小时 / 24 �
 A fixed 232px white sidebar beside a full-height main column on the canvas; below
 640px the sidebar collapses to a 52px icon rail. The desktop minimum is 960px.
 Every page uses the same frame: a 64px header (title, optional help tip, actions
-on the right) in translucent canvas with a backdrop blur, then a scrolling body
+on the right) in solid canvas, then a scrolling body
 padded `20px 28px 48px` with sections stacked 28px apart. Inside a section the
 heading row sits 12px above its content.
 
@@ -386,9 +386,9 @@ section rhythm or toolbar.
 Depth comes from the canvas-to-card step, not from stacked shadows.
 
 ### Shadow Vocabulary
-- **Card** (`0 1px 1px rgb(20 20 30 / 3%), 0 2px 5px -2px rgb(20 20 30 / 7%)` with
-  a 1px `card-border` edge at 11% ink): KPI strips, table frames, chart grids,
-  Overview cards, the Session transcript and the deployment panel.
+- **Card** (no shadow; a 1px `card-border` edge at 11% ink): KPI strips, table
+  frames, chart grids, Overview cards, the Session transcript and the deployment
+  panel. Cards are flat; no page surface is translucent or blurred.
 - **Control lift** (`0 1px 2px rgb(0 0 0 / 6%)`): primary and outline buttons,
   inputs, selects, the search field, the active segment.
 - **Floating** (`0 1px 2px rgb(24 24 27 / 4%), 0 8px 24px -12px rgb(24 24 27 /

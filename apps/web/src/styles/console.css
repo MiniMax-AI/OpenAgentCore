@@ -23,7 +23,8 @@
   /* Surfaces: a quiet canvas under raised white cards. */
   --canvas: #f5f5f6;
   --card-border: rgb(20 20 30 / 11%);
-  --card-shadow: 0 1px 1px rgb(20 20 30 / 3%), 0 2px 5px -2px rgb(20 20 30 / 7%);
+  /* Cards are flat: the border alone separates them from the canvas. */
+  --card-shadow: none;
   --data: var(--accent);
 }
 
@@ -40,7 +41,7 @@ html[data-theme="dark"] {
   --meter-track: rgb(255 255 255 / 9%);
   --canvas: #121212;
   --card-border: rgb(255 255 255 / 11%);
-  --card-shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 2px 6px -2px rgb(0 0 0 / 35%);
+  --card-shadow: none;
 }
 
 .visually-hidden,
@@ -1271,8 +1272,8 @@ html[data-theme="dark"] {
 
 
 /* Surfaces -------------------------------------------------------------
-   The page sits on a canvas; every frame is a raised card. Keeps depth
-   without borders-inside-borders. */
+   The page sits on a canvas; every frame is a flat card with a 1px edge.
+   No borders-inside-borders, no shadows, no translucency. */
 .app-main {
   background: var(--canvas);
 }
@@ -1281,10 +1282,10 @@ html[data-theme="dark"] {
   background: var(--surface);
 }
 
+/* The header is solid canvas: content scrolls under it without a blur. */
 .console-page > .page-header {
-  background: color-mix(in srgb, var(--canvas) 88%, transparent);
+  background: var(--canvas);
   border-bottom-color: transparent;
-  backdrop-filter: blur(8px);
 }
 
 .kpi-strip,

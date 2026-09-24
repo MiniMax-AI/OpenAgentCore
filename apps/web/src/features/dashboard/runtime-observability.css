@@ -291,13 +291,12 @@
   top: 12px;
   gap: 4px;
   color: var(--fg);
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  background: var(--surface);
   border: 1px solid var(--line-strong, var(--line));
   border-radius: 7px;
   box-shadow: var(--shadow-popover, var(--shadow-control));
   pointer-events: none;
   transform: translateX(-50%);
-  backdrop-filter: blur(8px);
 }
 
 .dashboard-runtime-trend-tooltip.is-pinned {
