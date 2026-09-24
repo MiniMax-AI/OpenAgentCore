@@ -32,10 +32,12 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 			return nil, err
 		}
 		return &execution.RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, Maintenance: setup.Maintenance, CoreURL: setup.CoreURL + "/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: p}, nil
-,func(ctx context.Context,setup store.SandboxSetup)(execution.PreparedRuntimeDeployment,error){
- if fail.Load() {return execution.PreparedRuntimeDeployment{}, errors.New("fixture provider unavailable")}
- return execution.PreparedRuntimeDeployment{Config:&execution.RuntimeProvider{InstallationID:setup.InstallationID,ProviderKind:setup.Provider,Mode:setup.Mode,Maintenance:setup.Maintenance,CoreURL:setup.CoreURL+"/api/v1",BackendFingerprint:setup.BackendFingerprint,Provider:p}},nil
- })
+	}, func(ctx context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
+		if fail.Load() {
+			return execution.PreparedRuntimeDeployment{}, errors.New("fixture provider unavailable")
+		}
+		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, Maintenance: setup.Maintenance, CoreURL: setup.CoreURL + "/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: p}}, nil
+	})
 	w, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry(), ManagedRuntimes: configuration})
 	if err != nil {
 		t.Fatal(err)
@@ -51,13 +53,13 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 			t.Error("worker shutdown blocked")
 		}
 	})
-	if _, err := w.InitializeSandboxDeployment(t.Context(), store.SandboxDeploymentSetupRequest{DeploymentSpec:store.SandboxDeploymentTestSpec("docker"),Provider: "docker", CoreURL: "https://core.example"}); err != nil {
+	if _, err := w.InitializeSandboxDeployment(t.Context(), store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("docker"), Provider: "docker", CoreURL: "https://core.example"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.SetSandboxMaintenance(t.Context(), store.SandboxMaintenanceRequest{Maintenance: true, ExpectedGeneration: 1}); err != nil {
 		t.Fatal(err)
 	}
-	input := store.SandboxDeploymentUpdateRequest{ExpectedGeneration: 1, SandboxDeploymentSetupRequest: store.SandboxDeploymentSetupRequest{DeploymentSpec:store.SandboxDeploymentTestSpec("e2b"),Provider: "e2b", CoreURL: "https://core.example", E2B: &store.SandboxE2BConfiguration{APIKey: "fixture-api-key", Template: "runtime:" + uuid.NewString()}}}
+	input := store.SandboxDeploymentUpdateRequest{ExpectedGeneration: 1, SandboxDeploymentSetupRequest: store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"), Provider: "e2b", CoreURL: "https://core.example", E2B: &store.SandboxE2BConfiguration{APIKey: "fixture-api-key", Template: "runtime:" + uuid.NewString()}}}
 	fail.Store(true)
 	if _, err := w.UpdateSandboxDeployment(t.Context(), input); err == nil {
 		t.Fatal("failed activation reported success")
@@ -70,7 +72,9 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 		t.Fatal("failed activation resumed")
 	}
 	fail.Store(false)
- if _,err:=w.UpdateSandboxDeployment(t.Context(),input);err!=nil{t.Fatal(err)}
+	if _, err := w.UpdateSandboxDeployment(t.Context(), input); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := w.SetSandboxMaintenance(t.Context(), store.SandboxMaintenanceRequest{ExpectedGeneration: 2}); err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +86,7 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 	if _, err := w.SetSandboxMaintenance(t.Context(), store.SandboxMaintenanceRequest{Maintenance: true, ExpectedGeneration: 2}); err != nil {
 		t.Fatal(err)
 	}
-	next := store.SandboxDeploymentUpdateRequest{ExpectedGeneration: 2, SandboxDeploymentSetupRequest: store.SandboxDeploymentSetupRequest{DeploymentSpec:store.SandboxDeploymentTestSpec("docker"),Provider: "docker", CoreURL: "https://core.example"}}
+	next := store.SandboxDeploymentUpdateRequest{ExpectedGeneration: 2, SandboxDeploymentSetupRequest: store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("docker"), Provider: "docker", CoreURL: "https://core.example"}}
 	if _, err := w.UpdateSandboxDeployment(t.Context(), next); !errors.Is(err, store.ErrSandboxDeploymentConflict) {
 		t.Fatal("dirty switch accepted", err)
 	}
