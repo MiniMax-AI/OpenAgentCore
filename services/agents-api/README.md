@@ -474,10 +474,10 @@ an official SSE replay mechanism.
 ## User-managed Runtime enrollment
 
 V1 uses our daemon as the user-side executor. Deploy daemon, selected harness,
-local tools and protected `/workspace` together using the shared Runtime. Core
-manages Docker-hosted compute only. The user owns local or E2B allocation, renewal
+local tools and protected `/workspace` together using the shared Runtime. For this caller-managed path, the user owns local or E2B allocation, renewal
 and destruction; use the official E2B SDK through the
-[E2B guide](deploy/e2b/README.md), not a Core E2B Provider.
+[E2B guide](deploy/e2b/README.md). Deployment-managed E2B, Docker and microsandbox
+are separate hosted choices in [Hosted Sandbox Manager](HOSTED-SANDBOX-MANAGER.md).
 
 Create a Session with `environment={"type":"self_hosted",
 "workspace_directory":"/workspace"}` and empty/default capability directories.
