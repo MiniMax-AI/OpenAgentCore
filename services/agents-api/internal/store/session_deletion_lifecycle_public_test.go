@@ -229,7 +229,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 				t.Fatal("repeated deletion must append exactly two operation records", err)
 			}
 			for _, operation := range afterAudit.Data[:2] {
-				if operation.Action != "delete" || operation.APIKey.ID != "static:"+device.HashCredential(owner) {
+				if operation.Action != "delete" || operation.APIKey.ID != uuid.NewSHA1(uuid.NameSpaceOID, []byte(device.HashCredential(owner))).String() {
 					t.Fatal("repeated deletion recorded the wrong operation or key")
 				}
 			}
