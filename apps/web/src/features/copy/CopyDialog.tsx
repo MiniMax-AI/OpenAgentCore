@@ -1,4 +1,5 @@
 import { AgentCoreError, createIdempotencyKey, type Vault } from "@agents-core-web/agents-client";
+import { ArrowRight } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -7,7 +8,7 @@ import { CopyableId } from "../../components/list-ui";
 import { Modal } from "../../components/Modal";
 import type { ConsoleView } from "../../lib/console-routes";
 import { useConsoleNavigation } from "../../lib/console-navigation";
-import { admin, projectClient, useProjects } from "../../lib/projects";
+import { projectClient, readAllPages, useProjects } from "../../lib/projects";
 import "./copy.css";
 import { type CopyableResourceType, copyAsset, type CopyResult, type Project } from "../../lib/admin-view";
 
@@ -71,8 +72,8 @@ export function CopyDialog({ source, onClose }: { source: CopySource | null; onC
     const controller = new AbortController();
     setVaults(null);
     setVaultId("");
-    projectClient(targetId).listVaults({ limit: 100, signal: controller.signal }).then(
-      (page) => setVaults(page.data),
+    readAllPages((after) => projectClient(targetId).listVaults({ after, limit: 100, signal: controller.signal })).then(
+      setVaults,
       () => { if (!controller.signal.aborted) setVaults([]); },
     );
     return () => controller.abort();
@@ -120,30 +121,36 @@ export function CopyDialog({ source, onClose }: { source: CopySource | null; onC
         <>
           <button type="button" className="button outline" disabled={busy} onClick={onClose}>{t("actions.cancel")}</button>
           <button type="button" className="button primary" disabled={busy || !target || (needsVault && !vaultId)} onClick={() => void submit()}>
-            {busy ? t("copy.copying") : t("copy.submit")}
+            {busy ? t("copy.copying") : target ? t("copy.submitTo", { name: target.name }) : t("copy.submit")}
           </button>
         </>
       )}
     >
       {source ? (
         <div className="copy-dialog">
-          <dl className="copy-facts">
-            <div>
-              <dt>{t("copy.source")}</dt>
-              <dd><strong>{source.name}</strong><span className="copy-source-meta">{typeLabel(source.type)} · {source.project.name}</span></dd>
-            </div>
-          </dl>
-          {done ? <CopyResultView result={outcome.result} typeLabel={typeLabel} /> : (
+          <div className="copy-item">
+            <span className="copy-item-type">{typeLabel(source.type)}</span>
+            <strong className="copy-item-name" title={source.name}>{source.name}</strong>
+            <CopyableId id={source.id} compact />
+          </div>
+          {done ? <CopyResultView result={outcome.result} target={target?.name ?? ""} typeLabel={typeLabel} /> : (
             <>
-              <label className="field">
-                <span className="field-label-row">{t("copy.target")}<HelpTip>{t("copy.help")}</HelpTip></span>
-                {targets.length ? (
-                  <select value={targetId} onChange={(event) => setTargetId(event.target.value)} disabled={busy}>
-                    <option value="">{t("copy.chooseTarget")}</option>
-                    {targets.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
-                  </select>
-                ) : <p className="copy-empty">{t("copy.noTargets")}</p>}
-              </label>
+              <div className="copy-route">
+                <div className="copy-route-end">
+                  <span className="copy-route-label">{t("copy.from")}</span>
+                  <span className="copy-route-project" title={source.project.name}>{source.project.name}</span>
+                </div>
+                <ArrowRight className="copy-route-arrow" size={16} strokeWidth={1.6} aria-hidden="true" />
+                <label className="copy-route-end select-control">
+                  <span className="copy-route-label">{t("copy.to")}<HelpTip>{t("copy.help")}</HelpTip></span>
+                  {targets.length ? (
+                    <select value={targetId} onChange={(event) => setTargetId(event.target.value)} disabled={busy} aria-label={t("copy.target")}>
+                      <option value="">{t("copy.chooseTarget")}</option>
+                      {targets.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+                    </select>
+                  ) : <span className="copy-empty">{t("copy.noTargets")}</span>}
+                </label>
+              </div>
               {needsVault && targetId ? (
                 <label className="field">
                   <span>{t("copy.targetVault")}</span>
@@ -172,11 +179,11 @@ export function CopyDialog({ source, onClose }: { source: CopySource | null; onC
   );
 }
 
-function CopyResultView({ result, typeLabel }: { result: CopyResult; typeLabel: (type: string) => string }) {
+function CopyResultView({ result, target, typeLabel }: { result: CopyResult; target: string; typeLabel: (type: string) => string }) {
   const { t } = useTranslation();
   return (
     <div className="copy-result" role="status">
-      <p className="copy-result-title">{t("copy.done")}</p>
+      <p className="copy-result-title">{target ? t("copy.doneTo", { name: target }) : t("copy.done")}</p>
       {result.mappings.length ? (
         <div className="table-frame">
           <table className="data-table data-table-compact" aria-label={t("copy.mapped")}>

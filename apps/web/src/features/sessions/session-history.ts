@@ -135,3 +135,26 @@ export function turnDurationSeconds(turn: AgentTurn, nowSeconds: number): number
   const end = turn.completed_at ?? (turn.status === "in_progress" || turn.status === "waiting" ? nowSeconds : null);
   return end === null || end < turn.started_at ? null : end - turn.started_at;
 }
+
+export interface TranscriptGroup {
+  /** The Turn these Items belong to; null for Items that reference no known Turn. */
+  turn: AgentTurn | null;
+  /** 1-based position of the Turn in the Session. */
+  number: number | null;
+  items: SessionItem[];
+}
+
+/**
+ * The conversation grouped by Turn in the order Core ran them, keeping each
+ * Turn's Items in their durable order. Turns without Items still appear (a
+ * failed or queued Turn has something to say); Items whose Turn is unknown
+ * come last.
+ */
+export function transcriptGroups(turns: readonly AgentTurn[], items: readonly SessionItem[]): TranscriptGroup[] {
+  const byTurn = new Map<string, SessionItem[]>(turns.map((turn) => [turn.id, []]));
+  const orphans: SessionItem[] = [];
+  for (const item of items) (byTurn.get(item.turn_id) ?? orphans).push(item);
+  const groups: TranscriptGroup[] = turns.map((turn, index) => ({ turn, number: index + 1, items: byTurn.get(turn.id) ?? [] }));
+  if (orphans.length) groups.push({ turn: null, number: null, items: orphans });
+  return groups;
+}

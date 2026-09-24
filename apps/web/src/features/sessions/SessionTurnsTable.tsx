@@ -7,7 +7,7 @@ import { CopyableId } from "../../components/list-ui";
 import { formatDateTime, formatDuration, formatInteger, MISSING } from "../../lib/format";
 import { itemsPerTurn, turnDurationSeconds } from "./session-history";
 
-const turnTone: Record<AgentTurn["status"], Tone> = {
+export const turnTone: Record<AgentTurn["status"], Tone> = {
   queued: "pending",
   in_progress: "pending",
   waiting: "warning",

@@ -8,13 +8,13 @@ import { CopyableId } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatClock, formatDateTime, formatInteger, MISSING } from "../../lib/format";
 import { CreatorCell, projectClient, ProjectName, useCreators, useProjects } from "../../lib/projects";
-import { ThreadItems } from "./items/ItemRenderers";
 import { SessionDeleteDialog, type SessionDeleteTarget } from "./SessionDeleteDialog";
 import { isSessionActive } from "./session-history";
 import { environmentKind, isDeletable } from "./session-log";
 import { SessionStatus, useWaitingFor } from "./SessionStatus";
 import { hasObservableRuntime } from "./session-runtime";
 import { SessionRuntimeSection } from "./SessionRuntimeSection";
+import { SessionTranscript } from "./SessionTranscript";
 import { SessionTurnsTable } from "./SessionTurnsTable";
 import { TraceView } from "./trace/TraceView";
 import { isNotFound, useSessionHistory } from "./use-session-history";
@@ -153,11 +153,7 @@ export function SessionPage() {
           {view !== "conversation" && turnsError ? <p className="coverage-note coverage-note-error" role="alert">{t("history.turnsFailed", { reason: turnsError })}</p> : null}
           {view === "conversation" ? (
             items.length ? (
-              <div className="session-thread-frame">
-                <div className="thread-content">
-                  <div className="message-stack"><ThreadItems items={items} agentName={session.agent.name || t("common.agent")} /></div>
-                </div>
-              </div>
+              <SessionTranscript turns={turns} items={items} agentName={session.agent.name || t("common.agent")} />
             ) : <EmptyState title={t("history.noItems")} />
           ) : view === "trace" ? (
             <div className="session-trace-frame">

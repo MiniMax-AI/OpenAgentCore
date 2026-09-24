@@ -100,6 +100,11 @@ export const sessions = {
     noItems: "No Items yet",
     itemsFailed: "Items could not be loaded: {{reason}}",
     turnsFailed: "Turns could not be loaded: {{reason}}",
+    user: "User",
+    error: "Error",
+    unassociated: "Items without a Turn",
+    steps: "{{n}} steps",
+    tokens: "{{value}} tokens",
   },
   turnTable: {
     turn: "Turn",

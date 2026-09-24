@@ -11,6 +11,7 @@ import {
   readHistoryTail,
   SESSION_POLL_MS,
   settledPrefixLength,
+  transcriptGroups,
   turnDurationSeconds,
 } from "./session-history";
 import { loadSessionRuntimeHistory } from "./session-runtime";
@@ -129,5 +130,19 @@ describe("Session deletion and runtime answers", () => {
     await expect(loadSessionRuntimeHistory(client, session, 3_600_000)).resolves.toBeNull();
     const failing = { retrieveRuntimeHistory: async () => { throw new AgentCoreError("down", 503); } };
     await expect(loadSessionRuntimeHistory(failing, session, 3_600_000)).rejects.toThrow("down");
+  });
+});
+
+describe("transcript groups", () => {
+  it("groups Items under their Turn in Turn order, keeps empty Turns and puts unknown Items last", () => {
+    const turns = [turn("t1", "completed"), turn("t2", "failed"), turn("t3", "queued")];
+    const items = [item("a", "completed", "t1"), item("x", "completed", "gone"), item("b", "completed", "t2"), item("c", "completed", "t1")];
+    const groups = transcriptGroups(turns, items);
+    expect(groups.map((group) => [group.turn?.id ?? null, group.number, group.items.map((entry) => entry.id)])).toEqual([
+      ["t1", 1, ["a", "c"]],
+      ["t2", 2, ["b"]],
+      ["t3", 3, []],
+      [null, null, ["x"]],
+    ]);
   });
 });

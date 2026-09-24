@@ -134,9 +134,13 @@ function WorkTrace({ items }: { items: SessionItem[] }) {
   const duration = steps.reduce((total, item) => total + (item.duration_ms ?? 0), 0);
   const current = running ? [...steps].reverse().find((item) => item.status === "in_progress") : undefined;
   useEffect(() => setExpanded(running), [running]);
-  return <section className="work-trace" aria-label={t("items.agentWorkTrace")} aria-busy={running} data-work-trace={status}><button className="trace-header" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}><StatusIcon status={status} /><span>{t(`status.${status}` as never)}</span>{duration ? <span className="trace-duration" aria-hidden={running || undefined}>· {formatDuration(duration)}</span> : null}<ChevronDown className={`trace-header-chevron ${expanded ? "" : "closed"}`} size={14} strokeWidth={1.5} aria-hidden="true" /></button><TraceCollapse open={expanded}><ul className="trace-steps">{steps.map((item) => <WorkStep item={item} key={item.id} />)}</ul></TraceCollapse>{!expanded && current ? <ul className="trace-steps" data-work-trace-tail=""><WorkStep item={current} key={`tail:${current.id}`} /></ul> : null}</section>;
+  return <section className="work-trace" aria-label={t("items.agentWorkTrace")} aria-busy={running} data-work-trace={status}><button className="trace-header" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}><StatusIcon status={status} /><span>{t("history.steps", { n: steps.length })}</span>{status !== "completed" ? <span>· {t(`status.${status}` as never)}</span> : null}{duration ? <span className="trace-duration" aria-hidden={running || undefined}>· {formatDuration(duration)}</span> : null}<ChevronDown className={`trace-header-chevron ${expanded ? "" : "closed"}`} size={14} strokeWidth={1.5} aria-hidden="true" /></button><TraceCollapse open={expanded}><ul className="trace-steps">{steps.map((item) => <WorkStep item={item} key={item.id} />)}</ul></TraceCollapse>{!expanded && current ? <ul className="trace-steps" data-work-trace-tail=""><WorkStep item={current} key={`tail:${current.id}`} /></ul> : null}</section>;
 }
 
+/**
+ * One Turn's Items as transcript rows: who spoke on the left, what they said on
+ * the right, and the tool steps between them collapsed into one line.
+ */
 export function ThreadItems({ items, agentName }: { items: SessionItem[]; agentName: string }) {
   const { t } = useTranslation("sessions");
   const rendered = [];
@@ -144,12 +148,26 @@ export function ThreadItems({ items, agentName }: { items: SessionItem[]; agentN
     const item = items[index]; if (!item) break;
     if (item.type === "message") {
       const assistant = item.role === "assistant";
-      rendered.push(<article className={`message-row ${assistant ? "assistant" : "user"}`} key={item.id}><div className="message-body">{assistant ? <div className="message-byline">{agentName || t("common.agent")}{item.phase === "commentary" ? ` · ${t("items.workingNote")}` : ""}</div> : null}{assistant ? <MessageMarkdown content={textOf(item) || t("items.emptyMessage")} /> : <div className="message-copy">{textOf(item) || t("items.emptyMessage")}</div>}</div></article>);
+      const role = assistant ? `${agentName || t("common.agent")}${item.phase === "commentary" ? ` · ${t("items.workingNote")}` : ""}` : t("history.user");
+      rendered.push(
+        <div className={`transcript-row ${assistant ? "assistant" : "user"}`} key={item.id}>
+          <span className="transcript-role" title={role}>{role}</span>
+          <div className="transcript-content">
+            {assistant ? <MessageMarkdown content={textOf(item) || t("items.emptyMessage")} /> : <div className="message-copy">{textOf(item) || t("items.emptyMessage")}</div>}
+          </div>
+        </div>,
+      );
       index += 1; continue;
     }
     const traceItems = [item]; let cursor = index + 1;
     while (cursor < items.length && items[cursor]?.type !== "message" && items[cursor]?.turn_id === item.turn_id) { const next = items[cursor]; if (next) traceItems.push(next); cursor += 1; }
-    rendered.push(<WorkTrace items={traceItems} key={`trace:${item.turn_id}:${item.id}`} />); index = cursor;
+    rendered.push(
+      <div className="transcript-row work" key={`trace:${item.turn_id}:${item.id}`}>
+        <span className="transcript-role" aria-hidden="true" />
+        <div className="transcript-content"><WorkTrace items={traceItems} /></div>
+      </div>,
+    );
+    index = cursor;
   }
   return rendered;
 }

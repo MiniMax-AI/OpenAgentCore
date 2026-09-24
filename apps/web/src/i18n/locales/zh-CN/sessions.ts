@@ -97,6 +97,11 @@ export const sessions = {
     noItems: "还没有条目",
     itemsFailed: "无法加载条目：{{reason}}",
     turnsFailed: "无法加载 Turn：{{reason}}",
+    user: "用户",
+    error: "错误",
+    unassociated: "未关联 Turn",
+    steps: "{{n}} 个步骤",
+    tokens: "{{value}} token",
   },
   turnTable: {
     turn: "Turn",

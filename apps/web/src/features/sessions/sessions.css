@@ -66,16 +66,100 @@
   white-space: nowrap;
 }
 
-/* Conversation: the thread reads at a comfortable measure inside one frame. */
-.session-thread-frame {
+/* Conversation: one frame, one block per Turn divided by hairlines; the speaker
+   sits in a fixed left column so replies line up and read top to bottom. */
+.transcript {
+  margin: 0;
+  padding: 0;
+  list-style: none;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--frame-radius);
 }
 
-.session-thread-frame .thread-content {
-  min-height: 0;
-  padding: 24px 24px 28px;
+.transcript-turn {
+  padding: 12px 18px 14px;
+}
+
+.transcript-turn + .transcript-turn {
+  border-top: 1px solid var(--line);
+}
+
+.transcript-turn-head {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 14px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.transcript-turn-head .status-dot {
+  color: var(--fg-muted);
+}
+
+.transcript-turn-title {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.transcript-turn-time {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.transcript-rows {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 6px 16px;
+  margin-top: 8px;
+}
+
+.transcript-row {
+  display: contents;
+}
+
+.transcript-role {
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transcript-content {
+  min-width: 0;
+  color: var(--fg);
+  font-size: 13.5px;
+  line-height: 22px;
+}
+
+.transcript-content .message-copy,
+.transcript-content .message-markdown {
+  font-size: 13.5px;
+  line-height: 22px;
+}
+
+.transcript-row.error .transcript-role,
+.transcript-row.error .transcript-content {
+  color: var(--danger);
+}
+
+/* Tool steps: one muted line that opens into the step list. */
+.transcript-row.work .trace-header {
+  height: 22px;
+  font-size: 12.5px;
+}
+
+.transcript-row.work .trace-step-row {
+  height: 28px;
+}
+
+.transcript-row.work .trace-step-verb {
+  font-size: 12.5px;
 }
 
 /* Trace: ledger and detail scroll inside a frame of fixed height. */
@@ -129,4 +213,36 @@
 /* Five filters and the count share one row at desktop widths. */
 .session-log-page .list-toolbar .search-control.list-search {
   width: 232px;
+}
+
+/* Replies keep their Markdown structure at transcript density. */
+.transcript-content .message-markdown p {
+  margin: 2px 0;
+}
+
+.transcript-content .message-markdown ul,
+.transcript-content .message-markdown ol {
+  margin: 4px 0;
+}
+
+.transcript-content .message-markdown li {
+  margin: 0;
+}
+
+.transcript-content .message-markdown h2,
+.transcript-content .message-markdown h3,
+.transcript-content .message-markdown h4 {
+  margin: 8px 0 2px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.transcript-content .message-markdown pre,
+.transcript-content .message-markdown table {
+  margin: 6px 0;
+}
+
+.transcript-content .message-markdown table {
+  width: auto;
+  min-width: 240px;
 }
