@@ -220,6 +220,97 @@
   background: var(--fg-muted);
 }
 
+/* Legend keys use the same data palette as the lines. */
+.dashboard-runtime-trend-blue { color: var(--series-1); stroke: var(--series-1); background: var(--series-1) !important; }
+.dashboard-runtime-trend-green { color: var(--series-2); stroke: var(--series-2); background: var(--series-2) !important; }
+.dashboard-runtime-trend-orange { color: var(--series-3); stroke: var(--series-3); background: var(--series-3) !important; }
+.dashboard-runtime-trend-purple { color: var(--series-5); stroke: var(--series-5); background: var(--series-5) !important; }
+.dashboard-runtime-trend-neutral { color: var(--ink-3); stroke: var(--ink-3); background: repeating-linear-gradient(90deg, var(--ink-3) 0 4px, transparent 4px 7px) !important; }
+
+.dashboard-runtime-chart-frame {
+  margin-top: auto;
+}
+
+.dashboard-runtime-trend-card h3,
+.dashboard-runtime-trend-card p {
+  margin: 0;
+}
+
+.dashboard-runtime-trend-card h3 {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.dashboard-runtime-trend-card p {
+  color: var(--fg-muted);
+  font-size: 12px;
+  line-height: 14px;
+}
+
+.dashboard-runtime-trend-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 4px 14px;
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+
+.dashboard-runtime-trend-legend button {
+  display: inline-flex;
+  max-width: 180px;
+  min-width: 0;
+  align-items: center;
+  padding: 2px 4px;
+  gap: 5px;
+  overflow: hidden;
+  color: inherit;
+  font: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-runtime-trend-legend button:hover,
+.dashboard-runtime-trend-legend button:focus-visible {
+  color: var(--fg);
+  background: var(--surface-subtle);
+}
+
+.dashboard-runtime-trend-legend button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 1px;
+}
+
+.dashboard-runtime-trend-legend button.is-hidden {
+  opacity: .42;
+  text-decoration: line-through;
+}
+
+.dashboard-runtime-trend-legend .dashboard-runtime-chart-reset {
+  padding: 2px 6px;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+}
+
+.dashboard-runtime-trend-legend .dashboard-runtime-chart-reset:disabled {
+  color: var(--fg-muted);
+  cursor: default;
+  opacity: .42;
+}
+
+.dashboard-runtime-trend-legend i,
+.dashboard-runtime-trend-tooltip i {
+  width: 11px;
+  height: 2px;
+  flex: 0 0 auto;
+  background: var(--fg-muted);
+}
+
 .dashboard-runtime-trend-orange {
   color: #f59e52;
   stroke: #f59e52;

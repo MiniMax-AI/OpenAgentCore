@@ -7,8 +7,6 @@ import type { TFunction } from "i18next";
 import {
   EmptyState,
   HelpTip,
-  Kpi,
-  KpiStrip,
   Meter,
   PageBody,
   PageHeader,
@@ -38,6 +36,7 @@ import {
   type HostedRuntimeRow,
 } from "./sandbox-runtime";
 import "./MetricsView.css";
+import { SandboxSummary } from "./SandboxSummary";
 import { hostedRuntimesQuery } from "./metrics-queries";
 
 const healthTone: Record<NodeHealth, Tone> = { available: "ok", degraded: "warning", offline: "danger" };
@@ -88,6 +87,7 @@ export function SandboxMetricsPage() {
   const refreshing = runtimeState.status === "loading" || (fleetState.status === "ready" && fleetState.refreshing);
   const updatedAt = runtimeState.load?.loadedAt ?? fleet?.loadedAt ?? null;
   const message = fleetMessage(fleetState, t);
+  const allUsage = useMemo(() => (runtimeState.load ? hostedRuntimeUsage(runtimeState.load.observations) : null), [runtimeState.load]);
 
   return (
     <section className="page-section console-page metrics-page" aria-labelledby="sandbox-metrics-heading">
@@ -98,27 +98,18 @@ export function SandboxMetricsPage() {
         actions={<RefreshButton refreshing={refreshing} updatedAt={updatedAt ? formatClock(updatedAt, locale) : null} onClick={() => { refreshRuntime(); refreshFleet(); }} />}
       />
       <PageBody>
-        <KpiStrip label={t("sandbox.kpiLabel")}>
-          <Kpi
-            label={t("sandbox.nodesOnline")}
-            value={capacity ? `${capacity.online} / ${capacity.nodes}` : MISSING}
-            tone={capacity && capacity.nodes ? capacity.online < capacity.nodes ? "danger" : capacity.available < capacity.online ? "warning" : "ok" : undefined}
-            help={capacity ? t("sandbox.nodesAvailable", { count: capacity.available }) : message}
-          />
-          <Kpi label={t("sandbox.activeSandboxes")} value={capacity ? `${formatInteger(capacity.active, locale)} / ${formatInteger(capacity.maxActive, locale)}` : MISSING} help={t("sandbox.activeDetail")} />
-          <Kpi label={t("sandbox.retained")} value={capacity ? `${formatInteger(capacity.retained, locale)} / ${formatInteger(capacity.maxRetained, locale)}` : MISSING} help={t("sandbox.retainedDetail")} />
-          <Kpi label={t("sandbox.reserved")} value={capacity ? formatInteger(capacity.reserved, locale) : MISSING} help={t("sandbox.reservedDetail")} />
-          <Kpi
-            label={t("sandbox.cleanupPending")}
-            value={capacity ? formatInteger(capacity.cleanupPending, locale) : MISSING}
-            tone={capacity ? capacity.cleanupPending > 0 ? "warning" : "ok" : undefined}
-            help={t("sandbox.cleanupDetail")}
-          />
-        </KpiStrip>
+        <SandboxSummary
+          capacity={capacity}
+          nodes={fleet?.nodes ?? []}
+          allocations={fleet?.allocations ?? []}
+          observations={runtimeState.load?.observations ?? null}
+          usage={allUsage}
+          fleetMessage={message}
+        />
 
         <Section
           headingId="node-capacity-heading"
-          title={t("sandbox.nodesSection")}
+          title={t("sandbox.node")}
           help={t("sandbox.nodesSectionDetail")}
           actions={<button className="text-action" type="button" onClick={() => navigate("nodes")}>{t("sandbox.manageNodes")}</button>}
         >
@@ -130,12 +121,10 @@ export function SandboxMetricsPage() {
                     <th scope="col">{t("sandbox.node")}</th>
                     <th scope="col">{t("sandbox.status")}</th>
                     <th scope="col">{t("sandbox.slots")}</th>
-                    <th scope="col" className="numeric">{t("sandbox.retained")}</th>
-                    <th scope="col" className="numeric">{t("sandbox.reserved")}</th>
-                    <th scope="col" className="numeric">{t("sandbox.cleanupPending")}</th>
                     <th scope="col" className="numeric">{t("sandbox.cpus")}</th>
                     <th scope="col" className="numeric">{t("sandbox.freeMemory")}</th>
                     <th scope="col" className="numeric">{t("sandbox.freeDiskColumn")}</th>
+                    <th scope="col" className="numeric">{t("sandbox.cleanupPending")}</th>
                     <th scope="col" className="numeric">{t("sandbox.lastSeen")}</th>
                   </tr>
                 </thead>
@@ -144,7 +133,7 @@ export function SandboxMetricsPage() {
                     const health = nodeHealth(node);
                     return (
                       <tr key={node.id}>
-                        <th scope="row" title={node.id}><span className="table-primary">{node.name || node.id}</span></th>
+                        <th scope="row"><NameCell name={node.name} id={node.id} onOpen={() => navigate("nodes", { id: node.id })} /></th>
                         <td><StatusDot tone={healthTone[health]} label={t(`sandbox.health.${health}`)} /></td>
                         <td>
                           <span className="table-meter">
@@ -152,12 +141,10 @@ export function SandboxMetricsPage() {
                             <span>{node.active} / {node.max_active}</span>
                           </span>
                         </td>
-                        <td className="numeric">{node.retained} / {node.max_retained}</td>
-                        <td className="numeric">{node.reserved}</td>
-                        <td className="numeric">{node.cleanup_pending}</td>
                         <td className="numeric">{node.online ? node.cpu_count ?? MISSING : MISSING}</td>
                         <td className="numeric">{node.online ? formatBytes(node.available_memory_bytes) : MISSING}</td>
                         <td className="numeric">{node.online ? formatBytes(node.available_disk_bytes) : MISSING}</td>
+                        <td className={node.cleanup_pending > 0 ? "numeric numeric-warning" : "numeric"}>{node.cleanup_pending}</td>
                         <td className="numeric">{formatRelative(node.last_seen_at ? Date.parse(node.last_seen_at) / 1000 : null, now, locale)}</td>
                       </tr>
                     );
@@ -173,7 +160,7 @@ export function SandboxMetricsPage() {
               action={<button className="button primary" type="button" onClick={() => navigate("nodes")}>{t("sandbox.addNode")}</button>}
             />
           ) : fleetState.status === "checking" || fleetState.status === "loading"
-            ? <TableSkeleton label={message} rows={3} columns={10} />
+            ? <TableSkeleton label={message} rows={3} columns={8} />
             : <p className="page-status" role={fleetState.status === "failed" ? "alert" : "status"}>{message}</p>}
         </Section>
 
@@ -203,27 +190,10 @@ function HostedRuntimeSection({ state, fleet }: { state: RuntimeState; fleet: Re
     body = (
       <>
         {state.status === "failed" ? <p className="coverage-note coverage-note-error" role="alert">{t("sandbox.runtimeStale", { reason: state.error })}</p> : null}
-        <KpiStrip label={t("sandbox.runtimeKpiLabel")}>
-          <Kpi
-            label={t("sandbox.runtimes")}
-            value={t("sandbox.runtimeStates", { active: formatInteger(usage.active, locale), sleeping: formatInteger(usage.sleeping, locale) })}
-            help={t("sandbox.runtimesDetail", { total: usage.hosted, pending: usage.pending, observed: usage.observed })}
-          />
-          <Kpi
-            label={t("sandbox.cpu")}
-            value={usage.cpuUsageCores === null ? MISSING : `${formatCores(usage.cpuUsageCores, locale)} / ${t("sandbox.cores", { value: formatCores(usage.cpuCapacityCores, locale) })}`}
-            help={t("sandbox.cpuDetail")}
-          />
-          <Kpi
-            label={t("sandbox.memory")}
-            value={usage.memoryUsageBytes === null ? MISSING : `${formatBytes(usage.memoryUsageBytes)} / ${formatBytes(usage.memoryLimitBytes)}`}
-            help={t("sandbox.memoryDetail")}
-          />
-        </KpiStrip>
+        <RuntimeTable rows={hostedRuntimeRows(load, project, fleet)} showProject={!project} />
         <div className="runtime-embed">
           <RuntimeTrendPanel key={project || "all"} snapshot={snapshot} stale={state.status === "failed"} loadRuntimeHistory={loadHistory} />
         </div>
-        <RuntimeTable rows={hostedRuntimeRows(load, project, fleet)} showProject={!project} />
       </>
     );
   }
@@ -231,7 +201,18 @@ function HostedRuntimeSection({ state, fleet }: { state: RuntimeState; fleet: Re
   return (
     <Section
       headingId="runtime-heading"
-      title={t("sandbox.runtimeSection")}
+      title={<>
+        {t("sandbox.runtimeSection")}
+        {usage?.hosted ? (
+          <span className="section-meta">
+            {t("sandbox.runtimeMeta", {
+              n: formatInteger(usage.hosted, locale),
+              cpu: usage.cpuUsageCores === null ? MISSING : t("sandbox.cores", { value: formatCores(usage.cpuUsageCores, locale) }),
+              memory: usage.memoryUsageBytes === null ? MISSING : formatBytes(usage.memoryUsageBytes),
+            })}
+          </span>
+        ) : null}
+      </>}
       help={t("sandbox.runtimeSectionDetail")}
       actions={<>
         {partial ? (

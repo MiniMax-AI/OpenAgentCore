@@ -25,7 +25,7 @@ interface TrendPoint {
 interface TrendSeries {
   id: string;
   label: string;
-  tone: "orange" | "green" | "blue" | "purple";
+  tone: "orange" | "green" | "blue" | "purple" | "neutral";
   points: TrendPoint[];
   stepped?: boolean;
 }
@@ -56,11 +56,13 @@ function axisTimeLabel(value: number, locale: string): string {
   return new Date(value).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 }
 
-const toneColors: Record<TrendSeries["tone"], string> = {
-  orange: "#f59e52",
-  green: "#50d5a0",
-  blue: "#78a7ff",
-  purple: "#b998f4",
+/** Chart tones follow the console's data palette (`--series-*`), read when the chart draws. */
+const toneVariables: Record<TrendSeries["tone"], string> = {
+  blue: "--series-1",
+  green: "--series-2",
+  orange: "--series-3",
+  purple: "--series-5",
+  neutral: "--ink-3",
 };
 
 function withAlpha(hex: string, alpha: number): string {
@@ -211,10 +213,11 @@ function TrendChart({
     const axisColor = color("--fg-muted", theme === "dark" ? "#a8adb8" : "#6f7480");
     const gridColor = color("--line", theme === "dark" ? "#30343b" : "#e3e5e8");
     const surfaceColor = color("--surface", theme === "dark" ? "#17191d" : "#ffffff");
+    // Only the danger zone is tinted; the calm range needs no colour.
     const bandColors: Record<TrendBand["tone"], string> = {
-      safe: withAlpha("#50d5a0", .07),
-      warning: withAlpha("#f59e52", .07),
-      danger: withAlpha("#ef6a72", .07),
+      safe: "transparent",
+      warning: "transparent",
+      danger: color("--red-tint", withAlpha("#ef6a72", .06)),
     };
     const options: uPlot.Options = {
       width: Math.max(320, mount.clientWidth),
@@ -265,8 +268,9 @@ function TrendChart({
         ...series.map((entry): uPlot.Series => ({
           label: entry.label,
           show: !hiddenSeriesRef.current.has(entry.id),
-          stroke: toneColors[entry.tone],
-          width: 2,
+          stroke: color(toneVariables[entry.tone], "#8b90a0"),
+          width: entry.tone === "neutral" ? 1.5 : 2,
+          dash: entry.tone === "neutral" ? [4, 4] : undefined,
           spanGaps: false,
           paths: entry.stepped ? uPlot.paths.stepped!({ align: 1 }) : undefined,
           points: {
@@ -569,7 +573,7 @@ export function RuntimeTrendCharts({
     const active = [{
       id: "active",
       label: t(activeDisplay === "binary" ? "charts.runtime" : "charts.active.series"),
-      tone: "green",
+      tone: "blue",
       stepped: true,
       points: samples.map((sample) => ({
         sampledAt: sample.sampledAt,
@@ -583,13 +587,13 @@ export function RuntimeTrendCharts({
       cpu: cpuWithData,
       cpuWithoutData: cpu.length - cpuWithData.length,
       memory: [
-        { id: "used", label: t("charts.used"), tone: "purple", points: memoryUsed },
-        { id: "limit", label: t("charts.configuredLimit"), tone: "green", points: memoryLimit },
+        { id: "used", label: t("charts.used"), tone: "blue", points: memoryUsed },
+        { id: "limit", label: t("charts.configuredLimit"), tone: "neutral", points: memoryLimit },
       ] satisfies TrendSeries[],
       active,
       tokens: [
-        { id: "input", label: t("charts.input"), tone: "orange", points: throughput.map((sample) => ({ sampledAt: sample.sampledAt, value: sample.inputPerMinute ?? null })) },
-        { id: "output", label: t("charts.output"), tone: "green", points: throughput.map((sample) => ({ sampledAt: sample.sampledAt, value: sample.outputPerMinute ?? null })) },
+        { id: "input", label: t("charts.input"), tone: "blue", points: throughput.map((sample) => ({ sampledAt: sample.sampledAt, value: sample.inputPerMinute ?? null })) },
+        { id: "output", label: t("charts.output"), tone: "orange", points: throughput.map((sample) => ({ sampledAt: sample.sampledAt, value: sample.outputPerMinute ?? null })) },
       ] satisfies TrendSeries[],
     };
   }, [activeDisplay, samples, t]);
