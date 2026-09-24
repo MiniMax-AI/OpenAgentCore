@@ -2,27 +2,24 @@
 version: 1
 slug: "src-app-tsx"
 primary_target: "src/App.tsx"
-related_targets: []
+related_targets: ["src/ConsoleApp.tsx"]
 ---
 
 # Administrator console (operate)
 
-Scope: the signed-in console shell and every page behind it. Visitor mode: Operate.
-Audience: the operator of one Parsar Core deployment. Task: judge health, capacity,
-usage and failures; inspect resources; manage nodes, keys and configuration.
-Constraints: existing public client and console routes only; browser aggregation is
-bounded and labelled; missing data stays visibly missing; Parsar identity retained.
+Scope: the signed-in console shell and every page behind it, plus the first-run step. Visitor mode: Operate.
+Audience: the administrator of one Parsar Core deployment. Task: judge health, capacity, usage and failures; inspect and delete or copy project assets; manage projects, keys and nodes.
+Constraints: Web API only (`/core/v1/admin`, `/core/v1/sandbox`); missing data stays visibly missing; no small print, explanations live in help tips; API terms stay English in Chinese copy; zh-CN and English, light and dark.
 
-Information architecture: Monitor (Overview, Agent metrics, Sandbox metrics,
-Sessions log) · Resources (Agents, Environment templates, Vaults) · Infrastructure
-(Nodes) · Settings (API keys, System) · Playground (Session console, Agent builder,
-Getting started).
+Information architecture: Monitor (Overview, Agent metrics, Sandbox metrics, Session log) · Resources (Agents, Environment templates, Skills, Files, Vaults) · Platform (Projects and keys, Nodes, System).
+
+Unresolved: deployment configuration wizard waits for backend fields.
 
 ## Direction contract
 
-THESIS: The home is the fleet, not a builder: one health strip, the deployment's nodes and sandboxes on the left, evidence for the selected target on the right. Refuses the card-grid dashboard with create shortcuts.
-OWN-WORLD: Parsar neutrals on white, one indigo accent for selection and primary actions only, hairline rules instead of cards, tabular numerals, status dots, dense rows, system sans.
-STORY: The operator sees in one glance whether Core, nodes and agents are healthy, drills from a node to its sandboxes and failing Sessions, and opens deeper metrics pages.
-FIRST VIEWPORT: Page header; full-width KPI strip; fleet list at one third; selected-target metrics and allocations at two thirds; attention table beneath.
-FORM: Fleet split-pane, sixth of seven grounded structures; seed e20a0bc1.
+THESIS: One calm instrument panel for a whole deployment; every screen speaks one component language so the administrator reads state, not layout. Refuses the assembled dashboard of mismatched widgets and loading spinners.
+OWN-WORLD: Beautiful UI's foundation: cool near-white canvas, white cards drawn by a hairline ring and smooth layered shadow, neutral ink ramp, pill buttons (ink primary), Inter with CJK system fallback, tabular numerals, semantic tints as condiment; Parsar indigo as the only accent, for selection, links and data.
+STORY: The administrator lands on health, sees what needs attention, drills into a project, Session or node, and acts (delete, copy, issue, revoke) without waiting on a spinner.
+FIRST VIEWPORT: Page header with title, filters and refresh on one line; KPI strip; the page's primary card (chart grid, table or topology); nothing above the fold is a loader.
+FORM: User-pinned world (Beautiful UI + Parsar indigo, 2026-09-24); concept roll skipped because a user-pinned direction beats the roll.
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance

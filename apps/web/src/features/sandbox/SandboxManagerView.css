@@ -8,8 +8,8 @@
 .sandbox-status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 .sandbox-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 20px; margin: 0; }
 .sandbox-summary > div { min-width: 0; }
-.sandbox-summary dt { font-size: 11px; color: var(--fg-muted); margin-bottom: 6px; }
-.sandbox-summary dd { margin: 0; font-size: 12px; overflow-wrap: anywhere; }
+.sandbox-summary dt { font-size: 12px; color: var(--ink-3); margin-bottom: 4px; }
+.sandbox-summary dd { margin: 0; color: var(--ink); font-size: 13px; overflow-wrap: anywhere; }
 .sandbox-error { color: var(--danger) !important; }
 .sandbox-empty { display: grid; justify-items: center; gap: 12px; text-align: center; border: 1px dashed var(--line); border-radius: 12px; padding: 56px 24px; color: var(--fg-muted); }
 .sandbox-empty h3 { color: var(--fg); font-size: 16px; margin: 0; font-weight: 500; }
@@ -39,7 +39,7 @@
 .sandbox-manager-page { display: flex; padding: 0; overflow: hidden; }
 .sandbox-manager-page > .console-page-body { max-width: none; margin: 0; }
 .sandbox-manager-page .page-header h1 { margin: 0; font-size: 20px; letter-spacing: -0.02em; }
-.sandbox-provider-settings { padding: 24px; background: var(--surface); border: 0; border-radius: var(--frame-radius); box-shadow: var(--card-shadow); gap: 16px; }
+.sandbox-provider-settings { padding: 18px 20px; background: var(--surface); border: 0; border-radius: var(--frame-radius); box-shadow: var(--card-shadow); gap: 16px; }
 .sandbox-provider-settings h2 { margin: 0 0 8px; }
 .sandbox-provider-settings p, .sandbox-enrollment > p { font-size: 13px; line-height: 1.6; color: var(--fg-muted); }
 .sandbox-provider-settings > .button, .sandbox-enrollment > .button { align-self: flex-start; }

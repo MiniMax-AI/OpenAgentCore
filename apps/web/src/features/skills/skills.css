@@ -20,7 +20,7 @@
 
 .skills-table .skill-description {
   display: block;
-  max-width: 420px;
+  max-width: 220px;
   overflow: hidden;
   color: var(--fg-muted);
   text-overflow: ellipsis;

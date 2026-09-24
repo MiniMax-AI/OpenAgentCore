@@ -465,6 +465,31 @@ pre {
   font-weight: 500;
 }
 
+/* On the canvas (toolbars, headers) a control is a ringed white surface, like a
+   secondary button; inside cards and dialogs it is a filled field. */
+.list-toolbar .search-control,
+.list-toolbar .select-control select,
+.page-header .select-control select,
+.console-section-header .select-control select {
+  background-color: var(--surface);
+  box-shadow: var(--shadow-btn);
+}
+
+.list-toolbar .search-control:hover,
+.list-toolbar .select-control select:hover,
+.page-header .select-control select:hover,
+.console-section-header .select-control select:hover {
+  background-color: var(--inset);
+}
+
+.list-toolbar .search-control:focus-within,
+.list-toolbar .select-control select:focus-visible,
+.page-header .select-control select:focus-visible,
+.console-section-header .select-control select:focus-visible {
+  background-color: var(--surface);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-tint);
+}
+
 .select-control select {
   height: var(--control-height);
   padding: 0 30px 0 10px;

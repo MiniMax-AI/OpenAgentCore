@@ -1,10 +1,11 @@
-/* Platform › System: read-only deployment facts in hairline ledgers. */
+/* Platform › System: read-only deployment facts, each ledger one card. */
 
 .system-facts {
   margin: 0;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--frame-radius);
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
 }
 
 /* The label column matches the first column of the harness table, so values line up. */
@@ -15,7 +16,7 @@
   align-items: center;
   font-size: 13px;
   line-height: 18px;
-  border-bottom: 1px solid var(--line-muted);
+  border-bottom: 1px solid var(--grid-line);
 }
 
 .system-fact > dt,
@@ -32,7 +33,7 @@
   min-width: 0;
   align-items: center;
   gap: 4px;
-  color: var(--fg-muted);
+  color: var(--ink-2);
 }
 
 .system-fact dd {
@@ -53,14 +54,18 @@
   font-weight: 500;
 }
 
+/* The default harness carries a quiet pill. */
 .system-flag {
-  padding: 0 5px;
-  color: var(--fg-muted);
-  font-size: 11px;
+  display: inline-flex;
+  height: 20px;
+  align-items: center;
+  padding: 0 7px;
+  color: var(--ink-2);
+  font-size: 11.5px;
   font-weight: 500;
-  line-height: 16px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
+  background: var(--field);
+  border-radius: 999px;
+  box-shadow: var(--shadow-hairline);
 }
 
 .system-code {

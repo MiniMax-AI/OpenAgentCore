@@ -53,9 +53,19 @@ export function formatCores(value: number | null | undefined, locale?: string): 
   return value.toLocaleString(locale, { maximumFractionDigits: value < 10 ? 2 : 1 });
 }
 
-export function formatDateTime(epochSeconds: number | null | undefined, locale?: string): string {
+/** Date and time; the year is left out for dates in the current year. */
+export function formatDateTime(epochSeconds: number | null | undefined, locale?: string, now: Date = new Date()): string {
   if (epochSeconds === null || epochSeconds === undefined || !Number.isFinite(epochSeconds)) return MISSING;
-  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(epochSeconds * 1000));
+  const date = new Date(epochSeconds * 1000);
+  const sameYear = date.getFullYear() === now.getFullYear();
+  return new Intl.DateTimeFormat(locale, {
+    ...(sameYear ? {} : { year: "numeric" }),
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
 }
 
 export function formatClock(epochMilliseconds: number | null | undefined, locale?: string): string {

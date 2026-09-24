@@ -3,11 +3,13 @@ import { Puzzle } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState, PageBody, PageHeader, RefreshButton } from "../../components/console-ui";
 import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
+import { useDeleteFlow } from "../../lib/delete-flow";
 import { formatDateTime, MISSING } from "../../lib/format";
-import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, readAllPages, useCreators, useProjectCollection, useProjects } from "../../lib/projects";
+import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
 import { CopyDialog, type CopySource } from "../copy/CopyDialog";
 import { SkillDetail } from "./SkillDetail";
 import { LatestVersion } from "./skill-parts";
@@ -63,6 +65,11 @@ function SkillsList() {
   }, [collection.items, query]);
   const creators = useCreators("skill", useMemo(() => collection.items.map((row) => ({ projectId: row.project.id, id: row.value.id })), [collection.items]));
   const refresh = useCallback(() => { forgetCreators(); collection.refresh(); }, [collection]);
+  const remove = useDeleteFlow<Owned<Skill>>(
+    useCallback((row: Owned<Skill>) => projectClient(row.project.id).deleteSkill(row.value.id), []),
+    refresh,
+    { uncertain: tCommon("list.deleteUncertain") },
+  );
   const showProject = !filter;
 
   let body;
@@ -113,6 +120,9 @@ function SkillsList() {
                           <button className="text-action" type="button" aria-label={tCommon("copy.actionLabel", { name: skill.name })} onClick={() => setCopy({ type: "skill", id: skill.id, name: skill.name, project: row.project })}>
                             {tCommon("copy.action")}
                           </button>
+                          <button className="text-action danger" type="button" aria-label={t("deleteSkill.title", { name: skill.name })} onClick={() => remove.ask(row)}>
+                            {t("actions.delete")}
+                          </button>
                         </RowActions>
                       </td>
                     </tr>
@@ -142,6 +152,19 @@ function SkillsList() {
       />
       <PageBody>{body}</PageBody>
       <CopyDialog source={copy} onClose={() => setCopy(null)} />
+      <ConfirmDialog
+        open={remove.target !== null}
+        title={remove.target ? t("deleteSkill.title", { name: remove.target.value.name }) : ""}
+        confirmLabel={t("deleteSkill.confirm")}
+        busyLabel={t("deleteSkill.deleting")}
+        busy={remove.busy}
+        error={remove.error}
+        onConfirm={() => void remove.confirm()}
+        onClose={remove.cancel}
+      >
+        <p>{t("deleteSkill.allVersions")} {t("deleteSkill.existingSessions")}</p>
+        <p>{t("deleteSkill.templates")}</p>
+      </ConfirmDialog>
     </section>
   );
 }
