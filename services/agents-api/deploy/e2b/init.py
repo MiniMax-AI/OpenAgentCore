@@ -98,7 +98,7 @@ def initialize():
     ROOT.chmod(0o700)
     source = ROOT / 'bootstrap.json'
     receipt = ROOT / 'ready.json'
-    if receipt.exists() or (ROOT / 'launch.json').exists():
+    if any((ROOT / name).exists() for name in ['ready.json', 'launch.json', 'managed-launch.json', 'managed-ready.json']):
         raise RuntimeError('Runtime startup cannot be replayed; inspect or destroy this sandbox')
     if source.stat().st_size > 32768:
         raise ValueError('Runtime startup input too large')

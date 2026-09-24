@@ -94,12 +94,15 @@ class Provider:
     def inspect(self):
         found = self.discover()
         if not found:
+            if (self.receipt.data or {}).get('settled'):
+                return None
             raise Failure('not_found')
         if len(found) != 1:
             raise Failure('unconfirmed')
         cloud = found[0]
         record = self.receipt.data or {}
-        if cloud.state == 'running' and not record.get('settled') and record.get('connection'):
+        if (cloud.state == 'running' and not record.get('bootstrap_complete') and record.get('connection')
+                and record.get('status') not in ('bootstrap_failed', 'killed')):
             try:
                 receipt = json.loads(self.client(cloud).files.read('/root/.parsar/e2b/managed-ready.json',
                                       user='root', request_timeout=self.remaining()))
@@ -140,11 +143,12 @@ class Provider:
         if result['ExitCode'] != 0:
             self.receipt.save(status='bootstrap_failed', settled=True)
             raise Failure('unconfirmed')
+        self.receipt.save(status='bootstrap_exited', settled=True)
         return self.inspect()
 
     def renew(self):
         cloud = self.inspect()
-        if cloud.state != 'running':
+        if cloud is None or cloud.state != 'running':
             raise Failure('unconfirmed')
         Sandbox.set_timeout(cloud.sandbox_id, self.config['TimeoutSeconds'], **self.options())
         return self.owns(Sandbox.get_info(cloud.sandbox_id, **self.options()))
@@ -176,8 +180,11 @@ class Provider:
                     result = run(self.client(cloud), self.q['Command'], self.remaining)
                     return {'Version': 1, 'Command': result, 'ErrorCode': ''}
                 cloud = {'create': self.create, 'inspect': self.inspect, 'renew': self.renew}[operation]()
-                return {'Version': 1, 'Info': self.info(cloud), 'ErrorCode': ''}
+                return {'Version': 1, 'Info': self.info(cloud, absent=cloud is None), 'ErrorCode': ''}
             except Failure as error:
-                return {'Version': 1, 'Info': self.info(absent=error.code == 'not_found'), 'ErrorCode': error.code}
+                info = self.info()
+                if error.code == 'not_found':
+                    info = dict(self.reference, ProviderID='', State='absent', BootstrapComplete=False, CreateSettled=False)
+                return {'Version': 1, 'Info': info, 'ErrorCode': error.code}
             except Exception:
                 return {'Version': 1, 'Info': self.info(), 'ErrorCode': 'unconfirmed'}
