@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseEnv } from "node:util";
 
@@ -25,12 +24,11 @@ const MAX_RESPONSE_BYTES = 1024 * 1024;
 const MAX_COMMAND_OUTPUT_BYTES = 256 * 1024;
 const PROFILE_PATTERN = /^[a-zA-Z0-9._-]{1,64}$/;
 const CONFIG_KEYS = new Set([
-  "AGENTS_API_KEYS_FILE",
   "AGENTS_API_PROXY_TARGET",
   "AGENTS_API_PROXY_TOKEN",
   "AGENTS_API_PROXY_TOKEN_FILE",
 ]);
-const PATH_CONFIG_KEYS = new Set(["AGENTS_API_KEYS_FILE", "AGENTS_API_PROXY_TOKEN_FILE"]);
+const PATH_CONFIG_KEYS = new Set(["AGENTS_API_PROXY_TOKEN_FILE"]);
 const SAFE_PATH_EXPANSION_KEYS = new Set(["HOME", "PARSAR_HOME"]);
 
 const HELP = `Agents Core Doctor (read-only)
@@ -287,15 +285,11 @@ function normalizeToken(rawToken) {
   return token;
 }
 
-async function inspectPrivateFile(path, label, { platform, report, required = true }) {
+async function inspectPrivateFile(path, label, { platform, report }) {
   let metadata;
   try {
     metadata = await stat(path);
   } catch (error) {
-    if (!required && error?.code === "ENOENT") {
-      report.add("UNKNOWN", label, "local file is not available; digest comparison was skipped.");
-      return { exitCode: CORE_DOCTOR_EXIT_CODES.ok, value: undefined };
-    }
     report.add("FAIL", label, "file is missing or unreadable.");
     return { exitCode: CORE_DOCTOR_EXIT_CODES.diagnosticFailure, value: undefined };
   }
@@ -319,24 +313,6 @@ async function inspectPrivateFile(path, label, { platform, report, required = tr
     report.add("FAIL", label, "file is missing or unreadable.");
     return { exitCode: CORE_DOCTOR_EXIT_CODES.diagnosticFailure, value: undefined };
   }
-}
-
-function digestMatchesBinding(token, keysSource) {
-  let bindings;
-  try {
-    bindings = JSON.parse(keysSource);
-  } catch {
-    return false;
-  }
-  if (!Array.isArray(bindings)) return false;
-  const digest = createHash("sha256").update(token).digest("hex");
-  return bindings.some((binding) =>
-    binding &&
-    typeof binding === "object" &&
-    typeof binding.token_sha256 === "string" &&
-    /^[a-fA-F0-9]{64}$/.test(binding.token_sha256) &&
-    binding.token_sha256.toLowerCase() === digest,
-  );
 }
 
 export async function inspectCoreCredentials({ config, cwd, homeDir, platform, report }) {
@@ -369,35 +345,6 @@ export async function inspectCoreCredentials({ config, cwd, homeDir, platform, r
         exitCode = CORE_DOCTOR_EXIT_CODES.diagnosticFailure;
       }
     }
-  }
-
-  const configuredKeysFile = config.AGENTS_API_KEYS_FILE?.trim();
-  let keysFile;
-  if (configuredKeysFile) keysFile = resolveConfiguredPath(configuredKeysFile, homeDir, cwd);
-  else if (tokenFile) keysFile = join(dirname(tokenFile), "keys.json");
-
-  if (!keysFile) {
-    report.add("UNKNOWN", "Caller binding", "no local keys file is configured; digest comparison was skipped.");
-    return { exitCode, token };
-  }
-
-  const keysInspection = await inspectPrivateFile(keysFile, "Caller binding", {
-    platform,
-    report,
-    required: Boolean(configuredKeysFile),
-  });
-  exitCode = Math.max(exitCode, keysInspection.exitCode);
-
-  if (keysInspection.value === undefined) {
-    return { exitCode, token };
-  }
-  if (!token) {
-    report.add("WARN", "Caller binding", "digest comparison skipped because no valid caller token is available.");
-  } else if (digestMatchesBinding(token, keysInspection.value)) {
-    report.add("PASS", "Caller binding", "caller token digest matches a keys.json binding.");
-  } else {
-    report.add("FAIL", "Caller binding", "caller token digest does not match any keys.json binding.");
-    exitCode = Math.max(exitCode, CORE_DOCTOR_EXIT_CODES.diagnosticFailure);
   }
 
   return { exitCode, token };

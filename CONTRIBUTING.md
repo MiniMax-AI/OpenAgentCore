@@ -2241,17 +2241,14 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
 - Shared supported wire types live in `contracts/agents-api/v1`. `make openapi`
   separately generates the product spec and `contracts/agents-api/openapi.yaml`;
   never mix their routes or authentication schemes. CI checks both for drift.
-- The standalone service uses `AGENTS_API_DATABASE_URL` and operator-provisioned
-  SHA-256 API key bindings from `AGENTS_API_KEYS_FILE`. Each key resolves one
-  organization/project and typed user/service-account principal. The internal
-  tenant UUID is its project resource partition. Before starting the listener or
-  Worker, atomically insert or verify the configured project-to-tenant bijection
-  in `execution_project_scopes`; never remap or delete existing associations when
-  keys change. Configuration requires explicit identities, with no legacy default.
+- The standalone service uses `AGENTS_API_DATABASE_URL`. PostgreSQL stores Projects,
+  their immutable execution scopes and API-key digests. Keys in the same Project
+  resolve to one shared service-account principal and tenant. Project/key writes
+  are managed through deployment-authenticated APIs, not configuration files.
   Optional `OpenAI-Organization` and `OpenAI-Project` headers must match the key;
   repeated/conflicting values fail authentication. Metadata, forwarded identities
-  and product session cookies grant no access. Keys can rotate under the same
-  principal; changing or removing caller bindings requires a service restart.
+  and product session cookies grant no access. Issue/revoke operations take effect
+  without restarting Core. Deployment credentials cannot authenticate public calls.
   Every new Session requires an explicit typed creator at the Store boundary,
   including internal callers. Public creation derives it only from the authenticated
   principal. Persist creator kind/ID in the creation transaction and never rewrite

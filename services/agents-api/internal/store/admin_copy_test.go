@@ -251,3 +251,36 @@ func TestAdminCopySkillVersionsAndTemplateConfidentialDependencies(t *testing.T)
 		t.Fatal("dependency copy escaped rollback", err)
 	}
 }
+
+func TestAdminCopyArchivedProjectBoundaries(t *testing.T) {
+	s, source, target := adminCopyFixture(t)
+	file, err := s.CreateSourceFile(t.Context(), source, uploadSource([]byte("retained project asset")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ArchiveProject(adminCopyContext(t, source), source); err != nil {
+		t.Fatal(err)
+	}
+	input := CopyAssetsInput{ResourceType: "file", ResourceID: file.ID, IdempotencyKey: uuid.NewString()}
+	result, err := s.CopyAssets(adminCopyContext(t, target), source, target, input)
+	if err != nil {
+		t.Fatal("archived source was not readable", err)
+	}
+	targetID := copiedID(t, result, "file", file.ID)
+	if _, err := s.ArchiveProject(adminCopyContext(t, target), target); err != nil {
+		t.Fatal(err)
+	}
+	before := adminMutationSnapshot(t, s, "source_files", "admin_asset_copies", "admin_resource_owners", "admin_audit_log", "pg_largeobject")
+	for _, key := range []string{input.IdempotencyKey, uuid.NewString()} {
+		input.IdempotencyKey = key
+		if _, err := s.CopyAssets(adminCopyContext(t, target), source, target, input); !errors.Is(err, ErrProjectArchived) {
+			t.Fatal("archived target accepted a copy or replay", err)
+		}
+	}
+	if !reflect.DeepEqual(before, adminMutationSnapshot(t, s, "source_files", "admin_asset_copies", "admin_resource_owners", "admin_audit_log", "pg_largeobject")) {
+		t.Fatal("rejected copy changed retained resources or audit")
+	}
+	if _, err := s.GetSourceFile(t.Context(), target, targetID); err != nil {
+		t.Fatal("archive lost the existing copy", err)
+	}
+}
