@@ -20,8 +20,10 @@ function systemTheme(): ResolvedTheme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+/** `data-theme` drives the console's own tokens; the `dark` class drives Beautiful UI and Tailwind's `dark:` variant. */
 function applyTheme(theme: ResolvedTheme): void {
   document.documentElement.dataset.theme = theme;
+  document.documentElement.classList.toggle("dark", theme === "dark");
   document.documentElement.style.colorScheme = theme;
 }
 

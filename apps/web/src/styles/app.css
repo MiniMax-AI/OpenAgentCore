@@ -1,0 +1,10 @@
+/*
+ * The console's single stylesheet entry. Tailwind v4 contributes its theme
+ * variables and utilities only (no preflight: the console keeps its own base
+ * rules), Beautiful UI contributes the design tokens every surface uses, and
+ * the console grammar follows.
+ */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css";
+@import "../style.css";
+@import "./console.css";

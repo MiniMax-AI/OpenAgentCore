@@ -5,8 +5,7 @@ import { ConsoleApp } from "./ConsoleApp";
 import { ToastProvider } from "./components/Toast";
 import { ThemeProvider } from "./lib/ThemeProvider";
 import "./i18n";
-import "./style.css";
-import "./styles/console.css";
+import "./styles/app.css";
 
 const root = document.getElementById("root");
 

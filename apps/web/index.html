@@ -23,6 +23,7 @@
               : "light"
             : preference
         document.documentElement.dataset.theme = resolved
+        document.documentElement.classList.toggle("dark", resolved === "dark")
         document.documentElement.style.colorScheme = resolved
       })()
     </script>
