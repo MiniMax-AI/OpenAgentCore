@@ -330,13 +330,6 @@
   font-size: 12.5px;
 }
 
-.first-key-name {
-  color: var(--fg);
-  font-family: var(--font-mono);
-  font-size: 12.5px;
-  font-weight: 500;
-}
-
 .first-key-actions {
   display: flex;
   gap: 8px;

@@ -1,65 +1,7 @@
 /* Resources › Agents: the shared filter bar and data table grammar. */
 
-.agents-toolbar {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.agents-filter-bar .search-control {
-  width: 288px;
-  max-width: 100%;
-}
-
 .agent-table th[scope="row"] {
   min-width: 200px;
-}
-
-.agent-table-name {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 2px;
-}
-
-.agent-table-name .table-link {
-  min-width: 0;
-}
-
-.agent-table-name .table-link strong {
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-table-name .table-link:disabled {
-  cursor: default;
-}
-
-.agent-copy-id {
-  width: 22px;
-  height: 22px;
-  flex: 0 0 22px;
-  color: var(--fg-subtle);
-  opacity: 0;
-}
-
-.agent-table tr:hover .agent-copy-id,
-.agent-copy-id:focus-visible {
-  opacity: 1;
-}
-
-.agent-copy-id:hover {
-  color: var(--fg);
-}
-
-.agent-table-opening {
-  display: block;
-  margin-top: 2px;
-  color: var(--accent);
-  font-size: 11.5px;
-  font-weight: 400;
 }
 
 .agent-table-model {
@@ -69,40 +11,4 @@
   vertical-align: bottom;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.agent-table-help {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.agent-table td.agent-usage-pending {
-  color: var(--fg-subtle);
-}
-
-.agent-start-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.agent-table .agent-session-start {
-  width: auto;
-  height: 26px;
-  padding: 0 8px;
-  font-size: 12.5px;
-}
-
-@media (hover: none) {
-  .agent-copy-id {
-    opacity: 1;
-  }
-}
-
-@media (max-width: 640px) {
-  .agents-filter-bar .search-control {
-    width: 100%;
-    flex: 1 1 100%;
-  }
 }

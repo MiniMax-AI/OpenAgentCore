@@ -22,9 +22,3 @@
 .vault-metadata code {
   font-size: 12px;
 }
-
-.vault-skeleton {
-  display: grid;
-  gap: 14px;
-  padding: 16px;
-}

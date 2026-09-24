@@ -282,22 +282,6 @@
   width: 100% !important;
 }
 
-.dashboard-runtime-uplot .u-over {
-  cursor: crosshair;
-  touch-action: pan-y;
-}
-
-.dashboard-runtime-uplot .u-select {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  border-right: 1px dashed color-mix(in srgb, var(--accent) 78%, transparent);
-  border-left: 1px dashed color-mix(in srgb, var(--accent) 78%, transparent);
-}
-
-.dashboard-runtime-uplot .u-cursor-x,
-.dashboard-runtime-uplot .u-cursor-y {
-  border-color: color-mix(in srgb, var(--fg) 48%, transparent);
-}
-
 .dashboard-runtime-trend-tooltip {
   display: grid;
   width: min(190px, calc(100% - 24px));

@@ -4,12 +4,10 @@
 .sandbox-manager h1 { font-size: 24px; font-weight: 600; margin: 0 0 8px; letter-spacing: -.025em; }
 .sandbox-manager h2 { font-size: 15px; font-weight: 600; margin: 0; }
 .sandbox-manager p, .sandbox-add-node p { color: var(--fg-muted); line-height: 1.6; margin: 0; }
-.sandbox-heading, .sandbox-actions, .sandbox-section-heading { display: flex; align-items: center; gap: 12px; }
+.sandbox-heading, .sandbox-actions { display: flex; align-items: center; gap: 12px; }
 .sandbox-heading { justify-content: space-between; gap: 20px; }
 .sandbox-actions { flex-shrink: 0; flex-wrap: wrap; }
 .sandbox-refresh { width: 36px; height: 36px; }
-.sandbox-section-heading { margin-bottom: 14px; }
-.sandbox-section-heading > span { font-size: 12px; color: var(--fg-muted); border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; }
 .sandbox-node-card { min-width: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
 .sandbox-node-top { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 20px 20px 0; }
 .sandbox-node-icon { display: inline-flex; color: var(--fg-muted); }
@@ -89,3 +87,9 @@
 .sandbox-provider-settings > .button, .sandbox-enrollment > .button { align-self: flex-start; }
 .sandbox-cloud-summary { display: grid; gap: 16px; }
 .sandbox-provider-settings .sandbox-enrollment { max-width: none; }
+
+.sandbox-provider-title,
+.sandbox-provider-status,
+.sandbox-provider-actions { display: flex; align-items: center; gap: 6px; }
+.sandbox-provider-title h2 { margin: 0; }
+.sandbox-provider-actions { align-self: flex-start; }
