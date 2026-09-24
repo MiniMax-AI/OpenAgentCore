@@ -8,8 +8,8 @@ import (
 )
 
 // NewDeferredRuntimeProvider enables Web setup for one fixed installation. The
-// loader returns nil until selection, then an immutable remote-node provider.
-// This is one-time activation, not provider replacement or configuration reload.
+// loader returns nil until selection, then the committed immutable generation.
+// Replacement is serialized by the deployment maintenance and drain flow.
 func NewDeferredRuntimeProvider(installationID string, load func(context.Context) (*RuntimeProvider, error)) *RuntimeProvider {
 	return &RuntimeProvider{InstallationID: installationID, loadDeployment: load}
 }

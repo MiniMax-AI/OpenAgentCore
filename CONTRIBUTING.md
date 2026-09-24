@@ -646,7 +646,9 @@ confirmed absent compute may then be released. Ordinary 404 responses do not pro
 The helper's pinned SDK, dependencies and licenses ship with Core; users do not install
 Python packages after selecting E2B in Web. Application-managed self_hosted tooling
 remains independent and uses the same Runtime. Qualify each changed path using actual
-provider and model execution before claiming acceptance.
+provider and model execution before claiming acceptance. Run `make check-e2b-provider`
+with `PARSAR_E2B_SDK_PYTHON` pointing to the pinned SDK environment; the packaged
+helper build runs these tests as well. `make check` covers shared initialization.
 
 The independent Docker Provider consumes an immutable Runtime image and retains
 one caller-owned allocation reference through partial creation and cleanup. Persist
