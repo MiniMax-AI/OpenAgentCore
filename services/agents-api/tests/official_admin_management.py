@@ -112,7 +112,8 @@ def main():
             body = {"source_project_id": source["project_id"], "target_project_id": target["project_id"],
                     "resource_type": kind, "resource_id": resource, "include_dependencies": dependencies}
             if vault:
-                body["target_vault_id"] = vault
+                body["resource_id"] = resource.upper()
+                body["target_vault_id"] = vault.upper()
             headers = {"Idempotency-Key": str(uuid.uuid4())}
             result = safe(request("POST", "/core/v1/admin/copies", json=body, headers=headers))
             for item in result["mappings"]:

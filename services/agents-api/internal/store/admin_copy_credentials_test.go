@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/credentialcrypto"
@@ -33,7 +34,7 @@ func TestAdminCopyAgentVaultCredentialsAndEncryptedProvider(t *testing.T) {
 	if err := json.Unmarshal(agentProviderConfiguration(t, provider, "codex"), &configuration); err != nil {
 		t.Fatal(err)
 	}
-	configuration["tools"] = []map[string]any{{"type": "mcp", "server_label": "static", "credential_id": static.ID}, {"type": "mcp", "server_label": "refresh", "credential_id": refresh.ID}}
+	configuration["tools"] = []map[string]any{{"type": "mcp", "server_label": "static", "credential_id": strings.ToUpper(static.ID)}, {"type": "mcp", "server_label": "refresh", "credential_id": refresh.ID}}
 	raw, err := json.Marshal(configuration)
 	if err != nil {
 		t.Fatal(err)
@@ -42,7 +43,7 @@ func TestAdminCopyAgentVaultCredentialsAndEncryptedProvider(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := s.CopyAssets(adminCopyContext(t, target), source, target, CopyAssetsInput{ResourceType: "agent", ResourceID: agent.ID, IncludeDependencies: true})
+	result, err := s.CopyAssets(adminCopyContext(t, target), source, target, CopyAssetsInput{ResourceType: "agent", ResourceID: strings.ToUpper(agent.ID), IncludeDependencies: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,5 +116,47 @@ func TestAdminCopyAgentVaultCredentialsAndEncryptedProvider(t *testing.T) {
 		if err := s.pool.QueryRow(t.Context(), "SELECT count(*) FROM admin_audit_log WHERE tenant_id=$1 AND result_ids::text LIKE '%' || $2 || '%'", target, secret).Scan(&count); err != nil || count != 0 {
 			t.Fatal("audit exposes secret", err)
 		}
+	}
+}
+
+func TestAdminCopyCredentialCanonicalBindings(t *testing.T) {
+	for _, kind := range []string{"static_bearer", "mcp_oauth"} {
+		t.Run(kind, func(t *testing.T) {
+			s, source, target := adminCopyFixture(t)
+			vault, err := s.CreateVault(t.Context(), source, CreateVaultInput{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			destination, err := s.CreateVault(t.Context(), target, CreateVaultInput{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			const token = "canonical-copy-private-token"
+			const url = "https://canonical-copy.example/mcp"
+			var credential Credential
+			if kind == "static_bearer" {
+				credential, err = s.CreateStaticCredential(t.Context(), source, vault.ID, CreateStaticCredentialInput{Name: "canonical", MCPServerURL: url, Token: token})
+			} else {
+				credential, err = s.CreateOAuthCredential(t.Context(), source, vault.ID, CreateOAuthCredentialInput{Name: "canonical", MCPServerURL: url, AccessToken: token})
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, sourceID := range []string{credential.ID, strings.ToUpper(credential.ID)} {
+				result, err := s.CopyAssets(adminCopyContext(t, target), source, target, CopyAssetsInput{ResourceType: "credential", ResourceID: sourceID, TargetVaultID: strings.ToUpper(destination.ID)})
+				if err != nil {
+					t.Fatal("valid UUID copy failed", err)
+				}
+				id := copiedID(t, result, "credential", credential.ID)
+				selected, err := s.ResolveMCPCredentials(t.Context(), target, []string{destination.ID}, []MCPCredentialRequest{{ServerLabel: "copy", ServerURL: url, CredentialID: &id}})
+				if err != nil || len(selected) != 1 {
+					t.Fatal("copied credential cannot be selected", err)
+				}
+				got, err := s.MCPBearerToken(t.Context(), target, []string{destination.ID}, selected[0])
+				if err != nil || got != token {
+					t.Fatal("committed copy cannot decrypt through normal execution lookup", err)
+				}
+			}
+		})
 	}
 }

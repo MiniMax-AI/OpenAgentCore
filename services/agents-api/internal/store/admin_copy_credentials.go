@@ -44,6 +44,7 @@ func (c *assetCopier) credential(ctx context.Context, id, vault string) (string,
 	if err != nil {
 		return "", ErrNotFound
 	}
+	vault = copyID(targetVault)
 	if _, err := c.q.LockAdminCopyVault(ctx, sqlc.LockAdminCopyVaultParams{TenantID: c.target, ID: targetVault}); err != nil {
 		return "", err
 	}
@@ -135,6 +136,7 @@ func (c *assetCopier) agent(ctx context.Context, id string) (string, error) {
 		if err != nil {
 			return "", ErrNotFound
 		}
+		credentialID = copyID(credential)
 		original, err := c.q.GetAdminCopyCredential(ctx, sqlc.GetAdminCopyCredentialParams{TenantID: c.source, ID: credential})
 		if err != nil {
 			return "", err

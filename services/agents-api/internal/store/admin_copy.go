@@ -170,6 +170,14 @@ func (c *assetCopier) add(kind, source, target, parent string) string {
 }
 
 func (c *assetCopier) copy(ctx context.Context, kind, id, vault string) (string, error) {
+	switch kind {
+	case "agent", "vault", "credential", "environment_template":
+		source, err := parseID(id)
+		if err != nil {
+			return "", ErrNotFound
+		}
+		id = copyID(source)
+	}
 	if target, ok := c.mapped[kind+":"+id]; ok {
 		return target, nil
 	}
