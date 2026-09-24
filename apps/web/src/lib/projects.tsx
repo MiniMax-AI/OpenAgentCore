@@ -1,9 +1,11 @@
 import type { OpenAIAgentsClient } from "@agents-core-web/agents-client";
+import { QueryClientProvider, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { HelpTip } from "../components/console-ui";
-import { admin, listAllProjects, listCreators, type Creator, type OwnerResourceType, type Project } from "./admin-view";
+import { admin, listCreators, type Creator, type OwnerResourceType, type Project } from "./admin-view";
+import { collectionQuery, projectsQuery, queryClient, type CollectionSpec } from "./queries";
 
 export { admin };
 export type { Project };
@@ -27,24 +29,28 @@ interface ProjectsContextValue {
 
 const ProjectsContext = createContext<ProjectsContextValue | null>(null);
 
+/** Provides the query cache and the project list every page filters by. */
 export function ProjectsProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<ProjectsState>({ status: "loading", projects: [], error: null });
-  const [revision, setRevision] = useState(0);
-  useEffect(() => {
-    const controller = new AbortController();
-    setState((current) => ({ status: "loading", projects: current.projects, error: null }));
-    listAllProjects(controller.signal).then(
-      (projects) => setState({ status: "ready", projects, error: null }),
-      (error: unknown) => {
-        if (controller.signal.aborted) return;
-        setState((current) => ({ status: "failed", projects: current.projects, error: error instanceof Error ? error.message : String(error) }));
-      },
-    );
-    return () => controller.abort();
-  }, [revision]);
-  const refresh = useCallback(() => setRevision((value) => value + 1), []);
-  const byId = useMemo(() => new Map(state.projects.map((project) => [project.id, project])), [state.projects]);
-  return <ProjectsContext.Provider value={{ state, refresh, byId }}>{children}</ProjectsContext.Provider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ProjectsState>{children}</ProjectsState>
+    </QueryClientProvider>
+  );
+}
+
+function ProjectsState({ children }: { children: ReactNode }) {
+  const query = useQuery(projectsQuery);
+  const projects = useMemo(() => query.data ?? [], [query.data]);
+  const state: ProjectsState = query.isPending
+    ? { status: "loading", projects, error: null }
+    : query.isError && !query.data
+      ? { status: "failed", projects, error: query.error instanceof Error ? query.error.message : String(query.error) }
+      : { status: query.isFetching ? "loading" : "ready", projects, error: null };
+  const { refetch } = query;
+  const refresh = useCallback(() => { void refetch(); }, [refetch]);
+  const byId = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
+  const value = useMemo(() => ({ state, refresh, byId }), [state.status, state.error, projects, refresh, byId]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <ProjectsContext.Provider value={value}>{children}</ProjectsContext.Provider>;
 }
 
 export function useProjects(): ProjectsContextValue {
@@ -172,39 +178,33 @@ export function projectClient(projectId: string): ProjectClient {
 
 /**
  * Loads one collection from the selected project, or from every project in
- * parallel. A failing project is reported by name; the others still show.
+ * parallel, through the query cache: each project is cached on its own, so the
+ * all-projects view and a single project share reads, a revisit opens at once,
+ * and a refresh keeps the rows on screen. A failing project is reported by
+ * name; the others still show.
  */
-export function useProjectCollection<T>(
-  filter: ProjectFilterValue,
-  load: (client: ProjectClient, signal: AbortSignal) => Promise<T[]>,
-  deps: readonly unknown[] = [],
-): ProjectCollection<T> {
+export function useProjectCollection<T>(spec: CollectionSpec<T>, filter: ProjectFilterValue): ProjectCollection<T> {
   const { state } = useProjects();
-  const [collection, setCollection] = useState<Omit<ProjectCollection<T>, "refresh">>({ status: "loading", items: [], failures: [] });
-  const [revision, setRevision] = useState(0);
-  const loadRef = useRef(load);
-  loadRef.current = load;
+  const queryClient = useQueryClient();
   const targets = useMemo(() => state.projects.filter((project) => !filter || project.id === filter), [filter, state.projects]);
-  useEffect(() => {
-    if (state.status === "loading" && !state.projects.length) return;
-    const controller = new AbortController();
-    setCollection((current) => ({ status: "loading", items: current.items, failures: [] }));
-    void Promise.allSettled(targets.map(async (project) => ({ project, values: await loadRef.current(projectClient(project.id), controller.signal) })))
-      .then((results) => {
-        if (controller.signal.aborted) return;
-        const items: Owned<T>[] = [];
-        const failures: ProjectFailure[] = [];
-        results.forEach((result, index) => {
-          if (result.status === "fulfilled") items.push(...result.value.values.map((value) => ({ project: result.value.project, value })));
-          else failures.push({ project: targets[index]!, message: result.reason instanceof Error ? result.reason.message : String(result.reason) });
-        });
-        setCollection({ status: "ready", items, failures });
-      });
-    return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targets, revision, state.status, ...deps]);
-  const refresh = useCallback(() => setRevision((value) => value + 1), []);
-  return { ...collection, refresh };
+  const projectsKnown = state.status !== "loading" || state.projects.length > 0;
+  const results = useQueries({
+    queries: targets.map((project) => ({ ...collectionQuery(spec, project.id), enabled: projectsKnown })),
+  });
+  const items: Owned<T>[] = [];
+  const failures: ProjectFailure[] = [];
+  let pending = !projectsKnown;
+  results.forEach((result, index) => {
+    const project = targets[index]!;
+    if (result.data) items.push(...result.data.map((value) => ({ project, value })));
+    if (result.isError) failures.push({ project, message: result.error instanceof Error ? result.error.message : String(result.error) });
+    if (result.isFetching || result.isPending) pending = true;
+  });
+  const specKey = JSON.stringify(spec.key);
+  const refresh = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["collection", ...(JSON.parse(specKey) as unknown[])] });
+  }, [queryClient, specKey]);
+  return { status: pending ? "loading" : "ready", items, failures, refresh };
 }
 
 /** Reads every page of a cursor-paginated list, bounded like the rest of the console. */

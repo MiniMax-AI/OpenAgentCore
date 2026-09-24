@@ -13,6 +13,8 @@ import { SkillDetail } from "./SkillDetail";
 import { LatestVersion } from "./skill-parts";
 import { filterSkills } from "./skill-operations";
 import "./skills.css";
+import { collections } from "../../lib/queries";
+import { TableSkeleton } from "../../components/Skeleton";
 
 /**
  * Resources › Skills: every project's Skills. The console views, downloads,
@@ -54,7 +56,7 @@ function SkillsList() {
   const [filter, setFilter] = useState(params.project ?? "");
   const [query, setQuery] = useState("");
   const [copy, setCopy] = useState<CopySource | null>(null);
-  const collection = useProjectCollection<Skill>(filter, (client, signal) => readAllPages((after) => client.listSkills({ after, limit: 100, signal })));
+  const collection = useProjectCollection(collections.skills, filter);
   const rows = useMemo(() => {
     const visible = new Set(filterSkills(collection.items.map((row) => row.value), query));
     return collection.items.filter((row) => visible.has(row.value)).sort((a, b) => b.value.created_at - a.value.created_at);
@@ -65,7 +67,7 @@ function SkillsList() {
 
   let body;
   if (collection.status === "loading" && !collection.items.length) {
-    body = <p className="page-status" role="status">{t("list.loading")}</p>;
+    body = <TableSkeleton label={t("list.loading")} columns={6} />;
   } else if (!collection.items.length && !collection.failures.length) {
     body = <EmptyState icon={Puzzle} title={t("empty.title")} />;
   } else {

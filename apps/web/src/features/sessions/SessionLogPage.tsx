@@ -25,6 +25,8 @@ import {
 } from "./session-log";
 import "./sessions.css";
 import { type Project } from "../../lib/admin-view";
+import { collections } from "../../lib/queries";
+import { TableSkeleton } from "../../components/Skeleton";
 
 const PAGE_SIZE = 50;
 
@@ -55,7 +57,7 @@ export function SessionLogPage() {
 
   // A remembered or linked project that no longer exists falls back to every project.
   const selected = project && projects.status === "ready" && !byId.has(project) ? "" : project;
-  const collection = useProjectCollection(selected, (client, signal) => readSessionLog(client, signal));
+  const collection = useProjectCollection(collections.sessions, selected);
   useEffect(() => { if (collection.status === "ready") setLoadedAt(Date.now()); }, [collection.status, collection.items]);
 
   // Switching from every project to one narrows the rows at once; the reload follows.
@@ -90,7 +92,7 @@ export function SessionLogPage() {
   if (projects.status === "failed" && !projects.projects.length) {
     body = <EmptyState title={t("log.loadFailed")} description={projects.error} action={<button className="button outline" type="button" onClick={refresh}>{tCommon("actions.retry")}</button>} />;
   } else if (loading && !rows.length) {
-    body = <p className="page-status" role="status">{t("log.loading")}</p>;
+    body = <TableSkeleton label={t("log.loading")} rows={8} columns={8} />;
   } else if (allFailed) {
     body = <EmptyState title={t("log.loadFailed")} description={failures[0]?.message} action={<button className="button outline" type="button" onClick={refresh}>{tCommon("actions.retry")}</button>} />;
   } else if (!rows.length) {

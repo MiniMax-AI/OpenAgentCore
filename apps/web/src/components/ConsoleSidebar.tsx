@@ -38,9 +38,12 @@ const viewIcons: Record<ConsoleView, LucideIcon> = {
 export function ConsoleSidebar({
   active,
   onSelect,
+  onIntent,
 }: {
   active: ConsoleView | null;
   onSelect: (view: ConsoleView) => void;
+  /** Hover or focus on an item: read its page's data before the click. */
+  onIntent?: (view: ConsoleView) => void;
 }) {
   const { t } = useTranslation("navigation");
   return (
@@ -71,6 +74,8 @@ export function ConsoleSidebar({
                   aria-label={t(`views.${view}`)}
                   title={t(`views.${view}`)}
                   onClick={() => onSelect(view)}
+                  onPointerEnter={() => onIntent?.(view)}
+                  onFocus={() => onIntent?.(view)}
                 >
                   <Icon size={15} strokeWidth={1.5} aria-hidden="true" />
                   <span>{t(`views.${view}`)}</span>

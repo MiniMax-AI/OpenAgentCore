@@ -239,16 +239,12 @@ html[data-theme="dark"] {
   gap: 28px;
   padding: 20px var(--page-gutter) 48px;
   overflow: auto;
-  transition: opacity 180ms var(--ease-settle);
 }
 
 .console-page-body > * {
   flex-shrink: 0;
 }
 
-.console-page-body.is-refetching {
-  opacity: 0.62;
-}
 
 .page-status {
   margin: 0;

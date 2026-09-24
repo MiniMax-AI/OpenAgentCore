@@ -18,6 +18,7 @@ import { ProjectStatus } from "./ProjectStatus";
 import { useKeyFlow } from "./use-key-flow";
 import "./api-keys.css";
 import { type AdminKey, archiveProject, createProject, loadSummary, type Project, type ProjectSummary, renameProject, revokeKey } from "../../lib/admin-view";
+import { TableSkeleton } from "../../components/Skeleton";
 
 type Dialog =
   | { kind: "create"; name: string }
@@ -185,7 +186,7 @@ export function ProjectsPage() {
     if (state.status === "failed" && !projects.length) {
       body = <ErrorState title={t("page.loadFailed")} detail={state.error} onRetry={changed} />;
     } else if (state.status === "loading" && !projects.length) {
-      body = <p className="page-status" role="status">{t("page.loading")}</p>;
+      body = <TableSkeleton label={t("page.loading")} rows={4} columns={5} />;
     } else if (!projects.length) {
       body = <EmptyState icon={FolderKanban} title={t("page.empty")} action={createButton} />;
     } else {

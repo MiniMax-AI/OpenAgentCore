@@ -19,6 +19,18 @@ import { VaultsPage } from "./features/vaults/VaultsPage";
 import { ConsoleNavigationContext, hashWithParams, routeParamsFromHash, type RouteParams } from "./lib/console-navigation";
 import { consoleHashForView, consoleNavParent, consoleViewFromHash, type ConsoleView } from "./lib/console-routes";
 import { ProjectsProvider, useProjects } from "./lib/projects";
+import { collectionQuery, collections, filesCollection, queryClient, type CollectionSpec } from "./lib/queries";
+import { filesPageSize } from "./features/files/file-operations";
+
+/** The collection each resource page lists, read ahead when its nav item is hovered. */
+const prefetchable: Partial<Record<ConsoleView, CollectionSpec<unknown>>> = {
+  agents: collections.agents,
+  templates: collections.templates,
+  skills: collections.skills,
+  files: filesCollection("desc", filesPageSize),
+  vaults: collections.vaults,
+  sessions: collections.sessions,
+};
 
 function readLocation(): { view: ConsoleView; params: RouteParams } {
   const hash = typeof window === "undefined" ? "" : window.location.hash;
@@ -70,6 +82,12 @@ function ConsoleShell() {
 
   const navigation = useMemo(() => ({ ...location, navigate }), [location, navigate]);
 
+  const prefetch = useCallback((view: ConsoleView) => {
+    const spec = prefetchable[view];
+    if (!spec) return;
+    for (const project of state.projects) void queryClient.prefetchQuery(collectionQuery(spec, project.id));
+  }, [state.projects]);
+
   // First run: an administrator with no project yet creates the first one and its key.
   if (state.status === "ready" && state.projects.length === 0 && !setupDone) {
     return <FirstProjectSetup onDone={() => setSetupDone(true)} />;
@@ -79,7 +97,7 @@ function ConsoleShell() {
     <ConsoleNavigationContext.Provider value={navigation}>
       <div className="app-shell">
         <a className="skip-link" href="#main-content">{t("skipToContent")}</a>
-        <ConsoleSidebar active={consoleNavParent(location.view)} onSelect={(view) => navigate(view)} />
+        <ConsoleSidebar active={consoleNavParent(location.view)} onSelect={(view) => navigate(view)} onIntent={prefetch} />
         <main className="app-main" id="main-content" tabIndex={-1}>
           <div className="page-transition" key={`${location.view}:${location.params.project ?? ""}:${location.params.id ?? ""}`}>
             <ConsolePage view={location.view} />

@@ -13,6 +13,8 @@ import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName
 import { CopyDialog, type CopySource } from "../copy/CopyDialog";
 import { vaultName } from "./vault-catalog";
 import "./vaults.css";
+import { collections } from "../../lib/queries";
+import { TableSkeleton } from "../../components/Skeleton";
 
 /**
  * Resources › Vault: every project's Vaults and their Credential metadata.
@@ -36,7 +38,7 @@ function VaultsList() {
   const [filter, setFilter] = useState(params.project ?? "");
   const [query, setQuery] = useState("");
   const [copy, setCopy] = useState<CopySource | null>(null);
-  const collection = useProjectCollection<Vault>(filter, (client, signal) => readAllPages((after) => client.listVaults({ after, limit: 100, signal })));
+  const collection = useProjectCollection(collections.vaults, filter);
   const rows = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
     return collection.items
@@ -54,7 +56,7 @@ function VaultsList() {
 
   let body;
   if (collection.status === "loading" && !collection.items.length) {
-    body = <p className="page-status" role="status">{t("loading")}</p>;
+    body = <TableSkeleton label={t("loading")} columns={6} />;
   } else if (!collection.items.length && !collection.failures.length) {
     body = <EmptyState icon={VaultIcon} title={t("noVaults")} />;
   } else {

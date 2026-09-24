@@ -141,7 +141,7 @@ export function AgentMetricsPage() {
           <RefreshButton refreshing={loading} updatedAt={state.status === "ready" ? formatClock(state.loaded.loadedAt, locale) : null} onClick={() => setRevision((value) => value + 1)} />
         </>}
       />
-      <PageBody className={loading && metrics ? "is-refetching" : undefined}>
+      <PageBody>
         {projectsState.status === "failed" && !projects.length ? (
           <EmptyState icon={AlertTriangle} title={t("agent.projectsFailed")} description={projectsState.error} />
         ) : !metrics ? (

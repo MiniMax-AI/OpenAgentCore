@@ -13,6 +13,8 @@ import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName
 import { CopyDialog, type CopySource } from "../copy/CopyDialog";
 import { filesPageSize, filterFiles, isUnrecognizedFile } from "./file-operations";
 import "./files.css";
+import { filesCollection } from "../../lib/queries";
+import { TableSkeleton } from "../../components/Skeleton";
 
 type Row = Owned<SourceFileListEntry>;
 
@@ -28,7 +30,7 @@ export function FilesPage() {
   const [order, setOrder] = useState<PageOrder>("desc");
   const [copy, setCopy] = useState<CopySource | null>(null);
 
-  const collection = useProjectCollection<SourceFileListEntry>(filter, (client, signal) => readAllPages((after) => client.listSourceFiles({ after, limit: filesPageSize, order, signal })), [order]);
+  const collection = useProjectCollection(useMemo(() => filesCollection(order, filesPageSize), [order]), filter);
   const rows = useMemo(() => {
     const visible = new Set(filterFiles(collection.items.map((row) => row.value), query));
     const matched = collection.items.filter((row) => visible.has(row.value));
@@ -51,7 +53,7 @@ export function FilesPage() {
 
   let body;
   if (collection.status === "loading" && !collection.items.length) {
-    body = <p className="page-status" role="status">{t("list.loading")}</p>;
+    body = <TableSkeleton label={t("list.loading")} columns={6} />;
   } else if (!collection.items.length && !collection.failures.length) {
     body = <EmptyState icon={FileText} title={t("empty.title")} />;
   } else {

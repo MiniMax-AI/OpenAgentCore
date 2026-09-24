@@ -13,6 +13,8 @@ import { admin, CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, Proj
 import { CopyDialog, type CopySource } from "../copy/CopyDialog";
 import "./AgentCatalog.css";
 import { loadSummary, type ProjectSummary } from "../../lib/admin-view";
+import { collections } from "../../lib/queries";
+import { TableSkeleton } from "../../components/Skeleton";
 
 export function harnessLabel(harness: CoreHarnessKind): string {
   if (harness === "claude_sdk") return "Claude SDK";
@@ -69,7 +71,7 @@ function AgentsList() {
   const [filter, setFilter] = useState(params.project ?? "");
   const [query, setQuery] = useState("");
   const [copy, setCopy] = useState<CopySource | null>(null);
-  const collection = useProjectCollection<SavedAgent>(filter, (client, signal) => readAllPages((after) => client.listAgents({ after, limit: 100, signal })));
+  const collection = useProjectCollection(collections.agents, filter);
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return collection.items
@@ -90,7 +92,7 @@ function AgentsList() {
 
   let body;
   if (collection.status === "loading" && !collection.items.length) {
-    body = <p className="page-status" role="status">{t("loading", { defaultValue: "…" })}</p>;
+    body = <TableSkeleton label={t("loading", { defaultValue: "…" })} columns={8} />;
   } else if (!collection.items.length && !collection.failures.length) {
     body = <EmptyState icon={Bot} title={t("catalog.noSaved")} />;
   } else {

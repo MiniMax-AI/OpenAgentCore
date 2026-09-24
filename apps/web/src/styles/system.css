@@ -819,3 +819,55 @@ pre {
 .space-disabled {
   color: var(--ink-3);
 }
+
+/* Skeletons ------------------------------------------------------------- */
+
+/* Quick, not calming: one sweep under a second, and static for reduced motion. */
+.skeleton-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.skeleton-row {
+  display: flex;
+  height: 44px;
+  align-items: center;
+  gap: 24px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--grid-line);
+}
+
+.skeleton-row:last-child {
+  border-bottom: 0;
+}
+
+.skeleton-head {
+  height: 36px;
+  border-bottom-color: var(--line);
+}
+
+.skeleton-bar {
+  display: block;
+  height: 10px;
+  flex: 0 0 auto;
+  background: linear-gradient(90deg, var(--field) 0%, var(--hover-2) 50%, var(--field) 100%);
+  background-size: 200% 100%;
+  border-radius: 999px;
+  animation: skeleton-sweep 900ms linear infinite;
+}
+
+.skeleton-head .skeleton-bar {
+  height: 8px;
+  opacity: 0.7;
+}
+
+@keyframes skeleton-sweep {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bar {
+    animation: none;
+  }
+}

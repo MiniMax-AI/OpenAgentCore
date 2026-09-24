@@ -14,6 +14,8 @@ import { CopyDialog, type CopySource } from "../copy/CopyDialog";
 import { TemplateDetailPage } from "./TemplateDetail";
 import { filterTemplates, templateName } from "./template-name";
 import "./EnvironmentTemplatesView.css";
+import { collections } from "../../lib/queries";
+import { TableSkeleton } from "../../components/Skeleton";
 
 function count(value: readonly unknown[] | undefined): string | number {
   return value === undefined ? MISSING : value.length;
@@ -40,7 +42,7 @@ function TemplatesList() {
   const [filter, setFilter] = useState(params.project ?? "");
   const [query, setQuery] = useState("");
   const [copy, setCopy] = useState<CopySource | null>(null);
-  const collection = useProjectCollection<EnvironmentTemplateResource>(filter, (client, signal) => readAllPages((after) => client.listEnvironmentTemplates({ after, limit: 100, signal })));
+  const collection = useProjectCollection(collections.templates, filter);
   const rows = useMemo(() => {
     const visible = new Set(filterTemplates(collection.items.map((row) => row.value), query));
     return collection.items.filter((row) => visible.has(row.value)).sort((a, b) => b.value.updated_at - a.value.updated_at);
@@ -56,7 +58,7 @@ function TemplatesList() {
 
   let body;
   if (collection.status === "loading" && !collection.items.length) {
-    body = <p className="page-status" role="status" aria-busy="true">{t("loading")}</p>;
+    body = <TableSkeleton label={t("loading")} columns={6} />;
   } else if (!collection.items.length && !collection.failures.length) {
     body = <EmptyState icon={Boxes} title={t("emptyTitle")} />;
   } else {
