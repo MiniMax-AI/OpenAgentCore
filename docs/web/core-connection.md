@@ -35,7 +35,7 @@ application's caller-managed `self_hosted` Runtime, including its own E2B setup.
 | `CORE_CONSOLE_UPSTREAM` | Core HTTP(S) origin, without credentials, query or resource path |
 | `CORE_CONSOLE_ADMIN_TOKEN_FILE` | Absolute path to a private regular file containing the deployment credential |
 | `CORE_CONSOLE_AUTH_MODE=account` | Enables console account login |
-| `CORE_CONSOLE_STATE_DIR` | Private account and login-session state directory |
+| `CORE_CONSOLE_STATE_DIR` | Private account state directory (login sessions are process-local) |
 | `CORE_CONSOLE_DIST` | Absolute directory containing the built Web assets |
 
 Account mode exposes `GET /console/auth` and `POST /console/auth/setup`, `/login`
