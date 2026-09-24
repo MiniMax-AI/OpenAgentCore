@@ -73,7 +73,7 @@ func (b backend) suspend(ctx context.Context, q wire.SuspendRequest) (wire.State
 			if q.Snapshot != nil {
 				return wire.State{}, wire.ErrUnconfirmed
 			}
-			_, state, observeErr := b.inspect(ctx, q.Source)
+			_, state, observeErr := b.inspectOwned(ctx, q.Source)
 			if observeErr != nil {
 				return wire.State{}, observeErr
 			}
@@ -106,23 +106,23 @@ func (b backend) suspend(ctx context.Context, q wire.SuspendRequest) (wire.State
 	if e != nil {
 		return wire.State{}, e
 	}
-	if e = qualifySnapshotResources(b.q.Config, artifact.Labels()); e != nil {
-		return wire.State{}, e
-	}
 	if q.Snapshot != nil && snap != *q.Snapshot {
 		return wire.State{}, sandbox.ErrOwnership
+	}
+	if q.ObserveOnly {
+		// A completed operation receipt remains observable for cleanup even if
+		// its source or resource proof is no longer qualified for execution.
+		return observeCapturedSnapshot(q.Source, snap, func(source wire.Compute) (wire.State, error) {
+			_, state, err := b.inspectOwned(ctx, source)
+			return state, err
+		})
+	}
+	if e = qualifySnapshotResources(b.q.Config, artifact.Labels()); e != nil {
+		return wire.State{}, e
 	}
 	h, _, e := b.inspect(ctx, q.Source)
 	if e != nil && !sdk.IsKind(e, sdk.ErrSandboxNotFound) {
 		return wire.State{}, e
-	}
-	if q.ObserveOnly {
-		stopped := sdk.IsKind(e, sdk.ErrSandboxNotFound) || (e == nil && terminal(h.Status()))
-		status := "suspended"
-		if !stopped {
-			status = string(h.Status())
-		}
-		return wire.State{Compute: q.Source, Status: status, BootstrapComplete: true, Snapshot: &snap, SourceStopped: stopped}, nil
 	}
 	if e == nil {
 		// Graceful stop could run the captured source after the checkpoint.
@@ -148,12 +148,9 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 	if e = qualifySnapshotResources(b.q.Config, artifact.Labels()); e != nil {
 		return wire.State{}, e
 	}
-	_, state, e := b.inspect(ctx, q.Target)
+	_, _, e = b.inspectOwned(ctx, q.Target)
 	if e == nil {
-		if state.Status != "running" || !state.BootstrapComplete {
-			return wire.State{}, wire.ErrUnconfirmed
-		}
-		return state, nil
+		return b.finishRestore(ctx, q.Target)
 	}
 	if !sdk.IsKind(e, sdk.ErrSandboxNotFound) {
 		return wire.State{}, e
@@ -178,27 +175,32 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 	}
 	target := q.Target
 	target.ID = live.ID()
-	// The verified snapshot proves the inherited root capacity. Persist that
-	// proof on the exact target only after its other native limits match.
-	h, _, err := b.inspectOwned(ctx, target)
-	if err == nil {
-		err = qualifyConfiguration(b.q.Config, target, h.ConfigJSON(), true)
-	}
-	if err == nil {
-		_, err = live.Modify(ctx, sdk.ModifyOptions{Labels: map[string]string{resourceProofLabel: resourceProof(b.q.Config)}, Policy: sdk.ModificationPolicyNextStart})
-	}
+	// The same completion path handles a fresh target and a previous Restore
+	// whose response or derived proof write was interrupted.
+	state, err := b.finishRestore(ctx, target)
+	detachErr := live.Detach(context.Background())
 	if err != nil {
-		_ = live.Detach(context.Background())
 		return wire.State{}, err
 	}
-	if e = live.Detach(context.Background()); e != nil {
-		return wire.State{}, e
+	if detachErr != nil {
+		return wire.State{}, detachErr
 	}
-	_, state, e = b.inspect(ctx, target)
-	if e == nil && (state.Status != "running" || !state.BootstrapComplete) {
-		return wire.State{}, wire.ErrUnconfirmed
+	return state, nil
+}
+
+// Observation consumes an already verified artifact identity and never changes
+// source state. Execution qualification belongs to capture and subsequent use.
+func observeCapturedSnapshot(source wire.Compute, snapshot wire.SnapshotIdentity, readOwned func(wire.Compute) (wire.State, error)) (wire.State, error) {
+	state, err := readOwned(source)
+	if err != nil && !sdk.IsKind(err, sdk.ErrSandboxNotFound) {
+		return wire.State{}, err
 	}
-	return state, e
+	stopped := sdk.IsKind(err, sdk.ErrSandboxNotFound) || terminal(sdk.SandboxStatus(state.Status))
+	status := "suspended"
+	if !stopped {
+		status = state.Status
+	}
+	return wire.State{Compute: source, Status: status, BootstrapComplete: true, Snapshot: &snapshot, SourceStopped: stopped}, nil
 }
 
 func terminal(s sdk.SandboxStatus) bool {

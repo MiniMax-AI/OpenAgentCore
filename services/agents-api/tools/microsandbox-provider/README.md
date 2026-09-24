@@ -122,14 +122,25 @@ A completed matching artifact is inspected rather than captured again.
 
 After a lost response, Core uses `ObserveOnly`. This never starts capture or
 restore, and a suspended-operation observation never kills its source. Core can
-persist recovered snapshot evidence before KillCompute. If the artifact is absent but the exact source is still running or paused with settled bootstrap, observation returns that intact source with no snapshot, allowing Core to abort suspension and thaw/wake it. Missing state never
-authorizes replay of the original operation.
+persist recovered snapshot evidence before KillCompute. Observation verifies
+artifact integrity and source ownership independently of execution qualification,
+so resource drift cannot hide a retained artifact from cleanup. If the artifact
+is absent but the exact source is still running or paused with settled bootstrap,
+observation returns that source with no snapshot. Core can then abort suspension;
+thawing and subsequent execution still require resource qualification. Missing
+state never authorizes replay of the original operation.
 
 Restore verifies the exact artifact and creates the precommitted target name.
 Existing targets are adopted only when their immutable ID (if known) and
-persisted `snapshot_parent` agree. Restored labels are not synthesized.
-Unfinished restore intent is not bootstrap completion. There is no ordinary
-Start, replacement, disk-only restore, or cold-boot fallback.
+persisted `snapshot_parent` agree. Fresh restore and retry share completion:
+verify the original artifact and resource proof, inspect the running target's
+actual resources and ancestry, persist its missing derived resource-proof label,
+then strictly reread the same native ID. `ObserveOnly` may finish this receipt
+after an interrupted restore; it cannot restart a stopped target, change resources
+or issue another Restore. A conflicting proof remains an error. Native restore
+does not inherit source ownership labels; ancestry supplies that evidence.
+Unfinished restore intent is not bootstrap completion. There is no ordinary Start,
+replacement, disk-only restore, or cold-boot fallback.
 
 `ResumeCompute` only thaws the same resident source after an aborted suspension.
 The pinned Go handle method is name-based; the allocation flock plus ID checks
