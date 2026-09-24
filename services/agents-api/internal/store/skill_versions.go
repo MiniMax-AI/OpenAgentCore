@@ -36,7 +36,11 @@ func (s *Store) CreateSkillVersion(ctx context.Context, tenantID, skillID string
 		if err != nil {
 			return err
 		}
-		return q.AdvanceSkillVersion(ctx, sqlc.AdvanceSkillVersionParams{TenantID: tenant, ID: id, MakeDefault: makeDefault, Name: metadata.Name, Description: metadata.Description})
+		if err := q.AdvanceSkillVersion(ctx, sqlc.AdvanceSkillVersionParams{TenantID: tenant, ID: id, MakeDefault: makeDefault, Name: metadata.Name, Description: metadata.Description}); err != nil {
+			return err
+		}
+		return recordWriteAudit(ctx, q, tenantID, "upload_version", "skill_version", result.ID, result.SkillID,
+			AuditResource{Type: "skill_version", ID: result.ID, ParentID: result.SkillID})
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrNotFound
@@ -112,8 +116,10 @@ func (s *Store) DeleteSkillVersion(ctx context.Context, tenantID, skillID, versi
 				return ErrDefaultSkillVersion
 			}
 			result = skillVersionFromRow(sqlc.GetSkillVersionRow(rows[0]))
-			_, err = q.DeleteSkill(ctx, sqlc.DeleteSkillParams{TenantID: tenant, ID: id})
-			return err
+			if _, err = q.DeleteSkill(ctx, sqlc.DeleteSkillParams{TenantID: tenant, ID: id}); err != nil {
+				return err
+			}
+			return recordWriteAudit(ctx, q, tenantID, "delete", "skill_version", result.ID, result.SkillID)
 		}
 		row, err := q.DeleteSkillVersion(ctx, sqlc.DeleteSkillVersionParams{TenantID: tenant, SkillID: id, Version: number})
 		if err != nil {
@@ -121,9 +127,11 @@ func (s *Store) DeleteSkillVersion(ctx context.Context, tenantID, skillID, versi
 		}
 		result = skillVersionFromRow(sqlc.GetSkillVersionRow(row))
 		if owner.LatestVersion == number {
-			return q.RefreshLatestSkillVersion(ctx, sqlc.RefreshLatestSkillVersionParams{TenantID: tenant, ID: id})
+			if err := q.RefreshLatestSkillVersion(ctx, sqlc.RefreshLatestSkillVersionParams{TenantID: tenant, ID: id}); err != nil {
+				return err
+			}
 		}
-		return nil
+		return recordWriteAudit(ctx, q, tenantID, "delete", "skill_version", result.ID, result.SkillID)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrNotFound

@@ -34,9 +34,21 @@ func (s *Store) CreateOAuthCredential(ctx context.Context, tenantID, vaultID str
 	if err != nil {
 		return Credential{}, err
 	}
-	row, err := s.queries.CreateOAuthCredential(ctx, sqlc.CreateOAuthCredentialParams{
-		ID: pgtype.UUID{Bytes: uuid.MustParse(credential.ID), Valid: true}, TenantID: tenant, VaultID: vault,
-		Name: input.Name, McpServerUrl: input.MCPServerURL, OauthMetadata: metadata, TokenCiphertext: ciphertext,
+	var created Credential
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.queries.WithTx(tx)
+		row, err := q.CreateOAuthCredential(ctx, sqlc.CreateOAuthCredentialParams{
+			ID: pgtype.UUID{Bytes: uuid.MustParse(credential.ID), Valid: true}, TenantID: tenant, VaultID: vault,
+			Name: input.Name, McpServerUrl: input.MCPServerURL, OauthMetadata: metadata, TokenCiphertext: ciphertext,
+		})
+		if err != nil {
+			return err
+		}
+		created, err = credentialFromRow(sqlc.GetCredentialRow(row))
+		if err != nil {
+			return err
+		}
+		return recordWriteAudit(ctx, q, tenantID, "create", "credential", created.ID, created.VaultID, AuditResource{Type: "credential", ID: created.ID, ParentID: created.VaultID})
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Credential{}, ErrNotFound
@@ -44,7 +56,7 @@ func (s *Store) CreateOAuthCredential(ctx context.Context, tenantID, vaultID str
 	if err != nil {
 		return Credential{}, errors.New("credential creation failed")
 	}
-	return credentialFromRow(sqlc.GetCredentialRow(row))
+	return created, nil
 }
 
 func (s *Store) UpdateOAuthCredential(ctx context.Context, tenantID, vaultID, credentialID string, input UpdateOAuthCredentialInput) (Credential, error) {
@@ -91,6 +103,9 @@ func (s *Store) UpdateOAuthCredential(ctx context.Context, tenantID, vaultID, cr
 	updated, err := s.saveOAuth(ctx, tx, tenantID, credential, secret)
 	if err != nil {
 		return Credential{}, err
+	}
+	if err := recordWriteAudit(ctx, s.queries.WithTx(tx), tenantID, "update", "credential", updated.ID, updated.VaultID); err != nil {
+		return Credential{}, errors.New("credential update failed")
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return Credential{}, errors.New("credential update failed")

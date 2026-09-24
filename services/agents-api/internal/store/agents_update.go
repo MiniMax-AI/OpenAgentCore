@@ -98,7 +98,10 @@ func (s *Store) UpdateAgent(ctx context.Context, tenantID, agentID string, input
 			return err
 		}
 		updated, err = agentFromRow(row)
-		return err
+		if err != nil {
+			return err
+		}
+		return recordWriteAudit(ctx, q, tenantID, "update", "agent", updated.ID, "")
 	})
 	if err != nil {
 		return SavedAgent{}, fmt.Errorf("update agent: %w", err)

@@ -81,6 +81,10 @@ func (s *Store) CreateSourceFile(ctx context.Context, tenantID string, upload fu
 	if err != nil {
 		return SourceFile{}, fmt.Errorf("create source file: %w", err)
 	}
+	resource := sourceFileFromRow(row)
+	if err := recordWriteAudit(ctx, s.queries.WithTx(tx), tenantID, "create", "file", resource.ID, "", AuditResource{Type: "file", ID: resource.ID}); err != nil {
+		return SourceFile{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return SourceFile{}, err
 	}
@@ -201,6 +205,9 @@ func (s *Store) DeleteSourceFile(ctx context.Context, tenantID, fileID string) e
 	}
 	objects := tx.LargeObjects()
 	if err := objects.Unlink(ctx, oid.Uint32); err != nil {
+		return err
+	}
+	if err := recordWriteAudit(ctx, s.queries.WithTx(tx), tenantID, "delete", "file", fileID, ""); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

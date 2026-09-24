@@ -20,12 +20,21 @@ func (s *Store) DeleteAgent(ctx context.Context, tenantID, agentID string) (stri
 	if err != nil {
 		return "", err
 	}
-	deleted, err := s.queries.DeleteAgent(ctx, sqlc.DeleteAgentParams{TenantID: tenant, ID: id})
+	var deletedID string
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.queries.WithTx(tx)
+		deleted, err := q.DeleteAgent(ctx, sqlc.DeleteAgentParams{TenantID: tenant, ID: id})
+		if err != nil {
+			return err
+		}
+		deletedID = uuid.UUID(deleted.Bytes).String()
+		return recordWriteAudit(ctx, q, tenantID, "delete", "agent", deletedID, "")
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNotFound
 	}
 	if err != nil {
 		return "", fmt.Errorf("delete agent: %w", err)
 	}
-	return uuid.UUID(deleted.Bytes).String(), nil
+	return deletedID, nil
 }
