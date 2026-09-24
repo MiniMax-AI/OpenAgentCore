@@ -93,7 +93,6 @@ func run() error {
 	executionStore := store.NewWithCredentialCipherAndOAuthRefresh(pool, credentialKey, oauthClient)
 	metricsSource := &coreMetricsSource{store: executionStore, pool: pool}
 	metrics := coremetrics.New(processStartedAt, buildRevision, metricsSource)
-	metrics.StopJob("runtime_sampler")
 	auth, err := api.NewDatabaseAuthenticator(executionStore)
 	if err != nil {
 		return err
@@ -227,6 +226,9 @@ func run() error {
 		if managed != nil {
 			options = append(options, api.WithHostedEnvironments())
 		}
+	}
+	if history.SampleInterval == 0 {
+		metrics.StopJob("runtime_sampler")
 	}
 	if history.SampleInterval > 0 {
 		if worker == nil {
