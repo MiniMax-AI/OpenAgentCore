@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { TimeSeriesChart } from "../../components/charts/TimeSeriesChart";
 import { TableSkeleton } from "../../components/Skeleton";
 import { EmptyState, Kpi, KpiStrip, Meter, PageBody, PageHeader, RefreshButton, Section, SegmentedControl, StatusDot, type Tone } from "../../components/console-ui";
-import { formatBytes, formatClock, formatCompact, formatCores, formatDuration, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
+import { formatBucket, formatBytes, formatClock, formatCompact, formatCores, formatDuration, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
 import { coreMetricsQuery } from "./metrics-queries";
 import "./MetricsView.css";
 
@@ -34,11 +34,6 @@ function ratio(part: number | null, whole: number | null): number | null {
 /** A figure with its unit or limit set small beside it. */
 function Figure({ value, unit }: { value: ReactNode; unit?: ReactNode }) {
   return <>{value}{unit ? <span className="kpi-unit">{unit}</span> : null}</>;
-}
-
-function bucketLabel(resolution: number, locale: string | undefined): string {
-  const [amount, unit] = resolution >= 3600 ? [resolution / 3600, "hour"] : [Math.max(1, resolution / 60), "minute"];
-  return new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "long", maximumFractionDigits: 0 }).format(amount);
 }
 
 /**
@@ -116,7 +111,7 @@ function CoreMetricsBody({ metrics, stale }: { metrics: CoreMetrics; stale: stri
   const minutes = start !== null && end !== null && end > start ? (end - start) / 60 : null;
   const { ingress, execution, process } = metrics;
   const bucketSeconds = metrics.range.resolution_seconds;
-  const bucket = bucketLabel(bucketSeconds, locale);
+  const bucket = formatBucket(bucketSeconds, locale);
   const ingressBuckets = useMemo(() => ingress.series.map((entry) => seconds(entry.start) ?? 0), [ingress.series]);
   const queueBuckets = useMemo(() => execution.series.map((entry) => seconds(entry.start) ?? 0), [execution.series]);
   const processBuckets = useMemo(() => process.series.map((entry) => seconds(entry.start) ?? 0), [process.series]);

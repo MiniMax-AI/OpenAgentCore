@@ -235,6 +235,16 @@ export const metrics = {
       pending: "等待分配",
       stopped: "已停止",
     },
+    charts: {
+      cpu: "CPU 使用率 / {{bucket}}",
+      cpuAverage: "平均",
+      cpuPeak: "最高",
+      memory: "内存 / {{bucket}}",
+      memoryUsed: "已使用",
+      memoryLimit: "配额上限",
+      historyUnavailable: "运行时历史不可用。",
+      historyFailed: "无法读取运行时历史。{{reason}}",
+    },
     runtimeMeta: "{{n}} 个 · CPU {{cpu}} · 内存 {{memory}}",
     reason: {
       allocation_pending: "等待分配",

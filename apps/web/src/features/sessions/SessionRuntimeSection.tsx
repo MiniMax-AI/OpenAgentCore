@@ -5,10 +5,17 @@ import { useTranslation } from "react-i18next";
 
 import { Kpi, KpiStrip, Section, SegmentedControl, type Tone } from "../../components/console-ui";
 import { formatBytes, formatCores, formatDateTime, formatPercent, formatRelative, MISSING } from "../../lib/format";
-import { RuntimeTrendCharts } from "../dashboard/RuntimeTrendCharts";
-import "../dashboard/runtime-observability.css";
+import { RuntimeCharts } from "../metrics/RuntimeCharts";
+import type { RuntimeTrendSample } from "../dashboard/runtime-trends";
+
 import { SESSION_RUNTIME_RANGES, type SessionRuntimeHistory, type SessionRuntimeRange } from "./session-runtime";
 import { sessionObservationQuery, sessionRuntimeHistoryQuery } from "./session-queries";
+
+/** Seconds between consecutive samples; history is evenly bucketed. */
+function sampleSpacing(samples: readonly RuntimeTrendSample[]): number {
+  const [first, second] = samples;
+  return first && second ? Math.max(1, Math.round((second.sampledAt - first.sampledAt) / 1000)) : 60;
+}
 
 const HISTORY_REFRESH_MS = 30_000;
 type RangeLabel = (typeof SESSION_RUNTIME_RANGES)[number]["label"];
@@ -109,9 +116,7 @@ export function SessionRuntimeSection({
       {history.state === "unavailable" ? <p className="coverage-note">{t("runtime.historyUnavailable")}</p> : null}
       {history.state === "loading" && !history.value ? <p className="page-status" role="status">{t("runtime.historyLoading")}</p> : null}
       {history.value ? (
-        <div className="session-runtime-charts">
-          <RuntimeTrendCharts samples={history.value.samples} source="durable" rangeStart={history.value.rangeStart} rangeEnd={history.value.rangeEnd} activeDisplay="binary" />
-        </div>
+        <RuntimeCharts samples={history.value.samples} resolutionSeconds={sampleSpacing(history.value.samples)} />
       ) : null}
     </Section>
   );

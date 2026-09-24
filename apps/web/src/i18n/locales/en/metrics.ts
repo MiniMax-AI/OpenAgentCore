@@ -235,6 +235,16 @@ export const metrics = {
       pending: "Waiting for allocation",
       stopped: "Stopped",
     },
+    charts: {
+      cpu: "CPU utilization / {{bucket}}",
+      cpuAverage: "Average",
+      cpuPeak: "Peak",
+      memory: "Memory / {{bucket}}",
+      memoryUsed: "Used",
+      memoryLimit: "Configured limit",
+      historyUnavailable: "Runtime history is not available.",
+      historyFailed: "Runtime history could not be read. {{reason}}",
+    },
     runtimeMeta: "{{n}} · CPU {{cpu}} · memory {{memory}}",
     reason: {
       allocation_pending: "Allocation pending",

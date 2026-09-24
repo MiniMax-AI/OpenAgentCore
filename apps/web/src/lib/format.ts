@@ -88,3 +88,9 @@ export function formatRelative(epochSeconds: number | null | undefined, nowSecon
 export function shortId(id: string): string {
   return id.length > 14 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
 }
+
+/** A chart bucket as words: "1 分钟", "15 minutes", "2 hours". */
+export function formatBucket(seconds: number, locale?: string): string {
+  const [amount, unit] = seconds >= 3600 ? [seconds / 3600, "hour"] : [Math.max(1, seconds / 60), "minute"];
+  return new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "long", maximumFractionDigits: 0 }).format(amount);
+}

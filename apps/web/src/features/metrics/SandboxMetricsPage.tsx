@@ -1,5 +1,5 @@
 import { Server } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -12,6 +12,7 @@ import {
   PageHeader,
   RefreshButton,
   Section,
+  SegmentedControl,
   StatusDot,
   type Tone,
 } from "../../components/console-ui";
@@ -19,11 +20,10 @@ import { TableSkeleton } from "../../components/Skeleton";
 import { ListToolbar, listSummary, NameCell, SearchField } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatBytes, formatClock, formatCompact, formatCores, formatDuration, formatInteger, formatRelative, MISSING } from "../../lib/format";
-import { ProjectFilter, projectClient, ProjectName, useProjects, type ProjectFilterValue } from "../../lib/projects";
-import { loadRuntimeDurableSnapshot } from "../dashboard/runtime-history";
+import { projectClient, ProjectName, useProjects } from "../../lib/projects";
+import { loadRuntimeDurableSnapshot, RUNTIME_DURABLE_RANGES, type RuntimeDurableRange } from "../dashboard/runtime-history";
 import type { RuntimeDashboardSnapshot } from "../dashboard/runtime-snapshot";
 import { RUNTIME_SNAPSHOT_REFRESH_MS } from "../dashboard/runtime-snapshot";
-import { RuntimeTrendPanel, type RuntimeHistoryLoader } from "../dashboard/RuntimeTrendPanel";
 import { capacitySummary, nodeHealth, type NodeHealth } from "../fleet/fleet-model";
 import { fleetSnapshot, useSandboxFleet, type FleetState } from "../fleet/use-sandbox-fleet";
 import {
@@ -36,6 +36,7 @@ import {
   type HostedRuntimeRow,
 } from "./sandbox-runtime";
 import "./MetricsView.css";
+import { RuntimeCharts } from "./RuntimeCharts";
 import { hostedRuntimesQuery } from "./metrics-queries";
 
 const healthTone: Record<NodeHealth, Tone> = { available: "ok", degraded: "warning", offline: "danger" };
@@ -63,7 +64,7 @@ function useHostedRuntimes() {
 }
 
 /** Durable history of each hosted Session, read through the Session's project. */
-const loadHistory: RuntimeHistoryLoader = (snapshot, range, signal) => loadRuntimeDurableSnapshot((sessionId) => {
+const loadHistory = (snapshot: RuntimeDashboardSnapshot, range: RuntimeDurableRange, signal: AbortSignal) => loadRuntimeDurableSnapshot((sessionId) => {
   const projectId = snapshot.owners?.get(sessionId);
   return projectId ? projectClient(projectId) : null;
 }, snapshot, range, signal);
@@ -86,6 +87,7 @@ export function SandboxMetricsPage() {
   const refreshing = runtimeState.status === "loading" || (fleetState.status === "ready" && fleetState.refreshing);
   const updatedAt = runtimeState.load?.loadedAt ?? fleet?.loadedAt ?? null;
   const message = fleetMessage(fleetState, t);
+  const [range, setRange] = useState<RuntimeDurableRange>(RUNTIME_DURABLE_RANGES[0].milliseconds);
 
   return (
     <section className="page-section console-page metrics-page" aria-labelledby="sandbox-metrics-heading">
@@ -93,7 +95,15 @@ export function SandboxMetricsPage() {
         headingId="sandbox-metrics-heading"
         title={t("sandbox.title")}
         help={t("sandbox.description")}
-        actions={<RefreshButton refreshing={refreshing} updatedAt={updatedAt ? formatClock(updatedAt, locale) : null} onClick={() => { refreshRuntime(); refreshFleet(); }} />}
+        actions={<>
+          <SegmentedControl
+            label={t("range.label")}
+            value={String(range)}
+            options={RUNTIME_DURABLE_RANGES.map((entry) => ({ value: String(entry.milliseconds), label: t(`range.${entry.label}`) }))}
+            onChange={(value) => setRange(Number(value) as RuntimeDurableRange)}
+          />
+          <RefreshButton refreshing={refreshing} updatedAt={updatedAt ? formatClock(updatedAt, locale) : null} onClick={() => { refreshRuntime(); refreshFleet(); }} />
+        </>}
       />
       <PageBody>
         <Section
@@ -153,36 +163,54 @@ export function SandboxMetricsPage() {
             : <p className="page-status" role={fleetState.status === "failed" ? "alert" : "status"}>{message}</p>}
         </Section>
 
-        <HostedRuntimeSection state={runtimeState} fleet={fleet} />
+        <HostedRuntimeSection state={runtimeState} fleet={fleet} range={range} />
       </PageBody>
     </section>
   );
 }
 
-function HostedRuntimeSection({ state, fleet }: { state: RuntimeState; fleet: ReturnType<typeof fleetSnapshot> }) {
+/** Durable Runtime history of every hosted Session over a range, read through each Session's project. */
+function useRuntimeHistory(load: HostedRuntimeLoad | null, range: RuntimeDurableRange) {
+  const snapshot = useMemo<RuntimeDashboardSnapshot | null>(() => (load ? runtimeSnapshot(load, "") : null), [load]);
+  const targets = useMemo(() => snapshot?.observations
+    .filter((observation) => observation.mode === "openai_hosted" && observation.environment_id !== null)
+    .map((observation) => observation.session_id)
+    .sort()
+    .join("|") ?? "", [snapshot]);
+  return useQuery({
+    queryKey: ["runtime-history", range, targets],
+    queryFn: ({ signal }) => loadHistory(snapshot!, range, signal),
+    enabled: snapshot !== null,
+    placeholderData: keepPreviousData,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+  });
+}
+
+function HostedRuntimeSection({ state, fleet, range }: { state: RuntimeState; fleet: ReturnType<typeof fleetSnapshot>; range: RuntimeDurableRange }) {
   const { t, i18n } = useTranslation("metrics");
   const locale = i18n.resolvedLanguage;
-  const [project, setProject] = useState<ProjectFilterValue>("");
   const load = state.load;
-  const snapshot = useMemo<RuntimeDashboardSnapshot | null>(() => (load ? runtimeSnapshot(load, project) : null), [load, project]);
-  const usage = useMemo(() => (load ? hostedRuntimeUsage(load.observations.filter((observation) => !project || observation.project_id === project)) : null), [load, project]);
+  const usage = useMemo(() => (load ? hostedRuntimeUsage(load.observations) : null), [load]);
+  const history = useRuntimeHistory(load, range);
   const partial = load && (load.unread || load.failed) ? t("sandbox.runtimePartial", { unread: load.unread, failed: load.failed }) : null;
 
   let body;
-  if (!load || !snapshot || !usage) {
+  if (!load || !usage) {
     body = state.status === "failed"
       ? <p className="page-status" role="alert">{t("sandbox.runtimeUnavailable", { reason: state.error })}</p>
       : <TableSkeleton label={t("sandbox.runtimeLoading")} rows={4} columns={8} />;
   } else if (!usage.hosted) {
-    body = <EmptyState title={t("sandbox.noRuntimeTitle")} description={t(project ? "sandbox.noRuntimeProject" : "sandbox.noRuntimeDescription")} />;
+    body = <EmptyState title={t("sandbox.noRuntimeTitle")} description={t("sandbox.noRuntimeDescription")} />;
   } else {
+    const durable = history.data ?? null;
     body = (
       <>
         {state.status === "failed" ? <p className="coverage-note coverage-note-error" role="alert">{t("sandbox.runtimeStale", { reason: state.error })}</p> : null}
-        <RuntimeTable rows={hostedRuntimeRows(load, project, fleet)} showProject={!project} />
-        <div className="runtime-embed">
-          <RuntimeTrendPanel key={project || "all"} snapshot={snapshot} stale={state.status === "failed"} loadRuntimeHistory={loadHistory} />
-        </div>
+        {durable ? <RuntimeCharts samples={durable.samples} resolutionSeconds={durable.resolutionSeconds} />
+          : history.isError ? <p className="page-status" role="alert">{t("sandbox.charts.historyFailed", { reason: history.error instanceof Error ? history.error.message : "" })}</p>
+            : history.isFetched ? <p className="page-status">{t("sandbox.charts.historyUnavailable")}</p> : null}
+        <RuntimeTable rows={hostedRuntimeRows(load, "", fleet)} showProject />
       </>
     );
   }
@@ -203,15 +231,12 @@ function HostedRuntimeSection({ state, fleet }: { state: RuntimeState; fleet: Re
         ) : null}
       </>}
       help={t("sandbox.runtimeSectionDetail")}
-      actions={<>
-        {partial ? (
-          <span className="partial-chip">
-            <StatusDot tone="warning" label={t("coverage.partial")} />
-            <HelpTip>{partial}</HelpTip>
-          </span>
-        ) : null}
-        <ProjectFilter value={project} onChange={setProject} />
-      </>}
+      actions={partial ? (
+        <span className="partial-chip">
+          <StatusDot tone="warning" label={t("coverage.partial")} />
+          <HelpTip>{partial}</HelpTip>
+        </span>
+      ) : undefined}
     >
       {body}
     </Section>
