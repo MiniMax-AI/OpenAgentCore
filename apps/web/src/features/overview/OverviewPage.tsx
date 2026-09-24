@@ -1,4 +1,4 @@
-import type { AgentSession, Project, ProjectSummary, SandboxNode } from "@agents-core-web/agents-client";
+import type { AgentSession, SandboxNode } from "@agents-core-web/agents-client";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -36,6 +36,7 @@ import {
   type ServiceHealth,
 } from "./overview-model";
 import "./overview.css";
+import { loadSummary, type Project, type ProjectSummary } from "../../lib/admin-view";
 
 export const OVERVIEW_REFRESH_MS = 30_000;
 const ATTENTION_LIMIT = 8;
@@ -63,7 +64,7 @@ function useOverviewData(projects: readonly Project[], projectsReady: boolean) {
     const controller = new AbortController();
     setState({ status: "loading", data: latest.current });
     loadOverview(projects, {
-      summary: (signal) => admin.summary({ signal }),
+      summary: (signal) => loadSummary({ signal }),
       sessions: (project) => projectClient(project.id),
     }, Math.floor(Date.now() / 1000), controller.signal).then((data) => {
       latest.current = data;

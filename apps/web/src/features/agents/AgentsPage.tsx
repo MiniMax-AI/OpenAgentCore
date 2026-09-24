@@ -1,4 +1,4 @@
-import type { CoreHarnessKind, ProjectSummary, SavedAgent } from "@agents-core-web/agents-client";
+import type { CoreHarnessKind, SavedAgent } from "@agents-core-web/agents-client";
 import { ArrowLeft, Bot, Copy, ListTree, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -12,6 +12,7 @@ import { formatCompact, formatDateTime, formatInteger, formatPercent, formatRela
 import { admin, CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, readAllPages, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
 import { CopyDialog, type CopySource } from "../copy/CopyDialog";
 import "./AgentCatalog.css";
+import { loadSummary, type ProjectSummary } from "../../lib/admin-view";
 
 export function harnessLabel(harness: CoreHarnessKind): string {
   if (harness === "claude_sdk") return "Claude SDK";
@@ -26,7 +27,7 @@ function useAgentSummaries(projectIds: readonly string[]): Map<string, ProjectSu
   useEffect(() => {
     if (!key) return;
     const controller = new AbortController();
-    void Promise.allSettled(key.split(",").map((projectId) => admin.summary({ group_by: "agent", project_id: projectId, signal: controller.signal })))
+    void Promise.allSettled(key.split(",").map((projectId) => loadSummary({ group_by: "agent", project_id: projectId, signal: controller.signal })))
       .then((results) => {
         if (controller.signal.aborted) return;
         const next = new Map<string, ProjectSummary>();

@@ -2,7 +2,6 @@ import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { AdminKey, Project, ProjectSummary } from "@agents-core-web/agents-client";
 
 import { EmptyState, HelpTip, Kpi, KpiStrip, Section, StatusDot } from "../../components/console-ui";
 import { CopyableId, RowActions } from "../../components/list-ui";
@@ -11,8 +10,9 @@ import { useConsoleNavigation } from "../../lib/console-navigation";
 import type { ConsoleView } from "../../lib/console-routes";
 import { admin } from "../../lib/projects";
 import { prefixLabel, sortKeys } from "./key-flows";
-import { ProjectSource, ProjectStatus } from "./ProjectStatus";
+import { ProjectStatus } from "./ProjectStatus";
 import { WriteOperations } from "./WriteOperations";
+import { type AdminKey, listKeys, loadSummary, type Project, type ProjectSummary } from "../../lib/admin-view";
 
 export type Loaded<T> = { status: "loading"; value: T | null } | { status: "ready"; value: T } | { status: "failed"; value: T | null };
 
@@ -25,7 +25,7 @@ export function useProjectKeys(projectId: string | null, revision: number): Load
     const controller = new AbortController();
     // Another project's keys never show while this one loads.
     setKeys((current) => ({ projectId, loaded: { status: "loading", value: current.projectId === projectId ? current.loaded.value : null } }));
-    admin.listKeys(projectId, { signal: controller.signal }).then(
+    listKeys(projectId, controller.signal).then(
       (value) => setKeys({ projectId, loaded: { status: "ready", value: sortKeys(value) } }),
       () => { if (!controller.signal.aborted) setKeys((current) => ({ projectId, loaded: { status: "failed", value: current.loaded.value } })); },
     );
@@ -47,8 +47,8 @@ function useProjectSummaries(projectId: string, revision: number): Loaded<Summar
     const controller = new AbortController();
     setState((current) => ({ status: "loading", value: current.value }));
     Promise.all([
-      admin.summary({ project_id: projectId, signal: controller.signal }),
-      admin.summary({ project_id: projectId, group_by: "key", signal: controller.signal }).catch(() => null),
+      loadSummary({ project_id: projectId, signal: controller.signal }),
+      loadSummary({ project_id: projectId, group_by: "key", signal: controller.signal }).catch(() => null),
     ]).then(
       ([projectRows, keyRows]) => {
         const project = projectRows.find((row) => row.project_id === projectId && row.agent_id === null && row.key === null) ?? null;
@@ -115,7 +115,6 @@ export function ProjectDetail({ project, keys, revision, busy, onIssue, onRevoke
     <>
       <dl className="resource-facts" aria-label={t("detail.facts")}>
         <div><dt>{t("detail.id")}</dt><dd><CopyableId id={project.id} /></dd></div>
-        <div><dt>{t("detail.source")}</dt><dd><ProjectSource project={project} /></dd></div>
         <div><dt>{t("detail.status")}</dt><dd><ProjectStatus project={project} /></dd></div>
         <div><dt>{t("detail.created")}</dt><dd>{formatDateTime(project.created_at, locale)}</dd></div>
         {project.archived_at !== null ? <div><dt>{t("detail.archived")}</dt><dd>{formatDateTime(project.archived_at, locale)}</dd></div> : null}

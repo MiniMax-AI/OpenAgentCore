@@ -1,14 +1,14 @@
-import type { AdminIssuedKey, Project } from "@agents-core-web/agents-client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import type { KeyFlow } from "./key-flows";
 import { KeyFlowDialogs, PendingKeyNotice } from "./KeyFlowDialogs";
 import type { KeyFlowControls } from "./use-key-flow";
+import { type AdminIssuedKey, type Project } from "../../lib/admin-view";
 
-const project: Project = { id: "proj_7f3a91c2", name: "Production", source: "console", status: "active", created_at: 100, archived_at: null, active_key_count: 1 };
+const project: Project = { id: "proj_7f3a91c2", name: "Production", status: "active", created_at: 100, archived_at: null, active_key_count: 1 };
 const secret = "pc_live_" + "s".repeat(40);
-const issued: AdminIssuedKey = { id: "9f0e1d2c-3b4a-4c5d-8e6f-7a8b9c0d1e2f", name: "bob-laptop", prefix: "pc_live_Zq8", created_at: 300, revoked_at: null, key: secret };
+const issued: AdminIssuedKey = { id: "9f0e1d2c-3b4a-4c5d-8e6f-7a8b9c0d1e2f", project_id: "proj_7f3a91c2", name: "bob-laptop", prefix: "pc_live_Zq8", created_at: 300, revoked_at: null, key: secret };
 const controls = (flow: KeyFlow): KeyFlowControls => ({ flow, dispatch: () => undefined, submit: async () => undefined });
 
 describe("one-time key display", () => {

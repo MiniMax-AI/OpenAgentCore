@@ -1,7 +1,8 @@
-import type { AgentSession, Project, ProjectSummary } from "@agents-core-web/agents-client";
+import type { AgentSession } from "@agents-core-web/agents-client";
 
 import type { CapacitySummary } from "../fleet/fleet-model";
 import type { InProject } from "../metrics/project-sessions";
+import { type Project, type ProjectSummary } from "../../lib/admin-view";
 
 /** Pure projections behind the Overview. Missing inputs stay null, never zero. */
 

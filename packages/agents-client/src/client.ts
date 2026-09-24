@@ -172,7 +172,7 @@ export function isSessionDeletionConflict(error: unknown): error is AgentCoreErr
   return error instanceof AgentCoreError && error.status === 409 && error.code === "conflict_error";
 }
 
-export function trimTrailingSlash(value: string): string {
+function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
@@ -278,7 +278,7 @@ function addPageOptions(params: URLSearchParams, options?: PageOptions): void {
   if (options?.order) params.set("order", options.order);
 }
 
-function addVaultPageOptions(params: URLSearchParams, options?: VaultListOptions): void {
+export function addVaultPageOptions(params: URLSearchParams, options?: VaultListOptions): void {
   if (options?.limit !== undefined && (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 100)) {
     throw new TypeError("Vault list limit must be an integer from 1 through 100.");
   }
@@ -530,7 +530,7 @@ function invalidVaultResponse(code: string, message: string): never {
   throw new AgentCoreError(message, 502, code);
 }
 
-function projectVault(value: unknown, expectedId?: string): Vault {
+export function projectVault(value: unknown, expectedId?: string): Vault {
   if (!isRecord(value) || !exactFields(value, vaultFields)) {
     return invalidVaultResponse("invalid_vault_resource", "Agent Core returned an invalid Vault resource.");
   }
@@ -553,7 +553,7 @@ function projectVault(value: unknown, expectedId?: string): Vault {
   };
 }
 
-function projectVaultCredential(
+export function projectVaultCredential(
   value: unknown,
   expectedVaultId: string,
   expectedCredentialId?: string,
@@ -625,11 +625,11 @@ function projectVaultPage<T extends { id: string; created_at: number }>(
   return { object: "list", data, has_more: value.has_more, first_id: firstId, last_id: lastId };
 }
 
-function projectVaultList(value: unknown, options?: VaultListOptions): VaultList {
+export function projectVaultList(value: unknown, options?: VaultListOptions): VaultList {
   return projectVaultPage(value, options, (entry) => projectVault(entry), "invalid_vault_list", "Agent Core returned an invalid Vault list.");
 }
 
-function projectVaultCredentialList(value: unknown, vaultId: string, options?: VaultListOptions): VaultCredentialList {
+export function projectVaultCredentialList(value: unknown, vaultId: string, options?: VaultListOptions): VaultCredentialList {
   return projectVaultPage(
     value,
     options,
@@ -656,11 +656,11 @@ function invalidEnvironmentTemplate(message = "Agent Core returned an invalid En
   throw new AgentCoreError(message, 502, "invalid_environment_template");
 }
 
-function projectEnvironmentTemplate(value: unknown, expectedId?: string): EnvironmentTemplateResource {
+export function projectEnvironmentTemplate(value: unknown, expectedId?: string): EnvironmentTemplateResource {
   return projectEnvironmentTemplateResource(value, invalidEnvironmentTemplate, expectedId);
 }
 
-function projectEnvironmentTemplateList(
+export function projectEnvironmentTemplateList(
   value: unknown,
   options?: PageOptions,
 ): EnvironmentTemplateList {
@@ -677,7 +677,7 @@ function invalidSessionResource(message = "Agent Core returned an invalid Sessio
   throw new AgentCoreError(message, 502, "invalid_session_resource");
 }
 
-function projectAgentSnapshot(value: unknown): AgentSession["agent"] {
+export function projectAgentSnapshot(value: unknown): AgentSession["agent"] {
   if (
     !isRecord(value) || !onlyFields(value, agentSnapshotAcceptedFields) ||
     [...agentSnapshotFields].some((field) => !hasOwn(value, field))
@@ -929,7 +929,7 @@ function projectRequiredActions(value: unknown): AgentSession["required_actions"
   });
 }
 
-function projectAgentSession(
+export function projectAgentSession(
   value: unknown,
   expectedVaultIds?: string[],
   expectedSessionId?: string,
@@ -1677,7 +1677,7 @@ function validSourceFileId(value: unknown): value is string {
   return typeof value === "string" && sourceFileIdPattern.test(value);
 }
 
-function projectSourceFile(value: unknown, expectedId?: string): SourceFile {
+export function projectSourceFile(value: unknown, expectedId?: string): SourceFile {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return invalidSourceFile();
   const file = value as Record<string, unknown>;
   const fields = Object.keys(file);
@@ -1717,7 +1717,7 @@ function projectSourceFile(value: unknown, expectedId?: string): SourceFile {
   };
 }
 
-function projectSourceFileDeleted(value: unknown, expectedId: string): SourceFileDeleted {
+export function projectSourceFileDeleted(value: unknown, expectedId: string): SourceFileDeleted {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return invalidSourceFile();
   const deleted = value as Record<string, unknown>;
   const fields = Object.keys(deleted);

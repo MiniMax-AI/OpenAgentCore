@@ -1,4 +1,4 @@
-import { AgentCoreError, createIdempotencyKey, type CopyableResourceType, type CopyResult, type Project, type Vault } from "@agents-core-web/agents-client";
+import { AgentCoreError, createIdempotencyKey, type Vault } from "@agents-core-web/agents-client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -9,6 +9,7 @@ import type { ConsoleView } from "../../lib/console-routes";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { admin, projectClient, useProjects } from "../../lib/projects";
 import "./copy.css";
+import { type CopyableResourceType, copyAsset, type CopyResult, type Project } from "../../lib/admin-view";
 
 export interface CopySource {
   type: CopyableResourceType;
@@ -81,7 +82,7 @@ export function CopyDialog({ source, onClose }: { source: CopySource | null; onC
     if (!source || !target || outcome.kind === "copying" || (needsVault && !vaultId)) return;
     setOutcome({ kind: "copying" });
     try {
-      const result = await admin.copy({
+      const result = await copyAsset({
         source_project_id: source.project.id,
         target_project_id: target.id,
         resource_type: source.type,

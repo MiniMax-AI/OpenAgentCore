@@ -1,8 +1,8 @@
-import type { Project } from "@agents-core-web/agents-client";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 
 import { admin } from "../../lib/projects";
 import { flowError, idleFlow, isAbort, keyFlowReducer, normalizeName, type KeyFlow, type KeyFlowEvent } from "./key-flows";
+import { createProject, issueKey, type Project } from "../../lib/admin-view";
 
 export interface KeyFlowControls {
   flow: KeyFlow;
@@ -45,7 +45,7 @@ export function useKeyFlow(onChanged: (project: Project | null) => void = () => 
     let project = current.project;
     if (!project) {
       try {
-        project = await admin.createProject(normalizeName(current.projectName));
+        project = await createProject(normalizeName(current.projectName));
       } catch (error) {
         if (!isAbort(error)) send({ type: "failed", error: flowError(error) });
         return;
@@ -53,7 +53,7 @@ export function useKeyFlow(onChanged: (project: Project | null) => void = () => 
       send({ type: "projectCreated", project });
     }
     try {
-      const key = await admin.issueKey(project.id, { name: keyName });
+      const key = await issueKey(project.id, keyName);
       send({ type: "issued", projectId: project.id, key });
     } catch (error) {
       if (!isAbort(error)) send({ type: "failed", error: flowError(error) });

@@ -1,4 +1,6 @@
-import type { AgentSession, OpenAIAgentsClient, RuntimeObservation } from "@agents-core-web/agents-client";
+import type { AgentSession, RuntimeObservation } from "@agents-core-web/agents-client";
+
+import type { ProjectClient } from "../../lib/projects";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -28,7 +30,7 @@ export function SessionRuntimeSection({
   revision,
   refreshToken,
 }: {
-  client: OpenAIAgentsClient;
+  client: Pick<ProjectClient, "retrieveRuntimeObservation" | "retrieveRuntimeHistory">;
   session: AgentSession;
   active: boolean;
   revision: number;

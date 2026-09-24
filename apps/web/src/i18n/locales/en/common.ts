@@ -32,6 +32,8 @@ export const common = {
     unknown: "Unknown",
     unknownHelp: "Core has no creation record: the asset predates recording or an administrator copied it.",
     revoked: "Revoked",
+    adminCopy: "Admin copy",
+    adminCopyHelp: "An administrator copied this asset from another project.",
   },
   copy: {
     action: "Copy to…",

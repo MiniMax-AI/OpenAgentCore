@@ -2,7 +2,6 @@ import { ArrowLeft, FolderKanban, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { AdminKey, Project, ProjectSummary } from "@agents-core-web/agents-client";
 
 import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton } from "../../components/console-ui";
 import { ErrorState } from "../../components/ErrorState";
@@ -15,9 +14,10 @@ import { admin, useProjects } from "../../lib/projects";
 import { activeKeyNames, flowError, isAbort, isUsableName, matchesProject, normalizeName, prefixLabel, projectNameProblem, type FlowError } from "./key-flows";
 import { FlowErrorMessage, KeyFlowDialogs, NameField, PendingKeyNotice } from "./KeyFlowDialogs";
 import { ProjectDetail, useProjectKeys } from "./ProjectDetail";
-import { ProjectSource, ProjectStatus } from "./ProjectStatus";
+import { ProjectStatus } from "./ProjectStatus";
 import { useKeyFlow } from "./use-key-flow";
 import "./api-keys.css";
+import { type AdminKey, archiveProject, createProject, loadSummary, type Project, type ProjectSummary, renameProject, revokeKey } from "../../lib/admin-view";
 
 type Dialog =
   | { kind: "create"; name: string }
@@ -31,7 +31,7 @@ function replaceHash(id: string | null) {
   if (window.location.hash !== hash) window.history.replaceState(window.history.state, "", hash);
 }
 
-const manageable = (project: Project) => project.source === "console" && project.status === "active";
+const manageable = (project: Project) => project.status === "active";
 
 /**
  * Platform › Projects and keys. A project owns the assets shared by all of
@@ -68,7 +68,7 @@ export function ProjectsPage() {
   // Last activity for the list: one summary row per project.
   useEffect(() => {
     const controller = new AbortController();
-    admin.summary({ signal: controller.signal }).then(
+    loadSummary({ signal: controller.signal }).then(
       (rows) => setSummaries(new Map(rows.filter((row) => row.agent_id === null && row.key === null).map((row) => [row.project_id, row]))),
       () => undefined,
     );
@@ -104,15 +104,15 @@ export function ProjectsPage() {
     setDialogError(null);
     try {
       if (dialog.kind === "create") {
-        const project = await admin.createProject(normalizeName(dialog.name));
+        const project = await createProject(normalizeName(dialog.name));
         setCreated(project);
         open(project.id);
       } else if (dialog.kind === "rename") {
-        await admin.renameProject(dialog.project.id, normalizeName(dialog.name));
+        await renameProject(dialog.project.id, normalizeName(dialog.name));
       } else if (dialog.kind === "archive") {
-        await admin.archiveProject(dialog.project.id);
+        await archiveProject(dialog.project.id);
       } else {
-        await admin.revokeKey(dialog.project.id, dialog.key.id);
+        await revokeKey(dialog.project.id, dialog.key.id);
       }
       setDialog(null);
     } catch (error) {
@@ -201,7 +201,6 @@ export function ProjectsPage() {
                 <thead>
                   <tr>
                     <th scope="col">{t("list.name")}</th>
-                    <th scope="col"><span className="column-help">{t("list.source")}<HelpTip>{t("list.sourceHelp")}</HelpTip></span></th>
                     <th scope="col">{t("list.status")}</th>
                     <th scope="col" className="numeric">{t("list.activeKeys")}</th>
                     <th scope="col">{t("list.created")}</th>
@@ -217,7 +216,6 @@ export function ProjectsPage() {
                         <th scope="row">
                           <NameCell name={project.name} id={project.id} onOpen={() => open(project.id)} openLabel={t("list.open", { name: project.name })} />
                         </th>
-                        <td><ProjectSource project={project} /></td>
                         <td><ProjectStatus project={project} /></td>
                         <td className="numeric">{formatInteger(project.active_key_count, locale)}</td>
                         <td className="key-nowrap">{formatDateTime(project.created_at, locale)}</td>

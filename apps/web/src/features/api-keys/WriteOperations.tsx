@@ -2,13 +2,13 @@ import { History } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { ownerResourceTypes, type AdminKey, type KeyRef, type OwnerResourceType, type WriteOperation } from "@agents-core-web/agents-client";
 
 import { EmptyState, Section } from "../../components/console-ui";
 import { CopyableId, ListToolbar, listSummary } from "../../components/list-ui";
 import { formatDateTime, shortId } from "../../lib/format";
 import { admin } from "../../lib/projects";
 import { prefixLabel } from "./key-flows";
+import { type AdminKey, type KeyRef, listWriteOperations, type OwnerResourceType, ownerResourceTypes, type WriteOperation } from "../../lib/admin-view";
 
 const PAGE_SIZE = 50;
 
@@ -58,7 +58,7 @@ export function WriteOperations({ projectId, keys, refreshToken }: { projectId: 
     const current = new AbortController();
     controller.current = current;
     setState({ status: "loading", entries: [], cursor: null, loadingMore: false, moreFailed: false });
-    admin.listWriteOperations(projectId, { key_id: keyId || undefined, resource_type: type || undefined, limit: PAGE_SIZE, signal: current.signal }).then(
+    listWriteOperations(projectId, { key_id: keyId || undefined, resource_type: type || undefined, limit: PAGE_SIZE, signal: current.signal }).then(
       (page) => setState({ status: "ready", entries: page.data, cursor: page.has_more ? page.next_cursor : null, loadingMore: false, moreFailed: false }),
       () => { if (!current.signal.aborted) setState({ status: "failed", entries: [], cursor: null, loadingMore: false, moreFailed: false }); },
     );
@@ -71,7 +71,7 @@ export function WriteOperations({ projectId, keys, refreshToken }: { projectId: 
     controller.current = current;
     const after = state.cursor;
     setState((value) => ({ ...value, loadingMore: true, moreFailed: false }));
-    admin.listWriteOperations(projectId, { key_id: keyId || undefined, resource_type: type || undefined, after, limit: PAGE_SIZE, signal: current.signal }).then(
+    listWriteOperations(projectId, { key_id: keyId || undefined, resource_type: type || undefined, after, limit: PAGE_SIZE, signal: current.signal }).then(
       (page) => setState((value) => ({ ...value, entries: [...value.entries, ...page.data], cursor: page.has_more ? page.next_cursor : null, loadingMore: false })),
       () => { if (!current.signal.aborted) setState((value) => ({ ...value, loadingMore: false, moreFailed: true })); },
     );

@@ -1,7 +1,8 @@
-import type { AgentSession, AgentTurn, ListPage, OpenAIAgentsClient, PageOptions, Project, ProjectSummary, SessionItem } from "@agents-core-web/agents-client";
+import type { AgentSession, AgentTurn, ListPage, OpenAIAgentsClient, PageOptions, SessionItem } from "@agents-core-web/agents-client";
 
 import type { MetricsCoverage, MetricsWindow, SessionActivity } from "./agent-metrics";
 import { readProjectsSessions, type InProject, type ProjectReadFailure, type SessionLister } from "./project-sessions";
+import { type Project, type ProjectSummary } from "../../lib/admin-view";
 
 export interface AgentMetricsSource {
   listTurns(sessionId: string, options?: PageOptions): Promise<ListPage<AgentTurn>>;

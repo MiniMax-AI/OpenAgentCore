@@ -32,6 +32,8 @@ export const common = {
     unknown: "未知",
     unknownHelp: "Core 没有创建记录：资产创建于开始记录之前，或由管理员复制而来。",
     revoked: "已撤销",
+    adminCopy: "管理员复制",
+    adminCopyHelp: "管理员从其他项目复制而来。",
   },
   copy: {
     action: "复制到…",

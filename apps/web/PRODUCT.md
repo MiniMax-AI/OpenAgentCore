@@ -8,80 +8,104 @@ web
 
 ## Users
 
-The primary user is the operator who deployed Parsar Core: a self-hosted,
+The primary user is the administrator who deployed Parsar Core: a self-hosted,
 OpenAI Agents API compatible execution service. After signing in to the paired
-console they need to answer four questions quickly: is the service healthy, is
-there enough sandbox capacity, how much is it being used, and where is work
-failing. They also enroll execution nodes, issue and revoke Agent API keys and
-keep Skills, templates and Vaults in order.
+console they need to answer quickly: is the service healthy, is there enough
+sandbox capacity, how much is each project using, and where is work failing.
+They also create projects and issue their keys, enroll execution nodes, and clean
+up or redistribute assets between projects.
 
-API callers (application developers) use the Agents API from their own code, not
-this console. The console is the operator's back office, comparable to what the
-provider of a hosted API runs internally: it manages the service, it does not
-build things on the callers' behalf. Parsar Core is open source and a small team
-deploys one instance for itself, so the console serves one deployment and one
-project; there is no tenant or customer concept.
+API callers (application developers, and Parsar itself) use the Agents API from
+their own code with the keys of their project, not this console. The console is
+the administrator's management tool, comparable to what the provider of a hosted
+API runs internally: it manages the service and its projects, it does not build or
+run things on a caller's behalf.
 
 ## Product Purpose
 
-An operations back office for one Parsar Core deployment, comparable in role to
-the provider-side console behind a hosted API rather than the developer
-platform in front of it. Success: the operator lands on health, capacity, usage
-and failures; inspects Agents, Sessions and Turns as resources; manages nodes,
-keys and configuration; and reaches the debugging playground only when needed.
+A management console for one Parsar Core deployment. Success: the administrator
+lands on health, capacity, usage and failures across every project; inspects any
+project's Agents, Environment templates, Skills, Files, Vaults and Session history
+together with the API key that created each of them; deletes assets (for example a
+leaked Credential) and copies them between projects; manages projects and their
+named keys; and administers sandbox nodes.
 
 ## Positioning
 
-The console runs beside the operator's own Core, with execution, files and
-credentials on infrastructure they control. It shows only evidence Core
-actually reports and never invents readiness, traffic or zero values for
-missing data.
+The console runs beside the administrator's own Core, with execution, files and
+credentials on infrastructure they control. It shows only evidence Core actually
+reports and never invents readiness, traffic or zero values for missing data. It
+is not a playground: there is no Agent builder, Session composer or request
+workbench.
 
 ## Operating Context
 
-- Paired console (`services/core-console`): single local administrator account,
-  forwards `/v1` with the console's project credential and allowlisted
-  `/core/v1/sandbox` admin routes with its server-side admin token.
-- Web-only consoles may connect to an existing Core without sandbox admin or
-  key management capabilities (`/console/config`).
-- Chinese and English UI; light and dark themes; reduced-motion honored.
+- Paired console (`services/core-console`): a single local administrator account
+  (legacy installations keep Basic authentication). The browser holds only the
+  console sign-in; the console server holds the deployment administrator
+  credential and forwards the Web API (`/core/v1/admin/**`) and sandbox
+  administration (`/core/v1/sandbox/**`). The console never calls `/v1`.
+- The console account is not an Agents API identity. An administrator who wants to
+  call the Agents API issues a key in a project like any other caller.
+- `/console/config` reports whether sandbox administration is available; without
+  it the Nodes page explains that it is not configured and the fleet figures show
+  as unavailable.
+- Chinese and English UI; light and dark themes; reduced motion honored.
 
 ## Information Architecture
 
-Confirmed with the user on 2026-09-24 (top-level groups are theirs; the pages
-inside each group were left to design):
-
-- Monitor: Overview (health, capacity, Session status, attention), Agent
-  metrics, Sandbox metrics, Session log. There is no System page and no
-  platform-facts strip; maintenance shows as a status beside the deployment.
-- Resources: the objects callers use by ID in this single-project deployment —
-  Agents (list, create, edit), Skills, Environment templates, Vaults.
-- Platform: Nodes, API keys (still called API keys; one key per caller name is
-  not enforced by Core).
-- Playground: API workbench (fixed-format requests: form on the left, the exact
-  curl and JSON body on the right, copy or send, response below; also the
-  look-up-by-ID tool), Session console, and the first-run introduction.
-  Agents and Sessions created in the workbench carry
-  `metadata.created_by = console-playground`.
-- Terminology: API terms stay in English in the Chinese UI (Agent, Session,
-  Turn, Skill, Vault, API key).
-- First-run introduction: one continuous animation — the request path (your
-  code → Parsar Core → machines and sandboxes → Agent) is the progress
-  indicator; each step lights the next segment.
+- **Monitor**: Overview (service status, running Sessions, sandbox slots, Sessions
+  needing attention, 24-hour Session activity, the fleet of Core and its hosts,
+  usage by project, the attention table), Agent metrics (requests, errors,
+  duration, tokens, models, tools, Agents and API keys for 1 h / 6 h / 24 h / 7 d),
+  Sandbox metrics (node capacity and hosted Runtimes across projects), Session log
+  (every Session, read-only, opening one Session's history).
+- **Resources**: Agents, Environment templates, Skills, Files, Vaults. Each list
+  shows one project or all projects, with a Project column when all are shown and a
+  Creator column naming the creating key. Detail pages show the resource's facts
+  and offer Copy and Delete.
+- **Platform**: Projects and keys (projects, their assets and usage, named keys,
+  write history), Nodes (sandbox deployment and node enrollment), System (startup
+  configuration and the sandbox deployment).
+- **First run**: when no project exists yet, a full-screen step outside the shell
+  creates the first project (default name `Default`) and its first key and shows the
+  plaintext once.
+- Terminology: API terms stay in English in the Chinese UI (Agent, Session, Turn,
+  Skill, Vault, Credential, API key).
 
 ## Capabilities and Constraints
 
-- Data comes only from the existing public client (`packages/agents-client`)
-  and console routes; Core has no aggregate or statistics endpoint. Project
-  totals are aggregated in the browser from complete paginated lists (bounded
-  at about 10,000 items). Deployment-wide data is limited to sandbox nodes,
-  allocations and deployment state.
-- Runtime CPU and memory exist only for Core-managed hosted sandboxes; runtime
-  history is per Session and bounded.
-- Metrics that need new Core endpoints are recorded as backend requirements for
-  discussion, not simulated in the browser.
-- Preserve existing workflow safety: confirmed deletion, no automatic retry of
-  uncertain writes, connection-change discards, secrets never in browser storage.
+- **Projects and keys.** A project owns an isolated set of assets shared by all of
+  its named API keys; projects do not see each other's assets. Issuing or revoking
+  a key never touches assets. Archiving a project revokes every key and keeps its
+  assets viewable, deletable and copyable. Key plaintext is shown once, at issuance,
+  and never stored by the console.
+- **Web API only.** Every read and write goes through `/core/v1/admin/**` or
+  `/core/v1/sandbox/**`. The console holds no API key and sends nothing to `/v1`.
+- **No asset writes except delete and copy.** Assets are created and changed only by
+  a project's keys through the Agents API. The console does not create or edit
+  Agents or Templates, upload Skills or Files, create or replace Credentials, start
+  Sessions, send input or cancel work. Deletion follows the public deletion rules;
+  a busy Session is not deletable and the console never cancels work to make it so.
+- **Copies are independent.** A copy lands in another active project with new IDs,
+  optionally with its dependencies, and is never synchronised afterwards. Core
+  re-encrypts secrets internally; OAuth Credentials with a refresh configuration are
+  skipped. Sessions cannot be copied.
+- **Secrets stay write-only.** Credential tokens, Template environment variables and
+  setup commands are never returned, to the administrator included.
+- **Creators.** Core records the key behind every write. The console shows the
+  creating key of each asset and a project's write history; an administrator's copy
+  shows as Admin copy and an asset without a record as Unknown.
+- **Session history is read-only.** A Session page reads the Session, its Items and
+  Turns and polls while work is in flight; there is no live event stream.
+- **Figures.** Project, Agent and key usage comes from Core's summary; Agent run,
+  tool and activity figures are still assembled in the browser from bounded reads
+  and state their coverage. Metrics that need new Core endpoints are recorded as
+  backend requirements, not simulated. Usage is cumulative per Session and is not
+  billing.
+- Runtime CPU and memory exist only for Core-managed hosted sandboxes.
+- Preserve workflow safety: confirmed deletion, no automatic retry of uncertain
+  writes, idempotent copies, no secrets in browser storage.
 
 ## Brand Commitments
 
@@ -92,19 +116,21 @@ inside each group were left to design):
 
 ## Evidence on Hand
 
-- Fixture Core for development and acceptance: `apps/web/e2e/fixture-core.mjs`.
+- Playwright acceptance fixtures in `apps/web/e2e/` (`fixture-core.mjs`,
+  `fixture-sandbox.mjs`).
 - No customer data, benchmarks or usage claims exist; do not fabricate them.
 
 ## Product Principles
 
-1. Operations first: health, capacity, usage and failures lead; building and
-   chatting are debugging tools.
-2. Report evidence, not assumptions: missing data stays visibly missing.
-3. One page grammar everywhere: the same header, actions, tables, metrics and
+1. Operations first: health, capacity, usage and failures lead.
+2. Manage, don't operate: the administrator views, deletes, copies and manages
+   projects and keys; assets belong to the projects' keys.
+3. Report evidence, not assumptions: missing data stays visibly missing.
+4. One page grammar everywhere: the same header, toolbar, tables, metrics and
    states on every screen.
-4. Resources are inspected before they are edited.
-5. Deployment-level truth (nodes, keys, configuration) is distinct from
-   project-level resources.
+5. Projects are the unit: every asset shows the project that owns it and the key
+   that created it.
+6. Deployment-level truth (nodes, configuration) is distinct from project assets.
 
 ## Accessibility & Inclusion
 

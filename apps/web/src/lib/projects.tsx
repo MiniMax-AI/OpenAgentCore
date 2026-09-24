@@ -1,16 +1,18 @@
-import { AdminClient, type KeyRef, type OpenAIAgentsClient, type OwnerResourceType, type Project } from "@agents-core-web/agents-client";
+import type { OpenAIAgentsClient } from "@agents-core-web/agents-client";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { HelpTip } from "../components/console-ui";
+import { admin, listAllProjects, listCreators, type Creator, type OwnerResourceType, type Project } from "./admin-view";
+
+export { admin };
+export type { Project };
 
 /**
  * The console reaches Core only through the Web API (`/core/v1/admin`). A
  * project owns an isolated set of assets shared by all of its named API keys;
- * pages filter by project and read each project through a read/delete scope
- * that reuses the public projections.
+ * pages filter by project and read each project through `projectClient`.
  */
-export const admin = new AdminClient();
 
 export type ProjectsState =
   | { status: "loading"; projects: Project[]; error: null }
@@ -31,7 +33,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const controller = new AbortController();
     setState((current) => ({ status: "loading", projects: current.projects, error: null }));
-    admin.listProjects({ signal: controller.signal }).then(
+    listAllProjects(controller.signal).then(
       (projects) => setState({ status: "ready", projects, error: null }),
       (error: unknown) => {
         if (controller.signal.aborted) return;
@@ -101,10 +103,70 @@ export interface ProjectCollection<T> {
   refresh: () => void;
 }
 
-const clients = new Map<string, OpenAIAgentsClient>();
-export function projectClient(projectId: string): OpenAIAgentsClient {
+/** The public-client reads and deletes a project page uses, bound to one project. */
+export type ProjectClient = Pick<OpenAIAgentsClient,
+  | "listAgents" | "retrieveAgent" | "deleteAgent"
+  | "listSkills" | "retrieveSkill" | "deleteSkill" | "listSkillVersions" | "deleteSkillVersion" | "downloadSkill" | "downloadSkillVersion"
+  | "listEnvironmentTemplates" | "retrieveEnvironmentTemplate" | "deleteEnvironmentTemplate"
+  | "listSourceFiles" | "deleteSourceFile"
+  | "listVaults" | "retrieveVault" | "listVaultCredentials" | "deleteVault" | "deleteVaultCredential"
+  | "listSessions" | "listSessionsTolerant" | "retrieveSession" | "deleteSession" | "listTurns" | "listItems"
+  | "retrieveRuntimeObservation" | "retrieveRuntimeHistory">;
+
+async function content(result: Promise<{ blob: Blob; contentType: string | null; contentDisposition: string | null }>) {
+  const value = await result;
+  return { data: value.blob, bytes: value.blob.size, content_type: "application/octet-stream" as const, content_disposition: value.contentDisposition ?? "" };
+}
+
+/**
+ * Binds the management client to one project with the public client's method
+ * shapes, so pages written against the public projections read a project
+ * through `/core/v1/admin/projects/{id}` without change. Deletions only; no
+ * creation or editing exists here.
+ */
+function createProjectClient(projectId: string): ProjectClient {
+  const listSessions = async (options: Parameters<OpenAIAgentsClient["listSessions"]>[0] = {}) => {
+    const page = await admin.listSessions(projectId, { after: options.after, limit: options.limit, order: options.order, agentId: options.agentId, signal: options.signal });
+    return { ...page, object: "list" as const, first_id: page.first_id ?? null, last_id: page.last_id ?? null };
+  };
+  const client = {
+    listAgents: (options) => admin.listAgents(projectId, options),
+    retrieveAgent: (agentId: string) => admin.retrieveAgent(projectId, agentId),
+    deleteAgent: (agentId: string) => admin.deleteAgent(projectId, agentId),
+    listSkills: (options) => admin.listSkills(projectId, options),
+    retrieveSkill: (skillId, options) => admin.retrieveSkill(projectId, skillId, options),
+    deleteSkill: (skillId, options) => admin.deleteSkill(projectId, skillId, options),
+    listSkillVersions: (skillId, options) => admin.listSkillVersions(projectId, skillId, options),
+    deleteSkillVersion: (skillId, version, options) => admin.deleteSkillVersion(projectId, skillId, version, options),
+    downloadSkill: (skillId, options) => content(admin.downloadSkill(projectId, skillId, options)),
+    downloadSkillVersion: (skillId, version, options) => content(admin.downloadSkillVersion(projectId, skillId, version, options)),
+    listEnvironmentTemplates: (options) => admin.listEnvironmentTemplates(projectId, options),
+    retrieveEnvironmentTemplate: (templateId, options) => admin.retrieveEnvironmentTemplate(projectId, templateId, options),
+    deleteEnvironmentTemplate: (templateId, options) => admin.deleteEnvironmentTemplate(projectId, templateId, options),
+    listSourceFiles: (options) => admin.listSourceFiles(projectId, options),
+    deleteSourceFile: (fileId, options) => admin.deleteSourceFile(projectId, fileId, options),
+    listVaults: (options) => admin.listVaults(projectId, options),
+    retrieveVault: (vaultId, options) => admin.retrieveVault(projectId, vaultId, options),
+    listVaultCredentials: (vaultId, options) => admin.listVaultCredentials(projectId, vaultId, options),
+    deleteVault: (vaultId) => admin.deleteVault(projectId, vaultId),
+    deleteVaultCredential: (vaultId, credentialId) => admin.deleteVaultCredential(projectId, vaultId, credentialId),
+    listSessions,
+    // The management list is strict: a malformed Session fails the page rather than being skipped.
+    listSessionsTolerant: async (options) => ({ ...(await listSessions(options)), unrecognized: [] }),
+    retrieveSession: (sessionId, options) => admin.retrieveSession(projectId, sessionId, options),
+    deleteSession: (sessionId) => admin.deleteSession(projectId, sessionId),
+    listTurns: (sessionId, options) => admin.listTurns(projectId, sessionId, options),
+    listItems: (sessionId, options) => admin.listItems(projectId, sessionId, options),
+    retrieveRuntimeObservation: (sessionId, options) => admin.retrieveRuntimeObservation(projectId, sessionId, options),
+    retrieveRuntimeHistory: (sessionId, query) => admin.retrieveRuntimeHistory(projectId, sessionId, query),
+  } as ProjectClient;
+  return client;
+}
+
+const clients = new Map<string, ProjectClient>();
+export function projectClient(projectId: string): ProjectClient {
   let client = clients.get(projectId);
-  if (!client) { client = admin.scopeClient(projectId); clients.set(projectId, client); }
+  if (!client) { client = createProjectClient(projectId); clients.set(projectId, client); }
   return client;
 }
 
@@ -114,7 +176,7 @@ export function projectClient(projectId: string): OpenAIAgentsClient {
  */
 export function useProjectCollection<T>(
   filter: ProjectFilterValue,
-  load: (client: OpenAIAgentsClient, signal: AbortSignal) => Promise<T[]>,
+  load: (client: ProjectClient, signal: AbortSignal) => Promise<T[]>,
   deps: readonly unknown[] = [],
 ): ProjectCollection<T> {
   const { state } = useProjects();
@@ -163,7 +225,7 @@ export async function readAllPages<T extends { id: string }>(
 }
 
 /** Creator lookups are cached per project and resource; a refresh forgets them. */
-const creatorCache = new Map<string, KeyRef | null>();
+const creatorCache = new Map<string, Creator>();
 const creatorKey = (type: OwnerResourceType, projectId: string, id: string) => `${type}:${projectId}:${id}`;
 let creatorGeneration = 0;
 const creatorListeners = new Set<(generation: number) => void>();
@@ -176,8 +238,8 @@ export function forgetCreators() {
 }
 
 export interface Creators {
-  /** undefined: not loaded yet or the lookup failed; null: unknown creator. */
-  creatorOf: (projectId: string, id: string) => KeyRef | null | undefined;
+  /** undefined: not loaded yet or the lookup failed. */
+  creatorOf: (projectId: string, id: string) => Creator | undefined;
 }
 
 /** The key that created each row (#87 ownership), batched per project. */
@@ -198,17 +260,14 @@ export function useCreators(type: OwnerResourceType, rows: ReadonlyArray<{ proje
     if (!byProject.size) return;
     const controller = new AbortController();
     void Promise.allSettled([...byProject].map(async ([projectId, ids]) => {
-      const owners = await admin.listResourceOwners(projectId, type, ids, { signal: controller.signal });
-      for (const id of ids) creatorCache.set(creatorKey(type, projectId, id), owners.get(id) ?? null);
+      const creators = await listCreators(projectId, type, ids, controller.signal);
+      for (const id of ids) creatorCache.set(creatorKey(type, projectId, id), creators.get(id) ?? { key: null, source: null });
     })).then(() => { if (!controller.signal.aborted) setVersion((value) => value + 1); });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type, signature, generation]);
   return {
-    creatorOf: (projectId, id) => {
-      const key = creatorKey(type, projectId, id);
-      return creatorCache.has(key) ? creatorCache.get(key) ?? null : undefined;
-    },
+    creatorOf: (projectId, id) => creatorCache.get(creatorKey(type, projectId, id)),
   };
 }
 
@@ -218,16 +277,18 @@ export function CreatorHeading() {
   return <span className="column-help">{t("creator.column")}<HelpTip>{t("creator.help")}</HelpTip></span>;
 }
 
-/** The creating key's name; "Unknown" when Core has no record (historical, copied by an administrator). */
-export function CreatorCell({ creator }: { creator: KeyRef | null | undefined }) {
+/** The creating key's name, "Admin copy" for a copied asset, "Unknown" when Core has no record. */
+export function CreatorCell({ creator }: { creator: Creator | undefined }) {
   const { t } = useTranslation("common");
   if (creator === undefined) return <span className="owner-missing">—</span>;
-  if (creator === null) return <span className="owner-missing" title={t("creator.unknownHelp")}>{t("creator.unknown")}</span>;
-  const label = creator.name ?? (creator.prefix ? `${creator.prefix}…` : t("creator.unknown"));
+  if (creator.source === "admin_copy") return <span className="owner-missing" title={t("creator.adminCopyHelp")}>{t("creator.adminCopy")}</span>;
+  const key = creator.key;
+  if (!key) return <span className="owner-missing" title={t("creator.unknownHelp")}>{t("creator.unknown")}</span>;
+  const label = key.name ?? (key.prefix ? `${key.prefix}…` : t("creator.unknown"));
   return (
-    <span className={creator.revoked_at ? "owner-name owner-revoked" : "owner-name"} title={creator.prefix ? `${creator.prefix}…` : undefined}>
+    <span className={key.revoked_at ? "owner-name owner-revoked" : "owner-name"} title={key.prefix ? `${key.prefix}…` : undefined}>
       {label}
-      {creator.revoked_at ? <span className="owner-flag">{t("creator.revoked")}</span> : null}
+      {key.revoked_at ? <span className="owner-flag">{t("creator.revoked")}</span> : null}
     </span>
   );
 }

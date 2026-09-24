@@ -1,4 +1,3 @@
-import type { Project } from "@agents-core-web/agents-client";
 import { MessageSquareText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,6 +24,7 @@ import {
   type SessionLogFilters,
 } from "./session-log";
 import "./sessions.css";
+import { type Project } from "../../lib/admin-view";
 
 const PAGE_SIZE = 50;
 

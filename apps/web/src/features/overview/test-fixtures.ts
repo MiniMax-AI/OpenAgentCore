@@ -1,17 +1,19 @@
-import type { AgentSession, OwnedRuntimeObservation, Project, ProjectSummary, SandboxNode } from "@agents-core-web/agents-client";
+import type { AgentSession, SandboxNode } from "@agents-core-web/agents-client";
+import { type OwnedRuntimeObservation, type Project, type ProjectSummary } from "../../lib/admin-view";
 
 /** Fixtures shared by the Monitor page tests. Not part of the application bundle. */
 
 export function project(id: string, overrides: Partial<Project> = {}): Project {
-  return { id, name: id, source: "console", status: "active", created_at: 1, archived_at: null, active_key_count: 1, ...overrides };
+  return { id, name: id, status: "active", created_at: 1, archived_at: null, active_key_count: 1, ...overrides };
 }
 
 export function summary(projectId: string, overrides: Partial<ProjectSummary> = {}): ProjectSummary {
   return {
     project_id: projectId,
+    key_id: null,
     agent_id: null,
     key: null,
-    assets: { agents: 1, skills: 0, environment_templates: 0, files: 0, vaults: 0 },
+    assets: { agents: 1, skills: 0, environment_templates: 0, files: 0, vaults: 0, credentials: 0 },
     sessions: { total: 0, idle: 0, in_progress: 0, requires_action: 0, failed: 0 },
     usage: null,
     coverage: { sessions: 0, reported: 0 },

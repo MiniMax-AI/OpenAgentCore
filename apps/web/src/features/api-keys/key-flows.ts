@@ -1,4 +1,5 @@
-import { AgentCoreError, type AdminIssuedKey, type AdminKey, type Project } from "@agents-core-web/agents-client";
+import { AgentCoreError } from "@agents-core-web/agents-client";
+import { type AdminIssuedKey, type AdminKey, type Project } from "../../lib/admin-view";
 
 /**
  * Pure state for projects and their named API keys. A project owns the assets

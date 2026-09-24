@@ -13,8 +13,6 @@ export const keys = {
     label: "Projects",
     search: "Search by name or ID",
     name: "Name",
-    source: "Source",
-    sourceHelp: "Console projects are created here. Config projects come from Core's static key file: they are managed there and cannot be renamed or archived in the console.",
     status: "Status",
     activeKeys: "Active keys",
     created: "Created",
@@ -27,10 +25,6 @@ export const keys = {
   status: {
     active: "Active",
     archived: "Archived",
-  },
-  source: {
-    console: "Console",
-    config: "Config file",
   },
   actions: {
     issue: "Issue key",
@@ -106,7 +100,6 @@ export const keys = {
     back: "Back to projects",
     facts: "Project details",
     id: "ID",
-    source: "Source",
     status: "Status",
     created: "Created",
     archived: "Archived",

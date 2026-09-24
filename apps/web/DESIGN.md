@@ -1,6 +1,6 @@
 ---
 name: Parsar Core Console
-description: The operator's back office for one self-hosted Parsar Core deployment; health, capacity, usage and failures on hairline-ruled white.
+description: The management console for one self-hosted Parsar Core deployment; projects, their assets and keys, health and capacity, on raised cards over a quiet canvas.
 colors:
   ink: "#37352f"
   ink-muted: "#787774"
@@ -9,6 +9,8 @@ colors:
   surface: "#ffffff"
   surface-subtle: "#fafafa"
   surface-muted: "#f1f1f0"
+  canvas: "#f5f5f6"
+  card-border: "rgb(20 20 30 / 7%)"
   line: "#e9e9ec"
   line-muted: "#efeff1"
   line-strong: "#d6d7dc"
@@ -18,6 +20,7 @@ colors:
   accent: "#4f46e5"
   accent-emphasis: "#4338ca"
   accent-fg: "#ffffff"
+  data: "#4f46e5"
   success: "#16a34a"
   warning: "#d97706"
   danger: "#dc2626"
@@ -30,14 +33,22 @@ colors:
   series-5: "#e87ba4"
   series-6: "#008300"
   series-other: "#a3a3a8"
+  meter-fill: "color-mix(in srgb, #37352f 62%, transparent)"
   meter-track: "rgb(55 53 47 / 8%)"
 typography:
+  metric:
+    fontFamily: "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Segoe UI\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
+    fontSize: "30px"
+    fontWeight: 600
+    lineHeight: "36px"
+    letterSpacing: "-0.025em"
+    fontFeature: "\"tnum\""
   display:
     fontFamily: "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Segoe UI\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
     fontSize: "24px"
-    fontWeight: 600
+    fontWeight: 500
     lineHeight: "28px"
-    letterSpacing: "-0.02em"
+    letterSpacing: "-0.01em"
     fontFeature: "\"tnum\""
   headline:
     fontFamily: "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Segoe UI\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
@@ -70,16 +81,20 @@ rounded:
   control: "6px"
   control-inner: "5px"
   segment: "7px"
-  frame: "8px"
+  popover: "8px"
+  frame: "12px"
   pill: "999px"
 spacing:
   xs: "4px"
   sm: "8px"
   md: "12px"
   lg: "16px"
-  gutter: "24px"
+  gutter: "28px"
   section: "28px"
 components:
+  card:
+    backgroundColor: "{colors.surface}"
+    rounded: "{rounded.frame}"
   button-primary:
     backgroundColor: "{colors.accent}"
     textColor: "{colors.accent-fg}"
@@ -97,9 +112,9 @@ components:
     height: "28px"
   button-outline-hover:
     backgroundColor: "{colors.hover}"
-  button-secondary:
-    backgroundColor: "{colors.surface-muted}"
-    textColor: "{colors.ink}"
+  button-danger:
+    backgroundColor: "{colors.danger}"
+    textColor: "#ffffff"
     rounded: "{rounded.control}"
     padding: "0 10px"
     height: "28px"
@@ -108,11 +123,33 @@ components:
     rounded: "{rounded.control}"
     padding: "0 10px"
     height: "28px"
+  refresh-button:
+    textColor: "{colors.ink-muted}"
+    rounded: "{rounded.segment}"
+    size: "32px"
+  back-button:
+    textColor: "{colors.ink-muted}"
+    rounded: "{rounded.control}"
+    size: "28px"
+  text-action:
+    textColor: "{colors.ink-muted}"
+    typography: "{typography.label}"
   input-field:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
     rounded: "{rounded.control}"
     padding: "4px 8px"
+    height: "28px"
+  search-field:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.control}"
+    height: "28px"
+  select:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.control}"
+    padding: "0 28px 0 9px"
     height: "28px"
   segmented-track:
     backgroundColor: "{colors.surface-muted}"
@@ -134,6 +171,12 @@ components:
   nav-item-active:
     backgroundColor: "{colors.pressed}"
     textColor: "{colors.ink}"
+  metric-tile:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    typography: "{typography.metric}"
+    rounded: "{rounded.frame}"
+    padding: "16px 18px 18px"
   kpi-cell:
     textColor: "{colors.ink}"
     typography: "{typography.display}"
@@ -148,10 +191,19 @@ components:
     typography: "{typography.body}"
     padding: "6px 12px"
     height: "44px"
+  empty-state:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink-muted}"
+    rounded: "{rounded.frame}"
+    padding: "40px 24px"
   help-tip:
     textColor: "{colors.ink-subtle}"
     rounded: "{rounded.pill}"
     size: "18px"
+  modal:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.popover}"
   meter:
     backgroundColor: "{colors.meter-track}"
     rounded: "{rounded.pill}"
@@ -164,167 +216,376 @@ components:
 
 **Creative North Star: "The Operator's Ledger"**
 
-The console is an operations back office, not a developer showroom. Every screen reads like a ledger page: one header rule, one strip of figures, then ruled sections of evidence (charts, bar lists, tables) sitting on white. Structure comes from 1px hairlines and whitespace, never from floating cards; colour is spent on data and state, almost never on decoration. The one indigo accent means "you selected this" or "this is the primary action," and nothing else.
+The console is a management tool, not a developer showroom. Every screen reads like
+a ledger page laid on a desk: a quiet canvas, one header, then raised white cards
+holding the evidence (figures, charts, tables). Structure comes from the card edge,
+1px internal rules and whitespace; there are no cards inside cards. Colour is spent
+on problems and on the data itself, almost never on decoration. The indigo accent
+means "you selected this", "this is the primary action" or, as `--data`, "this is
+the single measured quantity".
 
-Density is deliberately high and calm: 13px body, 44px table rows, 28px controls, tabular figures in every column. The system is bilingual (zh-CN and English) and ships light and dark themes on the same token names; dark swaps values, never structure. It honours reduced motion and treats keyboard focus as a first-class state (2px indigo outline).
+Density is deliberately high and calm: 13px body, 44px table rows, 28px controls,
+tabular figures in every column. The system is bilingual (zh-CN and English) and
+ships light and dark themes on the same token names; dark swaps values, never
+structure. It honours reduced motion and treats keyboard focus as a first-class
+state (2px indigo outline).
 
-The data contract is part of the look. Core reports only what it observes, so the interface shows absence honestly: an em dash, a gap in a line, the word "Unavailable". An explained figure keeps its explanation one click away behind a circled question mark, so the page stays a ledger rather than a leaflet.
+The data contract is part of the look. Core reports only what it observes, so the
+interface shows absence honestly: an em dash, a gap in a line, the word
+"Unavailable" or "Unknown". Explanations stay one click away behind a circled
+question mark, so the page stays a ledger rather than a leaflet.
 
 **Key Characteristics:**
-- Neutral warm-gray ink on white, one indigo accent for selection and primary actions only.
-- Hairline frames divided by internal rules; no nested cards, no decorative shadows.
-- A six-slot categorical palette for data, bound to the entity, not its rank.
+- White cards with a faint border and shadow on a light-gray canvas, beside a white
+  sidebar; the page header is translucent canvas.
+- One indigo voice for selection, primary actions and single-series data (`--data`).
+- Meters are neutral ink; green, amber and red appear only when something is wrong
+  or a state needs reporting.
+- A six-slot categorical palette for multi-series data, bound to the entity, not its
+  rank.
+- One list grammar on every resource page: project filter, search, count, name with
+  compact ID, creator, row actions.
 - Tabular numerals everywhere a number can line up.
 - Status is always a dot plus a plain-language label.
-- Explanations live behind "?" help tips; errors, warnings and safety notices stay visible.
+- Explanations live behind "?" help tips; errors, warnings and safety notices stay
+  visible.
 
 ## Colors
 
-A restrained neutral ledger with one indigo voice, three semantic signal colours, and a separate categorical palette that belongs to data alone.
+A restrained neutral ledger with one indigo voice, three signal colours and a
+separate categorical palette that belongs to multi-series data alone.
 
 ### Primary
-- **Parsar Indigo** (accent): keyboard focus outlines and rings, primary buttons, link hover on table names and text actions, text selection wash. Deepens to **Pressed Indigo** (accent-emphasis) on primary hover. It is the brand colour shared with the public Parsar landing.
+- **Parsar Indigo** (accent): keyboard focus outlines and rings, primary buttons,
+  hover on name links and text actions, text selection wash. Deepens to **Pressed
+  Indigo** (accent-emphasis) on primary hover. It is the brand colour shared with
+  the public Parsar landing.
+- **Data** (`--data`, an alias of accent): the one measured series of a chart that
+  has only one, such as Sessions created per hour on Overview, drawn as a tint
+  (62% into the surface) rather than full strength.
 
 ### Neutral
-- **Ledger Ink** (ink): all primary text, figures, table cells, headings.
-- **Graphite** (ink-muted): secondary text, column headers, KPI labels, axis ticks, inactive controls.
-- **Pencil** (ink-subtle): help-tip glyphs, crosshairs, untoned KPI dots; the quietest legible mark.
-- **Sidebar Ink** (sidebar-ink): navigation text on the sidebar's subtle ground.
-- **Paper** (surface): page ground, popovers, the active segment's raised face.
-- **Margin Gray** (surface-subtle): sidebar, table header band, the fleet list pane, coverage notes.
+- **Ledger Ink** (ink): primary text, figures, table cells, headings.
+- **Graphite** (ink-muted): secondary text, column headers, KPI labels, axis ticks,
+  inactive controls, row actions at rest.
+- **Pencil** (ink-subtle): help-tip glyphs, crosshairs, untoned dots.
+- **Sidebar Ink** (sidebar-ink): navigation text.
+- **Canvas** (canvas): the ground of the main column (`#121212` in dark).
+- **Paper** (surface): cards, tables, KPI strips, chart grids, empty states,
+  dialogs, popovers, the sidebar.
+- **Card Edge** (card-border): the faint border of raised cards.
+- **Margin Gray** (surface-subtle): table header band, coverage notes.
 - **Well Gray** (surface-muted): segmented-control track, secondary buttons.
-- **Hairline** (line): every frame border and internal divider; chart gridlines.
+- **Hairline** (line): internal dividers of cards, chart gridlines, dialog rules.
 - **Faint Rule** (line-muted): row dividers inside tables.
-- **Firm Rule** (line-strong): control borders (inputs, outline buttons, active filter tab, selected fleet target), dashed empty-state border.
-- **Hover / Pressed / Tile washes**: translucent ink at 3% / 6% / 7% for hover, active nav item, and count pills.
+- **Firm Rule** (line-strong): control borders (inputs, selects, search, outline
+  buttons) and the pending-key notice.
+- **Hover / Pressed / Tile washes**: translucent ink at 3% / 6% / 7% for hover, the
+  active navigation item, and count pills.
 
 ### Signal
-- **Healthy Green** (success), **Caution Amber** (warning), **Fault Red** (danger): used only for status dots, KPI tone dots, meter fills past thresholds (warning at 80%, danger at 95%), error text, and error notices. **Queued Gray** (status-queued) is the pending tone dot in the KPI strip; **Idle Gray** (status-idle) marks idle and neutral status dots.
+- **Healthy Green** (success), **Caution Amber** (warning), **Fault Red** (danger):
+  status dots, KPI and tile tone dots, meter fills past their thresholds, error text,
+  error notices, destructive buttons and the hover of destructive row actions.
+- **Queued Gray** (status-queued) is the pending KPI tone; **Idle Gray**
+  (status-idle) marks idle and neutral status dots. A running or pending status dot
+  uses Series 1.
 
 ### Data (categorical)
-- **Series 1-6** (series-1 Cobalt, series-2 Persimmon, series-3 Jade, series-4 Saffron, series-5 Rose, series-6 Forest) and **Series Other** (series-other): chart lines, stacked bars, bar-list fills, legend keys. Series 1 doubles as the running-status colour and the default meter fill (`--meter-fill`, `--status-running`). Dark theme re-tunes each slot under the same name.
-- **Meter Track** (meter-track): the empty rail under meters and bar-list fills.
+- **Series 1–6** (Cobalt, Persimmon, Jade, Saffron, Rose, Forest) and **Series
+  Other**: lines, stacked bars and legend keys of multi-series charts (requests by
+  model, calls by tool, average against P95 duration, Runtime trends). Dark theme
+  re-tunes each slot under the same name.
+- **Meter Fill** (meter-fill): ink at 62%, the healthy fill of every meter.
+- **Meter Track** (meter-track): the empty rail under meters.
 
 ### Named Rules
-**The One Voice Rule.** Indigo is for selection and primary actions only. Data never wears the accent; charts, bar lists and meters draw from `--series-1..6`, `--series-other` and `--meter-fill`.
+**The Colour Only for Problems Rule.** A healthy state is drawn in ink. Meters fill
+in neutral ink and turn amber or red only past their thresholds; tone dots appear
+only on figures that report a state.
 
-**The Entity Owns Its Colour Rule.** A categorical colour follows the entity (model, tool, node), never its rank. An entity keeps its slot while visible; only slots of entities that left the view are reused. Anything beyond six series collapses into Series Other.
+**The One Voice Rule.** Indigo is for selection, focus, primary actions and the
+single `--data` series. Multi-series charts draw from `--series-1..6` and
+`--series-other`, never from the accent.
 
-**The Signal Is Not Decoration Rule.** Green, amber and red appear only when they report a state. A healthy meter stays in the series ramp; it turns amber or red only when the value crosses its threshold.
+**The Entity Owns Its Colour Rule.** A categorical colour follows the entity (model,
+tool), never its rank. An entity keeps its slot while visible; only slots of
+entities that left the view are reused. Anything beyond six series collapses into
+Series Other.
 
 ## Typography
 
-**Display Font:** system UI sans (-apple-system, Segoe UI, with PingFang SC / Microsoft YaHei / Noto Sans SC for Chinese)
+**Display Font:** system UI sans (-apple-system, Segoe UI, with PingFang SC /
+Microsoft YaHei / Noto Sans SC for Chinese)
 **Body Font:** the same system stack
 **Label/Mono Font:** ui-monospace / SF Mono / Menlo for identifiers and code
 
-**Character:** One quiet system sans in several weights, sized for dense reading; hierarchy comes from weight and a tight scale, not from a second typeface. Mono appears only for machine identifiers.
+**Character:** One quiet system sans in several weights, sized for dense reading;
+hierarchy comes from weight and a tight scale, not from a second typeface. Mono
+appears only for machine identifiers, key prefixes, models and commands.
 
 ### Hierarchy
-- **Display** (600, 24px, 28px, -0.02em, tabular): KPI figures in the strip. The largest type on any console page.
-- **Headline** (600, 20px, 26px, -0.02em): the page title in the 64px page header; one per page.
-- **Title** (600, 15px, 22px, -0.01em): section headings. Chart captions and empty-state titles step down to 600 at 13-14px.
-- **Body** (400, 13px, 18px): table cells, controls, form fields. The document base is 14px/20px for longer prose (help popovers run 12.5px/19px).
-- **Label** (500, 12.5px, 18px): KPI labels (400), status labels, text actions, segmented options; column headers 500 at 12px; axis ticks 11px.
-- **Mono** (400, 11.5px): IDs and code inside section headers and tables, in Graphite.
+- **Metric** (600, 30px, 36px, -0.025em, tabular): the four Overview tiles; the
+  largest type in the console.
+- **Display** (500, 24px, 28px, -0.01em, tabular): KPI strip figures.
+- **Headline** (600, 20px, 26px, -0.02em): the page title in the 64px page header;
+  one per page. Detail pages put the back button before it.
+- **Title** (600, 15px, 22px, -0.01em): section headings. Card headings and
+  empty-state titles step down to 600 at 14px.
+- **Body** (400, 13px, 18px): table cells, controls, form fields, dialog text. The
+  document base is 14px/20px; help popovers run 12.5px/19px.
+- **Label** (500, 12.5px, 18px): KPI labels (400), status labels, text actions,
+  segmented options; column headers 500 at 12px; fact labels 12px Graphite; axis
+  ticks 11px; the list count 12px.
+- **Mono** (400, 11.5px): IDs and code in tables and name cells, in Graphite.
 
 ### Named Rules
-**The Columns Line Up Rule.** Every figure that can share a column uses tabular numerals (`font-variant-numeric: tabular-nums`): KPI values, numeric table cells (right-aligned), bar-list values, axis ticks, tooltip values, counts.
+**The Columns Line Up Rule.** Every figure that can share a column uses tabular
+numerals: KPI and tile values, numeric table cells (right-aligned), legend totals,
+axis ticks, tooltip values, counts.
 
-**The Honest Figure Rule.** Missing data renders as "—", a gap in the line, or "Unavailable"; never as 0. Compact numbers keep two decimals only when the integer part is a single digit ("1.04M"), otherwise one ("415.7万"); values under 10,000 print whole. Durations read "850 ms / 12.4 s / 4m 12s / 3h 5m".
+**The Honest Figure Rule.** Missing data renders as "—", a gap in the line,
+"Unavailable" or "Unknown"; never as 0. Compact numbers keep two decimals only when
+the integer part is a single digit ("1.04M"), otherwise one ("415.7万"); values under
+10,000 print whole. Durations read "850 ms / 12.4 s / 4m 12s / 3h 5m".
 
-**The Plain Vocabulary Rule.** zh-CN copy uses one term per concept: 沙箱 (sandbox), 运行时 (runtime), 已上报 (reported), 活跃 (active), 提供方 (provider). Time ranges read "1 小时 / 6 小时 / 24 小时 / 7 天" (English "1h / 6h / 24h / 7d"), always in the one segmented control style.
+**The Plain Vocabulary Rule.** zh-CN copy uses one term per concept: 项目
+(project), 沙箱 (sandbox), 运行时 (runtime), 创建者 (creator), 已上报 (reported),
+活跃 (active), 提供方 (provider). API terms stay in English (Agent, Session, Turn,
+Skill, Vault, Credential, API key). Time ranges read "1 小时 / 6 小时 / 24 小时 /
+7 天" (English "1h / 6h / 24h / 7d"), always in the one segmented control style.
 
 ## Layout
 
-A fixed sidebar (232px, Margin Gray, hairline right edge) beside a full-height page column. The desktop minimum is 960px. Every page uses the same frame: a 64px header (title, optional help tip, actions on the right: range control then Refresh) over a hairline rule, then a scrolling body padded `20px 24px 48px` with sections stacked 28px apart. Inside a section the heading row sits 12px above its content.
+A fixed 232px white sidebar beside a full-height main column on the canvas; below
+640px the sidebar collapses to a 52px icon rail. The desktop minimum is 960px.
+Every page uses the same frame: a 64px header (title, optional help tip, actions
+on the right) in translucent canvas with a backdrop blur, then a scrolling body
+padded `20px 28px 48px` with sections stacked 28px apart. Inside a section the
+heading row sits 12px above its content.
 
-The recurring shapes in the body are the full-width KPI strip (auto-fit columns, min 158px; three per row below 1180px), paired chart frames (two equal columns, or 2:3 when a bar list sits beside its trend; single column below 1180px), and full-width table frames. The Overview uses a fleet split-pane inside one frame: target list at roughly one third on the subtle ground, selected-target evidence at two thirds, an attention table spanning beneath.
+The recurring shapes in the body are the KPI strip (auto-fit columns, min 158px;
+three per row below 1180px), chart grids (two equal columns, single below 1180px),
+full-width table cards, and a fact row on detail pages. Overview has its own
+arrangement: four metric tiles, Session activity beside the fleet card, then usage
+by project and the attention table, each on its own card with a 16px gap.
 
-Spacing follows a 4px base: 4, 8, 12, 16, 24 (page gutter), 28 (section gap). Controls are 28px tall, segmented options 24px, table rows 44px (32px compact), headers 34px.
+Spacing follows a 4px base: 4, 8, 12, 16, 28 (page gutter and section gap).
+Controls are 28px tall, segmented options 24px, table rows 44px (32px compact),
+table headers 34px.
 
-**The One Page Grammar Rule.** Every page, new or legacy, uses PageHeader, PageBody and Section. No page invents its own header height, gutter or section rhythm.
+**The One Page Grammar Rule.** Every page uses PageHeader, PageBody and Section
+from `components/console-ui.tsx`, and every resource list uses the list grammar
+from `components/list-ui.tsx`. No page invents its own header height, gutter,
+section rhythm or toolbar.
 
 ## Elevation & Depth
 
-The system is flat. Depth is conveyed by tone (subtle and muted grounds) and hairlines, not by shadow. Only two shadows exist, and each has a job.
+Depth comes from the canvas-to-card step, not from stacked shadows.
 
 ### Shadow Vocabulary
-- **Control lift** (`box-shadow: 0 1px 2px rgb(0 0 0 / 6%)`): raised controls only: primary and outline buttons, inputs and selects, the active segment, the active filter tab, the selected fleet target.
-- **Floating** (`box-shadow: 0 1px 2px rgb(24 24 27 / 4%), 0 8px 24px -12px rgb(24 24 27 / 18%)`): things that float above the page: help-tip popovers, chart tooltips, menus and dialogs.
+- **Card** (`0 1px 2px rgb(20 20 30 / 4%), 0 1px 1px rgb(20 20 30 / 2%)` with a
+  `card-border` edge): KPI strips, table frames, chart grids and Overview cards.
+- **Control lift** (`0 1px 2px rgb(0 0 0 / 6%)`): primary and outline buttons,
+  inputs, selects, the search field, the active segment.
+- **Floating** (`0 1px 2px rgb(24 24 27 / 4%), 0 8px 24px -12px rgb(24 24 27 /
+  18%)`): help-tip popovers, chart tooltips, menus and dialogs.
 
 ### Named Rules
-**The One Frame Rule.** Charts and KPI figures sit in one hairline frame divided by internal rules (inset 1px lines), never in nested cards. A frame never contains another bordered, shadowed container.
+**The One Card Rule.** Figures, charts and tables sit in one card divided by 1px
+internal rules. A card never contains another bordered, shadowed container; an
+empty list is itself one card.
 
 ## Shapes
 
-Soft but disciplined corners: 8px on frames (KPI strip, chart grid, tables, empty states, notices, popovers), 6px on controls, 7px on the segmented track and fleet targets, 5px on inner segments, 4px on small inline marks and the chart plot, full pills for meters, bar tracks and count badges, circles for status dots (7px) and KPI tone dots (8px). Legend keys are 9px squares with 2px corners, or 12x2px strokes for line series. Borders are always 1px; the empty state alone uses a dashed Firm Rule.
+12px corners on cards, tables, KPI strips, chart grids, empty states, coverage
+notes and the pending-key notice; 8px on dialogs and help popovers; 7px on the
+segmented track, the refresh button and chart tooltips; 6px on buttons, inputs,
+selects and the search field; 5px on inner segments; 4px on small inline marks and
+flags; full pills for meters and count badges; circles for status dots (7px), KPI
+tone dots (8px) and tile dots (10px). Legend keys are 9px squares with 2px corners,
+or 12×2px strokes for line series. Borders are always 1px.
 
 ## Components
 
 ### Buttons
-Compact and quiet; the primary button is the only filled colour on a page header.
-- **Shape:** gently rounded (6px), 28px tall, 0 10px padding, 13px/500 label, optional 14px Lucide icon at 1.5 stroke.
-- **Primary:** Parsar Indigo fill, white text, control lift. Hover deepens to Pressed Indigo.
-- **Outline:** Paper face, Firm Rule border, control lift; hover takes the ink wash. Refresh is always an outline button whose last-updated time lives in its tooltip, not on the page.
-- **Secondary / Ghost:** Well Gray fill, or transparent with Graphite text; both darken on hover.
-- **Focus / Press:** focus draws a 1px indigo border plus 1px indigo ring; press scales to 0.97 on the spring curve.
-- **Text action:** borderless Graphite 12.5px/500 link with a trailing arrow, turning indigo on hover ("Sandbox metrics →").
+Compact and quiet; the primary button is the only filled accent in a header.
+- **Shape:** 6px corners, 28px tall, 0 10px padding, 13px/500 label, optional 14px
+  Lucide icon.
+- **Primary:** Parsar Indigo fill, white text, control lift; deepens on hover. Used
+  for the one affirmative header action (Create project) and for the submit button
+  of non-destructive dialogs (create, rename, issue, copy, continue).
+- **Outline:** Paper face, Firm Rule border, control lift; hover takes the ink wash.
+  Used for Copy on detail pages, section actions such as Issue key, Cancel in
+  dialogs and empty-state actions.
+- **Danger:** Fault Red fill, white text. Used for Delete on detail pages and for
+  the confirm button of every destructive dialog.
+- **Ghost:** transparent with Graphite text; darkens on hover.
+- **Focus / Press:** focus draws an indigo border plus 1px indigo ring; press scales
+  to 0.97.
+- **Text action:** borderless Graphite 12.5px/500, turning indigo on hover
+  ("Manage nodes", "Session log"); a destructive text action turns red on hover.
+
+### Refresh button
+A 32px ghost icon button with the refresh glyph. Controls that scope the whole page
+(project filter, time range) come before it; on detail pages it leads, followed by
+Copy and Delete. It spins while reading; its tooltip carries the last update time
+instead of a visible timestamp.
 
 ### Segmented control
-The single style for ranges and mode switches. A Well Gray track (2px padding, 7px corners) holds 24px options in Graphite; the chosen option rises to Paper with Ledger Ink text and control lift. It is a radiogroup with arrow-key movement.
+The single style for ranges, order and status filters. A Well Gray track (2px
+padding, 7px corners) holds 24px options in Graphite; the chosen option rises to
+Paper with Ledger Ink and control lift. Options may carry a tabular count. It is a
+radiogroup with arrow-key movement.
 
-### Filter tabs and selects
-Filter tabs are 28px transparent buttons that gain Paper, a Firm Rule border and control lift when active; counts beside them are tabular Graphite. Selects are 28px Paper fields with a Firm Rule border and a drawn chevron; focus swaps the border to indigo with a 1px ring.
+### Selects and the project filter
+Selects are 28px Paper fields with a Firm Rule border, control lift and a drawn
+chevron; focus swaps the border to indigo with a 1px ring. The project filter is a
+select whose first option is **All projects**; archived projects are listed with
+"· archived".
 
-### Inputs / Fields
-- **Style:** Paper ground, Firm Rule 1px border, 6px corners, 28px min height, 13px text, control lift.
-- **Focus:** indigo border plus 1px indigo ring; no glow.
-- **Error:** Fault Red text beneath, kept visible.
+### List grammar
+Every resource list, the Session log and the project list share one grammar:
+- **ListToolbar**: on project-scoped lists the project filter first, then the
+  SearchField (280px, search icon, Paper, Firm Rule border), then any further
+  filters (segmented status or order, selects); the count sits on the right in 12px
+  Graphite ("12 total", "3 of 12", "40 loaded" when more exist).
+- **Project column**: shown only while All projects is selected, right after the
+  name; archived projects are muted.
+- **NameCell**: the first column. The name at 500 weight (a link that turns indigo
+  on hover when the row opens a detail page; a muted fallback such as "Untitled"
+  when the resource has no name) with the compact ID underneath in 11.5px mono. The
+  ID's copy button appears on row hover or focus; the full ID lives in its tooltip.
+- **Creator column**: the last column before the actions, headed "Creator" with a
+  help tip. It shows the creating key's name (its prefix when unnamed) with a small
+  "Revoked" flag for revoked keys, "Admin copy" in Graphite for an administrator's
+  copy, "Unknown" in Graphite when Core has no record, and "—" while loading or when
+  the lookup failed.
+- **RowActions**: text actions right-aligned at the end of the row, 16px apart:
+  Copy to…, then Delete (red on hover). A row click opens the detail page; action
+  clicks do not.
+- **Partial failure**: when some projects fail to load, one red line names them
+  above the table; the other projects still show.
+- **Empty state**: a solid card (Paper, 1px Hairline, 12px, 40px 24px padding) with
+  an optional 20px outline icon, a 14px/600 title, an optional one-line description
+  and an optional action. "No matches" offers Clear search.
+- **Load more**: an outline button centred under its table when more rows exist.
+
+### Detail pages
+- The page header starts with a **back button** (28px ghost icon button, arrow-left,
+  Graphite) before the title; the actions on the right start with Refresh, continue
+  with outline actions such as Copy, and end with Delete (danger).
+- Under the header, **resource-facts** lays out the facts as a grid of up to four
+  label/value pairs per row (12px Graphite label over a 13px value, 14px by 40px
+  gaps, two columns below 900px). It starts with the ID (with its copy button) and
+  the Project and includes the Creator.
+- Sections follow: usage figures in a KPI strip, then tables in cards.
+
+### Dialogs
+Dialogs are 448px Paper cards with 8px corners, a 48px header and a 52px footer
+separated by Hairlines, and the floating shadow. They cannot be closed while a
+request runs.
+- **ConfirmDialog**: the one grammar for destructive actions. The body states what
+  will be deleted and its consequences; the footer holds Cancel (outline) and the
+  confirm button (danger), whose label changes while busy. Core's reason for a
+  rejection, or an uncertain-outcome warning, appears in red inside the dialog.
+  The Skill page's delete dialogs follow the same grammar; deleting a whole Skill
+  also requires typing its name.
+- **CopyDialog**: the source name with its type and project; a target-project
+  select (active projects other than the source) with a help tip; a target Vault
+  select when copying one Credential; the **Include dependencies** checkbox with a
+  help tip where it applies. After success it lists new IDs (source → copy) and
+  skipped entries with their reasons, and offers "Open in <project>". A failed copy
+  says whether nothing was copied or the outcome is uncertain.
+- **Key dialogs**: name fields carry their rules in a help tip and their problem in
+  red underneath. The issued key appears in a read-only field with a copy button,
+  under a notice that it is shown once; only "I've saved this key" dismisses it.
+  Closing the dialog moves the key into a pending notice card on the page.
 
 ### Navigation
-Sidebar groups (Monitor, Resources, Infrastructure, Settings, Playground) with 12px Graphite group labels; items are 30px rows with a 16px outline icon and Sidebar Ink text. Hover takes the ink wash; the active item takes the pressed wash with Ledger Ink at 500. The Playground group sits below a hairline. The footer holds the Core connection switcher (status icon plus "API ready"), sign-out, and the language/theme menu.
+Sidebar groups Monitor, Resources and Platform with 12px Graphite group labels;
+items are 30px rows with a 15px outline icon and Sidebar Ink text. Hover takes the
+ink wash; the active item takes the pressed wash with Ledger Ink at 500. The
+Platform group sits below a hairline. A secondary page (one Session) highlights its
+parent. The footer holds sign-out and the language/theme menu.
 
-### KPI strip
-One hairline frame of equal cells separated by inset rules. Each cell: a 12.5px Graphite label with an optional help tip, then the Display figure, optionally led by an 8px tone dot (ok, warning, danger, pending). Figures ellipsize rather than wrap.
+### KPI strip and metric tiles
+A KPI strip is one card of equal cells separated by inset rules. Each cell: a
+12.5px Graphite label with an optional help tip, then the Display figure,
+optionally led by an 8px tone dot. Overview uses four separate metric tiles instead:
+a 13px label with a help tip, the 30px figure (the service status as a 10px dot and
+a word), and one 12.5px line of context. Figures ellipsize rather than wrap.
 
 ### Help tip
-An 18px circular button holding a 13px circled "?" in Pencil; hover or open takes Ledger Ink on the ink wash. It opens on hover, focus or click (click pins it), closes on Escape, scroll or resize, and renders a 12.5px popover (Paper, Hairline, 8px, floating shadow, max 288px) in a portal. The text also exists in a visually hidden element for assistive technology.
+An 18px circular button holding a 13px circled "?" in Pencil; hover or open takes
+Ledger Ink on the ink wash. It opens on hover, focus or click (click pins it),
+closes on Escape, scroll or resize, and renders a 12.5px popover (Paper, Hairline,
+8px, floating shadow, max 288px) in a portal. The text also exists in a visually
+hidden element for assistive technology.
 
 ### Status dot
-A 7px circle plus a plain label at 12.5px (ok green, warning amber, danger red, pending Series 1, neutral Idle Gray). Never a coloured pill, never colour alone.
+A 7px circle plus a plain label at 12.5px: ok green, warning amber, danger red,
+pending Series 1, neutral Idle Gray. A failed Session's error and a waiting
+Session's required actions sit in a help tip beside the label. Never a coloured
+pill, never colour alone.
 
-### Meter and bar list
-A 6px pill rail in Meter Track with a fill in `--meter-fill`; the fill turns amber at 80% and red at 95% of its limit, and a nonzero ratio shows at least 3% width. Unknown ratios draw an empty rail. Bar lists use the same idea at 8px with categorical fills: label (with legend key) at ~42%, the track, then a right-aligned tabular value.
+### Meter
+A 6px pill rail in Meter Track with a neutral ink fill. The fill turns amber at 90%
+and red at 100% of its limit by default, and a nonzero ratio shows at least 3%
+width. An unknown ratio draws an empty rail. A share meter may carry a fixed
+identity colour and then ignores thresholds.
 
 ### Charts
-Time-series charts live in chart panels (caption 13px/600, legend, plot) inside one chart-grid frame. Lines are 2px round-joined with a surface-ringed end dot; gridlines are crisp Hairlines with 11px tabular ticks; hovering draws a Pencil crosshair, a hover-wash band and a floating tooltip. Missing buckets are gaps, not zeros. Every chart has a table toggle (26px icon button, top right) that reveals the numbers in a 220px scrolling table.
+Time-series charts live in chart panels (caption 13px/600, legend with series
+totals, plot) inside one chart-grid card. Lines are 2px round-joined with a
+surface-ringed end dot; gridlines are crisp Hairlines with 11px tabular ticks;
+hovering draws a Pencil crosshair, a hover-wash band and a floating tooltip. Missing
+buckets are gaps, not zeros. Every chart has a 26px table toggle at its top right
+that reveals the numbers in a 220px scrolling table.
 
 ### Tables
-A hairline frame with a sticky 34px Margin Gray header in Graphite 12px/500, 44px rows divided by Faint Rules, hover wash, right-aligned tabular numerics, a 500-weight primary cell that turns indigo on hover when it links, and inline Fault Red error lines under the row title.
+A card with a sticky 34px Margin Gray header in Graphite 12px/500, 44px rows divided
+by Faint Rules, hover wash, right-aligned tabular numerics, clickable rows where a
+detail page exists, and the list grammar above.
 
-### Notices and empty states
-Coverage notes (Margin Gray, Hairline, 8px, 12.5px Graphite) state bounded aggregation; the error variant tints toward Fault Red. Partial-data chips are amber-tinted pills with a help tip. Empty states are dashed-border frames with a 20px outline icon, a 14px/600 title, one line of description and an optional action.
+### Notices
+Coverage notes (Margin Gray, Hairline, 12px corners, 12.5px Graphite) state bounded
+aggregation or a stale view; the error variant tints toward Fault Red. Partial-data
+chips are amber-tinted pills with a help tip. Safety notices (a key shown once, an
+uncertain write, a destructive consequence) stay visible in body text.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** put every explanation of a figure, section or page behind a circled "?" help tip; keep errors, warnings and safety notices (deletion confirmation, uncertain writes, secrets) visible on the page.
-- **Do** reserve Parsar Indigo for selection, focus and primary actions; draw data from `--series-1..6` and `--series-other`, and meters from `--meter-fill`.
-- **Do** place charts and KPI figures in one hairline frame (8px) divided by 1px internal rules.
-- **Do** render missing data as "—", a chart gap, or "Unavailable".
+- **Do** put every explanation of a figure, column, section or page behind a
+  circled "?" help tip; keep errors, warnings and safety notices (deletion
+  consequences, uncertain writes, a key shown once) visible.
+- **Do** start every project-scoped toolbar with the project filter, then search,
+  with the count on the right.
+- **Do** end every resource table with the Creator column and then the row actions.
+- **Do** confirm every deletion in ConfirmDialog and every copy in CopyDialog.
+- **Do** keep meters in neutral ink and let amber and red mean a threshold was
+  crossed.
+- **Do** reserve Parsar Indigo for selection, focus, primary actions and the single
+  `--data` series.
+- **Do** place figures, charts and tables in one card divided by 1px internal rules.
+- **Do** render missing data as "—", a chart gap, "Unavailable" or "Unknown".
 - **Do** show status as a 7px dot plus a plain label.
-- **Do** use tabular numerals for every aligned figure and right-align numeric columns.
-- **Do** use the one segmented control for time ranges, labelled "1 小时 / 6 小时 / 24 小时 / 7 天".
-- **Do** keep compact numbers at two decimals only when the integer part is one digit.
-- **Do** build every page from PageHeader, PageBody and Section with the 24px gutter and 28px section gap.
+- **Do** use tabular numerals for every aligned figure and right-align numeric
+  columns.
+- **Do** build every page from PageHeader, PageBody and Section.
 
 ### Don't:
-- **Don't** add lines of small explanatory print under headings, KPIs or charts.
-- **Don't** colour data, bars, lines or meters with the indigo accent.
-- **Don't** nest cards inside frames or lift sections with shadows; shadows are for raised controls and floating layers only.
+- **Don't** add lines of small explanatory print under headings, KPIs, fields or
+  charts.
+- **Don't** colour healthy meters, bars or states; colour is for problems and data.
+- **Don't** colour multi-series data with the indigo accent.
+- **Don't** nest cards inside cards or draw a dashed empty state.
 - **Don't** render an unreported value as 0 or draw a missing interval as a zero line.
 - **Don't** use coloured status pills or colour-only status.
 - **Don't** reassign a categorical colour by rank when data re-sorts.
-- **Don't** add uppercase letter-spaced micro-labels or eyebrow lines above headings; a section is named by its title alone.
-- **Don't** mix synonyms in zh-CN copy (for example alternating 沙盒 with 沙箱).
+- **Don't** show full IDs in list columns; show the compact ID with its copy button.
+- **Don't** add uppercase letter-spaced micro-labels or eyebrow lines above
+  headings; a section is named by its title alone.
+- **Don't** mix synonyms in zh-CN copy (for example alternating 沙盒 with 沙箱, or
+  API 密钥 with API key).

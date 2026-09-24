@@ -1,5 +1,4 @@
 import { AlertTriangle } from "lucide-react";
-import type { KeyRef, Project, ProjectSummary } from "@agents-core-web/agents-client";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -36,6 +35,7 @@ import { isAbortError, type ProjectReadFailure } from "./project-sessions";
 import { keyUsageRows, type KeyUsageRow } from "./key-usage";
 import { useStableColors } from "./use-stable-colors";
 import "./MetricsView.css";
+import { type KeyRef, loadSummary, type Project, type ProjectSummary } from "../../lib/admin-view";
 
 const RANGES: readonly AgentMetricsRange[] = ["1h", "6h", "24h", "7d"];
 
@@ -87,7 +87,7 @@ export function AgentMetricsPage() {
     setKeyUsage({ status: "loading" });
     void (async () => {
       // The summary says which projects were active; a failed summary only means every project is read.
-      const summary = await admin.summary({ project_id: filter || undefined, signal: controller.signal }).catch((error: unknown) => {
+      const summary = await loadSummary({ project_id: filter || undefined, signal: controller.signal }).catch((error: unknown) => {
         if (controller.signal.aborted) throw error;
         return null;
       });
@@ -105,7 +105,7 @@ export function AgentMetricsPage() {
       if (controller.signal.aborted || isAbortError(error)) return;
       setState({ status: "failed", error: errorText(error), previous: latest.current });
     });
-    admin.summary({ group_by: "key", created_after: window.start, project_id: filter || undefined, signal: controller.signal }).then(
+    loadSummary({ group_by: "key", created_after: window.start, project_id: filter || undefined, signal: controller.signal }).then(
       (rows) => setKeyUsage({ status: "ready", rows: keyUsageRows(rows) }),
       (error: unknown) => {
         if (!controller.signal.aborted) setKeyUsage({ status: "failed", error: errorText(error) });

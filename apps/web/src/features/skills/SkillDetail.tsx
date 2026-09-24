@@ -2,7 +2,9 @@ import { ArrowLeft, Copy, Download, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { AgentCoreError, type AgentCore, type Skill, type SkillVersion } from "@agents-core-web/agents-client";
+import { AgentCoreError, type Skill, type SkillVersion } from "@agents-core-web/agents-client";
+
+import type { ProjectClient } from "../../lib/projects";
 
 import { EmptyState, PageBody, PageHeader, RefreshButton, Section, StatusDot } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
@@ -255,7 +257,7 @@ function SkillVersionsTable({
 }
 
 export interface SkillDetailProps {
-  core: AgentCore;
+  core: Pick<ProjectClient, "retrieveSkill" | "listSkillVersions" | "deleteSkill" | "deleteSkillVersion" | "downloadSkill" | "downloadSkillVersion">;
   skillId: string;
   initialSkill: Skill | null;
   onBack: () => void;

@@ -7,5 +7,6 @@ export * from "./sandbox-client";
 export { isEnvironmentTemplateName, isRecognizedEnvironmentTemplate } from "./environment-template-projection";
 export { isOpenAIHostedSessionEnvironment } from "./session-environment-projection";
 export { compareSkillVersionNumbers, isSkillId, isSkillUploadPath, isSkillVersionId, isSkillVersionNumber, maxSkillUploadFiles } from "./skill-projection";
-export { AdminClient, adminScopePath, copyableResourceTypes, isKeyName, isProjectName, ownerResourceTypes, projectCopyResult, projectProject, projectResourceOwners, projectSummary, projectWriteOperationPage } from "./admin-client";
-export type { AdminClientOptions, AdminIssuedKey, AdminKey, CopyableResourceType, CopyRequest, CopyResult, KeyRef, OwnedRuntimeObservation, OwnerResourceType, Project, ProjectSource, ProjectStatus, ProjectSummary, SpaceUsage, SummaryQuery, WriteOperation, WriteOperationPage, WriteOperationQuery } from "./admin-client";
+export { AdminClient } from "./admin-client";
+// Skill and SkillVersion come from ./types; the admin projections use the same shapes.
+export type { AdminClientOptions, AdminProject, CreateAdminProjectInput, RenameAdminProjectInput, AdminAPIKey, AdminIssuedAPIKey, IssueAdminAPIKeyInput, AdminPage, AdminDeleted, AdminCopyResourceType, AdminCopyInput, AdminCopyResult, AdminWriteOptions, SessionArtifact, AdminContent, AdminResourceType, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperation, AdminWriteOperationOptions, AdminWriteOperationPage, AdminSummaryOptions, AdminSummaryEntry, AdminSummary, AdminRuntimeObservation, AdminAuditOptions, AdminAuditEntry, AdminAuditPage } from "./admin-types";

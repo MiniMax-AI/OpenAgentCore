@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import type { KeyRef } from "@agents-core-web/agents-client";
 
 import { summary } from "../overview/test-fixtures";
 import { keyUsageRows } from "./key-usage";
+import { type KeyRef } from "../../lib/admin-view";
 
 const key = (id: string): KeyRef => ({ id, name: id, prefix: `pc_${id}`, kind: "issued", revoked_at: null });
 const sessions = (total: number) => ({ total, idle: total, in_progress: 0, requires_action: 0, failed: 0 });

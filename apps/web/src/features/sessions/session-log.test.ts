@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import type { AgentSession, Project, TolerantSessionList } from "@agents-core-web/agents-client";
+import type { AgentSession, TolerantSessionList } from "@agents-core-web/agents-client";
 
 import type { Owned } from "../../lib/projects";
+import { type Project } from "../../lib/admin-view";
 import {
   agentOptions,
   environmentKind,

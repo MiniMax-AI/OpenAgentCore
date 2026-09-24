@@ -15,8 +15,6 @@ export const keys: TranslationShape<typeof english> = {
     label: "项目",
     search: "按名称或 ID 搜索",
     name: "名称",
-    source: "来源",
-    sourceHelp: "控制台项目在这里创建。配置文件项目来自 Core 的静态 key 配置文件，由配置文件管理，不能在控制台改名或归档。",
     status: "状态",
     activeKeys: "有效 key",
     created: "创建时间",
@@ -29,10 +27,6 @@ export const keys: TranslationShape<typeof english> = {
   status: {
     active: "有效",
     archived: "已归档",
-  },
-  source: {
-    console: "控制台",
-    config: "配置文件",
   },
   actions: {
     issue: "签发 key",
@@ -108,7 +102,6 @@ export const keys: TranslationShape<typeof english> = {
     back: "返回项目列表",
     facts: "项目信息",
     id: "ID",
-    source: "来源",
     status: "状态",
     created: "创建时间",
     archived: "归档时间",

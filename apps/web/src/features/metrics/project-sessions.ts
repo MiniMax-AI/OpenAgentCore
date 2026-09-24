@@ -1,6 +1,7 @@
-import type { AgentSession, OpenAIAgentsClient, Project } from "@agents-core-web/agents-client";
+import type { AgentSession, OpenAIAgentsClient } from "@agents-core-web/agents-client";
 
 import type { Owned } from "../../lib/projects";
+import { type Project } from "../../lib/admin-view";
 
 /**
  * Bounded reads of each project's Session list through its admin scope. The

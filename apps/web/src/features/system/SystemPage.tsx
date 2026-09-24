@@ -7,6 +7,7 @@ import { ErrorState } from "../../components/ErrorState";
 import { CopyableId } from "../../components/list-ui";
 import { admin } from "../../lib/projects";
 import "./system.css";
+import { retrieveStartupConfiguration } from "../../lib/admin-view";
 
 type Loaded<T> = { status: "loading"; value: T | null } | { status: "ready"; value: T } | { status: "failed"; value: T | null };
 
@@ -68,7 +69,7 @@ export function SystemPage() {
     const controller = new AbortController();
     setStartup((current) => ({ status: "loading", value: current.value }));
     setDeployment((current) => ({ status: "loading", value: current.value }));
-    admin.retrieveStartupConfiguration({ signal: controller.signal }).then(
+    retrieveStartupConfiguration(controller.signal).then(
       (value) => setStartup({ status: "ready", value }),
       () => { if (!controller.signal.aborted) setStartup((current) => ({ status: "failed", value: current.value })); },
     );

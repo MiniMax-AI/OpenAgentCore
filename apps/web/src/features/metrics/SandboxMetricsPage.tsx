@@ -38,6 +38,7 @@ import {
   type HostedRuntimeRow,
 } from "./sandbox-runtime";
 import "./MetricsView.css";
+import { listRuntimeObservations } from "../../lib/admin-view";
 
 const healthTone: Record<NodeHealth, Tone> = { available: "ok", degraded: "warning", offline: "danger" };
 
@@ -54,7 +55,7 @@ function useHostedRuntimes() {
     const controller = new AbortController();
     setState({ status: "loading", load: latest.current });
     loadHostedRuntimes({
-      observations: (signal) => admin.listRuntimeObservations({ signal }),
+      observations: (signal) => listRuntimeObservations(signal),
       sessionReader: (projectId) => projectClient(projectId),
     }, controller.signal).then((load) => {
       latest.current = load;

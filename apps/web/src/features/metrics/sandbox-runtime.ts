@@ -1,6 +1,7 @@
-import type { AgentSession, OpenAIAgentsClient, OwnedRuntimeObservation, SandboxAllocation, SandboxNode } from "@agents-core-web/agents-client";
+import type { AgentSession, OpenAIAgentsClient, SandboxAllocation, SandboxNode } from "@agents-core-web/agents-client";
 
 import type { RuntimeDashboardSnapshot } from "../dashboard/runtime-snapshot";
+import { type OwnedRuntimeObservation } from "../../lib/admin-view";
 
 /**
  * Hosted Runtimes across every project: the observations come from the Web

@@ -1,4 +1,4 @@
-import type { ProjectSummary } from "@agents-core-web/agents-client";
+import { type ProjectSummary } from "../../lib/admin-view";
 
 /**
  * Rows of `/summary?group_by=key`: Sessions created in the range, grouped by

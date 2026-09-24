@@ -1,7 +1,8 @@
-import type { AgentSession, Project, ProjectSummary } from "@agents-core-web/agents-client";
+import type { AgentSession } from "@agents-core-web/agents-client";
 
 import { readProjectsSessions, type InProject, type ProjectReadFailure, type SessionLister } from "../metrics/project-sessions";
 import { activityStart, attentionCount, overviewReadDone, projectRows } from "./overview-model";
+import { type Project, type ProjectSummary } from "../../lib/admin-view";
 
 /** Most Sessions read per project for the 24-hour activity and the attention list. */
 export const OVERVIEW_SESSION_CAP = 1_000;
