@@ -37,7 +37,7 @@ describe("Core sandbox credential boundaries", () => {
   it("forwards one specification with generation and preserves backend conflict details", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: { code: "sandbox_specification_mismatch", message: "Node specification differs" } }, 409));
     const admin = new SandboxAdminClient({ token: "admin-only", fetch });
-    const input = { provider: "e2b" as const, core_url: "https://core.example", resources: { cpus: 2, memory_mib: 2048 }, e2b: { template: "runtime:build", api_key: "synthetic-test-secret" }, expected_generation: 3 };
+    const input = { provider: "docker" as const, core_url: "https://core.example", resources: { cpus: 2, memory_mib: 2048 }, runtime: { source_commit: "a".repeat(40), image_id: "sha256:" + "b".repeat(64), image_manifest_digest: "sha256:" + "c".repeat(64), microsandbox_ref: "parsar-core-runtime@sha256:" + "d".repeat(64), runtime_sha256: "e".repeat(64), firmware_sha256: "f".repeat(64) }, expected_generation: 3 };
     await expect(admin.updateDeployment(input)).rejects.toMatchObject({ status: 409, code: "sandbox_specification_mismatch" });
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual(input);
