@@ -23,23 +23,11 @@ import (
 type Config struct {
 	Specification  sandbox.DeploymentSpec `json:"specification"`
 	Generation     uint64                 `json:"generation"`
-	Nodes          *Nodes                 `json:"nodes,omitempty"`
 	CoreURL        string                 `json:"core_url"`
 	Provider       string                 `json:"provider"`
 	InstallationID string                 `json:"installation_id"`
-	Maintenance    bool                   `json:"maintenance"`
 	Docker         *Docker                `json:"docker,omitempty"`
 	Microsandbox   *Microsandbox          `json:"microsandbox,omitempty"`
-}
-
-// Nodes controls local participation and, for remote-only deployments, the
-// deployment idle policy. Node capacity remains a per-host reservation bound.
-type Nodes struct {
-	Local            bool  `json:"local"`
-	MaxActive        int   `json:"max_active"`
-	MaxRetained      int   `json:"max_retained"`
-	IdleSeconds      int64 `json:"idle_seconds,omitempty"`
-	RetentionSeconds int64 `json:"retention_seconds,omitempty"`
 }
 
 type Docker struct {
@@ -72,18 +60,6 @@ func Load(file string) (Config, error) {
 	if docker && micro {
 		return config, errors.New("only one sandbox provider can be configured")
 	}
-	if v, ok := fields["maintenance"]; ok && bytes.Equal(bytes.TrimSpace(v), []byte("null")) {
-		return config, errors.New("maintenance must be a boolean")
-	}
-	if v, ok := fields["nodes"]; ok {
-		var n map[string]json.RawMessage
-		if json.Unmarshal(v, &n) != nil || n == nil {
-			return config, errors.New("nodes must be an object")
-		}
-		if local, exists := n["local"]; !exists || bytes.Equal(bytes.TrimSpace(local), []byte("null")) {
-			return config, errors.New("nodes.local must be an explicit boolean")
-		}
-	}
 	return config, nil
 }
 
@@ -111,30 +87,7 @@ func Build(config Config) (*Built, func(), error) {
 	if config.Provider != "docker" && config.Provider != "microsandbox" {
 		return nil, closeProvider, errors.New("sandbox provider must be docker or microsandbox")
 	}
-	if n := config.Nodes; n != nil {
-		if n.MaxActive < 1 || n.MaxRetained < n.MaxActive {
-			return nil, closeProvider, errors.New("nodes capacity requires max_retained >= max_active > 0")
-		}
-		if !n.Local {
-			if config.Docker != nil || config.Microsandbox != nil {
-				return nil, closeProvider, errors.New("remote-only Core cannot configure a local provider")
-			}
-			built := &Built{InstallationID: config.InstallationID, BackendFingerprint: BackendFingerprint(config.Provider, "nodes:"+config.InstallationID)}
-			if config.Provider == "microsandbox" {
-				const maxSeconds = int64((1<<63 - 1) / time.Second)
-				if n.IdleSeconds < 1 || n.RetentionSeconds < 1 || n.IdleSeconds > maxSeconds || n.RetentionSeconds > maxSeconds {
-					return nil, closeProvider, errors.New("remote microsandbox requires positive bounded idle_seconds and retention_seconds")
-				}
-				built.Suspension = &Policy{IdleTimeout: time.Duration(n.IdleSeconds) * time.Second, Retention: time.Duration(n.RetentionSeconds) * time.Second, MaxActive: n.MaxActive, MaxRetained: n.MaxRetained}
-			} else if n.IdleSeconds != 0 || n.RetentionSeconds != 0 {
-				return nil, closeProvider, errors.New("Docker does not support suspension policy")
-			}
-			return built, closeProvider, nil
-		}
-		if n.IdleSeconds != 0 || n.RetentionSeconds != 0 {
-			return nil, closeProvider, errors.New("local suspension policy belongs to microsandbox configuration")
-		}
-	}
+
 	hasDocker, hasMicrosandbox := config.Docker != nil, config.Microsandbox != nil
 	result := &Built{InstallationID: config.InstallationID, SpecificationDigest: config.Specification.Digest(config.Provider)}
 	switch config.Provider {
@@ -167,6 +120,19 @@ func Build(config Config) (*Built, func(), error) {
 			if err != nil {
 				return errors.New("Docker daemon is unavailable")
 			}
+			host, err := c.Info(ctx, client.InfoOptions{})
+			if err != nil {
+				return errors.New("cannot inspect Docker host resource support")
+			}
+			if !host.Info.MemoryLimit || !host.Info.CPUCfsQuota {
+				return errors.New("Docker host does not enforce CPU and memory limits")
+			}
+			if host.Info.MemTotal <= 0 {
+				return errors.New("Docker host memory capacity is unavailable")
+			}
+			if err := checkCapacity(config.Specification.Resources, host.Info.NCPU, uint64(host.Info.MemTotal)); err != nil {
+				return err
+			}
 			_, err = c.ImageInspect(ctx, entry.Image)
 			if err != nil {
 				return errors.New("pinned Docker image is unavailable")
@@ -180,6 +146,13 @@ func Build(config Config) (*Built, func(), error) {
 		}
 		if err := configureMicrosandbox(*config.Microsandbox, result); err != nil {
 			return nil, closeProvider, err
+		}
+		probe := result.Probe
+		result.Probe = func(ctx context.Context) error {
+			if err := hostCapacity(config.Specification.Resources); err != nil {
+				return err
+			}
+			return probe(ctx)
 		}
 	default:
 		return nil, closeProvider, errors.New("managed provider must be docker or microsandbox")

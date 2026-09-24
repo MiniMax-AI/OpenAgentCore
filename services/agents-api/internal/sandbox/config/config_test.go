@@ -1,75 +1,59 @@
 package config
 
 import (
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
-func TestRemoteOnlyConfiguration(t *testing.T) {
-	c := Config{InstallationID: "94be54a1-138c-4f30-bc87-b13686272dbe", Provider: "microsandbox", Nodes: &Nodes{Local: false, MaxActive: 4, MaxRetained: 16, IdleSeconds: 300, RetentionSeconds: 86400}}
-	b, close, err := Build(c)
-	defer close()
-	if err != nil {
-		t.Fatal(err)
+func TestNodeRejectsCoreConfigurationAndUnknownProvider(t *testing.T) {
+	for _, field := range []string{`"nodes":{"local":false}`, `"maintenance":true`} {
+		path := filepath.Join(t.TempDir(), "config.json")
+		if err := os.WriteFile(path, []byte(`{"provider":"docker",`+field+`}`), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Load(path); err == nil {
+			t.Fatal("accepted retired Core configuration")
+		}
 	}
-	if b.Provider != nil || b.Suspension == nil || b.Suspension.IdleTimeout != 5*time.Minute {
-		t.Fatal("remote-only Core constructed local compute or lost idle policy")
-	}
-	first := b.BackendFingerprint
-	c.Nodes.MaxActive = 5
-	changed, close, err := Build(c)
-	defer close()
-	if err != nil || changed.BackendFingerprint != first {
-		t.Fatal("capacity changed deployment identity", err)
-	}
-	c.Microsandbox = &Microsandbox{}
-	if _, close, err := Build(c); err == nil {
-		close()
-		t.Fatal("remote-only Core accepted local backend")
-	}
-	c.Microsandbox = nil
-	c.Provider = "docker"
-	if _, close, err := Build(c); err == nil {
-		close()
-		t.Fatal("Docker accepted a snapshot policy")
-	}
-	c.Nodes.IdleSeconds = 0
-	c.Nodes.RetentionSeconds = 0
-	b, close, err = Build(c)
-	defer close()
-	if err != nil || b.Suspension != nil || b.BackendFingerprint == first {
-		t.Fatal("provider kind not fenced", err)
+	if BackendFingerprint("docker", "socket") == BackendFingerprint("microsandbox", "socket") {
+		t.Fatal("provider namespaces collide")
 	}
 }
-
-func TestNodeConfigurationMustBeExplicit(t *testing.T) {
-	for _, fragment := range []string{`null`, `{}`, `{"local":null}`, `{"local":false,"unexpected":true}`} {
-		t.Run(fragment, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "config.json")
-			raw := `{"installation_id":"94be54a1-138c-4f30-bc87-b13686272dbe","provider":"docker","nodes":` + fragment + `}`
-			if err := os.WriteFile(path, []byte(raw), 0600); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := Load(path); err == nil {
-				t.Fatal("ambiguous configuration accepted")
-			}
-		})
+func TestNodeSpecificationCannotBeOverridden(t *testing.T) {
+	release := sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40), ImageID: "sha256:" + strings.Repeat("b", 64), ImageManifestDigest: "sha256:" + strings.Repeat("c", 64), MicrosandboxRef: "parsar-core-runtime@sha256:" + strings.Repeat("d", 64), RuntimeSHA256: strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64)}
+	c := Config{Generation: 1, Provider: "docker", Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}, Runtime: &release}, Docker: &Docker{Image: release.ImageID}}
+	for _, image := range []string{release.ImageID, release.ImageManifestDigest} {
+		c.Docker.Image = image
+		if err := validateSpecification(c); err != nil {
+			t.Fatal(err)
+		}
 	}
-	c := Config{InstallationID: "94be54a1-138c-4f30-bc87-b13686272dbe", Provider: "docker", Nodes: &Nodes{MaxActive: 2, MaxRetained: 1}}
-	if _, close, err := Build(c); err == nil {
-		close()
-		t.Fatal("unbounded node capacity accepted")
+	c.Docker.Image = "sha256:" + strings.Repeat("a", 64)
+	if err := validateSpecification(c); err == nil {
+		t.Fatal("accepted different Runtime")
 	}
-	c.Provider = "other"
-	c.Nodes.MaxRetained = 4
-	if _, close, err := Build(c); err == nil {
-		close()
-		t.Fatal("unknown provider accepted")
+	c.Provider = "microsandbox"
+	c.Docker = nil
+	c.Specification.Resources.RootDiskMiB = 8192
+	c.Specification.Resources.EnvironmentDiskMiB = 8192
+	c.Microsandbox = &Microsandbox{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 8192, EnvironmentDiskMiB: 8192, Image: release.MicrosandboxRef, RuntimeSHA256: release.RuntimeSHA256, FirmwareSHA256: release.FirmwareSHA256}
+	if err := validateSpecification(c); err != nil {
+		t.Fatal(err)
 	}
-	if strings.EqualFold(BackendFingerprint("docker", "a"), BackendFingerprint("microsandbox", "a")) {
-		t.Fatal("provider namespaces collide")
+	for _, change := range []func(*Microsandbox){func(m *Microsandbox) { m.CPUs = 1 }, func(m *Microsandbox) { m.MemoryMiB = 1024 }, func(m *Microsandbox) { m.EnvironmentDiskMiB = 4096 }, func(m *Microsandbox) { m.RootDiskMiB = 4096 }, func(m *Microsandbox) { m.FirmwareSHA256 = strings.Repeat("a", 64) }} {
+		copy := *c.Microsandbox
+		change(&copy)
+		other := c
+		other.Microsandbox = &copy
+		if err := validateSpecification(other); err == nil {
+			t.Fatal("accepted local specification override")
+		}
+	}
+	c.Generation = 0
+	if err := validateSpecification(c); err == nil {
+		t.Fatal("accepted unbound node")
 	}
 }

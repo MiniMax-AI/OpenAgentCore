@@ -112,7 +112,7 @@ func run(ctx context.Context, args []string) error {
 		_, err = probe(probeCtx)
 		stopProbe()
 		if err != nil {
-			return errors.New("local provider readiness check failed")
+			return fmt.Errorf("local provider readiness check failed: %w", err)
 		}
 		stored, err := node.Enroll(ctx, *coreURL, *stateDir, token, node.EnrollmentRequest{Name: *name})
 		if err != nil {

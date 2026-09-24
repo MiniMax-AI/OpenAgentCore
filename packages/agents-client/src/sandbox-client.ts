@@ -4,15 +4,25 @@ import type { ReadOptions } from "./types";
 export type SandboxDiagnostic = "" | "node_unavailable" | "resource_missing" | "compute_unconfirmed" | "ownership_mismatch" | "provider_unavailable";
 
 export type SandboxProvider = "docker" | "microsandbox" | "e2b";
+/** CPU and MiB limits for each sandbox, not node concurrency. */
+export interface SandboxResources { cpus: number; memory_mib: number; root_disk_mib?: number; environment_disk_mib?: number }
+export interface SandboxRuntimeRelease { source_commit: string; image_id: string; image_manifest_digest: string; microsandbox_ref: string; runtime_sha256: string; firmware_sha256: string }
+export interface SandboxSpecification { resources: SandboxResources; runtime?: SandboxRuntimeRelease }
 export interface InitializeSandboxDeployment {
   provider: SandboxProvider;
   core_url: string;
+  /** Required by Core for new and replacement configurations. */
+  resources?: SandboxResources;
+  /** Required for Docker/microsandbox; E2B uses its fixed template build. */
+  runtime?: SandboxRuntimeRelease;
   e2b?: { api_key: string; template: string };
 }
 export interface UpdateSandboxDeployment extends InitializeSandboxDeployment { expected_generation: number }
 export interface SetSandboxMaintenance { maintenance: boolean; expected_generation: number }
 
 export interface SandboxDeployment {
+  specification?: SandboxSpecification;
+  specification_digest?: string;
   installation_id: string;
   provider: SandboxProvider | "";
   core_url: string;
