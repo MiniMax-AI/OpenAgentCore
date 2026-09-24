@@ -118,7 +118,6 @@ export const metrics = {
     cleanupPending: "Cleanup pending",
     cleanupDetail: "Released but not yet removed",
     freeMemory: "Free memory",
-    freeDisk: "Free disk {{value}}",
     nodesSection: "Node capacity",
     nodesSectionDetail: "Limits, usage and host resources each node reports with its heartbeat.",
     manageNodes: "Manage nodes",

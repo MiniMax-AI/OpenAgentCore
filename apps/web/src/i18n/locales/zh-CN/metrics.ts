@@ -118,7 +118,6 @@ export const metrics = {
     cleanupPending: "待清理",
     cleanupDetail: "已释放但尚未移除",
     freeMemory: "可用内存",
-    freeDisk: "可用磁盘 {{value}}",
     nodesSection: "节点容量",
     nodesSectionDetail: "各节点心跳上报的上限、用量与主机资源。",
     manageNodes: "管理节点",

@@ -1,6 +1,10 @@
 import type { SandboxNode } from "@agents-core-web/agents-client";
 
-/** Pure projections of the deployment fleet. Missing inputs stay null, never zero. */
+/**
+ * Pure projections of the deployment fleet. Missing inputs stay null, never zero.
+ * Host resources (CPU, free memory, free disk) are per node and not summed: a
+ * sandbox runs on one node, and nodes report no totals to compare a sum with.
+ */
 
 export type NodeHealth = "available" | "degraded" | "offline";
 
@@ -20,14 +24,6 @@ export interface CapacitySummary {
   maxRetained: number;
   reserved: number;
   cleanupPending: number;
-  cpuCount: number | null;
-  availableMemoryBytes: number | null;
-  availableDiskBytes: number | null;
-}
-
-function sumKnown(values: ReadonlyArray<number | null>): number | null {
-  const known = values.filter((value): value is number => typeof value === "number");
-  return known.length ? known.reduce((sum, value) => sum + value, 0) : null;
 }
 
 export function capacitySummary(nodes: readonly SandboxNode[]): CapacitySummary {
@@ -42,9 +38,6 @@ export function capacitySummary(nodes: readonly SandboxNode[]): CapacitySummary 
     maxRetained: online.reduce((sum, node) => sum + node.max_retained, 0),
     reserved: nodes.reduce((sum, node) => sum + node.reserved, 0),
     cleanupPending: nodes.reduce((sum, node) => sum + node.cleanup_pending, 0),
-    cpuCount: sumKnown(online.map((node) => node.cpu_count)),
-    availableMemoryBytes: sumKnown(online.map((node) => node.available_memory_bytes)),
-    availableDiskBytes: sumKnown(online.map((node) => node.available_disk_bytes)),
   };
 }
 

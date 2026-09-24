@@ -7,7 +7,6 @@ import { TimeSeriesChart } from "../../components/charts/TimeSeriesChart";
 import {
   EmptyState,
   HelpTip,
-  Meter,
   PageBody,
   PageHeader,
   RefreshButton,
@@ -16,11 +15,12 @@ import {
 } from "../../components/console-ui";
 import { NameCell } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
-import { formatBytes, formatClock, formatCompact, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
+import { formatClock, formatCompact, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
 import { admin, projectClient, ProjectName, useProjects } from "../../lib/projects";
-import { capacitySummary, coreStatus, nodeHealth, type CoreStatus, type NodeHealth } from "../fleet/fleet-model";
+import { capacitySummary, coreStatus, type CoreStatus } from "../fleet/fleet-model";
 import { fleetSnapshot, useSandboxFleet, type FleetState } from "../fleet/use-sandbox-fleet";
 import { isAbortError, type InProject } from "../metrics/project-sessions";
+import { FleetTopology, TOPOLOGY_LIMIT } from "./FleetTopology";
 import { loadOverview, type OverviewData } from "./overview-loader";
 import {
   attentionCount,
@@ -41,7 +41,6 @@ import { loadSummary, type Project, type ProjectSummary } from "../../lib/admin-
 export const OVERVIEW_REFRESH_MS = 30_000;
 const ATTENTION_LIMIT = 8;
 
-const healthTone: Record<NodeHealth, Tone> = { available: "ok", degraded: "warning", offline: "danger" };
 const serviceTone: Record<ServiceHealth, Tone> = { healthy: "ok", degraded: "warning", down: "danger", unknown: "pending" };
 const coreTone: Record<CoreStatus, Tone> = { checking: "pending", running: "ok", maintenance: "warning", unreachable: "danger" };
 
@@ -223,7 +222,7 @@ export function OverviewPage() {
             ) : <p className="detail-note overview-card-note" role="status">{t("activity.loading")}</p>}
           </section>
 
-          <FleetCard fleetState={fleetState} core={core} onManage={() => navigate("nodes")} />
+          <FleetCard fleetState={fleetState} core={core} onManage={() => navigate("nodes")} onOpen={(node) => navigate("nodes", { id: node.id })} />
         </div>
 
         <section className="overview-card overview-table-card" aria-labelledby="projects-heading">
@@ -274,12 +273,12 @@ function fleetDetail(state: FleetState, t: TFunction<"overview">): string {
   return t("fleet.loading");
 }
 
-/** Core itself, then one row per sandbox host, on one grid so the columns line up. */
-function FleetCard({ fleetState, core, onManage }: { fleetState: FleetState; core: CoreStatus; onManage: () => void }) {
-  const { t, i18n } = useTranslation("overview");
-  const locale = i18n.resolvedLanguage;
+/** Core and its sandbox nodes as a topology; a node opens on the Nodes page. */
+function FleetCard({ fleetState, core, onManage, onOpen }: { fleetState: FleetState; core: CoreStatus; onManage: () => void; onOpen: (node: SandboxNode) => void }) {
+  const { t } = useTranslation("overview");
   const fleet = fleetSnapshot(fleetState);
   const hosts = fleet?.nodes ?? [];
+  const hidden = Math.max(0, hosts.length - TOPOLOGY_LIMIT);
   return (
     <section className="overview-card overview-fleet" aria-labelledby="fleet-heading">
       <header className="overview-card-header">
@@ -291,52 +290,18 @@ function FleetCard({ fleetState, core, onManage }: { fleetState: FleetState; cor
           <button className="text-action" type="button" onClick={onManage}>{hosts.length ? t("fleet.manageNodes") : t("fleet.addNode")}</button>
         ) : null}
       </header>
-      <div className="overview-card-body">
-        <div className="fleet-grid" role="table" aria-labelledby="fleet-heading">
-          <div className="fleet-row fleet-head" role="row">
-            <span role="columnheader">{t("fleet.name")}</span>
-            <span role="columnheader">{t("fleet.status")}</span>
-            <span role="columnheader">{t("fleet.slots")}</span>
-            <span role="columnheader" className="numeric">{t("fleet.cpu")}</span>
-            <span role="columnheader" className="numeric">{t("fleet.memory")}</span>
-          </div>
-          <div className="fleet-row fleet-core" role="row">
-            <span role="rowheader" className="fleet-name">
-              {t("fleet.core")}
-              <HelpTip label={t("fleet.core")}>{t("fleet.coreHelp")}</HelpTip>
-            </span>
-            <span role="cell"><StatusDot tone={coreTone[core]} label={t(`coreStatus.${core}`)} /></span>
-            <span role="cell" />
-            <span role="cell" className="numeric fleet-unreported">{t("fleet.unreported")}</span>
-            <span role="cell" className="numeric fleet-unreported">{t("fleet.unreported")}</span>
-          </div>
-          {hosts.map((node) => <HostRow key={node.id} node={node} locale={locale} />)}
-        </div>
+      <div className="overview-card-body fleet-body">
+        <FleetTopology
+          nodes={hosts}
+          coreLabel={t(`coreStatus.${core}`)}
+          coreTone={coreTone[core]}
+          stale={fleetState.status === "ready" && fleetState.error !== null}
+          onOpen={onOpen}
+        />
+        {hidden ? <button className="text-action fleet-more" type="button" onClick={onManage}>{t("fleet.more", { n: hidden })}</button> : null}
         <FleetFooter state={fleetState} empty={fleet ? hosts.length === 0 : false} />
       </div>
     </section>
-  );
-}
-
-function HostRow({ node, locale }: { node: SandboxNode; locale: string | undefined }) {
-  const { t } = useTranslation("overview");
-  const health = nodeHealth(node);
-  const name = node.name || node.id;
-  return (
-    <div className="fleet-row fleet-host" role="row">
-      <span role="rowheader" className="fleet-name" title={node.id}>{name}</span>
-      <span role="cell"><StatusDot tone={healthTone[health]} label={t(`nodeHealth.${health}`)} /></span>
-      <span role="cell" className="fleet-slots">
-        <Meter value={node.active} limit={node.max_active} label={t("capacity.slotsOf", { name })} />
-        <span>{formatInteger(node.active, locale)} / {formatInteger(node.max_active, locale)}</span>
-      </span>
-      <span role="cell" className="numeric">{node.online && node.cpu_count !== null ? t("capacity.cores", { value: formatInteger(node.cpu_count, locale) }) : MISSING}</span>
-      <span role="cell" className="numeric">
-        {node.online && node.available_memory_bytes !== null
-          ? <>{formatBytes(node.available_memory_bytes)} <span className="fleet-muted">{t("fleet.free")}</span></>
-          : MISSING}
-      </span>
-    </div>
   );
 }
 

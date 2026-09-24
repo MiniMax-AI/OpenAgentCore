@@ -126,7 +126,6 @@ export function SandboxMetricsPage() {
             tone={capacity ? capacity.cleanupPending > 0 ? "warning" : "ok" : undefined}
             help={t("sandbox.cleanupDetail")}
           />
-          <Kpi label={t("sandbox.freeMemory")} value={capacity ? formatBytes(capacity.availableMemoryBytes) : MISSING} help={capacity ? t("sandbox.freeDisk", { value: formatBytes(capacity.availableDiskBytes) }) : message} />
         </KpiStrip>
 
         <Section

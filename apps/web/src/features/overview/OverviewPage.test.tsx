@@ -10,14 +10,14 @@ import { OverviewPage } from "./OverviewPage";
 const render = (page: ReactElement) => renderToStaticMarkup(<ProjectsProvider>{page}</ProjectsProvider>);
 
 describe("Monitor pages before data arrives", () => {
-  it("shows missing figures instead of zero and lists Core beside the hosts", () => {
+  it("shows missing figures instead of zero and draws Core before the nodes load", () => {
     const html = render(<OverviewPage />);
     expect(html).toContain("Overview");
     expect(html).not.toMatch(/metric-tile-value kpi-value">0</);
     expect(html).toContain('metric-tile-value kpi-value">—<');
-    // Core has no slots and reports no CPU or memory yet: say so instead of inventing figures.
     expect(html).toContain(">Core<");
-    expect(html.match(/Not reported/g)).toHaveLength(2);
+    expect(html).toContain("Checking");
+    expect(html).not.toContain("fleet-node");
   });
 
   it("puts the project filter before the time range on Agent metrics", () => {

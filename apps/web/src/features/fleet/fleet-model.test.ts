@@ -4,14 +4,13 @@ import { node } from "../overview/test-fixtures";
 import { capacitySummary, coreStatus, nodeHealth } from "./fleet-model";
 
 describe("fleet model", () => {
-  it("counts limits only on online nodes and keeps missing host metrics null", () => {
+  it("counts limits only on online nodes", () => {
     const summary = capacitySummary([
       node("a", { active: 3, max_active: 4, retained: 1, max_retained: 8 }),
       node("b", { online: false, active: 0, max_active: 4, cpu_count: null, available_memory_bytes: null, available_disk_bytes: null }),
       node("c", { provider_ready: false, cpu_count: null }),
     ]);
-    expect(summary).toMatchObject({ nodes: 3, online: 2, available: 1, active: 4, maxActive: 8, retained: 1, maxRetained: 16, cpuCount: 8 });
-    expect(capacitySummary([]).cpuCount).toBeNull();
+    expect(summary).toMatchObject({ nodes: 3, online: 2, available: 1, active: 4, maxActive: 8, retained: 1, maxRetained: 16 });
   });
 
   it("classifies node health", () => {

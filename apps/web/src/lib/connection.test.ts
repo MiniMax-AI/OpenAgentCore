@@ -1,14 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { isLocalProxyBaseUrl, isValidDirectCoreBaseUrl } from "./connection";
+import { isValidDirectCoreBaseUrl } from "./connection";
 
 describe("Core URL checks", () => {
-  it("recognizes only the same-origin /v1 proxy boundary", () => {
-    expect(isLocalProxyBaseUrl("/v1")).toBe(true);
-    expect(isLocalProxyBaseUrl(" /v1/ ")).toBe(true);
-    expect(isLocalProxyBaseUrl("http://127.0.0.1:8091/v1")).toBe(false);
-  });
-
   it.each([
     "https://core.example/v1",
     "http://localhost:8091/v1",

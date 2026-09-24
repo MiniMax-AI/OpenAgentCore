@@ -128,72 +128,167 @@
   flex: 1;
 }
 
-/* Fleet: Core, then one row per host, on one grid so columns line up. */
+/* Fleet: Core in the middle, sandbox nodes left and right of it. Lines use a
+   0-1000 viewBox stretched to the card, so node columns are in percent. */
 
-.fleet-grid {
+.fleet-body {
+  justify-content: center;
+}
+
+.fleet-topology {
+  position: relative;
+  min-width: 0;
+  isolation: isolate;
+}
+
+.fleet-topology-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.fleet-link {
+  color: var(--line-strong);
+}
+
+.fleet-link-available {
+  color: color-mix(in srgb, var(--fg) 45%, transparent);
+}
+
+.fleet-link-degraded {
+  color: var(--warning);
+}
+
+.fleet-link path {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.fleet-link-edge {
+  stroke: currentColor;
+  stroke-width: 1.25px;
+  opacity: 0.6;
+}
+
+.fleet-link-offline .fleet-link-edge {
+  stroke-dasharray: 4 6;
+  opacity: 0.9;
+}
+
+.fleet-link-flow {
+  stroke: currentColor;
+  stroke-width: 2px;
+  stroke-linecap: round;
+  stroke-dasharray: 3 27;
+  opacity: 0.7;
+  animation: fleet-link-flow 4s linear infinite;
+}
+
+.fleet-topology-stale .fleet-link-flow {
+  display: none;
+}
+
+.fleet-core {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content 116px max-content max-content;
-  column-gap: 20px;
-  font-size: 13px;
-  line-height: 18px;
+  width: 104px;
+  justify-items: center;
+  gap: 6px;
+  padding: 14px 8px 12px;
+  color: var(--fg-muted);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  box-shadow: var(--shadow-floating);
+  transform: translate(-50%, -50%);
 }
 
-.fleet-row {
-  display: grid;
-  grid-column: 1 / -1;
-  grid-template-columns: subgrid;
-  min-height: 40px;
-  align-items: center;
-  border-top: 1px solid var(--line-muted);
+.fleet-core strong {
+  color: var(--fg);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
-.fleet-row .numeric {
-  text-align: right;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.fleet-head {
-  min-height: 30px;
+.fleet-core .status-dot,
+.fleet-node .status-dot {
   color: var(--fg-muted);
   font-size: 12px;
-  font-weight: 500;
-  border-top: 0;
+  line-height: 16px;
 }
 
-/* Core is the deployment itself, the hosts sit under it. */
-.fleet-core + .fleet-host {
-  border-top-color: var(--line);
-}
-
-.fleet-name {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
+.fleet-node {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  width: 30%;
   gap: 4px;
+  padding: 9px 12px;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: border-color 160ms ease;
+}
+
+.fleet-node:hover {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+}
+
+.fleet-node:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.fleet-node-left {
+  left: 0;
+}
+
+.fleet-node-right {
+  right: 0;
+}
+
+.fleet-node-head {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.fleet-node-head strong {
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
+  font-size: 13px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.fleet-slots {
-  display: grid;
-  grid-template-columns: 56px auto;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.fleet-slots .meter {
-  min-width: 0;
-  height: 5px;
-}
-
-.fleet-unreported,
-.fleet-muted {
+.fleet-node-slots {
   color: var(--fg-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fleet-more {
+  align-self: center;
+  margin-top: 8px;
+}
+
+@keyframes fleet-link-flow {
+  to { stroke-dashoffset: -60; }
 }
 
 .fleet-list-footer {
@@ -295,6 +390,14 @@
   .overview-fleet,
   .overview-table-card {
     animation: none;
+  }
+
+  .fleet-link-flow {
+    animation: none;
+  }
+
+  .fleet-node {
+    transition: none;
   }
 }
 

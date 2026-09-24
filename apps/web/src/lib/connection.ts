@@ -4,10 +4,6 @@
  */
 export type CoreConnectionState = "connecting" | "ready" | "failed";
 
-export function isLocalProxyBaseUrl(baseUrl: string): boolean {
-  return (baseUrl.trim() || "/v1").replace(/\/+$/, "") === "/v1";
-}
-
 export function isLoopbackHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase();
   return (

@@ -20,9 +20,6 @@ import { ConsoleNavigationContext, hashWithParams, routeParamsFromHash, type Rou
 import { consoleHashForView, consoleNavParent, consoleViewFromHash, type ConsoleView } from "./lib/console-routes";
 import { ProjectsProvider, useProjects } from "./lib/projects";
 
-/** Sandbox administration stays on the paired console's `/core/v1/sandbox` routes. */
-const SANDBOX_BASE = "/v1";
-
 function readLocation(): { view: ConsoleView; params: RouteParams } {
   const hash = typeof window === "undefined" ? "" : window.location.hash;
   return { view: consoleViewFromHash(hash), params: routeParamsFromHash(hash) };
@@ -41,7 +38,7 @@ function ConsolePage({ view }: { view: ConsoleView }) {
     case "files": return <FilesPage />;
     case "vaults": return <VaultsPage />;
     case "projects": return <ProjectsPage />;
-    case "nodes": return <SandboxManagerView coreBaseUrl={SANDBOX_BASE} />;
+    case "nodes": return <SandboxManagerView />;
     case "system": return <SystemPage />;
   }
 }

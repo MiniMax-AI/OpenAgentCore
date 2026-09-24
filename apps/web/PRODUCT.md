@@ -55,7 +55,7 @@ workbench.
 ## Information Architecture
 
 - **Monitor**: Overview (service status, running Sessions, sandbox slots, Sessions
-  needing attention, 24-hour Session activity, the fleet of Core and its hosts,
+  needing attention, 24-hour Session activity, the topology of Core and its nodes,
   usage by project, the attention table), Agent metrics (requests, errors,
   duration, tokens, models, tools, Agents and API keys for 1 h / 6 h / 24 h / 7 d),
   Sandbox metrics (node capacity and hosted Runtimes across projects), Session log
@@ -65,7 +65,8 @@ workbench.
   Creator column naming the creating key. Detail pages show the resource's facts
   and offer Copy and Delete.
 - **Platform**: Projects and keys (projects, their assets and usage, named keys,
-  write history), Nodes (sandbox deployment and node enrollment), System (startup
+  write history), Nodes (sandbox deployment, the node list with each node's
+  capacity, host figures and allocations, enrollment and removal), System (startup
   configuration and the sandbox deployment).
 - **First run**: when no project exists yet, a full-screen step outside the shell
   creates the first project (default name `Default`) and its first key and shows the
