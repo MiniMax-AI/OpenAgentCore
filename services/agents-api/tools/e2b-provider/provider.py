@@ -7,7 +7,7 @@ from uuid import UUID
 from e2b import Sandbox, SandboxQuery, SandboxState
 from e2b.exceptions import FileNotFoundException, SandboxNotFoundException
 
-from sdk import connection_material, definitely_rejected, restore, run
+from sdk import connection_material, definitely_rejected, restore, run, validate_deployment
 from state import Failure, Receipt
 
 PREFIX = 'parsar_'
@@ -27,9 +27,10 @@ class Provider:
         self.config = request['Config']
         self.reference = request['Reference']
         if (request['Version'] != 1 or request['Operation'] not in
-                ('create', 'inspect', 'renew', 'kill', 'command') or
-                set(self.reference) != set(FIELDS[1:]) or
-                any(not valid_id(v) for v in self.reference.values()) or
+                ('create', 'inspect', 'renew', 'kill', 'command', 'validate_deployment') or
+                (request['Operation'] != 'validate_deployment' and
+                 (set(self.reference) != set(FIELDS[1:]) or
+                  any(not valid_id(v) for v in self.reference.values()))) or
                 not valid_id(self.config['InstallationID'])):
             raise Failure('invalid')
         deadline = datetime.fromisoformat(request['Deadline'].replace('Z', '+00:00'))
@@ -67,6 +68,16 @@ class Provider:
     def owns(self, cloud):
         if any(cloud.metadata.get(key) != value for key, value in self.metadata.items()):
             raise Failure('ownership')
+        return cloud
+
+    def qualified(self, cloud):
+        resources = self.config.get('Resources')
+        if resources is not None:
+            template = self.config['Template'].split(':', 1)[0]
+            if (cloud.template_id != template or type(cloud.cpu_count) is not int or
+                    cloud.cpu_count != resources['cpus'] or type(cloud.memory_mb) is not int or
+                    cloud.memory_mb != resources['memory_mib']):
+                raise Failure('invalid')
         return cloud
 
     def discover(self):
@@ -108,6 +119,7 @@ class Provider:
         if len(found) != 1:
             raise Failure('unconfirmed')
         cloud = found[0]
+        self.qualified(cloud)
         record = self.receipt.data or {}
         if (cloud.state == 'running' and not record.get('bootstrap_complete') and record.get('connection')
                 and record.get('status') not in ('bootstrap_failed', 'killed')):
@@ -142,6 +154,14 @@ class Provider:
                 self.receipt.save(status='rejected', settled=True)
             raise Failure('unconfirmed') from None
         self.receipt.save(status='created', ids=[cloud.sandbox_id], connection=connection_material(cloud))
+        # Creation responses do not include resources. Inspect before credentials
+        # or bootstrap are written, retaining the allocation for owned cleanup.
+        if self.config.get('Resources') is not None:
+            try:
+                self.qualified(self.owns(Sandbox.get_info(cloud.sandbox_id, **self.options())))
+            except Failure:
+                self.receipt.save(status='configuration_rejected', settled=True)
+                raise
         payload = dict(bootstrap, InstallationID=self.config['InstallationID'])
         cloud.files.write('/root/.parsar/e2b/managed-bootstrap.json', json.dumps(payload),
                           user='root', request_timeout=self.remaining())
@@ -159,7 +179,7 @@ class Provider:
         if cloud is None or cloud.state != 'running':
             raise Failure('unconfirmed')
         Sandbox.set_timeout(cloud.sandbox_id, self.config['TimeoutSeconds'], **self.options())
-        return self.owns(Sandbox.get_info(cloud.sandbox_id, **self.options()))
+        return self.qualified(self.owns(Sandbox.get_info(cloud.sandbox_id, **self.options())))
 
     def kill(self):
         if self.rejected_absence():
@@ -177,6 +197,14 @@ class Provider:
         self.receipt.save(status='killed', settled=True, bootstrap_complete=False, connection=None)
 
     def execute(self):
+        if self.q['Operation'] == 'validate_deployment':
+            try:
+                validate_deployment(self.config, self.remaining)
+                return {'Version': 1, 'DeploymentValid': True, 'ErrorCode': ''}
+            except Failure as error:
+                return {'Version': 1, 'ErrorCode': error.code}
+            except Exception:
+                return {'Version': 1, 'ErrorCode': 'unconfirmed'}
         with Receipt(self.q, self.remaining) as self.receipt:
             try:
                 operation = self.q['Operation']

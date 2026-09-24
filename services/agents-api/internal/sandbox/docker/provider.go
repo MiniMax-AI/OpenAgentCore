@@ -28,6 +28,7 @@ type Config struct {
 	InstallationID, Image, Network, Seccomp string
 	ExtraHosts                              []string
 	NestedSandbox                           bool
+	Resources                               *sandbox.Resources
 }
 type Provider struct {
 	client *client.Client
@@ -39,6 +40,13 @@ var _ sandbox.Provider = (*Provider)(nil)
 func New(c *client.Client, config Config) (*Provider, error) {
 	if c == nil || !validID(config.InstallationID) || (!strings.HasPrefix(config.Image, "sha256:") && !strings.Contains(config.Image, "@sha256:")) || config.Seccomp == "" || config.Network == "" || config.Network == "host" || strings.HasPrefix(config.Network, "container:") {
 		return nil, sandbox.ErrInvalid
+	}
+	if config.Resources != nil {
+		if config.Resources.Validate("docker") != nil {
+			return nil, sandbox.ErrInvalid
+		}
+		resources := *config.Resources
+		config.Resources = &resources
 	}
 	return &Provider{client: c, config: config}, nil
 }
@@ -86,6 +94,9 @@ func (p *Provider) GetInfo(ctx context.Context, r sandbox.Reference) (sandbox.In
 	info := sandbox.Info{Reference: r}
 	v, e := p.inspect(ctx, r)
 	if e != nil {
+		return info, e
+	}
+	if e = p.verifyConfiguration(ctx, v); e != nil {
 		return info, e
 	}
 	info.ProviderID = v.Container.ID
@@ -148,6 +159,15 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 		return info, e
 	}
 	info.ProviderID = v.ID
+	if p.config.Resources != nil {
+		actual, err := p.inspect(ctx, b.Reference)
+		if err != nil {
+			return info, err
+		}
+		if err = p.verifyConfiguration(ctx, actual); err != nil {
+			return info, err
+		}
+	}
 	// Any failure returns the retained allocation reference. The caller must Kill
 	// it, including on a lost acknowledgement. Never erase uncertain owner state.
 	if e = p.bootstrap(ctx, v.ID, b); e != nil {

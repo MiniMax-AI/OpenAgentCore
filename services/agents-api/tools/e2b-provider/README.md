@@ -5,6 +5,15 @@ and initialization RunCommand. Daily execution and Files remain on the existing
 Runtime connection. The helper uses the official E2B Python SDK 2.51.0; it does
 not implement provider HTTP, envd RPC, a scheduler or a network service.
 
+Managed deployment validation uses a separate read-only helper request, bounded
+to 30 seconds. The pinned SDK reads the selected template's build inventory and
+requires the exact build UUID to be ready with the configured CPU and memory.
+It creates neither compute nor allocation receipts. Actual sandbox information
+is checked before writing bootstrap credentials and on subsequent inspection;
+resource drift still permits ownership-based cleanup. E2B disk capacity is not
+an independently configurable limit. Sandbox inspection does not expose a build
+UUID: build provenance comes from the validated immutable create selector.
+
 The private JSON boundary has version 1. Requests and credentials enter stdin;
 stdout contains one bounded response with sanitized error codes. API keys never
 enter arguments, inherited environment or receipts. The process retains its

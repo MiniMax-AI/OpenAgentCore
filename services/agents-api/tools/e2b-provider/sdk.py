@@ -8,10 +8,53 @@ from e2b.exceptions import AuthenticationException, SandboxException, ServiceBus
 from e2b.sandbox.commands.command_handle import CommandExitException
 from packaging.version import Version
 
+from e2b.api.client_sync import get_api_client
+from e2b.api.client.api.templates import get_templates_template_id
+from e2b.api.client.models.template_with_builds import TemplateWithBuilds
+from e2b.api.client.types import UNSET
+
 from state import Failure
 
 SDK_VERSION = '2.51.0'
 MAX_OUTPUT = 1024 * 1024
+
+
+def validate_deployment(config, remaining):
+    """Read the exact ready build through the pinned SDK, without allocating."""
+    resources = config.get('Resources')
+    if (not isinstance(resources, dict) or type(resources.get('cpus')) is not int or
+            not 1 <= resources['cpus'] <= 255 or
+            type(resources.get('memory_mib')) is not int or
+            not 512 <= resources['memory_mib'] <= 1048576 or
+            resources.get('root_disk_mib', 0) != 0 or resources.get('environment_disk_mib', 0) != 0):
+        raise Failure('invalid')
+    template, build_id = config['Template'].split(':', 1)
+    cursor, seen = UNSET, set()
+    for _ in range(100):
+        client = get_api_client(ConnectionConfig(api_key=config['APIKey'], retries=0,
+                                                debug=False, request_timeout=remaining()))
+        response = get_templates_template_id.sync_detailed(template_id=template, client=client,
+                                                          next_token=cursor, limit=100)
+        if response.status_code != 200 or not isinstance(response.parsed, TemplateWithBuilds):
+            raise Failure('invalid' if response.status_code in (400, 401, 403, 404, 422) else 'unconfirmed')
+        result = response.parsed
+        if result.template_id != template:
+            raise Failure('invalid')
+        matches = [build for build in result.builds if str(build.build_id) == build_id]
+        if matches:
+            build = matches[0]
+            if (len(matches) != 1 or build.status.value != 'ready' or
+                    type(build.cpu_count) is not int or build.cpu_count != resources['cpus'] or
+                    type(build.memory_mb) is not int or build.memory_mb != resources['memory_mib']):
+                raise Failure('invalid')
+            return
+        cursor = response.headers.get('x-next-token')
+        if not cursor:
+            raise Failure('invalid')
+        if len(cursor) > 4096 or cursor in seen:
+            raise Failure('unconfirmed')
+        seen.add(cursor)
+    raise Failure('unconfirmed')
 
 
 def connection_material(sandbox):

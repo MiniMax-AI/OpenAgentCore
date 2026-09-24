@@ -26,6 +26,7 @@ const MaxResponseBytes = 16 * 1024 * 1024
 type Config struct {
 	Binary, StateDir, InstallationID, APIKey, Template string
 	TimeoutSeconds                                     int
+	Resources                                          *sandbox.Resources
 }
 
 type Request struct {
@@ -38,10 +39,11 @@ type Request struct {
 	Deadline  time.Time
 }
 type Response struct {
-	Version   int
-	Info      *sandbox.Info          `json:",omitempty"`
-	Command   *sandbox.CommandResult `json:",omitempty"`
-	ErrorCode string
+	Version         int
+	Info            *sandbox.Info          `json:",omitempty"`
+	Command         *sandbox.CommandResult `json:",omitempty"`
+	ErrorCode       string
+	DeploymentValid bool `json:",omitempty"`
 }
 type Caller interface {
 	Call(context.Context, Request) (Response, error)
@@ -61,6 +63,9 @@ func validReference(r sandbox.Reference) bool {
 	return validID(r.TenantID) && validID(r.EnvironmentID) && validID(r.AllocationID)
 }
 func (c Config) Validate() error {
+	if c.Resources != nil && c.Resources.Validate("e2b") != nil {
+		return sandbox.ErrInvalid
+	}
 	template, build, ok := strings.Cut(c.Template, ":")
 	if !ok || template == "" || !validID(build) || !validID(c.InstallationID) || c.TimeoutSeconds < 1 || c.TimeoutSeconds > 86400 || c.APIKey == "" || len(c.APIKey) > 4096 || strings.ContainsFunc(c.APIKey, func(r rune) bool { return unicode.IsSpace(r) || r == 0 }) {
 		return sandbox.ErrInvalid
@@ -90,11 +95,15 @@ func NewWithCaller(c Config, caller Caller) (*Provider, error) {
 	if c.Validate() != nil || caller == nil {
 		return nil, sandbox.ErrInvalid
 	}
+	if c.Resources != nil {
+		resources := *c.Resources
+		c.Resources = &resources
+	}
 	return &Provider{config: c, caller: caller}, nil
 }
 func (p *Provider) call(ctx context.Context, operation string, r sandbox.Reference, b *sandbox.Bootstrap, command *sandbox.Command) (Response, error) {
 	deadline, ok := ctx.Deadline()
-	if !ok || !validReference(r) {
+	if !ok || (operation != "validate_deployment" && !validReference(r)) {
 		return unstarted(operation, r), sandbox.ErrInvalid
 	}
 	if err := ctx.Err(); err != nil {
@@ -129,6 +138,24 @@ func (p *Provider) call(ctx context.Context, operation string, r sandbox.Referen
 	default:
 		return out, sandbox.ErrComputeUnconfirmed
 	}
+}
+
+// ValidateDeployment reads the exact immutable build without creating compute or
+// allocation receipts. Candidate configuration remains unpublished until it passes.
+func (p *Provider) ValidateDeployment(ctx context.Context) error {
+	if p.config.Resources == nil {
+		return sandbox.ErrInvalid
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	out, err := p.call(ctx, "validate_deployment", sandbox.Reference{}, nil, nil)
+	if err != nil {
+		return err
+	}
+	if !out.DeploymentValid || out.Info != nil || out.Command != nil {
+		return sandbox.ErrComputeUnconfirmed
+	}
+	return nil
 }
 func (p *Provider) info(ctx context.Context, operation string, r sandbox.Reference, b *sandbox.Bootstrap) (sandbox.Info, error) {
 	out, err := p.call(ctx, operation, r, b, nil)
