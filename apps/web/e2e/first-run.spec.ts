@@ -338,7 +338,7 @@ test("lets a web-only console use an existing project connection without key man
     return route.fulfill({ status: 503, json: { error: { message: "Key management is not paired." } } });
   });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Use an existing Agent API key.", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "API key management is not enabled", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Create API key", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "I've saved it. Continue", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Connect your own machine.", exact: true })).toBeVisible();
@@ -352,4 +352,37 @@ test("lets a web-only console use an existing project connection without key man
   expect(writes).toHaveLength(1);
   expect(writes[0]?.body).toMatchObject({ model: "fixture/web-only-model" });
   expect(keyRequests).toBe(0);
+});
+
+test("rechecks key management without sending key requests while disabled", async ({ page }) => {
+  await mockAccount(page, { mode: "authenticated", username });
+  let enabled = false;
+  let keyRequests = 0;
+  await page.route("**/console/config", (route) => route.fulfill({ json: { api_keys: enabled, sandbox_admin: enabled, node_installer: false } }));
+  await page.route("**/console/api-keys", (route) => {
+    keyRequests++;
+    return route.fulfill({ json: { data: [] } });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "API key management is not enabled", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Check again", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "API key management is not enabled", exact: true })).toBeVisible();
+  expect(keyRequests).toBe(0);
+  enabled = true;
+  await page.getByRole("button", { name: "Check again", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Create API key", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "I've saved it. Continue", exact: true })).toBeDisabled();
+  expect(keyRequests).toBe(1);
+});
+
+test("keeps the API key management page separate from introduction guidance", async ({ page }) => {
+  await mockAccount(page, { mode: "authenticated", username });
+  await page.route("**/console/config", (route) => route.fulfill({ json: { api_keys: false, sandbox_admin: false, node_installer: false } }));
+  await page.goto("/#api-keys");
+  await expect(page.getByRole("heading", { name: "API key management is not enabled", exact: true })).toBeVisible();
+  await expect(page.getByText("You can continue the introduction and use your signed-in console connection to create an Agent.", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Check again", exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("button", { name: "Check again", exact: true })).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

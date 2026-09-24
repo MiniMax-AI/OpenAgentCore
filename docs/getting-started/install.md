@@ -86,6 +86,11 @@ Neither is the administrator password. Examples read environment variables or as
 for keys privately in the terminal, and reject HTTP redirects. Keep the generated Core API key for later requests from your own machine.
 A Web-only installation without paired key management guides you to use an
 existing Core API key and still allows the request workbench.
+If **API key management is not enabled** appears, configure the paired
+administrator access described below, restart the console, sign in again if
+prompted, and select **Check again**. The administrator account alone does not
+enable deployment management. Existing caller keys remain valid; the page never
+asks you to paste a deployment administrator key into the browser.
 Creating a saved Agent stores its configuration; it does not start a Session or
 call the model. The full protocol surface and execution support are documented
 in the [API guide](./quickstart.md).

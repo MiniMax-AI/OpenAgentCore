@@ -23,9 +23,11 @@ export function ApiKeyPanel({ onReady }: { onReady?: (ready: boolean) => void })
   if (capability === "available") return <ManagedApiKeyPanel onReady={onReady} />;
   return <section className="api-key-panel" aria-label={t("API keys")}>
     {capability === "unavailable" ? <>
-      <header><div className="api-key-heading"><KeyRound size={18} strokeWidth={1.5} /><h3>{t("Use an existing Agent API key.")}</h3></div></header>
-      <p className="api-key-caption">{t("This console cannot create API keys. Use a key supplied by your Core administrator for requests from your machine or application.")}</p>
-      <p className="api-key-caption">{t("You can continue the introduction and use your signed-in console connection to create an Agent.")}</p>
+      <header><div className="api-key-heading"><KeyRound size={18} strokeWidth={1.5} /><h3>{t("API key management is not enabled")}</h3></div></header>
+      <p className="api-key-caption">{t("A deployment administrator needs to enable key management for this console. You can then create, view and revoke keys here.")}</p>
+      <p className="api-key-caption">{t("If you already have an Agent API key, you can keep using it for requests from your machine or application.")}</p>
+      {onReady ? <p className="api-key-caption">{t("You can continue the introduction and use your signed-in console connection to create an Agent.")}</p> : null}
+      <button type="button" className="button outline" onClick={() => setRevision((value) => value + 1)}><RefreshCw size={14} />{t("Check again")}</button>
     </> : capability === "loading" ? <p role="status">{t("Checking API key management…")}</p> : <>
       <p className="api-key-error" role="alert">{t("Could not check API key management. Try again.")}</p>
       <button type="button" className="button outline" onClick={() => setRevision((value) => value + 1)}>{t("Try again")}</button>

@@ -1,7 +1,9 @@
 export const apiKeyChinese = {
   "My API key": "我的 API 密钥",
-  "Use an existing Agent API key.": "使用已有的 Agent API 密钥。",
-  "This console cannot create API keys. Use a key supplied by your Core administrator for requests from your machine or application.": "此控制台无法创建 API 密钥。从本机或应用发起请求时，请使用 Core 管理员提供的密钥。",
+  "API key management is not enabled": "API 密钥管理尚未启用",
+  "A deployment administrator needs to enable key management for this console. You can then create, view and revoke keys here.": "需要部署管理员为此控制台启用密钥管理，之后即可在这里创建、查看和撤销密钥。",
+  "If you already have an Agent API key, you can keep using it for requests from your machine or application.": "如果你已有 Agent API 密钥，仍可使用它从本机或应用发起请求。",
+  "Check again": "重新检查",
   "You can continue the introduction and use your signed-in console connection to create an Agent.": "你可以继续导览，并通过已登录的控制台连接创建 Agent。",
   "Checking API key management…": "正在检查 API 密钥管理功能…",
   "Could not check API key management. Try again.": "暂时无法检查 API 密钥管理功能，请重试。",
