@@ -5,6 +5,7 @@ import type { AgentSession, RuntimeObservation, SavedAgent, TokenUsage } from "@
 import {
   buildDashboardSnapshot,
   buildRuntimeDashboardModel,
+  buildSandboxInsights,
   dashboardEnvironmentLabel,
   dashboardEnvironmentProfile,
   dashboardStatusLabel,
@@ -355,6 +356,56 @@ describe("Dashboard loaded-snapshot model", () => {
       totalTokens: 26,
       tokenCoverageCount: 2,
     });
+    expect(buildSandboxInsights(model.rows)).toMatchObject({
+      observed: 1,
+      unavailable: 0,
+      highMemory: 0,
+      measuredMemory: 1,
+      highestMemory: [{ sessionId: second.id, memoryPercent: 37.5 }],
+    });
+  });
+
+  it("separates sleeping allocations from unexpected sampling gaps", () => {
+    const base = session("11111111-1111-4111-8111-111111111111");
+    const observation: RuntimeObservation = {
+      id: base.id, object: "agent.runtime_observation", session_id: base.id,
+      environment_id: "33333333-3333-4333-8333-333333333333", mode: "openai_hosted",
+      provider_type: "docker",
+      instance: { kind: "managed_allocation", allocation_id: "allocation-1", device_id: null, connection_generation: null },
+      lifecycle_state: "sleeping", status: "unavailable", reason: "runtime_not_running",
+      allocation_created_at: 100, resolved_at: 220, observed_at: null, started_at: null,
+      cpu: null, memory: null,
+    };
+    const failed = { ...observation, id: "other", session_id: "other", instance: { ...observation.instance, allocation_id: "allocation-2" }, lifecycle_state: "active" as const, reason: "sample_timeout" as const };
+    const rows = buildRuntimeDashboardModel([base, session("other")], [observation, failed]).rows;
+    expect(buildSandboxInsights(rows)).toMatchObject({
+      sleeping: 1, pending: 0, unavailable: 1,
+      unavailableReasons: { sample_timeout: 1 },
+    });
+  });
+
+  it("does not pick a conflicting same-second allocation observation by list order", () => {
+    const first = session("first");
+    const second = session("second");
+    const base: RuntimeObservation = {
+      id: first.id, object: "agent.runtime_observation", session_id: first.id,
+      environment_id: "33333333-3333-4333-8333-333333333333", mode: "openai_hosted",
+      provider_type: "docker", instance: { kind: "managed_allocation", allocation_id: "allocation-1", device_id: null, connection_generation: null },
+      lifecycle_state: "active", status: "observed", reason: null,
+      allocation_created_at: 100, resolved_at: 220, observed_at: 210, started_at: 150,
+      cpu: null, memory: { usage_bytes: 900, limit_bytes: 1000 },
+    };
+    const conflict: RuntimeObservation = {
+      ...base, id: second.id, session_id: second.id, status: "unavailable", reason: "sample_timeout",
+      observed_at: null, started_at: null, cpu: null, memory: null,
+    };
+    const insights = (observations: RuntimeObservation[]) => buildSandboxInsights(buildRuntimeDashboardModel([first, second], observations).rows);
+    for (const order of [[base, conflict], [conflict, base]]) {
+      expect(insights(order)).toMatchObject({
+        observed: 0, unavailable: 1, highMemory: 0, measuredMemory: 0,
+        unavailableReasons: { sample_unavailable: 1 },
+      });
+    }
   });
 
   it("holds each Session's last reported tokens in the summary while public usage is null", () => {

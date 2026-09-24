@@ -81,6 +81,26 @@ export interface RuntimeDashboardModel {
   rows: RuntimeDashboardRow[];
 }
 
+export interface SandboxInsight {
+  allocationId: string;
+  sessionId: string;
+  title: string;
+  memoryPercent: number;
+  memoryUsageBytes: number;
+  memoryLimitBytes: number;
+}
+
+export interface SandboxInsights {
+  observed: number;
+  unavailable: number;
+  pending: number;
+  sleeping: number;
+  highMemory: number;
+  measuredMemory: number;
+  unavailableReasons: Partial<Record<NonNullable<RuntimeObservation["reason"]>, number>>;
+  highestMemory: SandboxInsight[];
+}
+
 const sessionStatuses = new Set<SessionStatus>([
   "idle",
   "in_progress",
@@ -473,6 +493,75 @@ export function buildRuntimeDashboardModel(
     },
     rows,
   };
+}
+
+/** Current managed allocations only; duplicate Session observations share one allocation. */
+export function buildSandboxInsights(rows: readonly RuntimeDashboardRow[]): SandboxInsights {
+  const byAllocation = new Map<string, RuntimeDashboardRow[]>();
+  let unallocatedPending = 0;
+  for (const row of rows) {
+    const allocationId = row.observation.instance.allocation_id;
+    if (row.observation.mode !== "openai_hosted") continue;
+    if (!allocationId) {
+      if (row.observation.lifecycle_state === "pending") unallocatedPending += 1;
+      continue;
+    }
+    const previous = byAllocation.get(allocationId);
+    if (previous) previous.push(row);
+    else byAllocation.set(allocationId, [row]);
+  }
+  const insights: SandboxInsights = {
+    observed: 0, unavailable: 0, pending: unallocatedPending, sleeping: 0,
+    highMemory: 0, measuredMemory: 0, unavailableReasons: {}, highestMemory: [],
+  };
+  for (const [allocationId, candidates] of byAllocation) {
+    const newestTime = candidates.reduce((latest, candidate) => Math.max(latest, candidate.observation.resolved_at), 0);
+    const newest = candidates.filter((candidate) => candidate.observation.resolved_at === newestTime);
+    const signature = (candidate: RuntimeDashboardRow) => {
+      const value = candidate.observation;
+      return JSON.stringify([value.lifecycle_state, value.status, value.reason, value.observed_at, value.memory]);
+    };
+    // Public timestamps have second resolution. Conflicting observations in one
+    // second have no reliable order, so do not publish a pressure measurement.
+    if (new Set(newest.map(signature)).size > 1) {
+      insights.unavailable += 1;
+      insights.unavailableReasons.sample_unavailable = (insights.unavailableReasons.sample_unavailable ?? 0) + 1;
+      continue;
+    }
+    const row = newest.sort((left, right) => left.observation.session_id.localeCompare(right.observation.session_id))[0]!;
+    const observation = row.observation;
+    if (observation.lifecycle_state === "pending") insights.pending += 1;
+    if (observation.lifecycle_state === "sleeping") insights.sleeping += 1;
+    if (observation.status === "unavailable") {
+      // Parked and stopped allocations are not sampling failures.
+      if (observation.lifecycle_state !== "sleeping" && observation.lifecycle_state !== "pending" && observation.lifecycle_state !== "stopped") {
+        insights.unavailable += 1;
+        if (observation.reason) {
+          insights.unavailableReasons[observation.reason] = (insights.unavailableReasons[observation.reason] ?? 0) + 1;
+        }
+      }
+      continue;
+    }
+    if (observation.status !== "observed") continue;
+    insights.observed += 1;
+    const usage = safeNonNegativeInteger(observation.memory?.usage_bytes);
+    const limit = safeNonNegativeInteger(observation.memory?.limit_bytes);
+    if (usage === null || limit === null || limit === 0) continue;
+    insights.measuredMemory += 1;
+    const memoryPercent = usage / limit * 100;
+    if (memoryPercent >= 80) insights.highMemory += 1;
+    insights.highestMemory.push({
+      allocationId,
+      sessionId: row.observation.session_id,
+      title: row.session.title,
+      memoryPercent,
+      memoryUsageBytes: usage,
+      memoryLimitBytes: limit,
+    });
+  }
+  insights.highestMemory.sort((left, right) => right.memoryPercent - left.memoryPercent || left.allocationId.localeCompare(right.allocationId));
+  insights.highestMemory = insights.highestMemory.slice(0, 5);
+  return insights;
 }
 
 export function formatDashboardBytes(value: number | null): string {

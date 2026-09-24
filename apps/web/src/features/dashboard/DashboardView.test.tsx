@@ -247,6 +247,12 @@ describe("Dashboard loaded-result presentation", () => {
     expect(html).toContain("Cumulative CPU / capacity");
     expect(html).toContain("1m 13s / 2 cores");
     expect(html).toContain("512 MiB / 2.00 GiB");
+    expect(html).toContain("Sandbox diagnostics");
+    expect(html).toContain("Memory ≥80%");
+    const withoutMemory = render({
+      runtimeSnapshot: { sessions: [hosted], observations: [{ ...observation, memory: { usage_bytes: null, limit_bytes: null } }], loadedAt: 1_700_000_100_000 },
+    });
+    expect(withoutMemory).toMatch(/Memory ≥80%<\/small><strong>Unavailable<\/strong>/);
     expect(html).toContain('aria-label="Runtime live-window charts"');
     expect(html).toContain("Resource trends");
     expect(html).toContain("Browser-local samples · reset on reload");

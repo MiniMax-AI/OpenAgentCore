@@ -83,9 +83,20 @@ Web projects active Runtime state differently by scope. The Dashboard shows one
 summed series of distinct allocation identities: live snapshots count
 `lifecycle_state: active`, while retained buckets count successfully observed
 allocations because lifecycle state is not retained yet. The single-Session view
-collapses the same value to `1` or `0`. Missing or unavailable retained values are
-currently rendered as zero, so this presentation intentionally does not yet
-distinguish sleeping from collection failure.
+collapses the same value to `1` or `0`. Empty retained buckets have no active
+observation; an observed zero in a current lifecycle snapshot remains zero.
+Retained history does not distinguish sleeping from collection failure because it
+does not retain lifecycle state.
+
+The Dashboard's current Sandbox diagnostics deduplicate managed observations by
+allocation ID, report sampling gaps separately from sleeping, pending and stopped
+allocations, and rank measured memory usage against a known limit. A target with
+missing usage or limit has no pressure percentage. Live and retained chart gaps
+remain null rather than fabricated zero; an observed lifecycle count of zero is
+still zero. Conflicting observations of one allocation with the same public
+second-resolution timestamp count as an ambiguous sample gap. The broader
+request, model and tool collection plan is documented in
+[system observability](system-observability-plan.md).
 
 Future automatic suspension requires a separate durable control model, including
 an activity revision and timestamps such as `idle_since` and

@@ -537,13 +537,16 @@ export function RuntimeTrendCharts({
       id,
       label: targetLabel(samples, id),
       tone: tones[index] ?? "blue",
-      points: samples.map((sample) => ({ sampledAt: sample.sampledAt, value: (sample.targets.find((target) => target.seriesId === id)?.cpuRatio ?? 0) * 100 })),
+      points: samples.map((sample) => {
+        const ratio = sample.targets.find((target) => target.seriesId === id)?.cpuRatio;
+        return { sampledAt: sample.sampledAt, value: ratio == null ? null : ratio * 100 };
+      }),
     }));
     if (cpu.length === 0 && samples.length > 0) {
-      cpu.push({ id: "cpu", label: t("charts.usage"), tone: "orange", points: samples.map((sample) => ({ sampledAt: sample.sampledAt, value: 0 })) });
+      cpu.push({ id: "cpu", label: t("charts.usage"), tone: "orange", points: samples.map((sample) => ({ sampledAt: sample.sampledAt, value: null })) });
     }
-    const memoryUsed = samples.map((sample) => ({ sampledAt: sample.sampledAt, value: sample.memoryUsageBytes ?? 0 }));
-    const memoryLimit = samples.map((sample) => ({ sampledAt: sample.sampledAt, value: sample.memoryLimitBytes ?? 0 }));
+    const memoryUsed = samples.map((sample) => ({ sampledAt: sample.sampledAt, value: sample.memoryUsageBytes }));
+    const memoryLimit = samples.map((sample) => ({ sampledAt: sample.sampledAt, value: sample.memoryLimitBytes }));
     const active = [{
       id: "active",
       label: t(activeDisplay === "binary" ? "charts.runtime" : "charts.active.series"),
@@ -552,8 +555,8 @@ export function RuntimeTrendCharts({
       points: samples.map((sample) => ({
         sampledAt: sample.sampledAt,
         value: activeDisplay === "binary"
-          ? (sample.activeSandboxCount ?? 0) > 0 ? 1 : 0
-          : sample.activeSandboxCount ?? 0,
+          ? sample.activeSandboxCount === null ? null : sample.activeSandboxCount > 0 ? 1 : 0
+          : sample.activeSandboxCount,
       })),
     }] satisfies TrendSeries[];
     const throughput = tokenThroughput(samples);
@@ -565,8 +568,8 @@ export function RuntimeTrendCharts({
       ] satisfies TrendSeries[],
       active,
       tokens: [
-        { id: "input", label: t("charts.input"), tone: "orange", points: throughput.map((sample) => ({ sampledAt: sample.sampledAt, value: sample.inputPerMinute ?? 0 })) },
-        { id: "output", label: t("charts.output"), tone: "green", points: throughput.map((sample) => ({ sampledAt: sample.sampledAt, value: sample.outputPerMinute ?? 0 })) },
+        { id: "input", label: t("charts.input"), tone: "orange", points: throughput.map((sample) => ({ sampledAt: sample.sampledAt, value: sample.inputPerMinute })) },
+        { id: "output", label: t("charts.output"), tone: "green", points: throughput.map((sample) => ({ sampledAt: sample.sampledAt, value: sample.outputPerMinute })) },
       ] satisfies TrendSeries[],
     };
   }, [activeDisplay, samples, t]);

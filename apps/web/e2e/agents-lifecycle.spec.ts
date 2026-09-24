@@ -2684,6 +2684,11 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
   const dashboard = page.locator(".dashboard-page");
   await expect(dashboard.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
   const refresh = dashboard.getByRole("button", { name: "Refresh Dashboard snapshot" });
+  const sandboxDiagnostics = dashboard.getByRole("region", { name: "Sandbox diagnostics" });
+  await expect(sandboxDiagnostics).toBeVisible();
+  await expect(sandboxDiagnostics).toContainText("12 managed targets");
+  await expect(sandboxDiagnostics).toContainText("12 with measured usage and limit");
+  await expect(sandboxDiagnostics).toContainText("Highest memory pressure");
   await expect(dashboard.locator(".dashboard-runtime-sample-count")).toContainText("1 sample ·");
   await expect(dashboard.getByRole("heading", { name: "CPU usage" })).toBeVisible();
   await expect(dashboard.getByRole("heading", { name: "Memory usage" })).toBeVisible();
@@ -2735,7 +2740,7 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
   await expect(cpuCard.locator(".dashboard-runtime-trend-tooltip")).toBeVisible();
   await cpuChart.click({ position: { x: 260, y: 90 } });
   await expect(cpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Pinned");
-  await expect(cpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("10%");
+  await expect(cpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Unavailable");
   await cpuChart.focus();
   await cpuChart.press("ArrowRight");
   await expect(cpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Pinned");
@@ -2930,9 +2935,9 @@ test("restores retained Runtime history after a Dashboard reload", async ({ page
   const durableCpuCard = durableCpuChart.locator("xpath=ancestor::section[contains(@class, 'dashboard-runtime-trend-card')]");
   await durableCpuChart.focus();
   await durableCpuChart.press("ArrowLeft");
-  await expect(durableCpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("0%");
+  await expect(durableCpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Unavailable");
   await durableCpuChart.press("ArrowLeft");
-  await expect(durableCpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("0%");
+  await expect(durableCpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Unavailable");
   const durableMemoryCard = dashboard.getByRole("region", { name: "Memory usage durable history chart" });
   const durableMemorySpan = await durableMemoryCard.locator("canvas").evaluate((canvas: HTMLCanvasElement) => {
     const context = canvas.getContext("2d");

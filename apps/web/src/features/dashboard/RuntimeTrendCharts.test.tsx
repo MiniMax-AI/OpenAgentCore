@@ -47,7 +47,7 @@ describe("Runtime live-window chart accessibility", () => {
     })).toBe("Memory usage all series hidden; use the legend to show a series");
   });
 
-  it("renders an unavailable current value as zero without retaining a stale value", () => {
+  it("renders an unavailable current value as a gap without retaining a stale value", () => {
     const unavailable = {
       ...sample(120_000, null),
       activeSandboxCount: 0,
@@ -58,13 +58,13 @@ describe("Runtime live-window chart accessibility", () => {
       <RuntimeTrendCharts samples={[sample(60_000, .5), unavailable]} />,
     );
 
-    expect(html).toContain("Runtime worker</th><td>0%</td><td>0</td>");
+    expect(html).toContain("Runtime worker</th><td>Unavailable</td><td>1</td>");
     expect(html).not.toContain("Runtime worker</th><td>50%</td><td>1</td>");
-    expect(html).toContain("used</th><td>0 B</td><td>0</td>");
+    expect(html).toContain("used</th><td>Unavailable</td><td>1</td>");
     expect(html).toContain("active</th><td>0</td><td>0</td>");
   });
 
-  it("renders empty retained buckets as continuous zero-value chart series", () => {
+  it("renders empty retained buckets as missing measurements", () => {
     const empty = (sampledAt: number): RuntimeTrendSample => ({
       ...sample(sampledAt, null),
       targets: [],
@@ -78,13 +78,13 @@ describe("Runtime live-window chart accessibility", () => {
       <RuntimeTrendCharts samples={[empty(60_000), empty(120_000)]} source="durable" />,
     );
 
-    expect(html).toContain("usage</th><td>0%</td><td>0</td>");
-    expect(html).toContain("used</th><td>0 B</td><td>0</td>");
+    expect(html).toContain("usage</th><td>Unavailable</td><td>2</td>");
+    expect(html).toContain("used</th><td>Unavailable</td><td>2</td>");
     expect(html).toContain("active</th><td>0</td><td>0</td>");
-    expect(html).toContain("input</th><td>0/min</td><td>0</td>");
-    expect(html).not.toContain("No retained CPU samples");
-    expect(html).not.toContain("No complete retained memory samples");
-    expect(html).not.toContain("No retained token samples");
+    expect(html).toContain("input</th><td>Unavailable</td><td>2</td>");
+    expect(html).toContain("No retained CPU samples");
+    expect(html).toContain("No retained observed memory samples");
+    expect(html).toContain("No retained token samples");
   });
 
   it("renders uPlot chart mounts and reports trends only after two real samples", () => {

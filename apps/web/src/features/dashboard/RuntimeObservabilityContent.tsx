@@ -26,6 +26,7 @@ import {
 
 import {
   buildRuntimeDashboardModel,
+  buildSandboxInsights,
   formatDashboardBytes,
   formatDashboardDuration,
   formatDashboardTimestamp,
@@ -312,6 +313,9 @@ export function RuntimeObservabilityContent({
     [snapshot, tokenTotals],
   );
   const summary = model.summary;
+  const sandbox = useMemo(() => buildSandboxInsights(model.rows), [model.rows]);
+  const unavailableReasons = Object.entries(sandbox.unavailableReasons)
+    .sort((left, right) => right[1] - left[1]);
   return (
     <>
       <div className="dashboard-runtime-summary" aria-label={t("runtime.resourceSnapshot")}>
@@ -320,6 +324,34 @@ export function RuntimeObservabilityContent({
         <RuntimeMetric icon={<MemoryStick size={17} />} label={t("runtime.metrics.memory")} value={summary.memoryUsageBytes === null && summary.memoryLimitBytes === null ? t("runtime.metrics.noSample") : `${summary.memoryUsageBytes === null ? t("runtime.filters.unavailable") : formatDashboardBytes(summary.memoryUsageBytes)} / ${summary.memoryLimitBytes === null ? t("runtime.filters.unavailable") : formatDashboardBytes(summary.memoryLimitBytes)}`} detail={t("runtime.metrics.memoryDetail", { covered: summary.memoryCoverageCount, total: summary.observedRuntimeCount })} />
         <RuntimeMetric icon={<Gauge size={17} />} label={t("runtime.metrics.tokens")} value={summary.totalTokens === null ? t("runtime.filters.unavailable") : formatDashboardTokens(summary.totalTokens, locale)} detail={t("runtime.metrics.tokenDetail", { covered: summary.tokenCoverageCount, total: summary.sessionCount })} />
       </div>
+
+      <section className="dashboard-sandbox-insights" aria-labelledby="dashboard-sandbox-insights-title">
+        <header>
+          <div>
+            <h3 id="dashboard-sandbox-insights-title">{t("sandbox.title")}</h3>
+            <p>{t("sandbox.subtitle")}</p>
+          </div>
+          <small>{t(stale ? "sandbox.retained" : "sandbox.current")}</small>
+        </header>
+        <div className="dashboard-sandbox-insight-grid">
+          <div><small>{t("sandbox.observed")}</small><strong>{sandbox.observed.toLocaleString(locale)}</strong><span>{t("sandbox.observedDetail", { total: summary.managedRuntimeCount })}</span></div>
+          <div><small>{t("sandbox.unavailable")}</small><strong>{sandbox.unavailable.toLocaleString(locale)}</strong><span>{t("sandbox.unavailableDetail")}</span></div>
+          <div><small>{t("sandbox.highMemory")}</small><strong>{sandbox.measuredMemory === 0 ? t("runtime.filters.unavailable") : sandbox.highMemory.toLocaleString(locale)}</strong><span>{t("sandbox.highMemoryDetail", { total: sandbox.measuredMemory })}</span></div>
+          <div><small>{t("sandbox.parked")}</small><strong>{(sandbox.sleeping + sandbox.pending).toLocaleString(locale)}</strong><span>{t("sandbox.parkedDetail", { sleeping: sandbox.sleeping, pending: sandbox.pending })}</span></div>
+        </div>
+        {unavailableReasons.length > 0 || sandbox.highestMemory.length > 0 ? (
+          <div className="dashboard-sandbox-diagnostics">
+            <div>
+              <h4>{t("sandbox.sampleGaps")}</h4>
+              {unavailableReasons.length ? <ul>{unavailableReasons.map(([reason, count]) => <li key={reason}><span>{t(`runtime.status.${reason}` as never)}</span><strong>{count}</strong></li>)}</ul> : <p>{t("sandbox.noGaps")}</p>}
+            </div>
+            <div>
+              <h4>{t("sandbox.memoryLeaders")}</h4>
+              {sandbox.highestMemory.length ? <ul>{sandbox.highestMemory.map((entry) => <li key={entry.allocationId}><button type="button" onClick={() => onOpenSession(entry.sessionId)}>{entry.title}</button><span title={`${formatDashboardBytes(entry.memoryUsageBytes)} / ${formatDashboardBytes(entry.memoryLimitBytes)}`}>{entry.memoryPercent.toLocaleString(locale, { maximumFractionDigits: 1 })}%</span></li>)}</ul> : <p>{t("sandbox.noMemory")}</p>}
+            </div>
+          </div>
+        ) : null}
+      </section>
 
       <RuntimeTrendPanel snapshot={snapshot} stale={stale} loadRuntimeHistory={loadRuntimeHistory} />
 

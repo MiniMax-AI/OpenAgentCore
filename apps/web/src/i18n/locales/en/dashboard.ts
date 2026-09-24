@@ -1,4 +1,14 @@
 export const dashboard = {
+  sandbox: {
+    title: "Sandbox diagnostics", subtitle: "Current allocation identity, sampling coverage, and memory pressure",
+    current: "Current complete snapshot", retained: "Last complete snapshot · refresh failed",
+    observed: "Observed", observedDetail: "of {{total}} managed targets",
+    unavailable: "Sampling gaps", unavailableDetail: "Excludes sleeping, pending and stopped",
+    highMemory: "Memory ≥80%", highMemoryDetail: "of {{total}} with measured usage and limit",
+    parked: "Parked", parkedDetail: "{{sleeping}} sleeping · {{pending}} pending",
+    sampleGaps: "Why samples are missing", noGaps: "No unexpected sampling gaps",
+    memoryLeaders: "Highest memory pressure", noMemory: "No measured memory and limit",
+  },
   runtime: {
     explorer: "Runtime target explorer", targets: "Runtime targets", resourceSnapshot: "Runtime resource snapshot",
     search: "Search Runtime targets", searchPlaceholder: "Search Session, provider, or identity", visible: "{{value}} visible",

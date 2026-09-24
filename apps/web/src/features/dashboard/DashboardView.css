@@ -633,6 +633,64 @@
   border-bottom: 1px solid var(--line);
 }
 
+.dashboard-sandbox-insights {
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dashboard-sandbox-insights > header,
+.dashboard-sandbox-diagnostics {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dashboard-sandbox-insights h3,
+.dashboard-sandbox-insights h4,
+.dashboard-sandbox-insights p {
+  margin: 0;
+}
+
+.dashboard-sandbox-insights h3 { font-size: 14px; }
+.dashboard-sandbox-insights h4 { font-size: 12px; }
+.dashboard-sandbox-insights p,
+.dashboard-sandbox-insights small { color: var(--fg-muted); font-size: 11px; }
+
+.dashboard-sandbox-insight-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.dashboard-sandbox-insight-grid > div {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.dashboard-sandbox-insight-grid strong {
+  font: 550 20px/1.2 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-sandbox-insight-grid span { color: var(--fg-muted); font-size: 10px; }
+.dashboard-sandbox-diagnostics { margin-top: 14px; }
+.dashboard-sandbox-diagnostics > div { flex: 1; min-width: 0; }
+.dashboard-sandbox-diagnostics ul { list-style: none; margin: 7px 0 0; padding: 0; }
+.dashboard-sandbox-diagnostics li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; font-size: 11px; }
+.dashboard-sandbox-diagnostics li + li { border-top: 1px solid var(--line); }
+.dashboard-sandbox-diagnostics li button { padding: 0; border: 0; background: none; color: var(--accent); cursor: pointer; text-align: left; }
+.dashboard-sandbox-diagnostics li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 800px) {
+  .dashboard-sandbox-insight-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-sandbox-diagnostics { flex-direction: column; }
+}
+
 .dashboard-runtime-metric {
   display: grid;
   min-width: 0;

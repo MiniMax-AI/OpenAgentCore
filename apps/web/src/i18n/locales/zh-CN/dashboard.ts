@@ -1,4 +1,14 @@
 export const dashboard = {
+  sandbox: {
+    title: "Sandbox 诊断", subtitle: "按分配身份查看采样覆盖、生命周期与内存压力",
+    current: "当前完整快照", retained: "上次完整快照 · 刷新失败",
+    observed: "已观测", observedDetail: "共 {{total}} 个托管目标",
+    unavailable: "采样缺口", unavailableDetail: "不含休眠、待分配和已停止状态",
+    highMemory: "内存 ≥80%", highMemoryDetail: "共 {{total}} 个具备用量和上限采样",
+    parked: "暂停/等待", parkedDetail: "{{sleeping}} 个休眠 · {{pending}} 个等待分配",
+    sampleGaps: "采样缺失原因", noGaps: "没有意外采样缺口",
+    memoryLeaders: "内存压力最高", noMemory: "暂无内存用量及上限采样",
+  },
   runtime: {
     explorer: "Runtime 目标浏览器", targets: "Runtime 目标", resourceSnapshot: "Runtime 资源快照",
     search: "搜索 Runtime 目标", searchPlaceholder: "搜索会话、Provider 或标识", visible: "显示 {{value}} 项",
