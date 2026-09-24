@@ -214,13 +214,32 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 				t.Fatalf("settled Session deletion: %d %s", status, first)
 			}
 			digest := databaseDigest(t, pool)
+			filter := store.WriteOperationFilter{ResourceType: "session", ResourceID: id, Limit: 100}
+			beforeAudit, err := s.ListWriteOperations(ctx, tenant, filter)
+			if err != nil {
+				t.Fatal(err)
+			}
 			for range 2 {
 				if status, again := client.do(owner, http.MethodDelete, sessionPath(id), "", nil); status != http.StatusOK || again != first {
 					t.Fatalf("repeated deletion: %d %s", status, again)
 				}
 			}
-			if after := databaseDigest(t, pool); !reflect.DeepEqual(after, digest) {
-				t.Fatal("repeated deletion changed the database")
+			afterAudit, err := s.ListWriteOperations(ctx, tenant, filter)
+			if err != nil || len(afterAudit.Data) != len(beforeAudit.Data)+2 || !reflect.DeepEqual(afterAudit.Data[2:], beforeAudit.Data) {
+				t.Fatal("repeated deletion must append exactly two operation records", err)
+			}
+			for _, operation := range afterAudit.Data[:2] {
+				if operation.Action != "delete" || operation.APIKey.ID != "static:"+device.HashCredential(owner) {
+					t.Fatal("repeated deletion recorded the wrong operation or key")
+				}
+			}
+			// Only the new operation records may differ. Ownership, Session state,
+			// execution data and every public response remain unchanged.
+			after := databaseDigest(t, pool)
+			delete(after, "write_audit_operations")
+			delete(digest, "write_audit_operations")
+			if !reflect.DeepEqual(after, digest) {
+				t.Fatal("repeated deletion changed business data or ownership")
 			}
 			notFound(owner, http.MethodGet, sessionPath(id))
 			notFound(owner, http.MethodGet, sessionPath(id)+"/turns")
