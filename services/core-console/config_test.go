@@ -15,13 +15,13 @@ func TestConfigRejectsUnsafeURLsAndSecretFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Setenv("CORE_CONSOLE_TOKEN_FILE", token)
+	t.Setenv("CORE_CONSOLE_ADMIN_TOKEN_FILE", token)
 	t.Setenv("CORE_CONSOLE_PASSWORD_FILE", password)
 	t.Setenv("CORE_CONSOLE_ORIGIN", testOrigin)
 	t.Setenv("CORE_CONSOLE_UPSTREAM", "http://core:8091")
 	t.Setenv("CORE_CONSOLE_DIST", directory)
 	c, err := loadConfig()
-	if err != nil || c.token != "private-core-token" {
+	if err != nil || c.adminToken != "private-core-token" {
 		t.Fatalf("valid configuration failed: %v", err)
 	}
 	for _, value := range []string{"http://user:secret@core:8091", "http://core:8091/v1", "http://core:8091?token=secret", "http://core:8091#", "file:///config/caller.key", ""} {

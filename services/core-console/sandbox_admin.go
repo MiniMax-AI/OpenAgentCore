@@ -10,7 +10,7 @@ func publicAPIRequest(r *http.Request) bool {
 }
 
 // Only deployment administration is exposed through the console. Enrollment and
-// node identity/transport calls connect directly to Core with their own credentials.
+// node identity/transport calls use the separate pass-through with their own credentials.
 func sandboxAdminRequest(r *http.Request) bool {
 	const base = "/core/v1/sandbox/"
 	if !strings.HasPrefix(r.URL.Path, base) {

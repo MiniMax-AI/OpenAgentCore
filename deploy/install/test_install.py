@@ -191,9 +191,9 @@ class InstallerTests(unittest.TestCase):
     def test_repeat_installation_preserves_execution_identity_and_all_secrets(self):
         first = self.initialize()
         keys = self.document("config/keys.json")
-        caller = (self.root / "config/caller.key").read_bytes()
+        self.assertFalse((self.root / "config/caller.key").exists())
         encryption = (self.root / "config/credential.key").read_text()
-        self.assertEqual(hashlib.sha256(caller).hexdigest(), keys[0]["token_sha256"])
+        self.assertEqual(keys, [])
         self.assertEqual(len(base64.b64decode(encryption, validate=True)), 32)
         self.assertIsNone(first["provider"])
         self.assertFalse((self.root / "config/managed-runtimes.json").exists())
@@ -354,7 +354,7 @@ class InstallerTests(unittest.TestCase):
                         if isinstance(mount, dict) and mount["target"] == "/config":
                             self.assertTrue(mount["read_only"])
 
-    def test_sandbox_admin_credential_is_separate_and_belongs_only_to_core(self):
+    def test_administrator_credential_is_private_and_only_web_holds_plaintext(self):
         for provider in (None, "docker", "microsandbox"):
             with self.subTest(provider=provider):
                 self.root = self.work / ("admin-" + str(provider))
@@ -363,7 +363,7 @@ class InstallerTests(unittest.TestCase):
                 admin = self.root / "admin"
                 token = (admin / "sandbox-admin.key").read_text()
                 self.assertEqual(self.document("admin/digests.json"), [hashlib.sha256(token.encode()).hexdigest()])
-                self.assertNotEqual(token, (self.root / "config/caller.key").read_text())
+                self.assertFalse((self.root / "config/caller.key").exists())
                 self.assertEqual(stat.S_IMODE(admin.stat().st_mode), 0o700)
                 for path in admin.iterdir():
                     self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
@@ -391,7 +391,7 @@ class InstallerTests(unittest.TestCase):
 
     def test_web_only_uses_existing_local_core_without_database_or_provider(self):
         source = self.caller_file()
-        flags = ("--web-only", "--core-url", "http://127.0.0.1:9091", "--core-token-file", str(source))
+        flags = ("--web-only", "--core-url", "http://127.0.0.1:9091", "--admin-token-file", str(source))
         state = self.initialize(*flags)
         self.assertEqual(self.device_probes, [])
         self.assertEqual(self.ports.call_args_list, [mock.call(8080)])
@@ -402,10 +402,12 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(web["network_mode"], "host")
         self.assertEqual(web["environment"]["CORE_CONSOLE_ADDR"], "127.0.0.1:8080")
         self.assertEqual(web["environment"]["CORE_CONSOLE_UPSTREAM"], "http://127.0.0.1:9091")
+        self.assertEqual(web["environment"]["CORE_CONSOLE_ADMIN_TOKEN_FILE"], "/admin/sandbox-admin.key")
+        self.assertNotIn("CORE_CONSOLE_TOKEN_FILE", web["environment"])
         self.assertNotIn("ports", web)
         self.assertNotIn("devices", web)
-        self.assertEqual({path.name for path in (self.root / "config").iterdir()}, {"caller.key"})
-        self.assertEqual((self.root / "config/caller.key").read_bytes(), source.read_bytes())
+        self.assertEqual({path.name for path in (self.root / "config").iterdir()}, set())
+        self.assertEqual((self.root / "admin/sandbox-admin.key").read_bytes(), source.read_bytes())
         before = self.snapshot()
         self.assertEqual(state, self.initialize(*flags))
         self.assertEqual(before, self.snapshot())
@@ -428,7 +430,7 @@ class InstallerTests(unittest.TestCase):
                 source = self.caller_file(contents, mode)
                 with self.assertRaises(install.InstallError):
                     self.initialize("--web-only", "--core-url", "http://localhost:8091",
-                                    "--core-token-file", str(source))
+                                    "--admin-token-file", str(source))
                 self.assertFalse(self.root.exists(), "invalid input left a non-retryable partial deployment")
 
     def test_web_only_rejects_directory_or_symlink_as_caller_file(self):
@@ -440,7 +442,7 @@ class InstallerTests(unittest.TestCase):
         for path in (link, private_directory):
             with self.subTest(path=path.name), self.assertRaises(install.InstallError):
                 self.initialize("--web-only", "--core-url", "http://localhost:8091",
-                                "--core-token-file", str(path))
+                                "--admin-token-file", str(path))
             self.assertFalse(self.root.exists())
 
     def test_bundle_verifies_transferred_bytes_before_trusting_manifest(self):
@@ -629,12 +631,12 @@ class InstallerTests(unittest.TestCase):
                 mock.patch.object(install, "wait_http", return_value=True) as health, \
                 contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
             install.main(["--install-dir", str(self.root), "--web-only", "--core-url",
-                          "http://127.0.0.1:9091", "--core-token-file", str(source)])
+                          "http://127.0.0.1:9091", "--admin-token-file", str(source)])
         self.assertEqual(self.device_probes, [])
         imports = [call for call in calls if call[:2] == ["docker", "load"]]
         self.assertEqual(imports, [["docker", "load", "--input", str(bundle / "images/web.tar")]])
         self.assertFalse(any(call[:2] == ["docker", "run"] for call in calls))
-        self.assertEqual([call.args[0] for call in health.call_args_list], ["http://127.0.0.1:8080/console/auth", "http://127.0.0.1:9091/v1/agents"])
+        self.assertEqual([call.args[0] for call in health.call_args_list], ["http://127.0.0.1:8080/console/auth", "http://127.0.0.1:9091/core/v1/admin/api-keys"])
         for path in (self.root / "config").iterdir():
             self.assertNotIn(path.read_text(), output.getvalue())
 
@@ -706,7 +708,7 @@ class InstallerTests(unittest.TestCase):
                     "https://core.example/?token=synthetic-secret"):
             output = io.StringIO()
             with self.subTest(url=url), contextlib.redirect_stderr(output), self.assertRaises(SystemExit):
-                self.args("--web-only", "--core-url", url, "--core-token-file", str(source))
+                self.args("--web-only", "--core-url", url, "--admin-token-file", str(source))
             self.assertNotIn("synthetic-secret", output.getvalue())
 
     def test_status_rejects_failed_database_even_while_http_processes_are_alive(self):

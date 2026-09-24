@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
@@ -26,7 +27,12 @@ type console struct {
 	auth                *consoleAuth
 }
 
+type consoleActorContextKey struct{}
+
 func newConsole(c config) (*console, error) {
+	if c.adminToken == "" {
+		return nil, errors.New("console requires a deployment administrator credential")
+	}
 	root, err := os.OpenRoot(c.dist)
 	if err != nil {
 		return nil, errors.New("cannot open console assets")
@@ -72,12 +78,13 @@ func newConsole(c config) (*console, error) {
 			r.Out.Header.Del("Cookie")
 			r.Out.Header.Del("Origin")
 			r.Out.Header.Del("Referer")
-			if ((publicAPIRequest(r.In) || projectExtensionRequest(r.In)) && explicitBearer(r.In)) || nodeTransportRequest(r.In) || (sandboxAdminRequest(r.In) && c.adminToken == "") {
+			r.Out.Header.Del("X-Core-Console-Actor")
+			if nodeTransportRequest(r.In) {
 				r.Out.Header.Set("Authorization", r.In.Header.Get("Authorization"))
-			} else if sandboxAdminRequest(r.In) || projectKeyAdminRequest(r.In) {
-				r.Out.Header.Set("Authorization", "Bearer "+c.adminToken)
 			} else {
-				r.Out.Header.Set("Authorization", "Bearer "+c.token)
+				r.Out.Header.Set("Authorization", "Bearer "+c.adminToken)
+				actor, _ := r.In.Context().Value(consoleActorContextKey{}).(string)
+				r.Out.Header.Set("X-Core-Console-Actor", actor)
 			}
 		},
 		ModifyResponse: func(r *http.Response) error {
@@ -121,18 +128,12 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "ok\n")
 		return
 	}
-	if publicAPIRequest(r) && explicitBearer(r) {
-		if r.Host != h.host || !safePath(r.URL.Path) || r.URL.IsAbs() ||
-			r.Method == http.MethodConnect || r.Method == http.MethodTrace || r.Header.Get("Upgrade") != "" ||
-			!h.validOriginHeaders(r) {
-			authError(w, http.StatusForbidden, "Invalid project API request")
-			return
-		}
-		h.proxy.ServeHTTP(w, r)
+	if publicAPIRequest(r) || r.URL.Path == "/console/api-keys" || strings.HasPrefix(r.URL.Path, "/console/api-keys/") || strings.HasPrefix(r.URL.Path, "/core/v1/environments/") {
+		http.NotFound(w, r)
 		return
 	}
-	if (h.adminToken != "" && nodeTransportRequest(r)) || (projectExtensionRequest(r) && explicitBearer(r)) {
-		if r.Host != h.host || !safePath(r.URL.Path) || r.URL.IsAbs() || !explicitBearer(r) || (r.Header.Get("Origin") != "" && r.Header.Get("Origin") != h.origin) {
+	if nodeTransportRequest(r) {
+		if r.Host != h.host || !safePath(r.URL.Path) || r.URL.IsAbs() || !explicitBearer(r) || !h.validOriginHeaders(r) {
 			http.Error(w, "Invalid node transport request", http.StatusForbidden)
 			return
 		}
@@ -169,20 +170,10 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveStatic(w, r)
 		return
 	}
-	if (r.URL.Path == "/core" || strings.HasPrefix(r.URL.Path, "/core/")) && h.adminToken == "" && !projectExtensionRequest(r) {
-		if !sandboxAdminRequest(r) {
-			http.NotFound(w, r)
-			return
-		}
-		if !explicitBearer(r) {
-			http.Error(w, "A deployment administrator bearer key is required", http.StatusUnauthorized)
-			return
-		}
-		h.proxy.ServeHTTP(w, r)
-		return
-	}
+	actor := "admin"
 	if h.auth != nil {
-		if h.auth.authenticated(r) == "" {
+		actor = h.auth.authenticated(r)
+		if actor == "" {
 			authError(w, http.StatusUnauthorized, "Sign in to the console")
 			return
 		}
@@ -201,20 +192,12 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveConsoleConfiguration(w, r)
 		return
 	}
-	if consoleAPIKeysRequest(r) {
-		h.serveAPIKeys(w, r)
-		return
-	}
 	if r.URL.Path == "/core" || strings.HasPrefix(r.URL.Path, "/core/") {
-		if !sandboxAdminRequest(r) && !projectExtensionRequest(r) {
+		if !sandboxAdminRequest(r) && !adminAPIRequest(r) {
 			http.NotFound(w, r)
 			return
 		}
-		h.proxy.ServeHTTP(w, r)
-		return
-	}
-	if r.URL.Path == "/v1" || strings.HasPrefix(r.URL.Path, "/v1/") {
-		h.proxy.ServeHTTP(w, r)
+		h.proxy.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), consoleActorContextKey{}, actor)))
 		return
 	}
 	h.serveStatic(w, r)
