@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import type { SessionItem } from "@agents-core-web/agents-client";
 
+import { Monogram } from "../../../components/atoms/EntityChip";
 import { MessageMarkdown } from "../../../components/MessageMarkdown";
 import { StatusIcon, type StatusKind } from "../../../components/StatusIcon";
 import { ApplyPatchDiffViewer } from "./ApplyPatchDiffViewer";
@@ -137,37 +138,78 @@ function WorkTrace({ items }: { items: SessionItem[] }) {
   return <section className="work-trace" aria-label={t("items.agentWorkTrace")} aria-busy={running} data-work-trace={status}><button className="trace-header" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}><StatusIcon status={status} /><span>{t("history.steps", { n: steps.length })}</span>{status !== "completed" ? <span>· {t(`status.${status}` as never)}</span> : null}{duration ? <span className="trace-duration" aria-hidden={running || undefined}>· {formatDuration(duration)}</span> : null}<ChevronDown className={`trace-header-chevron ${expanded ? "" : "closed"}`} size={14} strokeWidth={1.5} aria-hidden="true" /></button><TraceCollapse open={expanded}><ul className="trace-steps">{steps.map((item) => <WorkStep item={item} key={item.id} />)}</ul></TraceCollapse>{!expanded && current ? <ul className="trace-steps" data-work-trace-tail=""><WorkStep item={current} key={`tail:${current.id}`} /></ul> : null}</section>;
 }
 
-/**
- * One Turn's Items as transcript rows: who spoke on the left, what they said on
- * the right, and the tool steps between them collapsed into one line.
- */
-export function ThreadItems({ items, agentName }: { items: SessionItem[]; agentName: string }) {
+type ChatBlock =
+  | { kind: "user"; item: SessionItem }
+  | { kind: "assistant"; items: SessionItem[] };
+
+/** Consecutive Agent Items (tool steps, notes, the reply) form one block under one avatar. */
+function chatBlocks(items: readonly SessionItem[]): ChatBlock[] {
+  const blocks: ChatBlock[] = [];
+  for (const item of items) {
+    if (item.type === "message" && item.role !== "assistant") {
+      blocks.push({ kind: "user", item });
+      continue;
+    }
+    const last = blocks.at(-1);
+    if (last?.kind === "assistant") last.items.push(item);
+    else blocks.push({ kind: "assistant", items: [item] });
+  }
+  return blocks;
+}
+
+function AgentItems({ items }: { items: SessionItem[] }) {
   const { t } = useTranslation("sessions");
   const rendered = [];
   for (let index = 0; index < items.length;) {
     const item = items[index]; if (!item) break;
     if (item.type === "message") {
-      const assistant = item.role === "assistant";
-      const role = assistant ? `${agentName || t("common.agent")}${item.phase === "commentary" ? ` · ${t("items.workingNote")}` : ""}` : t("history.user");
       rendered.push(
-        <div className={`transcript-row ${assistant ? "assistant" : "user"}`} key={item.id}>
-          <span className="transcript-role" title={role}>{role}</span>
-          <div className="transcript-content">
-            {assistant ? <MessageMarkdown content={textOf(item) || t("items.emptyMessage")} /> : <div className="message-copy">{textOf(item) || t("items.emptyMessage")}</div>}
-          </div>
+        <div className={item.phase === "commentary" ? "chat-note" : "chat-reply"} key={item.id}>
+          {item.phase === "commentary" ? <span className="chat-note-label">{t("items.workingNote")}</span> : null}
+          <MessageMarkdown content={textOf(item) || t("items.emptyMessage")} />
         </div>,
       );
       index += 1; continue;
     }
     const traceItems = [item]; let cursor = index + 1;
     while (cursor < items.length && items[cursor]?.type !== "message" && items[cursor]?.turn_id === item.turn_id) { const next = items[cursor]; if (next) traceItems.push(next); cursor += 1; }
-    rendered.push(
-      <div className="transcript-row work" key={`trace:${item.turn_id}:${item.id}`}>
-        <span className="transcript-role" aria-hidden="true" />
-        <div className="transcript-content"><WorkTrace items={traceItems} /></div>
-      </div>,
-    );
+    rendered.push(<WorkTrace items={traceItems} key={`trace:${item.turn_id}:${item.id}`} />);
     index = cursor;
   }
   return rendered;
+}
+
+/**
+ * One Turn's Items as a conversation: the user's message is a bubble on the
+ * right; everything the Agent did (tool steps, working notes, its reply) sits
+ * on the left under its avatar, followed by the Turn's error when it failed.
+ */
+export function ThreadItems({ items, agentName, error }: { items: SessionItem[]; agentName: string; error?: string | null }) {
+  const { t } = useTranslation("sessions");
+  const name = agentName || t("common.agent");
+  const blocks = chatBlocks(items);
+  if (error) {
+    const last = blocks.at(-1);
+    if (last?.kind !== "assistant") blocks.push({ kind: "assistant", items: [] });
+  }
+  return blocks.map((block, index) => {
+    if (block.kind === "user") {
+      return (
+        <div className="chat-row user" key={block.item.id}>
+          <div className="chat-bubble message-copy">{textOf(block.item) || t("items.emptyMessage")}</div>
+        </div>
+      );
+    }
+    const isLast = index === blocks.length - 1;
+    return (
+      <div className="chat-row assistant" key={`agent:${block.items[0]?.id ?? index}`}>
+        <span className="chat-avatar" aria-hidden="true"><Monogram color="var(--accent)">{name.trim().charAt(0).toUpperCase()}</Monogram></span>
+        <div className="chat-body">
+          <span className="chat-author">{name}</span>
+          <AgentItems items={block.items} />
+          {isLast && error ? <p className="chat-error" role="status">{error}</p> : null}
+        </div>
+      </div>
+    );
+  });
 }

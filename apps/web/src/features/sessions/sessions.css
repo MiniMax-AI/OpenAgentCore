@@ -66,101 +66,229 @@
   white-space: nowrap;
 }
 
-/* Conversation: one frame, one block per Turn divided by hairlines; the speaker
-   sits in a fixed left column so replies line up and read top to bottom. */
-.transcript {
+/* Conversation: a chat in one card. Each Turn opens with a quiet meta line;
+   the user's message is a bubble on the right, the Agent's work and reply sit
+   on the left under its avatar. A readable column, compact rhythm. */
+.chat-thread {
   margin: 0;
   padding: 0;
   list-style: none;
   background: var(--surface);
-  border: 0;
-  border-radius: var(--frame-radius);
+  border-radius: var(--radius-card);
   box-shadow: var(--card-shadow);
 }
 
-.transcript-turn {
-  padding: 12px 16px 14px;
+.chat-turn {
+  padding: 14px 16px 18px;
 }
 
-.transcript-turn + .transcript-turn {
-  border-top: 1px solid var(--line);
+.chat-turn + .chat-turn {
+  border-top: 1px solid var(--grid-line);
 }
 
-.transcript-turn-head {
+.chat-turn-meta,
+.chat-stack {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.chat-turn-meta {
   display: flex;
   min-height: 20px;
   align-items: center;
-  gap: 14px;
-  color: var(--fg-muted);
+  gap: 12px;
+  color: var(--ink-3);
   font-size: 12px;
   line-height: 16px;
   font-variant-numeric: tabular-nums;
 }
 
-.transcript-turn-head .status-dot {
-  color: var(--fg-muted);
+.chat-turn-meta .status-dot {
+  color: var(--ink-3);
+  font-size: 12px;
 }
 
-.transcript-turn-title {
-  color: var(--fg);
+.chat-turn-title {
+  color: var(--ink-2);
   font-weight: 500;
 }
 
-.transcript-turn-time {
+.chat-turn-time {
   margin-left: auto;
   white-space: nowrap;
 }
 
-.transcript-rows {
+.chat-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.chat-row.user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.chat-bubble {
+  max-width: min(72%, 620px);
+  padding: 8px 13px;
+  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 21px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--hover-2);
+  border-radius: 16px 16px 4px 16px;
+}
+
+.chat-row.assistant {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-  gap: 6px 16px;
-  margin-top: 8px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
 }
 
-.transcript-row {
-  display: contents;
+.chat-avatar > span {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--frame-line);
 }
 
-.transcript-role {
-  overflow: hidden;
-  color: var(--fg-muted);
-  font-size: 12.5px;
-  line-height: 22px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.transcript-content {
+.chat-body {
+  display: flex;
   min-width: 0;
-  color: var(--fg);
-  font-size: 13.5px;
-  line-height: 22px;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.transcript-content .message-copy,
-.transcript-content .message-markdown {
-  font-size: 13.5px;
-  line-height: 22px;
-}
-
-.transcript-row.error .transcript-role,
-.transcript-row.error .transcript-content {
-  color: var(--danger);
-}
-
-/* Tool steps: one muted line that opens into the step list. */
-.transcript-row.work .trace-header {
-  height: 22px;
+.chat-author {
+  color: var(--ink-2);
   font-size: 12.5px;
+  font-weight: 500;
+  line-height: 24px;
 }
 
-.transcript-row.work .trace-step-row {
+.chat-reply,
+.chat-note {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 22px;
+}
+
+.chat-note {
+  color: var(--ink-2);
+}
+
+.chat-note-label {
+  display: block;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  line-height: 16px;
+}
+
+.chat-reply .message-markdown,
+.chat-note .message-markdown {
+  font-size: 13.5px;
+  line-height: 22px;
+}
+
+.chat-error {
+  margin: 0;
+  padding: 6px 10px;
+  color: var(--red);
+  font-size: 13px;
+  line-height: 20px;
+  background: var(--red-tint);
+  border-radius: var(--radius-control);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--red) 24%, transparent);
+}
+
+/* Tool steps (Beautiful UI's tool-chip grammar): one quiet summary line that
+   opens into rows of verb plus an inline mono chip. */
+.chat-body .work-trace {
+  max-width: 640px;
+}
+
+.chat-body .trace-header {
+  width: auto;
+  height: 24px;
+  gap: 6px;
+  padding: 0 8px 0 4px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  border-radius: var(--radius-control);
+}
+
+.chat-body .trace-header:hover {
+  background: var(--hover);
+}
+
+.chat-body .trace-steps {
+  margin-top: 4px;
+  border-top: 0;
+  border-left: 1px solid var(--line);
+  margin-left: 11px;
+  padding-left: 10px;
+}
+
+.chat-body .trace-step {
+  border-bottom: 0;
+}
+
+.chat-body .trace-step-row {
   height: 28px;
+  gap: 8px;
+  padding: 0 6px;
+  border-radius: var(--radius-control);
 }
 
-.transcript-row.work .trace-step-verb {
+.chat-body .trace-step-verb {
+  color: var(--ink-2);
   font-size: 12.5px;
+}
+
+.chat-body .trace-step-target {
+  flex: 0 1 auto;
+  padding: 1px 7px;
+  color: var(--ink);
+  font-size: 11.5px;
+  background: var(--field);
+  border-radius: var(--radius-chip);
+  box-shadow: var(--shadow-hairline);
+}
+
+.chat-body .trace-duration {
+  margin-left: auto;
+}
+
+/* Replies keep their Markdown structure at chat density. */
+.chat-reply .message-markdown p {
+  margin: 2px 0;
+}
+
+.chat-reply .message-markdown ul,
+.chat-reply .message-markdown ol {
+  margin: 4px 0;
+}
+
+.chat-reply .message-markdown li {
+  margin: 0;
+}
+
+.chat-reply .message-markdown h2,
+.chat-reply .message-markdown h3,
+.chat-reply .message-markdown h4 {
+  margin: 8px 0 2px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.chat-reply .message-markdown pre,
+.chat-reply .message-markdown table {
+  margin: 6px 0;
 }
 
 /* Trace: ledger and detail scroll inside a frame of fixed height. */
@@ -216,34 +344,3 @@
   width: 232px;
 }
 
-/* Replies keep their Markdown structure at transcript density. */
-.transcript-content .message-markdown p {
-  margin: 2px 0;
-}
-
-.transcript-content .message-markdown ul,
-.transcript-content .message-markdown ol {
-  margin: 4px 0;
-}
-
-.transcript-content .message-markdown li {
-  margin: 0;
-}
-
-.transcript-content .message-markdown h2,
-.transcript-content .message-markdown h3,
-.transcript-content .message-markdown h4 {
-  margin: 8px 0 2px;
-  font-size: 14px;
-  line-height: 22px;
-}
-
-.transcript-content .message-markdown pre,
-.transcript-content .message-markdown table {
-  margin: 6px 0;
-}
-
-.transcript-content .message-markdown table {
-  width: auto;
-  min-width: 240px;
-}

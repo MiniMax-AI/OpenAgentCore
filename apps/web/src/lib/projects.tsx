@@ -187,12 +187,22 @@ export function useProjectCollection<T>(spec: CollectionSpec<T>, filter: Project
   const results = useQueries({
     queries: targets.map((project) => ({ ...collectionQuery(spec, project.id), enabled: projectsKnown })),
   });
-  const items: Owned<T>[] = [];
+  // `items` keeps its identity until a project's cached data changes, so pages
+  // may depend on it in effects and memos without re-running on every render.
+  const cache = useRef<{ targets: readonly Project[]; sources: readonly (T[] | undefined)[]; items: Owned<T>[] } | null>(null);
+  const sources = results.map((result) => result.data);
+  const previous = cache.current;
+  let items: Owned<T>[];
+  if (previous && previous.targets === targets && previous.sources.length === sources.length && previous.sources.every((source, index) => source === sources[index])) {
+    items = previous.items;
+  } else {
+    items = sources.flatMap((source, index) => (source ?? []).map((value) => ({ project: targets[index]!, value })));
+    cache.current = { targets, sources, items };
+  }
   const failures: ProjectFailure[] = [];
   let pending = !projectsKnown;
   results.forEach((result, index) => {
     const project = targets[index]!;
-    if (result.data) items.push(...result.data.map((value) => ({ project, value })));
     if (result.isError) failures.push({ project, message: result.error instanceof Error ? result.error.message : String(result.error) });
     if (result.isFetching || result.isPending) pending = true;
   });
