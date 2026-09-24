@@ -73,8 +73,8 @@ func (s *routingStore) UpdateAgent(_ context.Context, tenant, id string, input s
 	return s.agent, nil
 }
 
-// routingKeys resolves one derived project API key to the static routing
-// binding. Key management methods panic, so administrator handlers are traps.
+// routingKeys resolves a second key for the same Project.
+// Key management methods panic, so administrator handlers are traps.
 type routingKeys struct {
 	ProjectAPIKeyStore
 	principal identity.Principal
@@ -84,7 +84,7 @@ func (k routingKeys) ResolveProjectAPIKey(_ context.Context, digest string) (sto
 	if digest != device.HashCredential(routingDerivedKey) {
 		return store.ProjectAPIKeyBinding{}, store.ErrNotFound
 	}
-	return store.ProjectAPIKeyBinding{BindingDigest: device.HashCredential(routingKey), Principal: k.principal}, nil
+	return store.ProjectAPIKeyBinding{Principal: k.principal}, nil
 }
 
 // missingFiles reports every File as missing.
@@ -111,11 +111,12 @@ func routingFixture(t *testing.T) (http.Handler, *chi.Mux, *routingStore) {
 	}
 	s := &routingStore{tenant: tenant, agent: store.SavedAgent{ID: uuid.NewString(), TenantID: tenant, Metadata: map[string]string{},
 		Configuration: json.RawMessage(`{"model":"fixture"}`), CreatedAt: time.Unix(1700000000, 0), UpdatedAt: time.Unix(1700000000, 0)}}
-	static, ok := auth.staticBinding(device.HashCredential(routingKey))
-	if !ok {
-		t.Fatal("static routing binding is missing")
+	binding, err := auth.keys.ResolveProjectAPIKey(t.Context(), device.HashCredential(routingKey))
+	if err != nil {
+		t.Fatal(err)
 	}
-	options := []Option{WithSandboxManager(&store.Store{}, admin), WithProjectAPIKeys(routingKeys{principal: static}, admin), WithSourceFiles(missingFiles{})}
+	auth.keys.(fixtureKeyResolver)[device.HashCredential(routingDerivedKey)] = binding
+	options := []Option{WithSandboxManager(&store.Store{}, admin), WithProjectAPIKeys(routingKeys{principal: binding.Principal}, admin), WithSourceFiles(missingFiles{})}
 	handler, err := NewHandler(s, auth, "codex", options...)
 	if err != nil {
 		t.Fatal(err)
@@ -316,7 +317,7 @@ func TestEveryRouteAuthenticatesItsCanonicalPath(t *testing.T) {
 		}
 		routes++
 		clean := concretePath(route)
-		admin := strings.HasPrefix(route, "/core/v1/sandbox/") || strings.HasPrefix(route, "/core/v1/project-api-keys/")
+		admin := strings.HasPrefix(route, "/core/v1/sandbox/") || strings.HasPrefix(route, "/core/v1/admin/")
 		betaGroup := strings.HasPrefix(route, "/v1/") && !strings.HasPrefix(route, "/v1/files") && !strings.HasPrefix(route, "/v1/skills")
 		for _, header := range credentials {
 			projectKey := header.Get("Authorization") == "Bearer "+routingKey || header.Get("Authorization") == "Bearer "+routingDerivedKey
@@ -344,8 +345,8 @@ func TestEveryRouteAuthenticatesItsCanonicalPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, route := range []string{"GET /core/v1/project-api-keys/{binding_digest}/", "POST /core/v1/project-api-keys/{binding_digest}/",
-		"DELETE /core/v1/project-api-keys/{binding_digest}/{key_id}", "GET /core/v1/sandbox/nodes", "DELETE /core/v1/environments/{environment_id}/executor-credentials/{key_id}"} {
+	for _, route := range []string{"GET /core/v1/admin/projects", "POST /core/v1/admin/projects",
+		"DELETE /core/v1/admin/projects/{project_id}/keys/{key_id}", "GET /core/v1/sandbox/nodes", "DELETE /core/v1/environments/{environment_id}/executor-credentials/{key_id}"} {
 		if !walked[route] {
 			t.Errorf("route %s was not walked", route)
 		}
@@ -371,10 +372,10 @@ func TestEveryRouteAuthenticatesItsCanonicalPath(t *testing.T) {
 		{"/core/v1/sandbox/%2E%2E/%2E%2E/%2E%2E/v1/agents", withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta), http.StatusUnauthorized, ""},
 		{"/core/v1/sandbox/nodes%2F..%2F..%2F..%2Fv1%2Fagents", withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta), http.StatusNotFound, ""},
 		// Project API key management keeps deployment administrator authority.
-		{"/v1/%2E%2E/core/v1/project-api-keys/" + device.HashCredential(routingKey), withHeaders(project, beta), http.StatusUnauthorized, "invalid_admin_key"},
-		{"/v1/agents//../../core/v1/project-api-keys/" + device.HashCredential(routingKey), withHeaders([]string{"Authorization", "Bearer " + routingDerivedKey}, beta), http.StatusUnauthorized, "invalid_admin_key"},
+		{"/v1/%2E%2E/core/v1/admin/projects/" + device.HashCredential(routingKey), withHeaders(project, beta), http.StatusUnauthorized, "invalid_admin_key"},
+		{"/v1/agents//../../core/v1/admin/projects/" + device.HashCredential(routingKey), withHeaders([]string{"Authorization", "Bearer " + routingDerivedKey}, beta), http.StatusUnauthorized, "invalid_admin_key"},
 		{"/v1/x{/..%2F..%2Fcore/v1/project-api-keys/" + device.HashCredential(routingKey), http.Header{}, http.StatusBadRequest, "invalid_beta"},
-		{"/core/v1/project-api-keys/" + device.HashCredential(routingKey) + "/%2E%2E/%2E%2E/%2E%2E/%2E%2E/v1/agents", withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta), http.StatusUnauthorized, ""},
+		{"/core/v1/admin/projects/" + device.HashCredential(routingKey) + "/%2E%2E/%2E%2E/%2E%2E/%2E%2E/%2E%2E/v1/agents", withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta), http.StatusUnauthorized, ""},
 	} {
 		got := serve(handler, http.MethodGet, test.target, "", test.header)
 		if got.Code != test.status || (test.code != "" && !strings.Contains(got.Body.String(), `"code":"`+test.code+`"`)) {
@@ -759,7 +760,7 @@ var canonicalPathSeeds = []string{
 	"api/v1/agent-daemon/%2E%2E/%2E%2E/%2E%2E/v1/agents", "v1/x{/%2e./core/v1/sandbox/node/identity", "v1/agents/%7E%5F%2D%41",
 	"core/v1/environments/x/executor-credentials/%2E%2E/%2E%2E/%2E%2E/%2E%2E/core/v1/sandbox/nodes",
 	"v1/x{/..%2F..%2Fcore/v1/project-api-keys/x", "core/v1/project-api-keys/x/%2E%2E/%2E%2E/%2E%2E/%2E%2E/v1/agents",
-	"v1/%2E%2E/core/v1/project-api-keys/x/", "core/v1/project-api-keys//x/y",
+	"v1/%2E%2E/core/v1/admin/projects/x/", "core/v1/project-api-keys//x/y",
 }
 
 // Differential property over arbitrary request paths: the routed outcome for

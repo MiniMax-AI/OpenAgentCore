@@ -34,7 +34,7 @@ func accountConsoleConfig(t *testing.T, backend http.Handler) config {
 	if err := os.Chmod(state, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	return config{origin: testOrigin, upstream: u, dist: dist, token: "project-token", adminToken: "deployment-token",
+	return config{origin: testOrigin, upstream: u, dist: dist, adminToken: "deployment-token",
 		authMode: "account", stateDir: state}
 }
 
@@ -84,7 +84,7 @@ func TestAccountSetupLoginRestartAndLogout(t *testing.T) {
 	var calls atomic.Int32
 	c := accountConsoleConfig(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
-		want := "Bearer project-token"
+		want := "Bearer deployment-token"
 		if strings.HasPrefix(r.URL.Path, "/core/") {
 			want = "Bearer deployment-token"
 		}
@@ -97,7 +97,7 @@ func TestAccountSetupLoginRestartAndLogout(t *testing.T) {
 	if w := authRequest(h, "GET", "/console/auth", "", nil); w.Code != 200 || !strings.Contains(w.Body.String(), `"setup"`) {
 		t.Fatalf("initial mode: %d %s", w.Code, w.Body)
 	}
-	for _, path := range []string{"/v1/agents", "/console/config", "/core/v1/sandbox/nodes", "/private.txt", "/state/console/admin.json"} {
+	for _, path := range []string{"/core/v1/admin/projects", "/console/config", "/core/v1/sandbox/nodes", "/private.txt", "/state/console/admin.json"} {
 		if w := authRequest(h, "GET", path, "", nil); w.Code != 401 {
 			t.Errorf("private path %s returned %d", path, w.Code)
 		}
@@ -114,9 +114,9 @@ func TestAccountSetupLoginRestartAndLogout(t *testing.T) {
 	if !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode || cookie.Path != "/" || cookie.MaxAge != 43200 || cookie.Secure {
 		t.Fatalf("unsafe cookie: %+v", cookie)
 	}
-	for _, path := range []string{"/v1/agents", "/core/v1/sandbox/nodes", "/console/config"} {
+	for _, path := range []string{"/core/v1/admin/projects", "/core/v1/sandbox/nodes", "/console/config"} {
 		w := authRequest(h, "GET", path, "", cookie)
-		if w.Code != 200 || strings.Contains(w.Body.String(), c.token) || strings.Contains(w.Body.String(), c.adminToken) {
+		if w.Code != 200 || strings.Contains(w.Body.String(), c.adminToken) || strings.Contains(w.Body.String(), c.adminToken) {
 			t.Errorf("authenticated path %s failed or leaked a credential: %d", path, w.Code)
 		}
 	}
@@ -150,7 +150,7 @@ func TestAccountSetupLoginRestartAndLogout(t *testing.T) {
 	if logout.Code != 200 || !strings.Contains(logout.Body.String(), `"login"`) || logout.Result().Cookies()[0].MaxAge != -1 {
 		t.Fatal("logout response did not clear the session")
 	}
-	if w := authRequest(restarted, "GET", "/v1/agents", "", newCookie); w.Code != 401 {
+	if w := authRequest(restarted, "GET", "/core/v1/admin/projects", "", newCookie); w.Code != 401 {
 		t.Fatal("logged-out cookie retained authority")
 	}
 }
@@ -263,7 +263,7 @@ func TestAccountSecureCookieExpiryAndExplicitCredentials(t *testing.T) {
 	if !cookie.Secure {
 		t.Fatal("HTTPS session cookie omitted Secure")
 	}
-	for _, path := range []string{"/core/v1/sandbox/enroll", "/core/v1/environments/env/executor-credentials"} {
+	for _, path := range []string{"/core/v1/sandbox/enroll", "/api/v1/agent-daemon/enroll"} {
 		r := httptest.NewRequest("POST", path, nil)
 		r.Host = h.host
 		r.Header.Set("Authorization", "Bearer transport-credential")
@@ -282,7 +282,7 @@ func TestAccountSecureCookieExpiryAndExplicitCredentials(t *testing.T) {
 		h.auth.sessions[key] = session
 	}
 	h.auth.mu.Unlock()
-	if w := authRequest(h, "GET", "/v1/agents", "", cookie); w.Code != 401 {
+	if w := authRequest(h, "GET", "/core/v1/admin/projects", "", cookie); w.Code != 401 {
 		t.Fatal("expired session retained authority")
 	}
 }

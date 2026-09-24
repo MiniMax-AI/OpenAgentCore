@@ -119,7 +119,7 @@ def arguments(argv=None):
     parser.add_argument("--web-port", type=int, default=8080)
     parser.add_argument("--core-url", type=core_target)
     parser.add_argument("--public-url", type=core_target, help="Public HTTPS Core/Web origin behind your TLS reverse proxy")
-    parser.add_argument("--core-token-file", type=Path)
+    parser.add_argument("--admin-token-file", type=Path)
     parser.add_argument("--status", action="store_true", help="Read installation health; never invoke a model")
     parser.add_argument("--stop", action="store_true", help="Stop installed services; retain all data")
     args = parser.parse_args(argv)
@@ -137,9 +137,9 @@ def arguments(argv=None):
         parser.error("Ports must be between 1024 and 65535")
     if not args.core_only and not args.web_only and args.core_port == args.web_port:
         parser.error("Core and Web need different ports")
-    if args.web_only and not (args.core_url and args.core_token_file):
-        parser.error("--web-only requires --core-url and --core-token-file")
-    if not args.web_only and (args.core_url or args.core_token_file):
+    if args.web_only and not (args.core_url and args.admin_token_file):
+        parser.error("--web-only requires --core-url and --admin-token-file")
+    if not args.web_only and (args.core_url or args.admin_token_file):
         parser.error("Existing Core connection flags require --web-only")
     return args
 
@@ -232,27 +232,24 @@ def initialize(root, args, manifest):
     if root.exists() and any(root.iterdir()):
         raise InstallError("Installation directory is not empty; refusing to overwrite existing state")
     if mode == "web-only":
-        source = args.core_token_file
+        source = args.admin_token_file
         info = source.stat()
         if (not source.is_absolute() or source.is_symlink() or not stat.S_ISREG(info.st_mode)
                 or stat.S_IMODE(info.st_mode) & 0o077 or info.st_size > 4096):
-            raise InstallError("Core token file must be an absolute, private regular file")
+            raise InstallError("Administrator token file must be an absolute, private regular file")
         token = source.read_text().strip()
         if not token or any(c.isspace() for c in token) or "\x00" in token:
-            raise InstallError("Invalid Core token file")
+            raise InstallError("Invalid administrator token file")
     else:
         if args.provider:
             device_gid = os.stat("/dev/kvm" if args.provider == "microsandbox" else "/var/run/docker.sock").st_gid
-        token = secrets.token_hex(32)
     if mode != "web-only":
         free_port(args.core_port)
     if mode != "core-only":
         free_port(args.web_port)
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(root, 0o700)
-    directories = ["config"]
-    if mode != "web-only":
-        directories.append("admin")
+    directories = ["config", "admin"]
     directories.append("state")
     if mode != "web-only":
         directories.append("state/e2b")
@@ -274,10 +271,6 @@ def initialize(root, args, manifest):
     if mode != "web-only":
         if args.provider:
             state["device_gid"] = device_gid
-        write_json(config / "keys.json", [{"tenant_id": str(uuid.uuid4()), "organization_id": "installation",
-            "project_id": "default", "subject_kind": "service_account", "subject_id": "operator",
-            "name": "Console", "kind": "console",
-            "token_sha256": hashlib.sha256(token.encode()).hexdigest()}])
         private_write(config / "credential.key", base64.b64encode(secrets.token_bytes(32)).decode())
         private_write(config / "database.password", secrets.token_hex(32))
         admin_token = secrets.token_hex(32)
@@ -285,7 +278,8 @@ def initialize(root, args, manifest):
         write_json(root / "admin/digests.json", [hashlib.sha256(admin_token.encode()).hexdigest()])
         if args.provider:
             write_json(config / "managed-runtimes.json", managed_config(root, state, manifest))
-    private_write(config / "caller.key", token)
+    if mode == "web-only":
+        private_write(root / "admin/sandbox-admin.key", token)
     if mode != "core-only":
         state["console_auth"] = "account"
     password = (config / "database.password").read_text() if mode != "web-only" else ""
@@ -415,10 +409,9 @@ def main(argv=None):
             if not wait_http(url + "/console/auth", {"Host": host}):
                 raise InstallError("Web authentication is unavailable. Inspect private console state")
             core_url = state.get("core_url") or f'http://127.0.0.1:{state["core_port"]}'
-            token = (root / "config/caller.key").read_text().strip()
-            if not wait_http(core_url + "/v1/agents", {"Authorization": "Bearer " + token,
-                    "OpenAI-Beta": "agents=v1"}):
-                raise InstallError("Core caller authentication failed. Inspect private configuration; no model was called")
+            token = (root / "admin/sandbox-admin.key").read_text().strip()
+            if not wait_http(core_url + "/core/v1/admin/projects", {"Authorization": "Bearer " + token}):
+                raise InstallError("Core administrator authentication failed. Inspect private configuration; no model was called")
             print("Console: " + (state.get("public_url") or url))
             if (root / "state/console/admin.json").exists():
                 print("Sign in with your administrator account. Keep its password and private state backup safe.")
@@ -427,14 +420,14 @@ def main(argv=None):
                 print("Keep your administrator username and password safe; there is no email password reset.")
         else:
             auth = base64.b64encode(("admin:" + (root / "config/console.password").read_text()).encode()).decode()
-            if not wait_http(url + "/v1/agents", {"Authorization": "Basic " + auth, "OpenAI-Beta": "agents=v1",
+            if not wait_http(url + "/core/v1/admin/projects", {"Authorization": "Basic " + auth,
                     "Host": host}):
                 raise InstallError("Web could not authenticate to Core. Inspect private configuration; no model was called")
             print("Console: " + (state.get("public_url") or url) + " (user: admin)")
             print("Console password file: " + str(root / "config/console.password"))
     if state["mode"] != "web-only":
         print(f'API: http://127.0.0.1:{state["core_port"]}/v1')
-        print("Caller key file: " + str(root / "config/caller.key"))
+        print("Create a Project and issue its API key through the administrator API before calling the direct Core API.")
         if state["provider"]:
             print("Provider: " + state["provider"] + ". Runtime image prepared; Core provisions Sessions on demand.")
         else:

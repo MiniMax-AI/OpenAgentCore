@@ -2,7 +2,6 @@ package store_test
 
 import (
 	"encoding/json"
-	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -13,28 +12,22 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestProjectAPIKeysPublicAuthenticationSurvivesRestartAndRejectsRevocationOrRebind(t *testing.T) {
-	st, pool := store.NewTestStore(t)
-	parentToken, adminToken := uuid.NewString(), uuid.NewString()
-	parent := api.APIKey{TokenSHA256: device.HashCredential(parentToken), TenantID: uuid.NewString(),
-		OrganizationID: "org-" + uuid.NewString(), ProjectID: "project-" + uuid.NewString(), SubjectKind: "service_account", SubjectID: "console"}
-	newHandler := func(st *store.Store, binding api.APIKey) http.Handler {
-		t.Helper()
-		auth, err := api.NewAuthenticator([]api.APIKey{binding})
-		if err != nil {
-			t.Fatal(err)
-		}
-		admin, err := api.NewDeploymentAuthenticator([]string{device.HashCredential(adminToken)})
-		if err != nil {
-			t.Fatal(err)
-		}
-		h, err := api.NewHandler(st, auth, "codex", api.WithProjectAPIKeys(st, admin))
-		if err != nil {
-			t.Fatal(err)
-		}
-		return h
+func TestProjectAndSharedKeysHTTPManagement(t *testing.T) {
+	st, _ := store.NewTestStore(t)
+	adminToken := uuid.NewString()
+	auth, err := api.NewDatabaseAuthenticator(st)
+	if err != nil {
+		t.Fatal(err)
 	}
-	call := func(h http.Handler, method, path, token, body string, status int) *httptest.ResponseRecorder {
+	admin, err := api.NewDeploymentAuthenticator([]string{device.HashCredential(adminToken)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := api.NewHandler(st, auth, "codex", api.WithProjectAPIKeys(st, admin))
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := func(method, path, token, body string, status int) *httptest.ResponseRecorder {
 		t.Helper()
 		r := httptest.NewRequest(method, path, strings.NewReader(body))
 		r.Header.Set("Authorization", "Bearer "+token)
@@ -43,39 +36,38 @@ func TestProjectAPIKeysPublicAuthenticationSurvivesRestartAndRejectsRevocationOr
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 		if w.Code != status {
-			t.Fatalf("%s %s returned %d; expected %d", method, path, w.Code, status)
+			t.Fatalf("%s %s got%d want%d", method, path, w.Code, status)
 		}
 		return w
 	}
-	h := newHandler(st, parent)
-	base := "/core/v1/project-api-keys/" + parent.TokenSHA256
-	id := uuid.NewString()
-	create := `{"id":"` + id + `","name":"Terminal"}`
-	w := call(h, "POST", base, adminToken, create, http.StatusCreated)
-	var issued store.IssuedProjectAPIKey
-	if err := json.Unmarshal(w.Body.Bytes(), &issued); err != nil || issued.ID != id || !strings.HasPrefix(issued.Key, "pc_") {
-		t.Fatal("create did not return the new key")
+	base := "/core/v1/admin/projects"
+	response := call("POST", base, adminToken, `{"name":"Default"}`, 201)
+	var p store.Project
+	if json.Unmarshal(response.Body.Bytes(), &p) != nil || p.ID == "" {
+		t.Fatal("Project response invalid")
 	}
-	call(h, "GET", "/v1/agents", issued.Key, "", http.StatusOK)
-	call(h, "POST", base, adminToken, create, http.StatusConflict)
-	call(h, "GET", base, issued.Key, "", http.StatusUnauthorized)
-	listed := call(h, "GET", base, adminToken, "", http.StatusOK)
-	for _, private := range []string{issued.Key, device.HashCredential(issued.Key), parent.TokenSHA256, `"key"`} {
-		if strings.Contains(listed.Body.String(), private) {
-			t.Fatal("list exposed secret or binding material")
-		}
+	keysPath := base + "/" + p.ID + "/keys"
+	var first, second store.IssuedProjectAPIKey
+	if json.Unmarshal(call("POST", keysPath, adminToken, `{"name":"first"}`, 201).Body.Bytes(), &first) != nil {
+		t.Fatal("key response invalid")
 	}
-	pool.Close()
-	restarted, _ := store.NewTestStore(t)
-	h = newHandler(restarted, parent)
-	call(h, "GET", "/v1/agents", issued.Key, "", http.StatusOK)
-	rebound := parent
-	rebound.SubjectID = "other-administrator"
-	call(newHandler(restarted, rebound), "GET", "/v1/agents", issued.Key, "", http.StatusUnauthorized)
-	replacement := parent
-	replacement.TokenSHA256 = device.HashCredential(uuid.NewString())
-	call(newHandler(restarted, replacement), "GET", "/v1/agents", issued.Key, "", http.StatusUnauthorized)
-	call(h, "DELETE", base+"/"+id, adminToken, "", http.StatusOK)
-	call(h, "GET", "/v1/agents", issued.Key, "", http.StatusUnauthorized)
-	call(h, "GET", "/v1/agents", parentToken, "", http.StatusOK)
+	_ = json.Unmarshal(call("POST", keysPath, adminToken, `{"name":"second"}`, 201).Body.Bytes(), &second)
+	call("GET", "/v1/agents", first.Key, "", 200)
+	call("GET", "/v1/agents", second.Key, "", 200)
+	call("GET", "/v1/agents", adminToken, "", 401)
+	call("GET", base, first.Key, "", 401)
+	list := call("GET", keysPath, adminToken, "", 200)
+	if strings.Contains(list.Body.String(), first.Key) {
+		t.Fatal("list exposed plaintext")
+	}
+	call("POST", base+"/"+p.ID, adminToken, `{"name":"renamed"}`, 200)
+	call("GET", "/v1/agents", first.Key, "", 200)
+	call("DELETE", keysPath+"/"+first.ID, adminToken, "", 200)
+	call("GET", "/v1/agents", first.Key, "", 401)
+	call("GET", "/v1/agents", second.Key, "", 200)
+	call("POST", base+"/"+p.ID+"/archive", adminToken, "", 200)
+	call("GET", "/v1/agents", second.Key, "", 401)
+	call("GET", keysPath, adminToken, "", 200)
+	call("POST", keysPath, adminToken, `{"name":"forbidden"}`, 409)
+	call("POST", base, adminToken, `{"id":"`+uuid.NewString()+`","name":"forged"}`, 400)
 }

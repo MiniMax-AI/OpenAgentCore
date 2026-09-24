@@ -1,4 +1,4 @@
-// Command fixtures seeds internal records for official-client recovery tests.
+// Command fixtures prepares internal records for official-client recovery tests.
 package main
 
 import (
@@ -27,6 +27,9 @@ func main() {
 }
 
 func seed() error {
+	if path := os.Getenv("AGENTS_API_PROJECT_IDENTITIES_FIXTURE"); path != "" {
+		return readProjectIdentities(path)
+	}
 	if path := os.Getenv("AGENTS_API_CREDENTIAL_LIST_FIXTURE"); path != "" {
 		return seedCredentialList(path)
 	}
@@ -84,4 +87,48 @@ func fixturePool(ctx context.Context) (*pgxpool.Pool, error) {
 		return nil, errors.New("dedicated test database required")
 	}
 	return pgxpool.NewWithConfig(ctx, cfg)
+}
+
+// readProjectIdentities exports only the scope required by internal test fixtures.
+// Projects and credentials are created through the administrator HTTP API.
+func readProjectIdentities(path string) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var f struct {
+		ProjectIDs []string          `json:"project_ids"`
+		Bindings   []json.RawMessage `json:"bindings"`
+	}
+	if err = json.Unmarshal(raw, &f); err != nil {
+		return err
+	}
+	ctx := context.Background()
+	pool, err := fixturePool(ctx)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	for _, id := range f.ProjectIDs {
+		projectID, err := uuid.Parse(id)
+		if err != nil {
+			return err
+		}
+		var binding json.RawMessage
+		err = pool.QueryRow(ctx, `SELECT json_build_object(
+			'tenant_id', p.tenant_id, 'organization_id', s.organization_id,
+			'project_id', s.project_id, 'subject_kind', p.subject_kind,
+			'subject_id', p.subject_id)
+			FROM projects p JOIN execution_project_scopes s ON s.tenant_id=p.tenant_id
+			WHERE p.id=$1`, projectID).Scan(&binding)
+		if err != nil {
+			return err
+		}
+		f.Bindings = append(f.Bindings, binding)
+	}
+	raw, err = json.Marshal(f)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, raw, 0600)
 }

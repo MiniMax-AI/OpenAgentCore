@@ -1,13 +1,13 @@
-"""Local Session creator retry policy with no-input, synthetic configurations.
+"""Project principal retries with synthetic configurations and no model execution.
 
-Cross-subject conflicts are local policy, not verified hosted API semantics.
-These checks exercise storage and HTTP behavior without model execution.
+Keys in one Project share the same principal and Session creation retries.
+These checks exercise local storage and HTTP behavior, not hosted API semantics.
 """
 
 import uuid
 
 import httpx2
-from openai import BadRequestError, ConflictError, NotFoundError
+from openai import BadRequestError, NotFoundError
 
 from official_session_creation_stream import event_data
 from official_session_metadata import without_metadata
@@ -18,7 +18,7 @@ def assert_no_creator_fields(payload):
     assert private.isdisjoint(payload), payload
 
 
-def verify_session_creators(client, owner, other, rotated, peer, same_id, spec, expect_error):
+def verify_session_creators(client, owner, other, replacement_key, peer_key, additional_key, spec, expect_error):
     sessions = owner.beta.agents.sessions
     endpoint = str(owner.base_url).rstrip("/") + "/agents/sessions"
     auth = {"Authorization": "Bearer " + owner.api_key, "OpenAI-Beta": "agents=v1"}
@@ -26,22 +26,23 @@ def verify_session_creators(client, owner, other, rotated, peer, same_id, spec, 
               "X-Creator-Kind": "user", "X-Creator-ID": "test-peer"}
     metadata = {"creator_kind": "user", "creator_id": "test-peer"}
     recovered = []
-    with client(rotated) as replacement, client(peer) as collaborator, client(same_id) as typed_peer, \
+    with client(replacement_key) as replacement, client(peer_key) as collaborator, client(additional_key) as additional_peer, \
             httpx2.Client(trust_env=False, timeout=10) as raw:
 
         def check_retries(request, key, current):
-            for caller in (owner, replacement):
+            turn_ids = [turn.id for turn in sessions.turns.list(current.id)]
+            for caller in (owner, replacement, collaborator, additional_peer):
                 assert caller.beta.agents.sessions.create(**request, extra_headers=key) == current
-            for caller in (collaborator, typed_peer):
-                expect_error(ConflictError, lambda: caller.beta.agents.sessions.create(**request, extra_headers=key))
+            for caller in (collaborator, additional_peer):
                 headers = auth | key | forged | {"Authorization": "Bearer " + caller.api_key}
                 with raw.stream("POST", endpoint, headers=headers, json=request | {"stream": True}) as response:
-                    assert response.status_code == 409
-                    assert response.headers["content-type"].split(";")[0] == "application/json"
-                    response.read()
-                    assert response.json()["error"]["code"] == "idempotency_conflict"
-                    assert response.json()["error"]["type"] == "conflict_error"
-                    assert_no_creator_fields(response.json()["error"])
+                    assert response.status_code == 201
+                    assert response.headers["content-type"].split(";")[0] == "text/event-stream"
+                    # Creation retries close without replaying historical events.
+                    assert [line for line in response.iter_lines() if line] == [": connected"]
+                assert caller.beta.agents.sessions.create(**request, extra_headers=key) == current
+                assert caller.beta.agents.sessions.retrieve(current.id) == current
+                assert [turn.id for turn in caller.beta.agents.sessions.turns.list(current.id)] == turn_ids
             response = raw.post(endpoint, headers=auth | key, json=request)
             assert response.status_code == 201 and response.json() == current.to_dict()
             assert_no_creator_fields(response.json())
@@ -58,8 +59,8 @@ def verify_session_creators(client, owner, other, rotated, peer, same_id, spec, 
         expect_error(NotFoundError, lambda: other.beta.agents.sessions.retrieve(first.id))
         expect_error(NotFoundError, lambda: collaborator.beta.agents.sessions.retrieve(foreign.id))
 
-        # Project peers retain reads and metadata writes without taking ownership.
-        for caller in (collaborator, typed_peer):
+        # Project keys share reads, metadata writes and the same creator principal.
+        for caller in (collaborator, additional_peer):
             assert caller.beta.agents.sessions.retrieve(first.id) == first
             assert first.id in {item.id for item in caller.beta.agents.sessions.list()}
             assert len(list(caller.beta.agents.sessions.turns.list(first.id))) == 1
@@ -94,37 +95,37 @@ def verify_session_creators(client, owner, other, rotated, peer, same_id, spec, 
         assert saved.agent.model == "creator-fixture-model" and saved.agent.instructions == "Frozen source."
         collaborator.beta.agents.delete(source.id)
         expect_error(NotFoundError, lambda: sessions.create(**request))
-        saved = typed_peer.beta.agents.sessions.update(saved.id, metadata={"shared": "updated"})
+        saved = additional_peer.beta.agents.sessions.update(saved.id, metadata={"shared": "updated"})
         check_retries(request, key, saved)
         recovered.append((request, key, saved))
 
-        # Streaming creation also records the authenticated typed subject. Two
-        # users with different IDs cannot share a retry; peers may still delete.
+        # Streaming creation uses the same Project principal for every key;
+        # all Project keys may recover the retry or delete the Session.
         key = {"Idempotency-Key": str(uuid.uuid4())}
-        headers = auth | key | forged | {"Authorization": "Bearer " + typed_peer.api_key}
+        headers = auth | key | forged | {"Authorization": "Bearer " + additional_peer.api_key}
         with raw.stream("POST", endpoint, headers=headers, json=spec | {"stream": True}) as response:
             assert response.status_code == 201 and response.headers["content-type"] == "text/event-stream"
             created = event_data(response.iter_lines())
             assert created["type"] == "agent.session.created"
             assert_no_creator_fields(created["session"])
-        streamed = typed_peer.beta.agents.sessions.create(**spec, extra_headers=key)
+        streamed = additional_peer.beta.agents.sessions.create(**spec, extra_headers=key)
         assert streamed.id == created["session"]["id"]
         for caller in (owner, collaborator):
-            expect_error(ConflictError, lambda: caller.beta.agents.sessions.create(**spec, extra_headers=key))
+            assert caller.beta.agents.sessions.create(**spec, extra_headers=key) == streamed
         collaborator.beta.agents.sessions.events.create(streamed.id, events=[{"type": "agent.session.input.cancel"}])
         deleted = collaborator.beta.agents.sessions.delete(streamed.id)
         assert deleted.deleted is True and deleted.id == streamed.id
-        expect_error(NotFoundError, lambda: typed_peer.beta.agents.sessions.retrieve(streamed.id))
+        expect_error(NotFoundError, lambda: additional_peer.beta.agents.sessions.retrieve(streamed.id))
 
-    print("Session creator local policy: typed subjects, credential rotation, project sharing, immutable retries, source update/deletion, private wire fields and pre-SSE JSON conflicts passed; no model execution or hosted semantics verified.")
+    print("Session creator local policy: shared Project principal, multiple keys, cross-Project isolation, immutable retries, source update/deletion, private wire fields and streaming retries passed; no model execution or hosted semantics verified.")
     return recovered
 
 
-def verify_creator_recovery(client, rotated, peer, same_id, retries, expect_error):
-    with client(rotated) as creator, client(peer) as collaborator, client(same_id) as typed_peer:
+def verify_creator_recovery(client, replacement_key, peer_key, additional_key, retries, expect_error):
+    with client(replacement_key) as creator, client(peer_key) as collaborator, client(additional_key) as additional_peer:
         for request, key, current in retries:
             assert creator.beta.agents.sessions.create(**request, extra_headers=key) == current
-            for caller in (collaborator, typed_peer):
+            for caller in (collaborator, additional_peer):
                 assert caller.beta.agents.sessions.retrieve(current.id) == current
-                expect_error(ConflictError, lambda: caller.beta.agents.sessions.create(**request, extra_headers=key))
-    print("Session creator local policy: same-subject credential and cross-subject retry behavior survived service restart.")
+                assert caller.beta.agents.sessions.create(**request, extra_headers=key) == current
+    print("Session creator local policy: all Project keys recovered the same creation retries after service restart.")

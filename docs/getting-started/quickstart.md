@@ -12,20 +12,36 @@ python3 -m venv .venv
 pip install openai==3.13.0
 ```
 
-Read the generated caller key from the private installation directory. For an
-installation on another machine, use its authenticated HTTPS API endpoint.
+The deployment administrator first creates a Project through
+`POST /core/v1/admin/projects` with `{"name":"Default"}`, then issues a key through
+`POST /core/v1/admin/projects/{project_id}/keys` with a descriptive `{"name":"..."}`.
+These requests use the separate deployment credential. The management UI has not
+yet migrated; see [integration status](../web/README.md).
+
+Obtain that key through a private channel and supply it as `PARSAR_API_KEY` in your
+application configuration. Its plaintext appears only at issuance; Core stores a
+digest in its database. All keys in the Project share assets, permissions and the
+same execution principal, while write provenance records the actual key. Other
+Projects remain isolated. The installer creates neither a Project nor an API key.
+For a remote installation, use its HTTPS API endpoint routed directly to Core; the
+console does not proxy `/v1`.
 
 ```python
-from pathlib import Path
+import os
 from openai import OpenAI
 
 client = OpenAI(
     base_url="http://127.0.0.1:8091/v1",
-    api_key=Path.home().joinpath(".parsar/core/config/caller.key").read_text().strip(),
+    api_key=os.environ["PARSAR_API_KEY"],
     default_headers={"OpenAI-Beta": "agents=v1"},
 )
 print(client.beta.agents.list().data)
 ```
+
+Rotate an application key by issuing a replacement in the same Project and revoking
+the old key. Assets and the Project principal remain unchanged. Archiving a Project
+disables every key while preserving assets and already accepted work. The deployment
+administrator credential cannot substitute for an application key on `/v1`.
 
 This read verifies API access. It does not invoke a model or create an execution
 environment. Installation has no mandatory sample task.
@@ -94,7 +110,7 @@ an unsupported model or operation work.
 
 ## Observe and recover
 
-Use the existing console or query the same resources from your application:
+Query execution history from your application:
 
 ```python
 current = client.beta.agents.sessions.retrieve(session.id)

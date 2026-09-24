@@ -68,7 +68,7 @@ func environmentFilesHandler(t *testing.T, enabled bool) (http.Handler, *environ
 		{"shared-key", f.environment.TenantID, "files-project"},
 		{"other-key", uuid.NewString(), "other-project"},
 	} {
-		keys = append(keys, APIKey{OrganizationID: "files-org", ProjectID: key.project, SubjectKind: "user", SubjectID: key.token,
+		keys = append(keys, APIKey{OrganizationID: "files-org", ProjectID: key.project, SubjectKind: "user", SubjectID: key.project,
 			TokenSHA256: device.HashCredential(key.token), TenantID: key.tenant})
 	}
 	auth, err := NewAuthenticator(keys)

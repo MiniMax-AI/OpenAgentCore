@@ -37,7 +37,8 @@ const getResourceOwners = `-- name: GetResourceOwners :many
 SELECT o.resource_id, a.key_id, a.key_name, a.key_prefix, a.key_kind, k.revoked_at
 FROM write_audit_owners o
 JOIN write_audit_operations a ON a.tenant_id = o.tenant_id AND a.id = o.operation_id
-LEFT JOIN project_api_keys k ON k.tenant_id = a.tenant_id AND k.id = CASE WHEN a.key_kind = 'issued' THEN a.key_id::uuid END
+LEFT JOIN projects p ON p.tenant_id=a.tenant_id
+LEFT JOIN project_api_keys k ON k.project_id=p.id AND k.id = CASE WHEN a.key_kind = 'issued' THEN a.key_id::uuid END
 WHERE o.tenant_id = $1 AND o.resource_type = $2 AND o.resource_id = ANY($3::text[])
 `
 
@@ -169,7 +170,8 @@ func (q *Queries) InsertWriteAuditOwner(ctx context.Context, arg InsertWriteAudi
 const listWriteOperations = `-- name: ListWriteOperations :many
 SELECT a.id, a.tenant_id, a.key_id, a.key_name, a.key_prefix, a.key_kind, a.action, a.resource_type, a.resource_id, a.parent_id, a.request_id, a.trace_id, a.created_at, k.revoked_at
 FROM write_audit_operations a
-LEFT JOIN project_api_keys k ON k.tenant_id = a.tenant_id AND k.id = CASE WHEN a.key_kind = 'issued' THEN a.key_id::uuid END
+LEFT JOIN projects p ON p.tenant_id=a.tenant_id
+LEFT JOIN project_api_keys k ON k.project_id=p.id AND k.id = CASE WHEN a.key_kind = 'issued' THEN a.key_id::uuid END
 WHERE a.tenant_id = $1
   AND ($2::text = '' OR a.key_id = $2)
   AND ($3::text = '' OR a.resource_type = $3)

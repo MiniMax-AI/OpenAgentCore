@@ -44,7 +44,7 @@ func TestWriteAuditCleanupBoundedAndCancellable(t *testing.T) {
 	defer cancel()
 	probe := &auditPruneProbe{cancel: cancel}
 	before := time.Now().Add(-24 * time.Hour)
-	runWriteAuditCleanup(ctx, probe, 24*time.Hour)
+	runWriteAuditCleanup(ctx, probe, 24*time.Hour, nil)
 	if !probe.called || probe.limit != 1000 || !probe.deadline || probe.cutoff.Before(before) || probe.cutoff.After(time.Now().Add(-24*time.Hour)) {
 		t.Fatalf("bad cleanup %+v", probe)
 	}

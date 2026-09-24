@@ -24,6 +24,9 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 // Every 401 has type invalid_request_error, as every observed official 401
 // does (HP-07); an empty code serializes as null.
 func writeError(w http.ResponseWriter, status int, code, message string, param ...string) {
+	if observer, ok := w.(interface{ reportAPIError(string) }); ok {
+		observer.reportAPIError(code)
+	}
 	kind := "invalid_request_error"
 	if status >= 500 {
 		kind = "server_error"
@@ -86,6 +89,10 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 	var cursor *store.InvalidCursorError
 	var selection *store.MCPCredentialSelectionError
 	switch {
+	case errors.Is(err, store.ErrProjectArchived):
+		writeError(w, http.StatusConflict, "project_archived", "The target Project is archived.")
+	case errors.Is(err, store.ErrProjectExists):
+		writeError(w, http.StatusConflict, "project_exists", "This Project ID already exists.")
 	case errors.Is(err, store.ErrProjectAPIKeyExists):
 		writeError(w, http.StatusConflict, "project_api_key_exists", "This API key ID already exists. List its metadata and revoke it explicitly if the secret was not saved.")
 	case errors.Is(err, store.ErrExecutorCredentialExists):

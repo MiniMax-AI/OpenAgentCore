@@ -44,8 +44,15 @@ func TestSandboxAdministratorIsSeparateFromProject(t *testing.T) {
 		t.Fatal("admin key gained project authority", result.Code)
 	}
 	reused, _ := NewDeploymentAuthenticator([]string{device.HashCredential("caller")})
-	if _, err := NewHandler(&recordingStore{}, project, "codex", WithSandboxManager(&store.Store{}, reused)); err == nil {
-		t.Fatal("same key accepted across trust boundaries")
+	collided, err := NewHandler(&recordingStore{}, project, "codex", WithSandboxManager(&store.Store{}, reused))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", "Bearer caller")
+	result = httptest.NewRecorder()
+	collided.ServeHTTP(result, request)
+	if result.Code != http.StatusUnauthorized {
+		t.Fatal("administrator digest collision gained public authority", result.Code)
 	}
 }
 func TestSandboxEnrollmentDoesNotAcceptProjectAsAdmin(t *testing.T) {

@@ -15,46 +15,9 @@ func callerBinding() APIKey {
 		OrganizationID: "org-one", ProjectID: "project-one", SubjectKind: "user", SubjectID: "user-one"}
 }
 
-func TestCallerPrincipalConfiguration(t *testing.T) {
-	for _, test := range []struct {
-		name string
-		edit func(*APIKey)
-	}{
-		{"missing organization", func(k *APIKey) { k.OrganizationID = "" }},
-		{"missing project", func(k *APIKey) { k.ProjectID = "" }},
-		{"missing subject", func(k *APIKey) { k.SubjectID = "" }},
-		{"unknown subject kind", func(k *APIKey) { k.SubjectKind = "workspace" }},
-		{"untyped subject", func(k *APIKey) { k.SubjectKind = "" }},
-		{"blank subject", func(k *APIKey) { k.SubjectID = " " }},
-		{"invalid tenant", func(k *APIKey) { k.TenantID = "product-workspace" }},
-		{"zero tenant", func(k *APIKey) { k.TenantID = uuid.Nil.String() }},
-		{"invalid digest", func(k *APIKey) { k.TokenSHA256 = "plaintext" }},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			key := callerBinding()
-			test.edit(&key)
-			if _, err := NewAuthenticator([]APIKey{key}); err == nil {
-				t.Fatal("invalid caller configuration accepted")
-			}
-		})
-	}
-	key := callerBinding()
-	for _, test := range []struct {
-		name string
-		edit func(*APIKey)
-	}{
-		{"tenant remap", func(k *APIKey) { k.ProjectID = "project-two" }},
-		{"project remap", func(k *APIKey) { k.TenantID = uuid.NewString() }},
-		{"duplicate key", func(k *APIKey) { k.TokenSHA256 = key.TokenSHA256 }},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			other := key
-			other.TokenSHA256 = device.HashCredential("other")
-			test.edit(&other)
-			if _, err := NewAuthenticator([]APIKey{key, other}); err == nil {
-				t.Fatal("ambiguous caller configuration accepted")
-			}
-		})
+func TestAuthenticatorRequiresDatabaseResolver(t *testing.T) {
+	if _, err := NewDatabaseAuthenticator(nil); err == nil {
+		t.Fatal("missing database resolver accepted")
 	}
 }
 
@@ -62,18 +25,10 @@ func TestCallerPrincipalHeadersAndKeyRotation(t *testing.T) {
 	key := callerBinding()
 	rotated, peer := key, key
 	rotated.TokenSHA256 = device.HashCredential("rotated")
-	peer.TokenSHA256, peer.SubjectKind, peer.SubjectID = device.HashCredential("peer"), "service_account", "service-one"
+	peer.TokenSHA256 = device.HashCredential("peer")
 	auth, err := NewAuthenticator([]APIKey{key, rotated, peer})
 	if err != nil {
 		t.Fatal(err)
-	}
-	scopes := auth.ProjectScopes()
-	if len(scopes) != 1 || scopes[0].TenantID != key.TenantID {
-		t.Fatalf("project scopes = %+v", scopes)
-	}
-	scopes[0].ProjectID = "mutated"
-	if auth.ProjectScopes()[0].ProjectID != key.ProjectID {
-		t.Fatal("returned scopes mutate authenticated configuration")
 	}
 	for _, test := range []struct {
 		name, token, subject string

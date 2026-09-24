@@ -13,13 +13,15 @@ ON CONFLICT (tenant_id, resource_type, resource_id) DO NOTHING;
 SELECT o.resource_id, a.key_id, a.key_name, a.key_prefix, a.key_kind, k.revoked_at
 FROM write_audit_owners o
 JOIN write_audit_operations a ON a.tenant_id = o.tenant_id AND a.id = o.operation_id
-LEFT JOIN project_api_keys k ON k.tenant_id = a.tenant_id AND k.id = CASE WHEN a.key_kind = 'issued' THEN a.key_id::uuid END
+LEFT JOIN projects p ON p.tenant_id=a.tenant_id
+LEFT JOIN project_api_keys k ON k.project_id=p.id AND k.id = CASE WHEN a.key_kind = 'issued' THEN a.key_id::uuid END
 WHERE o.tenant_id = $1 AND o.resource_type = $2 AND o.resource_id = ANY($3::text[]);
 
 -- name: ListWriteOperations :many
 SELECT a.*, k.revoked_at
 FROM write_audit_operations a
-LEFT JOIN project_api_keys k ON k.tenant_id = a.tenant_id AND k.id = CASE WHEN a.key_kind = 'issued' THEN a.key_id::uuid END
+LEFT JOIN projects p ON p.tenant_id=a.tenant_id
+LEFT JOIN project_api_keys k ON k.project_id=p.id AND k.id = CASE WHEN a.key_kind = 'issued' THEN a.key_id::uuid END
 WHERE a.tenant_id = sqlc.arg(tenant_id)
   AND (sqlc.arg(key_id)::text = '' OR a.key_id = sqlc.arg(key_id))
   AND (sqlc.arg(resource_type)::text = '' OR a.resource_type = sqlc.arg(resource_type))

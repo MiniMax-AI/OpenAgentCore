@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,16 +32,14 @@ function captureStream() {
   };
 }
 
-async function createLocalState(t, { keysFixture = "keys-matched.json", token = fixtureToken } = {}) {
+async function createLocalState(t, { token = fixtureToken } = {}) {
   const root = await mkdtemp(join(tmpdir(), "agents-core-doctor-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const homeDir = join(root, "home");
   const stateDir = join(homeDir, ".parsar", "agents-api");
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
   await writeFile(join(stateDir, "web-token"), token, { mode: 0o600 });
-  await writeFile(join(stateDir, "keys.json"), await fixture(keysFixture), { mode: 0o600 });
   await chmod(join(stateDir, "web-token"), 0o600);
-  await chmod(join(stateDir, "keys.json"), 0o600);
   return { root, homeDir, stateDir };
 }
 
@@ -214,7 +211,6 @@ test("reports missing conventional credential files and skips the authenticated 
 
   assert.equal(result.result.exitCode, CORE_DOCTOR_EXIT_CODES.diagnosticFailure);
   assert.match(result.stdout, /Caller token: file is missing or unreadable/);
-  assert.match(result.stdout, /Caller binding: local file is not available; digest comparison was skipped/);
   assert.match(result.stdout, /authenticated read skipped because no valid caller token/);
   assert.equal(requests.length, 1);
 });
@@ -236,39 +232,7 @@ test("refuses to read a group/world-accessible token file", async (t) => {
   assert.doesNotMatch(result.stdout, new RegExp(state.stateDir.replaceAll("/", "\\/")));
 });
 
-test("fails when an available local keys file has unsafe permissions", async (t) => {
-  const state = await createLocalState(t);
-  await chmod(join(state.stateDir, "keys.json"), 0o644);
-  const { fetchImpl, requests } = await successfulFetchRecorder();
-  const result = await runScenario({
-    env: { AGENTS_API_PROXY_TARGET: fixtureTarget },
-    cwd: state.root,
-    homeDir: state.homeDir,
-    fetchImpl,
-  });
-
-  assert.equal(result.result.exitCode, CORE_DOCTOR_EXIT_CODES.diagnosticFailure);
-  assert.match(result.stdout, /Caller binding: file is group\/world accessible/);
-  assert.equal(requests.length, 2);
-});
-
-test("detects a caller digest mismatch while keeping the GET probe read-only", async (t) => {
-  const state = await createLocalState(t, { keysFixture: "keys-mismatch.json" });
-  const { fetchImpl, requests } = await successfulFetchRecorder();
-  const result = await runScenario({
-    env: { AGENTS_API_PROXY_TARGET: fixtureTarget },
-    cwd: state.root,
-    homeDir: state.homeDir,
-    fetchImpl,
-  });
-
-  assert.equal(result.result.exitCode, CORE_DOCTOR_EXIT_CODES.diagnosticFailure);
-  assert.match(result.stdout, /does not match any keys\.json binding/);
-  assert.equal(requests.length, 2);
-  assert.ok(requests.every(({ method }) => method === "GET"));
-});
-
-test("allows an in-memory caller token when no local keys file is configured", async (t) => {
+test("accepts an issued caller token using the authenticated GET probe", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "agents-core-doctor-inline-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const { fetchImpl, requests } = await successfulFetchRecorder();
@@ -283,7 +247,6 @@ test("allows an in-memory caller token when no local keys file is configured", a
   });
 
   assert.equal(result.result.exitCode, CORE_DOCTOR_EXIT_CODES.ok);
-  assert.match(result.stdout, /no local keys file is configured; digest comparison was skipped/);
   assert.match(result.stdout, /Core API authenticated; basic Agent resource envelope parsed/);
   assert.equal(requests.length, 2);
 });
@@ -589,7 +552,6 @@ test("loads Vite-style proxy dotenv configuration without exposing unrelated val
     [
       "AGENTS_API_PROXY_TARGET='https://dotenv.fixture.invalid' # local override",
       "AGENTS_API_PROXY_TOKEN_FILE=${HOME}/.parsar/agents-api/web-token",
-      "AGENTS_API_KEYS_FILE=\"${HOME}/.parsar/agents-api/keys.json\" # quoted path",
       "OPENAI_API_KEY=provider-secret-marker",
     ].join("\n"),
     { mode: 0o600 },
@@ -685,10 +647,6 @@ test("never includes credential, response, URL suffix, provider, or private-path
   const privateDir = join(root, "synthetic-private-doctor-state");
   await mkdir(privateDir, { recursive: true, mode: 0o700 });
   const token = "fixture-super-secret-token";
-  const digest = createHash("sha256").update(token).digest("hex");
-  const keysPath = join(privateDir, "keys.json");
-  await writeFile(keysPath, JSON.stringify([{ token_sha256: digest }]), { mode: 0o600 });
-  await chmod(keysPath, 0o600);
   const { fetchImpl } = await successfulFetchRecorder({
     apiBody: JSON.stringify({
       object: "list",
@@ -702,7 +660,6 @@ test("never includes credential, response, URL suffix, provider, or private-path
     env: {
       AGENTS_API_PROXY_TARGET: fixtureTarget,
       AGENTS_API_PROXY_TOKEN: token,
-      AGENTS_API_KEYS_FILE: keysPath,
       OPENAI_API_KEY: "provider-secret-marker",
       HOME: root,
       PATH: "/synthetic/bin",
@@ -722,7 +679,6 @@ test("never includes credential, response, URL suffix, provider, or private-path
   for (const marker of JSON.parse(await fixture("redaction-corpus.json"))) {
     assert.equal(combined.includes(marker), false, `report leaked marker: ${marker}`);
   }
-  assert.equal(combined.includes(keysPath), false);
 });
 
 test("rejects credential-bearing target suffixes without reflecting them", async (t) => {

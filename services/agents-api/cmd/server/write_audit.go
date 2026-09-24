@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/coremetrics"
 )
 
 type writeAuditPruner interface {
@@ -25,13 +26,17 @@ func writeAuditRetention() (time.Duration, error) {
 	return duration, nil
 }
 
-func runWriteAuditCleanup(ctx context.Context, s writeAuditPruner, retention time.Duration) {
+func runWriteAuditCleanup(ctx context.Context, s writeAuditPruner, retention time.Duration, metrics *coremetrics.Service) {
+	if metrics != nil {
+		defer metrics.StopJob("audit_cleanup")
+	}
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
 		pruneCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		_, err := s.DeleteExpiredWriteOperations(pruneCtx, time.Now().Add(-retention), 1000)
+		count, err := s.DeleteExpiredWriteOperations(pruneCtx, time.Now().Add(-retention), 1000)
 		cancel()
+		reportCleanupResult(metrics, "audit_cleanup", count, err)
 		if err != nil && ctx.Err() == nil {
 			log.Ctx(ctx).Warn("Write audit retention cleanup failed")
 		}

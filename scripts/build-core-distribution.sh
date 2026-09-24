@@ -101,7 +101,7 @@ cp services/agents-api/deploy/codex/seccomp.json "$bundle/runtime/"
 cp LICENSE "$bundle/"
 cp -R site "$bundle/site"
 
-AGENTS_API_BUILD_DIR="$stage/core/bin" scripts/build-agents-api.sh
+AGENTS_API_BUILD_REVISION="$revision" AGENTS_API_BUILD_DIR="$stage/core/bin" scripts/build-agents-api.sh
 (
   cd services/agents-api/tools/microsandbox-provider
   GOWORK=off CGO_ENABLED=1 go build -mod=readonly -trimpath \

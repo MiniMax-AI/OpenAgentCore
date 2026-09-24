@@ -120,7 +120,7 @@ func (s sseLines) open(t *testing.T) {
 func TestCreationStreamPublicLifetimes(t *testing.T) {
 	s, pool := store.NewTestStore(t)
 	tenant, token := uuid.NewString(), uuid.NewString()
-	auth, err := api.NewAuthenticator([]api.APIKey{{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: device.HashCredential(token), TenantID: tenant}})
+	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: device.HashCredential(token), TenantID: tenant}})
 	if err != nil {
 		t.Fatal(err)
 	}

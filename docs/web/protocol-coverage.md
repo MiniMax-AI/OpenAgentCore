@@ -88,7 +88,7 @@ Resource-specific boundaries:
 | Summary | `GET /summary` | Overview (per project), the Agents list (`group_by=agent`), a project's page (per project and `group_by=key`), Agent metrics (to skip idle projects, and usage by creating key since the start of the range), the Projects list (last activity) |
 | Copies | `POST /copies` with `Idempotency-Key` | **Copy to…** on Agents, Environment templates, Skills, Files, Vaults and Credentials |
 | Runtime observations | `GET /runtime-observations` | Sandbox metrics: hosted Runtimes of every project, each labelled with its project |
-| Core metrics (proposed) | `GET /core-metrics?range=` | Core metrics page; the Core popover on Overview. Not served by Core yet: the page shows it as not reported and the popover shows only Core's status. See [Core metrics: backend requirements](core-metrics-requirements.md) |
+| Core metrics | `GET /core-metrics?range=` | Core metrics page; the Core popover on Overview. A Core without the route (404) is shown as not reporting; the popover then shows only Core's status. Measurements are defined in the [Core metrics contract](../../contracts/agents-api/core-metrics.md) |
 | Startup configuration | `GET /startup-configuration` | System: harnesses, default harness, model endpoint presence, managed sandbox, daemon gateway and self-hosted execution |
 
 Summary figures are cumulative per Session and are not billing records. Sessions
@@ -160,3 +160,17 @@ The aggregate endpoints that would replace these browser reads are proposed in
 
 Any change to a consumed route, field, error or bound must update this matrix, the
 client tests and the console's fixtures in the same change.
+
+## Evidence and changes
+
+The console's route allowlists live in
+[admin_routes.go](../../services/core-console/admin_routes.go) and
+[sandbox_admin.go](../../services/core-console/sandbox_admin.go); authentication,
+origin checks and header handling live in [server.go](../../services/core-console/server.go).
+Update this matrix when those boundaries or the console's reads change, and keep
+detailed wire semantics in the administrator contract.
+
+Backend HTTP tests, console login and proxy checks and Project isolation and copy
+acceptance establish backend behavior. The console's unit tests and fixture-backed
+browser tests cover its screens; they do not prove execution readiness or that a
+copied asset is usable.

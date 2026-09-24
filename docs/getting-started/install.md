@@ -64,9 +64,14 @@ retains that URL for remote node downloads; it does not silently change mirrors.
 
 ## Sign in to Web
 
+The management backend and client require the corresponding Web screen migration
+before release. See [console integration status](../web/README.md).
+
 Installation creates private configuration under `~/.parsar/core`, a dedicated
-PostgreSQL volume, an API caller key and a credential encryption key. New Web
-installations create a separate deployment administrator key. Secret values are not printed.
+PostgreSQL volume and a credential encryption key. Installation creates no Project
+or application API key. Projects and their keys are managed in the database;
+configuration files contain deployment settings only. New installations create a
+separate deployment administrator credential. Secret values are not printed.
 
 Open the console address printed by the installer (`https://core.example` in
 the example above). On the first visit, choose an administrator username and
@@ -74,29 +79,27 @@ password, and keep your sign-in details safe. The Web has one role: administrato
 with access to every console operation. It has no secondary user roles. The paired
 console already connects to Core; no API key is needed to sign in.
 
-On a paired deployment, the first-run Home creates an Agent API key, then guides you through optional
-host enrollment and a real Agent request. Save the generated key when it is shown;
-its secret is returned only once. The **API keys** page lists safe metadata and
-lets you create or revoke keys later. You can skip or replay it from **Getting started**. Hosts registered here
-supply sandbox resources for **hosted** Sessions; self-hosted Sessions use their
-application-managed environments. The request workbench lets you configure model,
-provider and harness defaults and run the generated request from your machine.
-Caller API keys authorize Core requests; model provider keys authorize model calls.
-Neither is the administrator password. Examples read environment variables or ask
-for keys privately in the terminal, and reject HTTP redirects. Keep the generated Core API key for later requests from your own machine.
-A Web-only installation without paired key management guides you to use an
-existing Core API key and still allows the request workbench.
-Creating a saved Agent stores its configuration; it does not start a Session or
-call the model. The full protocol surface and execution support are documented
-in the [API guide](./quickstart.md).
+Use the administrator API to create a Project, then issue a named API key within
+it and save the one-time plaintext response privately. Core stores only its digest.
+The corresponding Web management screens remain pending. Multiple keys in a Project
+share its assets and execution principal; writes record the actual key separately.
+Rotate by issuing another key in that Project and revoking the old one. Archiving
+the Project disables all its keys and retains assets for inspection, deletion or
+copying to another active Project. API callers use their own keys and the public
+API endpoint. The deployment credential cannot call `/v1`; the console cannot
+execute or create Agent resources on their behalf. See the [management contract](../../contracts/agents-api/admin-api.md).
+
+Hosts registered through the console supply sandbox resources for hosted Sessions;
+self-hosted Sessions use application-managed environments. Neither installation
+nor key creation calls a model. Run examples separately with the issued API key
+and your model provider key, as described in the [API guide](quickstart.md).
 
 Default local ports and private files:
 
 - API: `http://127.0.0.1:8091/v1`
 - Web upstream: `http://127.0.0.1:8080`; use the configured public URL in your browser
 - Administrator state: `~/.parsar/core/state/console/` (`admin.json` and `registered`)
-- API caller key: `~/.parsar/core/config/caller.key`
-- Sandbox administrator key: `~/.parsar/core/admin/sandbox-admin.key`
+- Deployment administrator key: `~/.parsar/core/admin/sandbox-admin.key`
 
 Use exactly the displayed console address; the production proxy validates its
 configured origin. The account file contains a password hash, not a recoverable
@@ -112,9 +115,8 @@ existing administrator state directory mounted.
 Manual account-mode consoles set `CORE_CONSOLE_AUTH_MODE=account`, an absolute
 `CORE_CONSOLE_STATE_DIR` (private writable directory). Keep state outside the
 static Web root. Setup/login/logout use private `/console/auth` routes and do not
-extend the public Agent API. Public `/v1` requests carrying an explicit caller
-Bearer are forwarded unchanged to Core; browser cookie requests use the paired
-console's server-held caller key. The console never exports that key to the page.
+extend the public Agent API. The console rejects every `/v1` request, including
+requests carrying an explicit Bearer token; it holds no caller key.
 
 Every Core installation creates a separate private deployment administrator key at
 `admin/sandbox-admin.key`. Core loads its SHA-256 digest from
@@ -123,7 +125,7 @@ digest file read-only. The bundled Web server reads the separate administrator
 key to proxy authenticated console operations; it never sends this key to the
 browser. The migration service receives neither. A Web-only connection to an
 external Core can enable management by configuring its administrator token
-server-side through `CORE_CONSOLE_SANDBOX_ADMIN_TOKEN_FILE`; the Web page does not
+server-side through `CORE_CONSOLE_ADMIN_TOKEN_FILE`; the Web page does not
 ask the operator to enter another key. Use the same-origin console connection for
 management. Choose English or Chinese through the System language selector.
 
@@ -267,14 +269,14 @@ expose a remote administration service.
 ### Separate Web installation
 
 To install only Web on a Linux host, provide the existing Core origin and a
-private caller-key file. A loopback Core uses the same host network namespace;
+private deployment-administrator key file. A loopback Core uses the same host network namespace;
 a remote Core must use HTTPS.
 
 ```sh
 ./install.sh --web-only \
   --install-dir "$HOME/.parsar/core-console" \
   --core-url http://127.0.0.1:8091 \
-  --core-token-file "$HOME/.parsar/core/config/caller.key"
+  --admin-token-file "$HOME/.parsar/core/admin/sandbox-admin.key"
 ```
 
 Web-only mode cannot enable a sandbox provider. It starts no database or Core and
@@ -300,8 +302,11 @@ For nodes added through Web, install with the intended shared HTTPS endpoint:
 
 The installer also uses this origin for the `wss` connection URL returned by
 self-hosted Sessions, so remote Runtime hosts never receive a Compose-only
-hostname. Configure your TLS reverse proxy to forward that origin to the loopback Web port,
-preserve Host, and support WebSocket upgrades. The bundled Web forwards the fixed
+hostname. Configure your TLS reverse proxy to route `/v1` and the project
+executor-credential API to the loopback Core port (8091), with all console pages,
+management paths and fixed node/daemon transport routes going to Web (8080).
+Preserve Host and support WebSocket upgrades. This keeps application API access
+separate from console authentication. The bundled Web forwards the fixed
 node and daemon transport routes to Core using their own credentials. Both the
 node host and its sandbox guests must reach this address. Installation does not
 create DNS records or certificates, nor expose a host port publicly. Without this

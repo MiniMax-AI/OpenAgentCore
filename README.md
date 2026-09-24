@@ -9,17 +9,24 @@ owns Sessions, environments, files, credentials and execution history; each
 native harness keeps its own model and tool loop. Core runs independently of the
 Parsar product.
 
-Core and its Web console ship together. The default installation runs Core, Web
+Core and its administrator Web console ship together. Projects own assets; multiple
+API keys in one Project share its assets and execution principal. Projects and API
+keys live in the database. Management credentials cannot call the Agent API. The
+default installation runs Core, Web
 and PostgreSQL with zero execution nodes. Add execution nodes through Web when
 you are ready. Core creates each required sandbox from the shared Runtime image. Model
 credentials are supplied through the existing write-only API extension.
 
-Hosted deployments use one selected provider across local or remote nodes. The
+Hosted deployments select E2B cloud or one provider across their own local/remote
+nodes (Docker or microsandbox). The
 Hosted Sandbox Manager shows node health, capacity and Session placement. New
 Sessions use automatic placement by default or an explicitly selected node;
 existing Sessions retain their node across disconnects and resume.
 
 ## Start here
+
+The management backend requires the coordinated Web screen switch before a paired
+release; see [console integration status](docs/web/README.md).
 
 1. **Install Core and Web.** Obtain and verify a matching Linux amd64 bundle,
    then run its installer. For node access, choose a reachable HTTPS address
@@ -29,16 +36,22 @@ existing Sessions retain their node across disconnects and resume.
    ./install.sh --public-url https://core.example
    ```
 
-   This starts Core, Web and PostgreSQL with zero execution nodes. Public release
-   bundles are not published yet; see the [installation guide](docs/getting-started/install.md)
-   for building a bundle and the host/network prerequisites.
+   This starts Core, Web and PostgreSQL with zero execution nodes. Release
+   bundles are tied to a source revision; an older published bundle does not include
+   current management changes. See the [installation guide](docs/getting-started/install.md)
+   for obtaining/building a matching bundle and the host/network prerequisites.
 2. **Sign in to Web.** Open the console address printed by the installer and
    register your administrator account with a username and password. Keep them safe.
    Existing installations retain their `admin` / `console.password` login.
-   The console connects to Core automatically. During first-run, create and save
-   an Agent API key for requests from your own machine or application.
-3. **Add a node.** Open **Hosted Sandbox Manager**, choose Docker or microsandbox,
-   and initialize the deployment. The paired console address is used by default;
+   The console connects to Core automatically. Until the management screens migrate,
+   use the [administrator API](contracts/agents-api/admin-api.md) to create a Project,
+   then issue a key within it for your application. Save the one-time plaintext
+   response privately; Core stores its digest. Rotate by issuing another key in the
+   same Project and revoking the old one.
+3. **Add a node.** Open **Hosted Sandbox Manager** and choose E2B cloud or
+   your own machines with Docker/microsandbox. E2B needs its account credentials and
+   qualified Runtime template, with no node installation. For your own machines,
+   initialize the deployment. The paired console address is used by default;
    advanced network settings allow a different reachable HTTPS origin. Select
    **Add node**, then copy and run the command on a prepared Linux host. Web shows when the node is online
    and its provider is ready. All nodes in a deployment use the same provider.
@@ -46,6 +59,7 @@ existing Sessions retain their node across disconnects and resume.
 Installation and node enrollment do not call a model. Once a node is ready,
 run an optional API example with your own model credentials.
 
+- [API documentation: public API and Web management](docs/api/README.md)
 - [Make your first API request](docs/getting-started/quickstart.md)
 - [Service health, data and operations](docs/getting-started/operations.md)
 - [Hosted Sandbox Manager](services/agents-api/HOSTED-SANDBOX-MANAGER.md)
@@ -67,9 +81,11 @@ Installing a local provider is optional, and is not required for adding nodes in
 ./install.sh --sandbox-provider true --provider docker
 ```
 
-Web-only installation connects the unchanged console to an existing Core; see the
+Web-only installation connects the console server to an existing Core; see the
 installation guide for its URL and private credential-file options. Installation
-never creates a sample Session or calls a model. API examples are optional.
+creates no Project or application key, never creates a sample Session and calls no
+model. Configuration files hold deployment settings, not business identities. API
+examples are optional.
 
 The protocol baseline is `openai-python` 3.13.0 and `agents=v1`. Harness selection,
 model execution configuration and our daemon transport are documented differences.
@@ -95,8 +111,8 @@ under `~/.parsar/build/`. For advanced deployment, see the
 [Web development guide](docs/web/README.md).
 
 Core-managed and user-managed environments reuse the colocated daemon, native
-harness, tools and workspace. E2B uses caller-managed provisioning through the
-official SDK; the returned `remote_url` connects our daemon, not `exec-server`.
+harness, tools and workspace. Caller-owned E2B provisioning uses the official SDK; deployment-managed E2B
+uses the configured SandboxProvider. For caller-owned environments, the returned `remote_url` connects our daemon, not `exec-server`.
 See the [Runtime enrollment guide](services/agents-api/README.md#user-managed-runtime-enrollment).
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before developing. Historical source-copy

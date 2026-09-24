@@ -55,7 +55,7 @@ if [[ "$go_version" != "$required_go" ]]; then
   printf 'Agents API release requires %s; found %s\n' "$required_go" "$go_version" >&2
   exit 1
 fi
-AGENTS_API_BUILD_DIR="$release_context/package/bin" \
+AGENTS_API_BUILD_REVISION="$source_revision" AGENTS_API_BUILD_DIR="$release_context/package/bin" \
   "$release_context/source/scripts/build-agents-api.sh"
 require_clean_source
 if [[ "$(git -C "$repo_root" rev-parse HEAD)" != "$source_revision" ]]; then

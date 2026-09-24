@@ -18,10 +18,10 @@ func TestPairedConsoleKeepsAdminAndNodeCredentialsSeparated(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 		want := "Bearer server-admin"
-		if strings.HasPrefix(r.URL.Path, "/v1/") {
-			want = "Bearer project-token"
-		}
 		if nodeTransportRequest(r) {
+			if r.Header.Get("X-Core-Console-Actor") != "" {
+				t.Error("transport retained untrusted administrator actor")
+			}
 			want = "Bearer node-token"
 		}
 		if r.Header.Get("Authorization") != want {
@@ -37,7 +37,7 @@ func TestPairedConsoleKeepsAdminAndNodeCredentialsSeparated(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	h, err := newConsole(config{origin: testOrigin, upstream: u, dist: dist, token: "project-token", password: "private-console-password", adminToken: "server-admin", nodePayloadDir: payload})
+	h, err := newConsole(config{origin: testOrigin, upstream: u, dist: dist, password: "private-console-password", adminToken: "server-admin", nodePayloadDir: payload})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestPairedConsoleKeepsAdminAndNodeCredentialsSeparated(t *testing.T) {
 		{"PATCH", "/core/v1/sandbox/deployment/maintenance", "basic", 200},
 		{"PATCH", "/core/v1/sandbox/deployment/maintenance", "none", 401},
 		{"GET", "/core/v1/sandbox/nodes", "node", 401},
-		{"GET", "/v1/agents", "basic", 200},
+		{"GET", "/core/v1/admin/projects", "basic", 200},
 		{"POST", "/core/v1/sandbox/enroll", "node", 200},
 		{"POST", "/core/v1/sandbox/enroll", "basic", 403},
 		{"POST", "/api/v1/agent-daemon/bootstrap", "node", 200},
@@ -72,6 +72,7 @@ func TestPairedConsoleKeepsAdminAndNodeCredentialsSeparated(t *testing.T) {
 		}
 		if tc.auth == "node" {
 			r.Header.Set("Authorization", "Bearer node-token")
+			r.Header.Set("X-Core-Console-Actor", "spoofed")
 			r.Header.Del("Origin")
 			r.Header.Del("Sec-Fetch-Site")
 		}
@@ -121,7 +122,7 @@ func TestPairedConsoleProxiesAuthenticatedNodeWebSockets(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dist, "index.html"), []byte("console"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	h, err := newConsole(config{origin: testOrigin, upstream: u, dist: dist, token: "project-token", password: "console-password", adminToken: "server-admin"})
+	h, err := newConsole(config{origin: testOrigin, upstream: u, dist: dist, password: "console-password", adminToken: "server-admin"})
 	if err != nil {
 		t.Fatal(err)
 	}

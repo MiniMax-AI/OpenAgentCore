@@ -37,6 +37,7 @@ type ResourceStore interface {
 }
 
 type Handler struct {
+	coreMetrics           CoreMetricsService
 	sandboxStore          *store.Store
 	deploymentAuth        *DeploymentAuthenticator
 	sandboxSetup          func(context.Context, store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error)
@@ -47,6 +48,7 @@ type Handler struct {
 	auth                  *Authenticator
 	projectKeys           ProjectAPIKeyStore
 	writeAudit            WriteAuditStore
+	adminManagement       AdminManagementStore
 	harnesses             map[string]bool
 	modelProviderDefaults ModelProviderDefaults
 	engine                string
@@ -72,13 +74,6 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 	for _, option := range options {
 		option(h)
 	}
-	if h.deploymentAuth != nil {
-		for digest := range h.deploymentAuth.digests {
-			if _, exists := auth.principals[digest]; exists {
-				return nil, errors.New("deployment administrator credentials must be separate from project credentials")
-			}
-		}
-	}
 	return CanonicalPaths(h.routes()), nil
 }
 
@@ -91,7 +86,7 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 // Beta group, has the JSON body and Allow header.
 func (h *Handler) routes() *chi.Mux {
 	router := chi.NewRouter()
-	router.Use(agentsResponseHeaders, log.HTTPMiddleware, middleware.GetHead)
+	router.Use(h.responseHeaders, log.HTTPMiddleware, middleware.GetHead)
 	router.MethodNotAllowed(methodNotAllowed)
 	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -107,8 +102,13 @@ func (h *Handler) routes() *chi.Mux {
 		r.Delete("/v1/files/{file_id}", h.deleteSourceFile)
 	})
 	h.registerSandboxManagerRoutes(router)
-	h.registerProjectAPIKeyRoutes(router)
-	h.registerWriteAuditRoutes(router)
+	if h.deploymentAuth != nil && h.projectKeys != nil {
+		router.Route("/core/v1/admin", func(r chi.Router) {
+			r.Use(h.deploymentAuth.authenticate)
+			h.registerProjectAPIKeyRoutes(r)
+			h.registerAdminResourceRoutes(r)
+		})
+	}
 	h.registerEnvironmentExecutorRoutes(router)
 	router.Route("/v1", func(r chi.Router) {
 		r.Use(h.authenticate)

@@ -29,7 +29,7 @@ func TestEnvironmentConnectionCredentialsStayScoped(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dist, "index.html"), []byte("console"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	h, err := newConsole(config{origin: testOrigin, upstream: u, dist: dist, token: "project-token", password: "private-console-password", adminToken: "server-admin"})
+	h, err := newConsole(config{origin: testOrigin, upstream: u, dist: dist, password: "private-console-password", adminToken: "server-admin"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,9 +40,9 @@ func TestEnvironmentConnectionCredentialsStayScoped(t *testing.T) {
 		method, path, bearer string
 		status               int
 	}{
-		{"POST", "/core/v1/environments/env/executor-credentials", "", 200},
-		{"POST", "/core/v1/environments/env/executor-credentials", "project-token", 200},
-		{"DELETE", "/core/v1/environments/env/executor-credentials/key", "project-token", 200},
+		{"POST", "/core/v1/environments/env/executor-credentials", "", 404},
+		{"POST", "/core/v1/environments/env/executor-credentials", "project-token", 404},
+		{"DELETE", "/core/v1/environments/env/executor-credentials/key", "project-token", 404},
 		{"GET", "/core/v1/environments/env/executor-credentials", "", 404},
 		{"POST", "/api/v1/agent-daemon/enroll", "executor-key", 200},
 		{"POST", "/api/v1/agent-daemon/enroll", "", 403},
@@ -84,7 +84,7 @@ func TestOfflineArtifactsAreManifestAllowlisted(t *testing.T) {
 		}
 	}
 	upstream, _ := url.Parse("http://127.0.0.1:1")
-	h, err := newConsole(config{origin: testOrigin, upstream: upstream, dist: dist, token: "key", password: "private-console-password", nodePayloadDir: payload})
+	h, err := newConsole(config{origin: testOrigin, upstream: upstream, dist: dist, password: "private-console-password", adminToken: "server-admin", nodePayloadDir: payload})
 	if err != nil {
 		t.Fatal(err)
 	}

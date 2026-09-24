@@ -26,7 +26,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	s, pool := store.NewManagedTestStore(t)
 	ctx := t.Context()
 	tenant, owner, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	auth, err := api.NewAuthenticator([]api.APIKey{
+	auth, err := newTestAuthenticator([]testAPIKey{
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "deletion-owner", TokenSHA256: device.HashCredential(owner), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "deletion-foreign", TokenSHA256: device.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
@@ -229,7 +229,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 				t.Fatal("repeated deletion must append exactly two operation records", err)
 			}
 			for _, operation := range afterAudit.Data[:2] {
-				if operation.Action != "delete" || operation.APIKey.ID != "static:"+device.HashCredential(owner) {
+				if operation.Action != "delete" || operation.APIKey.ID != uuid.NewSHA1(uuid.NameSpaceOID, []byte(device.HashCredential(owner))).String() {
 					t.Fatal("repeated deletion recorded the wrong operation or key")
 				}
 			}

@@ -11,10 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-var ErrProjectScopeConflict = errors.New("configured project conflicts with a persisted execution scope")
+var ErrProjectScopeConflict = errors.New("fixture project conflicts with a persisted execution scope")
 
-// EnsureProjectScopes binds or verifies the complete startup configuration atomically.
-// Removing a caller key never removes or changes a persisted project association.
+// EnsureProjectScopes establishes execution scopes for legacy resource fixtures.
 func (s *Store) EnsureProjectScopes(ctx context.Context, scopes []identity.ProjectScope) error {
 	validated, err := identity.ProjectScopes(scopes)
 	if err != nil {

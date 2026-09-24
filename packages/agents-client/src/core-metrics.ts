@@ -5,8 +5,8 @@ import type { ReadOptions } from "./types";
  * Core's own health as the one `agents-api` process sees it: execution slots
  * and the Turn queue (a Postgres table polled by the worker), connected
  * daemons, the PostgreSQL database, background jobs and the process itself.
- * Provisional contract for `GET /core/v1/admin/core-metrics` (see
- * docs/web/core-metrics-requirements.md); every figure Core cannot measure is
+ * `GET /core/v1/admin/core-metrics`, defined in
+ * contracts/agents-api/core-metrics.md; every figure Core cannot measure is
  * null, never zero.
  */
 export type CoreMetricsRange = "1h" | "6h" | "24h" | "7d";
