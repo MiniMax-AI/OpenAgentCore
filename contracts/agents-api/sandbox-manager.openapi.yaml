@@ -23,6 +23,13 @@ definitions:
       name:
         type: string
     type: object
+  api.ResourceOwnerList:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/store.ResourceOwner'
+        type: array
+    type: object
   api.SandboxAllocationList:
     properties:
       data:
@@ -82,6 +89,19 @@ definitions:
           $ref: '#/definitions/store.RuntimeNode'
         type: array
     type: object
+  store.AuditAPIKey:
+    properties:
+      id:
+        type: string
+      kind:
+        type: string
+      name:
+        type: string
+      prefix:
+        type: string
+      revoked_at:
+        type: string
+    type: object
   store.IssuedExecutorCredential:
     properties:
       environment_id:
@@ -117,6 +137,13 @@ definitions:
       prefix:
         type: string
       revoked_at:
+        type: string
+    type: object
+  store.ResourceOwner:
+    properties:
+      api_key:
+        $ref: '#/definitions/store.AuditAPIKey'
+      resource_id:
         type: string
     type: object
   store.RuntimeDeploymentView:
@@ -272,6 +299,38 @@ definitions:
         type: integer
       maintenance:
         type: boolean
+    type: object
+  store.WriteOperation:
+    properties:
+      action:
+        type: string
+      api_key:
+        $ref: '#/definitions/store.AuditAPIKey'
+      created_at:
+        type: string
+      id:
+        type: string
+      parent_id:
+        type: string
+      request_id:
+        type: string
+      resource_id:
+        type: string
+      resource_type:
+        type: string
+      trace_id:
+        type: string
+    type: object
+  store.WriteOperationPage:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/store.WriteOperation'
+        type: array
+      has_more:
+        type: boolean
+      next_cursor:
+        type: string
     type: object
   v1.APIError:
     properties:
@@ -519,6 +578,53 @@ paths:
       summary: Revoke a project API key
       tags:
         - Project API Keys
+  /core/v1/resource-owners:
+    get:
+      description: Deployment administrator only. A configured binding selects the project. Returns null for resources without recorded creation provenance, including historical and foreign resources. No key secret is returned.
+      parameters:
+        - description: Configured caller SHA-256 binding selector
+          in: query
+          name: binding_digest
+          required: true
+          type: string
+        - description: Resource type
+          in: query
+          name: resource_type
+          required: true
+          type: string
+        - description: Comma-separated public resource IDs, maximum 100
+          in: query
+          name: resource_ids
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ResourceOwnerList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Batch lookup resource creation keys
+      tags:
+        - Write Audit
   /core/v1/sandbox/deployment:
     get:
       description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
@@ -1010,6 +1116,71 @@ paths:
       summary: List retained allocations on a sandbox node
       tags:
         - Sandbox Manager
+  /core/v1/write-operations:
+    get:
+      description: Deployment administrator only. Reverse chronological keyset pagination over committed writes. Creation records remain; other records follow configured retention. A configured binding selects the project, never a caller-supplied tenant.
+      parameters:
+        - description: Configured caller SHA-256 binding selector
+          in: query
+          name: binding_digest
+          required: true
+          type: string
+        - description: Issued UUID or static key identifier
+          in: query
+          name: key_id
+          type: string
+        - description: Resource type
+          in: query
+          name: resource_type
+          type: string
+        - description: Public resource ID
+          in: query
+          name: resource_id
+          type: string
+        - description: Inclusive RFC3339 timestamp
+          in: query
+          name: created_after
+          type: string
+        - description: Exclusive RFC3339 timestamp
+          in: query
+          name: created_before
+          type: string
+        - description: Page size, 1-100, default 50
+          in: query
+          name: limit
+          type: integer
+        - description: Opaque next_cursor from the preceding page
+          in: query
+          name: after
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.WriteOperationPage'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Query API-key write operations
+      tags:
+        - Write Audit
 schemes:
   - http
   - https
