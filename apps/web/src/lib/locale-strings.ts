@@ -2,6 +2,13 @@ import { apiKeyChinese } from "./api-key-strings";
 import { firstRunChinese } from "./first-run-strings";
 import { consoleAuthChinese } from "./console-auth-strings";
 export const chinese = {
+  "The deployment needs an HTTPS Core address reachable from nodes and sandbox guests. Ask the deployment administrator to configure it.": "部署需要配置节点和沙箱都能访问的 HTTPS Core 地址，请联系部署管理员。",
+  "Console address reachable from the new node": "新节点可访问的控制台地址",
+  "Use the HTTPS address of this console. A localhost address or SSH tunnel on your computer cannot be reached from another machine.": "请使用此控制台的 HTTPS 地址。其他机器无法访问你电脑上的 localhost 地址或 SSH 隧道。",
+  "Generate enrollment command": "生成注册命令",
+  "Machine management needs setup": "机器管理需要配置",
+  "Cannot connect to this console": "无法连接此控制台",
+  "Console access could not be checked. Check your connection or sign in again, then refresh.": "无法确认控制台访问状态。请检查连接或重新登录，然后刷新。",
   ...apiKeyChinese,
   ...consoleAuthChinese,
   ...firstRunChinese,

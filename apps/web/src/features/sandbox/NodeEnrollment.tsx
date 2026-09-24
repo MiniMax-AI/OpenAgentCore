@@ -5,7 +5,7 @@ import type { SandboxAdminClient, SandboxDeployment, SandboxNode } from "@agents
 import { useTranslation } from "react-i18next";
 import { Modal } from "../../components/Modal";
 import { sandboxRequestError } from "../../lib/sandbox-labels";
-import { sandboxCoreOrigin } from "./core-origin";
+import { sandboxSetupOrigin } from "./core-origin";
 import type { SandboxConsoleConfig } from "./console-config";
 import { nodeInstallCommand } from "./enrollment-command";
 
@@ -32,8 +32,9 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, disab
   const request = useRef<AbortController | null>(null);
   const knownIds = useRef(new Set<string>());
   const revealedId = useRef<string | null>(null);
-  const sourceUrl = sandboxCoreOrigin(window.location.origin);
-  const coreUrl = sandboxCoreOrigin(deployment.core_url || window.location.origin);
+  const [sourceDraft, setSourceDraft] = useState(() => sandboxSetupOrigin(window.location.origin) ?? "");
+  const sourceUrl = sandboxSetupOrigin(sourceDraft);
+  const coreUrl = sandboxSetupOrigin(deployment.core_url || window.location.origin);
   const available = Boolean(consoleConfig.node_installer && sourceUrl && coreUrl);
   const expired = Boolean(enrollment && new Date(enrollment.expires_at).getTime() <= now);
   const connected = fresh && nodes.find((node) => !knownIds.current.has(node.id) && node.online && node.provider_ready);
@@ -62,7 +63,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, disab
     setCopied(false); setCopyFailed(false);
   }
   async function generate() {
-    if (request.current || !available) return;
+    if (request.current || !available || disabled || !fresh) return;
     generation.current++;
     const controller = new AbortController(); request.current = controller;
     knownIds.current = new Set(nodes.map((node) => node.id));
@@ -87,8 +88,13 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, disab
     <button type="button" className="button primary" disabled={disabled} onClick={() => { setOpen(true); void generate(); }}><Plus size={16} />{t("Add node")}</button>
     {createPortal(<Modal open={open} title={t("Add node")} onClose={close}>
       <div className="sandbox-add-node form-stack">
-        {!available ? <p role="status">{t("Node installation is unavailable. Ask the deployment administrator to enable the node installer on this console.")}</p> : <>
+        {!consoleConfig.node_installer || !coreUrl ? <p role="status">{t(!consoleConfig.node_installer ? "Node installation is unavailable. Ask the deployment administrator to enable the node installer on this console." : "The deployment needs an HTTPS Core address reachable from nodes and sandbox guests. Ask the deployment administrator to configure it.")}</p> : <>
           {!connected ? <p>{t("Run on the host you want to add.")}</p> : null}
+          {!enrollment && !busy && error === null ? <div className="form-stack">
+            <label className="field"><span>{t("Console address reachable from the new node")}</span><input type="url" value={sourceDraft} placeholder="https://console.example" onChange={(event) => setSourceDraft(event.target.value)} /></label>
+            <p>{t("Use the HTTPS address of this console. A localhost address or SSH tunnel on your computer cannot be reached from another machine.")}</p>
+            <button type="button" className="button primary" disabled={!available || disabled || !fresh} onClick={() => void generate()}>{t("Generate enrollment command")}</button>
+          </div> : null}
           {busy ? <p role="status">{t("Preparing your command…")}</p> : null}
           {error !== null ? <><p role="alert" className="sandbox-error">{sandboxRequestError(error, locale)}</p><button className="button outline" type="button" onClick={() => void generate()}>{t("Try again")}</button></> : null}
           {enrollment ? <>

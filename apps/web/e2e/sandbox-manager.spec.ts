@@ -45,6 +45,11 @@ test("add opens one command, copy works, existing hosts do not imply connection,
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await openManager(page);
   await page.getByRole("button", { name: "Add node", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
+  if (await page.getByLabel("Console address reachable from the new node").isVisible()) {
+    await page.getByLabel("Console address reachable from the new node").fill("https://console.example");
+    await page.getByRole("button", { name: "Generate enrollment command", exact: true }).click();
+  }
   const dialog = page.getByRole("dialog", { name: "Add node" });
   const command = dialog.getByLabel("One-time enrollment command");
   await expect(command).toHaveValue(/fixture-once-token/);
@@ -67,6 +72,11 @@ test("unavailable installer shows compact guidance and never creates an enrollme
   await page.route("**/console/config", (route) => route.fulfill({ json: { sandbox_admin: true, node_installer: false } }));
   await openManager(page);
   await page.getByRole("button", { name: "Add node", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
+  if (await page.getByLabel("Console address reachable from the new node").isVisible()) {
+    await page.getByLabel("Console address reachable from the new node").fill("https://console.example");
+    await page.getByRole("button", { name: "Generate enrollment command", exact: true }).click();
+  }
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Node installation is unavailable");
   await expect(dialog.getByRole("textbox")).toHaveCount(0);
@@ -107,6 +117,8 @@ test("Chinese actions, diagnostics, and enrollment are translated and language p
   await page.locator(".sandbox-topology-node").first().click();
   await expect(page.getByRole("region", { name: "沙箱资源分配" }).first()).toContainText("沙箱资源缺失");
   await page.getByRole("button", { name: "添加节点", exact: true }).click();
+  await page.getByLabel("新节点可访问的控制台地址").fill("https://console.example");
+  await page.getByRole("button", { name: "生成注册命令", exact: true }).click();
   await expect(page.getByLabel("一次性注册命令")).toHaveValue(/fixture-once-token/);
   await expect(page.getByRole("dialog")).toContainText("等待节点连接");
   await page.keyboard.press("Escape");
@@ -128,12 +140,22 @@ test("an uncertain write is never retried; closing discards a late token and all
     await route.fulfill({ json: { token: attempts === 1 ? "stale-token" : "fresh-token", expires_at: new Date(Date.now() + 600000).toISOString() } }).catch(() => {});
   });
   await page.getByRole("button", { name: "Add node", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
+  if (await page.getByLabel("Console address reachable from the new node").isVisible()) {
+    await page.getByLabel("Console address reachable from the new node").fill("https://console.example");
+    await page.getByRole("button", { name: "Generate enrollment command", exact: true }).click();
+  }
   await expect.poll(() => attempts).toBe(1);
   await page.keyboard.press("Escape");
   release();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(attempts).toBe(1);
   await page.getByRole("button", { name: "Add node", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
+  if (await page.getByLabel("Console address reachable from the new node").isVisible()) {
+    await page.getByLabel("Console address reachable from the new node").fill("https://console.example");
+    await page.getByRole("button", { name: "Generate enrollment command", exact: true }).click();
+  }
   await expect(page.getByLabel("One-time enrollment command")).toHaveValue(/fresh-token/);
   expect(attempts).toBe(2);
 });
@@ -148,6 +170,11 @@ test("a connected node remains successful after its enrollment token expires", a
   });
   await openManager(page);
   await page.getByRole("button", { name: "Add node", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
+  if (await page.getByLabel("Console address reachable from the new node").isVisible()) {
+    await page.getByLabel("Console address reachable from the new node").fill("https://console.example");
+    await page.getByRole("button", { name: "Generate enrollment command", exact: true }).click();
+  }
   const dialog = page.getByRole("dialog", { name: "Add node" });
   await expect(dialog.getByLabel("One-time enrollment command")).toHaveValue(/short-lived-token/);
   await request.post(`${fixture}/__fixture/sandbox-add-node`);
@@ -171,6 +198,11 @@ test("expired commands and failed writes require an explicit retry", async ({ pa
     return attempts === 1 ? route.fulfill({ json: { token: "expired-token", expires_at: "2020-01-01T00:00:00Z" } }) : route.fulfill({ status: 503, json: { error: { message: "Unavailable" } } });
   });
   await page.getByRole("button", { name: "Add node", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
+  if (await page.getByLabel("Console address reachable from the new node").isVisible()) {
+    await page.getByLabel("Console address reachable from the new node").fill("https://console.example");
+    await page.getByRole("button", { name: "Generate enrollment command", exact: true }).click();
+  }
   await expect(page.getByRole("dialog")).toContainText("Command expired");
   await expect(page.getByLabel("One-time enrollment command")).toHaveCount(0);
   expect(attempts).toBe(1);
@@ -220,6 +252,11 @@ for (const width of [1280, 1440]) {
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.screenshot({ animations: "disabled", path: testInfo.outputPath(`nodes-${width}-${theme}.png`) });
       await page.getByRole("button", { name: "Add node", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
+  if (await page.getByLabel("Console address reachable from the new node").isVisible()) {
+    await page.getByLabel("Console address reachable from the new node").fill("https://console.example");
+    await page.getByRole("button", { name: "Generate enrollment command", exact: true }).click();
+  }
       await expect(page.getByLabel("One-time enrollment command")).toHaveValue(/fixture-once-token/);
       const copyButton = page.getByRole("button", { name: "Copy node command" });
       await expect(copyButton).toBeInViewport();
@@ -302,3 +339,37 @@ for (const theme of ["light", "dark"]) {
     await page.locator("#sandbox-selected-node").screenshot({ path: testInfo.outputPath(`node-details-zh-${theme}.png`), animations: "disabled" });
   });
 }
+
+test("SSH tunnel enrollment requires a reachable console address before issuing a token", async ({ page, request }) => {
+  await openManager(page);
+  await page.getByRole("button", { name: "Add node", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  const source = dialog.getByLabel("Console address reachable from the new node");
+  const generate = dialog.getByRole("button", { name: "Generate enrollment command", exact: true });
+  await expect(source).toHaveValue("");
+  for (const invalid of ["http://127.0.0.1:14173", "https://localhost", "https://console.example/v1", "https://user:secret@console.example"]) {
+    await source.fill(invalid);
+    await expect(generate).toBeDisabled();
+  }
+  const before = (await (await request.get(`${fixture}/__fixture/sandbox`)).json()).calls;
+  expect(before.filter((call: { method: string }) => call.method === "POST")).toHaveLength(0);
+  await source.fill("https://console.example");
+  await generate.click();
+  const command = dialog.getByLabel("One-time enrollment command");
+  await expect(command).toHaveValue(/--source-url 'https:\/\/console.example'/);
+  await expect(command).toHaveValue(/--core-url 'https:\/\/core.example'/);
+  await expect(command).not.toHaveValue(/127\.0\.0\.1/);
+});
+
+test("a loopback deployment origin cannot issue a remote-node command", async ({ page, request }) => {
+  await page.route("**/core/v1/sandbox/deployment", async (route) => {
+    const deployment = await (await route.fetch()).json();
+    await route.fulfill({ json: { ...deployment, core_url: "http://127.0.0.1:8080" } });
+  });
+  await openManager(page);
+  await page.getByRole("button", { name: "Add node", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("deployment needs an HTTPS Core address");
+  await expect(page.getByLabel("One-time enrollment command")).toHaveCount(0);
+  const calls = (await (await request.get(`${fixture}/__fixture/sandbox`)).json()).calls;
+  expect(calls.filter((call: { method: string }) => call.method === "POST")).toHaveLength(0);
+});

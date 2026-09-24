@@ -154,7 +154,11 @@ and either Docker socket access or microsandbox's KVM/native-library prerequisit
 The command checks host access before downloading the Runtime and verifies
 microsandbox's shared libraries after downloading its native programs.
 The console serves only fixed, non-secret distribution files at `/node-install/`;
-private installation configuration is never part of this payload. Retain the
+private installation configuration is never part of this payload. When opening the
+console through a localhost SSH tunnel, enter the HTTPS address of this same
+console that the new host can reach before generating its enrollment command.
+That address must serve `/node-install/`; an API-only origin is not sufficient.
+The saved deployment Core origin must also be reachable from nodes and guests. Retain the
 installed `node-payload/` directory. Manual console deployments enable the same
 flow with `CORE_CONSOLE_NODE_PAYLOAD_DIR` pointing to the matched distribution
 payload. TLS verification stays enabled; deployments using a private certificate

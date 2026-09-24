@@ -34,7 +34,13 @@ function SandboxAccess({ presentation }: { presentation: "manager" | "home" }) {
     return () => controller.abort();
   }, [revision]);
   if (checking) return <p role="status">{t("Connecting to this console's Core…")}</p>;
-  if (!config?.sandbox_admin) return <div><p role="alert">{t("Sandbox administration is not configured on this console. Ask the deployment administrator to configure access.")}</p><button type="button" className="button outline" onClick={() => setRevision((value) => value + 1)}>{t("Refresh sandbox state")}</button></div>;
+  if (!config?.sandbox_admin) return <div className="sandbox-content form-stack">
+    <header className="sandbox-heading"><div><h1>{t("Hosted Sandbox Manager")}</h1><p>{t("Manage hosted execution for this Core deployment.")}</p></div></header>
+    <div className="sandbox-empty"><Server size={28} strokeWidth={1.25} /><h2>{t(config ? "Machine management needs setup" : "Cannot connect to this console")}</h2>
+      <p role="alert">{t(config ? "Sandbox administration is not configured on this console. Ask the deployment administrator to configure access." : "Console access could not be checked. Check your connection or sign in again, then refresh.")}</p>
+      <button type="button" className="button outline" onClick={() => setRevision((value) => value + 1)}><RefreshCw size={15} />{t("Refresh sandbox state")}</button>
+    </div>
+  </div>;
   return <SandboxManager consoleConfig={config} presentation={presentation} />;
 }
 

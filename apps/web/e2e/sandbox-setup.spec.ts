@@ -31,6 +31,11 @@ test("bundled console needs no extra admin key and provides one install command 
   await page.getByLabel("Sandbox provider").selectOption("docker");
   await page.getByRole("button", { name: "Initialize sandbox deployment" }).click();
   await page.getByRole("button", { name: "Add node", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
+  if (await page.getByLabel("Console address reachable from the new node").isVisible()) {
+    await page.getByLabel("Console address reachable from the new node").fill("https://console.example");
+    await page.getByRole("button", { name: "Generate enrollment command", exact: true }).click();
+  }
   const command = page.getByLabel("One-time enrollment command");
   await expect(command).toHaveValue(/fixture-once-token/);
   await expect(command).toHaveValue(/\/node-install\/node-install.pyz/);
@@ -68,6 +73,11 @@ for (const provider of ["docker", "microsandbox"]) {
     await expect(page.getByLabel("Sandbox provider")).toHaveCount(0);
     await expect(page.getByText("No nodes registered. Add a node to provide hosted capacity.")).toBeVisible();
     await page.getByRole("button", { name: "Add node", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
+  if (await page.getByLabel("Console address reachable from the new node").isVisible()) {
+    await page.getByLabel("Console address reachable from the new node").fill("https://console.example");
+    await page.getByRole("button", { name: "Generate enrollment command", exact: true }).click();
+  }
     await expect(page.getByLabel("One-time enrollment command")).toHaveValue(/--core-url 'https:\/\/core.example'/);
     expect(await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }))).not.toMatch(/fixture-admin-key|fixture-once-token/);
     await request.post(`${fixture}/__fixture/sandbox-add-node`);
@@ -167,6 +177,11 @@ for (const operation of ["setup", "enrollment"] as const) {
       await request.post(setupUrl, { data: { provider: "docker", core_url: "https://core.example" } });
       await page.getByRole("button", { name: "Refresh sandbox state" }).click();
       await page.getByRole("button", { name: "Add node", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
+  if (await page.getByLabel("Console address reachable from the new node").isVisible()) {
+    await page.getByLabel("Console address reachable from the new node").fill("https://console.example");
+    await page.getByRole("button", { name: "Generate enrollment command", exact: true }).click();
+  }
     }
     await expect.poll(() => page.evaluate(() => typeof (window as Window & { releaseSandboxResponse?: () => void }).releaseSandboxResponse)).toBe("function");
     await page.evaluate(() => { location.hash = "system"; });
@@ -193,7 +208,7 @@ test("unpaired or unavailable consoles show setup guidance without admin credent
     await page.route("**/console/config", (route) => route.fulfill(body ? { contentType: "application/json", body: JSON.stringify(body) } : { status: 404, body: "Not found" }));
     await page.reload();
     await page.getByRole("button", { name: "Hosted Sandbox Manager", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText("Sandbox administration is not configured");
+    await expect(page.getByRole("alert")).toContainText(body ? "Sandbox administration is not configured" : "Console access could not be checked");
     await expect(page.getByLabel("Deployment admin key")).toHaveCount(0);
     expect((await (await request.get(`${fixture}/__fixture/sandbox`)).json()).calls).toHaveLength(0);
   }
