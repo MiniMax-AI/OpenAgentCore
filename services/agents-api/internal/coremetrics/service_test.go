@@ -159,3 +159,28 @@ func TestRevisionMustBeCommit(t *testing.T) {
 		}
 	}
 }
+
+func TestSevenDayAlignedWindowRetainsLeadingSamples(t *testing.T) {
+	s, _, now := fixtureService(t)
+	now = now.Add(time.Hour + 59*time.Minute)
+	window, err := Window(now, "7d")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.started = window.Start.Add(-time.Hour)
+	first := window.Start.Add(10 * time.Second)
+	s.now = func() time.Time { return first }
+	s.RecordUnavailable()
+	s.record(Sample{At: first, Queued: ptr(int64(7)), Healthy: true})
+	// Populate every slot through the present, crossing the ordinary 7d cutoff.
+	for at := first.Add(SampleInterval); !at.After(now); at = at.Add(SampleInterval) {
+		s.record(Sample{At: at, Queued: ptr(int64(0)), Healthy: true})
+		s.now = func() time.Time { return at }
+		s.RecordUnavailable()
+	}
+	s.now = func() time.Time { return now }
+	got, err := s.Read(t.Context(), "7d")
+	if err != nil || got.Execution.Unavailable == nil || *got.Execution.Unavailable != int64(retention/SampleInterval) || got.Execution.Series[0].Queued == nil || *got.Execution.Series[0].Queued != 7 {
+		t.Fatal("leading complete bucket was overwritten", err, got.Execution.Unavailable, got.Execution.Series[0])
+	}
+}

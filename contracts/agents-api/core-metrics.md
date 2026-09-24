@@ -34,8 +34,8 @@ that all intermediate peaks were captured. Missing observations and the process'
 partial first bucket stay null. Successful periodic ping samples produce linear
 interpolated p50/p95; there is no request-triggered ping.
 
-A fixed-size in-process ring retains up to seven days of 30-second samples and
-rejection counts. Restart loses those measurements: no synthetic backfill occurs.
+A fixed-size in-process ring retains seven days of 30-second samples and
+rejection counts, plus two hours of padding for complete bucket alignment. Restart loses those measurements: no synthetic backfill occurs.
 The `execution.unavailable` count is null if the requested interval starts before
 this process's observation began; an entirely observed interval with no rejections
 is zero. PostgreSQL Turn history remains queryable across process restarts.

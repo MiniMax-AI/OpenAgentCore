@@ -11,7 +11,9 @@ import (
 
 const SampleInterval = 30 * time.Second
 const retention = 7 * 24 * time.Hour
-const sampleCapacity = int(retention/SampleInterval) + 2
+
+// The 7d window ends at a complete 2h bucket, so retain its leading padding too.
+const sampleCapacity = int((retention+2*time.Hour)/SampleInterval) + 2
 
 var jobIDs = []string{"scheduler", "runtime_sampler", "history_cleanup", "audit_cleanup"}
 var revisionPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)

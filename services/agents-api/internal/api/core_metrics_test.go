@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
@@ -60,7 +61,7 @@ func TestCoreMetricsAdministratorContract(t *testing.T) {
 		t.Fatal(w.Code)
 	}
 	f.err = errors.New("private credentials")
-	if w := projectKeyHTTP(h, "GET", path, "admin", ""); w.Code != 503 || w.Body.String() == f.err.Error() {
+	if w := projectKeyHTTP(h, "GET", path, "admin", ""); w.Code != 503 || strings.Contains(w.Body.String(), f.err.Error()) {
 		t.Fatal(w.Code, w.Body.String())
 	}
 }
