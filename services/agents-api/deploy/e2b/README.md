@@ -1,15 +1,48 @@
-# User-managed E2B Runtime
+# E2B Runtime deployment
 
-The application creates, renews and destroys its own E2B sandbox using the
-maintained E2B SDK. Core receives neither the E2B API key nor an allocation
+E2B supports two separate ownership choices. Core-managed `openai_hosted` uses
+the deployment-wide E2B Provider. Application-managed `self_hosted` uses the
+startup example below; in that path the application creates, renews and destroys
+its own sandbox, and Core receives neither the E2B account key nor an allocation
 request. The sandbox runs the existing V1 daemon, selected native harness, tools
 and workspace together. Codex, Claude Code and MiniMax Code use the same startup
 contract and their respective qualified Runtime images.
 
 This deployment uses Parsar daemon enrollment, not Codex `exec-server` or Noise.
 Public execution and Files/Artifacts continue through Core and the daemon;
-E2B commands/files are used only for application-controlled deployment and
-inspection. A public Session deletion does not destroy the user-owned VM.
+E2B commands/files are used only for deployment, initialization and inspection.
+A public Session deletion does not destroy an application-owned VM; managed
+compute cleanup remains Core's responsibility.
+
+## Core-managed hosted deployment
+
+Select E2B in Core's hosted deployment setup and supply the account key and an
+immutable `templateID:build_UUID`. One deployment uses one managed Provider;
+E2B needs no physical node enrollment. Switching Providers requires maintenance
+and confirmed cleanup of every owned allocation, pending creation and snapshot.
+Do not infer execution readiness from saved configuration or running compute.
+
+The pure-Go adapter invokes the packaged official Python SDK helper. The Core
+image and native installation include its runtime dependencies; configuring E2B
+does not require installing Python or pip on the server. The account key is
+write-only server configuration, passed to the helper over stdin. It never enters
+a template, command argument, inherited environment, receipt or public response.
+
+Keep the helper's private receipt directory on durable storage, owned by the Core
+service user with mode 0700. Manual deployments using the default non-root Core
+image must give its service UID ownership of that directory. SDK connection
+credentials and one-shot allocation claims are stored there; they are not Core
+execution state. Preserve them across upgrades and failures. An empty cloud
+lookup cannot settle an unknown Create, and inspection never creates, resumes
+or reboots compute. Initialization uncertainty requires reclaiming the original
+allocation rather than replaying startup. See the [helper contract](../../tools/e2b-provider/README.md).
+
+Rebuild old templates with this directory's `build-template.py` before managed
+use: it includes protected `init.py` and `managed_init.py`. The latter consumes
+Core's existing managed daemon auth profile, while application-managed startup
+continues to use the executor credential flow below. Both reuse the same daemon,
+native harnesses and colocated workspace. A qualified combined Runtime image can
+support several harnesses; provider selection is independent of harness choice.
 
 ## Build the packaged Runtime
 
@@ -29,11 +62,11 @@ python -m venv "$HOME/.parsar/build/e2b-sdk"
 
 The builder preserves the existing image's binaries, native configuration and
 private workspace layout. Its `template` output is an immutable
-`templateID:build_UUID`; use that exact value. Each engine needs its qualified
-image/build. No E2B account key, executor key or model credential belongs in a
+`templateID:build_UUID`; use that exact value. The build must qualify every harness it advertises; a combined Runtime image
+can include several harnesses. No E2B account key, executor key or model credential belongs in a
 build, template environment, metadata, command argument or log.
 
-## Start an existing self-hosted Environment
+## Application-managed: start an existing self-hosted Environment
 
 Create a public `self_hosted` Environment through Core and retain its ID and exact
 returned `remote_url`. Obtain an authorized connect-only executor key scoped to

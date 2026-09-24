@@ -35,6 +35,10 @@ type Info struct {
 	// BootstrapComplete is provider evidence that initialization has reached its
 	// last mutating step. It does not establish daemon or native readiness.
 	BootstrapComplete bool
+	// CreateSettled proves that the original create and initialization attempt can
+	// no longer mutate resources. An absent observation needs this explicit proof;
+	// an ordinary missing resource or empty provider listing is not sufficient.
+	CreateSettled bool
 }
 type Command struct {
 	Args      []string

@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/credentialcrypto"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -64,24 +64,20 @@ func TestVaultDeletionCascadeBindingAndRestart(t *testing.T) {
 			t.Fatal("foreign or invalid deletion was accepted", err)
 		}
 	}
-	tx, err := pool.BeginTx(t.Context(), pgx.TxOptions{AccessMode: pgx.ReadOnly})
-	if err != nil {
-		t.Fatal(err)
-	}
-	transactional := *public
-	transactional.queries = public.queries.WithTx(tx)
-	_, deletionErr := transactional.DeleteVault(t.Context(), tenant, vault.ID)
-	_ = tx.Rollback(t.Context())
+	readOnly := readOnlyResourceStore(t, pool)
+	_, deletionErr := readOnly.DeleteVault(t.Context(), tenant, vault.ID)
 	if deletionErr == nil || deletionErr.Error() != "vault deletion failed" {
 		t.Fatal("failed mutation was accepted or exposed")
 	}
-	tx, err = pool.Begin(t.Context())
+	tx, err := pool.Begin(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = tx.Rollback(t.Context()) }()
-	transactional.queries = public.queries.WithTx(tx)
-	if _, err := transactional.DeleteVault(t.Context(), tenant, vault.ID); err != nil {
+	// Verify the database cascade independently inside an explicit transaction.
+	tenantID, _ := parseID(tenant)
+	vaultID, _ := parseID(vault.ID)
+	if _, err := public.queries.WithTx(tx).DeleteVault(t.Context(), sqlc.DeleteVaultParams{TenantID: tenantID, ID: vaultID}); err != nil {
 		t.Fatal(err)
 	}
 	var count int

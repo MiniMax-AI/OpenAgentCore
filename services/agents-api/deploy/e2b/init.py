@@ -63,19 +63,8 @@ def write_private(path, value, owner=None):
     sync_directory(path.parent)
 
 
-def initialize():
-    ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
-    ROOT.chmod(0o700)
-    source = ROOT / 'bootstrap.json'
-    receipt = ROOT / 'ready.json'
-    if receipt.exists() or (ROOT / 'launch.json').exists():
-        raise RuntimeError('Runtime startup cannot be replayed; inspect or destroy this sandbox')
-    if source.stat().st_size > 32768:
-        raise ValueError('Runtime startup input too large')
-    payload = json.loads(source.read_text())
-    identity = launch_identity(payload)
-    # Claim before any side effect. An interrupted attempt must never start twice.
-    write_private(ROOT / 'launch.json', identity)
+def prepare_runtime():
+    """Restore the protected image and shared Runtime layout before any daemon starts."""
     # E2B finalization makes /usr/local world-writable after template commands.
     subprocess.run(['chown', '-R', 'root:root', '/usr/local'], check=True)
     subprocess.run(['chmod', '-R', 'go-w', '/usr/local'], check=True)
@@ -101,6 +90,23 @@ def initialize():
                       Path('/environment/initialization'), Path('/environment/packages')]:
         os.chown(directory, 1000, 1000)
         directory.chmod(0o700)
+    return environment
+
+
+def initialize():
+    ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
+    ROOT.chmod(0o700)
+    source = ROOT / 'bootstrap.json'
+    receipt = ROOT / 'ready.json'
+    if any((ROOT / name).exists() for name in ['ready.json', 'launch.json', 'managed-launch.json', 'managed-ready.json']):
+        raise RuntimeError('Runtime startup cannot be replayed; inspect or destroy this sandbox')
+    if source.stat().st_size > 32768:
+        raise ValueError('Runtime startup input too large')
+    payload = json.loads(source.read_text())
+    identity = launch_identity(payload)
+    # Claim before any side effect. An interrupted attempt must never start twice.
+    write_private(ROOT / 'launch.json', identity)
+    environment = prepare_runtime()
     credential = PROFILE.parent / 'executor-key.json'
     write_private(credential, payload['executor_key'], owner=1000)
     source.unlink()

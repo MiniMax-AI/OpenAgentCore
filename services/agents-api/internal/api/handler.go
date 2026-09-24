@@ -40,10 +40,13 @@ type Handler struct {
 	sandboxStore          *store.Store
 	deploymentAuth        *DeploymentAuthenticator
 	sandboxSetup          func(context.Context, store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error)
+	sandboxUpdate         func(context.Context, store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error)
+	sandboxMaintenance    func(context.Context, store.SandboxMaintenanceRequest) (store.RuntimeDeploymentView, error)
 	policy                execution.Policy
 	store                 ResourceStore
 	auth                  *Authenticator
 	projectKeys           ProjectAPIKeyStore
+	writeAudit            WriteAuditStore
 	harnesses             map[string]bool
 	modelProviderDefaults ModelProviderDefaults
 	engine                string
@@ -105,6 +108,7 @@ func (h *Handler) routes() *chi.Mux {
 	})
 	h.registerSandboxManagerRoutes(router)
 	h.registerProjectAPIKeyRoutes(router)
+	h.registerWriteAuditRoutes(router)
 	h.registerEnvironmentExecutorRoutes(router)
 	router.Route("/v1", func(r chi.Router) {
 		r.Use(h.authenticate)

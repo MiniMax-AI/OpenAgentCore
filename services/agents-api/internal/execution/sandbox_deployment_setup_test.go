@@ -82,3 +82,36 @@ func TestDeferredSandboxDeploymentShutdownCancelsLoad(t *testing.T) {
 		t.Fatal("shutdown did not cancel setup load", err)
 	}
 }
+
+func TestDeferredSandboxProviderFailureKeepsRecoveryAvailable(t *testing.T) {
+	hub := node.NewHub(node.HubOptions{})
+	defer hub.Close()
+	id := uuid.NewString()
+	available := false
+	loadErr := ErrExecutionUnavailable
+	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), "docker")}
+	m, err := newRuntimeManager(nil, gateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) {
+		if !available {
+			return nil, loadErr
+		}
+		return configuration, nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { m.stop(); m.drain() })
+	if nodes, err := m.syncNodes(t.Context()); err != nil || len(nodes) != 0 {
+		t.Fatal("unavailable provider stopped the manager", err)
+	}
+	if _, err := m.node("node"); !errors.Is(err, ErrExecutionUnavailable) {
+		t.Fatal("unavailable provider admitted execution", err)
+	}
+	loadErr = errors.New("storage failure")
+	if _, err := m.ensureDeployment(t.Context()); !errors.Is(err, loadErr) {
+		t.Fatal("provider recovery hid a storage failure", err)
+	}
+	available = true
+	if ready, err := m.ensureDeployment(t.Context()); err != nil || !ready {
+		t.Fatal("repaired provider did not activate", ready, err)
+	}
+}

@@ -120,6 +120,11 @@ else
 fi
 mkdir -p "$bundle/native"
 cp -R "$stage/core/bin" "$stage/core/microsandbox" "$bundle/native/"
+E2B_SOURCE_REVISION="$revision" E2B_PROVIDER_BUILD_DIR="$stage/e2b-build" scripts/build-e2b-provider.sh
+mkdir -p "$stage/core/e2b"
+tar -xzf "$stage/e2b-build/agents-api-e2b-provider-linux-amd64.tar.gz" \
+  --strip-components=1 -C "$stage/core/e2b"
+cp -R "$stage/core/e2b" "$bundle/native/e2b"
 cp deploy/distribution/Dockerfile "$stage/core/Dockerfile"
 build_image --platform linux/amd64 --iidfile "$stage/core.id" \
   --label "org.opencontainers.image.revision=$revision" "$stage/core"

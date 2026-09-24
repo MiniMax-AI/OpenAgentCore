@@ -36,10 +36,11 @@ type RuntimeStore interface {
 
 // AuthenticatedRuntime is the result of a successful credential check.
 type AuthenticatedRuntime struct {
-	DeviceID      string
-	WorkspaceID   string
-	Name          string
-	RuntimeNodeID string
+	DeviceID            string
+	WorkspaceID         string
+	Name                string
+	RuntimeNodeID       string
+	RuntimeAllocationID string
 }
 
 // Authenticator validates the (device_id, token, version) trio that
@@ -85,9 +86,10 @@ func (a *Authenticator) AuthenticateBearer(ctx context.Context, deviceID, bearer
 		return AuthenticatedRuntime{}, ErrAuthBadCredential
 	}
 	return AuthenticatedRuntime{
-		DeviceID:      rt.ID,
-		WorkspaceID:   rt.WorkspaceID,
-		Name:          rt.Name,
-		RuntimeNodeID: rt.RuntimeNodeID,
+		DeviceID:            rt.ID,
+		WorkspaceID:         rt.WorkspaceID,
+		Name:                rt.Name,
+		RuntimeNodeID:       rt.RuntimeNodeID,
+		RuntimeAllocationID: rt.RuntimeAllocationID,
 	}, nil
 }

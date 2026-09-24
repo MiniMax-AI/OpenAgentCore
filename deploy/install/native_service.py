@@ -11,7 +11,8 @@ import tempfile
 
 
 REQUIRED = ("bin/agents-api", "bin/agents-api-microsandbox-provider",
-            "microsandbox/msb", "microsandbox/libkrunfw.so.5.6.1")
+            "microsandbox/msb", "microsandbox/libkrunfw.so.5.6.1",
+            "e2b/agents-api-e2b-provider")
 
 
 def is_native(state):
@@ -149,7 +150,7 @@ def prepare(root, state, bundle, environment):
                 shutil.copytree(source, staged)
                 os.replace(staged, target)
         for path in [target, *target.rglob("*")]:
-            executable = path.is_dir() or path.parent == target / "bin" or path == target / "microsandbox/msb"
+            executable = path.is_dir() or path.parent == target / "bin" or path == target / "microsandbox/msb" or path == target / "e2b/agents-api-e2b-provider"
             os.chmod(path, 0o700 if executable else 0o600)
         config = root / "config"
         if config.is_symlink():

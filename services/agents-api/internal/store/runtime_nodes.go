@@ -44,11 +44,20 @@ func (s *Store) runtimeManagerTransaction(ctx context.Context, apply func(*sqlc.
 	})
 }
 func (s *Store) GetRuntimeDeployment(ctx context.Context) (RuntimeDeploymentView, error) {
-	d, err := s.queries.GetRuntimeDeployment(ctx)
+	return getRuntimeDeploymentView(ctx, s.queries)
+}
+func getRuntimeDeploymentView(ctx context.Context, q *sqlc.Queries) (RuntimeDeploymentView, error) {
+	d, err := q.GetRuntimeDeployment(ctx)
 	if err != nil {
 		return RuntimeDeploymentView{}, err
 	}
-	return runtimeDeploymentView(d), nil
+	resources, err := q.CountRuntimeDeploymentResources(ctx)
+	if err != nil {
+		return RuntimeDeploymentView{}, err
+	}
+	result := runtimeDeploymentView(d)
+	result.Resources = SandboxDeploymentResources{Allocations: resources.Allocations, Pending: resources.Pending}
+	return result, nil
 }
 func (s *Store) RuntimeOwnerEpoch(ctx context.Context) (uint64, error) {
 	d, err := s.queries.GetRuntimeDeployment(ctx)
@@ -89,6 +98,9 @@ func (s *Store) CreateRuntimeEnrollment(ctx context.Context) (string, time.Time,
 	token := hex.EncodeToString(bytes[:])
 	var expires time.Time
 	err := s.runtimeManagerTransaction(ctx, func(q *sqlc.Queries, d sqlc.RuntimeDeployment) error {
+		if d.Mode != "nodes" || d.Maintenance {
+			return ErrSandboxDeploymentConflict
+		}
 		if err := q.CreateRuntimeEnrollment(ctx, sqlc.CreateRuntimeEnrollmentParams{TokenSha256: runtimeTokenDigest(token), InstallationID: d.InstallationID}); err != nil {
 			return err
 		}
@@ -108,9 +120,6 @@ func (s *Store) EnrollRuntimeNode(ctx context.Context, token string, input Runti
 	}
 	var result RuntimeNodeIdentity
 	err = s.runtimeManagerTransaction(ctx, func(q *sqlc.Queries, d sqlc.RuntimeDeployment) error {
-		if input.Provider != d.ProviderKind {
-			return ErrInvalidInput
-		}
 		receipt, err := q.GetRuntimeEnrollment(ctx, runtimeTokenDigest(token))
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrRuntimeNodeCredential
@@ -120,6 +129,9 @@ func (s *Store) EnrollRuntimeNode(ctx context.Context, token string, input Runti
 		}
 		if receipt.ConsumedAt.Valid || !receipt.ExpiresAt.Time.After(time.Now()) || receipt.InstallationID != d.InstallationID {
 			return ErrRuntimeNodeCredential
+		}
+		if d.Mode != "nodes" || d.Maintenance || input.Provider != d.ProviderKind {
+			return ErrInvalidInput
 		}
 		if _, err := q.GetRuntimeNode(ctx, id); err == nil {
 			return ErrIdempotencyConflict
@@ -164,7 +176,7 @@ func (s *Store) AuthenticateRuntimeNode(ctx context.Context, nodeID, credential 
 	if err != nil {
 		return RuntimeNodeIdentity{}, ErrRuntimeNodeUnavailable
 	}
-	if n.InstallationID != d.InstallationID || d.ProviderKind == "" {
+	if n.InstallationID != d.InstallationID || d.Mode != "nodes" {
 		return RuntimeNodeIdentity{}, ErrRuntimeNodeCredential
 	}
 	return nodeIdentity(n, d.ProviderKind), nil

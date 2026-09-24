@@ -100,7 +100,7 @@ func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environmen
 		if err != nil {
 			return err
 		}
-		if deployment.ProviderKind != "" {
+		if deployment.Mode == "nodes" {
 			placement, err := q.GetRuntimePlacement(ctx, lookup.ID)
 			if err != nil {
 				return err

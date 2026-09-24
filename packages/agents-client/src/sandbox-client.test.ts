@@ -83,3 +83,42 @@ describe("Core sandbox credential boundaries", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("hosted provider configuration", () => {
+  const e2b = { api_key: "test-only-secret", template: "runtime:00000000-0000-0000-0000-000000000001" };
+  it("writes E2B configuration and generation without beta headers or browser credentials", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => response({ generation: 2, mode: "direct", resources: { allocations: 0, pending: 0 }, e2b: { template: e2b.template, credential_configured: true } }));
+    const client = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", fetch });
+    const controller = new AbortController();
+    await client.initializeDeployment({ provider: "e2b", core_url: "https://core.example", e2b });
+    await client.updateDeployment({ provider: "e2b", core_url: "https://core.example", e2b, expected_generation: 1 }, { signal: controller.signal });
+    await client.setMaintenance({ maintenance: false, expected_generation: 2 });
+    expect(fetch.mock.calls.map(([url, init]) => [url, init?.method])).toEqual([
+      ["/core/v1/sandbox/deployment", "POST"], ["/core/v1/sandbox/deployment", "PUT"], ["/core/v1/sandbox/deployment/maintenance", "PATCH"],
+    ]);
+    expect(JSON.parse(String(fetch.mock.calls[1]?.[1]?.body))).toEqual({ provider: "e2b", core_url: "https://core.example", e2b, expected_generation: 1 });
+    expect(fetch.mock.calls[1]?.[1]?.signal).toBe(controller.signal);
+    expect(JSON.parse(String(fetch.mock.calls[2]?.[1]?.body))).toEqual({ maintenance: false, expected_generation: 2 });
+    for (const [, init] of fetch.mock.calls) {
+      expect(new Headers(init?.headers).has("Authorization")).toBe(false);
+      expect(new Headers(init?.headers).has("OpenAI-Beta")).toBe(false);
+    }
+  });
+  it.each([409, 503])("does not expose reflected E2B keys or retry configuration after HTTP %s", async (status) => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: { message: e2b.api_key, code: e2b.api_key, param: e2b.api_key } }, status));
+    const client = new SandboxAdminClient({ fetch });
+    await expect(client.updateDeployment({ provider: "e2b", core_url: "https://core.example", e2b, expected_generation: 1 })).rejects.toMatchObject({ code: "sandbox_configuration_unconfirmed", status });
+    await client.initializeDeployment({ provider: "e2b", core_url: "https://core.example", e2b }).catch((error) => {
+      expect(JSON.stringify(error)).not.toContain(e2b.api_key);
+      expect(error.message).not.toContain(e2b.api_key);
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+  it("never retries uncertain switch or maintenance writes", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError("Connection lost"));
+    const client = new SandboxAdminClient({ fetch });
+    await expect(client.updateDeployment({ provider: "docker", core_url: "https://core.example", expected_generation: 1 })).rejects.toThrow();
+    await expect(client.setMaintenance({ maintenance: true, expected_generation: 1 })).rejects.toThrow();
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+});

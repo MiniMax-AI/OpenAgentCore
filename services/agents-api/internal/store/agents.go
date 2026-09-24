@@ -68,7 +68,10 @@ func (s *Store) CreateAgent(ctx context.Context, tenantID string, input CreateAg
 			return err
 		}
 		created, err = agentFromRow(row)
-		return err
+		if err != nil {
+			return err
+		}
+		return recordWriteAudit(ctx, q, tenantID, "create", "agent", created.ID, "", AuditResource{Type: "agent", ID: created.ID})
 	})
 	if err != nil {
 		return SavedAgent{}, fmt.Errorf("create agent: %w", err)

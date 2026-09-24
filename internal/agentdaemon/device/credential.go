@@ -16,6 +16,8 @@ type Credential struct {
 	CredentialHash string
 	// RuntimeNodeID is the persisted managed allocation binding, never caller input.
 	RuntimeNodeID string
+	// RuntimeAllocationID distinguishes managed cloud compute from self-hosted devices.
+	RuntimeAllocationID string
 }
 
 // HashCredential preserves the paired runtime bearer format, including trimming

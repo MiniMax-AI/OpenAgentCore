@@ -69,6 +69,7 @@ type EnvironmentFileWrite struct {
 	State         string             `json:"state"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	SettledAt     pgtype.Timestamptz `json:"settled_at"`
+	AuditSource   []byte             `json:"audit_source"`
 }
 
 type EnvironmentInputReservation struct {
@@ -198,6 +199,10 @@ type RuntimeDeployment struct {
 	CoreUrl            string             `json:"core_url"`
 	IdleSeconds        int64              `json:"idle_seconds"`
 	RetentionSeconds   int64              `json:"retention_seconds"`
+	Generation         int64              `json:"generation"`
+	Mode               string             `json:"mode"`
+	E2bTemplate        string             `json:"e2b_template"`
+	E2bCredential      []byte             `json:"e2b_credential"`
 }
 
 type RuntimeDeviceAuthority struct {
@@ -453,4 +458,28 @@ type VaultCredential struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	Status          string             `json:"status"`
 	OauthMetadata   []byte             `json:"oauth_metadata"`
+}
+
+type WriteAuditOperation struct {
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	KeyID        string             `json:"key_id"`
+	KeyName      string             `json:"key_name"`
+	KeyPrefix    string             `json:"key_prefix"`
+	KeyKind      string             `json:"key_kind"`
+	Action       string             `json:"action"`
+	ResourceType string             `json:"resource_type"`
+	ResourceID   string             `json:"resource_id"`
+	ParentID     string             `json:"parent_id"`
+	RequestID    string             `json:"request_id"`
+	TraceID      string             `json:"trace_id"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type WriteAuditOwner struct {
+	TenantID     pgtype.UUID `json:"tenant_id"`
+	ResourceType string      `json:"resource_type"`
+	ResourceID   string      `json:"resource_id"`
+	ParentID     string      `json:"parent_id"`
+	OperationID  pgtype.UUID `json:"operation_id"`
 }

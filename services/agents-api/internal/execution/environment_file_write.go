@@ -10,6 +10,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/writeaudit"
 	"github.com/google/uuid"
 )
 
@@ -66,6 +67,10 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(owner), 205*time.Second)
 	defer cancel()
+	// The worker owns cancellation; only safe request attribution crosses this boundary.
+	if source, ok := writeaudit.FromContext(request.ctx); ok {
+		ctx = writeaudit.WithSource(ctx, source)
+	}
 	if w.CheckOwnership(ctx) != nil {
 		return unavailable
 	}

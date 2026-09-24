@@ -47,14 +47,26 @@ func (s *Store) CreateVault(ctx context.Context, tenantID string, input CreateVa
 	if err != nil {
 		return Vault{}, err
 	}
-	row, err := s.queries.CreateVault(ctx, sqlc.CreateVaultParams{
-		ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, TenantID: tenant,
-		Name: name, Metadata: metadata,
+	var created Vault
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.queries.WithTx(tx)
+		row, err := q.CreateVault(ctx, sqlc.CreateVaultParams{
+			ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, TenantID: tenant,
+			Name: name, Metadata: metadata,
+		})
+		if err != nil {
+			return err
+		}
+		created, err = vaultFromRow(row)
+		if err != nil {
+			return err
+		}
+		return recordWriteAudit(ctx, q, tenantID, "create", "vault", created.ID, "", AuditResource{Type: "vault", ID: created.ID, ParentID: ""})
 	})
 	if err != nil {
 		return Vault{}, fmt.Errorf("create vault: %w", err)
 	}
-	return vaultFromRow(row)
+	return created, nil
 }
 
 func validVaultName(name string) bool {

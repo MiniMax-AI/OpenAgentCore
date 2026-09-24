@@ -50,6 +50,10 @@ func TestPairedConsoleKeepsAdminAndNodeCredentialsSeparated(t *testing.T) {
 	}{
 		{"POST", "/core/v1/sandbox/deployment", "basic", 200},
 		{"POST", "/core/v1/sandbox/deployment", "none", 401},
+		{"PUT", "/core/v1/sandbox/deployment", "basic", 200},
+		{"PUT", "/core/v1/sandbox/deployment", "none", 401},
+		{"PATCH", "/core/v1/sandbox/deployment/maintenance", "basic", 200},
+		{"PATCH", "/core/v1/sandbox/deployment/maintenance", "none", 401},
 		{"GET", "/core/v1/sandbox/nodes", "node", 401},
 		{"GET", "/v1/agents", "basic", 200},
 		{"POST", "/core/v1/sandbox/enroll", "node", 200},
@@ -82,7 +86,7 @@ func TestPairedConsoleKeepsAdminAndNodeCredentialsSeparated(t *testing.T) {
 			t.Fatal("paired mode missing")
 		}
 	}
-	if calls.Load() != 4 {
+	if calls.Load() != 6 {
 		t.Fatalf("unexpected upstream requests: %d", calls.Load())
 	}
 	r := consoleRequest(t, server, "POST", "/core/v1/sandbox/deployment")

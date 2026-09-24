@@ -90,8 +90,10 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 		writeError(w, http.StatusConflict, "project_api_key_exists", "This API key ID already exists. List its metadata and revoke it explicitly if the secret was not saved.")
 	case errors.Is(err, store.ErrExecutorCredentialExists):
 		writeError(w, http.StatusConflict, "executor_credential_exists", "This executor key ID already exists. Explicitly rotate it to replace the secret.")
+	case errors.Is(err, store.ErrSandboxCredentialUnavailable):
+		writeError(w, http.StatusServiceUnavailable, "sandbox_credential_unavailable", "Sandbox credentials are unavailable. Check the service credential encryption configuration.")
 	case errors.Is(err, store.ErrSandboxDeploymentConflict):
-		writeError(w, http.StatusConflict, "sandbox_deployment_conflict", "The sandbox deployment is already configured or is managed by a deployment file.")
+		writeError(w, http.StatusConflict, "sandbox_deployment_conflict", "The sandbox deployment cannot change in its current state. Refresh the configuration, enter maintenance and finish resource cleanup before switching. File-managed deployments must use their configuration file.")
 	case errors.Is(err, store.ErrRuntimeNodeCredential):
 		writeError(w, http.StatusUnauthorized, "invalid_node_credential", "A valid sandbox node enrollment or node credential is required.")
 	case errors.Is(err, store.ErrRuntimeNodeInUse):

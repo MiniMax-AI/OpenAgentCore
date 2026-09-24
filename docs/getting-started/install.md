@@ -310,12 +310,23 @@ localhost download command to a different machine. Running plain `./install.sh`
 is suitable for local console/API inspection; prepare the shared endpoint before
 installing a deployment that will enroll nodes.
 
+The distribution includes the pinned E2B SDK helper, so selecting E2B does not
+require Python or pip installation on the Core host. Its private receipts live in
+`state/e2b` and are mounted only into Core. Preserve them together with the database
+and credential key when backing up or moving this installation. E2B template
+preparation is described in the [E2B guide](../../services/agents-api/deploy/e2b/README.md).
+
 ## After installation
 
 Start with an optional [API request](quickstart.md). The read-only example works
 with the default installation. The execution example requires an installation
-with a connected, ready sandbox node, either installed locally or added through
-Web. Session creation supplies the model,
+with either E2B configured through Web or a connected, ready Docker/microsandbox node.
+The Hosted Sandbox Manager selects one scheme for the whole deployment. E2B uses
+an account API key and a qualified immutable Runtime template; Core provisions
+sandboxes without a node installer. Own machines use the existing node command.
+Enter maintenance and finish resource cleanup before switching schemes; see
+[provider switching](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance).
+Session creation supplies the model,
 harness and write-only model credentials. Core owns sandbox preparation and
 Runtime startup. Configuration is never injected into a public Agent instruction
 or baked into a Runtime image.

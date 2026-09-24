@@ -11,7 +11,14 @@ import (
 // delivery failure leaves that input for the normal maintenance scan.
 func (w *Worker) hintRuntimeWake(ctx context.Context, session store.Session) {
 	r := w.runtimes
-	if r == nil || r.config.Suspension == nil || r.ctx.Err() != nil {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	config := r.config
+	available := !r.closed && !r.switching
+	r.mu.Unlock()
+	if !available || config.Suspension == nil || r.ctx.Err() != nil {
 		return
 	}
 	lookup, cancel := context.WithTimeout(ctx, time.Second)
@@ -21,7 +28,7 @@ func (w *Worker) hintRuntimeWake(ctx context.Context, session store.Session) {
 		return
 	}
 	owner, err := w.admission.GetRuntimeAllocation(lookup, session.TenantID, environment.ID)
-	if err != nil || owner.ProviderKey != r.config.InstallationID || owner.State != "running" ||
+	if err != nil || owner.ProviderKey != config.InstallationID || owner.State != "running" ||
 		!owner.CreateSettled || owner.Initialization != "complete" || owner.SessionDeleted || owner.Expired {
 		return
 	}

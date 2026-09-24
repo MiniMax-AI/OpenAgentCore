@@ -38,6 +38,7 @@ type IssuedProjectAPIKey struct {
 
 // ProjectAPIKeyBinding must also match a currently configured static parent before authentication.
 type ProjectAPIKeyBinding struct {
+	Key           ProjectAPIKey
 	BindingDigest string
 	Principal     identity.Principal
 }
@@ -153,7 +154,7 @@ func (s *Store) ResolveProjectAPIKey(ctx context.Context, tokenDigest string) (P
 	if err != nil {
 		return ProjectAPIKeyBinding{}, err
 	}
-	return ProjectAPIKeyBinding{BindingDigest: row.BindingDigest, Principal: identity.Principal{
+	return ProjectAPIKeyBinding{Key: projectAPIKeyMetadata(row.ID, row.Name, row.Prefix, row.CreatedAt, row.RevokedAt), BindingDigest: row.BindingDigest, Principal: identity.Principal{
 		ProjectScope: identity.ProjectScope{TenantID: uuid.UUID(row.TenantID.Bytes).String(), OrganizationID: row.OrganizationID, ProjectID: row.ProjectID},
 		SubjectKind:  row.SubjectKind, SubjectID: row.SubjectID,
 	}}, nil

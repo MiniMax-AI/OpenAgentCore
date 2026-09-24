@@ -17,5 +17,5 @@ WHERE id = $1 AND binding_digest = $2 AND tenant_id = $3 AND organization_id = $
   AND project_id = $5 AND subject_kind = $6 AND subject_id = $7;
 
 -- name: ResolveProjectAPIKey :one
-SELECT binding_digest, tenant_id, organization_id, project_id, subject_kind, subject_id
+SELECT id, name, prefix, created_at, revoked_at, binding_digest, tenant_id, organization_id, project_id, subject_kind, subject_id
 FROM project_api_keys WHERE token_sha256 = $1 AND revoked_at IS NULL;

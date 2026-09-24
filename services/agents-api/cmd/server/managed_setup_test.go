@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"errors"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -41,8 +43,8 @@ func TestSelectedSetupPublishesSameOriginForDaemonBootstrap(t *testing.T) {
 		{"https://core.example:8443/api/v1", "wss://core.example:8443/api/v1/agent-daemon/ws"},
 		{"http://127.0.0.1:8091/api/v1", "ws://127.0.0.1:8091/api/v1/agent-daemon/ws"},
 	} {
-		s := &managedSetup{}
-		s.selected.Store(&execution.RuntimeProvider{CoreURL: tc.origin, ProviderKind: "docker"})
+		s := &managedSetup{store: &setupStore{value: store.SandboxSetup{Provider: "docker", Generation: 1}}}
+		s.selected.Store(&execution.RuntimeProvider{CoreURL: tc.origin, ProviderKind: "docker", Generation: 1})
 		got, err := s.webSocketURL("ws://private-core:8091/api/v1/agent-daemon/ws")(context.Background())
 		if err != nil || got != tc.want {
 			t.Fatalf("bootstrap URL=%s error=%v", got, err)
@@ -50,5 +52,58 @@ func TestSelectedSetupPublishesSameOriginForDaemonBootstrap(t *testing.T) {
 		if s.ObservationProviderType() != "docker" {
 			t.Fatal("observation lost selected provider")
 		}
+	}
+}
+
+type setupStore struct {
+	value store.SandboxSetup
+	err   error
+}
+
+func (s *setupStore) GetSandboxSetup(context.Context) (store.SandboxSetup, error) {
+	return s.value, s.err
+}
+func (*setupStore) ResolveRuntimeNode(context.Context, string, string) (string, error) {
+	return "", errors.New("unexpected node lookup")
+}
+
+func TestManagedSetupNeverReusesAnotherGenerationOrUnverifiedState(t *testing.T) {
+	db := &setupStore{value: store.SandboxSetup{InstallationID: "installation", Provider: "docker", Generation: 1}}
+	s := &managedSetup{store: db, installationID: "installation"}
+	cached := &execution.RuntimeProvider{InstallationID: "installation", ProviderKind: "docker", Generation: 1}
+	s.selected.Store(cached)
+	if got, err := s.load(t.Context()); err != nil || got != cached {
+		t.Fatal("matching immutable selection was not reused")
+	}
+	db.err = errors.New("database unavailable")
+	if _, err := s.load(t.Context()); err == nil {
+		t.Fatal("stale cached selection hid storage failure")
+	}
+	db.err = nil
+	db.value.Generation = 2
+	// No Hub is installed; a changed generation must construct again and fail.
+	if _, err := s.load(t.Context()); !errors.Is(err, execution.ErrExecutionUnavailable) {
+		t.Fatal("changed provider availability must block execution without losing recovery", err)
+	}
+	db.value.InstallationID = "other-installation"
+	db.value.Generation = 1
+	if _, err := s.load(t.Context()); err == nil {
+		t.Fatal("cache ignored installation identity")
+	}
+}
+
+func TestMissingE2BHelperReportsProviderUnavailable(t *testing.T) {
+	id := uuid.NewString()
+	t.Setenv("AGENTS_API_E2B_PROVIDER_BIN", filepath.Join(t.TempDir(), "missing-helper"))
+	t.Setenv("AGENTS_API_E2B_STATE_DIR", t.TempDir())
+	s := &managedSetup{installationID: id, store: &setupStore{value: store.SandboxSetup{
+		InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1,
+		E2B: &store.SandboxE2BConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()},
+	}}}
+	if _, err := s.load(t.Context()); !errors.Is(err, execution.ErrExecutionUnavailable) {
+		t.Fatal("missing local helper must leave administrative recovery available", err)
+	}
+	if s.selected.Load() != nil {
+		t.Fatal("unavailable provider was published")
 	}
 }

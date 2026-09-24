@@ -1,5 +1,5 @@
 -- name: SetRuntimeManagerDeployment :exec
-UPDATE runtime_deployment SET provider_kind=$1, local_node_id=$2, owner_epoch=owner_epoch+1 WHERE singleton=true;
+UPDATE runtime_deployment SET provider_kind=$1, local_node_id=$2, mode='nodes', generation=GREATEST(generation,1), owner_epoch=owner_epoch+1 WHERE singleton=true;
 
 -- name: GetRuntimeDeployment :one
 SELECT * FROM runtime_deployment WHERE singleton=true;

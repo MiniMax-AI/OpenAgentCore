@@ -121,14 +121,9 @@ func TestStaticCredentialUpdatePreservesBindingsAndReplacesCurrentSecret(t *test
 		assertUnchanged()
 	}
 	// A real PostgreSQL mutation failure must preserve both ciphertext and time.
-	tx, err := pool.BeginTx(t.Context(), pgx.TxOptions{AccessMode: pgx.ReadOnly})
-	if err != nil {
-		t.Fatal(err)
-	}
-	readOnly := *s
-	readOnly.queries = s.queries.WithTx(tx)
+	readOnly := readOnlyResourceStore(t, pool)
+	readOnly.credentialCipher = cipher
 	_, updateErr := readOnly.UpdateStaticCredential(t.Context(), tenant, original.VaultID, original.ID, UpdateStaticCredentialInput{Token: "rejected"})
-	_ = tx.Rollback(t.Context())
 	if updateErr == nil || updateErr.Error() != "credential update failed" {
 		t.Fatal("database write failure was accepted or exposed")
 	}

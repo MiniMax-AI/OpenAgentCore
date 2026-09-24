@@ -9,7 +9,6 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/credentialcrypto"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 func TestCredentialDeletionScopeBindingAndRestart(t *testing.T) {
@@ -63,14 +62,8 @@ func TestCredentialDeletionScopeBindingAndRestart(t *testing.T) {
 		}
 	}
 	// An actual database write failure must leave the resource and token intact.
-	tx, err := pool.BeginTx(t.Context(), pgx.TxOptions{AccessMode: pgx.ReadOnly})
-	if err != nil {
-		t.Fatal(err)
-	}
-	readOnly := *public
-	readOnly.queries = public.queries.WithTx(tx)
+	readOnly := readOnlyResourceStore(t, pool)
 	_, deletionErr := readOnly.DeleteCredential(t.Context(), tenant, vault.ID, original.ID)
-	_ = tx.Rollback(t.Context())
 	if deletionErr == nil || deletionErr.Error() != "credential deletion failed" {
 		t.Fatal("failed mutation was accepted or exposed")
 	}

@@ -2,8 +2,6 @@ package store
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"net"
 	"net/url"
@@ -17,14 +15,19 @@ import (
 var ErrSandboxDeploymentConflict = errors.New("sandbox deployment is already configured differently")
 
 type SandboxDeploymentSetupRequest struct {
-	Provider string `json:"provider"`
-	CoreURL  string `json:"core_url"`
+	Provider string                   `json:"provider"`
+	CoreURL  string                   `json:"core_url"`
+	E2B      *SandboxE2BConfiguration `json:"e2b,omitempty"`
 }
 
 // SandboxSetup is the immutable configuration selected by the deployment admin.
 // An empty Provider means that Web setup has not yet selected an adapter.
 type SandboxSetup struct {
 	InstallationID, Provider, CoreURL, BackendFingerprint string
+	Generation                                            uint64
+	Mode                                                  string
+	Maintenance                                           bool
+	E2B                                                   *SandboxE2BConfiguration
 	IdleSeconds, RetentionSeconds                         int64
 }
 
@@ -38,7 +41,15 @@ func (s *Store) GetSandboxSetup(ctx context.Context) (SandboxSetup, error) {
 	if !d.WebManaged {
 		return SandboxSetup{}, ErrSandboxDeploymentConflict
 	}
-	return SandboxSetup{InstallationID: runtimeUUID(d.InstallationID), Provider: d.ProviderKind, CoreURL: d.CoreUrl, BackendFingerprint: d.BackendFingerprint, IdleSeconds: d.IdleSeconds, RetentionSeconds: d.RetentionSeconds}, nil
+	result := SandboxSetup{InstallationID: runtimeUUID(d.InstallationID), Provider: d.ProviderKind, CoreURL: d.CoreUrl, BackendFingerprint: d.BackendFingerprint, IdleSeconds: d.IdleSeconds, RetentionSeconds: d.RetentionSeconds, Generation: uint64(d.Generation), Mode: d.Mode, Maintenance: d.Maintenance}
+	if d.ProviderKind == "e2b" {
+		credential, err := s.credentialCipher.OpenSandboxDeployment(d.E2bCredential, result.InstallationID, result.Generation)
+		if err != nil {
+			return SandboxSetup{}, ErrSandboxCredentialUnavailable
+		}
+		result.E2B = &SandboxE2BConfiguration{APIKey: string(credential), Template: d.E2bTemplate}
+	}
+	return result, nil
 }
 
 // ClaimWebSandboxDeployment runs exactly once per execution-owner startup. It
@@ -113,51 +124,10 @@ func ValidateSandboxCoreURL(value string) error {
 	return nil
 }
 
-func (s *Store) InitializeSandboxDeployment(ctx context.Context, installationID string, input SandboxDeploymentSetupRequest) (RuntimeDeploymentView, error) {
-	if s.executionLease == nil || (input.Provider != "docker" && input.Provider != "microsandbox") || ValidateSandboxCoreURL(input.CoreURL) != nil {
-		return RuntimeDeploymentView{}, ErrInvalidInput
-	}
-	id, err := parseConnectionGeneration(installationID)
-	if err != nil {
-		return RuntimeDeploymentView{}, err
-	}
-	ctx, cancel := context.WithTimeout(ctx, executionTransactionTimeout)
-	defer cancel()
-	var result RuntimeDeploymentView
-	err = s.executionLease.transaction(ctx, func(tx pgx.Tx) error {
-		q := s.queries.WithTx(tx)
-		d, err := q.LockRuntimeDeployment(ctx)
-		if err != nil {
-			return err
-		}
-		if !d.WebManaged || d.InstallationID != id {
-			return ErrSandboxDeploymentConflict
-		}
-		if d.ProviderKind != "" {
-			if d.ProviderKind != input.Provider || d.CoreUrl != input.CoreURL {
-				return ErrSandboxDeploymentConflict
-			}
-			result = runtimeDeploymentView(d)
-			return nil
-		}
-		digest := sha256.Sum256([]byte(input.Provider + "\x00nodes:" + installationID))
-		params := sqlc.InitializeSandboxDeploymentParams{ProviderKind: input.Provider, CoreUrl: input.CoreURL, BackendFingerprint: hex.EncodeToString(digest[:])}
-		if input.Provider == "microsandbox" {
-			params.IdleSeconds, params.RetentionSeconds = 300, 86400
-		}
-		if err := q.InitializeSandboxDeployment(ctx, params); err != nil {
-			return err
-		}
-		d, err = q.GetRuntimeDeployment(ctx)
-		if err != nil {
-			return err
-		}
-		result = runtimeDeploymentView(d)
-		return nil
-	})
-	return result, err
-}
-
 func runtimeDeploymentView(d sqlc.RuntimeDeployment) RuntimeDeploymentView {
-	return RuntimeDeploymentView{InstallationID: runtimeUUID(d.InstallationID), Provider: d.ProviderKind, CoreURL: d.CoreUrl, Maintenance: d.Maintenance, OwnerEpoch: uint64(d.OwnerEpoch)}
+	result := RuntimeDeploymentView{InstallationID: runtimeUUID(d.InstallationID), Provider: d.ProviderKind, CoreURL: d.CoreUrl, Maintenance: d.Maintenance, OwnerEpoch: uint64(d.OwnerEpoch), Generation: uint64(d.Generation), Mode: d.Mode}
+	if d.ProviderKind == "e2b" {
+		result.E2B = &SandboxE2BView{Template: d.E2bTemplate, CredentialConfigured: len(d.E2bCredential) > 0}
+	}
+	return result
 }

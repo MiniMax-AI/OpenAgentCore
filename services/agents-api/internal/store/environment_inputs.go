@@ -60,6 +60,9 @@ func (s *Store) ReserveEnvironmentInput(ctx context.Context, tenantID, sessionID
 	}
 	var result EnvironmentInputReservation
 	err = s.withEnvironmentInputSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
+		audit := func() error {
+			return recordWriteAudit(ctx, q, tenantID, "send_events", "session", uuid.UUID(session.Bytes).String(), "")
+		}
 		previous, err := q.FindEnvironmentInputReservation(ctx, sqlc.FindEnvironmentInputReservationParams{
 			SessionID: session, IdempotencyKey: key, Batch: encoded,
 		})
@@ -68,6 +71,9 @@ func (s *Store) ReserveEnvironmentInput(ctx context.Context, tenantID, sessionID
 				return ErrIdempotencyConflict
 			}
 			result, err = settleEnvironmentInput(ctx, q, tenantID, previous.EnvironmentInputReservation, EnvironmentInputExpired)
+			if err == nil && (result.State == EnvironmentInputPending || result.State == EnvironmentInputAdmitted) {
+				return audit()
+			}
 			return err
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
@@ -80,7 +86,7 @@ func (s *Store) ReserveEnvironmentInput(ctx context.Context, tenantID, sessionID
 		if len(receipts) > 0 {
 			// Earlier direct admission has receipts, but never had a reservation or deadline.
 			result = EnvironmentInputReservation{SessionID: sessionID, State: EnvironmentInputAdmitted, Receipts: receipts}
-			return nil
+			return audit()
 		}
 		if err := checkEnvironmentFileWriteGate(ctx, q, session); err != nil {
 			return err
@@ -111,7 +117,7 @@ func (s *Store) ReserveEnvironmentInput(ctx context.Context, tenantID, sessionID
 				}
 				result.Receipts = append(result.Receipts, receipt)
 			}
-			return nil
+			return audit()
 		} else if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
@@ -122,7 +128,10 @@ func (s *Store) ReserveEnvironmentInput(ctx context.Context, tenantID, sessionID
 			return err
 		}
 		result, err = environmentInputFromRow(row)
-		return err
+		if err != nil {
+			return err
+		}
+		return audit()
 	})
 	if err != nil {
 		return EnvironmentInputReservation{}, err

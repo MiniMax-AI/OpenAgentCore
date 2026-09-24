@@ -47,8 +47,20 @@ func (s *Store) UpdateStaticCredential(ctx context.Context, tenantID, vaultID, c
 	if err != nil {
 		return Credential{}, errors.New("credential encryption failed")
 	}
-	row, err := s.queries.UpdateStaticCredential(ctx, sqlc.UpdateStaticCredentialParams{
-		TenantID: tenant, VaultID: vault, ID: id, McpServerUrl: current.MCPServerURL, TokenCiphertext: ciphertext,
+	var updated Credential
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.queries.WithTx(tx)
+		row, err := q.UpdateStaticCredential(ctx, sqlc.UpdateStaticCredentialParams{
+			TenantID: tenant, VaultID: vault, ID: id, McpServerUrl: current.MCPServerURL, TokenCiphertext: ciphertext,
+		})
+		if err != nil {
+			return err
+		}
+		updated, err = credentialFromRow(sqlc.GetCredentialRow(row))
+		if err != nil {
+			return err
+		}
+		return recordWriteAudit(ctx, q, tenantID, "update", "credential", updated.ID, updated.VaultID)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Credential{}, ErrNotFound
@@ -56,5 +68,5 @@ func (s *Store) UpdateStaticCredential(ctx context.Context, tenantID, vaultID, c
 	if err != nil {
 		return Credential{}, errors.New("credential update failed")
 	}
-	return credentialFromRow(sqlc.GetCredentialRow(row))
+	return updated, nil
 }

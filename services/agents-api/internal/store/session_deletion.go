@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -13,19 +14,19 @@ import (
 // pending. Callers cancel first and delete after the Session settles.
 var ErrSessionNotIdle = errors.New("session must be durably idle or failed without required actions before deletion")
 
-// errSessionAlreadyDeleted rolls back a repeated deletion without any write.
-var errSessionAlreadyDeleted = errors.New("session already deleted")
-
 // DeleteSession removes public access to a durably idle or failed Session while
 // retaining state needed to settle execution. The decision is taken under the
 // Session lock that also orders Turn and input admission, so a concurrent
 // admission either commits first and is rejected here, or observes the deletion.
-// The owner's repeated deletion succeeds without another write; foreign and
+// The owner's repeated deletion succeeds without another resource write; foreign and
 // missing Sessions remain not found.
 func (s *Store) DeleteSession(ctx context.Context, tenantID, sessionID string) error {
-	err := s.withLockedSession(ctx, tenantID, sessionID, true, func(ctx context.Context, q *sqlc.Queries, session sqlc.LockSessionRow) error {
+	return s.withLockedSession(ctx, tenantID, sessionID, true, func(ctx context.Context, q *sqlc.Queries, session sqlc.LockSessionRow) error {
+		audit := func() error {
+			return recordWriteAudit(ctx, q, tenantID, "delete", "session", uuid.UUID(session.ID.Bytes).String(), "")
+		}
 		if session.DeletedAt.Valid {
-			return errSessionAlreadyDeleted
+			return audit()
 		}
 		if err := requireSessionSettled(ctx, q, session.ID); err != nil {
 			return err
@@ -36,12 +37,11 @@ func (s *Store) DeleteSession(ctx context.Context, tenantID, sessionID string) e
 		if err := q.ReleaseUnallocatedRuntimePlacement(ctx, session.ID); err != nil {
 			return err
 		}
-		return q.MarkSessionDeleted(ctx, session.ID)
+		if err := q.MarkSessionDeleted(ctx, session.ID); err != nil {
+			return err
+		}
+		return audit()
 	})
-	if errors.Is(err, errSessionAlreadyDeleted) {
-		return nil
-	}
-	return err
 }
 
 // requireSessionSettled rejects a queued, in-progress or waiting Turn, which

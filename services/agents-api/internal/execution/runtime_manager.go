@@ -2,6 +2,8 @@ package execution
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -11,6 +13,8 @@ import (
 
 // runtimeManager owns node membership, not provider operations. Each registered
 // node has one serial lifecycle; slow provider work cannot occupy another node.
+var errRuntimeTransition = fmt.Errorf("%w: sandbox configuration is changing", ErrExecutionUnavailable)
+
 type runtimeManager struct {
 	store               *store.Store
 	registry            *gateway.Registry
@@ -18,6 +22,9 @@ type runtimeManager struct {
 	setupInstallationID string
 	loadDeployment      func(context.Context) (*RuntimeProvider, error)
 	setupGate           chan struct{}
+	mutationGate        chan struct{}
+	switching           bool
+	switchDrained       chan struct{}
 	ctx                 context.Context
 	cancel              context.CancelFunc
 	mu                  sync.Mutex
@@ -42,6 +49,10 @@ func (m *runtimeManager) enter(parent context.Context) (context.Context, func(),
 		m.mu.Unlock()
 		return nil, nil, ErrExecutionUnavailable
 	}
+	if m.switching {
+		m.mu.Unlock()
+		return nil, nil, errRuntimeTransition
+	}
 	m.active.Add(1)
 	m.mu.Unlock()
 	ctx, cancel := context.WithCancel(parent)
@@ -54,7 +65,11 @@ func (m *runtimeManager) enter(parent context.Context) (context.Context, func(),
 
 func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 	m.mu.Lock()
-	if m.closed || (m.loadDeployment != nil && m.config.Provider == nil) || (id == "") != (m.config.ProviderKind == "") {
+	if m.switching {
+		m.mu.Unlock()
+		return nil, errRuntimeTransition
+	}
+	if m.closed || (m.loadDeployment != nil && m.config.Provider == nil) || (id == "") != (m.config.ProviderKind == "" || m.config.Mode == "direct") {
 		m.mu.Unlock()
 		return nil, ErrExecutionUnavailable
 	}
@@ -142,6 +157,10 @@ func (m *runtimeManager) applyInventory(previous map[string]*runtimeNode, ids []
 	}
 	var retired []*runtimeNode
 	m.mu.Lock()
+	if m.switching {
+		m.mu.Unlock()
+		return nil, errRuntimeTransition
+	}
 	if m.closed {
 		m.mu.Unlock()
 		return nil, ErrExecutionUnavailable
@@ -201,7 +220,7 @@ func (m *runtimeManager) run(ctx context.Context) error {
 	}
 	m.running = true
 	m.mu.Unlock()
-	if _, err := m.syncNodes(ctx); err != nil {
+	if _, err := m.syncNodes(ctx); err != nil && !errors.Is(err, errRuntimeTransition) {
 		return err
 	}
 	ticker := time.NewTicker(5 * time.Second)
@@ -215,7 +234,7 @@ func (m *runtimeManager) run(ctx context.Context) error {
 		case err := <-m.failed:
 			return err
 		case <-ticker.C:
-			if _, err := m.syncNodes(ctx); err != nil {
+			if _, err := m.syncNodes(ctx); err != nil && !errors.Is(err, errRuntimeTransition) {
 				return err
 			}
 		}

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -143,5 +144,20 @@ func TestSandboxDeploymentSetupRejectsFileManagedAndUnleasedWrites(t *testing.T)
 	}
 	if err := w.ClaimWebSandboxDeployment(t.Context(), selection.InstallationID); !errors.Is(err, ErrSandboxDeploymentConflict) {
 		t.Fatal("file-managed deployment adopted", err)
+	}
+}
+
+func TestSandboxSelectionRejectsWhitespaceInE2BCredential(t *testing.T) {
+	for _, separator := range []string{" ", "\t", "\r", "\n", "\x00", "\u00a0", "\u2003", "\u3000"} {
+		t.Run(fmt.Sprintf("U+%04X", []rune(separator)[0]), func(t *testing.T) {
+			selection := e2bSelection()
+			selection.E2B.APIKey = "prefix" + separator + "suffix"
+			if err := validateSandboxSelection(selection); !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("credential containing whitespace or NUL accepted: %v", err)
+			}
+		})
+	}
+	if err := validateSandboxSelection(e2bSelection()); err != nil {
+		t.Fatal(err)
 	}
 }

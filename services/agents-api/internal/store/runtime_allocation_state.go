@@ -41,17 +41,23 @@ func (s *Store) SettleRuntimeCreation(ctx context.Context, owner RuntimeAllocati
 // Cancellation requests do not prove existing native work has stopped. A live,
 // unexpired Environment fails with the generic provisioning reason.
 func (s *Store) RequestRuntimeCleanup(ctx context.Context, owner RuntimeAllocation) (RuntimeAllocation, error) {
-	return s.requestRuntimeCleanup(ctx, owner, provisioningFailureReason)
+	return s.requestRuntimeCleanup(ctx, owner, provisioningFailureReason, false)
 }
 
 // FailRuntimeInitialization is RequestRuntimeCleanup after a confirmed failed
 // initialization step: the step's safe reason becomes the Session error. Deleted
 // Sessions, expired and already terminal Environments keep their existing outcome.
 func (s *Store) FailRuntimeInitialization(ctx context.Context, owner RuntimeAllocation, failure ProvisioningFailure) (RuntimeAllocation, error) {
-	return s.requestRuntimeCleanup(ctx, owner, failure.reason())
+	return s.requestRuntimeCleanup(ctx, owner, failure.reason(), false)
 }
 
-func (s *Store) requestRuntimeCleanup(ctx context.Context, owner RuntimeAllocation, reason string) (RuntimeAllocation, error) {
+// ReleaseAbsentRuntimeCreation consumes provider proof that the original attempt
+// is settled and owns no resources. Authority revocation and release commit together.
+func (s *Store) ReleaseAbsentRuntimeCreation(ctx context.Context, owner RuntimeAllocation) (RuntimeAllocation, error) {
+	return s.requestRuntimeCleanup(ctx, owner, provisioningFailureReason, true)
+}
+
+func (s *Store) requestRuntimeCleanup(ctx context.Context, owner RuntimeAllocation, reason string, absent bool) (RuntimeAllocation, error) {
 	return s.mutateRuntimeAllocation(ctx, owner, false, func(ctx context.Context, q *sqlc.Queries, row sqlc.RuntimeAllocation) (sqlc.RuntimeAllocation, error) {
 		if row.State == "released" {
 			return row, nil
@@ -74,7 +80,21 @@ func (s *Store) requestRuntimeCleanup(ctx context.Context, owner RuntimeAllocati
 			return sqlc.RuntimeAllocation{}, err
 		}
 
-		return q.RequestRuntimeCleanup(ctx, row.ID)
+		pending, err := q.RequestRuntimeCleanup(ctx, row.ID)
+		if err != nil || !absent {
+			return pending, err
+		}
+		if _, err := q.SettleRuntimeCreation(ctx, row.ID); err != nil {
+			return sqlc.RuntimeAllocation{}, err
+		}
+		released, err := q.ReleaseRuntimeAllocation(ctx, row.ID)
+		if err != nil {
+			return sqlc.RuntimeAllocation{}, err
+		}
+		if err := q.ReleaseRuntimePlacement(ctx, row.EnvironmentID); err != nil {
+			return sqlc.RuntimeAllocation{}, err
+		}
+		return released, nil
 	})
 }
 

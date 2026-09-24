@@ -10,7 +10,7 @@ import (
 // provisionPending shares the existing lifecycle owner and serial gate. This
 // also recovers idle Session creation interrupted after its database commit.
 func (r *runtimeLifecycle) provisionPending(ctx context.Context) error {
-	if r.config.Maintenance {
+	if r.config.Maintenance && r.config.Generation == 0 {
 		return nil
 	}
 	rows, err := r.store.ListUnallocatedHostedEnvironmentsForNode(ctx, r.nodeID, r.pendingCursor)

@@ -1,10 +1,16 @@
-import { OpenAIAgentsClient } from "./client";
+import { AgentCoreError, OpenAIAgentsClient } from "./client";
 import type { ReadOptions } from "./types";
 
 export type SandboxDiagnostic = "" | "node_unavailable" | "resource_missing" | "compute_unconfirmed" | "ownership_mismatch" | "provider_unavailable";
 
-export type SandboxProvider = "docker" | "microsandbox";
-export interface InitializeSandboxDeployment { provider: SandboxProvider; core_url: string }
+export type SandboxProvider = "docker" | "microsandbox" | "e2b";
+export interface InitializeSandboxDeployment {
+  provider: SandboxProvider;
+  core_url: string;
+  e2b?: { api_key: string; template: string };
+}
+export interface UpdateSandboxDeployment extends InitializeSandboxDeployment { expected_generation: number }
+export interface SetSandboxMaintenance { maintenance: boolean; expected_generation: number }
 
 export interface SandboxDeployment {
   installation_id: string;
@@ -12,6 +18,10 @@ export interface SandboxDeployment {
   core_url: string;
   maintenance: boolean;
   owner_epoch: number;
+  generation: number;
+  mode: "nodes" | "direct" | "";
+  resources: { allocations: number; pending: number };
+  e2b?: { template: string; credential_configured: boolean };
 }
 export interface SandboxNode {
   id: string;
@@ -70,7 +80,22 @@ export class SandboxAdminClient extends OpenAIAgentsClient {
     return this.request("/deployment", { signal: options?.signal }, undefined, false);
   }
   initializeDeployment(input: InitializeSandboxDeployment, options?: ReadOptions): Promise<SandboxDeployment> {
-    return this.request("/deployment", { method: "POST", body: JSON.stringify(input), signal: options?.signal }, undefined, false);
+    return this.writeDeployment("POST", input, options);
+  }
+  updateDeployment(input: UpdateSandboxDeployment, options?: ReadOptions): Promise<SandboxDeployment> {
+    return this.writeDeployment("PUT", input, options);
+  }
+  setMaintenance(input: SetSandboxMaintenance, options?: ReadOptions): Promise<SandboxDeployment> {
+    return this.request("/deployment/maintenance", { method: "PATCH", body: JSON.stringify(input), signal: options?.signal }, undefined, false);
+  }
+  private async writeDeployment(method: "POST" | "PUT", input: InitializeSandboxDeployment | UpdateSandboxDeployment, options?: ReadOptions): Promise<SandboxDeployment> {
+    try {
+      return await this.request("/deployment", { method, body: JSON.stringify(input), signal: options?.signal }, undefined, false);
+    } catch (error) {
+      if (!input.e2b) throw error;
+      // A credential-bearing rejection may reflect the key in any error field.
+      throw new AgentCoreError("Sandbox configuration could not be confirmed. Refresh before submitting again.", error instanceof AgentCoreError ? error.status : 0, "sandbox_configuration_unconfirmed");
+    }
   }
   listNodes(options?: ReadOptions): Promise<{ data: SandboxNode[] }> {
     return this.request("/nodes", { signal: options?.signal }, undefined, false);

@@ -1,8 +1,9 @@
 # Hosted Sandbox Manager
 
 One Core execution owner can manage sandbox nodes on its own host and on other
-Linux hosts. The deployment selects exactly one provider: `docker` or
-`microsandbox`. All nodes must use that provider and installation ID. These nodes
+Linux hosts, or provision cloud sandboxes directly through E2B. A deployment selects
+exactly one provider: `e2b`, `docker` or `microsandbox`. Docker/microsandbox nodes
+must all use the selected provider and installation ID. These nodes
 are distinct from user-managed `self_hosted` Environments, whose provisioning
 remains the user's responsibility.
 
@@ -33,7 +34,10 @@ node installation payload. Project keys cannot register, edit or remove nodes.
 ## Start with zero nodes
 
 Default installation starts Core, Web and PostgreSQL without local compute.
-Hosted Sandbox Manager first asks for Docker or microsandbox. It defaults to the
+Hosted Sandbox Manager first asks for **E2B cloud** or **Own machines**. Own machines
+then choose Docker or microsandbox; E2B takes an account API key and a qualified
+immutable Runtime template build (`template-id:build-uuid`). The key is write-only,
+encrypted by Core and never returned to the browser. E2B needs no node installation. It defaults to the
 paired console origin, which forwards the required Core API and WebSocket routes.
 Use advanced network settings only when nodes and guests need a different public
 HTTPS origin. When the inferred address is loopback or is not HTTPS, setup
@@ -41,14 +45,32 @@ opens the network field and requires a non-loopback HTTPS origin before saving.
 The API still accepts HTTP loopback for explicit local development; a guest's
 loopback address cannot reach its Core host.
 
-Saving initializes the deployment once. An identical request may be retried;
-a different provider or origin returns a conflict. Refresh after an uncertain
-response before trying again. Selection persists in PostgreSQL, activates without
-a restart and applies to every node. Removing all nodes does not reset it.
+Saving initializes the deployment. Refresh after an uncertain response before
+trying again. Selection persists in PostgreSQL and activates without a restart.
+Removing all nodes does not reset it. E2B uses the same daemon, harness and workspace
+Runtime as node-backed hosting. Configuration alone does not prove provider or model
+readiness. To prepare the qualified E2B Runtime build, use
+[the E2B build guide](deploy/e2b/README.md); it is not a public Environment Template.
 Microsandbox suspends eligible idle Sessions after 300 seconds and retains their
-snapshots for 86400 seconds. Docker has no memory snapshot policy.
+snapshots for 86400 seconds. Docker and E2B have no memory snapshot policy.
 
-Click **Add node**, copy the installation command from the dialog, and run it on
+For source/manual deployments using E2B, install the packaged helper and set
+`AGENTS_API_E2B_PROVIDER_BIN` to its absolute executable path. Set
+`AGENTS_API_E2B_STATE_DIR` to a persistent directory owned by the Core service user,
+mode `0700`. The standard distribution prepares both. Back up this private state
+with the database and credential-encryption key; losing it can leave an uncertain
+allocation that cannot safely be reclaimed. Do not mount it into Web or Runtime.
+
+Drain and confirm cleanup before revoking the configured E2B account key. Replacing
+that key currently uses the same zero-resource configuration guard; in-place key
+rotation with retained resources is not supported. If the key is revoked early,
+Core keeps unverifiable allocations and blocks switching, even if compute was
+removed through the provider console. Do not clear database allocations or private
+receipts to bypass this check. A future credential-repair operation must verify
+account/resource ownership before accepting a replacement key; an inaccessible
+sandbox or empty listing from another account is not proof of cleanup.
+
+For own machines, click **Add node**, copy the installation command from the dialog, and run it on
 the target Linux amd64 host. The command uses the saved deployment origin, or the
 paired console origin for file-managed deployments, without a routine URL field.
 Closing the dialog discards its one-time command. An expired command requires
@@ -57,7 +79,7 @@ checks its hashes, prepares provider configuration and starts the existing node
 program as a systemd user service. Web polls readiness and capacity while waiting.
 It does not install software through SSH. Registration itself
 does not create a Session, sandbox or model request. Hosted Session admission
-fails until setup is complete and a ready node has capacity.
+fails until setup is complete and a ready node has capacity. E2B allocates directly without this node requirement.
 
 For manual zero-node deployments, set `AGENTS_API_SANDBOX_INSTALLATION_ID` to a
 stable UUID, configure `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE`, and enable the daemon
@@ -243,14 +265,30 @@ maintenance transition. That transition currently changes the deployment backend
 configuration and requires resources on all nodes to be cleared; it is not a
 per-node drain operation.
 
-Provider changes remain an explicit deployment maintenance operation: start the
-old configuration in maintenance, resolve all old resources, then start the new
-provider configuration in maintenance before reopening admission. Merely changing
-a configuration file or disconnecting hosts does not clear resources. Preserve
-old node state and backend storage until cleanup is confirmed. A new backend
-requires its own node identity. Existing Sessions do not migrate across nodes or
-providers. Switching local participation also changes backend configuration and
-is subject to the same resource guard; it is not an automatic migration.
+For Web-managed deployments, use **Change provider**:
+
+1. Enter maintenance. This blocks new hosted Sessions and allocations while allowing
+   existing work, queries and cleanup.
+2. Delete no-longer-needed Sessions through their existing project-authorized flow.
+   Check the deployment's remaining allocation and pending-environment counts.
+   Stopped compute, snapshots, unknown creates and pending cleanup still block switching.
+3. Once cleanup is verified, save the new deployment-wide selection. Core rechecks
+   resources and the configuration generation under its execution lock, retires old
+   nodes and unused enrollments, then activates the new provider. History is retained.
+4. Explicitly resume. If activation fails, maintenance remains enabled; inspect the
+   configuration and refresh before retrying. Saving never automatically deletes compute.
+
+`GET /core/v1/sandbox/deployment` reports the safe configuration, `generation` and
+`resources` counts. `PATCH /core/v1/sandbox/deployment/maintenance` takes
+`maintenance` and `expected_generation`; `PUT /core/v1/sandbox/deployment` takes
+the replacement selection and `expected_generation`. Both require deployment admin
+authority. The public Core origin cannot change in this operation. E2B is not
+combined with own-machine nodes, and existing Sessions never migrate providers.
+
+File-managed deployments retain their explicit maintenance/restart process. Merely
+changing a file or disconnecting a host does not clear resources. Preserve old node
+state and backend storage until cleanup is confirmed. A new backend requires a fresh
+node identity. Changing local participation also requires full cleanup.
 
 This release has one Core execution owner. It does not add Core multi-active,
 cross-node snapshot restore, automatic failover, Kubernetes or autoscaling.

@@ -146,3 +146,14 @@ Host virtualization, credentials, tenant isolation, durable state and actual
 execution are release acceptance requirements. Other missing operational screens
 or low-frequency improvements belong in the backlog; they do not turn this batch
 into a Web redesign or a complete protocol-compatibility claim.
+
+### API-key write history
+
+Core records committed public resource writes and their key ownership for the
+administrator console. Configure `AGENTS_API_WRITE_AUDIT_RETENTION` (Go duration,
+minimum `1h`, default `2160h`) to control non-creation history. Creation ownership
+remains permanently; removing keys or resources does not cascade-delete records.
+Static key bindings may set a safe `name` and `kind: "console"` for console-owned
+credentials. Existing resources without recorded provenance return null. See the
+[query contract](../../contracts/agents-api/write-audit.md) for deployment-authenticated
+batch ownership and cursor history endpoints. These APIs do not log bodies or secrets.

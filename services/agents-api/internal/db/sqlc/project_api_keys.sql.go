@@ -122,23 +122,33 @@ func (q *Queries) ListProjectAPIKeys(ctx context.Context, arg ListProjectAPIKeys
 }
 
 const resolveProjectAPIKey = `-- name: ResolveProjectAPIKey :one
-SELECT binding_digest, tenant_id, organization_id, project_id, subject_kind, subject_id
+SELECT id, name, prefix, created_at, revoked_at, binding_digest, tenant_id, organization_id, project_id, subject_kind, subject_id
 FROM project_api_keys WHERE token_sha256 = $1 AND revoked_at IS NULL
 `
 
 type ResolveProjectAPIKeyRow struct {
-	BindingDigest  string      `json:"binding_digest"`
-	TenantID       pgtype.UUID `json:"tenant_id"`
-	OrganizationID string      `json:"organization_id"`
-	ProjectID      string      `json:"project_id"`
-	SubjectKind    string      `json:"subject_kind"`
-	SubjectID      string      `json:"subject_id"`
+	ID             pgtype.UUID        `json:"id"`
+	Name           string             `json:"name"`
+	Prefix         string             `json:"prefix"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	RevokedAt      pgtype.Timestamptz `json:"revoked_at"`
+	BindingDigest  string             `json:"binding_digest"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	OrganizationID string             `json:"organization_id"`
+	ProjectID      string             `json:"project_id"`
+	SubjectKind    string             `json:"subject_kind"`
+	SubjectID      string             `json:"subject_id"`
 }
 
 func (q *Queries) ResolveProjectAPIKey(ctx context.Context, tokenSha256 string) (ResolveProjectAPIKeyRow, error) {
 	row := q.db.QueryRow(ctx, resolveProjectAPIKey, tokenSha256)
 	var i ResolveProjectAPIKeyRow
 	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Prefix,
+		&i.CreatedAt,
+		&i.RevokedAt,
 		&i.BindingDigest,
 		&i.TenantID,
 		&i.OrganizationID,
