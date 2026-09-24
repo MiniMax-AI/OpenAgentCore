@@ -20,7 +20,7 @@ The console server authenticates these requests to Core with its deployment
 credential. Browser code must not receive or configure that credential.
 
 The console does not proxy `/v1`, carry a public caller key, or impersonate a selected
-key space. An application calls Core's `/v1` endpoint directly using its own API key
+Project. An application calls Core's `/v1` endpoint directly using its own API key
 and the public API's route-specific headers. The application endpoint and console
 endpoint have different purposes even when an operator exposes both on one host.
 
@@ -46,23 +46,25 @@ boundary; restoring `/v1` forwarding is not a migration workaround. Keep deploym
 application, node and provider credentials out of `VITE_*`, source files, browser
 storage, URLs and logs.
 
-## Application keys
+## Projects and application keys
 
-An administrator creates a key through the management API and delivers its one-time
-secret to the application using a private channel. Creation allocates a new tenant;
-the key's display name is only a label. There is no separate Core user or role to
-create first.
+After installation, an administrator creates a Project through the management API
+and issues one or more named keys within it. The Project owns one tenant and one
+execution principal; every key in it has equal access to its assets. Core records
+the actual key separately for write provenance. There are no API users or roles.
 
-A secret reset preserves the key ID and its tenant, so existing assets and provenance
-remain attached to the same space. The previous secret stops authenticating
-immediately. Revocation also stops new authentication but retains resources and
-accepted work. An administrator can continue inspecting or deleting retained
-resources under the normal resource rules.
+Projects and keys live only in the database. Configuration files hold deployment
+settings and credentials, never business Projects or API keys. Issuance returns
+plaintext once; Core stores its digest. Deliver the plaintext to the application
+through a private channel. Ordinary key reads return safe metadata only.
 
-Static configuration keys remain operator-managed and appear as read-only key
-metadata. Their reset and revocation do not use the management API. Key reads return
-safe metadata only. For creation/reset request IDs, uncertain-write recovery and
-static-key details, use the [administrator API contract](../../contracts/agents-api/admin-api.md#key-spaces).
+Rotate by issuing a replacement in the same Project and revoking the old key.
+Revocation stops new authentication without removing assets or accepted work.
+Renaming a Project preserves its ID and principal. Archiving disables all its keys
+and retains resources for administrator inspection, deletion or copying to an
+active Project. The management UI is still pending; use the
+[administrator API contract](../../contracts/agents-api/admin-api.md) for these
+operations and their uncertain-write behavior.
 
 ## Verification and diagnosis
 
@@ -71,7 +73,7 @@ Check connection layers separately:
 1. `/healthz` establishes Core process liveness only.
 2. An authenticated console login and a successful same-origin management read
    establish the browser-to-console and console-to-Core paths. Suitable reads are
-   `/core/v1/admin/api-keys` and `/core/v1/admin/startup-configuration`.
+   `/core/v1/admin/projects` and `/core/v1/admin/startup-configuration`.
 3. An application's own key must work on its permitted `/v1` resources and fail on
    administrator routes. The deployment credential must fail on `/v1`.
 4. Runtime observations and history establish the reported execution state. A

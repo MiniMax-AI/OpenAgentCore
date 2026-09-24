@@ -68,8 +68,10 @@ The management backend and client require the corresponding Web screen migration
 before release. See [console integration status](../web/README.md).
 
 Installation creates private configuration under `~/.parsar/core`, a dedicated
-PostgreSQL volume and a credential encryption key. No caller key is generated. New Web
-installations create a separate deployment administrator key. Secret values are not printed.
+PostgreSQL volume and a credential encryption key. Installation creates no Project
+or application API key. Projects and their keys are managed in the database;
+configuration files contain deployment settings only. New installations create a
+separate deployment administrator credential. Secret values are not printed.
 
 Open the console address printed by the installer (`https://core.example` in
 the example above). On the first visit, choose an administrator username and
@@ -77,12 +79,15 @@ password, and keep your sign-in details safe. The Web has one role: administrato
 with access to every console operation. It has no secondary user roles. The paired
 console already connects to Core; no API key is needed to sign in.
 
-Use administrator key management to create an API key and save its one-time
-plaintext response. Each new key owns an independent asset space. Resetting a
-secret preserves the key ID and assets while invalidating the old secret;
-revocation preserves assets for inspection, deletion or copying. API callers use
-their own keys and the public API endpoint. The console cannot execute or create
-Agent resources on their behalf. See the [management contract](../../contracts/agents-api/admin-api.md).
+Use the administrator API to create a Project, then issue a named API key within
+it and save the one-time plaintext response privately. Core stores only its digest.
+The corresponding Web management screens remain pending. Multiple keys in a Project
+share its assets and execution principal; writes record the actual key separately.
+Rotate by issuing another key in that Project and revoking the old one. Archiving
+the Project disables all its keys and retains assets for inspection, deletion or
+copying to another active Project. API callers use their own keys and the public
+API endpoint. The deployment credential cannot call `/v1`; the console cannot
+execute or create Agent resources on their behalf. See the [management contract](../../contracts/agents-api/admin-api.md).
 
 Hosts registered through the console supply sandbox resources for hosted Sessions;
 self-hosted Sessions use application-managed environments. Neither installation

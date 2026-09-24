@@ -9,8 +9,10 @@ owns Sessions, environments, files, credentials and execution history; each
 native harness keeps its own model and tool loop. Core runs independently of the
 Parsar product.
 
-Core and its administrator Web console ship together. Each API key owns an
-independent asset space; management credentials cannot call the Agent API. The default installation runs Core, Web
+Core and its administrator Web console ship together. Projects own assets; multiple
+API keys in one Project share its assets and execution principal. Projects and API
+keys live in the database. Management credentials cannot call the Agent API. The
+default installation runs Core, Web
 and PostgreSQL with zero execution nodes. Add execution nodes through Web when
 you are ready. Core creates each required sandbox from the shared Runtime image. Model
 credentials are supplied through the existing write-only API extension.
@@ -39,9 +41,11 @@ release; see [console integration status](docs/web/README.md).
 2. **Sign in to Web.** Open the console address printed by the installer and
    register your administrator account with a username and password. Keep them safe.
    Existing installations retain their `admin` / `console.password` login.
-   The console connects to Core automatically. Create and save an Agent API key
-   for requests from your own machine or application. Its secret is shown once;
-   resetting it retains the same asset space.
+   The console connects to Core automatically. Until the management screens migrate,
+   use the [administrator API](contracts/agents-api/admin-api.md) to create a Project,
+   then issue a key within it for your application. Save the one-time plaintext
+   response privately; Core stores its digest. Rotate by issuing another key in the
+   same Project and revoking the old one.
 3. **Add a node.** Open **Hosted Sandbox Manager**, choose Docker or microsandbox,
    and initialize the deployment. The paired console address is used by default;
    advanced network settings allow a different reachable HTTPS origin. Select
@@ -72,9 +76,11 @@ Installing a local provider is optional, and is not required for adding nodes in
 ./install.sh --sandbox-provider true --provider docker
 ```
 
-Web-only installation connects the unchanged console to an existing Core; see the
+Web-only installation connects the console server to an existing Core; see the
 installation guide for its URL and private credential-file options. Installation
-never creates a sample Session or calls a model. API examples are optional.
+creates no Project or application key, never creates a sample Session and calls no
+model. Configuration files hold deployment settings, not business identities. API
+examples are optional.
 
 The protocol baseline is `openai-python` 3.13.0 and `agents=v1`. Harness selection,
 model execution configuration and our daemon transport are documented differences.

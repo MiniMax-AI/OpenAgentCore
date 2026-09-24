@@ -12,10 +12,19 @@ python3 -m venv .venv
 pip install openai==3.13.0
 ```
 
-Obtain an API key from the deployment administrator and supply it through private
-application configuration as `PARSAR_API_KEY`. Each key owns an independent asset
-space. The installer does not generate a caller key. For a remote installation,
-use its HTTPS API endpoint routed directly to Core; the console does not proxy `/v1`.
+The deployment administrator first creates a Project through
+`POST /core/v1/admin/projects` with `{"name":"Default"}`, then issues a key through
+`POST /core/v1/admin/projects/{project_id}/keys` with a descriptive `{"name":"..."}`.
+These requests use the separate deployment credential. The management UI has not
+yet migrated; see [integration status](../web/README.md).
+
+Obtain that key through a private channel and supply it as `PARSAR_API_KEY` in your
+application configuration. Its plaintext appears only at issuance; Core stores a
+digest in its database. All keys in the Project share assets, permissions and the
+same execution principal, while write provenance records the actual key. Other
+Projects remain isolated. The installer creates neither a Project nor an API key.
+For a remote installation, use its HTTPS API endpoint routed directly to Core; the
+console does not proxy `/v1`.
 
 ```python
 import os
@@ -28,6 +37,11 @@ client = OpenAI(
 )
 print(client.beta.agents.list().data)
 ```
+
+Rotate an application key by issuing a replacement in the same Project and revoking
+the old key. Assets and the Project principal remain unchanged. Archiving a Project
+disables every key while preserving assets and already accepted work. The deployment
+administrator credential cannot substitute for an application key on `/v1`.
 
 This read verifies API access. It does not invoke a model or create an execution
 environment. Installation has no mandatory sample task.
@@ -96,7 +110,7 @@ an unsupported model or operation work.
 
 ## Observe and recover
 
-Use the existing console or query the same resources from your application:
+Query execution history from your application:
 
 ```python
 current = client.beta.agents.sessions.retrieve(session.id)

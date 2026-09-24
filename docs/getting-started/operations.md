@@ -67,12 +67,28 @@ public issue reports. For local diagnosis, use the exact installation file:
 docker compose -f "$HOME/.parsar/core/compose.json" ps --all
 ```
 
+## Projects and API keys
+
+Use the [administrator API](../../contracts/agents-api/admin-api.md) to create a
+Project and issue its first key after installation. The Web management migration
+is still pending; see [integration status](../web/README.md). No configuration file
+defines Projects or application keys. API-key plaintext is returned once at issuance,
+with only its digest stored in the database.
+
+To rotate, issue another key within the same Project, update the application, then
+revoke the old key. Renaming a Project or revoking a key preserves its assets and
+execution principal. Archiving a Project disables all its keys while retaining
+assets and already accepted execution. Administrators may inspect or delete retained
+resources, or copy supported assets to an active Project; they cannot execute them
+using the deployment credential.
+
 ## Data and upgrades
 
 Retain together:
 
-- the dedicated PostgreSQL volume, including large objects;
-- `config/credential.key`, caller identity configuration and provider identity;
+- the dedicated PostgreSQL volume, including Projects, API-key digests, provenance
+  and large objects;
+- `config/credential.key` and provider identity;
 - `admin/`, including on zero-node installations, containing the separate sandbox
   administrator key and Core's digest configuration;
 - each separately installed node's private configuration and persistent identity
@@ -155,8 +171,11 @@ Core records committed public resource writes and their key ownership for the
 administrator console. Configure `AGENTS_API_WRITE_AUDIT_RETENTION` (Go duration,
 minimum `1h`, default `2160h`) to control non-creation history. Creation ownership
 remains permanently; removing keys or resources does not cascade-delete records.
-Static key bindings may set a safe `name`; each binding needs its own space.
-Console credentials are separate administrator credentials. Existing resources without recorded provenance return null. See the
+Projects and their API keys are database records. Keys within one Project share
+assets and the same execution principal, while provenance identifies the actual
+key that made each write. Existing resources without recorded provenance return
+null. Historical key-kind metadata remains audit evidence, not a configuration
+authentication path. Console credentials are separate deployment credentials. See the
 [query contract](../../contracts/agents-api/write-audit.md) for deployment-authenticated
-key-scoped batch ownership and cursor history endpoints. Administrator mutations
+Project-scoped batch ownership and cursor history endpoints. Administrator mutations
 have a separate [audit log](../../contracts/agents-api/admin-api.md#monitoring-and-audit). These APIs do not log bodies or secrets.

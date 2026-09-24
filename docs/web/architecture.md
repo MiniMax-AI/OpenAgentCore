@@ -48,10 +48,10 @@ console account names are audit labels, not independent Core authorization.
 
 | Component | Responsibility |
 | --- | --- |
-| Core Web | Key-space selection, resource inspection, permitted deletion/copy, key management and operational views |
+| Core Web | Project selection, resource inspection, permitted deletion/copy, key management and operational views |
 | `AdminClient` | Typed management requests and response validation, reusing public resource projections where the wire objects match |
 | Console server | Administrator login, same-origin request checks, management-route proxying and server-side deployment authentication |
-| Core | Key-space isolation, resource state, deletion preconditions, atomic copies, audit/provenance and execution scheduling |
+| Core | Project isolation, resource state, deletion preconditions, atomic copies, audit/provenance and execution scheduling |
 | Runtime and native adapters | Existing allocation, process lifecycle, execution and native protocol behavior |
 
 The management API adds no execution path. Runtime ownership, native harness
@@ -60,16 +60,23 @@ behavior and the pinned public Agents API contract remain governed by
 observations are distinct: configured support does not prove a reachable model,
 valid provider credentials or execution readiness.
 
-## Keys and resources
+## Projects, keys and resources
 
-One stable API-key resource owns one independent tenant. Creating a key creates a
-space. Resetting its secret retains the key ID, tenant and assets, and invalidates
-the previous secret. Revocation prevents new authentication but preserves assets
-and already accepted execution. Revoked spaces remain available to administrator
-queries. Core has no separate API-user or role model.
+A Project owns one tenant and one execution principal. Multiple equal API keys
+belong to it and share its assets; writes record the actual key independently of
+the principal. Projects and API keys are database records. Configuration files hold
+deployment settings only, with no configuration-owned Projects or static API keys.
+Core has no separate API-user or role model.
+
+Administrators create, rename and archive Projects, and issue or revoke their keys.
+Renaming preserves identity. Rotate a key by issuing a replacement in the same
+Project and revoking the old one. Revocation prevents new authentication without
+removing assets or accepted work. Archiving disables every key in the Project and
+retains its resources for administrator inspection, deletion or copying to an active
+Project.
 
 Administrators may inspect resource metadata and execution history, delete resources
-under their existing deletion rules, and copy supported assets between spaces.
+under their existing deletion rules, and copy supported assets between Projects.
 They cannot create or edit arbitrary user resources, start Sessions, submit input,
 or cancel work through the management API. A busy Session therefore cannot be
 made deletable by an implicit console cancellation.
@@ -84,11 +91,11 @@ content has no administrator download route.
 
 Session inspection uses paginated durable history and bounded polling. The
 management API has no Session SSE subscription or execution stream controller.
-Changing the selected key space must abort or discard stale reads and pending
-operation state so that results cannot appear under another space.
+Changing the selected Project must abort or discard stale reads and pending
+operation state so that results cannot appear under another Project.
 
 Deletion and copy require deliberate administrator actions. The client never
-retries an uncertain write automatically. Key creation and secret reset return
-plaintext once; ordinary reads never recover it. The UI must not persist that
-plaintext in browser storage or logs. The API contract specifies explicit recovery
+retries an uncertain write automatically. Core returns key plaintext once at issuance
+and stores its digest in the database; ordinary reads never recover the plaintext.
+The UI must not persist it in browser storage or logs. The API contract specifies explicit recovery
 and idempotency behavior for each operation.

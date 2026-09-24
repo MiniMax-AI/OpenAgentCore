@@ -13,18 +13,20 @@ and fixture tests describe the previous UI, not completed management acceptance.
 
 The management contract supports:
 
-- Create an API key with its own asset space, reset its secret, or revoke it.
-  Creation and reset display plaintext once. Reset preserves assets; revocation
-  keeps them available for administrative inspection and cleanup.
-- Select a key space to inspect Agents, Skills, Environment Templates, Source File
+- Create, rename or archive a Project. Issue or revoke named keys within it; all
+  keys share the Project assets and execution principal. Issuance displays plaintext
+  once and stores its digest in the database. Rotate by issuing a replacement and
+  revoking the old key. Archiving disables every key and retains assets.
+- Select a Project to inspect Agents, Skills, Environment Templates, Source File
   metadata, Vault/Credential metadata and Session history. Existing resource
   serializers and deletion constraints are shared with the public API.
 - Delete supported resources with confirmation. Copy supported assets into another
-  key space as independent resources, optionally including dependencies. Copies
+  active Project as independent resources, optionally including dependencies. Copies
   never share subsequent changes or expose stored credential values.
-- Read global and per-key summaries, usage coverage, Runtime observations and
+- Read global, Project, Agent and key summaries, usage coverage, Runtime observations and
   administrator or API-key write history. Missing usage remains unknown; these
-  totals are not billing records.
+  totals are not billing records. Key grouping attributes whole Sessions to their
+  creation keys, with unknown creators grouped separately.
 - Manage deployment sandbox nodes through the existing Hosted Sandbox Manager.
 
 The console has no execution, resource creation/editing, Session-event or model
@@ -36,7 +38,9 @@ Parsar.
 
 Follow the [installation guide](../getting-started/install.md). The default is
 Core, Web and PostgreSQL with zero execution nodes. The paired installation gives
-only the Web server its deployment credential. It generates no caller key.
+only the Web server its deployment credential. It creates no Project or application
+key. The administrator creates both through the management API. Configuration files
+hold deployment settings; business identities live only in the database.
 
 For a separate Web installation, use `--web-only --core-url ...
 --admin-token-file /absolute/private/file`. The Core origin must be loopback or
@@ -57,7 +61,8 @@ plaintext, deployment credentials, model tokens or copied secret fields.
 
 Development requires Node 22, pnpm 10.30.3 and the repository's required toolchains.
 `make check` covers client, service and fixture Web tests. Real management
-acceptance must separately prove key isolation, auditing and copied asset use.
+acceptance must separately prove Project isolation, shared access by keys within a
+Project, auditing and copied asset use.
 Fixture screenshots and HTTP deserialization alone do not prove those properties.
 
 ## References
