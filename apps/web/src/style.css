@@ -366,6 +366,20 @@ html[data-theme="dark"] .brand-mark-dark {
   text-transform: capitalize;
 }
 
+.sidebar-footer > .core-switcher {
+  grid-column: 1 / -1;
+}
+
+.sidebar-footer > .console-account-menu {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.sidebar-footer > .sidebar-preferences {
+  grid-column: 1;
+  grid-row: 2;
+}
+
 .sidebar-preferences {
   display: flex;
   align-items: center;
@@ -4500,6 +4514,28 @@ button.trace-step-row:hover {
     gap: 6px;
   }
 
+  .sidebar-footer > .console-account-menu,
+  .sidebar-footer > .sidebar-preferences {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .sidebar-footer .console-account-menu > button {
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+  }
+
+  .sidebar-footer .console-account-menu > button > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
   .core-switcher {
     display: flex;
     justify-content: center;
@@ -4510,12 +4546,13 @@ button.trace-step-row:hover {
   }
 
   .sidebar-preferences {
+    max-width: 100%;
     flex-direction: column;
   }
 
   .appearance-menu-trigger {
-    width: 40px;
-    min-width: 40px;
+    width: 38px;
+    min-width: 38px;
     padding: 0;
   }
 
