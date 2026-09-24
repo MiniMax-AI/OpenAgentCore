@@ -8,6 +8,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AdminAuditLog struct {
+	ID                pgtype.UUID        `json:"id"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
+	AdminCredentialID string             `json:"admin_credential_id"`
+	ActorLabel        string             `json:"actor_label"`
+	Action            string             `json:"action"`
+	TargetKeyID       string             `json:"target_key_id"`
+	ResourceType      string             `json:"resource_type"`
+	ResourceID        string             `json:"resource_id"`
+	ResultIds         []byte             `json:"result_ids"`
+	RequestID         string             `json:"request_id"`
+	TraceID           string             `json:"trace_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
 type Agent struct {
 	ID            pgtype.UUID        `json:"id"`
 	TenantID      pgtype.UUID        `json:"tenant_id"`
@@ -141,7 +156,6 @@ type ProjectApiKey struct {
 	Name           string             `json:"name"`
 	Prefix         string             `json:"prefix"`
 	TokenSha256    string             `json:"token_sha256"`
-	BindingDigest  string             `json:"binding_digest"`
 	TenantID       pgtype.UUID        `json:"tenant_id"`
 	OrganizationID string             `json:"organization_id"`
 	ProjectID      string             `json:"project_id"`

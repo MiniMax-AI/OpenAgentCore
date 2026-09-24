@@ -4,32 +4,33 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"net/http"
-	"strings"
-	"unicode"
-	"unicode/utf8"
-
+	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/adminaudit"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/go-chi/chi/v5"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
 )
 
 type ProjectAPIKeyStore interface {
-	CreateProjectAPIKey(context.Context, string, identity.Principal, string, string) (store.IssuedProjectAPIKey, error)
-	ListProjectAPIKeys(context.Context, string, identity.Principal) ([]store.ProjectAPIKey, error)
-	RevokeProjectAPIKey(context.Context, string, identity.Principal, string) error
+	CreateProjectAPIKey(context.Context, string, string) (store.IssuedProjectAPIKey, error)
+	GetProjectAPIKey(context.Context, string) (store.ProjectAPIKeyBinding, error)
+	ListProjectAPIKeys(context.Context, string, int, bool) (store.ProjectAPIKeyPage, error)
+	ResetProjectAPIKey(context.Context, string, string) (store.IssuedProjectAPIKey, error)
+	RevokeProjectAPIKey(context.Context, string) error
 	ResolveProjectAPIKey(context.Context, string) (store.ProjectAPIKeyBinding, error)
 }
-
 type ProjectAPIKeyRequest struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
-
-type ProjectAPIKeyList struct {
-	Data    []store.ProjectAPIKey `json:"data"`
-	HasMore bool                  `json:"has_more"`
+type ProjectAPIKeyResetRequest struct {
+	RequestID string `json:"request_id"`
 }
+type ProjectAPIKeyList = store.ProjectAPIKeyPage
 
 func WithProjectAPIKeys(s ProjectAPIKeyStore, auth *DeploymentAuthenticator) Option {
 	return func(h *Handler) {
@@ -39,101 +40,162 @@ func WithProjectAPIKeys(s ProjectAPIKeyStore, auth *DeploymentAuthenticator) Opt
 		}
 	}
 }
-
 func (h *Handler) registerProjectAPIKeyRoutes(r chi.Router) {
 	if h.projectKeys == nil || h.deploymentAuth == nil {
 		return
 	}
-	r.Route("/core/v1/project-api-keys/{binding_digest}", func(r chi.Router) {
+	r.Route("/core/v1/admin/api-keys", func(r chi.Router) {
 		r.Use(h.deploymentAuth.authenticate)
 		r.Get("/", h.listProjectAPIKeys)
 		r.Post("/", h.createProjectAPIKey)
+		r.Get("/{key_id}", h.getProjectAPIKey)
 		r.Delete("/{key_id}", h.revokeProjectAPIKey)
+		r.Post("/{key_id}/reset", h.resetProjectAPIKey)
 	})
 }
 
-// staticBinding resolves a non-secret selector, never a credential or caller
-// supplied principal. Derived keys cannot themselves become parent bindings.
+// staticBinding is retained only for static read provenance selectors.
 func (a *Authenticator) staticBinding(value string) (identity.Principal, bool) {
 	digest, err := hex.DecodeString(value)
 	if err != nil || len(digest) != sha256.Size || hex.EncodeToString(digest) != value {
 		return identity.Principal{}, false
 	}
-	principal, ok := a.principals[[sha256.Size]byte(digest)]
-	return principal, ok
+	p, ok := a.principals[[sha256.Size]byte(digest)]
+	return p, ok
+}
+func (h *Handler) resolveAdminKey(ctx context.Context, id string) (store.ProjectAPIKeyBinding, error) {
+	if strings.HasPrefix(id, "static:") {
+		digest := strings.TrimPrefix(id, "static:")
+		p, ok := h.auth.staticBinding(digest)
+		if !ok {
+			return store.ProjectAPIKeyBinding{}, store.ErrNotFound
+		}
+		raw, _ := hex.DecodeString(digest)
+		source := h.auth.sources[[32]byte(raw)]
+		return store.ProjectAPIKeyBinding{Principal: p, Key: store.ProjectAPIKey{ID: id, Name: source.Name, Prefix: source.Prefix, Kind: "static", TenantID: p.TenantID, OrganizationID: p.OrganizationID, ProjectID: p.ProjectID}}, nil
+	}
+	return h.projectKeys.GetProjectAPIKey(ctx, id)
+}
+func (h *Handler) adminKeyScope(w http.ResponseWriter, r *http.Request) (store.ProjectAPIKeyBinding, bool) {
+	binding, err := h.resolveAdminKey(r.Context(), chi.URLParam(r, "key_id"))
+	if err != nil {
+		writeStoreError(w, r, err)
+		return store.ProjectAPIKeyBinding{}, false
+	}
+	setAdminAuditSource(r, binding.Key.ID)
+	return binding, true
+}
+func setAdminAuditSource(r *http.Request, keyID string) {
+	digest, _ := projectBearerDigest(r)
+	requestID, _ := log.RequestIDFromContext(r.Context())
+	source := adminaudit.Source{CredentialID: hex.EncodeToString(digest[:])[:8], ActorLabel: r.Header.Get("X-Core-Console-Actor"), RequestID: requestID, TraceID: requestID, TargetKeyID: keyID}
+	if carrier, ok := log.TraceFromContext(r.Context()); ok {
+		source.TraceID = carrier.Trace.String()
+	}
+	*r = *r.WithContext(adminaudit.WithSource(r.Context(), source))
+}
+func (h *Handler) listAdminKeyBindings(ctx context.Context, after string, limit int, ascending bool) (store.ProjectAPIKeyPage, error) {
+	if limit < 1 || limit > 500 {
+		return store.ProjectAPIKeyPage{}, store.ErrInvalidInput
+	}
+	if after != "" {
+		if _, err := h.resolveAdminKey(ctx, after); err != nil {
+			return store.ProjectAPIKeyPage{}, err
+		}
+	}
+	page, err := h.projectKeys.ListProjectAPIKeys(ctx, after, limit, ascending)
+	if err != nil {
+		return page, err
+	}
+	for _, source := range h.auth.sources {
+		if after == "" || (ascending && source.KeyID > after) || (!ascending && source.KeyID < after) {
+			binding, err := h.resolveAdminKey(ctx, source.KeyID)
+			if err != nil {
+				return store.ProjectAPIKeyPage{}, err
+			}
+			page.Data = append(page.Data, binding.Key)
+		}
+	}
+	sort.Slice(page.Data, func(i, j int) bool {
+		if ascending {
+			return page.Data[i].ID < page.Data[j].ID
+		}
+		return page.Data[i].ID > page.Data[j].ID
+	})
+	if len(page.Data) > limit {
+		page.HasMore = true
+		page.Data = page.Data[:limit]
+	}
+	if page.Data == nil {
+		page.Data = []store.ProjectAPIKey{}
+	}
+	return page, nil
 }
 
-func (h *Handler) projectAPIKeyBinding(w http.ResponseWriter, r *http.Request) (string, identity.Principal, bool) {
-	digest := chi.URLParam(r, "binding_digest")
-	principal, ok := h.auth.staticBinding(digest)
-	if !ok {
-		writeStoreError(w, r, store.ErrNotFound)
-		return "", identity.Principal{}, false
-	}
-	if r.URL.RawQuery != "" || r.URL.ForceQuery {
-		writeStoreError(w, r, store.ErrInvalidInput)
-		return "", identity.Principal{}, false
-	}
-	return digest, principal, true
-}
-
-// @Summary List project API keys for a configured caller binding
-// @Description Core extension requiring deployment administrator authority. The binding digest selects only a statically configured caller; it does not authenticate. Returns safe metadata, never key secrets or token digests. Derived keys freeze that caller's principal and stop authenticating when the static parent is removed or rebound.
-// @Tags Project API Keys
+// @Summary List independent API key spaces
+// @Tags Administrator API Keys
 // @Produce json
 // @Security DeploymentAdminAuth
-// @Param binding_digest path string true "Configured caller SHA-256 binding selector"
-// @Success 200 {object} api.ProjectAPIKeyList
+// @Param after query string false "Key ID cursor"
+// @Param limit query int false "Page size (1-500)"
+// @Param order query string false "asc or desc by key ID"
+// @Success 200 {object} store.ProjectAPIKeyPage
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Router /core/v1/project-api-keys/{binding_digest} [get]
+// @Router /core/v1/admin/api-keys [get]
 func (h *Handler) listProjectAPIKeys(w http.ResponseWriter, r *http.Request) {
-	digest, principal, ok := h.projectAPIKeyBinding(w, r)
-	if !ok {
-		return
+	values := r.URL.Query()
+	limit := 20
+	ascending := false
+	for _, name := range []string{"after", "limit", "order"} {
+		if len(values[name]) > 1 {
+			writeStoreError(w, r, store.ErrInvalidInput)
+			return
+		}
 	}
-	keys, err := h.projectKeys.ListProjectAPIKeys(r.Context(), digest, principal)
+	if raw, ok := values["limit"]; ok {
+		n, err := strconv.Atoi(raw[0])
+		if err != nil {
+			writeStoreError(w, r, store.ErrInvalidInput)
+			return
+		}
+		limit = n
+	}
+	if raw, ok := values["order"]; ok {
+		if raw[0] != "asc" && raw[0] != "desc" {
+			writeStoreError(w, r, store.ErrInvalidInput)
+			return
+		}
+		ascending = raw[0] == "asc"
+	}
+	page, err := h.listAdminKeyBindings(r.Context(), values.Get("after"), limit, ascending)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	if keys == nil {
-		keys = []store.ProjectAPIKey{}
-	}
-	writeJSON(w, http.StatusOK, ProjectAPIKeyList{Data: keys})
+	writeJSON(w, http.StatusOK, page)
 }
 
-// @Summary Create a project API key for a configured caller binding
-// @Description Core extension requiring deployment administrator authority. Generates an independent random secret, stores only its digest and returns the secret once. A duplicate request ID returns 409 without replaying the secret. After an uncertain response, list the ID and revoke it explicitly before creating another key. The key inherits the frozen static caller principal and cannot manage keys or deployment resources.
-// @Tags Project API Keys
+// @Summary Issue an API key with a new independent space
+// @Tags Administrator API Keys
 // @Accept json
 // @Produce json
 // @Security DeploymentAdminAuth
-// @Param binding_digest path string true "Configured caller SHA-256 binding selector"
-// @Param body body api.ProjectAPIKeyRequest true "Key ID and display name"
+// @Param body body api.ProjectAPIKeyRequest true "Stable key ID and display name"
 // @Success 201 {object} store.IssuedProjectAPIKey
-// @Failure 400,401,404,409,500 {object} v1.ErrorResponse
-// @Router /core/v1/project-api-keys/{binding_digest} [post]
+// @Failure 400,401,409,500 {object} v1.ErrorResponse
+// @Router /core/v1/admin/api-keys [post]
 func (h *Handler) createProjectAPIKey(w http.ResponseWriter, r *http.Request) {
-	digest, principal, ok := h.projectAPIKeyBinding(w, r)
-	if !ok {
-		return
-	}
 	raw, ok := readJSONBodyLimit(w, r, 4096, "API key request is too large.")
 	if !ok {
 		return
 	}
 	var input ProjectAPIKeyRequest
-	if decodeInputObject(raw, &input, "id", "name") != nil {
+	if decodeInputObject(raw, &input, "id", "name") != nil || !executorManagementID(input.ID) {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
-	containsControl := strings.IndexFunc(input.Name, unicode.IsControl) >= 0
-	input.Name = strings.TrimSpace(input.Name)
-	if !executorManagementID(input.ID) || input.Name == "" || utf8.RuneCountInString(input.Name) > 80 || containsControl {
-		writeStoreError(w, r, store.ErrInvalidInput)
-		return
-	}
-	key, err := h.projectKeys.CreateProjectAPIKey(r.Context(), digest, principal, input.ID, input.Name)
+	setAdminAuditSource(r, input.ID)
+	key, err := h.projectKeys.CreateProjectAPIKey(r.Context(), input.ID, input.Name)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -141,29 +203,82 @@ func (h *Handler) createProjectAPIKey(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, key)
 }
 
-// @Summary Revoke a project API key
-// @Description Core extension requiring deployment administrator authority. Scopes the key ID to the exact configured parent binding and principal. Revocation prevents future authenticated requests; it does not cancel already admitted operations or streams. Missing and foreign IDs return the same 404 response.
-// @Tags Project API Keys
+// @Summary Get safe API key metadata including revoked keys
+// @Tags Administrator API Keys
 // @Produce json
 // @Security DeploymentAdminAuth
-// @Param binding_digest path string true "Configured caller SHA-256 binding selector"
-// @Param key_id path string true "Project API key UUID"
-// @Success 200 {object} api.SandboxMutationResponse
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Router /core/v1/project-api-keys/{binding_digest}/{key_id} [delete]
-func (h *Handler) revokeProjectAPIKey(w http.ResponseWriter, r *http.Request) {
-	digest, principal, ok := h.projectAPIKeyBinding(w, r)
+// @Param key_id path string true "API key ID"
+// @Success 200 {object} store.ProjectAPIKey
+// @Failure 401,404,500 {object} v1.ErrorResponse
+// @Router /core/v1/admin/api-keys/{key_id} [get]
+func (h *Handler) getProjectAPIKey(w http.ResponseWriter, r *http.Request) {
+	binding, ok := h.adminKeyScope(w, r)
+	if ok {
+		writeJSON(w, http.StatusOK, binding.Key)
+	}
+}
+
+// @Summary Reset a key secret while preserving its space and identity
+// @Tags Administrator API Keys
+// @Accept json
+// @Produce json
+// @Security DeploymentAdminAuth
+// @Param key_id path string true "API key UUID"
+// @Param body body api.ProjectAPIKeyResetRequest true "Unique reset request ID; duplicates return conflict"
+// @Success 200 {object} store.IssuedProjectAPIKey
+// @Failure 400,401,404,409,500 {object} v1.ErrorResponse
+// @Router /core/v1/admin/api-keys/{key_id}/reset [post]
+func (h *Handler) resetProjectAPIKey(w http.ResponseWriter, r *http.Request) {
+	binding, ok := h.adminKeyScope(w, r)
 	if !ok {
 		return
 	}
-	id := chi.URLParam(r, "key_id")
-	if !executorManagementID(id) {
-		writeStoreError(w, r, store.ErrNotFound)
+	if binding.Key.Kind == "static" {
+		writeError(w, 409, "static_api_key", "Static keys are managed through deployment configuration.")
 		return
 	}
-	if err := h.projectKeys.RevokeProjectAPIKey(r.Context(), digest, principal, id); err != nil {
+	raw, ok := readJSONBodyLimit(w, r, 4096, "API key request is too large.")
+	if !ok {
+		return
+	}
+	var input ProjectAPIKeyResetRequest
+	if decodeInputObject(raw, &input, "request_id") != nil || !executorManagementID(input.RequestID) {
+		writeStoreError(w, r, store.ErrInvalidInput)
+		return
+	}
+	key, err := h.projectKeys.ResetProjectAPIKey(r.Context(), binding.Key.ID, input.RequestID)
+	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, SandboxMutationResponse{ID: id, Deleted: true})
+	writeJSON(w, http.StatusOK, key)
+}
+
+// @Summary Revoke authentication while retaining the key space and assets
+// @Tags Administrator API Keys
+// @Produce json
+// @Security DeploymentAdminAuth
+// @Param key_id path string true "API key UUID"
+// @Success 200 {object} api.SandboxMutationResponse
+// @Failure 401,404,409,500 {object} v1.ErrorResponse
+// @Router /core/v1/admin/api-keys/{key_id} [delete]
+func (h *Handler) revokeProjectAPIKey(w http.ResponseWriter, r *http.Request) {
+	binding, ok := h.adminKeyScope(w, r)
+	if !ok {
+		return
+	}
+	if binding.Key.Kind == "static" {
+		writeError(w, 409, "static_api_key", "Static keys are managed through deployment configuration.")
+		return
+	}
+	if err := h.projectKeys.RevokeProjectAPIKey(r.Context(), binding.Key.ID); err != nil {
+		writeStoreError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, SandboxMutationResponse{ID: binding.Key.ID, Deleted: true})
+}
+
+func (h *Handler) adminAuditContext(r *http.Request, keyID string) context.Context {
+	setAdminAuditSource(r, keyID)
+	return r.Context()
 }

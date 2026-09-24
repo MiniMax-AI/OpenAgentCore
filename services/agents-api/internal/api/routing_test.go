@@ -84,7 +84,7 @@ func (k routingKeys) ResolveProjectAPIKey(_ context.Context, digest string) (sto
 	if digest != device.HashCredential(routingDerivedKey) {
 		return store.ProjectAPIKeyBinding{}, store.ErrNotFound
 	}
-	return store.ProjectAPIKeyBinding{BindingDigest: device.HashCredential(routingKey), Principal: k.principal}, nil
+	return store.ProjectAPIKeyBinding{Principal: k.principal}, nil
 }
 
 // missingFiles reports every File as missing.
@@ -316,7 +316,7 @@ func TestEveryRouteAuthenticatesItsCanonicalPath(t *testing.T) {
 		}
 		routes++
 		clean := concretePath(route)
-		admin := strings.HasPrefix(route, "/core/v1/sandbox/") || strings.HasPrefix(route, "/core/v1/project-api-keys/")
+		admin := strings.HasPrefix(route, "/core/v1/sandbox/") || strings.HasPrefix(route, "/core/v1/admin/")
 		betaGroup := strings.HasPrefix(route, "/v1/") && !strings.HasPrefix(route, "/v1/files") && !strings.HasPrefix(route, "/v1/skills")
 		for _, header := range credentials {
 			projectKey := header.Get("Authorization") == "Bearer "+routingKey || header.Get("Authorization") == "Bearer "+routingDerivedKey
@@ -344,8 +344,8 @@ func TestEveryRouteAuthenticatesItsCanonicalPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, route := range []string{"GET /core/v1/project-api-keys/{binding_digest}/", "POST /core/v1/project-api-keys/{binding_digest}/",
-		"DELETE /core/v1/project-api-keys/{binding_digest}/{key_id}", "GET /core/v1/sandbox/nodes", "DELETE /core/v1/environments/{environment_id}/executor-credentials/{key_id}"} {
+	for _, route := range []string{"GET /core/v1/admin/api-keys/", "POST /core/v1/admin/api-keys/",
+		"DELETE /core/v1/admin/api-keys/{key_id}", "GET /core/v1/sandbox/nodes", "DELETE /core/v1/environments/{environment_id}/executor-credentials/{key_id}"} {
 		if !walked[route] {
 			t.Errorf("route %s was not walked", route)
 		}

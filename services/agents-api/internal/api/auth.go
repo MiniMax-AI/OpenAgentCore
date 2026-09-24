@@ -38,9 +38,7 @@ type Authenticator struct {
 }
 
 func NewAuthenticator(keys []APIKey) (*Authenticator, error) {
-	if len(keys) == 0 {
-		return nil, errors.New("at least one Agents API key is required")
-	}
+
 	a := &Authenticator{principals: make(map[[32]byte]identity.Principal, len(keys)), sources: make(map[[32]byte]writeaudit.Source, len(keys))}
 	for _, key := range keys {
 		principal := identity.Principal{ProjectScope: identity.ProjectScope{TenantID: key.TenantID, OrganizationID: key.OrganizationID, ProjectID: key.ProjectID}, SubjectKind: key.SubjectKind, SubjectID: key.SubjectID}
@@ -58,8 +56,8 @@ func NewAuthenticator(keys []APIKey) (*Authenticator, error) {
 		if key.Kind == "" {
 			key.Kind = "static"
 		}
-		if key.Kind != "static" && key.Kind != "console" {
-			return nil, errors.New("configured API key kind must be static or console")
+		if key.Kind != "static" {
+			return nil, errors.New("configured API key kind must be static")
 		}
 		if !utf8.ValidString(key.Name) || utf8.RuneCountInString(key.Name) > 80 || strings.ContainsFunc(key.Name, unicode.IsControl) {
 			return nil, errors.New("configured API key name must contain at most 80 characters without controls")
@@ -112,6 +110,11 @@ func (h *Handler) resolveCaller(r *http.Request) (identity.Principal, writeaudit
 	if !valid {
 		return identity.Principal{}, writeaudit.Source{}, false, nil
 	}
+	if h.deploymentAuth != nil {
+		if _, admin := h.deploymentAuth.digests[digest]; admin {
+			return identity.Principal{}, writeaudit.Source{}, false, nil
+		}
+	}
 	if principal, ok := h.auth.principals[digest]; ok {
 		return principal, h.auth.sources[digest], principalScopeHeaders(r, principal), nil
 	}
@@ -127,12 +130,11 @@ func (h *Handler) resolveCaller(r *http.Request) (identity.Principal, writeaudit
 	if err != nil {
 		return identity.Principal{}, writeaudit.Source{}, false, err
 	}
-	parent, ok := h.auth.staticBinding(binding.BindingDigest)
-	if !ok || parent != binding.Principal || !principalScopeHeaders(r, parent) {
+	if !principalScopeHeaders(r, binding.Principal) {
 		return identity.Principal{}, writeaudit.Source{}, false, nil
 	}
-	source := writeaudit.Source{KeyID: binding.Key.ID, Name: binding.Key.Name, Prefix: binding.Key.Prefix, Kind: "issued", TenantID: parent.TenantID}
-	return parent, source, true, nil
+	source := writeaudit.Source{KeyID: binding.Key.ID, Name: binding.Key.Name, Prefix: binding.Key.Prefix, Kind: "issued", TenantID: binding.Principal.TenantID}
+	return binding.Principal, source, true, nil
 }
 
 func matchesScopeHeader(r *http.Request, name, expected string) bool {

@@ -1,21 +1,33 @@
 -- name: CreateProjectAPIKey :one
-INSERT INTO project_api_keys
-    (id, name, prefix, token_sha256, binding_digest, tenant_id, organization_id, project_id, subject_kind, subject_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-ON CONFLICT (id) DO NOTHING
-RETURNING id, name, prefix, created_at, revoked_at;
+INSERT INTO project_api_keys (id,name,prefix,token_sha256,tenant_id,organization_id,project_id,subject_kind,subject_id)
+VALUES ($1,$2,$3,$4,$5,$6,$7,'service_account',$1::uuid::text)
+ON CONFLICT (id) DO NOTHING RETURNING *;
 
 -- name: ListProjectAPIKeys :many
-SELECT id, name, prefix, created_at, revoked_at FROM project_api_keys
-WHERE binding_digest = $1 AND tenant_id = $2 AND organization_id = $3
-  AND project_id = $4 AND subject_kind = $5 AND subject_id = $6
-ORDER BY created_at DESC, id;
+SELECT * FROM project_api_keys
+WHERE (sqlc.arg(after_id)::text = '' OR
+    (sqlc.arg(ascending)::bool AND id::text > sqlc.arg(after_id)::text) OR
+    (NOT sqlc.arg(ascending)::bool AND id::text < sqlc.arg(after_id)::text))
+ORDER BY CASE WHEN sqlc.arg(ascending)::bool THEN id END ASC,
+         CASE WHEN NOT sqlc.arg(ascending)::bool THEN id END DESC
+LIMIT sqlc.arg(page_limit)::int;
 
--- name: RevokeProjectAPIKey :execrows
+-- name: GetProjectAPIKey :one
+SELECT * FROM project_api_keys WHERE id = $1;
+
+-- name: RevokeProjectAPIKey :one
 UPDATE project_api_keys SET revoked_at = COALESCE(revoked_at, now())
-WHERE id = $1 AND binding_digest = $2 AND tenant_id = $3 AND organization_id = $4
-  AND project_id = $5 AND subject_kind = $6 AND subject_id = $7;
+WHERE id = $1 RETURNING *;
+
+-- name: ResetProjectAPIKey :one
+UPDATE project_api_keys SET prefix = $2, token_sha256 = $3
+WHERE id = $1 AND revoked_at IS NULL RETURNING *;
 
 -- name: ResolveProjectAPIKey :one
-SELECT id, name, prefix, created_at, revoked_at, binding_digest, tenant_id, organization_id, project_id, subject_kind, subject_id
-FROM project_api_keys WHERE token_sha256 = $1 AND revoked_at IS NULL;
+SELECT * FROM project_api_keys WHERE token_sha256 = $1 AND revoked_at IS NULL;
+
+-- name: ProjectAPIKeyDigestExists :one
+SELECT EXISTS (SELECT 1 FROM project_api_keys WHERE token_sha256 = $1);
+
+-- name: ProjectAPIKeyTenantExists :one
+SELECT EXISTS (SELECT 1 FROM project_api_keys WHERE tenant_id = $1);

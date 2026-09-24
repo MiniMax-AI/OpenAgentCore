@@ -101,14 +101,14 @@ func TestWriteAuditQueriesDeploymentScopeAndValidation(t *testing.T) {
 func TestAuthenticatedWriteProvenance(t *testing.T) {
 	key := callerBinding()
 	key.Name = "Console"
-	key.Kind = "console"
+	key.Kind = "static"
 	auth, err := NewAuthenticator([]APIKey{key})
 	if err != nil {
 		t.Fatal(err)
 	}
 	principal := auth.principals[[32]byte(mustDigestForAudit(t, key.TokenSHA256))]
 	issued := store.ProjectAPIKey{ID: uuid.NewString(), Name: "SDK", Prefix: "pc_12345678"}
-	keys := &projectKeyStoreFixture{binding: store.ProjectAPIKeyBinding{BindingDigest: key.TokenSHA256, Principal: principal, Key: issued}}
+	keys := &projectKeyStoreFixture{binding: store.ProjectAPIKeyBinding{Principal: principal, Key: issued}}
 	h := &Handler{auth: auth, projectKeys: keys}
 	var source writeaudit.Source
 	var got bool
@@ -120,7 +120,7 @@ func TestAuthenticatedWriteProvenance(t *testing.T) {
 		method, path, token, kind, id string
 		present                       bool
 	}{
-		{"POST", "/v1/agents", "caller", "console", "static:" + key.TokenSHA256, true},
+		{"POST", "/v1/agents", "caller", "static", "static:" + key.TokenSHA256, true},
 		{"DELETE", "/v1/files/file-one", "issued-project-key", "issued", issued.ID, true},
 		{"GET", "/v1/agents", "caller", "", "", false},
 		{"POST", "/core/v1/anything", "caller", "", "", false},
@@ -161,7 +161,7 @@ func TestStaticAuditIdentityStableAcrossDisplayChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	key.Name = "Renamed"
-	key.Kind = "console"
+	key.Kind = "static"
 	b, err := NewAuthenticator([]APIKey{key})
 	if err != nil {
 		t.Fatal(err)

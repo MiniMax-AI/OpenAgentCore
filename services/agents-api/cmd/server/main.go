@@ -55,16 +55,18 @@ func main() {
 
 func run() error {
 	databaseURL, keysFile := os.Getenv("AGENTS_API_DATABASE_URL"), os.Getenv("AGENTS_API_KEYS_FILE")
-	if databaseURL == "" || keysFile == "" {
-		return errors.New("AGENTS_API_DATABASE_URL and AGENTS_API_KEYS_FILE are required")
-	}
-	content, err := os.ReadFile(keysFile)
-	if err != nil {
-		return errors.New("cannot read AGENTS_API_KEYS_FILE")
+	if databaseURL == "" {
+		return errors.New("AGENTS_API_DATABASE_URL is required")
 	}
 	var keys []api.APIKey
-	if err := json.Unmarshal(content, &keys); err != nil {
-		return errors.New("AGENTS_API_KEYS_FILE must contain an array of API key bindings")
+	if keysFile != "" {
+		content, err := os.ReadFile(keysFile)
+		if err != nil {
+			return errors.New("cannot read AGENTS_API_KEYS_FILE")
+		}
+		if err := json.Unmarshal(content, &keys); err != nil {
+			return errors.New("AGENTS_API_KEYS_FILE must contain an array of API key bindings")
+		}
 	}
 	auth, err := api.NewAuthenticator(keys)
 	if err != nil {
@@ -185,6 +187,9 @@ func run() error {
 		if err != nil {
 			return err
 		}
+	}
+	if err := api.ValidateCredentialSeparation(ctx, auth, keyAdmin, executionStore); err != nil {
+		return err
 	}
 	options = append(options, api.WithProjectAPIKeys(executionStore, keyAdmin), api.WithWriteAudit(executionStore, keyAdmin))
 	if history.Reader != nil {
