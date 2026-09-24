@@ -184,14 +184,14 @@ func TestPostgresRuntimeHistoryDenseReadAndBoundedRetention(t *testing.T) {
 	if err != nil || len(got.Coverage) != 0 {
 		t.Fatal("expired samples visible", got, err)
 	}
-	if err := reader.Prune(t.Context()); err != nil {
+	if _, err := reader.Prune(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	var remaining int
 	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM runtime_history_samples WHERE tenant_id=$1 AND resolved_at_ns<$2`, scope.TenantID, end.Add(-7*24*time.Hour).UnixNano()).Scan(&remaining); err != nil || remaining != 5 {
 		t.Fatal("cleanup exceeded bounded batch", remaining, err)
 	}
-	if err := reader.Prune(t.Context()); err != nil {
+	if _, err := reader.Prune(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM runtime_history_samples WHERE tenant_id=$1 AND resolved_at_ns<$2`, scope.TenantID, end.Add(-7*24*time.Hour).UnixNano()).Scan(&remaining); err != nil || remaining != 0 {

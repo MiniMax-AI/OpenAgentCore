@@ -172,6 +172,141 @@ definitions:
           $ref: '#/definitions/store.RuntimeNode'
         type: array
     type: object
+  coremetrics.Database:
+    properties:
+      ping_ms:
+        $ref: '#/definitions/coremetrics.Latency'
+      pool:
+        $ref: '#/definitions/coremetrics.Pool'
+      series:
+        items:
+          $ref: '#/definitions/coremetrics.DatabaseBucket'
+        type: array
+      size_bytes:
+        type: integer
+    type: object
+  coremetrics.DatabaseBucket:
+    properties:
+      ping_p95_ms:
+        type: number
+      pool_in_use:
+        type: integer
+      start:
+        type: string
+    type: object
+  coremetrics.Execution:
+    properties:
+      connected_daemons:
+        type: integer
+      in_progress_turns:
+        type: integer
+      interrupted:
+        type: integer
+      oldest_queued_seconds:
+        type: number
+      queue_wait_ms:
+        $ref: '#/definitions/coremetrics.Latency'
+      queued_turns:
+        type: integer
+      series:
+        items:
+          $ref: '#/definitions/coremetrics.ExecutionBucket'
+        type: array
+      slots_in_use:
+        type: integer
+      slots_total:
+        type: integer
+      unavailable:
+        type: integer
+      waiting_for_daemon:
+        type: integer
+    type: object
+  coremetrics.ExecutionBucket:
+    properties:
+      in_progress:
+        type: integer
+      queue_wait_p95_ms:
+        type: number
+      queued:
+        type: integer
+      start:
+        type: string
+    type: object
+  coremetrics.Job:
+    properties:
+      failed:
+        type: integer
+      id:
+        type: string
+      last_run_at:
+        type: string
+      processed:
+        type: integer
+      status:
+        type: string
+    type: object
+  coremetrics.Latency:
+    properties:
+      p50:
+        type: number
+      p95:
+        type: number
+    type: object
+  coremetrics.Pool:
+    properties:
+      idle:
+        type: integer
+      in_use:
+        type: integer
+      max:
+        type: integer
+    type: object
+  coremetrics.Process:
+    properties:
+      goroutines:
+        type: integer
+      memory_bytes:
+        type: integer
+    type: object
+  coremetrics.Range:
+    properties:
+      end:
+        type: string
+      resolution_seconds:
+        type: integer
+      start:
+        type: string
+    type: object
+  coremetrics.ServiceState:
+    properties:
+      execution_owner:
+        type: boolean
+      revision:
+        type: string
+      started_at:
+        type: string
+      status:
+        type: string
+    type: object
+  coremetrics.View:
+    properties:
+      database:
+        $ref: '#/definitions/coremetrics.Database'
+      execution:
+        $ref: '#/definitions/coremetrics.Execution'
+      jobs:
+        items:
+          $ref: '#/definitions/coremetrics.Job'
+        type: array
+      object:
+        type: string
+      process:
+        $ref: '#/definitions/coremetrics.Process'
+      range:
+        $ref: '#/definitions/coremetrics.Range'
+      service:
+        $ref: '#/definitions/coremetrics.ServiceState'
+    type: object
   store.AdminAssetCounts:
     properties:
       agents:
@@ -2634,6 +2769,43 @@ paths:
       security:
         - DeploymentAdminAuth: []
       summary: Copy assets into another Project
+      tags:
+        - Core Administration
+  /core/v1/admin/core-metrics:
+    get:
+      description: Deployment administrator only. Complete UTC buckets; unknown measurements are null. Samples are process-local and are not backfilled after a restart.
+      parameters:
+        - description: Time range (default 1h)
+          enum:
+            - 1h
+            - 6h
+            - 24h
+            - 7d
+          in: query
+          name: range
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/coremetrics.View'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve Core operational metrics
       tags:
         - Core Administration
   /core/v1/admin/projects:

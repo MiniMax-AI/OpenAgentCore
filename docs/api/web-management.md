@@ -88,3 +88,13 @@ Origin/Host requests are rejected; unavailable Core or rejected upstream redirec
 return 502. Console authentication uses its own error envelope. Management resource
 errors and deletion constraints are documented in the administrator reference and
 generated schema; do not interpret every empty or failed read as an absent resource.
+
+## Core metrics
+
+`GET /core/v1/admin/core-metrics?range=1h|6h|24h|7d` returns Core process, execution
+queue/slots, PostgreSQL and background-job measurements. It uses deployment
+administrator authentication, rejects arbitrary query filters and never grants
+Agent execution access. See the [exact measurement contract](../../contracts/agents-api/core-metrics.md)
+for complete buckets, null values, units and process-local retention. Frontend
+implementation is maintained separately; this backend change does not modify
+Agent metrics or the public Agent API.

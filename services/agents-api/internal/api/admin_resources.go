@@ -39,6 +39,7 @@ func (h *Handler) registerAdminResourceRoutes(router chi.Router) {
 	}
 	router.Group(func(r chi.Router) {
 
+		r.Get("/core-metrics", h.getCoreMetrics)
 		r.Get("/startup-configuration", h.adminStartupConfiguration)
 		r.Get("/runtime-history/capabilities", h.adminRuntimeHistoryCapabilities)
 		if h.adminManagement != nil {

@@ -11,6 +11,12 @@ for directory in "$runtime_root" "$output_dir"; do
   fi
 done
 
+revision="${AGENTS_API_BUILD_REVISION:-$(git -C "$repo_root" rev-parse HEAD 2>/dev/null || true)}"
+if [[ -n "$revision" && ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
+  printf 'Invalid Agents API source revision\n' >&2
+  exit 1
+fi
+
 mkdir -p "$runtime_root/cache/agents-api-builds"
 build_context="$(mktemp -d "$runtime_root/cache/agents-api-builds/source.XXXXXX")"
 trap 'rm -rf "$build_context"' EXIT
@@ -31,7 +37,7 @@ tar -C "$repo_root" -cf - \
     artifact="agents-api-$command"
     if [[ "$command" == server ]]; then artifact=agents-api; fi
     if [[ "$command" == sandbox-node ]]; then artifact=parsar-sandbox-node; fi
-    go build -mod=readonly -trimpath -buildvcs=false \
+    go build -mod=readonly -trimpath -buildvcs=false -ldflags "-X main.buildRevision=$revision" \
       -o "$build_context/bin/$artifact" "./services/agents-api/cmd/$command"
   done
 )
