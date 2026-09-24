@@ -8,19 +8,19 @@ definitions:
         type: string
       resource_type:
         type: string
-      source_key_id:
+      source_project_id:
         type: string
-      target_key_id:
+      target_project_id:
         type: string
       target_vault_id:
         type: string
     type: object
   api.AdminRuntimeObservation:
     properties:
-      key_id:
-        type: string
       observation:
         $ref: '#/definitions/v1.RuntimeObservation'
+      project_id:
+        type: string
     type: object
   api.AdminRuntimeObservationList:
     properties:
@@ -73,6 +73,8 @@ definitions:
         type: string
       last_active_at:
         type: integer
+      project_id:
+        type: string
       sessions:
         $ref: '#/definitions/api.AdminSessionCounts'
       usage:
@@ -96,14 +98,12 @@ definitions:
     type: object
   api.ProjectAPIKeyRequest:
     properties:
-      id:
-        type: string
       name:
         type: string
     type: object
-  api.ProjectAPIKeyResetRequest:
+  api.ProjectRequest:
     properties:
-      request_id:
+      name:
         type: string
     type: object
   api.ResourceOwnerList:
@@ -199,6 +199,8 @@ definitions:
         type: string
       id:
         type: string
+      project_id:
+        type: string
       request_id:
         type: string
       resource_id:
@@ -209,8 +211,6 @@ definitions:
         items:
           type: object
         type: array
-      target_key_id:
-        type: string
       trace_id:
         type: string
     type: object
@@ -284,11 +284,7 @@ definitions:
         type: string
       key:
         type: string
-      kind:
-        type: string
       name:
-        type: string
-      organization_id:
         type: string
       prefix:
         type: string
@@ -296,7 +292,18 @@ definitions:
         type: string
       revoked_at:
         type: string
-      tenant_id:
+    type: object
+  store.Project:
+    properties:
+      active_key_count:
+        type: integer
+      archived_at:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
         type: string
     type: object
   store.ProjectAPIKey:
@@ -305,11 +312,7 @@ definitions:
         type: string
       id:
         type: string
-      kind:
-        type: string
       name:
-        type: string
-      organization_id:
         type: string
       prefix:
         type: string
@@ -317,14 +320,21 @@ definitions:
         type: string
       revoked_at:
         type: string
-      tenant_id:
-        type: string
     type: object
   store.ProjectAPIKeyPage:
     properties:
       data:
         items:
           $ref: '#/definitions/store.ProjectAPIKey'
+        type: array
+      has_more:
+        type: boolean
+    type: object
+  store.ProjectPage:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/store.Project'
         type: array
       has_more:
         type: boolean
@@ -2515,2036 +2525,13 @@ info:
   title: Core Extensions
   version: "1"
 paths:
-  /core/v1/admin/api-keys:
-    get:
-      parameters:
-        - description: Key ID cursor
-          in: query
-          name: after
-          type: string
-        - description: Page size (1-100)
-          in: query
-          name: limit
-          type: integer
-        - description: asc or desc by key ID
-          in: query
-          name: order
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/store.ProjectAPIKeyPage'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: List independent API key spaces
-      tags:
-        - Administrator API Keys
-    post:
-      consumes:
-        - application/json
-      parameters:
-        - description: Stable key ID and display name
-          in: body
-          name: body
-          required: true
-          schema:
-            $ref: '#/definitions/api.ProjectAPIKeyRequest'
-      produces:
-        - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/store.IssuedProjectAPIKey'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Issue an API key with a new independent space
-      tags:
-        - Administrator API Keys
-  /core/v1/admin/api-keys/{key_id}:
-    delete:
-      parameters:
-        - description: API key UUID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.SandboxMutationResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Revoke authentication while retaining the key space and assets
-      tags:
-        - Administrator API Keys
-    get:
-      parameters:
-        - description: API key ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/store.ProjectAPIKey'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Get safe API key metadata including revoked keys
-      tags:
-        - Administrator API Keys
-  /core/v1/admin/api-keys/{key_id}/agents:
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Last Agent ID from the previous page
-          in: query
-          name: after
-          type: string
-        - default: 20
-          description: Page size; 0 is treated as 1 and values above 100 as 100
-          in: query
-          minimum: 0
-          name: limit
-          type: integer
-        - default: desc
-          description: Creation order; omit for descending, explicit empty values are invalid
-          enum:
-            - asc
-            - desc
-          in: query
-          name: order
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.SavedAgentList'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: List reusable Agents in a managed key space
-      tags:
-        - Agents
-  /core/v1/admin/api-keys/{key_id}/agents/{agent_id}:
-    delete:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Agent ID
-          in: path
-          name: agent_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.AgentDeleted'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "413":
-          description: Request Entity Too Large
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Delete a reusable Agent in a managed key space
-      tags:
-        - Agents
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Agent ID
-          in: path
-          name: agent_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.SavedAgent'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Retrieve a reusable Agent in a managed key space
-      tags:
-        - Agents
-  /core/v1/admin/api-keys/{key_id}/environment-templates:
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Previous Template ID
-          in: query
-          name: after
-          type: string
-        - default: 20
-          description: Page size; 0 is treated as 1 and values above 100 as 100
-          in: query
-          minimum: 0
-          name: limit
-          type: integer
-        - default: desc
-          description: Creation order; omit for descending, explicit empty values are invalid
-          enum:
-            - asc
-            - desc
-          in: query
-          name: order
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.EnvironmentTemplateList'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: List Environment Templates in a managed key space
-      tags:
-        - Environment Templates
-  /core/v1/admin/api-keys/{key_id}/environment-templates/{environment_template_id}:
-    delete:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Template ID
-          in: path
-          name: environment_template_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.EnvironmentTemplateDeleted'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Delete an Environment Template in a managed key space
-      tags:
-        - Environment Templates
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Template ID
-          in: path
-          name: environment_template_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.EnvironmentTemplate'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Retrieve an Environment Template in a managed key space
-      tags:
-        - Environment Templates
-  /core/v1/admin/api-keys/{key_id}/files:
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Last File ID from the previous page
-          in: query
-          name: after
-          type: string
-        - default: 10000
-          description: Maximum page size, 1–10000
-          in: query
-          maximum: 10000
-          minimum: 1
-          name: limit
-          type: integer
-        - default: desc
-          description: Creation order; omit for descending, explicit empty values are invalid
-          enum:
-            - asc
-            - desc
-          in: query
-          name: order
-          type: string
-        - description: Only return Files with this purpose
-          in: query
-          name: purpose
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.SourceFileList'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: List source files in a managed key space
-      tags:
-        - Files
-  /core/v1/admin/api-keys/{key_id}/files/{file_id}:
-    delete:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Source file ID
-          in: path
-          name: file_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.SourceFileDeleted'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Delete a source file in a managed key space
-      tags:
-        - Files
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Source file ID
-          in: path
-          name: file_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.SourceFile'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Retrieve source file metadata in a managed key space
-      tags:
-        - Files
-  /core/v1/admin/api-keys/{key_id}/reset:
-    post:
-      consumes:
-        - application/json
-      parameters:
-        - description: API key UUID
-          in: path
-          name: key_id
-          required: true
-          type: string
-        - description: Unique reset request ID; duplicates return conflict
-          in: body
-          name: body
-          required: true
-          schema:
-            $ref: '#/definitions/api.ProjectAPIKeyResetRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/store.IssuedProjectAPIKey'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Reset a key secret while preserving its space and identity
-      tags:
-        - Administrator API Keys
-  /core/v1/admin/api-keys/{key_id}/resource-owners:
-    get:
-      description: Deployment administrator only. The key path selects its independent space. Returns null for resources without recorded creation provenance, including historical and foreign resources. No key secret is returned.
-      parameters:
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-        - description: Resource type
-          in: query
-          name: resource_type
-          required: true
-          type: string
-        - description: Comma-separated public resource IDs, maximum 100
-          in: query
-          name: resource_ids
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.ResourceOwnerList'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Batch lookup resource creation keys
-      tags:
-        - Write Audit
-  /core/v1/admin/api-keys/{key_id}/sessions:
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Root Agent ID whose Sessions to return
-          in: query
-          name: agent_id
-          type: string
-        - description: Last Session ID from the previous page
-          in: query
-          name: after
-          type: string
-        - default: 20
-          description: Page size; 0 is treated as 1 and values above 100 as 100
-          in: query
-          minimum: 0
-          name: limit
-          type: integer
-        - default: desc
-          description: Creation order; omit for descending, explicit empty values are invalid
-          enum:
-            - asc
-            - desc
-          in: query
-          name: order
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.SessionList'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: List execution Sessions in a managed key space
-      tags:
-        - Sessions
-  /core/v1/admin/api-keys/{key_id}/sessions/{session_id}:
-    delete:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Session ID
-          in: path
-          name: session_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.SessionDeleted'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "413":
-          description: Request Entity Too Large
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Delete an execution Session in a managed key space
-      tags:
-        - Sessions
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Session ID
-          in: path
-          name: session_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.Session'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Retrieve an execution Session in a managed key space
-      tags:
-        - Sessions
-  /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/artifacts:
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Session ID
-          in: path
-          name: session_id
-          required: true
-          type: string
-        - description: Producing Environment ID; an unknown or malformed ID returns an empty page
-          in: query
-          name: environment_id
-          type: string
-        - description: Last immutable artifact ID
-          in: query
-          name: after
-          type: string
-        - default: 20
-          description: Page size
-          in: query
-          maximum: 100
-          minimum: 1
-          name: limit
-          type: integer
-        - default: desc
-          description: Publication order; omit for descending, explicit empty values are invalid
-          enum:
-            - asc
-            - desc
-          in: query
-          name: order
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.SessionArtifactList'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: List immutable Session artifacts in a managed key space
-      tags:
-        - Artifacts
-  /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/artifacts/{artifact_id}:
-    delete:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Session ID
-          in: path
-          name: session_id
-          required: true
-          type: string
-        - description: Artifact ID
-          in: path
-          name: artifact_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.SessionArtifactDeleted'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Delete a published artifact in a managed key space
-      tags:
-        - Artifacts
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Session ID
-          in: path
-          name: session_id
-          required: true
-          type: string
-        - description: Artifact ID
-          in: path
-          name: artifact_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.SessionArtifact'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Retrieve immutable artifact metadata in a managed key space
-      tags:
-        - Artifacts
-  /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/artifacts/{artifact_id}/content:
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Session ID
-          in: path
-          name: session_id
-          required: true
-          type: string
-        - description: Artifact ID
-          in: path
-          name: artifact_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/octet-stream
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: file
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Download immutable artifact bytes in a managed key space
-      tags:
-        - Artifacts
-  /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/execution-configuration:
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Session ID
-          in: path
-          name: session_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.SessionExecutionConfiguration'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Retrieve frozen Session execution configuration in a managed key space
-      tags:
-        - Core extensions
-  /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/items:
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Session ID
-          in: path
-          name: session_id
-          required: true
-          type: string
-        - description: Last Item ID from the previous page
-          in: query
-          name: after
-          type: string
-        - default: 20
-          description: Page size; 0 is treated as 1 and values above 100 as 100
-          in: query
-          minimum: 0
-          name: limit
-          type: integer
-        - default: desc
-          description: Creation order; omit for descending, explicit empty values are invalid
-          enum:
-            - asc
-            - desc
-          in: query
-          name: order
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.ItemList'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: List persisted execution Items in a managed key space
-      tags:
-        - Items
-  /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/runtime-history:
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Session ID
-          in: path
-          name: session_id
-          required: true
-          type: string
-        - description: Inclusive Unix-second start
-          in: query
-          maximum: 9007199254740991
-          minimum: 0
-          name: start
-          required: true
-          type: integer
-        - description: Exclusive Unix-second end
-          in: query
-          maximum: 9007199254740991
-          minimum: 1
-          name: end
-          required: true
-          type: integer
-        - description: Maximum points per series; defaults to the lower of 120 and the advertised service maximum
-          in: query
-          maximum: 10000
-          minimum: 2
-          name: max_points
-          type: integer
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.RuntimeHistory'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Retrieve Session Runtime history in a managed key space
-      tags:
-        - Runtime history
-  /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/runtime-observation:
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Session ID
-          in: path
-          name: session_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.RuntimeObservation'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Retrieve a Session Runtime observation in a managed key space
-      tags:
-        - Runtime observations
-  /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/turns:
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Session ID
-          in: path
-          name: session_id
-          required: true
-          type: string
-        - description: Last Turn ID from the previous page
-          in: query
-          name: after
-          type: string
-        - default: 20
-          description: Page size
-          in: query
-          maximum: 100
-          minimum: 1
-          name: limit
-          type: integer
-        - default: desc
-          description: Creation order; omit for descending, explicit empty values are invalid
-          enum:
-            - asc
-            - desc
-          in: query
-          name: order
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.TurnList'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: List execution Turns in a managed key space
-      tags:
-        - Turns
-  /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/turns/{turn_id}:
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Session ID
-          in: path
-          name: session_id
-          required: true
-          type: string
-        - description: Turn ID
-          in: path
-          name: turn_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.Turn'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Retrieve an execution Turn in a managed key space
-      tags:
-        - Turns
-  /core/v1/admin/api-keys/{key_id}/skills:
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Skill resource cursor
-          in: query
-          name: after
-          type: string
-        - default: 20
-          description: Page size; 0 returns an empty page
-          in: query
-          maximum: 100
-          minimum: 0
-          name: limit
-          type: integer
-        - description: Creation order; omit for descending, explicit empty values are invalid
-          enum:
-            - asc
-            - desc
-          in: query
-          name: order
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.SkillList'
-      security:
-        - DeploymentAdminAuth: []
-      summary: List Skills in a managed key space
-      tags:
-        - Skills
-  /core/v1/admin/api-keys/{key_id}/skills/{skill_id}:
-    delete:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Skill ID
-          in: path
-          name: skill_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.SkillDeleted'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Delete a Skill and its versions in a managed key space
-      tags:
-        - Skills
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Skill ID
-          in: path
-          name: skill_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.Skill'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Retrieve Skill metadata in a managed key space
-      tags:
-        - Skills
-  /core/v1/admin/api-keys/{key_id}/skills/{skill_id}/content:
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Skill ID
-          in: path
-          name: skill_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/octet-stream
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: file
-      security:
-        - DeploymentAdminAuth: []
-      summary: Download Skill content in a managed key space
-      tags:
-        - Skills
-  /core/v1/admin/api-keys/{key_id}/skills/{skill_id}/versions:
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Skill ID
-          in: path
-          name: skill_id
-          required: true
-          type: string
-        - description: Version resource cursor
-          in: query
-          name: after
-          type: string
-        - default: 20
-          description: Page size; 0 returns an empty page
-          in: query
-          maximum: 100
-          minimum: 0
-          name: limit
-          type: integer
-        - description: Version order; omit for descending, explicit empty values are invalid
-          enum:
-            - asc
-            - desc
-          in: query
-          name: order
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.SkillVersionList'
-      security:
-        - DeploymentAdminAuth: []
-      summary: List Skill versions in a managed key space
-      tags:
-        - Skills
-  /core/v1/admin/api-keys/{key_id}/skills/{skill_id}/versions/{version}:
-    delete:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Skill ID
-          in: path
-          name: skill_id
-          required: true
-          type: string
-        - description: Concrete version number
-          in: path
-          name: version
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.SkillVersionDeleted'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Delete a Skill version in a managed key space
-      tags:
-        - Skills
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Skill ID
-          in: path
-          name: skill_id
-          required: true
-          type: string
-        - description: Concrete version number
-          in: path
-          name: version
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.SkillVersion'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Retrieve Skill version metadata in a managed key space
-      tags:
-        - Skills
-  /core/v1/admin/api-keys/{key_id}/skills/{skill_id}/versions/{version}/content:
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Skill ID
-          in: path
-          name: skill_id
-          required: true
-          type: string
-        - description: Concrete version number
-          in: path
-          name: version
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/octet-stream
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: file
-      security:
-        - DeploymentAdminAuth: []
-      summary: Download immutable Skill version content in a managed key space
-      tags:
-        - Skills
-  /core/v1/admin/api-keys/{key_id}/vaults:
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Last Vault ID from the previous page
-          in: query
-          name: after
-          type: string
-        - default: 20
-          description: Requested page size, clamped to 1–100
-          in: query
-          name: limit
-          type: integer
-        - default: desc
-          description: Creation order; omit for descending, explicit empty values are invalid
-          enum:
-            - asc
-            - desc
-          in: query
-          name: order
-          type: string
-        - description: Scalar status filter
-          enum:
-            - active
-            - archived
-          in: query
-          name: status
-          type: string
-        - collectionFormat: multi
-          description: Array status filter; combined with status as a union
-          in: query
-          items:
-            enum:
-              - active
-              - archived
-            type: string
-          name: status[]
-          type: array
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.VaultList'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: List Vaults in a managed key space
-      tags:
-        - Vaults
-  /core/v1/admin/api-keys/{key_id}/vaults/{vault_id}:
-    delete:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Vault ID
-          in: path
-          name: vault_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.VaultDeleted'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "413":
-          description: Request Entity Too Large
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Delete a Vault and all its Credentials in a managed key space
-      tags:
-        - Vaults
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Vault ID
-          in: path
-          name: vault_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.Vault'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Retrieve a Vault in a managed key space
-      tags:
-        - Vaults
-  /core/v1/admin/api-keys/{key_id}/vaults/{vault_id}/credentials:
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Vault ID
-          in: path
-          name: vault_id
-          required: true
-          type: string
-        - description: Last Credential ID from the previous page
-          in: query
-          name: after
-          type: string
-        - default: 20
-          description: Requested page size, clamped to 1–100
-          in: query
-          name: limit
-          type: integer
-        - default: desc
-          description: Creation order; omit for descending, explicit empty values are invalid
-          enum:
-            - asc
-            - desc
-          in: query
-          name: order
-          type: string
-        - description: Scalar status filter
-          enum:
-            - active
-            - archived
-          in: query
-          name: status
-          type: string
-        - collectionFormat: multi
-          description: Array status filter; combined with status as a union
-          in: query
-          items:
-            enum:
-              - active
-              - archived
-            type: string
-          name: status[]
-          type: array
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.CredentialList'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: List safe Vault Credential metadata in a managed key space
-      tags:
-        - Credentials
-  /core/v1/admin/api-keys/{key_id}/vaults/{vault_id}/credentials/{credential_id}:
-    delete:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Vault ID
-          in: path
-          name: vault_id
-          required: true
-          type: string
-        - description: Credential ID
-          in: path
-          name: credential_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.CredentialDeleted'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "413":
-          description: Request Entity Too Large
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Delete a Vault Credential in a managed key space
-      tags:
-        - Credentials
-    get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
-      parameters:
-        - description: Vault ID
-          in: path
-          name: vault_id
-          required: true
-          type: string
-        - description: Credential ID
-          in: path
-          name: credential_id
-          required: true
-          type: string
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.Credential'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Retrieve safe Vault Credential metadata in a managed key space
-      tags:
-        - Credentials
-  /core/v1/admin/api-keys/{key_id}/write-operations:
-    get:
-      description: Deployment administrator only. Reverse chronological keyset pagination over committed writes. Creation records remain; other records follow configured retention. The key path selects its independent space, never a caller-supplied tenant.
-      parameters:
-        - description: API key space ID
-          in: path
-          name: key_id
-          required: true
-          type: string
-        - description: Recorded creator key ID
-          in: query
-          name: key_id
-          type: string
-        - description: Resource type
-          in: query
-          name: resource_type
-          type: string
-        - description: Public resource ID
-          in: query
-          name: resource_id
-          type: string
-        - description: Inclusive RFC3339 timestamp
-          in: query
-          name: created_after
-          type: string
-        - description: Exclusive RFC3339 timestamp
-          in: query
-          name: created_before
-          type: string
-        - description: Page size, 1-100, default 50
-          in: query
-          name: limit
-          type: integer
-        - description: Opaque next_cursor from the preceding page
-          in: query
-          name: after
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/store.WriteOperationPage'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Query API-key write operations
-      tags:
-        - Write Audit
   /core/v1/admin/audit-log:
     get:
       description: Deployment administrator only. Newest-first cursor pagination of safe metadata. Actor labels are unverified console labels, not authorization identities. Request bodies and secrets are never recorded.
       parameters:
-        - description: Target API key space ID
+        - description: Target Project ID
           in: query
-          name: key_id
+          name: project_id
           type: string
         - description: Resource type
           in: query
@@ -4611,7 +2598,7 @@ paths:
           in: header
           name: Idempotency-Key
           type: string
-        - description: Source and target key spaces and resource
+        - description: Source and target Projects and resource
           in: body
           name: body
           required: true
@@ -4646,9 +2633,2137 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Copy assets into another independent key space
+      summary: Copy assets into another Project
       tags:
         - Core Administration
+  /core/v1/admin/projects:
+    get:
+      parameters:
+        - description: Project ID cursor
+          in: query
+          name: after
+          type: string
+        - description: Page size (1-100)
+          in: query
+          name: limit
+          type: integer
+        - description: asc or desc by Project ID
+          in: query
+          name: order
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.ProjectPage'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List Projects and active key counts
+      tags:
+        - Administrator Projects
+    post:
+      consumes:
+        - application/json
+      parameters:
+        - description: Project display name
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/api.ProjectRequest'
+      produces:
+        - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/store.Project'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Create an empty independent Project
+      tags:
+        - Administrator Projects
+  /core/v1/admin/projects/{project_id}:
+    post:
+      consumes:
+        - application/json
+      parameters:
+        - description: Project UUID
+          in: path
+          name: project_id
+          required: true
+          type: string
+        - description: Project display name
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/api.ProjectRequest'
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.Project'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Rename a Project
+      tags:
+        - Administrator Projects
+  /core/v1/admin/projects/{project_id}/agents:
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Last Agent ID from the previous page
+          in: query
+          name: after
+          type: string
+        - default: 20
+          description: Page size; 0 is treated as 1 and values above 100 as 100
+          in: query
+          minimum: 0
+          name: limit
+          type: integer
+        - default: desc
+          description: Creation order; omit for descending, explicit empty values are invalid
+          enum:
+            - asc
+            - desc
+          in: query
+          name: order
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SavedAgentList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List reusable Agents in a managed key space
+      tags:
+        - Agents
+  /core/v1/admin/projects/{project_id}/agents/{agent_id}:
+    delete:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Agent ID
+          in: path
+          name: agent_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.AgentDeleted'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Delete a reusable Agent in a managed key space
+      tags:
+        - Agents
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Agent ID
+          in: path
+          name: agent_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SavedAgent'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve a reusable Agent in a managed key space
+      tags:
+        - Agents
+  /core/v1/admin/projects/{project_id}/archive:
+    post:
+      parameters:
+        - description: Project UUID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.Project'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Archive a Project and revoke all its keys while retaining assets
+      tags:
+        - Administrator Projects
+  /core/v1/admin/projects/{project_id}/environment-templates:
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Previous Template ID
+          in: query
+          name: after
+          type: string
+        - default: 20
+          description: Page size; 0 is treated as 1 and values above 100 as 100
+          in: query
+          minimum: 0
+          name: limit
+          type: integer
+        - default: desc
+          description: Creation order; omit for descending, explicit empty values are invalid
+          enum:
+            - asc
+            - desc
+          in: query
+          name: order
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.EnvironmentTemplateList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List Environment Templates in a managed key space
+      tags:
+        - Environment Templates
+  /core/v1/admin/projects/{project_id}/environment-templates/{environment_template_id}:
+    delete:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Template ID
+          in: path
+          name: environment_template_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.EnvironmentTemplateDeleted'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Delete an Environment Template in a managed key space
+      tags:
+        - Environment Templates
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Template ID
+          in: path
+          name: environment_template_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.EnvironmentTemplate'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve an Environment Template in a managed key space
+      tags:
+        - Environment Templates
+  /core/v1/admin/projects/{project_id}/files:
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Last File ID from the previous page
+          in: query
+          name: after
+          type: string
+        - default: 10000
+          description: Maximum page size, 1–10000
+          in: query
+          maximum: 10000
+          minimum: 1
+          name: limit
+          type: integer
+        - default: desc
+          description: Creation order; omit for descending, explicit empty values are invalid
+          enum:
+            - asc
+            - desc
+          in: query
+          name: order
+          type: string
+        - description: Only return Files with this purpose
+          in: query
+          name: purpose
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SourceFileList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List source files in a managed key space
+      tags:
+        - Files
+  /core/v1/admin/projects/{project_id}/files/{file_id}:
+    delete:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Source file ID
+          in: path
+          name: file_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SourceFileDeleted'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Delete a source file in a managed key space
+      tags:
+        - Files
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Source file ID
+          in: path
+          name: file_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SourceFile'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve source file metadata in a managed key space
+      tags:
+        - Files
+  /core/v1/admin/projects/{project_id}/keys:
+    get:
+      parameters:
+        - description: Project UUID
+          in: path
+          name: project_id
+          required: true
+          type: string
+        - description: Key ID cursor
+          in: query
+          name: after
+          type: string
+        - description: Page size (1-100)
+          in: query
+          name: limit
+          type: integer
+        - description: asc or desc by key ID
+          in: query
+          name: order
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.ProjectAPIKeyPage'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List safe key metadata for a Project
+      tags:
+        - Administrator Projects
+    post:
+      consumes:
+        - application/json
+      parameters:
+        - description: Project UUID
+          in: path
+          name: project_id
+          required: true
+          type: string
+        - description: Key display name
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/api.ProjectAPIKeyRequest'
+      produces:
+        - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/store.IssuedProjectAPIKey'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Issue an independent secret in an existing Project
+      tags:
+        - Administrator Projects
+  /core/v1/admin/projects/{project_id}/keys/{key_id}:
+    delete:
+      parameters:
+        - description: Project UUID
+          in: path
+          name: project_id
+          required: true
+          type: string
+        - description: API key UUID
+          in: path
+          name: key_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SandboxMutationResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Revoke one Project key while retaining shared assets
+      tags:
+        - Administrator Projects
+  /core/v1/admin/projects/{project_id}/resource-owners:
+    get:
+      description: Deployment administrator only. The key path selects its independent space. Returns null for resources without recorded creation provenance, including historical and foreign resources. No key secret is returned.
+      parameters:
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+        - description: Resource type
+          in: query
+          name: resource_type
+          required: true
+          type: string
+        - description: Comma-separated public resource IDs, maximum 100
+          in: query
+          name: resource_ids
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ResourceOwnerList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Batch lookup resource creation keys
+      tags:
+        - Write Audit
+  /core/v1/admin/projects/{project_id}/sessions:
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Root Agent ID whose Sessions to return
+          in: query
+          name: agent_id
+          type: string
+        - description: Last Session ID from the previous page
+          in: query
+          name: after
+          type: string
+        - default: 20
+          description: Page size; 0 is treated as 1 and values above 100 as 100
+          in: query
+          minimum: 0
+          name: limit
+          type: integer
+        - default: desc
+          description: Creation order; omit for descending, explicit empty values are invalid
+          enum:
+            - asc
+            - desc
+          in: query
+          name: order
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SessionList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List execution Sessions in a managed key space
+      tags:
+        - Sessions
+  /core/v1/admin/projects/{project_id}/sessions/{session_id}:
+    delete:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Session ID
+          in: path
+          name: session_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SessionDeleted'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Delete an execution Session in a managed key space
+      tags:
+        - Sessions
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Session ID
+          in: path
+          name: session_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.Session'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve an execution Session in a managed key space
+      tags:
+        - Sessions
+  /core/v1/admin/projects/{project_id}/sessions/{session_id}/artifacts:
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Session ID
+          in: path
+          name: session_id
+          required: true
+          type: string
+        - description: Producing Environment ID; an unknown or malformed ID returns an empty page
+          in: query
+          name: environment_id
+          type: string
+        - description: Last immutable artifact ID
+          in: query
+          name: after
+          type: string
+        - default: 20
+          description: Page size
+          in: query
+          maximum: 100
+          minimum: 1
+          name: limit
+          type: integer
+        - default: desc
+          description: Publication order; omit for descending, explicit empty values are invalid
+          enum:
+            - asc
+            - desc
+          in: query
+          name: order
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SessionArtifactList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List immutable Session artifacts in a managed key space
+      tags:
+        - Artifacts
+  /core/v1/admin/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id}:
+    delete:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Session ID
+          in: path
+          name: session_id
+          required: true
+          type: string
+        - description: Artifact ID
+          in: path
+          name: artifact_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SessionArtifactDeleted'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Delete a published artifact in a managed key space
+      tags:
+        - Artifacts
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Session ID
+          in: path
+          name: session_id
+          required: true
+          type: string
+        - description: Artifact ID
+          in: path
+          name: artifact_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SessionArtifact'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve immutable artifact metadata in a managed key space
+      tags:
+        - Artifacts
+  /core/v1/admin/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id}/content:
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Session ID
+          in: path
+          name: session_id
+          required: true
+          type: string
+        - description: Artifact ID
+          in: path
+          name: artifact_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Download immutable artifact bytes in a managed key space
+      tags:
+        - Artifacts
+  /core/v1/admin/projects/{project_id}/sessions/{session_id}/execution-configuration:
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Session ID
+          in: path
+          name: session_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SessionExecutionConfiguration'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve frozen Session execution configuration in a managed key space
+      tags:
+        - Core extensions
+  /core/v1/admin/projects/{project_id}/sessions/{session_id}/items:
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Session ID
+          in: path
+          name: session_id
+          required: true
+          type: string
+        - description: Last Item ID from the previous page
+          in: query
+          name: after
+          type: string
+        - default: 20
+          description: Page size; 0 is treated as 1 and values above 100 as 100
+          in: query
+          minimum: 0
+          name: limit
+          type: integer
+        - default: desc
+          description: Creation order; omit for descending, explicit empty values are invalid
+          enum:
+            - asc
+            - desc
+          in: query
+          name: order
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.ItemList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List persisted execution Items in a managed key space
+      tags:
+        - Items
+  /core/v1/admin/projects/{project_id}/sessions/{session_id}/runtime-history:
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Session ID
+          in: path
+          name: session_id
+          required: true
+          type: string
+        - description: Inclusive Unix-second start
+          in: query
+          maximum: 9007199254740991
+          minimum: 0
+          name: start
+          required: true
+          type: integer
+        - description: Exclusive Unix-second end
+          in: query
+          maximum: 9007199254740991
+          minimum: 1
+          name: end
+          required: true
+          type: integer
+        - description: Maximum points per series; defaults to the lower of 120 and the advertised service maximum
+          in: query
+          maximum: 10000
+          minimum: 2
+          name: max_points
+          type: integer
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.RuntimeHistory'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve Session Runtime history in a managed key space
+      tags:
+        - Runtime history
+  /core/v1/admin/projects/{project_id}/sessions/{session_id}/runtime-observation:
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Session ID
+          in: path
+          name: session_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.RuntimeObservation'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve a Session Runtime observation in a managed key space
+      tags:
+        - Runtime observations
+  /core/v1/admin/projects/{project_id}/sessions/{session_id}/turns:
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Session ID
+          in: path
+          name: session_id
+          required: true
+          type: string
+        - description: Last Turn ID from the previous page
+          in: query
+          name: after
+          type: string
+        - default: 20
+          description: Page size
+          in: query
+          maximum: 100
+          minimum: 1
+          name: limit
+          type: integer
+        - default: desc
+          description: Creation order; omit for descending, explicit empty values are invalid
+          enum:
+            - asc
+            - desc
+          in: query
+          name: order
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.TurnList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List execution Turns in a managed key space
+      tags:
+        - Turns
+  /core/v1/admin/projects/{project_id}/sessions/{session_id}/turns/{turn_id}:
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Session ID
+          in: path
+          name: session_id
+          required: true
+          type: string
+        - description: Turn ID
+          in: path
+          name: turn_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.Turn'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve an execution Turn in a managed key space
+      tags:
+        - Turns
+  /core/v1/admin/projects/{project_id}/skills:
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Skill resource cursor
+          in: query
+          name: after
+          type: string
+        - default: 20
+          description: Page size; 0 returns an empty page
+          in: query
+          maximum: 100
+          minimum: 0
+          name: limit
+          type: integer
+        - description: Creation order; omit for descending, explicit empty values are invalid
+          enum:
+            - asc
+            - desc
+          in: query
+          name: order
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SkillList'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List Skills in a managed key space
+      tags:
+        - Skills
+  /core/v1/admin/projects/{project_id}/skills/{skill_id}:
+    delete:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Skill ID
+          in: path
+          name: skill_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SkillDeleted'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Delete a Skill and its versions in a managed key space
+      tags:
+        - Skills
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Skill ID
+          in: path
+          name: skill_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.Skill'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve Skill metadata in a managed key space
+      tags:
+        - Skills
+  /core/v1/admin/projects/{project_id}/skills/{skill_id}/content:
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Skill ID
+          in: path
+          name: skill_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+      security:
+        - DeploymentAdminAuth: []
+      summary: Download Skill content in a managed key space
+      tags:
+        - Skills
+  /core/v1/admin/projects/{project_id}/skills/{skill_id}/versions:
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Skill ID
+          in: path
+          name: skill_id
+          required: true
+          type: string
+        - description: Version resource cursor
+          in: query
+          name: after
+          type: string
+        - default: 20
+          description: Page size; 0 returns an empty page
+          in: query
+          maximum: 100
+          minimum: 0
+          name: limit
+          type: integer
+        - description: Version order; omit for descending, explicit empty values are invalid
+          enum:
+            - asc
+            - desc
+          in: query
+          name: order
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SkillVersionList'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List Skill versions in a managed key space
+      tags:
+        - Skills
+  /core/v1/admin/projects/{project_id}/skills/{skill_id}/versions/{version}:
+    delete:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Skill ID
+          in: path
+          name: skill_id
+          required: true
+          type: string
+        - description: Concrete version number
+          in: path
+          name: version
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SkillVersionDeleted'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Delete a Skill version in a managed key space
+      tags:
+        - Skills
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Skill ID
+          in: path
+          name: skill_id
+          required: true
+          type: string
+        - description: Concrete version number
+          in: path
+          name: version
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SkillVersion'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve Skill version metadata in a managed key space
+      tags:
+        - Skills
+  /core/v1/admin/projects/{project_id}/skills/{skill_id}/versions/{version}/content:
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Skill ID
+          in: path
+          name: skill_id
+          required: true
+          type: string
+        - description: Concrete version number
+          in: path
+          name: version
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+      security:
+        - DeploymentAdminAuth: []
+      summary: Download immutable Skill version content in a managed key space
+      tags:
+        - Skills
+  /core/v1/admin/projects/{project_id}/vaults:
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Last Vault ID from the previous page
+          in: query
+          name: after
+          type: string
+        - default: 20
+          description: Requested page size, clamped to 1–100
+          in: query
+          name: limit
+          type: integer
+        - default: desc
+          description: Creation order; omit for descending, explicit empty values are invalid
+          enum:
+            - asc
+            - desc
+          in: query
+          name: order
+          type: string
+        - description: Scalar status filter
+          enum:
+            - active
+            - archived
+          in: query
+          name: status
+          type: string
+        - collectionFormat: multi
+          description: Array status filter; combined with status as a union
+          in: query
+          items:
+            enum:
+              - active
+              - archived
+            type: string
+          name: status[]
+          type: array
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.VaultList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List Vaults in a managed key space
+      tags:
+        - Vaults
+  /core/v1/admin/projects/{project_id}/vaults/{vault_id}:
+    delete:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Vault ID
+          in: path
+          name: vault_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.VaultDeleted'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Delete a Vault and all its Credentials in a managed key space
+      tags:
+        - Vaults
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Vault ID
+          in: path
+          name: vault_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.Vault'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve a Vault in a managed key space
+      tags:
+        - Vaults
+  /core/v1/admin/projects/{project_id}/vaults/{vault_id}/credentials:
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Vault ID
+          in: path
+          name: vault_id
+          required: true
+          type: string
+        - description: Last Credential ID from the previous page
+          in: query
+          name: after
+          type: string
+        - default: 20
+          description: Requested page size, clamped to 1–100
+          in: query
+          name: limit
+          type: integer
+        - default: desc
+          description: Creation order; omit for descending, explicit empty values are invalid
+          enum:
+            - asc
+            - desc
+          in: query
+          name: order
+          type: string
+        - description: Scalar status filter
+          enum:
+            - active
+            - archived
+          in: query
+          name: status
+          type: string
+        - collectionFormat: multi
+          description: Array status filter; combined with status as a union
+          in: query
+          items:
+            enum:
+              - active
+              - archived
+            type: string
+          name: status[]
+          type: array
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.CredentialList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List safe Vault Credential metadata in a managed key space
+      tags:
+        - Credentials
+  /core/v1/admin/projects/{project_id}/vaults/{vault_id}/credentials/{credential_id}:
+    delete:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Vault ID
+          in: path
+          name: vault_id
+          required: true
+          type: string
+        - description: Credential ID
+          in: path
+          name: credential_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.CredentialDeleted'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Delete a Vault Credential in a managed key space
+      tags:
+        - Credentials
+    get:
+      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      parameters:
+        - description: Vault ID
+          in: path
+          name: vault_id
+          required: true
+          type: string
+        - description: Credential ID
+          in: path
+          name: credential_id
+          required: true
+          type: string
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.Credential'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve safe Vault Credential metadata in a managed key space
+      tags:
+        - Credentials
+  /core/v1/admin/projects/{project_id}/write-operations:
+    get:
+      description: Deployment administrator only. Reverse chronological keyset pagination over committed writes. Creation records remain; other records follow configured retention. The key path selects its independent space, never a caller-supplied tenant.
+      parameters:
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+        - description: Recorded creator key ID
+          in: query
+          name: key_id
+          type: string
+        - description: Resource type
+          in: query
+          name: resource_type
+          type: string
+        - description: Public resource ID
+          in: query
+          name: resource_id
+          type: string
+        - description: Inclusive RFC3339 timestamp
+          in: query
+          name: created_after
+          type: string
+        - description: Exclusive RFC3339 timestamp
+          in: query
+          name: created_before
+          type: string
+        - description: Page size, 1-100, default 50
+          in: query
+          name: limit
+          type: integer
+        - description: Opaque next_cursor from the preceding page
+          in: query
+          name: after
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.WriteOperationPage'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Query API-key write operations
+      tags:
+        - Write Audit
   /core/v1/admin/runtime-history/capabilities:
     get:
       produces:
@@ -4669,7 +4784,7 @@ paths:
         - Core Administration
   /core/v1/admin/runtime-observations:
     get:
-      description: Deployment administrator only. Each observation is labelled with its owning key ID. Uses the existing read-only Runtime sampler, with bounded concurrency and no execution or provisioning.
+      description: Deployment administrator only. Each observation is labelled with its owning Project ID. Uses the existing read-only Runtime sampler, with bounded concurrency and no execution or provisioning.
       parameters:
         - description: Last Session ID from the preceding page
           in: query
@@ -4719,7 +4834,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: List Runtime observations across managed key spaces
+      summary: List Runtime observations across managed Projects
       tags:
         - Core Administration
   /core/v1/admin/startup-configuration:
@@ -4747,17 +4862,18 @@ paths:
         - Core Administration
   /core/v1/admin/summary:
     get:
-      description: Administrator only. after/limit/order paginate key spaces. Agent grouping returns groups within those spaces. Date bounds filter Session creation, not current asset counts. Usage sums only non-null public Session usage; coverage includes every selected Session. Each key is read in a consistent database snapshot. Totals are not billing records.
+      description: Administrator only. after/limit/order paginate Projects. Agent grouping returns groups within those spaces. Date bounds filter Session creation, not current asset counts. Usage sums only non-null public Session usage; coverage includes every selected Session. Each Project is read in a consistent database snapshot. Totals are not billing records.
       parameters:
-        - description: One API key space
+        - description: One API Project
           in: query
-          name: key_id
+          name: project_id
           type: string
-        - default: key
+        - default: project
           description: Grouping
           enum:
-            - key
+            - project
             - agent
+            - key
           in: query
           name: group_by
           type: string
@@ -4769,19 +4885,19 @@ paths:
           in: query
           name: created_before
           type: string
-        - description: Last key ID in preceding page
+        - description: Last Project ID in preceding page
           in: query
           name: after
           type: string
         - default: 20
-          description: Number of key spaces
+          description: Number of Projects
           in: query
           maximum: 100
           minimum: 1
           name: limit
           type: integer
         - default: desc
-          description: Key ID order
+          description: Project order
           enum:
             - asc
             - desc
@@ -4813,7 +4929,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Summarize resource counts and Session usage by key or Agent
+      summary: Summarize resource counts and Session usage by Project, Agent or creator key
       tags:
         - Core Administration
   /core/v1/environments/{environment_id}/executor-credentials:
