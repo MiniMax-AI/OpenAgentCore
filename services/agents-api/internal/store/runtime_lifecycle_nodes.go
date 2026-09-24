@@ -108,7 +108,7 @@ func (s *Store) ResolveRuntimeLifecycleNode(ctx context.Context, tenant, environ
 	if err != nil {
 		return "", err
 	}
-	if row.ProviderKind == "" {
+	if row.ProviderKind == "" || row.Mode == "direct" {
 		if row.PlacementNodeID.Valid || row.AllocationNodeID.Valid {
 			return "", ErrRuntimeNodeUnavailable
 		}

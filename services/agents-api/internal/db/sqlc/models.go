@@ -198,6 +198,10 @@ type RuntimeDeployment struct {
 	CoreUrl            string             `json:"core_url"`
 	IdleSeconds        int64              `json:"idle_seconds"`
 	RetentionSeconds   int64              `json:"retention_seconds"`
+	Generation         int64              `json:"generation"`
+	Mode               string             `json:"mode"`
+	E2bTemplate        string             `json:"e2b_template"`
+	E2bCredential      []byte             `json:"e2b_credential"`
 }
 
 type RuntimeDeviceAuthority struct {

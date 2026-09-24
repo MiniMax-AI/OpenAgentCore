@@ -20,6 +20,8 @@ import (
 // RuntimeProvider binds one deployment to one sandbox installation.
 // BackendFingerprint identifies its namespace independently of mutable sizing.
 type RuntimeProvider struct {
+	Generation                       uint64
+	Mode                             string
 	loadDeployment                   func(context.Context) (*RuntimeProvider, error)
 	VerifyLegacyOwnership            store.RuntimeOwnershipVerifier
 	ProviderKind                     string
@@ -67,7 +69,7 @@ func newRuntimeManager(s *store.Store, registry *gateway.Registry, config *Runti
 		}
 	}
 	ctx, stop := context.WithCancel(context.Background())
-	return &runtimeManager{store: s, registry: registry, config: copied, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, setupGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
+	return &runtimeManager{store: s, registry: registry, config: copied, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
 }
 
 func validatedRuntimeProvider(config *RuntimeProvider, registry *gateway.Registry) (RuntimeProvider, error) {
@@ -81,6 +83,15 @@ func validatedRuntimeProvider(config *RuntimeProvider, registry *gateway.Registr
 		return RuntimeProvider{}, sandbox.ErrInvalid
 	}
 	copied := *config
+	if copied.Mode == "" && copied.ProviderKind != "" {
+		copied.Mode = "nodes"
+	}
+	if copied.Mode != "" && copied.Mode != "nodes" && copied.Mode != "direct" {
+		return RuntimeProvider{}, sandbox.ErrInvalid
+	}
+	if copied.Mode == "direct" && (copied.ProviderKind != "e2b" || copied.LocalNodeID != "" || copied.Suspension != nil) {
+		return RuntimeProvider{}, sandbox.ErrInvalid
+	}
 	if config.Suspension != nil {
 		policy := *config.Suspension
 		if _, ok := config.Provider.(sandbox.CheckpointProvider); !ok || policy.IdleTimeout < time.Second || policy.Retention < time.Second || policy.MaxActive < 1 || policy.MaxRetained < policy.MaxActive {
@@ -161,7 +172,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 		return store.RuntimeAllocation{}, sandbox.ErrInvalid
 	}
 	if _, err := r.store.GetRuntimeAllocation(ctx, tenant, environment); errors.Is(err, store.ErrNotFound) {
-		if r.config.Maintenance {
+		if r.config.Maintenance && r.config.Generation == 0 {
 			return store.RuntimeAllocation{}, ErrExecutionUnavailable
 		}
 		if err := r.computeFreshCapacity(ctx, providerKey); err != nil {
@@ -201,6 +212,25 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 		Reference: runtimeReference(owner), SessionID: owner.SessionID, DeviceID: owner.DeviceID,
 		CoreURL: r.config.CoreURL, Credential: token, NetworkAccess: placement.NetworkAccess, AllowedDomains: placement.AllowedDomains,
 	})
+	if info.Reference == runtimeReference(owner) && info.CreateSettled && info.State == "absent" {
+		record, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		released, releaseErr := r.store.ReleaseAbsentRuntimeCreation(record, owner)
+		cancel()
+		if releaseErr != nil {
+			return owner, releaseErr
+		}
+		if err == nil {
+			err = sandbox.ErrComputeUnconfirmed
+		}
+		return released, err
+	}
+	if info.Reference == runtimeReference(owner) && info.CreateSettled {
+		settled, settleErr := r.store.SettleRuntimeCreation(ctx, owner)
+		if settleErr != nil {
+			return owner, settleErr
+		}
+		owner = settled
+	}
 	if err != nil {
 		// Explicit invalid/foreign bootstrap cannot become an authorized Runtime.
 		// Other failures may hide a successful Create; retain recovery for those.
@@ -317,7 +347,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAlloc
 	if err == nil && info.Reference != runtimeReference(owner) {
 		return sandbox.ErrOwnership
 	}
-	if running && info.BootstrapComplete && !owner.CreateSettled {
+	if err == nil && (info.CreateSettled || running && info.BootstrapComplete) && !owner.CreateSettled {
 		// Only the adapter can qualify completion of its bootstrap writes.
 		owner, err = r.store.SettleRuntimeCreation(ctx, owner)
 		if err != nil {

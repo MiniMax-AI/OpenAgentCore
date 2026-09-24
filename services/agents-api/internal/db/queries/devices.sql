@@ -6,7 +6,7 @@ VALUES ($1, $2, $3, $4) RETURNING id;
 SELECT id, name FROM devices WHERE tenant_id = $1 AND id = $2 AND revoked_at IS NULL;
 
 -- name: GetDeviceCredential :one
-SELECT d.id, d.name, d.credential_hash, COALESCE(a.node_id::text, '')::text AS runtime_node_id
+SELECT d.id, d.name, d.credential_hash, COALESCE(a.node_id::text, '')::text AS runtime_node_id, COALESCE(a.id::text, '')::text AS runtime_allocation_id
 FROM runtime_device_authority d
 LEFT JOIN runtime_allocations a ON a.device_id = d.id
 WHERE d.id = $1;

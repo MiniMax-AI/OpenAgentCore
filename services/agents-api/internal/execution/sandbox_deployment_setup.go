@@ -15,9 +15,11 @@ func NewDeferredRuntimeProvider(installationID string, load func(context.Context
 }
 
 func (w *Worker) InitializeSandboxDeployment(ctx context.Context, input store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error) {
-	if w.runtimes == nil || w.runtimes.loadDeployment == nil {
-		return store.RuntimeDeploymentView{}, store.ErrSandboxDeploymentConflict
+	unlock, err := w.runtimes.lockMutation(ctx)
+	if err != nil {
+		return store.RuntimeDeploymentView{}, err
 	}
+	defer unlock()
 	return w.dispatcher.Store.InitializeSandboxDeployment(ctx, w.runtimes.setupInstallationID, input)
 }
 
@@ -48,7 +50,7 @@ func (m *runtimeManager) ensureDeployment(parent context.Context) (bool, error) 
 	if err != nil || config == nil {
 		return false, err
 	}
-	if config.InstallationID != m.setupInstallationID || config.LocalNodeID != "" || config.loadDeployment != nil || (config.ProviderKind != "docker" && config.ProviderKind != "microsandbox") {
+	if config.InstallationID != m.setupInstallationID || config.LocalNodeID != "" || config.loadDeployment != nil || (config.ProviderKind != "docker" && config.ProviderKind != "microsandbox" && config.ProviderKind != "e2b") {
 		return false, sandbox.ErrInvalid
 	}
 	copied, err := validatedRuntimeProvider(config, m.registry)
@@ -57,7 +59,8 @@ func (m *runtimeManager) ensureDeployment(parent context.Context) (bool, error) 
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.closed || ctx.Err() != nil {
+	if m.switching { return false,errRuntimeTransition }
+ if m.closed || ctx.Err() != nil {
 		return false, ErrExecutionUnavailable
 	}
 	m.config = copied

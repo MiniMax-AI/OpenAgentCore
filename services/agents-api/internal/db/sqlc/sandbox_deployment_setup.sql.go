@@ -11,6 +11,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const advanceSandboxOwnerEpoch = `-- name: AdvanceSandboxOwnerEpoch :exec
+UPDATE runtime_deployment SET owner_epoch=owner_epoch+1 WHERE singleton=true
+`
+
+func (q *Queries) AdvanceSandboxOwnerEpoch(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, advanceSandboxOwnerEpoch)
+	return err
+}
+
 const claimWebSandboxDeployment = `-- name: ClaimWebSandboxDeployment :exec
 UPDATE runtime_deployment SET installation_id=$1, web_managed=true,
 owner_epoch=owner_epoch+1, updated_at=clock_timestamp() WHERE singleton=true
@@ -23,7 +32,7 @@ func (q *Queries) ClaimWebSandboxDeployment(ctx context.Context, installationID 
 
 const initializeSandboxDeployment = `-- name: InitializeSandboxDeployment :exec
 UPDATE runtime_deployment SET provider_kind=$1, core_url=$2, backend_fingerprint=$3,
-idle_seconds=$4, retention_seconds=$5, updated_at=clock_timestamp() WHERE singleton=true
+idle_seconds=$4, retention_seconds=$5, generation=$6, mode=$7, e2b_template=$8, e2b_credential=$9, updated_at=clock_timestamp() WHERE singleton=true
 `
 
 type InitializeSandboxDeploymentParams struct {
@@ -32,6 +41,10 @@ type InitializeSandboxDeploymentParams struct {
 	BackendFingerprint string `json:"backend_fingerprint"`
 	IdleSeconds        int64  `json:"idle_seconds"`
 	RetentionSeconds   int64  `json:"retention_seconds"`
+	Generation         int64  `json:"generation"`
+	Mode               string `json:"mode"`
+	E2bTemplate        string `json:"e2b_template"`
+	E2bCredential      []byte `json:"e2b_credential"`
 }
 
 func (q *Queries) InitializeSandboxDeployment(ctx context.Context, arg InitializeSandboxDeploymentParams) error {
@@ -41,6 +54,37 @@ func (q *Queries) InitializeSandboxDeployment(ctx context.Context, arg Initializ
 		arg.BackendFingerprint,
 		arg.IdleSeconds,
 		arg.RetentionSeconds,
+		arg.Generation,
+		arg.Mode,
+		arg.E2bTemplate,
+		arg.E2bCredential,
 	)
+	return err
+}
+
+const retireSandboxEnrollments = `-- name: RetireSandboxEnrollments :exec
+UPDATE runtime_node_enrollments SET expires_at=clock_timestamp() WHERE consumed_at IS NULL
+`
+
+func (q *Queries) RetireSandboxEnrollments(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, retireSandboxEnrollments)
+	return err
+}
+
+const retireSandboxNodes = `-- name: RetireSandboxNodes :exec
+UPDATE runtime_nodes SET removed_at=clock_timestamp(),connection_id=NULL,provider_ready=false WHERE removed_at IS NULL
+`
+
+func (q *Queries) RetireSandboxNodes(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, retireSandboxNodes)
+	return err
+}
+
+const setSandboxMaintenance = `-- name: SetSandboxMaintenance :exec
+UPDATE runtime_deployment SET maintenance=$1,updated_at=clock_timestamp() WHERE singleton=true
+`
+
+func (q *Queries) SetSandboxMaintenance(ctx context.Context, maintenance bool) error {
+	_, err := q.db.Exec(ctx, setSandboxMaintenance, maintenance)
 	return err
 }

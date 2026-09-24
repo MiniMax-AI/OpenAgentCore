@@ -153,7 +153,7 @@ func (q *Queries) DisconnectRuntimeNode(ctx context.Context, arg DisconnectRunti
 }
 
 const getRuntimeDeployment = `-- name: GetRuntimeDeployment :one
-SELECT singleton, installation_id, backend_fingerprint, maintenance, updated_at, provider_kind, local_node_id, owner_epoch, web_managed, core_url, idle_seconds, retention_seconds FROM runtime_deployment WHERE singleton=true
+SELECT singleton, installation_id, backend_fingerprint, maintenance, updated_at, provider_kind, local_node_id, owner_epoch, web_managed, core_url, idle_seconds, retention_seconds, generation, mode, e2b_template, e2b_credential FROM runtime_deployment WHERE singleton=true
 `
 
 func (q *Queries) GetRuntimeDeployment(ctx context.Context) (RuntimeDeployment, error) {
@@ -172,6 +172,10 @@ func (q *Queries) GetRuntimeDeployment(ctx context.Context) (RuntimeDeployment, 
 		&i.CoreUrl,
 		&i.IdleSeconds,
 		&i.RetentionSeconds,
+		&i.Generation,
+		&i.Mode,
+		&i.E2bTemplate,
+		&i.E2bCredential,
 	)
 	return i, err
 }
@@ -553,7 +557,7 @@ func (q *Queries) RemoveRuntimeNode(ctx context.Context, id pgtype.UUID) error {
 }
 
 const setRuntimeManagerDeployment = `-- name: SetRuntimeManagerDeployment :exec
-UPDATE runtime_deployment SET provider_kind=$1, local_node_id=$2, owner_epoch=owner_epoch+1 WHERE singleton=true
+UPDATE runtime_deployment SET provider_kind=$1, local_node_id=$2, mode='nodes', generation=GREATEST(generation,1), owner_epoch=owner_epoch+1 WHERE singleton=true
 `
 
 type SetRuntimeManagerDeploymentParams struct {

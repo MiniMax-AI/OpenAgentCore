@@ -23,13 +23,13 @@ FROM sessions s WHERE s.tenant_id = $1 AND s.id = $2;
 -- name: ClaimRuntimeInitialization :one
 UPDATE runtime_allocations SET initialization = 'running'
 WHERE id = $1 AND initialization = 'pending' AND state = 'running' AND create_settled
-AND (node_id IS NOT NULL OR kept_at > clock_timestamp() - interval '1 hour')
+AND (node_id IS NOT NULL OR (SELECT mode FROM runtime_deployment) = 'direct' OR kept_at > clock_timestamp() - interval '1 hour')
 RETURNING *;
 
 -- name: CompleteRuntimeInitialization :one
 UPDATE runtime_allocations SET initialization = 'complete'
 WHERE id = $1 AND initialization = 'running' AND state = 'running' AND create_settled
-AND (node_id IS NOT NULL OR kept_at > clock_timestamp() - interval '1 hour')
+AND (node_id IS NOT NULL OR (SELECT mode FROM runtime_deployment) = 'direct' OR kept_at > clock_timestamp() - interval '1 hour')
 RETURNING *;
 
 -- name: LockInitialSourceFile :one

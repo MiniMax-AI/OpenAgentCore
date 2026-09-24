@@ -66,12 +66,24 @@ type RuntimePlacement struct {
 	State        string `json:"state"`
 	ComputePhase string `json:"compute_phase"`
 }
+type SandboxDeploymentResources struct {
+	Allocations int64 `json:"allocations"`
+	Pending     int64 `json:"pending"`
+}
+type SandboxE2BView struct {
+	Template             string `json:"template"`
+	CredentialConfigured bool   `json:"credential_configured"`
+}
 type RuntimeDeploymentView struct {
-	CoreURL        string `json:"core_url"`
-	InstallationID string `json:"installation_id"`
-	Provider       string `json:"provider"`
-	Maintenance    bool   `json:"maintenance"`
-	OwnerEpoch     uint64 `json:"owner_epoch"`
+	Generation     uint64                     `json:"generation"`
+	Mode           string                     `json:"mode"`
+	Resources      SandboxDeploymentResources `json:"resources"`
+	E2B            *SandboxE2BView            `json:"e2b,omitempty"`
+	CoreURL        string                     `json:"core_url"`
+	InstallationID string                     `json:"installation_id"`
+	Provider       string                     `json:"provider"`
+	Maintenance    bool                       `json:"maintenance"`
+	OwnerEpoch     uint64                     `json:"owner_epoch"`
 }
 type RuntimeNodeAllocation struct {
 	Diagnostic     string    `json:"diagnostic"`
