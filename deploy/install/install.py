@@ -271,7 +271,6 @@ def initialize(root, args, manifest):
     if mode != "web-only":
         if args.provider:
             state["device_gid"] = device_gid
-        write_json(config / "keys.json", [])
         private_write(config / "credential.key", base64.b64encode(secrets.token_bytes(32)).decode())
         private_write(config / "database.password", secrets.token_hex(32))
         admin_token = secrets.token_hex(32)
@@ -411,8 +410,7 @@ def main(argv=None):
                 raise InstallError("Web authentication is unavailable. Inspect private console state")
             core_url = state.get("core_url") or f'http://127.0.0.1:{state["core_port"]}'
             token = (root / "admin/sandbox-admin.key").read_text().strip()
-            if not wait_http(core_url + "/core/v1/admin/api-keys", {"Authorization": "Bearer " + token,
-                    "OpenAI-Beta": "agents=v1"}):
+            if not wait_http(core_url + "/core/v1/admin/projects", {"Authorization": "Bearer " + token}):
                 raise InstallError("Core administrator authentication failed. Inspect private configuration; no model was called")
             print("Console: " + (state.get("public_url") or url))
             if (root / "state/console/admin.json").exists():
@@ -422,14 +420,14 @@ def main(argv=None):
                 print("Keep your administrator username and password safe; there is no email password reset.")
         else:
             auth = base64.b64encode(("admin:" + (root / "config/console.password").read_text()).encode()).decode()
-            if not wait_http(url + "/core/v1/admin/api-keys", {"Authorization": "Basic " + auth, "OpenAI-Beta": "agents=v1",
+            if not wait_http(url + "/core/v1/admin/projects", {"Authorization": "Basic " + auth,
                     "Host": host}):
                 raise InstallError("Web could not authenticate to Core. Inspect private configuration; no model was called")
             print("Console: " + (state.get("public_url") or url) + " (user: admin)")
             print("Console password file: " + str(root / "config/console.password"))
     if state["mode"] != "web-only":
         print(f'API: http://127.0.0.1:{state["core_port"]}/v1')
-        print("Create an API key through the administrator API or console before calling the direct Core API.")
+        print("Create a Project and issue its API key through the administrator API before calling the direct Core API.")
         if state["provider"]:
             print("Provider: " + state["provider"] + ". Runtime image prepared; Core provisions Sessions on demand.")
         else:

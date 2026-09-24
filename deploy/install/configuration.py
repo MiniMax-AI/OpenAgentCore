@@ -50,7 +50,6 @@ def core_environment(root, state, database_password):
                                      path="/api/v1/agent-daemon/ws").geturl()
     result = {
         "AGENTS_API_DATABASE_URL": f"postgres://agents_api:{database_password}@{database}/agents_api?sslmode=disable",
-        "AGENTS_API_KEYS_FILE": config + "/keys.json",
         "AGENTS_API_CREDENTIAL_KEY_FILE": config + "/credential.key",
         "AGENTS_API_ADDR": f'127.0.0.1:{state["core_port"]}' if native else ":8091",
         "AGENTS_API_ENGINE": "codex", "AGENTS_API_HARNESSES": "codex,claude_sdk,mcode",
