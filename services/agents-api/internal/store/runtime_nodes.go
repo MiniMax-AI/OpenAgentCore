@@ -44,11 +44,14 @@ func (s *Store) runtimeManagerTransaction(ctx context.Context, apply func(*sqlc.
 	})
 }
 func (s *Store) GetRuntimeDeployment(ctx context.Context) (RuntimeDeploymentView, error) {
-	d, err := s.queries.GetRuntimeDeployment(ctx)
+	return getRuntimeDeploymentView(ctx, s.queries)
+}
+func getRuntimeDeploymentView(ctx context.Context, q *sqlc.Queries) (RuntimeDeploymentView, error) {
+	d, err := q.GetRuntimeDeployment(ctx)
 	if err != nil {
 		return RuntimeDeploymentView{}, err
 	}
-	resources, err := s.queries.CountRuntimeDeploymentResources(ctx)
+	resources, err := q.CountRuntimeDeploymentResources(ctx)
 	if err != nil {
 		return RuntimeDeploymentView{}, err
 	}

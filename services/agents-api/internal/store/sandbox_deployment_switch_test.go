@@ -96,7 +96,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 	changed, err := w.UpdateSandboxDeployment(t.Context(), id, update)
-	if err != nil || changed.Generation != 2 || changed.Mode != "nodes" || !changed.Maintenance || changed.E2B != nil {
+	if err != nil || changed.Generation != 2 || changed.Mode != "nodes" || !changed.Maintenance || changed.E2B != nil || changed.Resources != (SandboxDeploymentResources{}) {
 		t.Fatal("clean switch", changed, err)
 	}
 	if _, err := w.SetSandboxMaintenance(t.Context(), id, SandboxMaintenanceRequest{ExpectedGeneration: 1}); !errors.Is(err, ErrSandboxDeploymentConflict) {

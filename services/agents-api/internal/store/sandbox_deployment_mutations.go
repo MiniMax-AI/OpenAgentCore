@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math"
 	"strings"
+	"unicode"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/google/uuid"
@@ -39,7 +40,7 @@ func validateSandboxSelection(input SandboxDeploymentSetupRequest) error {
 			return ErrInvalidInput
 		}
 	case "e2b":
-		if input.E2B == nil || input.E2B.APIKey == "" || len(input.E2B.APIKey) > 4096 || strings.ContainsAny(input.E2B.APIKey, " \t\r\n\x00") {
+		if input.E2B == nil || input.E2B.APIKey == "" || len(input.E2B.APIKey) > 4096 || strings.IndexFunc(input.E2B.APIKey, func(r rune) bool { return unicode.IsSpace(r) || r == 0 }) >= 0 {
 			return ErrInvalidInput
 		}
 		template, build, ok := strings.Cut(input.E2B.Template, ":")
@@ -135,8 +136,7 @@ func (s *Store) InitializeSandboxDeployment(ctx context.Context, installationID 
 		} else if err := s.saveSandboxSelection(ctx, q, d, input); err != nil {
 			return err
 		}
-		d, err = q.GetRuntimeDeployment(ctx)
-		result = runtimeDeploymentView(d)
+		result, err = getRuntimeDeploymentView(ctx, q)
 		return err
 	})
 	return result, err
@@ -213,8 +213,7 @@ func (s *Store) UpdateSandboxDeployment(ctx context.Context, installation string
 				return err
 			}
 		}
-		d, err = q.GetRuntimeDeployment(ctx)
-		result = runtimeDeploymentView(d)
+		result, err = getRuntimeDeploymentView(ctx, q)
 		return err
 	})
 	return result, err
@@ -240,8 +239,7 @@ func (s *Store) SetSandboxMaintenance(ctx context.Context, installation string, 
 		if err := q.SetSandboxMaintenance(ctx, input.Maintenance); err != nil {
 			return err
 		}
-		d, err = q.GetRuntimeDeployment(ctx)
-		result = runtimeDeploymentView(d)
+		result, err = getRuntimeDeploymentView(ctx, q)
 		return err
 	})
 	return result, err
