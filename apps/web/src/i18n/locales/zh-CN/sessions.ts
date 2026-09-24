@@ -92,6 +92,8 @@ export const sessions = {
     help: "来自 Core 的只读历史。Session 运行中或等待操作时，页面每 5 秒重新读取一次；Session 空闲或失败后停止。",
     view: "历史视图",
     conversation: "对话",
+    working: "正在处理…",
+    queued: "排队中…",
     trace: "追踪",
     turns: "Turn",
     noItems: "还没有条目",

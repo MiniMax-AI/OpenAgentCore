@@ -4,6 +4,7 @@ import { useCallback, useMemo, type CSSProperties, type ReactNode } from "react"
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
+import { LiveNumber } from "../../components/live-number";
 import { TimeSeriesChart } from "../../components/charts/TimeSeriesChart";
 import { TableSkeleton } from "../../components/Skeleton";
 import {
@@ -166,21 +167,21 @@ export function OverviewPage() {
             index={1}
             label={t("kpi.running")}
             help={t("kpi.runningHelp")}
-            value={totals ? formatInteger(totals.sessions.in_progress, locale) : MISSING}
+            value={totals ? <LiveNumber value={totals.sessions.in_progress} /> : MISSING}
             sub={totals ? t("tiles.sessionSplit", { idle: formatInteger(totals.sessions.idle, locale), total: formatInteger(totals.sessions.total, locale) }) : t("kpi.summaryUnavailable")}
           />
           <MetricTile
             index={2}
             label={t("kpi.slots")}
             help={t("kpi.slotsHelp")}
-            value={capacity ? `${formatInteger(capacity.active, locale)} / ${formatInteger(capacity.maxActive, locale)}` : MISSING}
+            value={capacity ? <><LiveNumber value={capacity.active} /><span className="kpi-unit">/ {formatInteger(capacity.maxActive, locale)}</span></> : MISSING}
             sub={capacity ? t("tiles.nodesOnline", { online: capacity.online, total: capacity.nodes }) : fleetDetail(fleetState, t)}
           />
           <MetricTile
             index={3}
             label={t("kpi.attention")}
             help={t("attention.subtitle")}
-            value={attentionTotal === null ? MISSING : formatInteger(attentionTotal, locale)}
+            value={<LiveNumber value={attentionTotal} />}
             sub={totals ? t("tiles.attentionSplit", { failed: totals.sessions.failed, waiting: totals.sessions.requires_action }) : t("kpi.summaryUnavailable")}
           />
         </div>

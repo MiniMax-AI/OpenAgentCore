@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
+import { LiveNumber } from "../../components/live-number";
 import { TimeSeriesChart, type TimeSeries } from "../../components/charts/TimeSeriesChart";
 import {
   EmptyState,
@@ -17,7 +18,7 @@ import {
   SegmentedControl,
   StatusDot,
 } from "../../components/console-ui";
-import { TableSkeleton } from "../../components/Skeleton";
+import { DashboardSkeleton, TableSkeleton } from "../../components/Skeleton";
 import { formatClock, formatCompact, formatDuration, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
 import { ProjectFilter, ProjectName, useProjects, type ProjectFilterValue } from "../../lib/projects";
 import {
@@ -125,7 +126,9 @@ export function AgentMetricsPage() {
         {projectsState.status === "failed" && !projects.length ? (
           <EmptyState icon={AlertTriangle} title={t("agent.projectsFailed")} description={projectsState.error} />
         ) : !metrics ? (
-          <p className="page-status" role="status">{state.status === "failed" ? t("agent.loadFailed", { reason: state.error }) : t("agent.loading")}</p>
+          state.status === "failed"
+            ? <p className="page-status" role="alert">{t("agent.loadFailed", { reason: state.error })}</p>
+            : <DashboardSkeleton label={t("agent.loading")} />
         ) : (
           <AgentMetricsContent
             metrics={metrics}
@@ -225,10 +228,10 @@ function AgentMetricsContent({
       {listFailureNote}
       {failedReads}
       <KpiStrip label={t("agent.kpiLabel")}>
-        <Kpi label={t("agent.requests")} value={integer(totals.requests)} help={t("agent.requestsDetail", { completed: integer(totals.completed), unfinished: integer(totals.unfinished) })} />
+        <Kpi label={t("agent.requests")} value={<LiveNumber value={totals.requests} />} help={t("agent.requestsDetail", { completed: integer(totals.completed), unfinished: integer(totals.unfinished) })} />
         <Kpi
           label={t("agent.errorRate")}
-          value={formatPercent(totals.errorRate, locale)}
+          value={<LiveNumber value={totals.errorRate} format="percent" />}
           tone={totals.errorRate === null ? undefined : totals.errorRate >= 0.05 ? "danger" : totals.errorRate > 0 ? "warning" : "ok"}
           help={<>{t("agent.errorDetail", { failed: integer(totals.failed), cancelled: integer(totals.cancelled) })}<br />{t("agent.errorFormula")}</>}
         />
@@ -236,14 +239,14 @@ function AgentMetricsContent({
         <Kpi label={t("agent.p95")} value={formatDuration(totals.p95LatencySeconds)} help={t("agent.p95Detail")} />
         <Kpi
           label={t("agent.tokens")}
-          value={tokensKnown ? compact(totals.tokens.total) : MISSING}
+          value={tokensKnown ? <LiveNumber value={totals.tokens.total} format="compact" /> : MISSING}
           help={tokensKnown
             ? <>{t("agent.tokenSplit", { input: compact(totals.tokens.input), output: compact(totals.tokens.output) })}<br />{t("agent.tokenCoverage", { reported: integer(totals.tokens.reportedTurns), total: integer(totals.requests) })}</>
             : t("agent.tokensUnreported")}
         />
         <Kpi
           label={t("agent.toolCalls")}
-          value={totals.toolCalls === null ? MISSING : integer(totals.toolCalls)}
+          value={<LiveNumber value={totals.toolCalls} />}
           help={totals.toolFailures === null ? t("agent.toolsUnavailable") : t("agent.failedCount", { count: totals.toolFailures })}
         />
       </KpiStrip>

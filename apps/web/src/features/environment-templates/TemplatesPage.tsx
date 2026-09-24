@@ -15,7 +15,7 @@ import { TemplateDetailPage } from "./TemplateDetail";
 import { filterTemplates, templateName } from "./template-name";
 import "./EnvironmentTemplatesView.css";
 import { collections } from "../../lib/queries";
-import { TableSkeleton } from "../../components/Skeleton";
+import { DetailSkeleton, TableSkeleton } from "../../components/Skeleton";
 import { useTemplateDetail } from "../resources/detail-queries";
 
 function count(value: readonly unknown[] | undefined): string | number {
@@ -196,7 +196,7 @@ function TemplateDetailRoute({ projectId, templateId }: { projectId: string; tem
       <section className="page-section console-page templates-page" aria-labelledby="template-detail-heading">
         <PageHeader headingId="template-detail-heading" title={t("detail.loadingTitle", { defaultValue: templateId })} actions={<RefreshButton onClick={refresh} refreshing={read.isFetching} />} />
         <PageBody>
-          {failure === null ? <p className="page-status" role="status">{t("loading")}</p> : (
+          {failure === null ? <DetailSkeleton label={t("loading")} /> : (
             <EmptyState title={t("loadFailedTitle")} description={failure} action={<button className="button outline" type="button" onClick={back}>{t("back")}</button>} />
           )}
         </PageBody>

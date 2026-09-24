@@ -439,8 +439,9 @@ instead of a visible timestamp.
 
 ### Segmented control
 The single style for ranges, order and status filters. A Well Gray track (2px
-padding, 7px corners) holds 24px options in Graphite; the chosen option rises to
-Paper with Ledger Ink and control lift. Options may carry a tabular count. It is a
+padding, 8px corners) holds 26px options in Graphite; the chosen option sits on a
+Paper thumb with control lift and Ledger Ink text, and the thumb glides to a new
+choice (Motion shared layout). Options may carry a tabular count. It is a
 radiogroup with arrow-key movement.
 
 ### Selects and the project filter
@@ -510,16 +511,19 @@ request runs.
 ### Navigation
 Sidebar groups Monitor, Resources and Platform with 12px Graphite group labels;
 items are 30px rows with a 15px outline icon and Sidebar Ink text. Hover takes the
-ink wash; the active item takes the pressed wash with Ledger Ink at 500. The
+ink wash; the active item sits on a white chip (the page panel's surface, ringed)
+with Ledger Ink at 500, and the chip glides to the next item on navigation. The
 Platform group sits below a hairline. A secondary page (one Session) highlights its
 parent. The footer holds sign-out and the language/theme menu.
 
 ### KPI strip and metric tiles
 A KPI strip is one card of equal cells separated by inset rules. Each cell: a
-12.5px Graphite label with an optional help tip, then the Display figure,
-optionally led by an 8px tone dot. Overview uses four separate metric tiles instead:
-a 13px label with a help tip, the 30px figure (the service status as a 10px dot and
-a word), and one 12.5px line of context. Figures ellipsize rather than wrap.
+12.5px Graphite label with an optional help tip, then the figure at 20px/500 with
+any unit or limit small beside it, optionally led by an 8px tone dot. Overview uses
+four separate metric tiles instead: a 13px label with a help tip, the same 20px
+figure (the service status as a dot and a word), and one 12.5px line of context.
+Figures ellipsize rather than wrap. Live figures on monitor pages roll their digits
+to a new value on refresh (NumberFlow) instead of swapping.
 
 ### Help tip
 An 18px circular button holding a 13px circled "?" in Pencil; hover or open takes
@@ -530,7 +534,8 @@ hidden element for assistive technology.
 
 ### Status dot
 A 7px circle plus a plain label at 12.5px: ok green, warning amber, danger red,
-pending Series 1, neutral Idle Gray. A failed Session's error and a waiting
+pending Series 1 with a soft expanding ring while work is in progress, neutral
+Idle Gray. A failed Session's error and a waiting
 Session's required actions sit in a help tip beside the label. Never a coloured
 pill, never colour alone.
 
@@ -546,7 +551,9 @@ totals, plot) inside one chart-grid card. Lines are 2px round-joined with a
 surface-ringed end dot; gridlines are crisp Hairlines with 11px tabular ticks;
 hovering draws a Pencil crosshair, a hover-wash band and a floating tooltip. Missing
 buckets are gaps, not zeros. Every chart has a 26px table toggle at its top right
-that reveals the numbers in a 220px scrolling table.
+that reveals the numbers in a 220px scrolling table. When a range is first shown,
+bars rise from the baseline in a short left-to-right wave and lines trace from their
+first point; refreshes of the same range redraw in place.
 
 ### Tables
 A card with a sticky 34px Margin Gray header in Graphite 12px/500, 44px rows divided
@@ -558,6 +565,19 @@ Coverage notes (Margin Gray, Hairline, 12px corners, 12.5px Graphite) state boun
 aggregation or a stale view; the error variant tints toward Fault Red. Partial-data
 chips are amber-tinted pills with a help tip. Safety notices (a key shown once, an
 uncertain write, a destructive consequence) stay visible in body text.
+
+### Loading and motion
+The console has no spinners and no "Loading…" lines. Reads are cached (TanStack
+Query) and prefetched on navigation hover, so revisits show data at once and
+refreshes keep the last data on screen. Only a first read shows a skeleton in the
+final layout's cards: table rows, a headline strip with chart panels, or a facts
+card with a table, swept once under a second. Work in progress is the Agent's
+shimmering "Working…" line in the conversation and the breathing pending dot.
+
+Motion reports state and never makes anyone wait: the navigation chip and segmented
+thumbs glide (Motion, one 320ms spring without bounce), figures roll, charts draw in
+once per range, new conversation messages settle 6px upward in 260ms, pages fade in
+160ms, popovers and dialogs scale from 98%. Reduced motion makes all of it instant.
 
 ## Do's and Don'ts
 

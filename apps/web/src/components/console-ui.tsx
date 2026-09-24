@@ -1,5 +1,6 @@
 import { CircleHelp, RefreshCw, type LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import * as m from "motion/react-m";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
@@ -275,6 +276,7 @@ export function SegmentedControl<T extends string>({
   onChange: (value: T) => void;
 }) {
   const groupRef = useRef<HTMLDivElement>(null);
+  const thumbId = useId();
   const move = (delta: number) => {
     const index = options.findIndex((option) => option.value === value);
     const next = options[(index + delta + options.length) % options.length];
@@ -303,7 +305,8 @@ export function SegmentedControl<T extends string>({
           className={option.value === value ? "active" : undefined}
           onClick={() => onChange(option.value)}
         >
-          {option.label}
+          {option.value === value ? <m.span className="segmented-thumb" layoutId={`segmented-thumb${thumbId}`} aria-hidden="true" /> : null}
+          <span className="segmented-label">{option.label}</span>
           {option.count !== undefined ? <span className="segmented-count">{option.count}</span> : null}
         </button>
       ))}

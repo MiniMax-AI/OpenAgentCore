@@ -15,6 +15,7 @@ import { turnTone } from "./SessionTurnsTable";
  */
 export function SessionTranscript({ turns, items, agentName }: { turns: readonly AgentTurn[]; items: readonly SessionItem[]; agentName: string }) {
   const { t, i18n } = useTranslation("sessions");
+  const activityOf = (status: AgentTurn["status"]) => (status === "in_progress" ? t("history.working") : status === "queued" ? t("history.queued") : null);
   const locale = i18n.resolvedLanguage;
   const groups = useMemo(() => transcriptGroups(turns, items), [items, turns]);
   const now = Math.floor(Date.now() / 1000);
@@ -35,9 +36,9 @@ export function SessionTranscript({ turns, items, agentName }: { turns: readonly
                 {turn?.started_at != null ? <time className="chat-turn-time">{formatDateTime(turn.started_at, locale)}</time> : null}
               </header>
             ) : null}
-            {group.items.length || turn?.error ? (
+            {group.items.length || turn?.error || (turn && activityOf(turn.status)) ? (
               <div className="chat-stack">
-                <ThreadItems items={group.items} agentName={agentName} error={turn?.error?.message ?? null} />
+                <ThreadItems items={group.items} agentName={agentName} error={turn?.error?.message ?? null} activity={turn ? activityOf(turn.status) : null} />
               </div>
             ) : null}
           </li>

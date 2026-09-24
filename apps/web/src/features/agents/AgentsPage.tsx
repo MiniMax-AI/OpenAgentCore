@@ -15,7 +15,7 @@ import "./AgentCatalog.css";
 import { type ProjectSummary } from "../../lib/admin-view";
 import { refreshAgentSummaries, useAgentSummaries } from "./agent-summaries";
 import { collections } from "../../lib/queries";
-import { TableSkeleton } from "../../components/Skeleton";
+import { DetailSkeleton, TableSkeleton } from "../../components/Skeleton";
 import { useAgentDetail } from "../resources/detail-queries";
 
 export function harnessLabel(harness: CoreHarnessKind): string {
@@ -232,7 +232,7 @@ function AgentDetail({ projectId, agentId }: { projectId: string; agentId: strin
         )}
       />
       <PageBody>
-        {!agent && read.isPending ? <p className="page-status" role="status">…</p> : null}
+        {!agent && read.isPending ? <DetailSkeleton label={t("loading")} /> : null}
         {!agent && failure !== null ? <EmptyState title={t("view.loadFailed")} description={failure} action={<button className="button outline" type="button" onClick={back}>{t("view.back")}</button>} /> : null}
         {agent ? (
           <>

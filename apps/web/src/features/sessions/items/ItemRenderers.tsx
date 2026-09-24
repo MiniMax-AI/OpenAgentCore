@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import type { SessionItem } from "@agents-core-web/agents-client";
 
 import { Monogram } from "../../../components/atoms/EntityChip";
+import { Shimmer } from "../../../components/atoms/Shimmer";
 import { MessageMarkdown } from "../../../components/MessageMarkdown";
 import { StatusIcon, type StatusKind } from "../../../components/StatusIcon";
 import { ApplyPatchDiffViewer } from "./ApplyPatchDiffViewer";
@@ -184,11 +185,17 @@ function AgentItems({ items }: { items: SessionItem[] }) {
  * right; everything the Agent did (tool steps, working notes, its reply) sits
  * on the left under its avatar, followed by the Turn's error when it failed.
  */
-export function ThreadItems({ items, agentName, error }: { items: SessionItem[]; agentName: string; error?: string | null }) {
+export function ThreadItems({ items, agentName, error, activity }: {
+  items: SessionItem[];
+  agentName: string;
+  error?: string | null;
+  /** What the Agent is doing now ("Working…"), shown as a shimmering line at the end. */
+  activity?: string | null;
+}) {
   const { t } = useTranslation("sessions");
   const name = agentName || t("common.agent");
   const blocks = chatBlocks(items);
-  if (error) {
+  if (error || activity) {
     const last = blocks.at(-1);
     if (last?.kind !== "assistant") blocks.push({ kind: "assistant", items: [] });
   }
@@ -208,6 +215,7 @@ export function ThreadItems({ items, agentName, error }: { items: SessionItem[];
           <span className="chat-author">{name}</span>
           <AgentItems items={block.items} />
           {isLast && error ? <p className="chat-error" role="status">{error}</p> : null}
+          {isLast && activity && !error ? <p className="chat-working" role="status"><Shimmer>{activity}</Shimmer></p> : null}
         </div>
       </div>
     );

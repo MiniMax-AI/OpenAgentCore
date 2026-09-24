@@ -95,6 +95,8 @@ export const sessions = {
     help: "Read-only history from Core. While the Session is running or waiting for input the page reads it again every 5 seconds and stops once the Session is idle or failed.",
     view: "History view",
     conversation: "Conversation",
+    working: "Working…",
+    queued: "Queued…",
     trace: "Trace",
     turns: "Turns",
     noItems: "No Items yet",

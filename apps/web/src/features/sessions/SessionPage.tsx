@@ -4,6 +4,7 @@ import { ArrowLeft, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { DetailSkeleton } from "../../components/Skeleton";
 import { EmptyState, Kpi, KpiStrip, PageBody, PageHeader, RefreshButton, Section, SegmentedControl } from "../../components/console-ui";
 import { CopyableId } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
@@ -72,7 +73,7 @@ export function SessionPage() {
   } else if (projects.status === "ready" && !project) {
     body = <EmptyState title={t("detail.projectMissing")} action={<button className="button outline" type="button" onClick={back}>{t("detail.back")}</button>} />;
   } else if (!session) {
-    if (history.phase === "loading") body = <p className="page-status" role="status">{t("detail.loading")}</p>;
+    if (history.phase === "loading") body = <DetailSkeleton label={t("detail.loading")} />;
     else if (isNotFound(history.error)) body = <EmptyState title={t("detail.notFound")} description={t("detail.notFoundDescription")} action={<button className="button outline" type="button" onClick={back}>{t("detail.back")}</button>} />;
     else body = <EmptyState title={t("detail.loadFailed")} description={errorText(history.error)} action={<button className="button outline" type="button" onClick={refresh}>{t("detail.retry")}</button>} />;
   } else {

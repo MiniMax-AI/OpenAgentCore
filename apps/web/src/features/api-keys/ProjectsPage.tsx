@@ -179,7 +179,7 @@ export function ProjectsPage() {
               onRevoke={(key, activeCount) => openDialog({ kind: "revoke", project: selected, key, activeCount })}
             />
           ) : state.status === "loading" ? (
-            <p className="page-status" role="status">{t("page.loading")}</p>
+            <TableSkeleton label={t("page.loading")} rows={4} columns={6} />
           ) : (
             <EmptyState
               icon={FolderKanban}

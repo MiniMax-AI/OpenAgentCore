@@ -1,5 +1,5 @@
 import { Table2 } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import { formatBucketTime, niceTicks, tickIndices } from "./chart-scale";
@@ -185,13 +185,15 @@ export function TimeSeriesChart({
               ? <rect className="chart-band-highlight" x={left + band * active} y={MARGIN.top} width={band} height={height} />
               : <line className="chart-crosshair" x1={xCenter(active)} x2={xCenter(active)} y1={MARGIN.top} y2={MARGIN.top + height} />
           ) : null}
+          {/* Keyed by the bucketing: bars and lines draw in when a range is first shown, not on every refresh. */}
+          <g key={`${bucketSeconds}:${count}`} className="chart-series">
           {kind === "columns" ? buckets.map((_, index) => {
             let base = 0;
             const drawn = series
               .map((entry) => ({ entry, value: entry.values[index] ?? 0 }))
               .filter((segment) => segment.value > 0);
             return (
-              <g key={index}>
+              <g key={index} className="chart-bar" style={{ "--i": index } as CSSProperties}>
                 {drawn.map(({ entry, value }, position) => {
                   if (!stacked) {
                     const slot = columnWidth / series.length;
@@ -218,12 +220,13 @@ export function TimeSeriesChart({
             const last = [...points].reverse().find(Boolean) ?? null;
             return (
               <g key={entry.id}>
-                <path className="chart-line" d={linePath(points)} stroke={entry.color} />
-                {last ? <circle className="chart-end-dot" cx={last[0]} cy={last[1]} r={4} fill={entry.color} /> : null}
+                <path className="chart-line" pathLength={1} d={linePath(points)} stroke={entry.color} />
+                {last ? <circle className="chart-end-dot chart-last-dot" cx={last[0]} cy={last[1]} r={4} fill={entry.color} /> : null}
                 {active !== null && points[active] ? <circle className="chart-end-dot" cx={points[active]![0]} cy={points[active]![1]} r={4} fill={entry.color} /> : null}
               </g>
             );
           })}
+          </g>
           <rect
             className="chart-hit"
             x={left}

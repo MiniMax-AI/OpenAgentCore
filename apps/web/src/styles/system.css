@@ -198,12 +198,36 @@ pre {
   transform: scale(0.98);
 }
 
-/* The current page is a white chip, the same surface as the panel it opens. */
+/* The current page is a white chip, the same surface as the panel it opens.
+ * One chip glides between items (a Motion shared layout); labels sit above it. */
+.main-nav {
+  isolation: isolate;
+}
+
+.main-nav button {
+  position: relative;
+}
+
+.main-nav button > svg,
+.main-nav button > span:not(.nav-active-chip) {
+  position: relative;
+  z-index: 1;
+}
+
 .main-nav button.active {
   color: var(--ink);
   font-weight: 500;
+  background: transparent;
+}
+
+.nav-active-chip {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
   background: var(--surface);
+  border-radius: var(--radius-control);
   box-shadow: 0 0 0 1px var(--frame-line), 0 1px 2px oklch(0 0 0 / 4%);
+  pointer-events: none;
 }
 
 .main-nav button.active svg,
@@ -607,12 +631,38 @@ pre {
   color: var(--ink);
 }
 
+/* The selected option is a thumb that glides between options (Motion shared
+ * layout); labels and counts sit above it. */
+.segmented {
+  isolation: isolate;
+}
+
+.segmented button {
+  position: relative;
+}
+
+.segmented-label,
+.segmented-count {
+  position: relative;
+  z-index: 1;
+}
+
 .segmented button[aria-pressed="true"],
 .segmented button[aria-checked="true"],
 .segmented button.active {
   color: var(--ink);
+  background: transparent;
+  box-shadow: none;
+}
+
+.segmented-thumb {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
   background: var(--surface);
+  border-radius: 6px;
   box-shadow: var(--shadow-btn);
+  pointer-events: none;
 }
 
 .segmented-count {
@@ -1030,6 +1080,42 @@ pre {
   animation: skeleton-sweep 900ms linear infinite;
 }
 
+/* Dashboard and detail skeletons take the final layout's cards. */
+.skeleton-stack {
+  display: grid;
+  gap: 28px;
+}
+
+.skeleton-kpi {
+  gap: 12px;
+  padding-bottom: 18px;
+}
+
+.skeleton-label {
+  height: 8px;
+  opacity: 0.8;
+}
+
+.skeleton-figure {
+  height: 16px;
+  border-radius: 6px;
+}
+
+.skeleton-chart {
+  gap: 14px;
+}
+
+.skeleton-plot {
+  display: block;
+  height: 168px;
+  background: repeating-linear-gradient(to bottom, transparent 0 41px, var(--grid-line) 41px 42px);
+  border-bottom: 1px solid var(--grid-line);
+}
+
+.resource-facts .skeleton-bar + .skeleton-bar {
+  margin-top: 8px;
+}
+
 .skeleton-head .skeleton-bar {
   height: 8px;
   opacity: 0.7;
@@ -1201,4 +1287,72 @@ pre {
 .page-title-meta .status-dot {
   color: var(--ink-3);
   font-size: 12.5px;
+}
+
+/* Motion ------------------------------------------------------------------
+ * Motion here reports state: data arriving, work in progress, a figure that
+ * changed. Nothing waits on it; the reduced-motion rule in style.css makes
+ * every animation instant. */
+
+/* Charts draw in once per range: bars rise from the baseline in a short
+ * left-to-right wave, lines trace from their first point. */
+.chart-bar {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: chart-bar-in 460ms var(--ease-settle) both;
+  animation-delay: calc(min(var(--i, 0), 30) * 9ms);
+}
+
+.chart-line {
+  stroke-dasharray: 1;
+  animation: chart-line-draw 720ms var(--ease-settle) both;
+}
+
+.chart-last-dot {
+  animation: motion-fade 200ms ease-out 560ms both;
+}
+
+@keyframes chart-bar-in {
+  from { opacity: 0; transform: scaleY(0); }
+}
+
+@keyframes chart-line-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes motion-fade {
+  from { opacity: 0; }
+}
+
+/* A figure's digits roll when a refresh changes it (NumberFlow). */
+.live-number {
+  font-variant-numeric: tabular-nums;
+  --number-flow-mask-height: 0.2em;
+}
+
+/* Work in progress breathes: a soft ring expands from the dot. */
+.status-dot-pending .status-dot-mark {
+  animation: status-breathe 1.8s ease-out infinite;
+}
+
+@keyframes status-breathe {
+  0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--status-running) 45%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 5px color-mix(in oklab, var(--status-running) 0%, transparent); }
+}
+
+/* New messages settle into the conversation as a running Session reports them. */
+.chat-row {
+  animation: chat-in 260ms var(--ease-settle) both;
+}
+
+@keyframes chat-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+/* The Agent is working: its name's line shimmers (Beautiful UI's thinking state). */
+.chat-working {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 20px;
 }

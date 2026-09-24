@@ -4,8 +4,9 @@ import { Network } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { LiveNumber } from "../../components/live-number";
 import { TimeSeriesChart } from "../../components/charts/TimeSeriesChart";
-import { TableSkeleton } from "../../components/Skeleton";
+import { DashboardSkeleton, TableSkeleton } from "../../components/Skeleton";
 import { EmptyState, Kpi, KpiStrip, PageBody, PageHeader, RefreshButton, Section, SegmentedControl, StatusDot, type Tone } from "../../components/console-ui";
 import { formatBucket, formatBytes, formatClock, formatDuration, formatInteger, formatRelative, MISSING } from "../../lib/format";
 import { coreMetricsQuery } from "./metrics-queries";
@@ -54,7 +55,7 @@ export function CoreMetricsPage() {
       ? <EmptyState icon={Network} title={t("core.missingTitle")} description={t("core.missingDescription")} />
       : query.isError
         ? <p className="page-status" role="alert">{t("core.failed", { reason: error })}</p>
-        : <TableSkeleton label={t("core.loading")} rows={3} columns={5} />;
+        : <DashboardSkeleton label={t("core.loading")} figures={5} />;
   } else {
     body = <CoreMetricsBody metrics={metrics} stale={query.isError ? error : null} />;
   }
@@ -115,16 +116,16 @@ function CoreMetricsBody({ metrics, stale }: { metrics: CoreMetrics; stale: stri
         <Kpi
           label={t("core.slots")}
           help={t("core.slotsHelp")}
-          value={execution.slots_in_use === null ? MISSING : <Figure value={integer(execution.slots_in_use)} unit={execution.slots_total === null ? undefined : `/ ${integer(execution.slots_total)}`} />}
+          value={execution.slots_in_use === null ? MISSING : <Figure value={<LiveNumber value={execution.slots_in_use} />} unit={execution.slots_total === null ? undefined : `/ ${integer(execution.slots_total)}`} />}
           tone={slotsFull ? "warning" : undefined}
         />
         <Kpi
           label={t("core.queued")}
           help={t("core.queuedHelp")}
-          value={execution.queued_turns === null ? MISSING : <Figure value={integer(execution.queued_turns)} unit={execution.waiting_for_daemon ? t("core.waitingForDaemon", { n: execution.waiting_for_daemon }) : undefined} />}
+          value={execution.queued_turns === null ? MISSING : <Figure value={<LiveNumber value={execution.queued_turns} />} unit={execution.waiting_for_daemon ? t("core.waitingForDaemon", { n: execution.waiting_for_daemon }) : undefined} />}
           tone={(execution.queued_turns ?? 0) > 0 ? "warning" : undefined}
         />
-        <Kpi label={t("core.daemons")} help={t("core.daemonsHelp")} value={count(execution.connected_daemons)} />
+        <Kpi label={t("core.daemons")} help={t("core.daemonsHelp")} value={<LiveNumber value={execution.connected_daemons} />} />
         <Kpi label={t("core.databaseLatency")} value={milliseconds(database.ping_ms.p95)} />
         <Kpi label={t("core.memory")} value={process.memory_bytes === null ? MISSING : formatBytes(process.memory_bytes)} />
       </KpiStrip>

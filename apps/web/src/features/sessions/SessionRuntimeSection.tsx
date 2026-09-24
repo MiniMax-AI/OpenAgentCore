@@ -3,6 +3,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { DashboardSkeleton } from "../../components/Skeleton";
 import { Kpi, KpiStrip, Section, SegmentedControl, type Tone } from "../../components/console-ui";
 import { formatBytes, formatCores, formatDateTime, formatPercent, formatRelative, MISSING } from "../../lib/format";
 import { RuntimeCharts } from "../metrics/RuntimeCharts";
@@ -114,7 +115,7 @@ export function SessionRuntimeSection({
       {observationError ? <p className="coverage-note coverage-note-error" role="alert">{t("runtime.observationFailed", { reason: observationError })}</p> : null}
       {history.state === "failed" ? <p className="coverage-note coverage-note-error" role="alert">{t("runtime.historyFailed", { reason: history.error ?? "" })}</p> : null}
       {history.state === "unavailable" ? <p className="coverage-note">{t("runtime.historyUnavailable")}</p> : null}
-      {history.state === "loading" && !history.value ? <p className="page-status" role="status">{t("runtime.historyLoading")}</p> : null}
+      {history.state === "loading" && !history.value ? <DashboardSkeleton label={t("runtime.historyLoading")} figures={0} /> : null}
       {history.value ? (
         <RuntimeCharts samples={history.value.samples} resolutionSeconds={sampleSpacing(history.value.samples)} />
       ) : null}

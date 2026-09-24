@@ -11,7 +11,7 @@ import { skillQuery, skillVersionsQuery } from "../resources/detail-queries";
 
 import { EmptyState, PageBody, PageHeader, RefreshButton, Section, StatusDot } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
-import { TableSkeleton } from "../../components/Skeleton";
+import { DetailSkeleton, TableSkeleton } from "../../components/Skeleton";
 import { useToast } from "../../components/Toast";
 import { formatDateTime, MISSING } from "../../lib/format";
 import { CopyableId, LatestVersion } from "./skill-parts";
@@ -120,7 +120,7 @@ export function SkillDetailPage({
               description={error ?? undefined}
               action={<button className="button outline" type="button" onClick={onRefresh}>{t("actions.retry")}</button>}
             />
-          ) : <p className="page-status" role="status">{t("detail.loading")}</p>
+          ) : <DetailSkeleton label={t("detail.loading")} />
         ) : (
           <>
             {status === "failed" && error ? <p className="coverage-note coverage-note-error" role="alert">{t("detail.refreshFailed", { reason: error })}</p> : null}

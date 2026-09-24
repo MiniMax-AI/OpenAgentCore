@@ -14,7 +14,7 @@ import { CopyDialog, type CopySource } from "../copy/CopyDialog";
 import { vaultName } from "./vault-catalog";
 import "./vaults.css";
 import { collections } from "../../lib/queries";
-import { TableSkeleton } from "../../components/Skeleton";
+import { DetailSkeleton, TableSkeleton } from "../../components/Skeleton";
 import { useVaultDetail } from "../resources/detail-queries";
 
 function errorText(error: unknown): string {
@@ -208,7 +208,7 @@ function VaultDetail({ projectId, vaultId }: { projectId: string; vaultId: strin
         )}
       />
       <PageBody>
-        {!vault && read.isPending ? <p className="page-status" role="status">{t("loading")}</p> : null}
+        {!vault && read.isPending ? <DetailSkeleton label={t("loading")} /> : null}
         {!vault && failure !== null ? (
           <EmptyState title={t("loadFailed")} description={failure} action={<button className="button outline" type="button" onClick={refresh}>{tCommon("actions.retry")}</button>} />
         ) : null}

@@ -14,6 +14,7 @@ import {
   Vault,
   type LucideIcon,
 } from "lucide-react";
+import * as m from "motion/react-m";
 import { useTranslation } from "react-i18next";
 
 import { consoleNavGroups, type ConsoleView } from "../lib/console-routes";
@@ -79,6 +80,7 @@ export function ConsoleSidebar({
                   onPointerEnter={() => onIntent?.(view)}
                   onFocus={() => onIntent?.(view)}
                 >
+                  {active === view ? <m.span className="nav-active-chip" layoutId="console-nav-active" aria-hidden="true" /> : null}
                   <Icon size={15} strokeWidth={1.5} aria-hidden="true" />
                   <span>{t(`views.${view}`)}</span>
                 </button>
