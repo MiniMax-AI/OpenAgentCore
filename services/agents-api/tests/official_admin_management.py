@@ -254,6 +254,8 @@ def main():
             for kind, resource in [("agent", agent.id), ("skill", skill.id), ("file", file.id),
                                    ("environment_template", template.id), ("vault", vault.id)]:
                 equal_reads(source, kind, resource)
+                assert safe(request("GET", "/v1/" + PUBLIC_PATHS[kind], token=target["key"]))["data"] == []
+                request("GET", admin_resource(target, kind, resource), expected=404)
                 path = f"/v1/{PUBLIC_PATHS[kind]}/{resource}"
                 for method in ("GET", "DELETE"):
                     request(method, path, expected=404, token=target["key"])
