@@ -69,6 +69,7 @@ type EnvironmentFileWrite struct {
 	State         string             `json:"state"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	SettledAt     pgtype.Timestamptz `json:"settled_at"`
+	AuditSource   []byte             `json:"audit_source"`
 }
 
 type EnvironmentInputReservation struct {
