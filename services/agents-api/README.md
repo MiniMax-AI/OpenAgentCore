@@ -156,7 +156,7 @@ incomplete. Durable acceptance is not an exactly-once side-effect guarantee.
 Run migrations first, then `go run ./services/agents-api/cmd/server`. The service
 uses `AGENTS_API_DATABASE_URL` for its dedicated database; it does not read the
 product database or accept product login cookies. Configure the separate deployment
-administrator credential through `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` to manage
+administrator credential through `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` at startup to manage
 Projects and keys. Deployment credentials cannot authenticate `/v1`, and application
 API keys cannot authenticate administrator routes.
 

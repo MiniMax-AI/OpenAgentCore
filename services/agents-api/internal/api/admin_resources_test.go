@@ -21,8 +21,7 @@ type adminProjectFixture struct {
 	principal identity.Principal
 }
 
-func managementProjectStore() *adminProjectFixture {
-	key := callerBinding()
+func managementProjectStore(key APIKey) *adminProjectFixture {
 	return &adminProjectFixture{principal: identity.Principal{ProjectScope: identity.ProjectScope{TenantID: key.TenantID, OrganizationID: key.OrganizationID, ProjectID: key.ProjectID}, SubjectKind: key.SubjectKind, SubjectID: key.SubjectID}}
 }
 
@@ -63,7 +62,7 @@ func TestAdminResourcesHaveExplicitTargetWithoutCallerImpersonation(t *testing.T
 	}
 	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("admin")})
 	resources := &adminReadFixture{}
-	h, err := NewHandler(resources, auth, "codex", WithProjectAPIKeys(managementProjectStore(), admin))
+	h, err := NewHandler(resources, auth, "codex", WithProjectAPIKeys(managementProjectStore(key), admin))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +126,7 @@ func TestAdminSummaryUsesPublicStateAndNullUsageCoverage(t *testing.T) {
 	auth, _ := NewAuthenticator([]APIKey{key})
 	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("admin")})
 	fixture := &summaryFixture{}
-	h, err := NewHandler(&recordingStore{}, auth, "codex", WithProjectAPIKeys(managementProjectStore(), admin), WithAdminManagement(fixture))
+	h, err := NewHandler(&recordingStore{}, auth, "codex", WithProjectAPIKeys(managementProjectStore(key), admin), WithAdminManagement(fixture))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,6 +11,8 @@ signed-in account. Core records it only as an unverified display label.
 A Project owns one tenant and shared principal. Its keys have equal access to all
 its assets. Projects and keys are database-owned; deployment configuration defines
 neither. There are no API users, roles or configuration-managed business keys.
+Core requires a separate deployment administrator credential at startup for
+bootstrap and management.
 
 | Operation | Path | Result |
 | --- | --- | --- |
@@ -29,6 +31,9 @@ Project names contain 1–128 characters; key names contain 1–80. Names are di
 labels and may repeat; control characters are rejected. Lists use lexical ID
 ordering, `order=asc|desc` (default `desc`), `limit=1..100` (default 20), and `after`.
 No response includes the stored digest or an existing credential's plaintext.
+The catalog UUID identifies management paths. Its public authentication scope uses
+organization `core` and project `proj_<catalog UUID>`; optional OpenAI scope headers
+must match those values. All keys share subject `service_account/project:<UUID>`.
 
 Rotate by issuing a new key in the same Project and revoking the old one. Revoking
 one key leaves other keys, assets and admitted work intact. Archive atomically
