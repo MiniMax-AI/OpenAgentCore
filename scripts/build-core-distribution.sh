@@ -120,7 +120,7 @@ else
 fi
 mkdir -p "$bundle/native"
 cp -R "$stage/core/bin" "$stage/core/microsandbox" "$bundle/native/"
-E2B_PROVIDER_BUILD_DIR="$stage/e2b-build" scripts/build-e2b-provider.sh
+E2B_SOURCE_REVISION="$revision" E2B_PROVIDER_BUILD_DIR="$stage/e2b-build" scripts/build-e2b-provider.sh
 mkdir -p "$stage/core/e2b"
 tar -xzf "$stage/e2b-build/agents-api-e2b-provider-linux-amd64.tar.gz" \
   --strip-components=1 -C "$stage/core/e2b"
