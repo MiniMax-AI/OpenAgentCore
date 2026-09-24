@@ -7,9 +7,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/node"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -113,5 +116,97 @@ func TestDeferredSandboxProviderFailureKeepsRecoveryAvailable(t *testing.T) {
 	available = true
 	if ready, err := m.ensureDeployment(t.Context()); err != nil || !ready {
 		t.Fatal("repaired provider did not activate", ready, err)
+	}
+}
+
+func TestRejectedSandboxCandidatePreservesActiveGeneration(t *testing.T) {
+	hub := node.NewHub(node.HubOptions{})
+	defer hub.Close()
+	id := uuid.NewString()
+	config := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), "docker")}
+	rejected := errors.New("candidate provider unavailable")
+	m, err := newRuntimeManager(nil, gateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil },
+		func(context.Context, store.SandboxSetup) (PreparedRuntimeDeployment, error) {
+			return PreparedRuntimeDeployment{}, rejected
+		}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { m.stop(); m.drain() }()
+	if _, err := m.ensureDeployment(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	old, err := m.node(uuid.NewString())
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := store.SandboxDeploymentSetupRequest{Provider: "e2b", CoreURL: "https://core.example", E2B: &store.SandboxE2BConfiguration{APIKey: "fixture-key", Template: "runtime:" + uuid.NewString()}, DeploymentSpec: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 1024}}}
+	if _, err := m.prepareCandidate(t.Context(), input); !errors.Is(err, rejected) {
+		t.Fatal("candidate rejection was lost", err)
+	}
+	if m.config.Generation != 1 || m.config.Provider != config.Provider || m.switching || old.lifecycle.ctx.Err() != nil {
+		t.Fatal("rejected candidate replaced or drained the active configuration")
+	}
+	_, finish, err := m.enter(t.Context())
+	if err != nil {
+		t.Fatal("candidate rejection stopped current execution", err)
+	}
+	finish()
+}
+
+func TestSandboxCandidateValidationDoesNotHoldManagerLock(t *testing.T) {
+	id := uuid.NewString()
+	entered, release := make(chan struct{}), make(chan struct{})
+	m, err := newRuntimeManager(nil, gateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil },
+		func(context.Context, store.SandboxSetup) (PreparedRuntimeDeployment, error) {
+			close(entered)
+			<-release
+			return PreparedRuntimeDeployment{}, errors.New("rejected")
+		}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { m.stop(); m.drain() }()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = m.prepareCandidate(t.Context(), store.SandboxDeploymentSetupRequest{Provider: "e2b", CoreURL: "https://core.example", E2B: &store.SandboxE2BConfiguration{APIKey: "fixture-key", Template: "runtime:" + uuid.NewString()}, DeploymentSpec: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 1024}}})
+	}()
+	<-entered
+	stopped := make(chan struct{})
+	go func() { m.stop(); close(stopped) }()
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		close(release)
+		<-done
+		t.Fatal("provider validation blocked manager shutdown")
+	}
+	close(release)
+	<-done
+}
+
+func TestCommittedSandboxCandidatePublishesAfterShutdown(t *testing.T) {
+	hub := node.NewHub(node.HubOptions{})
+	defer hub.Close()
+	id := uuid.NewString()
+	m, err := newRuntimeManager(nil, gateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.pauseDeployment(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	config := &RuntimeProvider{InstallationID: id, ProviderKind: "e2b", Mode: "direct", CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("b", 64), Provider: hub.Proxy(uuid.NewString(), "docker")}
+	var published *RuntimeProvider
+	candidate := PreparedRuntimeDeployment{Config: config, Publish: func(value *RuntimeProvider) { published = value }}
+	m.stop()
+	m.publishDeployment(candidate, store.RuntimeDeploymentView{InstallationID: id, Generation: 2, Mode: "direct", Provider: "e2b", Maintenance: true})
+	m.drain()
+	if m.config.Generation != 2 || !m.config.Maintenance || published == nil || published.Generation != 2 || !published.Maintenance || m.switching {
+		t.Fatal("committed candidate was lost during shutdown")
+	}
+	if _, _, err := m.enter(t.Context()); !errors.Is(err, ErrExecutionUnavailable) {
+		t.Fatal("publication reopened a closed manager", err)
 	}
 }

@@ -10,6 +10,7 @@ import (
 
 	"errors"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/node"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
 )
@@ -105,5 +106,41 @@ func TestMissingE2BHelperReportsProviderUnavailable(t *testing.T) {
 	}
 	if s.selected.Load() != nil {
 		t.Fatal("unavailable provider was published")
+	}
+}
+
+func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
+	id := uuid.NewString()
+	hub := node.NewHub(node.HubOptions{})
+	defer hub.Close()
+	s := &managedSetup{installationID: id, hub: hub, store: &setupStore{}}
+	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
+	s.selected.Store(previous)
+	candidate, err := s.prepare(t.Context(), store.SandboxSetup{InstallationID: id, Provider: "microsandbox", Mode: "nodes", CoreURL: "https://core.example", IdleSeconds: 300, RetentionSeconds: 86400})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.selected.Load() != previous || candidate.Config.ProviderKind != "microsandbox" || candidate.Config.Suspension == nil {
+		t.Fatal("preparation published or lost candidate configuration")
+	}
+	committed := *candidate.Config
+	committed.Generation, committed.Maintenance = 2, true
+	candidate.Publish(&committed)
+	if got := s.selected.Load(); got.Generation != 2 || got.ProviderKind != "microsandbox" || !got.Maintenance {
+		t.Fatal("commit did not publish the validated selection")
+	}
+}
+
+func TestManagedSetupRejectedCandidateRetainsSelection(t *testing.T) {
+	id := uuid.NewString()
+	t.Setenv("AGENTS_API_E2B_PROVIDER_BIN", filepath.Join(t.TempDir(), "missing-helper"))
+	t.Setenv("AGENTS_API_E2B_STATE_DIR", t.TempDir())
+	s := &managedSetup{installationID: id}
+	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
+	s.selected.Store(previous)
+	_, err := s.prepare(t.Context(), store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct", CoreURL: "https://core.example",
+		E2B: &store.SandboxE2BConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}})
+	if !errors.Is(err, execution.ErrExecutionUnavailable) || s.selected.Load() != previous {
+		t.Fatal("rejected candidate lost the previous selection", err)
 	}
 }

@@ -119,6 +119,10 @@ func (w *Worker) UpdateSandboxDeployment(ctx context.Context, input store.Sandbo
 	if err := m.store.CheckSandboxDeploymentSwitch(ctx, m.setupInstallationID, input); err != nil {
 		return store.RuntimeDeploymentView{}, err
 	}
+	candidate, err := m.prepareCandidate(ctx, input.SandboxDeploymentSetupRequest)
+	if err != nil {
+		return store.RuntimeDeploymentView{}, err
+	}
 	if err := m.pauseDeployment(ctx); err != nil {
 		return store.RuntimeDeploymentView{}, err
 	}
@@ -126,9 +130,7 @@ func (w *Worker) UpdateSandboxDeployment(ctx context.Context, input store.Sandbo
 	if err != nil {
 		return store.RuntimeDeploymentView{}, err
 	}
-	if err := m.activateDeployment(ctx, result); err != nil {
-		return store.RuntimeDeploymentView{}, err
-	}
+	m.publishDeployment(candidate, result)
 	return result, nil
 }
 

@@ -8,11 +8,24 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
+// PreparedRuntimeDeployment has completed provider validation without publishing
+// a selection. Publish must only update in-memory state and must not fail.
+type PreparedRuntimeDeployment struct {
+	Config  *RuntimeProvider
+	Publish func(*RuntimeProvider)
+}
+
+type RuntimeDeploymentPreparer func(context.Context, store.SandboxSetup) (PreparedRuntimeDeployment, error)
+
 // NewDeferredRuntimeProvider enables Web setup for one fixed installation. The
 // loader returns nil until selection, then the committed immutable generation.
 // Replacement is serialized by the deployment maintenance and drain flow.
-func NewDeferredRuntimeProvider(installationID string, load func(context.Context) (*RuntimeProvider, error)) *RuntimeProvider {
-	return &RuntimeProvider{InstallationID: installationID, loadDeployment: load}
+func NewDeferredRuntimeProvider(installationID string, load func(context.Context) (*RuntimeProvider, error), prepare ...RuntimeDeploymentPreparer) *RuntimeProvider {
+	config := &RuntimeProvider{InstallationID: installationID, loadDeployment: load}
+	if len(prepare) == 1 {
+		config.prepareDeployment = prepare[0]
+	}
+	return config
 }
 
 func (w *Worker) InitializeSandboxDeployment(ctx context.Context, input store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error) {
@@ -21,7 +34,17 @@ func (w *Worker) InitializeSandboxDeployment(ctx context.Context, input store.Sa
 		return store.RuntimeDeploymentView{}, err
 	}
 	defer unlock()
-	return w.dispatcher.Store.InitializeSandboxDeployment(ctx, w.runtimes.setupInstallationID, input)
+	m := w.runtimes
+	candidate, err := m.prepareCandidate(ctx, input)
+	if err != nil {
+		return store.RuntimeDeploymentView{}, err
+	}
+	result, err := m.store.InitializeSandboxDeployment(ctx, m.setupInstallationID, input)
+	if err != nil {
+		return store.RuntimeDeploymentView{}, err
+	}
+	m.publishDeployment(candidate, result)
+	return result, nil
 }
 
 // ensureDeployment serializes the first configuration read without holding the
@@ -74,4 +97,57 @@ func (m *runtimeManager) ensureDeployment(parent context.Context) (bool, error) 
 	}
 	m.config = copied
 	return true, nil
+}
+
+// Preparation is outside the manager mutex and all database transactions. A
+// rejected candidate cannot retire the current generation or its node lanes.
+func (m *runtimeManager) prepareCandidate(ctx context.Context, input store.SandboxDeploymentSetupRequest) (PreparedRuntimeDeployment, error) {
+	if m.prepareDeployment == nil {
+		return PreparedRuntimeDeployment{}, ErrExecutionUnavailable
+	}
+	setup, err := store.SandboxSetupForSelection(m.setupInstallationID, input)
+	if err != nil {
+		return PreparedRuntimeDeployment{}, err
+	}
+	candidate, err := m.prepareDeployment(ctx, setup)
+	if err != nil {
+		return PreparedRuntimeDeployment{}, err
+	}
+	config := candidate.Config
+	if config == nil || config.InstallationID != setup.InstallationID || config.ProviderKind != setup.Provider || config.Mode != setup.Mode || config.CoreURL != setup.CoreURL+"/api/v1" || config.BackendFingerprint != setup.BackendFingerprint || config.LocalNodeID != "" || config.loadDeployment != nil || config.prepareDeployment != nil {
+		return PreparedRuntimeDeployment{}, sandbox.ErrInvalid
+	}
+	copied, err := validatedRuntimeProvider(config, m.registry)
+	if err != nil {
+		return PreparedRuntimeDeployment{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return PreparedRuntimeDeployment{}, err
+	}
+	m.mu.Lock()
+	closed := m.closed
+	m.mu.Unlock()
+	if closed {
+		return PreparedRuntimeDeployment{}, ErrExecutionUnavailable
+	}
+	candidate.Config = &copied
+	return candidate, nil
+}
+
+// The store commit is the point of no return. Publishing a validated candidate
+// is infallible, including when shutdown or request cancellation follows commit.
+func (m *runtimeManager) publishDeployment(candidate PreparedRuntimeDeployment, committed store.RuntimeDeploymentView) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	config := *candidate.Config
+	config.Generation, config.Maintenance = committed.Generation, committed.Maintenance
+	if m.switching {
+		m.nodes = make(map[string]*runtimeNode)
+	}
+	m.config = config
+	if candidate.Publish != nil {
+		candidate.Publish(&config)
+	}
+	m.switching = false
+	m.switchDrained = nil
 }

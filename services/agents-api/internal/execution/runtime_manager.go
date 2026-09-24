@@ -21,6 +21,7 @@ type runtimeManager struct {
 	config              RuntimeProvider
 	setupInstallationID string
 	loadDeployment      func(context.Context) (*RuntimeProvider, error)
+	prepareDeployment   RuntimeDeploymentPreparer
 	setupGate           chan struct{}
 	mutationGate        chan struct{}
 	switching           bool

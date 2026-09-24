@@ -23,6 +23,7 @@ type RuntimeProvider struct {
 	Generation                       uint64
 	Mode                             string
 	loadDeployment                   func(context.Context) (*RuntimeProvider, error)
+	prepareDeployment                RuntimeDeploymentPreparer
 	VerifyLegacyOwnership            store.RuntimeOwnershipVerifier
 	ProviderKind                     string
 	LocalNodeID                      string
@@ -69,7 +70,7 @@ func newRuntimeManager(s *store.Store, registry *gateway.Registry, config *Runti
 		}
 	}
 	ctx, stop := context.WithCancel(context.Background())
-	return &runtimeManager{store: s, registry: registry, config: copied, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
+	return &runtimeManager{store: s, registry: registry, config: copied, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
 }
 
 func validatedRuntimeProvider(config *RuntimeProvider, registry *gateway.Registry) (RuntimeProvider, error) {
