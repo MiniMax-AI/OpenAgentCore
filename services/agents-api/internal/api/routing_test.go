@@ -344,7 +344,7 @@ func TestEveryRouteAuthenticatesItsCanonicalPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, route := range []string{"GET /core/v1/admin/api-keys/", "POST /core/v1/admin/api-keys/",
+	for _, route := range []string{"GET /core/v1/admin/api-keys", "POST /core/v1/admin/api-keys",
 		"DELETE /core/v1/admin/api-keys/{key_id}", "GET /core/v1/sandbox/nodes", "DELETE /core/v1/environments/{environment_id}/executor-credentials/{key_id}"} {
 		if !walked[route] {
 			t.Errorf("route %s was not walked", route)

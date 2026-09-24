@@ -48,7 +48,7 @@ func TestAdminResourcesHaveExplicitTargetWithoutCallerImpersonation(t *testing.T
 		method, path string
 		status       int
 	}{
-		{"GET", base + "/agents", 200}, {"DELETE", base + "/agents/known", 200},
+		{"GET", base + "/agents", 200}, {"DELETE", base + "/agents/11111111-1111-4111-8111-111111111111", 200},
 		{"POST", base + "/agents", 405}, {"POST", base + "/sessions", 405},
 		{"POST", base + "/sessions/known/events", 404}, {"GET", base + "/sessions/known/events", 404},
 		{"GET", base + "/files/known/content", 404}, {"POST", base + "/vaults/v/credentials", 405},
