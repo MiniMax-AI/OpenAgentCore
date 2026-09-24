@@ -6,11 +6,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
+	"testing"
+
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/adminaudit"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
 	"github.com/google/uuid"
-	"strings"
-	"testing"
 )
 
 func projectKeyDigest(value string) string {
@@ -151,5 +152,59 @@ func TestProjectNamesValidateBeforeDatabaseAccess(t *testing.T) {
 		if _, err := s.CreateProjectAPIKey(t.Context(), uuid.NewString(), uuid.NewString(), name); !errors.Is(err, ErrInvalidInput) {
 			t.Fatal("invalid key name accepted")
 		}
+	}
+}
+
+func TestProjectCatalogPaginationAndScopedKeyCursor(t *testing.T) {
+	s, _ := testStore(t)
+	first, second := createTestProject(t, s), createTestProject(t, s)
+	if _, err := s.CreateProject(keyAdminContext(t.Context(), first.ID), first.ID, "duplicate"); !errors.Is(err, ErrProjectExists) {
+		t.Fatal("duplicate Project ID did not conflict", err)
+	}
+	// Equal display names do not merge Projects or keys.
+	a, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), first.ID), first.ID, uuid.NewString(), "same name")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), first.ID), first.ID, uuid.NewString(), "same name")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), first.ID), first.ID, a.ID, "duplicate ID"); !errors.Is(err, ErrProjectAPIKeyExists) {
+		t.Fatal("duplicate key ID did not conflict", err)
+	}
+	page, err := s.ListProjectAPIKeys(t.Context(), first.ID, "", 1, true)
+	if err != nil || len(page.Data) != 1 || !page.HasMore {
+		t.Fatal("first key page invalid", err)
+	}
+	tail, err := s.ListProjectAPIKeys(t.Context(), first.ID, page.Data[0].ID, 1, true)
+	if err != nil || len(tail.Data) != 1 || tail.HasMore || tail.Data[0].ID <= page.Data[0].ID {
+		t.Fatal("key cursor did not advance", err)
+	}
+	reverse, err := s.ListProjectAPIKeys(t.Context(), first.ID, "", 1, false)
+	if err != nil || len(reverse.Data) != 1 || reverse.Data[0].ID != tail.Data[0].ID {
+		t.Fatal("descending key page invalid", err)
+	}
+	if _, err := s.ListProjectAPIKeys(t.Context(), second.ID, a.ID, 1, true); !errors.Is(err, ErrNotFound) {
+		t.Fatal("foreign key cursor accepted", err)
+	}
+	if _, err := s.ListProjectAPIKeys(t.Context(), first.ID, "", 101, true); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("oversized key page accepted", err)
+	}
+	if _, err := s.ListProjects(t.Context(), "", 101, true); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("oversized Project page accepted", err)
+	}
+	if err := s.RevokeProjectAPIKey(keyAdminContext(t.Context(), first.ID), first.ID, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RevokeProjectAPIKey(keyAdminContext(t.Context(), first.ID), first.ID, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	current, err := s.GetProject(t.Context(), first.ID)
+	if err != nil || current.Project.ArchivedAt != nil || current.Project.ActiveKeyCount != 0 {
+		t.Fatal("last key removal changed Project lifecycle", err)
+	}
+	if _, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), first.ID), first.ID, uuid.NewString(), "new access"); err != nil {
+		t.Fatal("zero-key Project could not issue another key", err)
 	}
 }

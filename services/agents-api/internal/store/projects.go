@@ -4,15 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+	"unicode"
+	"unicode/utf8"
+
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"strings"
-	"time"
-	"unicode"
-	"unicode/utf8"
 )
 
 var (
@@ -107,7 +108,7 @@ func (s *Store) GetProject(ctx context.Context, id string) (ProjectBinding, erro
 }
 func (s *Store) ListProjects(ctx context.Context, after string, limit int, ascending bool) (ProjectPage, error) {
 	result := ProjectPage{Data: []Project{}}
-	if limit < 1 || limit > 500 {
+	if limit < 1 || limit > 100 {
 		return result, ErrInvalidInput
 	}
 	if after != "" {

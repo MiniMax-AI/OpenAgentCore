@@ -7,11 +7,12 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"time"
+
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"time"
 )
 
 var ErrProjectAPIKeyExists = errors.New("project API key ID already exists")
@@ -106,7 +107,7 @@ func (s *Store) CreateProjectAPIKey(ctx context.Context, project, id, name strin
 }
 func (s *Store) ListProjectAPIKeys(ctx context.Context, project, after string, limit int, ascending bool) (ProjectAPIKeyPage, error) {
 	result := ProjectAPIKeyPage{Data: []ProjectAPIKey{}}
-	if limit < 1 || limit > 500 {
+	if limit < 1 || limit > 100 {
 		return result, ErrInvalidInput
 	}
 	p, err := s.GetProject(ctx, project)

@@ -32,4 +32,3 @@ UPDATE projects SET archived_at=COALESCE(archived_at,now()) WHERE id=$1;
 
 -- name: RevokeProjectKeys :exec
 UPDATE project_api_keys SET revoked_at=COALESCE(revoked_at,now()) WHERE project_id=$1;
-

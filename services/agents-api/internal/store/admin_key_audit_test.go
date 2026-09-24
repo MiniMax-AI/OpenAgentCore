@@ -3,10 +3,11 @@ package store
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/adminaudit"
-	"github.com/google/uuid"
 	"reflect"
 	"testing"
+
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/adminaudit"
+	"github.com/google/uuid"
 )
 
 func TestAdminProjectAndKeyDatabaseAuditTransactions(t *testing.T) {

@@ -2,13 +2,14 @@ package store_test
 
 import (
 	"encoding/json"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/api"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
-	"net/http/httptest"
-	"strings"
-	"testing"
 )
 
 func TestProjectAndSharedKeysHTTPManagement(t *testing.T) {

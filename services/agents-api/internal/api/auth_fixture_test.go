@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"

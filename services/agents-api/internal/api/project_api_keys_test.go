@@ -3,12 +3,13 @@ package api
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
 type projectKeyStoreFixture struct {
@@ -85,5 +86,41 @@ func TestDatabaseResolverControlsAuthentication(t *testing.T) {
 	w := projectKeyHTTP(h.authenticateCaller(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Fatal("unavailable auth reached handler") }), true), "GET", "/v1/files", "issued-project-key", "")
 	if w.Code != 503 {
 		t.Fatal("database failure did not fail closed")
+	}
+}
+
+type separationFixture struct {
+	digests []string
+	err     error
+}
+
+func (s *separationFixture) ValidateProjectKeySeparation(_ context.Context, digests []string) error {
+	s.digests = digests
+	return s.err
+}
+func TestAdministratorCredentialSeparation(t *testing.T) {
+	s := &separationFixture{}
+	if err := ValidateCredentialSeparation(t.Context(), nil, s); err == nil {
+		t.Fatal("missing administrator accepted")
+	}
+	digest := device.HashCredential("admin")
+	admin, _ := NewDeploymentAuthenticator([]string{digest})
+	if err := ValidateCredentialSeparation(t.Context(), admin, s); err != nil || len(s.digests) != 1 || s.digests[0] != digest {
+		t.Fatal("administrator digest was not checked against persisted keys", err)
+	}
+	s.err = errors.New("credential overlap")
+	if err := ValidateCredentialSeparation(t.Context(), admin, s); !errors.Is(err, s.err) {
+		t.Fatal("persisted credential collision accepted")
+	}
+}
+func TestAdminCatalogPageLimits(t *testing.T) {
+	for _, query := range []string{"limit=101", "limit=0", "limit=bad", "limit=1&limit=2", "order=sideways", "order=asc&order=desc", "after=a&after=b"} {
+		if _, _, _, err := adminCatalogPage(httptest.NewRequest("GET", "/core/v1/admin/projects?"+query, nil)); err == nil {
+			t.Errorf("invalid page accepted: %s", query)
+		}
+	}
+	_, limit, ascending, err := adminCatalogPage(httptest.NewRequest("GET", "/core/v1/admin/projects?limit=100&order=asc", nil))
+	if err != nil || limit != 100 || !ascending {
+		t.Fatal("valid maximum page rejected", err)
 	}
 }

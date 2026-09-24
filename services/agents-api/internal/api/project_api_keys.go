@@ -3,13 +3,14 @@ package api
 import (
 	"context"
 	"encoding/hex"
+	"net/http"
+	"strconv"
+
 	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/adminaudit"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"net/http"
-	"strconv"
 )
 
 type ProjectAPIKeyStore interface {
@@ -89,7 +90,7 @@ func adminCatalogPage(r *http.Request) (string, int, bool, error) {
 	}
 	if raw, ok := values["limit"]; ok {
 		n, err := strconv.Atoi(raw[0])
-		if err != nil || n < 1 || n > 500 {
+		if err != nil || n < 1 || n > 100 {
 			return "", 0, false, store.ErrInvalidInput
 		}
 		limit = n
@@ -108,7 +109,7 @@ func adminCatalogPage(r *http.Request) (string, int, bool, error) {
 // @Produce json
 // @Security DeploymentAdminAuth
 // @Param after query string false "Project ID cursor"
-// @Param limit query int false "Page size (1-500)"
+// @Param limit query int false "Page size (1-100)"
 // @Param order query string false "asc or desc by Project ID"
 // @Success 200 {object} store.ProjectPage
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
@@ -215,7 +216,7 @@ func (h *Handler) archiveProject(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param project_id path string true "Project UUID"
 // @Param after query string false "Key ID cursor"
-// @Param limit query int false "Page size (1-500)"
+// @Param limit query int false "Page size (1-100)"
 // @Param order query string false "asc or desc by key ID"
 // @Success 200 {object} store.ProjectAPIKeyPage
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
