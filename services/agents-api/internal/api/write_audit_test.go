@@ -52,11 +52,11 @@ func TestWriteAuditQueriesDeploymentScopeAndValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	queries := &auditQueryFixture{}
-	h, err := NewHandler(&recordingStore{}, auth, "codex", WithWriteAudit(queries, admin))
+	h, err := NewHandler(&recordingStore{}, auth, "codex", WithWriteAudit(queries, admin), WithProjectAPIKeys(&projectKeyStoreFixture{}, admin))
 	if err != nil {
 		t.Fatal(err)
 	}
-	owners := "/core/v1/resource-owners?binding_digest=" + key.TokenSHA256 + "&resource_type=agent&resource_ids=first,second"
+	owners := "/core/v1/admin/api-keys/static:" + key.TokenSHA256 + "/resource-owners?resource_type=agent&resource_ids=first,second"
 	for _, token := range []string{"", "caller", "foreign"} {
 		w := projectKeyHTTP(h, "GET", owners, token, "")
 		if w.Code != 401 || queries.calls != 0 {
@@ -70,16 +70,16 @@ func TestWriteAuditQueriesDeploymentScopeAndValidation(t *testing.T) {
 	if !strings.Contains(w.Body.String(), `"api_key":null`) {
 		t.Fatalf("history must be null: %s", w.Body)
 	}
-	history := "/core/v1/write-operations?binding_digest=" + key.TokenSHA256
-	w = projectKeyHTTP(h, "GET", history+"&key_id=some-key&resource_type=credential&resource_id=resource&limit=2&after=cursor&created_after=2026-01-01T00:00:00Z&created_before=2026-02-01T00:00:00Z", "admin", "")
+	history := "/core/v1/admin/api-keys/static:" + key.TokenSHA256 + "/write-operations?"
+	w = projectKeyHTTP(h, "GET", history+"key_id=some-key&resource_type=credential&resource_id=resource&limit=2&after=cursor&created_after=2026-01-01T00:00:00Z&created_before=2026-02-01T00:00:00Z", "admin", "")
 	if w.Code != 200 || queries.filter.Limit != 2 || queries.filter.KeyID != "some-key" || queries.filter.After != "cursor" || queries.filter.CreatedAfter == nil || queries.filter.CreatedBefore == nil {
 		t.Fatalf("history %d %s filter%+v", w.Code, w.Body, queries.filter)
 	}
 	for _, path := range []string{
 		owners + "&resource_type=file", strings.Replace(owners, "agent", "unknown", 1), strings.Replace(owners, "first,second", "", 1),
 		owners + "&tenant_id=foreign", owners + "&bad=%GG", strings.Replace(owners, "first,second", strings.Repeat("id,", 100)+"id", 1),
-		history + "&limit=0", history + "&limit=101", history + "&limit=bad", history + "&limit=", history + "&created_after=yesterday", history + "&resource_type=unknown",
-		history + "&created_after=2026-02-01T00:00:00Z&created_before=2026-01-01T00:00:00Z",
+		history + "limit=0", history + "limit=101", history + "limit=bad", history + "limit=", history + "created_after=yesterday", history + "resource_type=unknown",
+		history + "created_after=2026-02-01T00:00:00Z&created_before=2026-01-01T00:00:00Z",
 	} {
 		count := queries.calls
 		w = projectKeyHTTP(h, "GET", path, "admin", "")
