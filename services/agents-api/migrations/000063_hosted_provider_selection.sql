@@ -23,6 +23,24 @@ ALTER TABLE runtime_deployment ADD CONSTRAINT runtime_deployment_e2b_check CHECK
 -- +goose Down
 -- +goose StatementBegin
 DO $$ BEGIN
-    RAISE EXCEPTION 'Cannot discard hosted provider configuration generations';
+    IF EXISTS (SELECT 1 FROM runtime_deployment WHERE provider_kind='e2b' OR generation>1) THEN
+        RAISE EXCEPTION 'Cannot discard hosted provider configuration generations';
+    END IF;
 END $$;
 -- +goose StatementEnd
+
+ALTER TABLE runtime_deployment DROP CONSTRAINT runtime_deployment_e2b_check;
+ALTER TABLE runtime_deployment DROP CONSTRAINT runtime_deployment_setup_check;
+ALTER TABLE runtime_deployment DROP COLUMN e2b_credential;
+ALTER TABLE runtime_deployment DROP COLUMN e2b_template;
+ALTER TABLE runtime_deployment DROP COLUMN mode;
+ALTER TABLE runtime_deployment DROP COLUMN generation;
+ALTER TABLE runtime_deployment DROP CONSTRAINT runtime_deployment_provider_kind_check;
+ALTER TABLE runtime_deployment ADD CONSTRAINT runtime_deployment_provider_kind_check CHECK (provider_kind IN ('','docker','microsandbox'));
+ALTER TABLE runtime_deployment ADD CONSTRAINT runtime_deployment_setup_check CHECK (
+    NOT web_managed OR (local_node_id IS NULL AND (
+        (provider_kind='' AND core_url='' AND idle_seconds=0 AND retention_seconds=0) OR
+        (provider_kind='docker' AND core_url<>'' AND idle_seconds=0 AND retention_seconds=0) OR
+        (provider_kind='microsandbox' AND core_url<>'' AND idle_seconds>0 AND retention_seconds>0)
+    ))
+);
