@@ -60,7 +60,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 		}
 	}()
 	token := uuid.NewString()
-	auth, err := api.NewAuthenticator([]api.APIKey{{OrganizationID: "test-org", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: device.HashCredential(token), TenantID: h.tenant}})
+	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: device.HashCredential(token), TenantID: h.tenant}})
 	if err != nil {
 		t.Fatal(err)
 	}

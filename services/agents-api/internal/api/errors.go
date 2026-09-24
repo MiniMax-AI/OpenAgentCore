@@ -86,6 +86,10 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 	var cursor *store.InvalidCursorError
 	var selection *store.MCPCredentialSelectionError
 	switch {
+	case errors.Is(err, store.ErrProjectArchived):
+		writeError(w, http.StatusConflict, "project_archived", "The target Project is archived.")
+	case errors.Is(err, store.ErrProjectExists):
+		writeError(w, http.StatusConflict, "project_exists", "This Project ID already exists.")
 	case errors.Is(err, store.ErrProjectAPIKeyExists):
 		writeError(w, http.StatusConflict, "project_api_key_exists", "This API key ID already exists. List its metadata and revoke it explicitly if the secret was not saved.")
 	case errors.Is(err, store.ErrExecutorCredentialExists):

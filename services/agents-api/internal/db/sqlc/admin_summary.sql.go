@@ -115,12 +115,14 @@ func (q *Queries) AdminRuntimeTargets(ctx context.Context, arg AdminRuntimeTarge
 }
 
 const adminSummarySessions = `-- name: AdminSummarySessions :many
-SELECT id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id FROM sessions
-WHERE tenant_id=$1 AND deleted_at IS NULL
- AND ($2::timestamptz IS NULL OR created_at >= $2::timestamptz)
- AND ($3::timestamptz IS NULL OR created_at < $3::timestamptz)
- AND id > $4::uuid
-ORDER BY id LIMIT 100
+SELECT s.id, s.tenant_id, s.engine, s.metadata, s.idempotency_key, s.request_hash, s.created_at, s.configuration, s.event_sequence, s.creation_request_hash, s.deleted_at, s.creator_kind, s.creator_id, a.key_id AS creation_key_id FROM sessions s
+LEFT JOIN write_audit_owners o ON o.tenant_id=s.tenant_id AND o.resource_type='session' AND o.resource_id=s.id::text
+LEFT JOIN write_audit_operations a ON a.tenant_id=o.tenant_id AND a.id=o.operation_id
+WHERE s.tenant_id=$1 AND s.deleted_at IS NULL
+ AND ($2::timestamptz IS NULL OR s.created_at >= $2::timestamptz)
+ AND ($3::timestamptz IS NULL OR s.created_at < $3::timestamptz)
+ AND s.id > $4::uuid
+ORDER BY s.id LIMIT 100
 `
 
 type AdminSummarySessionsParams struct {
@@ -130,7 +132,12 @@ type AdminSummarySessionsParams struct {
 	AfterID       pgtype.UUID        `json:"after_id"`
 }
 
-func (q *Queries) AdminSummarySessions(ctx context.Context, arg AdminSummarySessionsParams) ([]Session, error) {
+type AdminSummarySessionsRow struct {
+	Session       Session     `json:"session"`
+	CreationKeyID pgtype.Text `json:"creation_key_id"`
+}
+
+func (q *Queries) AdminSummarySessions(ctx context.Context, arg AdminSummarySessionsParams) ([]AdminSummarySessionsRow, error) {
 	rows, err := q.db.Query(ctx, adminSummarySessions,
 		arg.TenantID,
 		arg.CreatedAfter,
@@ -141,23 +148,24 @@ func (q *Queries) AdminSummarySessions(ctx context.Context, arg AdminSummarySess
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Session{}
+	items := []AdminSummarySessionsRow{}
 	for rows.Next() {
-		var i Session
+		var i AdminSummarySessionsRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.TenantID,
-			&i.Engine,
-			&i.Metadata,
-			&i.IdempotencyKey,
-			&i.RequestHash,
-			&i.CreatedAt,
-			&i.Configuration,
-			&i.EventSequence,
-			&i.CreationRequestHash,
-			&i.DeletedAt,
-			&i.CreatorKind,
-			&i.CreatorID,
+			&i.Session.ID,
+			&i.Session.TenantID,
+			&i.Session.Engine,
+			&i.Session.Metadata,
+			&i.Session.IdempotencyKey,
+			&i.Session.RequestHash,
+			&i.Session.CreatedAt,
+			&i.Session.Configuration,
+			&i.Session.EventSequence,
+			&i.Session.CreationRequestHash,
+			&i.Session.DeletedAt,
+			&i.Session.CreatorKind,
+			&i.Session.CreatorID,
+			&i.CreationKeyID,
 		); err != nil {
 			return nil, err
 		}

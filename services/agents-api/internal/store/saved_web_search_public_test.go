@@ -22,7 +22,7 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 	// An isolated database keeps the no-write digest independent of other tests.
 	s, pool := store.NewManagedTestStore(t)
 	owner, foreign, ownerTenant := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	auth, err := api.NewAuthenticator([]api.APIKey{
+	auth, err := newTestAuthenticator([]testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "search-owner", TokenSHA256: device.HashCredential(owner), TenantID: ownerTenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "search-foreign", TokenSHA256: device.HashCredential(foreign), TenantID: uuid.NewString()},
 	})

@@ -33,7 +33,7 @@ func TestMCPCredentialSelectionPublicPostgres(t *testing.T) {
 	}
 	s := store.NewWithCredentialCipher(pool, cipher)
 	tenantA, tokenA, tokenB := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	auth, err := api.NewAuthenticator([]api.APIKey{
+	auth, err := newTestAuthenticator([]testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "selection-a", TokenSHA256: device.HashCredential(tokenA), TenantID: tenantA},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "selection-b", TokenSHA256: device.HashCredential(tokenB), TenantID: uuid.NewString()},
 	})

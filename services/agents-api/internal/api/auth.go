@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/writeaudit"
@@ -18,74 +16,17 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
-// APIKey binds a service credential to an execution principal, not a product user.
-// Configuration stores the SHA-256 hex digest, never the plaintext key.
-type APIKey struct {
-	Name           string `json:"name,omitempty"`
-	Kind           string `json:"kind,omitempty"`
-	TokenSHA256    string `json:"token_sha256"`
-	TenantID       string `json:"tenant_id"`
-	OrganizationID string `json:"organization_id"`
-	ProjectID      string `json:"project_id"`
-	SubjectKind    string `json:"subject_kind"`
-	SubjectID      string `json:"subject_id"`
+// ProjectAPIKeyResolver resolves current database credentials on each request.
+type ProjectAPIKeyResolver interface {
+	ResolveProjectAPIKey(context.Context, string) (store.ProjectAPIKeyBinding, error)
 }
+type Authenticator struct{ keys ProjectAPIKeyResolver }
 
-type Authenticator struct {
-	principals map[[32]byte]identity.Principal
-	projects   []identity.ProjectScope
-	sources    map[[32]byte]writeaudit.Source
-}
-
-func NewAuthenticator(keys []APIKey) (*Authenticator, error) {
-
-	a := &Authenticator{principals: make(map[[32]byte]identity.Principal, len(keys)), sources: make(map[[32]byte]writeaudit.Source, len(keys))}
-	for _, key := range keys {
-		principal := identity.Principal{ProjectScope: identity.ProjectScope{TenantID: key.TenantID, OrganizationID: key.OrganizationID, ProjectID: key.ProjectID}, SubjectKind: key.SubjectKind, SubjectID: key.SubjectID}
-		if err := principal.Validate(); err != nil {
-			return nil, err
-		}
-		digest, err := hex.DecodeString(key.TokenSHA256)
-		if err != nil || len(digest) != sha256.Size {
-			return nil, errors.New("API key token_sha256 must be a SHA-256 hex digest")
-		}
-		hash := [32]byte(digest)
-		if _, exists := a.principals[hash]; exists {
-			return nil, errors.New("duplicate API key digest")
-		}
-		if key.Kind == "" {
-			key.Kind = "static"
-		}
-		if key.Kind != "static" {
-			return nil, errors.New("configured API key kind must be static")
-		}
-		if !utf8.ValidString(key.Name) || utf8.RuneCountInString(key.Name) > 80 || strings.ContainsFunc(key.Name, unicode.IsControl) {
-			return nil, errors.New("configured API key name must contain at most 80 characters without controls")
-		}
-		digestID := hex.EncodeToString(hash[:])
-		a.sources[hash] = writeaudit.Source{KeyID: "static:" + digestID, Name: strings.TrimSpace(key.Name), Prefix: digestID[:8], Kind: key.Kind, TenantID: principal.TenantID}
-		a.principals[hash] = principal
-		a.projects = append(a.projects, principal.ProjectScope)
+func NewDatabaseAuthenticator(keys ProjectAPIKeyResolver) (*Authenticator, error) {
+	if keys == nil {
+		return nil, errors.New("database API key resolver is required")
 	}
-	var err error
-	a.projects, err = identity.ProjectScopes(a.projects)
-	if err != nil {
-		return nil, err
-	}
-	return a, nil
-}
-
-func (a *Authenticator) ProjectScopes() []identity.ProjectScope {
-	return append([]identity.ProjectScope(nil), a.projects...)
-}
-
-func (a *Authenticator) principal(r *http.Request) (identity.Principal, bool) {
-	digest, valid := projectBearerDigest(r)
-	if !valid {
-		return identity.Principal{}, false
-	}
-	principal, ok := a.principals[digest]
-	return principal, ok && principalScopeHeaders(r, principal)
+	return &Authenticator{keys: keys}, nil
 }
 
 func projectBearerDigest(r *http.Request) ([sha256.Size]byte, bool) {
@@ -115,15 +56,9 @@ func (h *Handler) resolveCaller(r *http.Request) (identity.Principal, writeaudit
 			return identity.Principal{}, writeaudit.Source{}, false, nil
 		}
 	}
-	if principal, ok := h.auth.principals[digest]; ok {
-		return principal, h.auth.sources[digest], principalScopeHeaders(r, principal), nil
-	}
-	if h.projectKeys == nil {
-		return identity.Principal{}, writeaudit.Source{}, false, nil
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	binding, err := h.projectKeys.ResolveProjectAPIKey(ctx, hex.EncodeToString(digest[:]))
+	binding, err := h.auth.keys.ResolveProjectAPIKey(ctx, hex.EncodeToString(digest[:]))
 	if errors.Is(err, store.ErrNotFound) {
 		return identity.Principal{}, writeaudit.Source{}, false, nil
 	}

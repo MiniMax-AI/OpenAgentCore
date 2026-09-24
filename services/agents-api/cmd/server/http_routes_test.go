@@ -77,7 +77,7 @@ func (trapKeys) ResolveProjectAPIKey(context.Context, string) (store.ProjectAPIK
 // daemonComposition serves the real API handler beside sentinel daemon routes.
 func daemonComposition(t testing.TB) http.Handler {
 	t.Helper()
-	auth, err := api.NewAuthenticator([]api.APIKey{{OrganizationID: "org", ProjectID: "project", SubjectKind: "service_account",
+	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "org", ProjectID: "project", SubjectKind: "service_account",
 		SubjectID: "runner", TokenSHA256: device.HashCredential("project-key"), TenantID: uuid.NewString()}})
 	if err != nil {
 		t.Fatal(err)

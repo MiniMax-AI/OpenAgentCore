@@ -33,7 +33,7 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 	s := store.NewWithCredentialCipher(pool, cipher)
 	reopenedStore := store.NewWithCredentialCipher(pool, cipher)
 	tenant, foreignTenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
-	auth, err := api.NewAuthenticator([]api.APIKey{
+	auth, err := newTestAuthenticator([]testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "composition-owner", TokenSHA256: device.HashCredential(token), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "composition-foreign", TokenSHA256: device.HashCredential(foreign), TenantID: foreignTenant},
 	})

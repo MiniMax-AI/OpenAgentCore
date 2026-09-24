@@ -12,19 +12,17 @@ import (
 )
 
 const createProjectAPIKey = `-- name: CreateProjectAPIKey :one
-INSERT INTO project_api_keys (id,name,prefix,token_sha256,tenant_id,organization_id,project_id,subject_kind,subject_id)
-VALUES ($1,$2,$3,$4,$5,$6,$7,'service_account',$1::uuid::text)
-ON CONFLICT (id) DO NOTHING RETURNING id, name, prefix, token_sha256, tenant_id, organization_id, project_id, subject_kind, subject_id, created_at, revoked_at
+INSERT INTO project_api_keys (id,name,prefix,token_sha256,project_id)
+VALUES ($1,$2,$3,$4,$5)
+ON CONFLICT (id) DO NOTHING RETURNING id, name, prefix, token_sha256, created_at, revoked_at, project_id
 `
 
 type CreateProjectAPIKeyParams struct {
-	ID             pgtype.UUID `json:"id"`
-	Name           string      `json:"name"`
-	Prefix         string      `json:"prefix"`
-	TokenSha256    string      `json:"token_sha256"`
-	TenantID       pgtype.UUID `json:"tenant_id"`
-	OrganizationID string      `json:"organization_id"`
-	ProjectID      string      `json:"project_id"`
+	ID          pgtype.UUID `json:"id"`
+	Name        string      `json:"name"`
+	Prefix      string      `json:"prefix"`
+	TokenSha256 string      `json:"token_sha256"`
+	ProjectID   pgtype.UUID `json:"project_id"`
 }
 
 func (q *Queries) CreateProjectAPIKey(ctx context.Context, arg CreateProjectAPIKeyParams) (ProjectApiKey, error) {
@@ -33,8 +31,6 @@ func (q *Queries) CreateProjectAPIKey(ctx context.Context, arg CreateProjectAPIK
 		arg.Name,
 		arg.Prefix,
 		arg.TokenSha256,
-		arg.TenantID,
-		arg.OrganizationID,
 		arg.ProjectID,
 	)
 	var i ProjectApiKey
@@ -43,58 +39,61 @@ func (q *Queries) CreateProjectAPIKey(ctx context.Context, arg CreateProjectAPIK
 		&i.Name,
 		&i.Prefix,
 		&i.TokenSha256,
-		&i.TenantID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.SubjectKind,
-		&i.SubjectID,
 		&i.CreatedAt,
 		&i.RevokedAt,
+		&i.ProjectID,
 	)
 	return i, err
 }
 
-const getProjectAPIKey = `-- name: GetProjectAPIKey :one
-SELECT id, name, prefix, token_sha256, tenant_id, organization_id, project_id, subject_kind, subject_id, created_at, revoked_at FROM project_api_keys WHERE id = $1
+const getProjectAPIKeyForProject = `-- name: GetProjectAPIKeyForProject :one
+SELECT id, name, prefix, token_sha256, created_at, revoked_at, project_id FROM project_api_keys WHERE id=$1 AND project_id=$2
 `
 
-func (q *Queries) GetProjectAPIKey(ctx context.Context, id pgtype.UUID) (ProjectApiKey, error) {
-	row := q.db.QueryRow(ctx, getProjectAPIKey, id)
+type GetProjectAPIKeyForProjectParams struct {
+	ID        pgtype.UUID `json:"id"`
+	ProjectID pgtype.UUID `json:"project_id"`
+}
+
+func (q *Queries) GetProjectAPIKeyForProject(ctx context.Context, arg GetProjectAPIKeyForProjectParams) (ProjectApiKey, error) {
+	row := q.db.QueryRow(ctx, getProjectAPIKeyForProject, arg.ID, arg.ProjectID)
 	var i ProjectApiKey
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Prefix,
 		&i.TokenSha256,
-		&i.TenantID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.SubjectKind,
-		&i.SubjectID,
 		&i.CreatedAt,
 		&i.RevokedAt,
+		&i.ProjectID,
 	)
 	return i, err
 }
 
 const listProjectAPIKeys = `-- name: ListProjectAPIKeys :many
-SELECT id, name, prefix, token_sha256, tenant_id, organization_id, project_id, subject_kind, subject_id, created_at, revoked_at FROM project_api_keys
-WHERE ($1::text = '' OR
-    ($2::bool AND id::text > $1::text) OR
-    (NOT $2::bool AND id::text < $1::text))
-ORDER BY CASE WHEN $2::bool THEN id END ASC,
-         CASE WHEN NOT $2::bool THEN id END DESC
-LIMIT $3::int
+SELECT id, name, prefix, token_sha256, created_at, revoked_at, project_id FROM project_api_keys
+WHERE project_id=$1 AND ($2::text = '' OR
+    ($3::bool AND id::text > $2::text) OR
+    (NOT $3::bool AND id::text < $2::text))
+ORDER BY CASE WHEN $3::bool THEN id END ASC,
+         CASE WHEN NOT $3::bool THEN id END DESC
+LIMIT $4::int
 `
 
 type ListProjectAPIKeysParams struct {
-	AfterID   string `json:"after_id"`
-	Ascending bool   `json:"ascending"`
-	PageLimit int32  `json:"page_limit"`
+	ProjectID pgtype.UUID `json:"project_id"`
+	AfterID   string      `json:"after_id"`
+	Ascending bool        `json:"ascending"`
+	PageLimit int32       `json:"page_limit"`
 }
 
 func (q *Queries) ListProjectAPIKeys(ctx context.Context, arg ListProjectAPIKeysParams) ([]ProjectApiKey, error) {
-	rows, err := q.db.Query(ctx, listProjectAPIKeys, arg.AfterID, arg.Ascending, arg.PageLimit)
+	rows, err := q.db.Query(ctx, listProjectAPIKeys,
+		arg.ProjectID,
+		arg.AfterID,
+		arg.Ascending,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -107,13 +106,9 @@ func (q *Queries) ListProjectAPIKeys(ctx context.Context, arg ListProjectAPIKeys
 			&i.Name,
 			&i.Prefix,
 			&i.TokenSha256,
-			&i.TenantID,
-			&i.OrganizationID,
-			&i.ProjectID,
-			&i.SubjectKind,
-			&i.SubjectID,
 			&i.CreatedAt,
 			&i.RevokedAt,
+			&i.ProjectID,
 		); err != nil {
 			return nil, err
 		}
@@ -136,90 +131,69 @@ func (q *Queries) ProjectAPIKeyDigestExists(ctx context.Context, tokenSha256 str
 	return exists, err
 }
 
-const projectAPIKeyTenantExists = `-- name: ProjectAPIKeyTenantExists :one
-SELECT EXISTS (SELECT 1 FROM project_api_keys WHERE tenant_id = $1)
-`
-
-func (q *Queries) ProjectAPIKeyTenantExists(ctx context.Context, tenantID pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, projectAPIKeyTenantExists, tenantID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
-const resetProjectAPIKey = `-- name: ResetProjectAPIKey :one
-UPDATE project_api_keys SET prefix = $2, token_sha256 = $3
-WHERE id = $1 AND revoked_at IS NULL RETURNING id, name, prefix, token_sha256, tenant_id, organization_id, project_id, subject_kind, subject_id, created_at, revoked_at
-`
-
-type ResetProjectAPIKeyParams struct {
-	ID          pgtype.UUID `json:"id"`
-	Prefix      string      `json:"prefix"`
-	TokenSha256 string      `json:"token_sha256"`
-}
-
-func (q *Queries) ResetProjectAPIKey(ctx context.Context, arg ResetProjectAPIKeyParams) (ProjectApiKey, error) {
-	row := q.db.QueryRow(ctx, resetProjectAPIKey, arg.ID, arg.Prefix, arg.TokenSha256)
-	var i ProjectApiKey
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Prefix,
-		&i.TokenSha256,
-		&i.TenantID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.SubjectKind,
-		&i.SubjectID,
-		&i.CreatedAt,
-		&i.RevokedAt,
-	)
-	return i, err
-}
-
 const resolveProjectAPIKey = `-- name: ResolveProjectAPIKey :one
-SELECT id, name, prefix, token_sha256, tenant_id, organization_id, project_id, subject_kind, subject_id, created_at, revoked_at FROM project_api_keys WHERE token_sha256 = $1 AND revoked_at IS NULL
+SELECT k.id, k.name, k.prefix, k.token_sha256, k.created_at, k.revoked_at, k.project_id, p.tenant_id, p.subject_kind, p.subject_id, s.organization_id, s.project_id AS external_project_id
+FROM project_api_keys k JOIN projects p ON p.id=k.project_id
+JOIN execution_project_scopes s ON s.tenant_id=p.tenant_id
+WHERE k.token_sha256 = $1 AND k.revoked_at IS NULL AND p.archived_at IS NULL
 `
 
-func (q *Queries) ResolveProjectAPIKey(ctx context.Context, tokenSha256 string) (ProjectApiKey, error) {
+type ResolveProjectAPIKeyRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	Name              string             `json:"name"`
+	Prefix            string             `json:"prefix"`
+	TokenSha256       string             `json:"token_sha256"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	RevokedAt         pgtype.Timestamptz `json:"revoked_at"`
+	ProjectID         pgtype.UUID        `json:"project_id"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
+	SubjectKind       string             `json:"subject_kind"`
+	SubjectID         string             `json:"subject_id"`
+	OrganizationID    string             `json:"organization_id"`
+	ExternalProjectID string             `json:"external_project_id"`
+}
+
+func (q *Queries) ResolveProjectAPIKey(ctx context.Context, tokenSha256 string) (ResolveProjectAPIKeyRow, error) {
 	row := q.db.QueryRow(ctx, resolveProjectAPIKey, tokenSha256)
-	var i ProjectApiKey
+	var i ResolveProjectAPIKeyRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Prefix,
 		&i.TokenSha256,
-		&i.TenantID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.SubjectKind,
-		&i.SubjectID,
 		&i.CreatedAt,
 		&i.RevokedAt,
+		&i.ProjectID,
+		&i.TenantID,
+		&i.SubjectKind,
+		&i.SubjectID,
+		&i.OrganizationID,
+		&i.ExternalProjectID,
 	)
 	return i, err
 }
 
 const revokeProjectAPIKey = `-- name: RevokeProjectAPIKey :one
 UPDATE project_api_keys SET revoked_at = COALESCE(revoked_at, now())
-WHERE id = $1 RETURNING id, name, prefix, token_sha256, tenant_id, organization_id, project_id, subject_kind, subject_id, created_at, revoked_at
+WHERE id = $1 AND project_id=$2 RETURNING id, name, prefix, token_sha256, created_at, revoked_at, project_id
 `
 
-func (q *Queries) RevokeProjectAPIKey(ctx context.Context, id pgtype.UUID) (ProjectApiKey, error) {
-	row := q.db.QueryRow(ctx, revokeProjectAPIKey, id)
+type RevokeProjectAPIKeyParams struct {
+	ID        pgtype.UUID `json:"id"`
+	ProjectID pgtype.UUID `json:"project_id"`
+}
+
+func (q *Queries) RevokeProjectAPIKey(ctx context.Context, arg RevokeProjectAPIKeyParams) (ProjectApiKey, error) {
+	row := q.db.QueryRow(ctx, revokeProjectAPIKey, arg.ID, arg.ProjectID)
 	var i ProjectApiKey
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Prefix,
 		&i.TokenSha256,
-		&i.TenantID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.SubjectKind,
-		&i.SubjectID,
 		&i.CreatedAt,
 		&i.RevokedAt,
+		&i.ProjectID,
 	)
 	return i, err
 }

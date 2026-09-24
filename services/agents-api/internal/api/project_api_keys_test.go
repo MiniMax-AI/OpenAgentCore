@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"net/http"
@@ -13,8 +14,16 @@ import (
 type projectKeyStoreFixture struct {
 	ProjectAPIKeyStore
 	binding store.ProjectAPIKeyBinding
+	project store.ProjectBinding
 	resolve error
 	lookups int
+}
+
+func (s *projectKeyStoreFixture) GetProject(_ context.Context, id string) (store.ProjectBinding, error) {
+	if s.project.Project.ID == id {
+		return s.project, nil
+	}
+	return store.ProjectBinding{}, store.ErrNotFound
 }
 
 func (s *projectKeyStoreFixture) ResolveProjectAPIKey(_ context.Context, digest string) (store.ProjectAPIKeyBinding, error) {
@@ -54,38 +63,27 @@ func TestAdminCredentialNeverAuthenticatesPublicAPI(t *testing.T) {
 		t.Fatal("administrator authenticated on public API")
 	}
 }
-func TestIndependentIssuedPrincipalNeedsNoStaticParent(t *testing.T) {
-	auth, err := NewAuthenticator(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestDatabaseResolverControlsAuthentication(t *testing.T) {
 	p := callerBinding()
-	principal, _ := NewAuthenticator([]APIKey{p})
+	fixture, _ := NewAuthenticator([]APIKey{p})
+	binding, _ := fixture.keys.ResolveProjectAPIKey(t.Context(), p.TokenSHA256)
+	keys := &projectKeyStoreFixture{binding: binding}
+	auth, _ := NewDatabaseAuthenticator(keys)
+	h := &Handler{auth: auth}
 	r := httptest.NewRequest("GET", "/v1/files", nil)
-	r.Header.Set("Authorization", "Bearer caller")
-	identity, _ := principal.principal(r)
-	keys := &projectKeyStoreFixture{binding: store.ProjectAPIKeyBinding{Principal: identity, Key: store.ProjectAPIKey{ID: "independent"}}}
-	h := &Handler{auth: auth, projectKeys: keys}
 	r.Header.Set("Authorization", "Bearer issued-project-key")
 	got, _, ok, err := h.resolveCaller(r)
-	if err != nil || !ok || got != identity {
-		t.Fatal("independent issued key rejected")
+	if err != nil || !ok || got != binding.Principal {
+		t.Fatal("database key rejected")
 	}
-}
-func TestStaticKeyKindsAndIndependentSpaces(t *testing.T) {
-	key := callerBinding()
-	key.Kind = "console"
-	if _, err := NewAuthenticator([]APIKey{key}); err == nil {
-		t.Fatal("console key accepted")
+	keys.resolve = store.ErrNotFound
+	_, _, ok, err = h.resolveCaller(r)
+	if err != nil || ok {
+		t.Fatal("revoked database key authenticated")
 	}
-	key.Kind = "static"
-	other := key
-	other.TokenSHA256 = device.HashCredential("other")
-	a, err := NewAuthenticator([]APIKey{key, other})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := ValidateCredentialSeparation(t.Context(), a, nil, nil); err == nil {
-		t.Fatal("shared static tenant accepted")
+	keys.resolve = errors.New("database unavailable")
+	w := projectKeyHTTP(h.authenticateCaller(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Fatal("unavailable auth reached handler") }), true), "GET", "/v1/files", "issued-project-key", "")
+	if w.Code != 503 {
+		t.Fatal("database failure did not fail closed")
 	}
 }

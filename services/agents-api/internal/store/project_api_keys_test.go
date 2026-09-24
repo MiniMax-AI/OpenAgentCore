@@ -21,123 +21,135 @@ func projectKeyPrincipal() identity.Principal {
 	return identity.Principal{ProjectScope: identity.ProjectScope{TenantID: uuid.NewString(), OrganizationID: "org-" + uuid.NewString(), ProjectID: "project-" + uuid.NewString()}, SubjectKind: "service_account", SubjectID: "test"}
 }
 func keyAdminContext(ctx context.Context, id string) context.Context {
-	return adminaudit.WithSource(ctx, adminaudit.Source{CredentialID: "12345678", ActorLabel: "test", RequestID: uuid.NewString(), TraceID: uuid.NewString(), TargetKeyID: id})
+	return adminaudit.WithSource(ctx, adminaudit.Source{CredentialID: "12345678", ActorLabel: "test", RequestID: uuid.NewString(), TraceID: uuid.NewString(), ProjectID: id})
 }
-func TestProjectAPIKeyIndependentLifecycle(t *testing.T) {
-	s, pool := testStore(t)
+func createTestProject(t *testing.T, s *Store) Project {
+	t.Helper()
 	id := uuid.NewString()
-	ctx := keyAdminContext(t.Context(), id)
-	issued, err := s.CreateProjectAPIKey(ctx, id, " first ")
+	p, err := s.CreateProject(keyAdminContext(t.Context(), id), id, "Project")
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), uuid.NewString()), uuid.NewString(), "second")
+	return p
+}
+func TestProjectKeysShareIdentityAndArchiveRetainsAssets(t *testing.T) {
+	s, _ := testStore(t)
+	p := createTestProject(t, s)
+	other := createTestProject(t, s)
+	first, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), p.ID), p.ID, uuid.NewString(), "first")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if issued.TenantID == second.TenantID {
-		t.Fatal("keys share tenant")
-	}
-	asset, err := s.CreateAgent(t.Context(), issued.TenantID, CreateAgentInput{Configuration: []byte(`{"model":"test"}`)})
+	second, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), p.ID), p.ID, uuid.NewString(), "second")
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolved, err := s.ResolveProjectAPIKey(t.Context(), projectKeyDigest(issued.Key))
-	if err != nil || resolved.Principal.SubjectID != id || resolved.Principal.TenantID != issued.TenantID {
-		t.Fatal("incorrect independent principal")
-	}
-	raw, _ := json.Marshal(resolved.Key)
-	if strings.Contains(string(raw), issued.Key) || strings.Contains(string(raw), projectKeyDigest(issued.Key)) {
-		t.Fatal("metadata exposed secret")
-	}
-	var before int
-	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM execution_project_scopes").Scan(&before); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), id), id, "duplicate"); err == nil {
-		t.Fatal("duplicate key accepted")
-	}
-	var after int
-	_ = pool.QueryRow(t.Context(), "SELECT count(*) FROM execution_project_scopes").Scan(&after)
-	if before != after {
-		t.Fatal("duplicate creation leaked tenant")
-	}
-	requestID := uuid.NewString()
-	reset, err := s.ResetProjectAPIKey(keyAdminContext(t.Context(), id), id, requestID)
+	a, err := s.ResolveProjectAPIKey(t.Context(), projectKeyDigest(first.Key))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reset.ID != issued.ID || reset.TenantID != issued.TenantID || reset.Key == issued.Key {
-		t.Fatal("reset changed key identity or failed to change secret")
+	b, err := s.ResolveProjectAPIKey(t.Context(), projectKeyDigest(second.Key))
+	if err != nil || a.Principal != b.Principal || a.Principal.SubjectID != "project:"+p.ID || a.Principal.ProjectID != "proj_"+p.ID {
+		t.Fatal("Project keys do not share the stable Project principal", err)
 	}
-	if _, err := s.ResolveProjectAPIKey(t.Context(), projectKeyDigest(issued.Key)); !errors.Is(err, ErrNotFound) {
-		t.Fatal("old secret remained valid")
-	}
-	if _, err := s.ResetProjectAPIKey(keyAdminContext(t.Context(), id), id, requestID); !errors.Is(err, ErrProjectAPIKeyExists) {
-		t.Fatal("reset retry rotated again")
-	}
-	if _, err := s.ResolveProjectAPIKey(t.Context(), projectKeyDigest(reset.Key)); err != nil {
-		t.Fatal("reset retry invalidated saved secret")
-	}
-	if err := s.RevokeProjectAPIKey(keyAdminContext(t.Context(), id), id); err != nil {
+	asset, err := s.CreateAgent(t.Context(), a.Principal.TenantID, CreateAgentInput{Configuration: []byte(`{"model":"test"}`)})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.ResolveProjectAPIKey(t.Context(), projectKeyDigest(reset.Key)); !errors.Is(err, ErrNotFound) {
-		t.Fatal("revoked secret authenticated")
+	if _, err := s.GetAgent(t.Context(), b.Principal.TenantID, asset.ID); err != nil {
+		t.Fatal("peer key cannot read shared asset", err)
 	}
-	metadata, err := s.GetProjectAPIKey(t.Context(), id)
-	if err != nil || metadata.Key.RevokedAt == nil || metadata.Key.TenantID != issued.TenantID {
-		t.Fatal("revocation removed space metadata")
+	if _, err := s.GetAgent(t.Context(), other.TenantID, asset.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatal("foreign Project read asset", err)
 	}
-	if _, err := s.ResetProjectAPIKey(keyAdminContext(t.Context(), id), id, uuid.NewString()); !errors.Is(err, ErrNotFound) {
-		t.Fatal("revoked key reset")
+	renamed, err := s.RenameProject(keyAdminContext(t.Context(), p.ID), p.ID, "renamed")
+	if err != nil || renamed.TenantID != p.TenantID || renamed.ActiveKeyCount != 2 {
+		t.Fatal("rename changed Project ownership", err)
+	}
+	afterRename, err := s.ResolveProjectAPIKey(t.Context(), projectKeyDigest(first.Key))
+	if err != nil || afterRename.Principal != a.Principal {
+		t.Fatal("rename changed key principal", err)
+	}
+	listed, err := s.ListProjectAPIKeys(t.Context(), p.ID, "", 50, true)
+	if err != nil || len(listed.Data) != 2 {
+		t.Fatal("Project keys missing", err)
+	}
+	raw, _ := json.Marshal(listed)
+	if strings.Contains(string(raw), first.Key) || strings.Contains(string(raw), projectKeyDigest(first.Key)) {
+		t.Fatal("key list exposed credential")
+	}
+	if err := s.RevokeProjectAPIKey(keyAdminContext(t.Context(), other.ID), other.ID, first.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatal("foreign Project revoked key", err)
+	}
+	if err := s.RevokeProjectAPIKey(keyAdminContext(t.Context(), p.ID), p.ID, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ResolveProjectAPIKey(t.Context(), projectKeyDigest(first.Key)); !errors.Is(err, ErrNotFound) {
+		t.Fatal("revoked key authenticated")
 	}
 	if _, err := s.ResolveProjectAPIKey(t.Context(), projectKeyDigest(second.Key)); err != nil {
-		t.Fatal("revocation affected another key")
+		t.Fatal("revocation affected peer", err)
 	}
-	if _, err := s.GetAgent(t.Context(), issued.TenantID, asset.ID); err != nil {
-		t.Fatal("revocation lost assets")
+	archived, err := s.ArchiveProject(keyAdminContext(t.Context(), p.ID), p.ID)
+	if err != nil || archived.ArchivedAt == nil || archived.ActiveKeyCount != 0 {
+		t.Fatal("archive did not revoke all keys", err)
 	}
-	if _, err := s.GetAgent(t.Context(), second.TenantID, asset.ID); !errors.Is(err, ErrNotFound) {
-		t.Fatal("independent key saw foreign asset")
+	if _, err := s.ResolveProjectAPIKey(t.Context(), projectKeyDigest(second.Key)); !errors.Is(err, ErrNotFound) {
+		t.Fatal("archived Project authenticated")
 	}
-	if err := s.ValidateProjectKeySeparation(t.Context(), []string{projectKeyDigest(reset.Key)}, nil); err == nil {
-		t.Fatal("revoked digest collision accepted")
+	if _, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), p.ID), p.ID, uuid.NewString(), "late"); !errors.Is(err, ErrProjectArchived) {
+		t.Fatal("archived Project admitted new key", err)
 	}
-	if err := s.ValidateProjectKeySeparation(t.Context(), nil, []string{issued.TenantID}); err == nil {
-		t.Fatal("issued tenant overlap accepted")
+	if _, err := s.GetAgent(t.Context(), p.TenantID, asset.ID); err != nil {
+		t.Fatal("archive removed assets", err)
+	}
+	if err := s.ValidateProjectKeySeparation(t.Context(), []string{projectKeyDigest(second.Key)}); err == nil {
+		t.Fatal("revoked credential collision accepted")
+	}
+	raw, _ = json.Marshal(archived)
+	if strings.Contains(string(raw), p.TenantID) {
+		t.Fatal("Project response exposed internal tenant")
 	}
 }
-func TestProjectAPIKeyAuditFailureRollsBack(t *testing.T) {
+func TestProjectManagementRequiresAtomicAudit(t *testing.T) {
 	s, _ := testStore(t)
 	id := uuid.NewString()
-	if _, err := s.CreateProjectAPIKey(t.Context(), id, "unaudited"); !errors.Is(err, ErrInvalidInput) {
-		t.Fatal("missing audit accepted")
+	if _, err := s.CreateProject(t.Context(), id, "unaudited"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("unaudited Project accepted")
 	}
-	if _, err := s.GetProjectAPIKey(t.Context(), id); !errors.Is(err, ErrNotFound) {
-		t.Fatal("unaudited create persisted")
+	if _, err := s.GetProject(t.Context(), id); !errors.Is(err, ErrNotFound) {
+		t.Fatal("unaudited Project persisted")
 	}
-	issued, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), id), id, "audited")
-	if err != nil {
-		t.Fatal(err)
+	p := createTestProject(t, s)
+	keyID := uuid.NewString()
+	if _, err := s.CreateProjectAPIKey(t.Context(), p.ID, keyID, "unaudited"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("unaudited key accepted")
 	}
-	bad := adminaudit.Source{CredentialID: "", RequestID: uuid.NewString(), TraceID: "trace", TargetKeyID: id}
-	ctx := adminaudit.WithSource(t.Context(), bad)
-	if _, err := s.ResetProjectAPIKey(ctx, id, uuid.NewString()); err == nil {
-		t.Fatal("unaudited reset accepted")
+	page, err := s.ListProjectAPIKeys(t.Context(), p.ID, "", 20, true)
+	if err != nil || len(page.Data) != 0 {
+		t.Fatal("unaudited key persisted")
 	}
-	if err := s.RevokeProjectAPIKey(ctx, id); err == nil {
-		t.Fatal("unaudited revoke accepted")
+	if _, err := s.RenameProject(t.Context(), p.ID, "bad"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("unaudited rename accepted")
 	}
-	if _, err := s.ResolveProjectAPIKey(t.Context(), projectKeyDigest(issued.Key)); err != nil {
-		t.Fatal("failed audit changed secret or revocation")
+	if _, err := s.ArchiveProject(t.Context(), p.ID); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("unaudited archive accepted")
+	}
+	current, err := s.GetProject(t.Context(), p.ID)
+	if err != nil || current.Project.Name != p.Name || current.Project.ArchivedAt != nil {
+		t.Fatal("unaudited mutation persisted")
 	}
 }
-func TestProjectAPIKeysValidateBeforeDatabaseAccess(t *testing.T) {
+func TestProjectNamesValidateBeforeDatabaseAccess(t *testing.T) {
 	s := &Store{}
+	for _, name := range []string{"", " ", "with\ncontrol", strings.Repeat("x", 129)} {
+		if _, err := s.CreateProject(t.Context(), uuid.NewString(), name); !errors.Is(err, ErrInvalidInput) {
+			t.Fatal("invalid Project name accepted")
+		}
+	}
 	for _, name := range []string{"", " ", "with\ncontrol", strings.Repeat("x", 81)} {
-		if _, err := s.CreateProjectAPIKey(t.Context(), uuid.NewString(), name); !errors.Is(err, ErrInvalidInput) {
-			t.Fatal("invalid name accepted")
+		if _, err := s.CreateProjectAPIKey(t.Context(), uuid.NewString(), uuid.NewString(), name); !errors.Is(err, ErrInvalidInput) {
+			t.Fatal("invalid key name accepted")
 		}
 	}
 }

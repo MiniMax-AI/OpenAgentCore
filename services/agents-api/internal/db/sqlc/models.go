@@ -19,10 +19,10 @@ type AdminAssetCopy struct {
 type AdminAuditLog struct {
 	ID                pgtype.UUID        `json:"id"`
 	TenantID          pgtype.UUID        `json:"tenant_id"`
+	ProjectID         pgtype.UUID        `json:"project_id"`
 	AdminCredentialID string             `json:"admin_credential_id"`
 	ActorLabel        string             `json:"actor_label"`
 	Action            string             `json:"action"`
-	TargetKeyID       string             `json:"target_key_id"`
 	ResourceType      string             `json:"resource_type"`
 	ResourceID        string             `json:"resource_id"`
 	ResultIds         []byte             `json:"result_ids"`
@@ -167,18 +167,24 @@ type InitialEnvironmentFile struct {
 	Contents  []byte      `json:"contents"`
 }
 
+type Project struct {
+	ID          pgtype.UUID        `json:"id"`
+	Name        string             `json:"name"`
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	SubjectKind string             `json:"subject_kind"`
+	SubjectID   string             `json:"subject_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
+}
+
 type ProjectApiKey struct {
-	ID             pgtype.UUID        `json:"id"`
-	Name           string             `json:"name"`
-	Prefix         string             `json:"prefix"`
-	TokenSha256    string             `json:"token_sha256"`
-	TenantID       pgtype.UUID        `json:"tenant_id"`
-	OrganizationID string             `json:"organization_id"`
-	ProjectID      string             `json:"project_id"`
-	SubjectKind    string             `json:"subject_kind"`
-	SubjectID      string             `json:"subject_id"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	RevokedAt      pgtype.Timestamptz `json:"revoked_at"`
+	ID          pgtype.UUID        `json:"id"`
+	Name        string             `json:"name"`
+	Prefix      string             `json:"prefix"`
+	TokenSha256 string             `json:"token_sha256"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	RevokedAt   pgtype.Timestamptz `json:"revoked_at"`
+	ProjectID   pgtype.UUID        `json:"project_id"`
 }
 
 type PublicExecutionTurn struct {

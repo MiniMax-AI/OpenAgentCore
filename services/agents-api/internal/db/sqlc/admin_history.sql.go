@@ -59,8 +59,8 @@ func (q *Queries) GetAdminResourceOwners(ctx context.Context, arg GetAdminResour
 }
 
 const listAdminAuditLog = `-- name: ListAdminAuditLog :many
-SELECT id, tenant_id, admin_credential_id, actor_label, action, target_key_id, resource_type, resource_id, result_ids, request_id, trace_id, created_at FROM admin_audit_log
-WHERE ($1::text='' OR target_key_id=$1)
+SELECT id, tenant_id, project_id, admin_credential_id, actor_label, action, resource_type, resource_id, result_ids, request_id, trace_id, created_at FROM admin_audit_log
+WHERE ($1::text='' OR project_id::text=$1)
  AND ($2::text='' OR resource_type=$2)
  AND ($3::text='' OR resource_id=$3)
  AND ($4::text='' OR action=$4)
@@ -71,7 +71,7 @@ ORDER BY created_at DESC,id DESC LIMIT $9
 `
 
 type ListAdminAuditLogParams struct {
-	KeyID         string             `json:"key_id"`
+	ProjectID     string             `json:"project_id"`
 	ResourceType  string             `json:"resource_type"`
 	ResourceID    string             `json:"resource_id"`
 	Action        string             `json:"action"`
@@ -84,7 +84,7 @@ type ListAdminAuditLogParams struct {
 
 func (q *Queries) ListAdminAuditLog(ctx context.Context, arg ListAdminAuditLogParams) ([]AdminAuditLog, error) {
 	rows, err := q.db.Query(ctx, listAdminAuditLog,
-		arg.KeyID,
+		arg.ProjectID,
 		arg.ResourceType,
 		arg.ResourceID,
 		arg.Action,
@@ -104,10 +104,10 @@ func (q *Queries) ListAdminAuditLog(ctx context.Context, arg ListAdminAuditLogPa
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,
+			&i.ProjectID,
 			&i.AdminCredentialID,
 			&i.ActorLabel,
 			&i.Action,
-			&i.TargetKeyID,
 			&i.ResourceType,
 			&i.ResourceID,
 			&i.ResultIds,

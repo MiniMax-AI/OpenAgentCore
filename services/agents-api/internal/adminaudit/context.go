@@ -8,7 +8,7 @@ type Source struct {
 	ActorLabel   string
 	RequestID    string
 	TraceID      string
-	TargetKeyID  string
+	ProjectID    string
 }
 type sourceKey struct{}
 

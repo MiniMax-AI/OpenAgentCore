@@ -2,20 +2,19 @@ package store_test
 
 import (
 	"encoding/json"
-	"net/http/httptest"
-	"strings"
-	"testing"
-
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/api"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
+	"net/http/httptest"
+	"strings"
+	"testing"
 )
 
-func TestProjectAPIKeysHTTPIndependentLifecycle(t *testing.T) {
+func TestProjectAndSharedKeysHTTPManagement(t *testing.T) {
 	st, _ := store.NewTestStore(t)
 	adminToken := uuid.NewString()
-	auth, err := api.NewAuthenticator(nil)
+	auth, err := api.NewDatabaseAuthenticator(st)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,31 +35,38 @@ func TestProjectAPIKeysHTTPIndependentLifecycle(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 		if w.Code != status {
-			t.Fatalf("%s %s: got%d want%d", method, path, w.Code, status)
+			t.Fatalf("%s %s got%d want%d", method, path, w.Code, status)
 		}
 		return w
 	}
-	base := "/core/v1/admin/api-keys"
-	id := uuid.NewString()
-	response := call("POST", base, adminToken, `{"id":"`+id+`","name":"terminal"}`, 201)
-	var issued store.IssuedProjectAPIKey
-	if err := json.Unmarshal(response.Body.Bytes(), &issued); err != nil {
-		t.Fatal(err)
+	base := "/core/v1/admin/projects"
+	response := call("POST", base, adminToken, `{"name":"Default"}`, 201)
+	var p store.Project
+	if json.Unmarshal(response.Body.Bytes(), &p) != nil || p.ID == "" {
+		t.Fatal("Project response invalid")
 	}
-	call("POST", base, adminToken, `{"id":"`+id+`","name":"duplicate"}`, 409)
-	call("GET", "/v1/agents", issued.Key, "", 200)
+	keysPath := base + "/" + p.ID + "/keys"
+	var first, second store.IssuedProjectAPIKey
+	if json.Unmarshal(call("POST", keysPath, adminToken, `{"name":"first"}`, 201).Body.Bytes(), &first) != nil {
+		t.Fatal("key response invalid")
+	}
+	_ = json.Unmarshal(call("POST", keysPath, adminToken, `{"name":"second"}`, 201).Body.Bytes(), &second)
+	call("GET", "/v1/agents", first.Key, "", 200)
+	call("GET", "/v1/agents", second.Key, "", 200)
 	call("GET", "/v1/agents", adminToken, "", 401)
-	call("GET", base, issued.Key, "", 401)
-	list := call("GET", base, adminToken, "", 200)
-	if strings.Contains(list.Body.String(), issued.Key) {
-		t.Fatal("list leaked secret")
+	call("GET", base, first.Key, "", 401)
+	list := call("GET", keysPath, adminToken, "", 200)
+	if strings.Contains(list.Body.String(), first.Key) {
+		t.Fatal("list exposed plaintext")
 	}
-	resetResponse := call("POST", base+"/"+id+"/reset", adminToken, `{"request_id":"`+uuid.NewString()+`"}`, 200)
-	var reset store.IssuedProjectAPIKey
-	_ = json.Unmarshal(resetResponse.Body.Bytes(), &reset)
-	call("GET", "/v1/agents", issued.Key, "", 401)
-	call("GET", "/v1/agents", reset.Key, "", 200)
-	call("DELETE", base+"/"+id, adminToken, "", 200)
-	call("GET", "/v1/agents", reset.Key, "", 401)
-	call("GET", base+"/"+id, adminToken, "", 200)
+	call("POST", base+"/"+p.ID, adminToken, `{"name":"renamed"}`, 200)
+	call("GET", "/v1/agents", first.Key, "", 200)
+	call("DELETE", keysPath+"/"+first.ID, adminToken, "", 200)
+	call("GET", "/v1/agents", first.Key, "", 401)
+	call("GET", "/v1/agents", second.Key, "", 200)
+	call("POST", base+"/"+p.ID+"/archive", adminToken, "", 200)
+	call("GET", "/v1/agents", second.Key, "", 401)
+	call("GET", keysPath, adminToken, "", 200)
+	call("POST", keysPath, adminToken, `{"name":"forbidden"}`, 409)
+	call("POST", base, adminToken, `{"id":"`+uuid.NewString()+`","name":"forged"}`, 400)
 }

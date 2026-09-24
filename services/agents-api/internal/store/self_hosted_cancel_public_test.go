@@ -25,7 +25,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	s, pool := store.NewTestStore(t)
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	token, foreign := uuid.NewString(), uuid.NewString()
-	auth, err := api.NewAuthenticator([]api.APIKey{
+	auth, err := newTestAuthenticator([]testAPIKey{
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "cancel-caller", TokenSHA256: device.HashCredential(token), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: foreignTenant, SubjectKind: "service_account", SubjectID: "cancel-caller", TokenSHA256: device.HashCredential(foreign), TenantID: foreignTenant},
 	})

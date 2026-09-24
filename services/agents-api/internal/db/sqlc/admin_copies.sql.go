@@ -253,6 +253,22 @@ func (q *Queries) LockAdminAssetCopy(ctx context.Context, lockKey string) error 
 	return err
 }
 
+const lockAdminCopyTargetProject = `-- name: LockAdminCopyTargetProject :one
+SELECT id, archived_at FROM projects WHERE tenant_id=$1 FOR SHARE
+`
+
+type LockAdminCopyTargetProjectRow struct {
+	ID         pgtype.UUID        `json:"id"`
+	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) LockAdminCopyTargetProject(ctx context.Context, tenantID pgtype.UUID) (LockAdminCopyTargetProjectRow, error) {
+	row := q.db.QueryRow(ctx, lockAdminCopyTargetProject, tenantID)
+	var i LockAdminCopyTargetProjectRow
+	err := row.Scan(&i.ID, &i.ArchivedAt)
+	return i, err
+}
+
 const lockAdminCopyTemplate = `-- name: LockAdminCopyTemplate :one
 SELECT id FROM environment_templates WHERE tenant_id=$1 AND id=$2 FOR UPDATE
 `
