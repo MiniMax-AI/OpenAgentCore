@@ -33,7 +33,7 @@ func NewAuthenticator(keys []APIKey) (*Authenticator, error) {
 		if _, exists := resolver[k.TokenSHA256]; exists {
 			return nil, errors.New("duplicate fixture digest")
 		}
-		resolver[k.TokenSHA256] = store.ProjectAPIKeyBinding{Key: store.ProjectAPIKey{ID: uuid.NewSHA1(uuid.NameSpaceOID, []byte(k.TokenSHA256)).String(), Name: k.Name, Prefix: "pc_fixture"}, Principal: p}
+		resolver[k.TokenSHA256] = store.ProjectAPIKeyBinding{Key: store.ProjectAPIKey{ID: uuid.NewSHA1(uuid.NameSpaceOID, []byte(k.TokenSHA256)).String(), Name: k.Name, Prefix: "pc_" + k.TokenSHA256[:8]}, Principal: p}
 	}
 	return NewDatabaseAuthenticator(resolver)
 }
