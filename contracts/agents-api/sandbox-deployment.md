@@ -66,7 +66,10 @@ and exact image identity. It does not provide independent hard root or workspace
 disk quotas through this contract. E2B CPU and memory must match the exact ready
 template build; Core validates that build through the pinned SDK before saving.
 E2B disk capacity remains part of its native template. Neither provider silently
-accepts a requested disk quota that it cannot enforce.
+accepts a requested disk quota that it cannot enforce. On restart, Core loads the
+committed E2B selection without repeating template-build validation. Existing
+resource inspection and cleanup use the original credentials and provider
+receipts; new selections still require successful template validation.
 
 Microsandbox configures CPU, memory, managed root disk and a separate owned disk
 at `/environment`. Restored root capacity can be inherited from the verified full

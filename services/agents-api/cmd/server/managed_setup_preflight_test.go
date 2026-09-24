@@ -1,13 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
@@ -33,7 +34,60 @@ func TestE2BRejectedSpecificationHasSafeActionableDiagnostic(t *testing.T) {
 		t.Fatal("rejected candidate lost its safe diagnostic or was published", err)
 	}
 	s.store = &setupStore{value: selection}
-	if _, err := s.load(t.Context()); !errors.Is(err, execution.ErrExecutionUnavailable) {
-		t.Fatal("provider drift must preserve administrator recovery", err)
+	if restored, err := s.load(t.Context()); err != nil || restored == nil || restored.Provider == nil {
+		t.Fatal("template rejection prevented loading committed resource ownership", err)
+	}
+}
+
+func TestCommittedE2BResourceAccessDoesNotRequireTemplateLookup(t *testing.T) {
+	helper := filepath.Join(t.TempDir(), "provider")
+	const script = `#!/usr/bin/env python3
+import json, pathlib, sys
+q = json.load(sys.stdin)
+op = q['Operation']
+with (pathlib.Path(q['Config']['StateDir']) / 'operations').open('a') as log:
+    log.write(op + '\n')
+if op == 'validate_deployment':
+    print(json.dumps({'Version': 1, 'ErrorCode': 'invalid'}))
+else:
+    info = dict(q['Reference'], ProviderID='owned-compute', State='stopped', CreateSettled=True)
+    if op == 'kill':
+        info.update(ProviderID='', State='absent')
+    print(json.dumps({'Version': 1, 'Info': info}))
+`
+	if err := os.WriteFile(helper, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	state := t.TempDir()
+	if err := os.Chmod(state, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENTS_API_E2B_PROVIDER_BIN", helper)
+	t.Setenv("AGENTS_API_E2B_STATE_DIR", state)
+	id := uuid.NewString()
+	selection := store.SandboxSetup{InstallationID: id, Provider: "e2b", Generation: 1,
+		Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}},
+		E2B:           &store.SandboxE2BConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
+	s := &managedSetup{installationID: id, store: &setupStore{value: selection}}
+	if _, err := s.prepare(t.Context(), selection); err == nil || s.selected.Load() != nil {
+		t.Fatal("invalid new template selection was published", err)
+	}
+	loaded, err := s.load(t.Context())
+	if err != nil || loaded == nil {
+		t.Fatal("committed provider became inaccessible", err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	ref := sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}
+	info, err := loaded.Provider.GetInfo(ctx, ref)
+	if err != nil || info.Reference != ref || info.ProviderID != "owned-compute" {
+		t.Fatal("could not observe retained resource", info, err)
+	}
+	if err := loaded.Provider.Kill(ctx, ref); err != nil {
+		t.Fatal("could not clean retained resource", err)
+	}
+	operations, err := os.ReadFile(filepath.Join(state, "operations"))
+	if err != nil || string(operations) != "validate_deployment\ninspect\nkill\n" {
+		t.Fatal("loading or cleanup repeated candidate-template validation", string(operations), err)
 	}
 }

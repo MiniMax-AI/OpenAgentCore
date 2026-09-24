@@ -43,13 +43,13 @@ func (s *managedSetup) load(ctx context.Context) (*execution.RuntimeProvider, er
 	if selected := s.selected.Load(); selected != nil && selected.Generation == setup.Generation {
 		return selected, nil
 	}
-	candidate, err := s.prepare(ctx, setup)
+	candidate, err := s.configuration(setup)
 	if err != nil {
 		log.Warn(ctx, "Hosted provider is unavailable; administrator recovery remains available", "provider", setup.Provider, "error", err)
 		return nil, fmt.Errorf("%w: %v", execution.ErrExecutionUnavailable, err)
 	}
-	// A slower read cannot replace a generation that committed while provider
-	// validation was in flight. Publication itself performs no external work.
+	// A slower read cannot replace a generation that committed while this
+	// configuration was loading. Publication performs no external work.
 	for {
 		selected := s.selected.Load()
 		if selected != nil && selected.Generation >= setup.Generation {
@@ -62,15 +62,29 @@ func (s *managedSetup) load(ctx context.Context) (*execution.RuntimeProvider, er
 }
 
 func (s *managedSetup) prepare(ctx context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
+	candidate, err := s.configuration(setup)
+	if err != nil {
+		return execution.PreparedRuntimeDeployment{}, err
+	}
+	if provider, ok := candidate.Config.Provider.(*e2b.Provider); ok {
+		if err := provider.ValidateDeployment(ctx); err != nil {
+			if errors.Is(err, sandbox.ErrInvalid) {
+				return execution.PreparedRuntimeDeployment{}, &store.SandboxConfigurationError{Message: "E2B configuration was rejected; select a ready fixed template build whose CPU and memory match the deployment specification"}
+			}
+			return execution.PreparedRuntimeDeployment{}, fmt.Errorf("%w: E2B validation could not be confirmed; verify the helper, credential, network and fixed template build before retrying", execution.ErrExecutionUnavailable)
+		}
+	}
+	return candidate, nil
+}
+
+// Loading an already committed selection must retain provider access to its
+// owned resources, even when a new-template validation would now fail.
+func (s *managedSetup) configuration(setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
 	if setup.InstallationID != s.installationID {
 		return execution.PreparedRuntimeDeployment{}, errors.New("sandbox installation does not match setup")
 	}
-	provider, err := s.provider(ctx, setup)
+	provider, err := s.provider(setup)
 	if err != nil {
-		var invalid *store.SandboxConfigurationError
-		if errors.As(err, &invalid) {
-			return execution.PreparedRuntimeDeployment{}, invalid
-		}
 		return execution.PreparedRuntimeDeployment{}, fmt.Errorf("%w: %v", execution.ErrExecutionUnavailable, err)
 	}
 	selected := &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, Maintenance: setup.Maintenance,
@@ -117,7 +131,7 @@ func (s *managedSetup) Observe(ctx context.Context, target runtimeobs.Target) (r
 	return source.Observe(ctx, target)
 }
 
-func (s *managedSetup) provider(ctx context.Context, setup store.SandboxSetup) (sandbox.Provider, error) {
+func (s *managedSetup) provider(setup store.SandboxSetup) (sandbox.Provider, error) {
 	switch setup.Provider {
 	case "docker", "microsandbox":
 		if s.hub == nil {
@@ -138,12 +152,6 @@ func (s *managedSetup) provider(ctx context.Context, setup store.SandboxSetup) (
 			Resources: &setup.Specification.Resources, InstallationID: setup.InstallationID, APIKey: setup.E2B.APIKey, Template: setup.E2B.Template, TimeoutSeconds: 3600})
 		if err != nil {
 			return nil, errors.New("E2B provider cannot load; check the installed helper and private state directory")
-		}
-		if err := provider.ValidateDeployment(ctx); err != nil {
-			if errors.Is(err, sandbox.ErrInvalid) {
-				return nil, &store.SandboxConfigurationError{Message: "E2B configuration was rejected; select a ready fixed template build whose CPU and memory match the deployment specification"}
-			}
-			return nil, errors.New("E2B validation could not be confirmed; verify the helper, credential, network and fixed template build before retrying")
 		}
 		return provider, nil
 	default:

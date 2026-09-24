@@ -707,7 +707,11 @@ Docker and E2B accept CPU/memory but reject independent nonzero disk capacities;
 do not claim hard root/workspace disk quotas for them. Docker creation and native
 inspection enforce the declared CPU/memory and exact image. E2B setup verifies the
 exact ready template build and matching CPU/memory through the pinned SDK before
-saving its encrypted account key. E2B uses direct placement without a node. Node
+saving its encrypted account key. Loading a committed selection reconstructs its
+provider from the original credentials and receipts without repeating candidate
+template validation; a template endpoint outage must not block cleanup of existing
+sandboxes. Creation and instance inspection still enforce the saved resources.
+E2B uses direct placement without a node. Node
 providers require one immutable distribution with source commit, Docker image ID,
 OCI manifest digest, microsandbox image reference, Runtime and firmware hashes.
 These identities are distinct and cannot substitute for each other.
