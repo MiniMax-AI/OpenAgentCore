@@ -100,7 +100,8 @@ for (const value of ["node_unavailable", "resource_missing"]) {
 }
 
 test("Chinese actions, diagnostics, and enrollment are translated and language persists", async ({ page, request }) => {
-  await page.getByLabel("Language / 语言").selectOption("zh");
+  await page.getByRole("button", { name: "Language and appearance" }).click();
+  await page.getByRole("menuitemradio", { name: "简体中文" }).click();
   await request.post(`${fixture}/__fixture/sandbox-diagnostic?value=resource_missing`);
   await page.getByRole("button", { name: "托管沙箱管理", exact: true }).click();
   await page.locator(".sandbox-topology-node").first().click();
@@ -109,9 +110,10 @@ test("Chinese actions, diagnostics, and enrollment are translated and language p
   await expect(page.getByLabel("一次性注册命令")).toHaveValue(/fixture-once-token/);
   await expect(page.getByRole("dialog")).toContainText("等待节点连接");
   await page.keyboard.press("Escape");
-  await page.getByLabel("Language / 语言").selectOption("en");
+  await page.getByRole("button", { name: "语言和外观" }).click();
+  await page.getByRole("menuitemradio", { name: "English" }).click();
   await page.reload();
-  await expect(page.getByLabel("Language / 语言")).toHaveValue("en");
+  await expect(page.getByRole("button", { name: "Language and appearance" })).toContainText("EN");
   await expect(page.getByLabel("One-time enrollment command")).toHaveCount(0);
 });
 
@@ -290,7 +292,8 @@ for (const theme of ["light", "dark"]) {
   test(`Chinese topology and node details render on desktop in ${theme}`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.evaluate((theme) => document.documentElement.dataset.theme = theme, theme);
-    await page.getByLabel("Language / 语言").selectOption("zh");
+    await page.getByRole("button", { name: "Language and appearance" }).click();
+    await page.getByRole("menuitemradio", { name: "简体中文" }).click();
     await page.getByRole("button", { name: "托管沙箱管理", exact: true }).click();
     await expect(page.getByRole("region", { name: "沙箱节点", exact: true })).toContainText("可用");
     await page.screenshot({ path: testInfo.outputPath(`topology-zh-${theme}.png`), animations: "disabled" });

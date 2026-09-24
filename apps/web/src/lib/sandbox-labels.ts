@@ -1,4 +1,4 @@
-import { AgentCoreError, type SandboxNode } from "@agents-core-web/agents-client";
+import { AgentCoreError, type SandboxNode, type SandboxProvider } from "@agents-core-web/agents-client";
 import { translate, type Locale } from "./locale";
 import type { MessageKey } from "./locale-strings";
 
@@ -13,7 +13,8 @@ export function sandboxStateLabel(state: string, locale: Locale): string {
 export function sandboxRequestError(error: unknown, locale: Locale): string {
   let key: MessageKey = "The sandbox request failed. Refresh to check the current state before trying again.";
   if (error instanceof AgentCoreError) {
-    if (error.code === "runtime_node_in_use") key = "The node has active allocations or retained resources. Clear allocations, snapshots, reservations and pending cleanup before removal.";
+    if (error.code === "sandbox_configuration_unconfirmed") key = "The sandbox request failed. Refresh to check the current state before trying again.";
+    else if (error.code === "runtime_node_in_use") key = "The node has active allocations or retained resources. Clear allocations, snapshots, reservations and pending cleanup before removal.";
     else if (error.code === "runtime_node_unavailable") key = "The selected sandbox node is unavailable or has no capacity.";
     else if (error.code === "sandbox_deployment_conflict") key = "Sandbox deployment is already configured. Refresh to inspect the saved provider and Core origin.";
     else if (error.status === 401) key = "Sign in to the console again to access sandbox management.";
@@ -26,4 +27,10 @@ export function sandboxRequestError(error: unknown, locale: Locale): string {
 
 export function sandboxNodeStatus(node: SandboxNode, stale: boolean, locale: Locale): string {
   return translate(locale, stale ? "Status unconfirmed" : !node.online ? "Offline" : node.provider_ready ? "Available" : "Unavailable");
+}
+
+export function sandboxProviderLabel(provider: SandboxProvider | "", locale: Locale): string {
+  if (provider === "docker") return "Docker";
+  if (provider === "microsandbox") return "microsandbox";
+  return translate(locale, provider === "e2b" ? "E2B cloud" : "Unknown state");
 }

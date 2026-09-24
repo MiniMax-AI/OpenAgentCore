@@ -3,11 +3,12 @@ import { SandboxAdminClient, type InitializeSandboxDeployment, type SandboxAlloc
 import { RefreshCw, Server } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { isLocalProxyBaseUrl } from "../../lib/connection";
-import { sandboxRequestError } from "../../lib/sandbox-labels";
+import { sandboxProviderLabel, sandboxRequestError } from "../../lib/sandbox-labels";
 import { SandboxTopology } from "./SandboxTopology";
 import { SandboxNodeCard } from "./SandboxNodeCard";
 import { sandboxConsoleConfig, type SandboxConsoleConfig } from "./console-config";
 import { SandboxSetup } from "./SandboxSetup";
+import { SandboxDeploymentSettings } from "./SandboxDeploymentSettings";
 import { NodeEnrollment } from "./NodeEnrollment";
 import "./SandboxManagerView.css";
 
@@ -54,6 +55,7 @@ function SandboxManager({ consoleConfig, presentation }: { consoleConfig: Sandbo
   const revealNode = useCallback((id: string) => { setSelectedId(id); setRemoveId(null); }, []);
   const initialCoreUrl = window.location.origin;
   const [setupNeedsRefresh, setSetupNeedsRefresh] = useState(false);
+  const [mutationError, setMutationError] = useState<unknown>(null);
   const lifetime = useRef<AbortController | null>(null);
   useEffect(() => {
     const controller = new AbortController(); lifetime.current = controller;
@@ -61,9 +63,10 @@ function SandboxManager({ consoleConfig, presentation }: { consoleConfig: Sandbo
   }, []);
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setMutationError(null); setFresh(false);
     void (async () => {
-      const [deployment, nodes] = await Promise.all([client.retrieveDeployment({ signal: controller.signal }), client.listNodes({ signal: controller.signal })]);
+      const deployment = await client.retrieveDeployment({ signal: controller.signal });
+      const nodes = deployment.provider === "e2b" ? { data: [] } : await client.listNodes({ signal: controller.signal });
       const allocations = await Promise.all(nodes.data.map((node) => client.listAllocations(node.id, { signal: controller.signal })));
       if (!controller.signal.aborted) {
         setSnapshot({ deployment, nodes: nodes.data, allocations: allocations.flatMap((page) => page.data) });
@@ -73,17 +76,30 @@ function SandboxManager({ consoleConfig, presentation }: { consoleConfig: Sandbo
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [client, revision]);
-  async function initialize(input: InitializeSandboxDeployment) {
+  async function changeDeployment(operation: (signal: AbortSignal) => Promise<SandboxDeployment>) {
     const controller = lifetime.current;
-    if (!controller || busy || loading || setupNeedsRefresh) return;
-    setBusy(true); setError(null);
+    if (!controller || busy || loading || setupNeedsRefresh || !fresh) return;
+    setBusy(true); setMutationError(null);
     try {
-      const deployment = await client.initializeDeployment(input, { signal: controller.signal });
-      if (!controller.signal.aborted) setSnapshot({ deployment, nodes: [], allocations: [] });
+      const deployment = await operation(controller.signal);
+      if (!controller.signal.aborted) {
+        setSnapshot((current) => ({ deployment, nodes: deployment.generation === current?.deployment.generation ? current.nodes : [], allocations: deployment.generation === current?.deployment.generation ? current.allocations : [] }));
+        setSelectedId(null); setRemoveId(null);
+      }
     } catch (error) {
-      if (!controller.signal.aborted) { setSetupNeedsRefresh(true); setError(error); }
+      if (!controller.signal.aborted) { setSetupNeedsRefresh(true); setMutationError(error); setFresh(false); }
     } finally { if (!controller.signal.aborted) setBusy(false); }
   }
+  function initialize(input: InitializeSandboxDeployment) {
+    return changeDeployment((signal) => client.initializeDeployment(input, { signal }));
+  }
+  function update(input: InitializeSandboxDeployment) {
+    return changeDeployment((signal) => client.updateDeployment({ ...input, core_url: snapshot!.deployment.core_url, expected_generation: snapshot!.deployment.generation }, { signal }));
+  }
+  function maintenance(maintenance: boolean) {
+    return changeDeployment((signal) => client.setMaintenance({ maintenance, expected_generation: snapshot!.deployment.generation }, { signal }));
+  }
+  const writeError = mutationError === null ? null : `${sandboxRequestError(mutationError, locale)} ${t("Refresh sandbox state to confirm whether the change was saved before submitting again.")}`;
   async function remove() {
     const controller = lifetime.current;
     if (!controller || !removeId || busy) return;
@@ -96,23 +112,25 @@ function SandboxManager({ consoleConfig, presentation }: { consoleConfig: Sandbo
     finally { if (!controller.signal.aborted) setBusy(false); }
   }
   return <div className="sandbox-content form-stack">
-    <header className="sandbox-heading"><div>{presentation === "home" ? <h2>{t("Node network")}</h2> : <><h1>{t("Hosted Sandbox Manager")}</h1><p>{t("Your hosts for running sandboxes.")}</p></>}</div><div className="sandbox-actions">
+    <header className="sandbox-heading"><div>{presentation === "home" ? <h2>{t(snapshot?.deployment.provider === "e2b" ? "Hosted sandboxes" : "Node network")}</h2> : <><h1>{t("Hosted Sandbox Manager")}</h1><p>{t("Manage hosted execution for this Core deployment.")}</p></>}</div><div className="sandbox-actions">
       <button type="button" className="icon-button sandbox-refresh" disabled={loading || busy} aria-label={t("Refresh sandbox state")} title={t("Refresh sandbox state")} onClick={refresh}><RefreshCw size={17} /></button>
-      {snapshot?.deployment.provider ? <NodeEnrollment client={client} consoleConfig={consoleConfig} deployment={snapshot.deployment} nodes={snapshot.nodes} disabled={busy || loading || error !== null} fresh={fresh} onRefresh={refresh} onConnected={revealNode} /> : null}
+      {snapshot?.deployment.provider && snapshot.deployment.provider !== "e2b" ? <NodeEnrollment key={snapshot.deployment.generation} client={client} consoleConfig={consoleConfig} deployment={snapshot.deployment} nodes={snapshot.nodes} disabled={busy || loading || !fresh || snapshot.deployment.maintenance} fresh={fresh} onRefresh={refresh} onConnected={revealNode} /> : null}
     </div></header>
     {loading && !snapshot ? <p role="status">{t("Loading sandbox state…")}</p> : null}
     {busy ? <span role="status">{t("Saving sandbox change…")}</span> : null}
-    {error !== null ? <p role="alert" className="sandbox-error">{sandboxRequestError(error, locale)}{setupNeedsRefresh ? ` ${t("Refresh sandbox state to confirm whether setup was saved before submitting again.")}` : ""}{snapshot ? ` ${t("Previously loaded state is shown below.")}` : ""}</p> : null}
+    {error !== null ? <p role="alert" className="sandbox-error">{sandboxRequestError(error, locale)}{snapshot ? ` ${t("Previously loaded state is shown below.")}` : ""}</p> : null}
+    {snapshot && !snapshot.deployment.provider && writeError ? <p role="alert" className="sandbox-error">{writeError}</p> : null}
     {snapshot && !snapshot.deployment.provider ? <SandboxSetup key={revision} initialCoreUrl={initialCoreUrl} disabled={busy || loading || setupNeedsRefresh || error !== null} onInitialize={initialize} /> : null}
     {presentation === "home" && snapshot && !snapshot.deployment.provider ? <SandboxTopology nodes={snapshot.nodes} allocations={snapshot.allocations} stale={!fresh} selectedId={selectedId} onSelect={revealNode} /> : null}
     {snapshot?.deployment.provider ? <>
       {snapshot.deployment.maintenance ? <p className="sandbox-maintenance" role="status">{t("Maintenance is enabled. New sandbox placement is paused.")}</p> : null}
-      <section aria-labelledby="sandbox-nodes-heading"><div className="sandbox-section-heading"><h2 id="sandbox-nodes-heading">{t("Nodes")}</h2><span>{snapshot.nodes.length}</span></div>
+      <SandboxDeploymentSettings key={`${snapshot.deployment.generation}:${snapshot.deployment.maintenance}:${revision}`} deployment={snapshot.deployment} fresh={fresh} disabled={busy || loading || !fresh || setupNeedsRefresh} error={writeError} onMaintenance={maintenance} onUpdate={update} onRefresh={refresh} />
+      {snapshot.deployment.provider !== "e2b" ? <section aria-labelledby="sandbox-nodes-heading"><div className="sandbox-section-heading"><h2 id="sandbox-nodes-heading">{t("Nodes")}</h2><span>{snapshot.nodes.length}</span></div>
         {snapshot.nodes.length || presentation === "home" ? <SandboxTopology nodes={snapshot.nodes} allocations={snapshot.allocations} stale={!fresh} selectedId={selectedId} onSelect={revealNode} /> : <div className="sandbox-empty"><Server size={32} strokeWidth={1.25} /><h3>{t("Add your first node")}</h3><p>{t("No nodes registered. Add a node to provide hosted capacity.")}</p></div>}
         {selectedNode ? <div id="sandbox-selected-node" className="sandbox-selected-node"><SandboxNodeCard key={selectedNode.id} node={selectedNode} allocations={snapshot.allocations.filter((allocation) => allocation.node_id === selectedNode.id)} stale={!fresh} disabled={busy || loading} confirming={removeId === selectedNode.id} onRemove={() => setRemoveId(selectedNode.id)} onConfirm={() => void remove()} onCancel={() => setRemoveId(null)} /></div> : null}
-      </section>
+      </section> : null}
       <details className="sandbox-deployment-details"><summary>{t("Deployment details")}</summary><dl className="sandbox-summary">
-        <div><dt>{t("Provider")}</dt><dd>{snapshot.deployment.provider === "docker" ? "Docker" : "microsandbox"}</dd></div>
+        <div><dt>{t("Provider")}</dt><dd>{sandboxProviderLabel(snapshot.deployment.provider, locale)}</dd></div>
         <div><dt>{t("Maintenance")}</dt><dd>{snapshot.deployment.maintenance ? t("Enabled") : t("Off")}</dd></div>
         <div><dt>{t("Installation")}</dt><dd><code>{snapshot.deployment.installation_id}</code></dd></div>
         <div><dt>{t("Core origin")}</dt><dd>{snapshot.deployment.core_url || initialCoreUrl}</dd></div>

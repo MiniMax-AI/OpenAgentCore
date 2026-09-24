@@ -27,6 +27,7 @@ test("bundled console needs no extra admin key and provides one install command 
   await expect(page.getByLabel("Deployment admin key")).toHaveCount(0);
   await expect(page.getByLabel("Core origin reachable from nodes and guests")).toBeVisible();
   await page.getByLabel("Core origin reachable from nodes and guests").fill("https://core.example");
+  await page.getByLabel("Where to run sandboxes").selectOption("nodes");
   await page.getByLabel("Sandbox provider").selectOption("docker");
   await page.getByRole("button", { name: "Initialize sandbox deployment" }).click();
   await page.getByRole("button", { name: "Add node", exact: true }).click();
@@ -45,13 +46,14 @@ test("bundled console needs no extra admin key and provides one install command 
 });
 
 for (const provider of ["docker", "microsandbox"]) {
-  test(`initial ${provider} setup, enrollment, refresh and immutable selection`, async ({ page, request }) => {
+  test(`initial ${provider} setup, enrollment and refresh`, async ({ page, request }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openSetup(page);
     const submit = page.getByRole("button", { name: "Initialize sandbox deployment" });
     await expect(submit).toBeDisabled();
-    await expect(page.getByLabel("Sandbox provider")).toHaveValue("");
+    await expect(page.getByLabel("Where to run sandboxes")).toHaveValue("");
     await expect(page.getByRole("button", { name: "Add node", exact: true })).toHaveCount(0);
+    await page.getByLabel("Where to run sandboxes").selectOption("nodes");
     await page.getByLabel("Sandbox provider").selectOption(provider);
     const origin = page.getByLabel("Core origin reachable from nodes and guests");
     for (const invalid of ["http://127.0.0.1:8080", "https://localhost", "https://[::1]", "http://core.example", "https://core.example/v1", "https://user:secret@core.example", "https://core.example?key=secret"]) {
@@ -82,6 +84,7 @@ for (const provider of ["docker", "microsandbox"]) {
 
 test("concurrent setup conflict requires refresh and displays the committed provider", async ({ page, request }) => {
   await openSetup(page);
+  await page.getByLabel("Where to run sandboxes").selectOption("nodes");
   await page.getByLabel("Sandbox provider").selectOption("docker");
   await page.getByLabel("Core origin reachable from nodes and guests").fill("https://core.example");
   const winner = { provider: "microsandbox", core_url: "https://other-core.example" };
@@ -99,6 +102,7 @@ test("concurrent setup conflict requires refresh and displays the committed prov
 
 test("a lost setup response is not retried and refresh recovers the saved deployment", async ({ page, request }) => {
   await openSetup(page);
+  await page.getByLabel("Where to run sandboxes").selectOption("nodes");
   await page.getByLabel("Sandbox provider").selectOption("docker");
   await page.getByLabel("Core origin reachable from nodes and guests").fill("https://core.example");
   let writes = 0;
@@ -121,6 +125,7 @@ test("a lost setup response is not retried and refresh recovers the saved deploy
 
 test("a failed setup refresh keeps setup disabled until a successful read", async ({ page }) => {
   await openSetup(page);
+  await page.getByLabel("Where to run sandboxes").selectOption("nodes");
   await page.getByLabel("Sandbox provider").selectOption("docker");
   await page.getByLabel("Core origin reachable from nodes and guests").fill("https://core.example");
   await page.route("**/core/v1/sandbox/deployment", (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { message: "Deployment unavailable" } }) }));
@@ -128,11 +133,11 @@ test("a failed setup refresh keeps setup disabled until a successful read", asyn
   await expect(page.getByRole("alert")).toContainText("Refresh sandbox state to confirm");
   await page.getByRole("button", { name: "Refresh sandbox state" }).click();
   await expect(page.getByRole("alert")).toContainText("The sandbox service is unavailable");
-  await expect(page.getByLabel("Sandbox provider")).toBeDisabled();
+  await expect(page.getByLabel("Where to run sandboxes")).toBeDisabled();
   await page.unroute("**/core/v1/sandbox/deployment");
   await page.getByRole("button", { name: "Refresh sandbox state" }).click();
-  await expect(page.getByLabel("Sandbox provider")).toBeEnabled();
-  await expect(page.getByLabel("Sandbox provider")).toHaveValue("");
+  await expect(page.getByLabel("Where to run sandboxes")).toBeEnabled();
+  await expect(page.getByLabel("Where to run sandboxes")).toHaveValue("");
 });
 
 for (const operation of ["setup", "enrollment"] as const) {
@@ -154,6 +159,7 @@ for (const operation of ["setup", "enrollment"] as const) {
     await page.reload();
     await openSetup(page);
     if (operation === "setup") {
+      await page.getByLabel("Where to run sandboxes").selectOption("nodes");
       await page.getByLabel("Sandbox provider").selectOption("docker");
       await page.getByLabel("Core origin reachable from nodes and guests").fill("https://core.example");
       await page.getByRole("button", { name: "Initialize sandbox deployment" }).click();
@@ -202,6 +208,7 @@ test("loopback console setup exposes the address and cannot save the automatic d
   await expect(origin).toBeVisible();
   await expect(origin).toHaveValue(new URL(page.url()).origin);
   await expect(page.getByText("This console address cannot be used by sandbox guests.", { exact: false })).toBeVisible();
+  await page.getByLabel("Where to run sandboxes").selectOption("nodes");
   await page.getByLabel("Sandbox provider").selectOption("docker");
   const submit = page.getByRole("button", { name: "Initialize sandbox deployment" });
   await expect(submit).toBeDisabled();
@@ -224,6 +231,7 @@ test("a usable HTTPS console origin initializes without exposing the network fie
   await page.goto("https://core.example/");
   await openSetup(page);
   await expect(page.getByLabel("Core origin reachable from nodes and guests")).toBeHidden();
+  await page.getByLabel("Where to run sandboxes").selectOption("nodes");
   await page.getByLabel("Sandbox provider").selectOption("docker");
   await page.getByRole("button", { name: "Initialize sandbox deployment" }).click();
   await expect(page.getByRole("button", { name: "Add node", exact: true })).toBeVisible();

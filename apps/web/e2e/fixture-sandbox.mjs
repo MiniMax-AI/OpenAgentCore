@@ -38,7 +38,7 @@ export function handleSandboxFixture(request, response, url, sendJson, sendError
   calls.push({ path, method: request.method, authorization: request.headers.authorization ?? null });
   // This fixture represents authenticated console routes, not direct Core administration.
   if (request.headers.authorization) { sendError(response, 400, "Browser admin credentials are not accepted.", "unexpected_authorization"); return true; }
-  const deployment = () => ({ installation_id: "fixture-installation", provider, core_url: coreUrl, maintenance: false, owner_epoch: 1 });
+  const deployment = () => ({ installation_id: "fixture-installation", provider, core_url: coreUrl, maintenance: false, owner_epoch: 1, generation: provider ? 1 : 0, mode: provider ? "nodes" : "", resources: { allocations: nodes.some((entry) => entry.id === "node-local") ? 1 : 0, pending: 0 } });
   if (path.endsWith("/deployment") && request.method === "POST") {
     let body = "";
     request.on("data", (chunk) => { body += chunk; });
