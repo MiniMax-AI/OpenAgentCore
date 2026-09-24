@@ -76,7 +76,7 @@ export interface AdminKeyProvenance {
   id: string;
   name: string;
   prefix: string;
-  kind: "issued" | "static";
+  kind: "issued" | "static" | "console";
   revoked_at: string | null;
 }
 export interface AdminResourceOwner {

@@ -49,7 +49,7 @@ export function projectResourcePage<T extends { id: string }>(value: unknown, pr
   if (page.object !== "list" || !Array.isArray(page.data) || typeof page.has_more !== "boolean") return invalidAdminResponse();
   const data = page.data.map(project);
   if (page.first_id !== (data[0]?.id ?? null) || page.last_id !== (data.at(-1)?.id ?? null) ||
-    new Set(data.map((entry) => entry.id)).size !== data.length || (page.has_more && data.length === 0)) return invalidAdminResponse();
+    new Set(data.map((entry) => entry.id)).size !== data.length) return invalidAdminResponse();
   return { object: "list", data, has_more: page.has_more, first_id: page.first_id as string | null, last_id: page.last_id as string | null };
 }
 export function projectAdminDeleted<O extends string>(value: unknown, expectedId: string, object: O): AdminDeleted<O> {
@@ -104,7 +104,7 @@ function projectProvenance(value: unknown): AdminKeyProvenance | null {
   if (value === null) return null;
   const key = record(value, ["id", "name", "prefix", "kind", "revoked_at"]);
   strings(key, ["id", "name", "prefix"]);
-  if ((key.kind !== "issued" && key.kind !== "static") || !date(key.revoked_at)) return invalidAdminResponse();
+  if ((key.kind !== "issued" && key.kind !== "static" && key.kind !== "console") || !date(key.revoked_at)) return invalidAdminResponse();
   return { ...key } as unknown as AdminKeyProvenance;
 }
 export function projectResourceOwners(value: unknown, ids: string[]): { data: AdminResourceOwner[] } {

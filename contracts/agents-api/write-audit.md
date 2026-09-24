@@ -22,7 +22,7 @@ Missing historical or foreign ownership is `null`. No historical resources are b
 An issued key's current `revoked_at` comes from its retained key row. Revocation
 prevents new authentication but does not invalidate already admitted work or erase
 history. Existing audit metadata remains an immutable snapshot, including any
-historical static-key records; retaining history does not enable static-key
+historical static-key and console-key records; retaining history does not enable static-key
 authentication. Deleting a resource does not delete its
 operation history or creation anchor.
 

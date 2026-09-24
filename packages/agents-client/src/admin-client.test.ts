@@ -332,7 +332,14 @@ describe("AdminClient database-owned identities", () => {
     await expect(clientWith({ data: [{ ...key, created_at: null }], has_more: false }).client.listAPIKeys(projectId)).rejects.toMatchObject({ code: "invalid_admin_response" });
   });
 
-  it.each(["issued", "static"])("preserves %s key provenance in historical ownership records", async (kind) => {
+  it("preserves zero-limit Skill and version pages with more resources", async () => {
+    const page = { object: "list", data: [], has_more: true, first_id: null, last_id: null };
+    const { client } = clientWith(page);
+    expect(await client.listSkills(projectId, { limit: 0 })).toEqual(page);
+    expect(await client.listSkillVersions(projectId, "skill", { limit: 0 })).toEqual(page);
+  });
+
+  it.each(["issued", "static", "console"])("preserves %s key provenance in historical ownership records", async (kind) => {
     const owner = { resource_id: resourceId, api_key: { id: keyId, name: "Original key", prefix: "p", kind, revoked_at: null }, source: "api_key", admin_audit_id: null };
     expect(await clientWith({ data: [owner] }).client.retrieveResourceOwners(projectId, "agent", [resourceId])).toEqual({ data: [owner] });
   });
