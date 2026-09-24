@@ -1,67 +1,58 @@
 # Single-host idle microVM suspension
 
-Run Core and its microsandbox helper natively on one Linux amd64 host. PostgreSQL
-can remain in Docker. A hosted Session gets a dedicated microVM with the existing
-daemon, native harness and workspace. Core suspends it only after a completed Turn
-has remained idle and all admitted work has settled. The next Turn restores the
-same Session history, files and configuration. Native harness startup and shutdown
-keep their existing behavior.
+Run the ordinary standalone sandbox node and its microsandbox helper natively on
+Linux amd64 with KVM access. Core owns scheduling and durable recovery over the
+node protocol; it can run independently in a container or on another host.
+PostgreSQL can remain in Docker. The installer’s local microsandbox opt-in still
+runs Core as a native user service, but that packaging choice is not a requirement
+of the provider architecture.
 
-This profile uses microsandbox v0.7.2. The helper runs one bounded operation at a
-time and exits; Core owns scheduling and durable recovery. See the
-[provider contract](../../tools/microsandbox-provider/README.md) for snapshot
-identity, uncertain operations and cleanup rules. This document specifies setup;
-real-model continuation and isolation still require deployment acceptance.
+A hosted Session gets a dedicated microVM with the existing daemon, native harness
+and workspace. Core suspends it only after a completed Turn has remained idle and
+all admitted work has settled. The next Turn restores the same Session history,
+files and configuration. Native harness startup and shutdown retain their existing
+behavior. This profile uses microsandbox v0.7.2; the helper performs one finite
+operation and exits.
 
-## Choose a hosted provider
+Start with the [installation guide](../../../../docs/getting-started/install.md)
+and [Hosted Sandbox Manager](../../HOSTED-SANDBOX-MANAGER.md). The
+[deployment configuration contract](../../../../contracts/agents-api/sandbox-deployment.md)
+defines the saved selection, resources, Runtime identity and node authorization.
+The [provider contract](../../tools/microsandbox-provider/README.md) describes
+snapshot identity, uncertain operations and cleanup. Real-model continuation and
+isolation still require deployment acceptance.
 
-Choose either the [Docker deployment](../codex/README.md#standalone-operator-configuration)
-or this microsandbox deployment during setup. Both adapters implement the same
-Core Provider contract. One Core deployment uses one provider, one installation
-identity and one backend configuration. Snapshot suspension is available only on
-microsandbox. Docker remains supported with its ordinary lifecycle.
+## Select and change the deployment
 
-Set `provider` to `docker` or `microsandbox` and include only that configuration
-object. Provider selection applies to the entire deployment, independently of
-harness selection. Legacy provider maps, `default_provider` and `engine_providers`
-are rejected. The setup remains a private configuration file and a Core restart;
-there is no separate setup service or automatic migration.
+Web or the deployment administrator API selects one provider for the installation.
+PostgreSQL owns the provider, per-sandbox CPU/memory/disk limits and immutable Runtime
+release. Microsandbox nodes install that selection and must match its generation
+and specification digest. Node files hold host paths and an installed copy of the
+specification; they cannot select different resources or a different Runtime.
+Harness selection is independent. Snapshot suspension is available only on
+microsandbox; Docker and E2B retain their own supported lifecycle.
 
-## Change the deployment provider
+Provider, resource and Runtime changes require global maintenance, the current
+generation and verified zero retained allocations or pending hosted Environments.
+Use the [maintenance procedure](../../HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance).
+Stopped compute, snapshots and unknown operations remain blockers. Maintenance
+and configuration changes do not delete resources or migrate Sessions. Keep the
+original node identity, backend paths and credentials until cleanup is confirmed.
+Session deletion removes its saved artifacts and is not a history-preserving
+resource-release operation.
 
-1. Keep the old provider, installation ID and backend path configured. Set
-   `maintenance: true` and restart Core. Maintenance blocks new compute; the old
-   adapter remains available for observing and explicitly cleaning up resources.
-2. Handle or delete the old hosted Sessions and resources explicitly. Confirm all
-   retained allocations, including snapshots and pending hosted Sessions, are
-   gone. A public deletion acknowledgement alone does not prove physical cleanup.
-3. Configure the new provider with a fresh `installation_id`, its backend object
-   and `maintenance: true`, then restart Core. Core validates that the old
-   deployment is empty before accepting the new identity.
-4. Keep the new identity unchanged, set `maintenance: false` and restart Core to
-   allow new compute.
-
-The installation ID and backend namespace are persisted. Changing the Docker
-socket or microsandbox `runtime_home` counts as a provider switch even if the UUID
-is reused. Image, resource limits and idle policy do not change that identity.
-Maintenance itself never initiates deletion; ordinary expiry, revocation and
-explicit deletion keep their existing cleanup behavior. A switch requires both
-the persisted old configuration and incoming configuration to be in maintenance.
-Switching never deletes resources automatically or migrates Sessions between
-providers. Do not repoint a configured backend path to another installation.
-
-When upgrading a database that has retained allocations but no recorded provider
-identity, Core cannot verify their original backend and refuses initial adoption.
-Keep the previous Core and its configuration available to finish cleanup before
-starting this profile. An empty legacy deployment can select its first provider;
-previously unallocated Sessions have no provider ownership to migrate.
+Core rejects `AGENTS_API_MANAGED_RUNTIMES_FILE`. It does not automatically adopt an
+older file-managed database, even after its resources are drained. Keep the
+previous release and original backend available to resolve that deployment;
+removing an environment variable does not migrate its configuration ownership.
 
 ## Host and binaries
 
 Use a dedicated service account with access to `/dev/kvm`, a C compiler and the
-repository's Go version. The helper requires glibc and the standard Linux dynamic
-libraries. The existing Core binary remains a CGO-disabled build. The current
-Core `distroless/static` image cannot run this helper.
+repository's Go version for source builds. The node's helper requires glibc and
+the standard Linux dynamic libraries. Core remains a CGO-disabled build. Its
+`distroless/static` image does not run the helper; the standalone native node does.
+Use the matched distribution's ordinary node installer for an operator installation.
 
 Build from the repository root:
 
@@ -87,18 +78,23 @@ It supplies `msb` and `libkrunfw.so.5.6.1`. Record each extracted file's SHA256 
 the provider configuration. The helper verifies both files on every invocation;
 it does not install or upgrade them.
 
-Create a private, short runtime state path, for example
-`~/.parsar/msb`, with mode 0700. Keep it on persistent local storage and reserve it
-for this installation. Unix socket path limits apply. The directory holds
-confidential disks, memory snapshots and SDK state; retain it together with the
-Core database when recovering the host.
+For a manual node installation, create a private, short runtime state path, for
+example `~/.parsar/msb`, with mode 0700. The ordinary installer instead selects
+`~/.parsar/m/<installation-hash-prefix>/` and stores node identity/configuration
+under `~/.parsar/nodes/<installation-id>/`. Keep these on persistent local storage
+reserved for this installation. Unix socket path limits apply. Runtime storage
+contains confidential disks, memory snapshots and SDK state; preserve it with the
+node identity and Core database when recovering the host.
 
 ## Runtime image
 
-Build the existing [Codex Runtime](../codex/README.md#managed-runtime-image-and-docker-adapter)
-with the daemon from this branch, then publish it to an operator-controlled OCI
-registry. Configure its immutable `repository@sha256:...` digest. The image must
-be available to the local microsandbox installation before provisioning.
+Use the immutable Runtime release saved in the deployment specification. The
+ordinary node installer verifies the matched distribution manifest and imports
+its microsandbox image under the declared digest reference. The image must be
+available to the local microsandbox installation before provisioning. For source
+builds, the existing [Runtime image build](../codex/README.md#managed-runtime-image-and-docker-adapter)
+remains the image source; produce and select a matching distribution rather than
+substituting a local image for an already saved release.
 
 The provider performs the existing Runtime bootstrap, starts the daemon as
 uid/gid 1000 and creates `/run/parsar` as a private control directory. No model,
@@ -106,45 +102,36 @@ Core or tenant credential belongs in the image. The ordinary Runtime initializer
 and native isolation profile still apply; snapshot restore does not rerun setup
 commands or initial file writes.
 
-## Core configuration
+## Deployment and node configuration
 
-Copy [managed-runtimes.example.json](managed-runtimes.example.json) to a private
-file under the service account's `~/.parsar/` directory and set mode 0600. Replace
-all placeholder paths, hashes, image digest and hostnames. Generate a fresh
-installation UUID for `installation_id`. Keep that identity and its original
-backend while any allocation needs cleanup. Set `provider: "microsandbox"` and
-include the single `microsandbox` object; do not include a `docker` object.
+Initialize microsandbox through Web or `POST /core/v1/sandbox/deployment`, including
+its required `resources` and immutable `runtime` fields. The standalone node
+installer reads `GET /core/v1/sandbox/node/configuration` using an enrollment token,
+or its retained node credential on a registered reinstall. It verifies the saved
+release and resources before registration. Local opt-in uses this same path and
+requires a guest-reachable, non-loopback HTTPS `--public-url`.
 
-Set VM memory, CPU and disk limits explicitly. `root_disk_mib` bounds the root
-disk; `environment_disk_mib` separately bounds the native owned ext4 disk at
-`/environment`, including workspace, staging and initialization data. Both are
-required; budget for both disks and their retained snapshots. `max_active` bounds active compute.
-`max_retained` bounds all retained allocations, including suspended snapshots, and
-must be at least `max_active`. `idle_seconds` is the sustained idle interval before
-suspension.
-`retention_seconds` bounds retained snapshots. Each value must be positive.
-Choose capacity and retention for the host's RAM and disk budget.
+Set VM CPU, memory and disk limits in the database-owned specification.
+`root_disk_mib` bounds the managed root disk; `environment_disk_mib` separately
+bounds the owned ext4 disk at `/environment`, including workspace, staging and
+initialization data. Both are required. Budget for both disks and retained full
+snapshots. Node `max_active` and `max_retained` are separate reservation limits;
+retained allocations include suspended snapshots and uncertain cleanup. The
+managed microsandbox policy uses a five-minute idle interval and one-day snapshot
+retention.
 
-The example denies network access except HTTPS to the named Core and model
-endpoints. Adapt those explicit rules to the deployment, including required
-package registries if initialization uses them. Both creation and restore apply
-the same host network policy. Native tool-network policy remains separate and
-continues to use the existing Runtime controls.
+The private node provider file supplies its absolute helper/runtime/firmware paths,
+short Runtime home and explicit host network policy. Permit the required Core,
+model and package-registry endpoints. Creation and restore apply the same host
+policy. Native tool-network policy remains separate and uses the existing Runtime
+controls. Never repoint a retained backend namespace or overwrite node identity
+to bypass a configuration mismatch.
 
 Use the existing [standalone Core setup](../../README.md) for the database,
-migrations, API keys and encryption key. Add these variables to its private
-service environment:
-
-```sh
-export AGENTS_API_MANAGED_RUNTIMES_FILE="$HOME/.parsar/managed-runtimes.json"
-export AGENTS_API_DAEMON_WS_URL='wss://core.example/api/v1/agent-daemon/ws'
-export AGENTS_API_ENGINE=codex
-"$HOME/.parsar/build/agents-api/agents-api"
-```
-
-The outward Core URL must be reachable from the guest. `localhost` inside the
-microVM refers to the guest. Model provider settings continue to use the existing
-private `AGENTS_API_EXECUTION_OPTIONS_FILE` contract.
+migrations, administrator credentials and encryption key. Model provider settings
+retain the private `AGENTS_API_EXECUTION_OPTIONS_FILE` contract. The saved public
+Core origin must be reachable from the guest; `localhost` in a microVM refers to
+the guest itself. Do not configure a Core-local managed-runtimes file.
 
 ## Runtime observations
 

@@ -143,40 +143,33 @@ execution, cancellation and Files continue through Core/daemon/Runtime.
 
 ## Standalone operator configuration
 
-Set `AGENTS_API_DAEMON_WS_URL` to the outward URL reachable from the Runtime and
-`AGENTS_API_MANAGED_RUNTIMES_FILE` to a private JSON file beneath `~/.parsar/`:
+Use the [installation guide](../../../../docs/getting-started/install.md) and
+[deployment configuration API](../../../../contracts/agents-api/sandbox-deployment.md).
+Web or the deployment administrator API selects Docker, uniform per-sandbox CPU
+and memory, and the matched immutable Runtime release in PostgreSQL. Docker does
+not accept independent hard root or workspace disk quotas through this contract.
+The saved public Core origin must be reachable from sandbox guests.
 
-```json
-{
-  "core_url": "https://core.example/api/v1",
-  "provider": "docker",
-  "installation_id": "11111111-1111-4111-8111-111111111111",
-  "maintenance": false,
-  "docker": {
-    "host": "unix:///var/run/docker.sock",
-    "image": "sha256:<qualified immutable image digest>",
-    "network": "bridge",
-    "seccomp_file": "/absolute/path/to/seccomp.json"
-  }
-}
-```
+Enroll an ordinary sandbox node using the console's one-line command. It fetches
+and validates the deployment configuration, imports the matched Runtime image and
+actively connects to Core. Core can run independently without a Docker socket;
+the node owns its local Docker access. Node files contain the installed selection
+and host-specific paths, never a separate provider or resource choice. A local
+installation opt-in uses this same node workflow.
 
-Choose Docker or [microsandbox](../microsandbox/README.md) at setup. A Core
-deployment accepts one provider and one backend object; legacy provider maps and
-engine-to-provider routing are rejected. The installation ID and explicit socket
-identify this backend. Harness selection does not choose a different provider.
+Provider, resource and Runtime changes use deployment maintenance, the current
+generation and verified zero retained or pending execution resources. Stopped
+containers, snapshots, unknown operations and pending cleanup block replacement.
+Use the [maintenance procedure](../../HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance).
+Configuration changes do not delete resources or migrate Sessions. Do not delete
+Sessions to preserve history: that operation removes public access and saved
+artifacts. Core rejects `AGENTS_API_MANAGED_RUNTIMES_FILE`; restarting or editing
+an old file does not replace database configuration ownership.
 
-Set `maintenance: true` and restart with the old configuration before changing
-providers. Explicitly handle or delete old hosted Sessions and resources, then
-verify cleanup has completed. Configure the new provider and fresh installation
-ID with maintenance still enabled, restart to validate the switch, then restart
-with `maintenance: false` to resume new compute. See the
-[provider switch procedure](../microsandbox/README.md#change-the-deployment-provider).
-No resources are automatically deleted and no Sessions migrate between providers.
-
-V1 supports explicit local Unix Docker sockets, ignoring ambient
-`DOCKER_HOST`. Optional `extra_hosts` is trusted operator configuration. No Docker
-socket is mounted in a Runtime. User-managed enrollment remains separate work.
+Node providers use explicit local Unix Docker sockets, ignoring ambient
+`DOCKER_HOST`. Optional `extra_hosts` is trusted node configuration. No Docker
+socket is mounted in a Runtime. Caller-managed `self_hosted` enrollment retains
+its separate public lifecycle.
 
 For a trusted model endpoint, `AGENTS_API_EXECUTION_OPTIONS_FILE` can supply the
 existing adapter options as a JSON object, including `codex_provider` with `name`,
