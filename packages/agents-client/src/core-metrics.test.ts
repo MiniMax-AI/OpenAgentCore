@@ -7,18 +7,17 @@ describe("Core metrics projection", () => {
     const metrics = projectCoreMetrics({
       object: "core.metrics",
       range: { start: "2026-09-24T00:00:00Z", end: "2026-09-24T01:00:00Z", resolution_seconds: 60 },
-      service: { status: "running", version: "0.9.0" },
-      ingress: { requests: 10, latency_ms: { p95: 120 }, series: [{ start: "2026-09-24T00:00:00Z", success: 10 }] },
-      execution: {},
-      dependencies: [{ id: "db", kind: "database", name: "PostgreSQL", status: "weird" }],
-      process: {},
+      service: { status: "running", revision: "b134a1b5", execution_owner: true },
+      execution: { slots_in_use: 3, slots_total: 4, queue_wait_ms: { p95: 2600 }, series: [{ start: "2026-09-24T00:00:00Z", queued: 1 }] },
+      jobs: [{ id: "runtime_sampler", status: "weird", processed: 12 }],
     });
-    expect(metrics.ingress.server_errors).toBeNull();
-    expect(metrics.ingress.latency_ms).toEqual({ p50: null, p95: 120 });
-    expect(metrics.ingress.series[0]).toMatchObject({ success: 10, server_error: null });
-    expect(metrics.execution.active_turns).toBeNull();
-    expect(metrics.dependencies[0]).toMatchObject({ kind: "database", status: "unknown", latency_p95_ms: null });
-    expect(metrics.process.series).toEqual([]);
+    expect(metrics.service).toMatchObject({ revision: "b134a1b5", execution_owner: true, started_at: null });
+    expect(metrics.execution).toMatchObject({ slots_in_use: 3, queued_turns: null, connected_daemons: null });
+    expect(metrics.execution.queue_wait_ms).toEqual({ p50: null, p95: 2600 });
+    expect(metrics.execution.series[0]).toMatchObject({ queued: 1, in_progress: null });
+    expect(metrics.database).toMatchObject({ size_bytes: null, pool: { in_use: null, idle: null, max: null }, series: [] });
+    expect(metrics.jobs[0]).toMatchObject({ status: "unknown", processed: 12, failed: null });
+    expect(metrics.process).toEqual({ memory_bytes: null, goroutines: null });
   });
 
   it("rejects a response that is not Core metrics", () => {

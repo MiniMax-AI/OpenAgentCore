@@ -1,4 +1,4 @@
-import { AgentCoreError, type CoreDependencyHealth, type CoreMetrics, type CoreMetricsRange } from "@agents-core-web/agents-client";
+import { AgentCoreError, type CoreJobStatus, type CoreMetrics, type CoreMetricsRange } from "@agents-core-web/agents-client";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Network } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
@@ -6,15 +6,15 @@ import { useTranslation } from "react-i18next";
 
 import { TimeSeriesChart } from "../../components/charts/TimeSeriesChart";
 import { TableSkeleton } from "../../components/Skeleton";
-import { EmptyState, Kpi, KpiStrip, Meter, PageBody, PageHeader, RefreshButton, Section, SegmentedControl, StatusDot, type Tone } from "../../components/console-ui";
-import { formatBucket, formatBytes, formatClock, formatCompact, formatCores, formatDuration, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
+import { EmptyState, Kpi, KpiStrip, PageBody, PageHeader, RefreshButton, Section, SegmentedControl, StatusDot, type Tone } from "../../components/console-ui";
+import { formatBucket, formatBytes, formatClock, formatDuration, formatInteger, formatRelative, MISSING } from "../../lib/format";
 import { coreMetricsQuery } from "./metrics-queries";
 import "./MetricsView.css";
 
 const RANGES: readonly CoreMetricsRange[] = ["1h", "6h", "24h", "7d"];
 const REFRESH_MS = 30_000;
 
-const healthTone: Record<CoreDependencyHealth, Tone> = { ok: "ok", degraded: "warning", down: "danger", unknown: "neutral" };
+const jobTone: Record<CoreJobStatus, Tone> = { ok: "ok", failing: "danger", stopped: "warning", unknown: "neutral" };
 const statusTone: Record<CoreMetrics["service"]["status"], Tone> = { running: "ok", maintenance: "warning", degraded: "warning" };
 
 function seconds(value: string | null): number | null {
@@ -27,20 +27,17 @@ function milliseconds(value: number | null): string {
   return value === null ? MISSING : formatDuration(value / 1000);
 }
 
-function ratio(part: number | null, whole: number | null): number | null {
-  return part === null || whole === null || whole === 0 ? null : part / whole;
-}
-
 /** A figure with its unit or limit set small beside it. */
 function Figure({ value, unit }: { value: ReactNode; unit?: ReactNode }) {
   return <>{value}{unit ? <span className="kpi-unit">{unit}</span> : null}</>;
 }
 
 /**
- * Monitor › Core metrics: the control plane's own health. It answers what no
- * other page does — is Core serving requests, is its scheduling queue keeping
- * up, are its dependencies healthy, is its process within limits — and leaves
- * Agent outcomes to Agent metrics and sandbox capacity to Sandbox metrics.
+ * Monitor › Core metrics: the health of the one Core process — can it run
+ * Turns (slots, queue, daemons), is its database responsive, are its
+ * background jobs running. Agent outcomes stay on Agent metrics and sandbox
+ * capacity on Sandbox metrics; the page follows the same header, headline
+ * figures and chart-then-table sections as they do.
  */
 export function CoreMetricsPage() {
   const { t, i18n } = useTranslation("metrics");
@@ -50,18 +47,6 @@ export function CoreMetricsPage() {
   const metrics = query.data ?? null;
   const missing = query.error instanceof AgentCoreError && (query.error.status === 404 || query.error.status === 501);
   const error = query.error instanceof Error ? query.error.message : query.error ? String(query.error) : "";
-
-  const header = (
-    <PageHeader
-      headingId="core-metrics-heading"
-      title={<>{t("core.title")}{metrics ? <ServiceMeta metrics={metrics} /> : null}</>}
-      help={t("core.description")}
-      actions={<>
-        <SegmentedControl label={t("range.label")} value={range} options={RANGES.map((value) => ({ value, label: t(`range.${value}`) }))} onChange={setRange} />
-        <RefreshButton refreshing={query.isFetching} updatedAt={query.dataUpdatedAt ? formatClock(query.dataUpdatedAt, locale) : null} onClick={() => void query.refetch()} />
-      </>}
-    />
-  );
 
   let body: ReactNode;
   if (!metrics) {
@@ -76,26 +61,33 @@ export function CoreMetricsPage() {
 
   return (
     <section className="page-section console-page metrics-page core-metrics-page" aria-labelledby="core-metrics-heading">
-      {header}
+      <PageHeader
+        headingId="core-metrics-heading"
+        title={<>{t("core.title")}{metrics ? <ServiceMeta metrics={metrics} /> : null}</>}
+        help={t("core.description")}
+        actions={<>
+          <SegmentedControl label={t("range.label")} value={range} options={RANGES.map((value) => ({ value, label: t(`range.${value}`) }))} onChange={setRange} />
+          <RefreshButton refreshing={query.isFetching} updatedAt={query.dataUpdatedAt ? formatClock(query.dataUpdatedAt, locale) : null} onClick={() => void query.refetch()} />
+        </>}
+      />
       <PageBody>{body}</PageBody>
     </section>
   );
 }
 
 function ServiceMeta({ metrics }: { metrics: CoreMetrics }) {
-  const { t, i18n } = useTranslation("metrics");
-  const locale = i18n.resolvedLanguage;
+  const { t } = useTranslation("metrics");
   const started = seconds(metrics.service.started_at);
   const now = Math.floor(Date.now() / 1000);
+  const notOwner = metrics.service.execution_owner === false;
   return (
     <span className="page-title-meta">
       <StatusDot
-        tone={statusTone[metrics.service.status]}
+        tone={notOwner ? "danger" : statusTone[metrics.service.status]}
         label={t("core.meta", {
-          status: t(`core.status.${metrics.service.status}`),
-          version: metrics.service.version ?? MISSING,
+          status: notOwner ? t("core.notOwner") : t(`core.status.${metrics.service.status}`),
+          revision: metrics.service.revision ?? MISSING,
           uptime: started === null ? MISSING : formatDuration(Math.max(0, now - started)),
-          instances: metrics.service.instances === null ? MISSING : formatInteger(metrics.service.instances, locale),
         })}
       />
     </span>
@@ -106,197 +98,144 @@ function CoreMetricsBody({ metrics, stale }: { metrics: CoreMetrics; stale: stri
   const { t, i18n } = useTranslation("metrics");
   const locale = i18n.resolvedLanguage;
   const now = Math.floor(Date.now() / 1000);
-  const start = seconds(metrics.range.start);
-  const end = seconds(metrics.range.end);
-  const minutes = start !== null && end !== null && end > start ? (end - start) / 60 : null;
-  const { ingress, execution, process } = metrics;
+  const { execution, database, process } = metrics;
   const bucketSeconds = metrics.range.resolution_seconds;
   const bucket = formatBucket(bucketSeconds, locale);
-  const ingressBuckets = useMemo(() => ingress.series.map((entry) => seconds(entry.start) ?? 0), [ingress.series]);
-  const queueBuckets = useMemo(() => execution.series.map((entry) => seconds(entry.start) ?? 0), [execution.series]);
-  const processBuckets = useMemo(() => process.series.map((entry) => seconds(entry.start) ?? 0), [process.series]);
+  const executionBuckets = useMemo(() => execution.series.map((entry) => seconds(entry.start) ?? 0), [execution.series]);
+  const databaseBuckets = useMemo(() => database.series.map((entry) => seconds(entry.start) ?? 0), [database.series]);
+  const count = (value: number | null) => (value === null ? MISSING : formatInteger(value, locale));
   const integer = (value: number) => formatInteger(value, locale);
-  const compact = (value: number) => formatCompact(value, locale);
-  const gib = 1024 ** 3;
+  const slotsFull = execution.slots_in_use !== null && execution.slots_total !== null && execution.slots_in_use >= execution.slots_total;
 
   return (
     <>
       {stale ? <p className="coverage-note coverage-note-error" role="alert">{t("core.stale", { reason: stale })}</p> : null}
 
       <KpiStrip label={t("core.kpiLabel")}>
-        <Kpi label={t("core.requestRate")} value={ingress.requests === null || minutes === null ? MISSING : formatCompact(ingress.requests / minutes, locale)} />
         <Kpi
-          label={t("core.errorRate")}
-          help={t("core.errorRateHelp")}
-          value={formatPercent(ratio(ingress.server_errors, ingress.requests), locale)}
-          tone={(ratio(ingress.server_errors, ingress.requests) ?? 0) >= 0.01 ? "danger" : undefined}
+          label={t("core.slots")}
+          help={t("core.slotsHelp")}
+          value={execution.slots_in_use === null ? MISSING : <Figure value={integer(execution.slots_in_use)} unit={execution.slots_total === null ? undefined : `/ ${integer(execution.slots_total)}`} />}
+          tone={slotsFull ? "warning" : undefined}
         />
-        <Kpi label={t("core.latencyP95")} value={milliseconds(ingress.latency_ms.p95)} />
-        <Kpi label={t("core.activeTurns")} value={execution.active_turns === null ? MISSING : integer(execution.active_turns)} />
-        <Kpi label={t("core.queuedTurns")} help={t("core.queuedHelp")} value={execution.queued_turns === null ? MISSING : integer(execution.queued_turns)} tone={(execution.queued_turns ?? 0) > 0 ? "warning" : undefined} />
+        <Kpi
+          label={t("core.queued")}
+          help={t("core.queuedHelp")}
+          value={execution.queued_turns === null ? MISSING : <Figure value={integer(execution.queued_turns)} unit={execution.waiting_for_daemon ? t("core.waitingForDaemon", { n: execution.waiting_for_daemon }) : undefined} />}
+          tone={(execution.queued_turns ?? 0) > 0 ? "warning" : undefined}
+        />
+        <Kpi label={t("core.daemons")} help={t("core.daemonsHelp")} value={count(execution.connected_daemons)} />
+        <Kpi label={t("core.databaseLatency")} value={milliseconds(database.ping_ms.p95)} />
+        <Kpi label={t("core.memory")} value={process.memory_bytes === null ? MISSING : formatBytes(process.memory_bytes)} />
       </KpiStrip>
 
-      <Section headingId="core-ingress-heading" title={t("core.ingress.title")} help={t("core.ingress.help")}>
+      <Section
+        headingId="core-execution-heading"
+        title={<>{t("core.execution.title")}<span className="section-meta">{t("core.execution.meta", {
+          oldest: execution.oldest_queued_seconds === null ? MISSING : formatDuration(execution.oldest_queued_seconds),
+          interrupted: count(execution.interrupted),
+          unavailable: count(execution.unavailable),
+        })}</span></>}
+        help={t("core.execution.help")}
+      >
         <div className="chart-grid">
           <figure className="chart-panel">
-            <figcaption>{t("core.ingress.chart", { bucket })}</figcaption>
+            <figcaption>{t("core.execution.turnsChart", { bucket })}</figcaption>
             <TimeSeriesChart
-              label={t("core.ingress.chart", { bucket })}
-              kind="columns"
-              stacked
-              buckets={ingressBuckets}
+              label={t("core.execution.turnsChart", { bucket })}
+              kind="lines"
+              buckets={executionBuckets}
               bucketSeconds={bucketSeconds}
               series={[
-                { id: "success", label: t("core.ingress.success"), color: "var(--series-1)", values: ingress.series.map((entry) => entry.success) },
-                { id: "client", label: t("core.ingress.clientError"), color: "var(--series-3)", values: ingress.series.map((entry) => entry.client_error) },
-                { id: "server", label: t("core.ingress.serverError"), color: "var(--red)", values: ingress.series.map((entry) => entry.server_error) },
+                { id: "in-progress", label: t("core.execution.inProgress"), color: "var(--series-1)", values: execution.series.map((entry) => entry.in_progress) },
+                { id: "queued", label: t("core.execution.queued"), color: "var(--series-3)", values: execution.series.map((entry) => entry.queued) },
               ]}
               formatValue={integer}
-              formatAxis={compact}
             />
           </figure>
           <figure className="chart-panel">
-            <figcaption>{t("core.ingress.latencyChart", { bucket })}</figcaption>
+            <figcaption>{t("core.execution.waitChart", { bucket })}</figcaption>
             <TimeSeriesChart
-              label={t("core.ingress.latencyChart", { bucket })}
+              label={t("core.execution.waitChart", { bucket })}
               kind="lines"
-              buckets={ingressBuckets}
+              buckets={executionBuckets}
               bucketSeconds={bucketSeconds}
-              series={[
-                { id: "p50", label: t("core.ingress.p50"), color: "var(--series-1)", values: ingress.series.map((entry) => entry.p50_ms) },
-                { id: "p95", label: t("core.ingress.p95"), color: "var(--series-3)", values: ingress.series.map((entry) => entry.p95_ms) },
-              ]}
+              series={[{ id: "wait", label: t("core.execution.wait"), color: "var(--series-1)", values: execution.series.map((entry) => entry.queue_wait_p95_ms) }]}
               formatValue={(value) => milliseconds(value)}
               formatAxis={(value) => (value === 0 ? "0" : milliseconds(value))}
             />
           </figure>
         </div>
-        {ingress.routes.length ? (
-          <div className="table-frame">
-            <table className="data-table" aria-label={t("core.ingress.title")}>
-              <thead>
-                <tr>
-                  <th scope="col">{t("core.ingress.route")}</th>
-                  <th scope="col" className="numeric">{t("core.ingress.requests")}</th>
-                  <th scope="col" className="numeric">{t("core.ingress.clientError")}</th>
-                  <th scope="col" className="numeric">{t("core.ingress.serverError")}</th>
-                  <th scope="col">{t("core.ingress.serverShare")}</th>
-                  <th scope="col" className="numeric">{t("core.ingress.p95")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ingress.routes.map((route) => {
-                  const share = ratio(route.server_errors, route.requests);
-                  return (
-                    <tr key={route.family}>
-                      <th scope="row"><span className="table-primary">{t(`core.ingress.families.${route.family}`, { defaultValue: route.family })}</span></th>
-                      <td className="numeric">{route.requests === null ? MISSING : integer(route.requests)}</td>
-                      <td className="numeric">{route.client_errors === null ? MISSING : integer(route.client_errors)}</td>
-                      <td className={route.server_errors ? "numeric numeric-danger" : "numeric"}>{route.server_errors === null ? MISSING : integer(route.server_errors)}</td>
-                      <td>
-                        <span className="table-meter">
-                          <Meter value={share} limit={1} warnAt={0.01} dangerAt={0.05} label={t("core.ingress.serverShare")} />
-                          <span>{formatPercent(share, locale)}</span>
-                        </span>
-                      </td>
-                      <td className="numeric">{milliseconds(route.p95_ms)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
       </Section>
 
       <Section
-        headingId="core-queue-heading"
-        title={<>{t("core.queue.title")}<span className="section-meta">{t("core.queue.meta", { p50: milliseconds(execution.queue_wait_ms.p50), p95: milliseconds(execution.queue_wait_ms.p95) })}</span></>}
-        help={t("core.queue.help")}
+        headingId="core-database-heading"
+        title={<>{t("core.database.title")}<span className="section-meta">{t("core.database.meta", {
+          size: formatBytes(database.size_bytes),
+          inUse: count(database.pool.in_use),
+          max: count(database.pool.max),
+        })}</span></>}
+        help={t("core.database.help")}
       >
-        <div className="chart-grid chart-grid-single">
+        <div className="chart-grid">
           <figure className="chart-panel">
-            <figcaption>{t("core.queue.chart", { bucket })}</figcaption>
+            <figcaption>{t("core.database.latencyChart", { bucket })}</figcaption>
             <TimeSeriesChart
-              label={t("core.queue.chart", { bucket })}
+              label={t("core.database.latencyChart", { bucket })}
               kind="lines"
-              buckets={queueBuckets}
+              buckets={databaseBuckets}
               bucketSeconds={bucketSeconds}
-              series={[{ id: "queued", label: t("core.queue.queued"), color: "var(--series-1)", values: execution.series.map((entry) => entry.queued) }]}
+              series={[{ id: "latency", label: t("core.database.latency"), color: "var(--series-1)", values: database.series.map((entry) => entry.ping_p95_ms) }]}
+              formatValue={(value) => milliseconds(value)}
+              formatAxis={(value) => (value === 0 ? "0" : milliseconds(value))}
+            />
+          </figure>
+          <figure className="chart-panel">
+            <figcaption>{t("core.database.poolChart", { bucket })}</figcaption>
+            <TimeSeriesChart
+              label={t("core.database.poolChart", { bucket })}
+              kind="lines"
+              buckets={databaseBuckets}
+              bucketSeconds={bucketSeconds}
+              series={[
+                { id: "in-use", label: t("core.database.inUse"), color: "var(--series-1)", values: database.series.map((entry) => entry.pool_in_use) },
+                { id: "max", label: t("core.database.max"), color: "var(--ink-3)", values: database.series.map(() => database.pool.max) },
+              ]}
               formatValue={integer}
-              height={140}
             />
           </figure>
         </div>
       </Section>
 
-      <Section headingId="core-dependencies-heading" title={t("core.dependencies.title")} help={t("core.dependencies.help")}>
-        {metrics.dependencies.length ? (
+      <Section headingId="core-jobs-heading" title={t("core.jobs.title")} help={t("core.jobs.help")}>
+        {metrics.jobs.length ? (
           <div className="table-frame">
-            <table className="data-table" aria-label={t("core.dependencies.title")}>
+            <table className="data-table" aria-label={t("core.jobs.title")}>
               <thead>
                 <tr>
-                  <th scope="col">{t("core.dependencies.name")}</th>
-                  <th scope="col">{t("core.dependencies.kind")}</th>
-                  <th scope="col">{t("core.dependencies.status")}</th>
-                  <th scope="col" className="numeric">{t("core.dependencies.latency")}</th>
-                  <th scope="col" className="numeric">{t("core.dependencies.errors")}</th>
-                  <th scope="col" className="numeric">{t("core.dependencies.checked")}</th>
+                  <th scope="col">{t("core.jobs.job")}</th>
+                  <th scope="col">{t("core.jobs.status")}</th>
+                  <th scope="col" className="numeric">{t("core.jobs.lastRun")}</th>
+                  <th scope="col" className="numeric">{t("core.jobs.processed")}</th>
+                  <th scope="col" className="numeric">{t("core.jobs.failed")}</th>
                 </tr>
               </thead>
               <tbody>
-                {metrics.dependencies.map((dependency) => (
-                  <tr key={dependency.id}>
-                    <th scope="row"><span className="table-primary">{dependency.name}</span></th>
-                    <td className="table-muted">{t(`core.dependencies.kinds.${dependency.kind}`)}</td>
-                    <td><StatusDot tone={healthTone[dependency.status]} label={t(`core.dependencies.health.${dependency.status}`)} /></td>
-                    <td className="numeric">{milliseconds(dependency.latency_p95_ms)}</td>
-                    <td className={(dependency.error_rate ?? 0) >= 0.01 ? "numeric numeric-danger" : "numeric"}>{formatPercent(dependency.error_rate, locale)}</td>
-                    <td className="numeric">{formatRelative(seconds(dependency.checked_at), now, locale)}</td>
+                {metrics.jobs.map((job) => (
+                  <tr key={job.id}>
+                    <th scope="row"><span className="table-primary">{t(`core.jobs.names.${job.id}`, { defaultValue: job.id })}</span></th>
+                    <td><StatusDot tone={jobTone[job.status]} label={t(`core.jobs.health.${job.status}`)} /></td>
+                    <td className="numeric" title={job.last_run_at ?? undefined}>{formatRelative(seconds(job.last_run_at), now, locale)}</td>
+                    <td className="numeric">{count(job.processed)}</td>
+                    <td className={job.failed ? "numeric numeric-danger" : "numeric"}>{count(job.failed)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        ) : <EmptyState title={t("core.dependencies.empty")} />}
-      </Section>
-
-      <Section headingId="core-process-heading" title={t("core.process.title")} help={t("core.process.help")}>
-        <KpiStrip label={t("core.process.kpiLabel")}>
-          <Kpi label={t("core.process.cpu")} value={process.cpu_cores === null ? MISSING : <Figure value={formatCores(process.cpu_cores, locale)} unit={process.cpu_limit_cores === null ? t("core.process.cores") : `/ ${formatCores(process.cpu_limit_cores, locale)} ${t("core.process.cores")}`} />} />
-          <Kpi label={t("core.process.memory")} value={process.memory_bytes === null ? MISSING : <Figure value={formatBytes(process.memory_bytes)} unit={process.memory_limit_bytes === null ? undefined : `/ ${formatBytes(process.memory_limit_bytes)}`} />} />
-          <Kpi label={t("core.process.connections")} value={process.open_connections === null ? MISSING : integer(process.open_connections)} />
-          <Kpi label={t("core.process.disk")} value={process.disk_used_bytes === null ? MISSING : <Figure value={formatBytes(process.disk_used_bytes)} unit={process.disk_total_bytes === null ? undefined : `/ ${formatBytes(process.disk_total_bytes)}`} />} />
-        </KpiStrip>
-        <div className="chart-grid">
-          <figure className="chart-panel">
-            <figcaption>{t("core.process.cpuChart", { bucket })}</figcaption>
-            <TimeSeriesChart
-              label={t("core.process.cpuChart", { bucket })}
-              kind="lines"
-              buckets={processBuckets}
-              bucketSeconds={bucketSeconds}
-              series={[{ id: "cpu", label: t("core.process.cpu"), color: "var(--series-1)", values: process.series.map((entry) => entry.cpu_cores) }]}
-              formatValue={(value) => `${formatCores(value, locale)} ${t("core.process.cores")}`}
-              formatAxis={(value) => formatCores(value, locale)}
-              height={140}
-            />
-          </figure>
-          <figure className="chart-panel">
-            <figcaption>{t("core.process.memoryChart", { bucket })}</figcaption>
-            <TimeSeriesChart
-              label={t("core.process.memoryChart", { bucket })}
-              kind="lines"
-              buckets={processBuckets}
-              bucketSeconds={bucketSeconds}
-              series={[{ id: "memory", label: t("core.process.memory"), color: "var(--series-2)", values: process.series.map((entry) => entry.memory_bytes === null ? null : entry.memory_bytes / gib) }]}
-              formatValue={(value) => formatBytes(value * gib)}
-              formatAxis={(value) => `${value.toFixed(value < 10 ? 1 : 0)} GiB`}
-              height={140}
-            />
-          </figure>
-        </div>
+        ) : <EmptyState title={t("core.jobs.empty")} />}
       </Section>
     </>
   );
 }
+

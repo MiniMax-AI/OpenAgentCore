@@ -2,62 +2,44 @@ import { AgentCoreError, OpenAIAgentsClient } from "./client";
 import type { ReadOptions } from "./types";
 
 /**
- * Core's own health: ingress, Turn execution, dependencies and the Core
- * process, aggregated server-side over a fixed range. Provisional contract
- * for `GET /core/v1/admin/core-metrics` (see docs/web/core-metrics-requirements.md);
- * every figure Core cannot measure is null, never zero.
+ * Core's own health as the one `agents-api` process sees it: execution slots
+ * and the Turn queue (a Postgres table polled by the worker), connected
+ * daemons, the PostgreSQL database, background jobs and the process itself.
+ * Provisional contract for `GET /core/v1/admin/core-metrics` (see
+ * docs/web/core-metrics-requirements.md); every figure Core cannot measure is
+ * null, never zero.
  */
 export type CoreMetricsRange = "1h" | "6h" | "24h" | "7d";
-export type CoreDependencyHealth = "ok" | "degraded" | "down" | "unknown";
-export type CoreDependencyKind = "database" | "queue" | "object_storage" | "model_provider" | "runtime_sampler" | "other";
+export type CoreJobStatus = "ok" | "failing" | "stopped" | "unknown";
 
 export interface CoreLatency {
   p50: number | null;
   p95: number | null;
 }
 
-export interface CoreIngressBucket {
-  start: string;
-  success: number | null;
-  client_error: number | null;
-  server_error: number | null;
-  p50_ms: number | null;
-  p95_ms: number | null;
-}
-
-export interface CoreRouteFamily {
-  /** Bounded route family, for example `agents_api`, `web_api`, `sandbox_admin`, `node_channel`. */
-  family: string;
-  requests: number | null;
-  client_errors: number | null;
-  server_errors: number | null;
-  p95_ms: number | null;
-}
-
 export interface CoreExecutionBucket {
   start: string;
-  completed: number | null;
-  failed: number | null;
-  cancelled: number | null;
   /** Highest queued Turn count seen in the bucket. */
   queued: number | null;
+  /** Highest in-progress Turn count seen in the bucket. */
+  in_progress: number | null;
+  queue_wait_p95_ms: number | null;
 }
 
-export interface CoreDependency {
-  id: string;
-  kind: CoreDependencyKind;
-  name: string;
-  status: CoreDependencyHealth;
-  latency_p95_ms: number | null;
-  /** Share of failed operations in the range, 0..1. */
-  error_rate: number | null;
-  checked_at: string | null;
-}
-
-export interface CoreProcessBucket {
+export interface CoreDatabaseBucket {
   start: string;
-  cpu_cores: number | null;
-  memory_bytes: number | null;
+  ping_p95_ms: number | null;
+  pool_in_use: number | null;
+}
+
+export interface CoreJob {
+  /** `scheduler`, `runtime_sampler`, `history_cleanup`, `audit_cleanup`, or another bounded name. */
+  id: string;
+  status: CoreJobStatus;
+  last_run_at: string | null;
+  /** Items the last run handled (Turns dispatched, Runtimes sampled, rows removed). */
+  processed: number | null;
+  failed: number | null;
 }
 
 export interface CoreMetrics {
@@ -65,38 +47,38 @@ export interface CoreMetrics {
   range: { start: string; end: string; resolution_seconds: number };
   service: {
     status: "running" | "maintenance" | "degraded";
-    version: string | null;
+    /** Build revision (source commit) of the running Core. */
+    revision: string | null;
     started_at: string | null;
-    instances: number | null;
-  };
-  ingress: {
-    requests: number | null;
-    client_errors: number | null;
-    server_errors: number | null;
-    latency_ms: CoreLatency;
-    series: CoreIngressBucket[];
-    routes: CoreRouteFamily[];
+    /** Whether this process holds the database's execution lease. */
+    execution_owner: boolean | null;
   };
   execution: {
-    active_turns: number | null;
+    slots_in_use: number | null;
+    slots_total: number | null;
     queued_turns: number | null;
-    completed: number | null;
-    failed: number | null;
-    cancelled: number | null;
+    /** Queued Turns whose Session has no connected daemon (part of queued_turns). */
+    waiting_for_daemon: number | null;
+    in_progress_turns: number | null;
+    oldest_queued_seconds: number | null;
+    connected_daemons: number | null;
+    /** Turns failed with execution_interrupted in the range. */
+    interrupted: number | null;
+    /** Requests refused with execution_unavailable in the range. */
+    unavailable: number | null;
     queue_wait_ms: CoreLatency;
-    run_duration_ms: CoreLatency;
     series: CoreExecutionBucket[];
   };
-  dependencies: CoreDependency[];
+  database: {
+    ping_ms: CoreLatency;
+    pool: { in_use: number | null; idle: number | null; max: number | null };
+    size_bytes: number | null;
+    series: CoreDatabaseBucket[];
+  };
+  jobs: CoreJob[];
   process: {
-    cpu_cores: number | null;
-    cpu_limit_cores: number | null;
     memory_bytes: number | null;
-    memory_limit_bytes: number | null;
-    open_connections: number | null;
-    disk_used_bytes: number | null;
-    disk_total_bytes: number | null;
-    series: CoreProcessBucket[];
+    goroutines: number | null;
   };
 }
 
@@ -105,6 +87,10 @@ type Json = Record<string, unknown>;
 function record(value: unknown, path: string): Json {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new AgentCoreError(`Core metrics: ${path} is not an object.`, 0, "invalid_response");
   return value as Json;
+}
+
+function optional(value: unknown): Json {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Json : {};
 }
 
 function number(value: unknown): number | null {
@@ -122,12 +108,11 @@ function list<T>(value: unknown, item: (entry: Json, index: number) => T, path: 
 }
 
 function latency(value: unknown): CoreLatency {
-  const entry = value && typeof value === "object" ? value as Json : {};
+  const entry = optional(value);
   return { p50: number(entry.p50), p95: number(entry.p95) };
 }
 
-const dependencyKinds = new Set<CoreDependencyKind>(["database", "queue", "object_storage", "model_provider", "runtime_sampler", "other"]);
-const dependencyHealth = new Set<CoreDependencyHealth>(["ok", "degraded", "down", "unknown"]);
+const jobStatuses = new Set<CoreJobStatus>(["ok", "failing", "stopped", "unknown"]);
 
 /** Validates the envelope and normalises every missing figure to null. */
 export function projectCoreMetrics(value: unknown): CoreMetrics {
@@ -135,73 +120,58 @@ export function projectCoreMetrics(value: unknown): CoreMetrics {
   if (body.object !== "core.metrics") throw new AgentCoreError("Core metrics: unexpected object type.", 0, "invalid_response");
   const range = record(body.range, "range");
   const service = record(body.service, "service");
-  const ingress = record(body.ingress, "ingress");
-  const execution = record(body.execution, "execution");
-  const process = record(body.process, "process");
+  const execution = optional(body.execution);
+  const database = optional(body.database);
+  const pool = optional(database.pool);
+  const process = optional(body.process);
   const status = service.status === "maintenance" || service.status === "degraded" ? service.status : "running";
   return {
     object: "core.metrics",
     range: { start: String(range.start ?? ""), end: String(range.end ?? ""), resolution_seconds: number(range.resolution_seconds) ?? 60 },
-    service: { status, version: text(service.version), started_at: text(service.started_at), instances: number(service.instances) },
-    ingress: {
-      requests: number(ingress.requests),
-      client_errors: number(ingress.client_errors),
-      server_errors: number(ingress.server_errors),
-      latency_ms: latency(ingress.latency_ms),
-      series: list(ingress.series, (entry) => ({
-        start: String(entry.start ?? ""),
-        success: number(entry.success),
-        client_error: number(entry.client_error),
-        server_error: number(entry.server_error),
-        p50_ms: number(entry.p50_ms),
-        p95_ms: number(entry.p95_ms),
-      }), "ingress.series"),
-      routes: list(ingress.routes, (entry) => ({
-        family: String(entry.family ?? "other"),
-        requests: number(entry.requests),
-        client_errors: number(entry.client_errors),
-        server_errors: number(entry.server_errors),
-        p95_ms: number(entry.p95_ms),
-      }), "ingress.routes"),
+    service: {
+      status,
+      revision: text(service.revision),
+      started_at: text(service.started_at),
+      execution_owner: typeof service.execution_owner === "boolean" ? service.execution_owner : null,
     },
     execution: {
-      active_turns: number(execution.active_turns),
+      slots_in_use: number(execution.slots_in_use),
+      slots_total: number(execution.slots_total),
       queued_turns: number(execution.queued_turns),
-      completed: number(execution.completed),
-      failed: number(execution.failed),
-      cancelled: number(execution.cancelled),
+      waiting_for_daemon: number(execution.waiting_for_daemon),
+      in_progress_turns: number(execution.in_progress_turns),
+      oldest_queued_seconds: number(execution.oldest_queued_seconds),
+      connected_daemons: number(execution.connected_daemons),
+      interrupted: number(execution.interrupted),
+      unavailable: number(execution.unavailable),
       queue_wait_ms: latency(execution.queue_wait_ms),
-      run_duration_ms: latency(execution.run_duration_ms),
       series: list(execution.series, (entry) => ({
         start: String(entry.start ?? ""),
-        completed: number(entry.completed),
-        failed: number(entry.failed),
-        cancelled: number(entry.cancelled),
         queued: number(entry.queued),
+        in_progress: number(entry.in_progress),
+        queue_wait_p95_ms: number(entry.queue_wait_p95_ms),
       }), "execution.series"),
     },
-    dependencies: list(body.dependencies, (entry, index) => ({
-      id: String(entry.id ?? index),
-      kind: dependencyKinds.has(entry.kind as CoreDependencyKind) ? entry.kind as CoreDependencyKind : "other",
-      name: String(entry.name ?? entry.id ?? ""),
-      status: dependencyHealth.has(entry.status as CoreDependencyHealth) ? entry.status as CoreDependencyHealth : "unknown",
-      latency_p95_ms: number(entry.latency_p95_ms),
-      error_rate: number(entry.error_rate),
-      checked_at: text(entry.checked_at),
-    }), "dependencies"),
-    process: {
-      cpu_cores: number(process.cpu_cores),
-      cpu_limit_cores: number(process.cpu_limit_cores),
-      memory_bytes: number(process.memory_bytes),
-      memory_limit_bytes: number(process.memory_limit_bytes),
-      open_connections: number(process.open_connections),
-      disk_used_bytes: number(process.disk_used_bytes),
-      disk_total_bytes: number(process.disk_total_bytes),
-      series: list(process.series, (entry) => ({
+    database: {
+      ping_ms: latency(database.ping_ms),
+      pool: { in_use: number(pool.in_use), idle: number(pool.idle), max: number(pool.max) },
+      size_bytes: number(database.size_bytes),
+      series: list(database.series, (entry) => ({
         start: String(entry.start ?? ""),
-        cpu_cores: number(entry.cpu_cores),
-        memory_bytes: number(entry.memory_bytes),
-      }), "process.series"),
+        ping_p95_ms: number(entry.ping_p95_ms),
+        pool_in_use: number(entry.pool_in_use),
+      }), "database.series"),
+    },
+    jobs: list(body.jobs, (entry, index) => ({
+      id: String(entry.id ?? index),
+      status: jobStatuses.has(entry.status as CoreJobStatus) ? entry.status as CoreJobStatus : "unknown",
+      last_run_at: text(entry.last_run_at),
+      processed: number(entry.processed),
+      failed: number(entry.failed),
+    }), "jobs"),
+    process: {
+      memory_bytes: number(process.memory_bytes),
+      goroutines: number(process.goroutines),
     },
   };
 }

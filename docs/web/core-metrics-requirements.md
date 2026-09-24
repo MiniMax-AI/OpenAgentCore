@@ -2,17 +2,23 @@
 
 Status: requested by Core Web (Monitor › Core metrics). The page and the typed
 client (`packages/agents-client/src/core-metrics.ts`) are built against the
-contract below; Core does not serve it yet, and the page shows "Core does not
-report its own metrics yet" until it does. It implements the "System" section of
-`contracts/agents-api/system-observability-plan.md` (PR #93).
+contract below; Core does not serve it yet, and the page says "Core does not
+report its own metrics yet" until it does.
 
-## Scope
+## What Core is, and what the page measures
 
-Core metrics answer what no other console page does: is Core serving requests,
-is its Turn scheduling keeping up, are its dependencies healthy, and is its
-process within limits. Agent outcomes, durations, models and tools stay on Agent
-metrics; sandbox capacity and hosted Runtimes stay on Sandbox metrics. The two
-must not be duplicated here.
+Core is one `agents-api` process with one execution owner per database
+(`pg_try_advisory_lock`). There is no message queue: a queued Turn is a row in
+`turns`, and the execution worker polls it into one of four execution slots
+(Turns, environment input and file reads and writes share them) and hands it to
+the Session's connected daemon. PostgreSQL is the only store (files are large
+objects). Core never calls model providers; harnesses in the Runtime do.
+
+So the page shows only what this process owns: execution slots, the Turn queue
+and connected daemons; the database; the periodic background jobs; and the
+process. Agent outcomes and durations stay on Agent metrics; sandbox capacity
+stays on Sandbox metrics. Instance counts, message queues, object storage,
+model-provider health and data-disk usage do not apply and are not requested.
 
 ## Endpoint
 
@@ -20,11 +26,9 @@ must not be duplicated here.
 
 - Deployment administrator only (the paired console's Web API). No tenant,
   project, key or free-form query parameters.
-- Aggregated server-side over complete buckets. Suggested resolution: 60 s (1h),
+- Series are aggregated over complete buckets. Suggested resolution: 60 s (1h),
   300 s (6h), 900 s (24h), 7200 s (7d).
-- Every figure Core cannot measure is `null`, never `0`. An empty bucket is not an
-  observed zero.
-- Health polling and the metrics request itself are excluded from ingress counts.
+- Every figure Core cannot measure is `null`, never `0`.
 
 ## Response
 
@@ -34,69 +38,50 @@ must not be duplicated here.
   "range": { "start": "RFC 3339", "end": "RFC 3339", "resolution_seconds": 60 },
   "service": {
     "status": "running | maintenance | degraded",
-    "version": "string | null",
+    "revision": "source commit | null",
     "started_at": "RFC 3339 | null",
-    "instances": "integer | null"
-  },
-  "ingress": {
-    "requests": "integer | null",
-    "client_errors": "integer | null",
-    "server_errors": "integer | null",
-    "latency_ms": { "p50": "number | null", "p95": "number | null" },
-    "series": [
-      { "start": "RFC 3339", "success": 0, "client_error": 0, "server_error": 0, "p50_ms": 0, "p95_ms": 0 }
-    ],
-    "routes": [
-      { "family": "agents_api | web_api | sandbox_admin | node_channel | other", "requests": 0, "client_errors": 0, "server_errors": 0, "p95_ms": 0 }
-    ]
+    "execution_owner": "boolean | null"
   },
   "execution": {
-    "active_turns": "integer | null",
-    "queued_turns": "integer | null",
-    "queue_wait_ms": { "p50": "number | null", "p95": "number | null" },
-    "series": [ { "start": "RFC 3339", "queued": "integer | null" } ]
+    "slots_in_use": 3, "slots_total": 4,
+    "queued_turns": 2, "waiting_for_daemon": 1, "in_progress_turns": 3,
+    "oldest_queued_seconds": 130,
+    "connected_daemons": 9,
+    "interrupted": 0, "unavailable": 3,
+    "queue_wait_ms": { "p50": 420, "p95": 2600 },
+    "series": [ { "start": "RFC 3339", "queued": 1, "in_progress": 3, "queue_wait_p95_ms": 1600 } ]
   },
-  "dependencies": [
-    {
-      "id": "string",
-      "kind": "database | queue | object_storage | model_provider | runtime_sampler | other",
-      "name": "string",
-      "status": "ok | degraded | down | unknown",
-      "latency_p95_ms": "number | null",
-      "error_rate": "number 0..1 | null",
-      "checked_at": "RFC 3339 | null"
-    }
+  "database": {
+    "ping_ms": { "p50": 1.8, "p95": 3.4 },
+    "pool": { "in_use": 6, "idle": 4, "max": 20 },
+    "size_bytes": 1331439861,
+    "series": [ { "start": "RFC 3339", "ping_p95_ms": 3.1, "pool_in_use": 7 } ]
+  },
+  "jobs": [
+    { "id": "scheduler | runtime_sampler | history_cleanup | audit_cleanup", "status": "ok | failing | stopped | unknown", "last_run_at": "RFC 3339 | null", "processed": 12, "failed": 1 }
   ],
-  "process": {
-    "cpu_cores": "number | null",
-    "cpu_limit_cores": "number | null",
-    "memory_bytes": "integer | null",
-    "memory_limit_bytes": "integer | null",
-    "open_connections": "integer | null",
-    "disk_used_bytes": "integer | null",
-    "disk_total_bytes": "integer | null",
-    "series": [ { "start": "RFC 3339", "cpu_cores": "number | null", "memory_bytes": "integer | null" } ]
-  }
+  "process": { "memory_bytes": 190840832, "goroutines": 214 }
 }
 ```
 
-The client also accepts `execution.completed`, `failed`, `cancelled` and
-`run_duration_ms` for forward compatibility, but the page does not show them:
-Turn outcomes and durations belong to Agent metrics.
+## Where each figure comes from
 
-## Semantics
+| Figure | Source in Core |
+| --- | --- |
+| `revision`, `started_at` | Build revision via `-ldflags` at build time; process start time |
+| `execution_owner` | The execution lease (`lease.Ping`) |
+| `slots_in_use`, `slots_total` | The worker's active set and its fixed limit of 4 |
+| `queued_turns`, `in_progress_turns`, `oldest_queued_seconds` | `turns` by status; oldest `created_at` of queued Turns |
+| `waiting_for_daemon` | Queued Turns whose Session has no connected daemon |
+| `connected_daemons` | The daemon registry (`Registry.Devices()`) |
+| `queue_wait_ms`, `series[].queue_wait_p95_ms` | `started_at − created_at` of Turns started in the bucket |
+| `interrupted`, `unavailable` | Turns failed with `execution_interrupted`; requests refused with `execution_unavailable` in the range |
+| `database.ping_ms` | A periodic ping (for example every 30 s) |
+| `database.pool` | `pgxpool.Stat()` |
+| `database.size_bytes` | `pg_database_size(current_database())` |
+| `jobs` | Last result of the worker poll, the Runtime sampler sweep (listed/observed/failed, today only logged), history cleanup and audit cleanup |
+| `process` | Go runtime memory statistics and goroutine count |
 
-- **Ingress:** completed HTTP requests by bounded route family and coarse outcome
-  (2xx/3xx success, 4xx client error, 5xx server error), with a latency histogram
-  recorded after the response. Transport health, not Turn success.
-- **Queue:** `active_turns` and `queued_turns` are current gauges from Core's
-  scheduling ownership; `queued` per bucket is the highest queued count seen;
-  queue wait is measured from persisted enqueue and start timestamps.
-- **Dependencies:** status from Core's own checks and real calls. Model providers
-  are the configured provider endpoints (one row each), not model names.
-  `runtime_sampler` reports collector health: failed or timed-out samples over
-  attempted samples.
-- **Process:** all Core instances together. Disk is the volume that holds Core's
-  data directory.
-- Metric labels stay bounded: no Session, allocation, tenant, key, tool name or
-  native identifiers.
+Series need a small in-memory ring buffer (or the existing history store) sampled
+once per resolution step. HTTP request rate and latency are not requested now;
+they would need a new middleware and can follow later.
