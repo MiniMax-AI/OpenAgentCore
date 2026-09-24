@@ -10,7 +10,6 @@ export interface AdminClientOptions {
 export interface AdminProject {
   id: string;
   name: string;
-  source: "console" | "config";
   created_at: string;
   archived_at: string | null;
   active_key_count: number;
@@ -22,8 +21,7 @@ export interface AdminAPIKey {
   project_id: string;
   name: string;
   prefix: string;
-  kind: "issued" | "static";
-  created_at: string | null;
+  created_at: string;
   revoked_at: string | null;
 }
 export interface AdminIssuedAPIKey extends AdminAPIKey { key: string }

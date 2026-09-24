@@ -7,11 +7,11 @@ const keyId = "44444444-4444-4444-8444-444444444444";
 const sessionId = "22222222-2222-4222-8222-222222222222";
 const resourceId = "33333333-3333-4333-8333-333333333333";
 const key = {
-  id: keyId, name: "SDK", prefix: "pc_example", kind: "issued", project_id: projectId,
+  id: keyId, name: "SDK", prefix: "pc_example", project_id: projectId,
   created_at: "2026-09-24T00:00:00Z", revoked_at: null,
 };
 const project = {
-  id: projectId, name: "Research", source: "console", created_at: "2026-09-24T00:00:00Z",
+  id: projectId, name: "Research", created_at: "2026-09-24T00:00:00Z",
   archived_at: null, active_key_count: 2,
 };
 function json(value: unknown, status = 200) {
@@ -101,9 +101,9 @@ describe("AdminClient transport boundary", () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => json({ data: [], has_more: false }));
     const signal = new AbortController().signal;
     const client = new AdminClient({ baseUrl: "https://core.test/core/v1/admin/", adminToken: () => "deployment-secret", fetch });
-    await client.listAPIKeys(projectId, { after: "static:a", limit: 5, order: "asc", signal });
+    await client.listAPIKeys(projectId, { after: keyId, limit: 5, order: "asc", signal });
     const [url, init] = fetch.mock.calls[0]!;
-    expect(url).toBe(`https://core.test/core/v1/admin/projects/${projectId}/keys?after=static%3Aa&limit=5&order=asc`);
+    expect(url).toBe(`https://core.test/core/v1/admin/projects/${projectId}/keys?after=${keyId}&limit=5&order=asc`);
     expect(init?.signal).toBe(signal);
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer deployment-secret");
   });
@@ -131,8 +131,8 @@ describe("AdminClient response contracts", () => {
     expect((await issued.client.issueAPIKey(projectId, { name: "SDK" })).key).toBe("once-only");
     await expect(issued.client.issueAPIKey(sessionId, { name: "SDK" })).rejects.toMatchObject({ code: "invalid_admin_response" });
     await expect(clientWith({ data: [{ ...key, key: "leak" }], has_more: false }).client.listAPIKeys(projectId)).rejects.toMatchObject({ code: "invalid_admin_response" });
-    const read = clientWith({ data: [{ ...key, kind: "static", created_at: "0001-01-01T00:00:00Z" }], has_more: false });
-    expect((await read.client.listAPIKeys(projectId)).data[0]?.kind).toBe("static");
+    const read = clientWith({ data: [key], has_more: false });
+    expect((await read.client.listAPIKeys(projectId)).data[0]).toEqual(key);
     await expect(read.client.listAPIKeys(sessionId)).rejects.toMatchObject({ code: "invalid_admin_response" });
     expect(await clientWith({ id: keyId, deleted: true }).client.revokeAPIKey(projectId, keyId)).toEqual({ id: keyId, deleted: true });
   });
@@ -240,12 +240,12 @@ describe("AdminClient deployment read models", () => {
 });
 
 describe("AdminClient project lifecycle", () => {
-  it("creates projects with server-owned IDs and accepts console/config projects in the catalog", async () => {
+  it("creates projects with server-owned IDs and lists their metadata", async () => {
     const { client, fetch } = clientWith(project);
     const input = { name: "Research", id: "must-not-be-sent", tenant_id: "must-not-be-sent" };
     expect(await client.createProject(input)).toEqual(project);
     expect(JSON.parse(fetch.mock.calls[0]![1]!.body as string)).toEqual({ name: "Research" });
-    const catalog = { data: [project, { ...project, id: resourceId, source: "config", name: "configured", active_key_count: 3 }], has_more: false };
+    const catalog = { data: [project, { ...project, id: resourceId, name: "Other", active_key_count: 3 }], has_more: false };
     expect(await clientWith(catalog).client.listProjects()).toEqual(catalog);
     await expect(clientWith({ ...catalog, data: [{ ...project, tenant_id: "hidden" }] }).client.listProjects()).rejects.toMatchObject({ code: "invalid_admin_response" });
     await expect(clientWith({ ...project, active_key_count: -1 }).client.createProject({ name: "Research" })).rejects.toMatchObject({ code: "invalid_admin_response" });
@@ -285,9 +285,9 @@ describe("AdminClient project lifecycle", () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
-  it("surfaces configuration-owned and archived-project conflicts without another request", async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => json({ error: { message: "Project is configuration-managed.", code: "project_read_only" } }, 409));
-    await expect(new AdminClient({ fetch }).archiveProject(projectId)).rejects.toMatchObject({ status: 409, code: "project_read_only" });
+  it("surfaces archived-project conflicts without another request", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => json({ error: { message: "Project is archived.", code: "conflict_error" } }, 409));
+    await expect(new AdminClient({ fetch }).issueAPIKey(projectId, { name: "SDK" })).rejects.toMatchObject({ status: 409, code: "conflict_error" });
     expect(fetch).toHaveBeenCalledOnce();
   });
 });
@@ -323,5 +323,17 @@ describe("AdminClient project monitoring", () => {
     const value = { object: "list", data: [{ project_id: projectId, observation }], has_more: false, first_id: sessionId, last_id: sessionId };
     expect(await clientWith(value).client.listRuntimeObservations()).toEqual(value);
     await expect(clientWith({ ...value, data: [{ key_id: keyId, observation }] }).client.listRuntimeObservations()).rejects.toMatchObject({ code: "invalid_admin_response" });
+  });
+});
+
+describe("AdminClient database-owned identities", () => {
+  it("requires persisted creation timestamps on projects and keys", async () => {
+    await expect(clientWith({ data: [{ ...project, created_at: null }], has_more: false }).client.listProjects()).rejects.toMatchObject({ code: "invalid_admin_response" });
+    await expect(clientWith({ data: [{ ...key, created_at: null }], has_more: false }).client.listAPIKeys(projectId)).rejects.toMatchObject({ code: "invalid_admin_response" });
+  });
+
+  it.each(["issued", "static"])("preserves %s key provenance in historical ownership records", async (kind) => {
+    const owner = { resource_id: resourceId, api_key: { id: keyId, name: "Original key", prefix: "p", kind, revoked_at: null }, source: "api_key", admin_audit_id: null };
+    expect(await clientWith({ data: [owner] }).client.retrieveResourceOwners(projectId, "agent", [resourceId])).toEqual({ data: [owner] });
   });
 });

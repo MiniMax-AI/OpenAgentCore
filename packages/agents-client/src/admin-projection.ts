@@ -18,17 +18,17 @@ function date(value: unknown): boolean {
   return value === null || (typeof value === "string" && Number.isFinite(Date.parse(value)));
 }
 export function projectAdminProject(value: unknown, expectedId?: string): AdminProject {
-  const project = record(value, ["id", "name", "source", "created_at", "archived_at", "active_key_count"]);
+  const project = record(value, ["id", "name", "created_at", "archived_at", "active_key_count"]);
   strings(project, ["id", "name", "created_at"]);
-  if ((project.source !== "console" && project.source !== "config") || !date(project.created_at) ||
+  if (!date(project.created_at) ||
     !date(project.archived_at) || !isNonnegativeInteger(project.active_key_count) ||
     (expectedId !== undefined && !sameResourceId(project.id as string, expectedId))) return invalidAdminResponse();
   return { ...project } as unknown as AdminProject;
 }
 export function projectAdminKey(value: unknown, projectId: string): AdminAPIKey {
-  const key = record(value, ["id", "project_id", "name", "prefix", "kind", "created_at", "revoked_at"]);
-  strings(key, ["id", "project_id", "name", "prefix"]);
-  if ((key.kind !== "issued" && key.kind !== "static") || !date(key.created_at) || !date(key.revoked_at) ||
+  const key = record(value, ["id", "project_id", "name", "prefix", "created_at", "revoked_at"]);
+  strings(key, ["id", "project_id", "name", "prefix", "created_at"]);
+  if (!date(key.created_at) || !date(key.revoked_at) ||
     !sameResourceId(key.project_id as string, projectId)) return invalidAdminResponse();
   return { ...key } as unknown as AdminAPIKey;
 }
@@ -36,7 +36,7 @@ export function projectIssuedAdminKey(value: unknown, projectId: string): AdminI
   if (!isRecord(value) || typeof value.key !== "string" || value.key.length === 0) return invalidAdminResponse();
   const { key, ...metadata } = value;
   const projected = projectAdminKey(metadata, projectId);
-  if (projected.kind !== "issued" || projected.revoked_at !== null) return invalidAdminResponse();
+  if (projected.revoked_at !== null) return invalidAdminResponse();
   return { ...projected, key };
 }
 export function projectAdminPage<T>(value: unknown, project: (entry: unknown) => T): AdminPage<T> {
