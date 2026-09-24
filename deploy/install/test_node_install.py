@@ -14,6 +14,7 @@ import urllib.error
 from unittest import mock
 
 import node_install as installer
+import node_spec
 
 
 class NodeInstallTests(unittest.TestCase):
@@ -42,6 +43,7 @@ class NodeInstallTests(unittest.TestCase):
         for patch in (mock.patch.object(installer.Path, "home", return_value=self.home),
                       mock.patch.object(installer, "preflight"),
                       mock.patch.object(installer, "wait_ready"),
+                      mock.patch.object(installer, "open_request", side_effect=self.configuration_response),
                       mock.patch.object(installer.distribution.urllib.request, "build_opener", return_value=mock.Mock(open=self.artifact_response)),
                       mock.patch.object(installer, "micro_home", return_value=self.home / "m"),
                       mock.patch.object(installer, "fetch", side_effect=lambda source, name: io.BytesIO(self.payloads[name])),
@@ -50,6 +52,16 @@ class NodeInstallTests(unittest.TestCase):
                       mock.patch.object(installer.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"statically linked", b""))):
             patch.start()
             self.addCleanup(patch.stop)
+
+    def configuration_response(self, request, **kwargs):
+        resources = {"cpus": 3, "memory_mib": 6144}
+        if self.args.provider == "microsandbox":
+            resources.update(root_disk_mib=10240, environment_disk_mib=12288)
+        spec = {"resources": resources, "runtime": node_spec.release(self.manifest)}
+        configuration = {"installation_id": self.args.installation_id, "provider": self.args.provider,
+                         "core_url": self.args.core_url, "generation": 1, "specification": spec,
+                         "specification_digest": node_spec.digest(self.args.provider, spec)}
+        return io.BytesIO(json.dumps(configuration).encode())
 
     def artifact_response(self, url, **kwargs):
         for name, item in self.manifest["artifacts"].items():
@@ -75,6 +87,12 @@ class NodeInstallTests(unittest.TestCase):
             secret = Path(arguments[arguments.index("--enrollment-token-file") + 1])
             self.assertEqual(secret.read_text(), "synthetic-once-token")
             self.assertEqual(stat.S_IMODE(secret.stat().st_mode), 0o600)
+            identity = {"node_id": "634d97be-e54d-40f0-9468-ae6b62be85bf", "installation_id": self.args.installation_id,
+                        "provider": self.args.provider, "deployment_generation": 1,
+                        "specification_digest": node_spec.digest(self.args.provider, json.loads((self.root / "provider.json").read_text())["specification"])}
+            path = self.root / "state/node/identity.json"
+            path.write_text(json.dumps({"identity": identity, "credential": "a" * 64, "core_url": self.args.core_url}))
+            path.chmod(0o600)
             if self.fail_registration:
                 raise installer.InstallError(failure)
         if "enable" in arguments and self.fail_service:
@@ -132,7 +150,7 @@ class NodeInstallTests(unittest.TestCase):
         config['docker']['image'] = 'sha256:' + 'f' * 64
         (self.root / 'provider.json').write_text(json.dumps(config))
         self.calls.clear()
-        with self.assertRaisesRegex(installer.InstallError, 'Retained Docker image differs'):
+        with self.assertRaisesRegex(node_spec.SpecificationError, 'Retained Docker image differs'):
             self.install()
         self.assertFalse(any('register' in call or 'enable' in call for call, _ in self.calls))
 
@@ -150,6 +168,10 @@ class NodeInstallTests(unittest.TestCase):
         self.install()
         config = json.loads((self.root / "provider.json").read_text())["microsandbox"]
         self.assertEqual(config["runtime_sha256"], self.manifest["microsandbox"]["runtime_sha256"])
+        self.assertEqual(config["cpus"], 3)
+        self.assertEqual(config["memory_mib"], 6144)
+        self.assertEqual(config["root_disk_mib"], 10240)
+        self.assertEqual(config["environment_disk_mib"], 12288)
         self.assertEqual(config["idle_seconds"], 300)
         self.assertEqual(config["retention_seconds"], 86400)
         rules = config["network"]["rules"]
@@ -196,12 +218,12 @@ class NodeInstallTests(unittest.TestCase):
         for field, value in (("provider", "microsandbox"), ("core_url", "https://other.example")):
             before = getattr(self.args, field)
             setattr(self.args, field, value)
-            with self.assertRaisesRegex(installer.InstallError, "configuration differs"):
+            with self.assertRaisesRegex((installer.InstallError, node_spec.SpecificationError), "differs"):
                 self.install()
             setattr(self.args, field, before)
         self.manifest["source_commit"] = "f" * 40
         self.refresh_manifest()
-        with self.assertRaisesRegex(installer.InstallError, "configuration differs"):
+        with self.assertRaisesRegex((installer.InstallError, node_spec.SpecificationError), "differs"):
             self.install()
         self.assertEqual((self.root / "provider.json").read_bytes(), original)
 
@@ -266,6 +288,38 @@ class NodeInstallTests(unittest.TestCase):
             installer.main(["--source-url", self.args.source_url, "--core-url", self.args.core_url,
                             "--provider", "docker", "--installation-id", self.args.installation_id])
             self.assertNotIn("PARSAR_NODE_ENROLLMENT_TOKEN", os.environ)
+
+    def test_offline_bundle_uses_same_bootstrap_and_verified_artifacts(self):
+        bundle = self.home / "bundle"
+        bundle.mkdir()
+        for name in ("manifest.json", "SHA256SUMS", "runtime/seccomp.json"):
+            target = bundle / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(self.payloads[name])
+        for name, entry in self.manifest["artifacts"].items():
+            target = bundle / "artifacts" / entry["filename"]
+            target.parent.mkdir(exist_ok=True)
+            target.write_bytes(self.payloads[name])
+        self.args.bundle = bundle
+        self.args.source_url = None
+        with mock.patch.object(installer, "fetch", side_effect=AssertionError("Unexpected metadata download")), \
+                mock.patch.object(installer.distribution.urllib.request, "build_opener", side_effect=AssertionError("Unexpected artifact download")):
+            self.install()
+        self.assertEqual(json.loads((self.root / "provider.json").read_text())["specification"], self.args.configuration["specification"])
+
+    def test_changed_local_micro_resources_cannot_reconnect(self):
+        self.args.provider = "microsandbox"
+        self.install()
+        target = self.root / "provider.json"
+        stored = json.loads(target.read_text())
+        stored["microsandbox"]["cpus"] += 1
+        target.write_text(json.dumps(stored))
+        before = target.read_bytes()
+        self.calls.clear()
+        with self.assertRaisesRegex(node_spec.SpecificationError, "microsandbox configuration differs"):
+            self.install()
+        self.assertEqual(target.read_bytes(), before)
+        self.assertFalse(any("register" in call or "enable" in call for call, _ in self.calls))
 
     def test_origin_rejects_remote_http_credentials_paths_and_redirects(self):
         for value in ("http://private.example", "https://user@core.example", "https://@core.example", "https://core.example/v1", "https://core.example?", "https://core.example#", "https://core.example\\path", "https://core.example:bad", ""):

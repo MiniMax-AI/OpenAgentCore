@@ -7,37 +7,6 @@ def bind(source, target, readonly=True):
     return {"type": "bind", "source": str(source), "target": target, "read_only": readonly}
 
 
-def managed_config(root, state, manifest):
-    root = Path(root)
-    result = {"installation_id": state["installation_id"], "provider": state["provider"],
-              "maintenance": False}
-    if state["provider"] == "docker":
-        result.update(core_url="http://core:8091/api/v1", docker={
-            "host": "unix:///var/run/docker.sock", "image": manifest["images"]["runtime"],
-            "network": state["project"] + "-runtime", "seccomp_file": "/config/seccomp.json",
-            "nested_sandbox": True,
-        })
-    else:
-        result.update(core_url=f'http://host.microsandbox.internal:{state["core_port"]}/api/v1', microsandbox={
-            "helper_path": str(root / "native/bin/agents-api-microsandbox-provider"),
-            "runtime_path": str(root / "native/microsandbox/msb"),
-            "firmware_path": str(root / "native/microsandbox/libkrunfw.so.5.6.1"),
-            "runtime_sha256": manifest["microsandbox"]["runtime_sha256"],
-            "firmware_sha256": manifest["microsandbox"]["firmware_sha256"],
-            "runtime_home": str(root / "state/msb"), "image": manifest["runtime_ref"],
-            "memory_mib": 4096, "cpus": 2, "root_disk_mib": 8192, "environment_disk_mib": 8192,
-            "idle_seconds": 300, "retention_seconds": 86400,
-            "max_active": 4, "max_retained": 16,
-            "network": {"default_egress": "deny", "default_ingress": "deny", "rules": [
-                {"action": "allow", "direction": "egress", "destination": "host", "protocol": "tcp", "port": str(state["core_port"])},
-                {"action": "allow", "direction": "egress", "destination": "host", "protocol": "udp", "port": "53"},
-                {"action": "allow", "direction": "egress", "destination": "host", "protocol": "tcp", "port": "53"},
-                {"action": "allow", "direction": "egress", "destination": "public"},
-            ]},
-        })
-    return result
-
-
 def core_environment(root, state, database_password):
     native = state["provider"] == "microsandbox"
     config = str(Path(root) / "config") if native else "/config"
@@ -60,12 +29,7 @@ def core_environment(root, state, database_password):
     }
     result["AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE"] = (
         str(Path(root) / "admin/digests.json") if native else "/admin/digests.json")
-    if not state["provider"]:
-        result["AGENTS_API_SANDBOX_INSTALLATION_ID"] = state["installation_id"]
-    if state["provider"]:
-        result["AGENTS_API_MANAGED_RUNTIMES_FILE"] = config + "/managed-runtimes.json"
-        result["AGENTS_API_SANDBOX_NODE_STATE_DIR"] = (
-            str(Path(root) / "state/sandbox-node") if native else "/state/sandbox-node")
+    result["AGENTS_API_SANDBOX_INSTALLATION_ID"] = state["installation_id"]
     return result
 
 
@@ -103,12 +67,6 @@ def compose_config(root, state, manifest, database_password):
         else:
             core["volumes"].append(bind(root / "admin/digests.json", "/admin/digests.json"))
             core["volumes"].append(bind(root / "state/e2b", "/state/e2b", False))
-            if state["provider"] == "docker":
-                core["volumes"].append(bind("/var/run/docker.sock", "/var/run/docker.sock", False))
-                core["volumes"].append(bind(root / "state/sandbox-node", "/state/sandbox-node", False))
-                core["group_add"] = [str(state["device_gid"])]
-                core["networks"] = ["default", "runtime"]
-                doc["networks"] = {"runtime": {"name": state["project"] + "-runtime"}}
             services["core"] = core
         doc["volumes"] = {"database": {}}
     if state["mode"] != "core-only":

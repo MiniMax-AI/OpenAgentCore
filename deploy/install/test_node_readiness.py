@@ -23,7 +23,7 @@ class ReadinessTests(unittest.TestCase):
         self.args = argparse.Namespace(core_url="https://core.example", provider="docker",
                                        installation_id="94be54a1-138c-4f30-bc87-b13686272dbe")
         self.identity = {"node_id": "634d97be-e54d-40f0-9468-ae6b62be85bf", "installation_id": self.args.installation_id,
-                         "provider": self.args.provider}
+                         "provider": self.args.provider, "deployment_generation": 1, "specification_digest": "b" * 64}
         self.path = self.root / "state/node/identity.json"
         self.path.parent.mkdir(parents=True)
         self.path.write_text(json.dumps({"identity": self.identity, "credential": "a" * 64, "core_url": self.args.core_url}))

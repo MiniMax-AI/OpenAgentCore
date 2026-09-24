@@ -4,6 +4,7 @@ import argparse
 import base64
 import hashlib
 import json
+import ipaddress
 import os
 from pathlib import Path
 import platform
@@ -20,9 +21,10 @@ import urllib.request
 from urllib.parse import urlsplit
 import uuid
 
-from configuration import compose_config, core_environment, managed_config
+from configuration import compose_config, core_environment
+import local_node
 import native_service
-from distribution import DistributionError, artifact, obtain_artifact, runtime_archive, image_identities, ensure_docker_image
+from distribution import DistributionError, artifact, obtain_artifact, image_identities, ensure_docker_image
 
 
 class InstallError(Exception):
@@ -64,7 +66,7 @@ def verify_bundle(bundle):
             raise InstallError("Invalid distribution path")
         if digest(path) != expected:
             raise InstallError("Distribution checksum mismatch: " + name)
-    required = {"manifest.json", "install.sh", "install.py", "configuration.py", "native_service.py", "node-install.pyz", "self-hosted-install.pyz", "distribution.py", "runtime/seccomp.json"}
+    required = {"manifest.json", "install.sh", "install.py", "configuration.py", "native_service.py", "local_node.py", "node_spec.py", "node-install.pyz", "self-hosted-install.pyz", "distribution.py", "runtime/seccomp.json"}
     required.update(f"images/{name}.tar" for name in ("core", "web", "database"))
     required.update("native/bin/" + name for name in ("agents-api", "agents-api-migrate"))
     required.add("native/e2b/agents-api-e2b-provider")
@@ -129,6 +131,14 @@ def arguments(argv=None):
     if args.web_only and args.sandbox_provider:
         parser.error("--web-only cannot install a sandbox provider")
     args.provider = (args.provider or "microsandbox") if args.sandbox_provider else None
+    if args.provider and not (args.status or args.stop):
+        endpoint = urlsplit(args.public_url or "")
+        try:
+            loopback = ipaddress.ip_address(endpoint.hostname).is_loopback
+        except ValueError:
+            loopback = endpoint.hostname == "localhost"
+        if endpoint.scheme != "https" or loopback:
+            parser.error("Local sandbox installation requires --public-url with HTTPS reachable from sandbox guests; loopback origins cannot be used")
     if args.status and args.stop:
         parser.error("Choose status or stop")
     if not args.install_dir.is_absolute():
@@ -210,10 +220,8 @@ def initialize(root, args, manifest):
             name = "core" if service == "migrate" else service
             if config.get("image") != manifest["images"].get(name):
                 raise InstallError("Retained Docker image differs; preserve the installation and inspect its configuration")
-        if state["provider"] == "docker":
-            managed = json.loads((root / "config/managed-runtimes.json").read_text())
-            if managed.get("docker", {}).get("image") != manifest["images"]["runtime"]:
-                raise InstallError("Retained Runtime image differs; preserve the installation and inspect its configuration")
+        if (root / "config/managed-runtimes.json").exists():
+            raise InstallError("Retired file-managed provider configuration exists; preserve its resources and follow the deployment replacement guide")
         if mode != "web-only":
             directory = root / "state/e2b"
             if (not directory.is_dir() or directory.is_symlink() or
@@ -240,9 +248,6 @@ def initialize(root, args, manifest):
         token = source.read_text().strip()
         if not token or any(c.isspace() for c in token) or "\x00" in token:
             raise InstallError("Invalid administrator token file")
-    else:
-        if args.provider:
-            device_gid = os.stat("/dev/kvm" if args.provider == "microsandbox" else "/var/run/docker.sock").st_gid
     if mode != "web-only":
         free_port(args.core_port)
     if mode != "core-only":
@@ -253,12 +258,8 @@ def initialize(root, args, manifest):
     directories.append("state")
     if mode != "web-only":
         directories.append("state/e2b")
-    if args.provider:
-        directories.append("state/sandbox-node")
     if mode != "core-only":
         directories.append("state/console")
-    if args.provider == "microsandbox":
-        directories.append("state/msb")
     for name in directories:
         (root / name).mkdir(mode=0o700)
     state = {"version": 1, "source_commit": manifest["source_commit"], "mode": mode,
@@ -269,15 +270,11 @@ def initialize(root, args, manifest):
         state["database_port"] = database_port()
     config = root / "config"
     if mode != "web-only":
-        if args.provider:
-            state["device_gid"] = device_gid
         private_write(config / "credential.key", base64.b64encode(secrets.token_bytes(32)).decode())
         private_write(config / "database.password", secrets.token_hex(32))
         admin_token = secrets.token_hex(32)
         private_write(root / "admin/sandbox-admin.key", admin_token)
         write_json(root / "admin/digests.json", [hashlib.sha256(admin_token.encode()).hexdigest()])
-        if args.provider:
-            write_json(config / "managed-runtimes.json", managed_config(root, state, manifest))
     if mode == "web-only":
         private_write(root / "admin/sandbox-admin.key", token)
     if mode != "core-only":
@@ -322,16 +319,6 @@ def prepare_node_payload(root, state, bundle):
                     os.unlink(temporary)
 
 
-def import_runtime(root, state, manifest, bundle):
-    if not native_service.is_native(state):
-        return
-    runtime = root / "native/microsandbox"
-    env = dict(os.environ, MSB_BACKEND="local", MSB_HOME=str(root / "state/msb"),
-               MSB_PATH=str(runtime / "msb"), MSB_LIBKRUNFW_PATH=str(runtime / "libkrunfw.so.5.6.1"))
-    run([str(runtime / "msb"), "image", "load", "--input", str(bundle / "images/runtime.tar"),
-         "--tag", manifest["runtime_ref"], "--quiet"], env=env)
-
-
 def main(argv=None):
     args = arguments(argv)
     root = args.install_dir
@@ -358,7 +345,6 @@ def main(argv=None):
     if args.provider and not args.web_only:
         print("Preparing the selected local sandbox provider...", flush=True)
         if args.provider == "microsandbox":
-            runtime_archive(manifest, bundle, bundle)
             for name in ("native/bin/agents-api-microsandbox-provider", "native/microsandbox/msb",
                          "native/microsandbox/libkrunfw.so.5.6.1"):
                 obtain_artifact(manifest, name, bundle / name, bundle)
@@ -369,30 +355,20 @@ def main(argv=None):
         images = ["database"]
     else:
         images = ["core", "database"]
-    if args.provider == "docker":
-        images.append("runtime")
     if not args.core_only and not args.web_only:
         images.append("web")
     local_images = dict(manifest["images"])
     for name in images:
-        if name == "runtime":
-            archive = lambda: runtime_archive(manifest, bundle, bundle)
-        else:
-            archive = lambda name=name: bundle / f"images/{name}.tar"
+        archive = lambda name=name: bundle / f"images/{name}.tar"
         local_images[name] = ensure_docker_image(manifest, name, archive)
     # Deployment configuration uses Docker's local IDs; published metadata is unchanged.
     deployment = dict(manifest, images=local_images)
     state = initialize(root, args, deployment)
     prepare_node_payload(root, state, bundle)
-    if state["provider"] == "docker":
-        seccomp = bundle / "runtime/seccomp.json"
-        if not (root / "config/seccomp.json").exists():
-            private_write(root / "config/seccomp.json", seccomp.read_text())
     if native_service.is_native(state):
         password = (root / "config/database.password").read_text()
         environment = core_environment(root, state, password)
         native_service.prepare(root, state, bundle, environment)
-    import_runtime(root, state, manifest, bundle)
     compose(root, "up", "--detach", "--wait")
     if native_service.is_native(state):
         migration_environment = {key: value for key, value in environment.items()
@@ -402,6 +378,8 @@ def main(argv=None):
         native_service.start(root, state)
     if state["mode"] != "web-only" and not wait_http(f'http://127.0.0.1:{state["core_port"]}/healthz'):
         raise InstallError("Core did not become healthy. Use --status; retained state has not been removed")
+    if state["provider"]:
+        local_node.install(root, state, manifest, bundle, run)
     if state["mode"] != "core-only":
         url = f'http://127.0.0.1:{state["web_port"]}'
         host = urlsplit(state.get("public_url") or url).netloc
@@ -429,7 +407,7 @@ def main(argv=None):
         print(f'API: http://127.0.0.1:{state["core_port"]}/v1')
         print("Create a Project and issue its API key through the administrator API before calling the direct Core API.")
         if state["provider"]:
-            print("Provider: " + state["provider"] + ". Runtime image prepared; Core provisions Sessions on demand.")
+            print("Provider: " + state["provider"] + ". Local node enrolled; Core provisions Sessions on demand.")
         else:
             print("No execution node installed. Open Hosted Sandbox Manager to choose a provider and add nodes.")
         print("Sandbox administrator key file: " + str(root / "admin/sandbox-admin.key"))
@@ -439,7 +417,7 @@ def main(argv=None):
 if __name__ == "__main__":
     try:
         main()
-    except (InstallError, DistributionError, RuntimeError, OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:
+    except (InstallError, local_node.LocalNodeError, DistributionError, RuntimeError, OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:
         # Errors never include generated configuration or external process output.
-        print(str(error) if isinstance(error, (InstallError, DistributionError, RuntimeError)) else "Installation failed; inspect prerequisites and private deployment files", file=sys.stderr)
+        print(str(error) if isinstance(error, (InstallError, local_node.LocalNodeError, DistributionError, RuntimeError)) else "Installation failed; inspect prerequisites and private deployment files", file=sys.stderr)
         sys.exit(1)

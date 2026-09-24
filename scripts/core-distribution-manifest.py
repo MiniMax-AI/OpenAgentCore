@@ -201,6 +201,10 @@ def bootstraps(bundle, epoch):
                 target = pathlib.Path(directory) / packaged
                 shutil.copyfile(bundle / original, target)
                 os.utime(target, (int(epoch), int(epoch)))
+            if source == "node_install.py":
+                target = pathlib.Path(directory) / "node_spec.py"
+                shutil.copyfile(bundle / "node_spec.py", target)
+                os.utime(target, (int(epoch), int(epoch)))
             zipapp.create_archive(directory, bundle / output, compressed=True)
 
 

@@ -37,7 +37,7 @@ class InstallerTests(unittest.TestCase):
                 ("core", "1"), ("runtime", "2"), ("database", "3"), ("web", "4"))},
             "image_manifest_digests": {name: "sha256:" + digit * 64 for name, digit in (
                 ("core", "a"), ("runtime", "b"), ("database", "c"), ("web", "d"))},
-            "runtime_ref": "localhost/parsar-runtime:test-install",
+            "runtime_ref": "parsar-core-runtime@sha256:" + "b" * 64,
             "microsandbox": {"runtime_sha256": "5" * 64, "firmware_sha256": "6" * 64},
         }
         self.loaded_images = set()
@@ -77,6 +77,8 @@ class InstallerTests(unittest.TestCase):
         return result
 
     def args(self, *values):
+        if "--sandbox-provider" in values and "--public-url" not in values:
+            values = (*values, "--public-url", "https://core.example")
         return install.arguments(["--install-dir", str(self.root), *values])
 
     def initialize(self, *values):
@@ -104,7 +106,7 @@ class InstallerTests(unittest.TestCase):
         (bundle / "runtime").mkdir()
         (bundle / "manifest.json").write_text(json.dumps(self.manifest))
         (bundle / "runtime/seccomp.json").write_text('{"defaultAction":"SCMP_ACT_ERRNO"}')
-        for name in ("install.py", "configuration.py", "native_service.py", "distribution.py", "install.sh"):
+        for name in ("install.py", "configuration.py", "native_service.py", "local_node.py", "node_spec.py", "distribution.py", "install.sh"):
             shutil.copyfile(Path(__file__).with_name(name), bundle / name)
         for name in ("node-install.pyz", "self-hosted-install.pyz"):
             (bundle / name).write_bytes(b"synthetic verified Python bootstrap")
@@ -251,17 +253,21 @@ class InstallerTests(unittest.TestCase):
 
     def test_retained_config_cannot_launch_an_unresolved_image(self):
         self.initialize('--sandbox-provider', 'true', '--provider', 'docker')
-        for path, select in (('compose.json', lambda value: value['services']['web']),
-                             ('config/managed-runtimes.json', lambda value: value['docker'])):
-            original = (self.root / path).read_bytes()
-            config = self.document(path)
-            select(config)['image'] = 'sha256:' + 'f' * 64
-            (self.root / path).write_text(json.dumps(config))
-            before = self.snapshot()
-            with self.subTest(path=path), self.assertRaisesRegex(install.InstallError, 'image differs'):
-                self.initialize('--sandbox-provider', 'true', '--provider', 'docker')
-            self.assertEqual(before, self.snapshot())
-            (self.root / path).write_bytes(original)
+        config = self.document('compose.json')
+        config['services']['web']['image'] = 'sha256:' + 'f' * 64
+        (self.root / 'compose.json').write_text(json.dumps(config))
+        before = self.snapshot()
+        with self.assertRaisesRegex(install.InstallError, 'image differs'):
+            self.initialize('--sandbox-provider', 'true', '--provider', 'docker')
+        self.assertEqual(before, self.snapshot())
+
+    def test_retired_file_managed_config_is_not_adopted(self):
+        self.initialize()
+        (self.root / 'config/managed-runtimes.json').write_text('{}')
+        before = self.snapshot()
+        with self.assertRaisesRegex(install.InstallError, 'Retired file-managed'):
+            self.initialize()
+        self.assertEqual(before, self.snapshot())
 
     def test_configuration_changes_refuse_without_mutating_existing_deployment(self):
         self.initialize()
@@ -278,16 +284,10 @@ class InstallerTests(unittest.TestCase):
     def test_opt_in_microsandbox_keeps_core_and_vm_processes_outside_compose(self):
         state = self.initialize("--sandbox-provider", "true")
         self.assertEqual(state["provider"], "microsandbox")
-        managed = self.document("config/managed-runtimes.json")
-        self.assertNotIn("docker", managed)
-        micro = managed["microsandbox"]
-        self.assertEqual(micro["root_disk_mib"], 8192)
-        self.assertEqual(micro["environment_disk_mib"], 8192)
-        self.assertEqual(micro["network"]["default_ingress"], "deny")
-        self.assertEqual(micro["network"]["default_egress"], "deny")
-        self.assertEqual(micro["image"], self.manifest["runtime_ref"])
-        self.assertEqual(micro["runtime_home"], str(self.root / "state/msb"))
-        self.assertEqual(micro["helper_path"], str(self.root / "native/bin/agents-api-microsandbox-provider"))
+        self.assertFalse((self.root / "config/managed-runtimes.json").exists())
+        environment = install.core_environment(self.root, state, "fixture-password")
+        self.assertEqual(environment["AGENTS_API_SANDBOX_INSTALLATION_ID"], state["installation_id"])
+        self.assertNotIn("AGENTS_API_MANAGED_RUNTIMES_FILE", environment)
         services = self.document("compose.json")["services"]
         self.assertEqual(set(services), {"database", "web"})
         for service in services.values():
@@ -302,56 +302,18 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue(web["read_only"])
         self.assertIn("no-new-privileges:true", web["security_opt"])
 
-    def test_docker_provider_socket_and_runtime_network_belong_only_to_core(self):
+    def test_local_docker_uses_deferred_core_without_provider_authority(self):
         state = self.initialize("--sandbox-provider", "true", "--provider", "docker", "--core-only")
-        managed = self.document("config/managed-runtimes.json")
-        self.assertNotIn("microsandbox", managed)
-        self.assertEqual(managed["docker"]["host"], "unix:///var/run/docker.sock")
-        self.assertEqual(managed["docker"]["image"], self.manifest["images"]["runtime"])
-        self.assertTrue(managed["docker"]["nested_sandbox"])
+        self.assertFalse((self.root / "config/managed-runtimes.json").exists())
+        self.assertFalse((self.root / "state/sandbox-node").exists())
         compose = self.document("compose.json")
-        services = compose["services"]
-        self.assertNotIn("web", services)
-        self.assertFalse((self.root / "config/console.password").exists())
-        self.assertNotIn("console_auth", state)
-        self.assertFalse((self.root / "config/console.setup.key").exists())
-        self.assertEqual(compose["networks"]["runtime"]["name"], managed["docker"]["network"])
-        self.assertEqual(managed["installation_id"], state["installation_id"])
-        for name, service in services.items():
-            self.assertNotIn("devices", service)
-            sockets = [mount for mount in service.get("volumes", [])
-                       if isinstance(mount, dict) and mount["target"] == "/var/run/docker.sock"]
-            self.assertEqual(len(sockets), 1 if name == "core" else 0)
-            self.assertEqual("runtime" in service.get("networks", []), name == "core")
-        self.assertNotIn("/dev/kvm", self.device_probes)
-
-    def test_local_node_identity_has_persistent_private_state_only_on_core(self):
-        for provider in ("docker", "microsandbox"):
-            with self.subTest(provider=provider):
-                self.root = self.work / provider
-                state = self.initialize("--sandbox-provider", "true", "--provider", provider)
-                directory = self.root / "state/sandbox-node"
-                self.assertEqual(stat.S_IMODE(directory.stat().st_mode), 0o700)
-                identity = directory / "identity.json"
-                install.private_write(identity, "synthetic persistent node identity")
-                before = self.snapshot()
-                self.initialize("--sandbox-provider", "true", "--provider", provider)
-                self.assertEqual(self.snapshot(), before)
-                environment = install.core_environment(self.root, state, "synthetic database password")
-                expected = str(directory) if provider == "microsandbox" else "/state/sandbox-node"
-                self.assertEqual(environment["AGENTS_API_SANDBOX_NODE_STATE_DIR"], expected)
-                services = self.document("compose.json")["services"]
-                for name, service in services.items():
-                    mounts = service.get("volumes", [])
-                    node_mounts = [m for m in mounts if isinstance(m, dict) and m["target"] == "/state/sandbox-node"]
-                    self.assertEqual(len(node_mounts), 1 if name == "core" else 0)
-                    if node_mounts:
-                        self.assertEqual(node_mounts[0]["source"], str(directory))
-                        self.assertFalse(node_mounts[0]["read_only"])
-                        self.assertTrue(service["read_only"])
-                    for mount in mounts:
-                        if isinstance(mount, dict) and mount["target"] == "/config":
-                            self.assertTrue(mount["read_only"])
+        self.assertNotIn("networks", compose)
+        self.assertNotIn("web", compose["services"])
+        for service in compose["services"].values():
+            self.assertNotIn("docker.sock", json.dumps(service.get("volumes", [])))
+            self.assertNotIn("AGENTS_API_MANAGED_RUNTIMES_FILE", service.get("environment", {}))
+            self.assertNotIn("AGENTS_API_SANDBOX_NODE_STATE_DIR", service.get("environment", {}))
+        self.assertEqual(compose["services"]["core"]["environment"]["AGENTS_API_SANDBOX_INSTALLATION_ID"], state["installation_id"])
 
     def test_administrator_credential_is_private_and_only_web_holds_plaintext(self):
         for provider in (None, "docker", "microsandbox"):
@@ -538,6 +500,16 @@ class InstallerTests(unittest.TestCase):
                 env = install.core_environment(self.root, configured, "fixture-password")
                 self.assertEqual(env["AGENTS_API_DAEMON_WS_URL"], expected + "/api/v1/agent-daemon/ws")
 
+    def test_local_opt_in_requires_non_loopback_https_origin_before_installation(self):
+        for provider in ("docker", "microsandbox"):
+            for origin in (None, "http://localhost:8080", "https://127.0.0.1:8443"):
+                flags = ["--sandbox-provider", "true", "--provider", provider]
+                if origin:
+                    flags += ["--public-url", origin]
+                with self.subTest(provider=provider, origin=origin), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                    install.arguments(flags)
+        self.assertFalse(self.root.exists())
+
     def test_provider_requires_explicit_enablement_and_cannot_belong_to_web_only(self):
         self.assertIsNone(self.args("--sandbox-provider", "false").provider)
         self.assertEqual(self.args("--sandbox-provider").provider, "microsandbox")
@@ -581,16 +553,16 @@ class InstallerTests(unittest.TestCase):
                         mock.patch.object(install.os, "access", return_value=True), \
                         mock.patch.object(install, "run", return_value=SimpleNamespace(stdout="", returncode=0)), \
                         mock.patch.object(install, "wait_http", return_value=True), \
-                        mock.patch.object(install, "import_runtime"), \
+                        mock.patch.object(install.local_node, "install"), \
                         mock.patch.object(install.native_service, "_run", side_effect=host_command), \
                         mock.patch("distribution.urllib.request.build_opener", return_value=SimpleNamespace(open=response)), \
                         contextlib.redirect_stdout(io.StringIO()):
-                    install.main(["--install-dir", str(self.root), "--sandbox-provider", "true", "--provider", "microsandbox"])
+                    install.main(["--install-dir", str(self.root), "--sandbox-provider", "true", "--provider", "microsandbox", "--public-url", "https://core.example"])
                 self.assertTrue((self.root / "native/bin/agents-api").is_file())
                 self.assertTrue((self.root / "native/bin/agents-api-microsandbox-provider").is_file())
                 self.assertFalse((self.root / "native/bin/parsar-sandbox-node").exists())
                 self.assertNotIn(self.manifest["artifacts"]["native/bin/parsar-sandbox-node"]["filename"], requested)
-                self.assertEqual(len(requested), 0 if offline else 4)
+                self.assertEqual(len(requested), 0 if offline else 3)
                 shutil.rmtree(bundle)
                 shutil.rmtree(self.root)
 
@@ -664,20 +636,18 @@ class InstallerTests(unittest.TestCase):
                         mock.patch.object(install.platform, 'system', return_value='Linux'), \
                         mock.patch.object(install.platform, 'machine', return_value='x86_64'), \
                         mock.patch.object(install, 'run'), mock.patch.object(install, 'wait_http', return_value=True), \
-                        mock.patch.object(install, 'runtime_archive', side_effect=AssertionError('cache must avoid Runtime download')), \
+                        mock.patch.object(install.local_node, 'install'), \
+                        mock.patch.object(distribution, 'runtime_archive', side_effect=AssertionError('cache must avoid Runtime download')), \
                         contextlib.redirect_stdout(io.StringIO()):
-                    flags = ['--sandbox-provider', 'true', '--provider', provider] if provider else []
+                    flags = ['--sandbox-provider', 'true', '--provider', provider, '--public-url', 'https://core.example'] if provider else []
                     install.main(['--install-dir', str(self.root), *flags])
                     before = self.snapshot()
                     install.main(['--install-dir', str(self.root), *flags])
                     self.assertEqual(self.snapshot(), before)
                 for service, config in self.document('compose.json')['services'].items():
                     self.assertEqual(config['image'], self.manifest['image_manifest_digests']['core' if service == 'migrate' else service])
-                if provider:
-                    self.assertEqual(self.document('config/managed-runtimes.json')['docker']['image'],
-                                     self.manifest['image_manifest_digests']['runtime'])
-                else:
-                    self.assertFalse((self.root / 'state/sandbox-node').exists())
+                self.assertFalse((self.root / 'config/managed-runtimes.json').exists())
+                self.assertFalse((self.root / 'state/sandbox-node').exists())
                 self.assertEqual((self.root / 'node-payload/manifest.json').read_bytes(), published)
                 self.assertEqual((bundle / 'manifest.json').read_bytes(), published)
                 shutil.rmtree(bundle)
