@@ -30,6 +30,7 @@ def verify_session_creators(client, owner, other, replacement_key, peer_key, add
             httpx2.Client(trust_env=False, timeout=10) as raw:
 
         def check_retries(request, key, current):
+            turn_ids = [turn.id for turn in sessions.turns.list(current.id)]
             for caller in (owner, replacement, collaborator, additional_peer):
                 assert caller.beta.agents.sessions.create(**request, extra_headers=key) == current
             for caller in (collaborator, additional_peer):
@@ -37,10 +38,11 @@ def verify_session_creators(client, owner, other, replacement_key, peer_key, add
                 with raw.stream("POST", endpoint, headers=headers, json=request | {"stream": True}) as response:
                     assert response.status_code == 201
                     assert response.headers["content-type"].split(";")[0] == "text/event-stream"
-                    created = event_data(response.iter_lines())
-                    assert created["type"] == "agent.session.created"
-                    assert created["session"] == current.to_dict()
-                    assert_no_creator_fields(created["session"])
+                    # Creation retries close without replaying historical events.
+                    assert [line for line in response.iter_lines() if line] == [": connected"]
+                assert caller.beta.agents.sessions.create(**request, extra_headers=key) == current
+                assert caller.beta.agents.sessions.retrieve(current.id) == current
+                assert [turn.id for turn in caller.beta.agents.sessions.turns.list(current.id)] == turn_ids
             response = raw.post(endpoint, headers=auth | key, json=request)
             assert response.status_code == 201 and response.json() == current.to_dict()
             assert_no_creator_fields(response.json())
