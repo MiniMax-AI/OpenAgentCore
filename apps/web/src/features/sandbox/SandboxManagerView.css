@@ -39,7 +39,7 @@
 .sandbox-manager-page { display: flex; padding: 0; overflow: hidden; }
 .sandbox-manager-page > .console-page-body { max-width: none; margin: 0; }
 .sandbox-manager-page .page-header h1 { margin: 0; font-size: 20px; letter-spacing: -0.02em; }
-.sandbox-provider-settings { padding: 24px; border: 1px solid var(--line); border-radius: 12px; gap: 16px; }
+.sandbox-provider-settings { padding: 24px; background: var(--surface); border: 1px solid var(--card-border); border-radius: var(--frame-radius); box-shadow: var(--card-shadow); gap: 16px; }
 .sandbox-provider-settings h2 { margin: 0 0 8px; }
 .sandbox-provider-settings p, .sandbox-enrollment > p { font-size: 13px; line-height: 1.6; color: var(--fg-muted); }
 .sandbox-provider-settings > .button, .sandbox-enrollment > .button { align-self: flex-start; }

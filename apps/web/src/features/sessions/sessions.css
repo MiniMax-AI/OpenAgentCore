@@ -73,8 +73,9 @@
   padding: 0;
   list-style: none;
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 1px solid var(--card-border);
   border-radius: var(--frame-radius);
+  box-shadow: var(--card-shadow);
 }
 
 .transcript-turn {

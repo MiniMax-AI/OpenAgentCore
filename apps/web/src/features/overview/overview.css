@@ -203,7 +203,7 @@
   padding: 14px 8px 12px;
   color: var(--fg-muted);
   background: var(--surface);
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--card-border);
   border-radius: 14px;
   box-shadow: var(--shadow-floating);
   transform: translate(-50%, -50%);
@@ -234,8 +234,9 @@
   font: inherit;
   text-align: left;
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 1px solid var(--card-border);
   border-radius: 10px;
+  box-shadow: var(--card-shadow);
   cursor: pointer;
   transform: translateY(-50%);
   transition: border-color 160ms ease;
@@ -258,21 +259,21 @@
   right: 0;
 }
 
-.fleet-node-head {
-  display: flex;
+.fleet-node-name {
   min-width: 0;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.fleet-node-head strong {
-  min-width: 0;
-  flex: 1;
   overflow: hidden;
   font-size: 13px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.fleet-node-foot {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .fleet-node-slots {

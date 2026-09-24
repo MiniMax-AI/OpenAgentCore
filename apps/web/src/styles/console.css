@@ -22,8 +22,8 @@
   --page-gutter: 28px;
   /* Surfaces: a quiet canvas under raised white cards. */
   --canvas: #f5f5f6;
-  --card-border: rgb(20 20 30 / 7%);
-  --card-shadow: 0 1px 2px rgb(20 20 30 / 4%), 0 1px 1px rgb(20 20 30 / 2%);
+  --card-border: rgb(20 20 30 / 11%);
+  --card-shadow: 0 1px 1px rgb(20 20 30 / 3%), 0 2px 5px -2px rgb(20 20 30 / 7%);
   --data: var(--accent);
 }
 
@@ -39,8 +39,8 @@ html[data-theme="dark"] {
   --status-idle: #5e5e62;
   --meter-track: rgb(255 255 255 / 9%);
   --canvas: #121212;
-  --card-border: rgb(255 255 255 / 8%);
-  --card-shadow: 0 1px 2px rgb(0 0 0 / 30%);
+  --card-border: rgb(255 255 255 / 11%);
+  --card-shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 2px 6px -2px rgb(0 0 0 / 35%);
 }
 
 .visually-hidden,

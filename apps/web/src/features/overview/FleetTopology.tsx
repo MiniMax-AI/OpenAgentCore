@@ -84,11 +84,11 @@ export function FleetTopology({ nodes, coreLabel, coreTone, stale, onOpen }: {
             aria-label={t("fleet.open", { name, state, slots })}
             onClick={() => onOpen(node)}
           >
-            <span className="fleet-node-head">
-              <strong>{name}</strong>
+            <strong className="fleet-node-name">{name}</strong>
+            <span className="fleet-node-foot">
+              <StatusDot tone={healthTone[health]} label={state} />
               <span className="fleet-node-slots">{slots}</span>
             </span>
-            <StatusDot tone={healthTone[health]} label={state} />
           </button>
         );
       })}

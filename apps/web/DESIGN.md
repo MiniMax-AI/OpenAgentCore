@@ -10,7 +10,7 @@ colors:
   surface-subtle: "#fafafa"
   surface-muted: "#f1f1f0"
   canvas: "#f5f5f6"
-  card-border: "rgb(20 20 30 / 7%)"
+  card-border: "rgb(20 20 30 / 11%)"
   line: "#e9e9ec"
   line-muted: "#efeff1"
   line-strong: "#d6d7dc"
@@ -273,7 +273,7 @@ separate categorical palette that belongs to multi-series data alone.
 - **Canvas** (canvas): the ground of the main column (`#121212` in dark).
 - **Paper** (surface): cards, tables, KPI strips, chart grids, empty states,
   dialogs, popovers, the sidebar.
-- **Card Edge** (card-border): the faint border of raised cards.
+- **Card Edge** (card-border): the 1px border of raised cards.
 - **Margin Gray** (surface-subtle): table header band, coverage notes.
 - **Well Gray** (surface-muted): segmented-control track, secondary buttons.
 - **Hairline** (line): internal dividers of cards, chart gridlines, dialog rules.
@@ -386,8 +386,9 @@ section rhythm or toolbar.
 Depth comes from the canvas-to-card step, not from stacked shadows.
 
 ### Shadow Vocabulary
-- **Card** (`0 1px 2px rgb(20 20 30 / 4%), 0 1px 1px rgb(20 20 30 / 2%)` with a
-  `card-border` edge): KPI strips, table frames, chart grids and Overview cards.
+- **Card** (`0 1px 1px rgb(20 20 30 / 3%), 0 2px 5px -2px rgb(20 20 30 / 7%)` with
+  a 1px `card-border` edge at 11% ink): KPI strips, table frames, chart grids,
+  Overview cards, the Session transcript and the deployment panel.
 - **Control lift** (`0 1px 2px rgb(0 0 0 / 6%)`): primary and outline buttons,
   inputs, selects, the search field, the active segment.
 - **Floating** (`0 1px 2px rgb(24 24 27 / 4%), 0 8px 24px -12px rgb(24 24 27 /
