@@ -1,7 +1,7 @@
 import { createRoot } from "react-dom/client";
 
 import { ConsoleAccess } from "./features/first-run/ConsoleAccess";
-import { App } from "./App";
+import { ConsoleApp } from "./ConsoleApp";
 import { ToastProvider } from "./components/Toast";
 import { ThemeProvider } from "./lib/ThemeProvider";
 import "./i18n";
@@ -15,7 +15,7 @@ if (!root) throw new Error("Missing #root element.");
 createRoot(root).render(
   <ThemeProvider>
     <ToastProvider>
-      <ConsoleAccess><App /></ConsoleAccess>
+      <ConsoleAccess><ConsoleApp /></ConsoleAccess>
     </ToastProvider>
   </ThemeProvider>,
 );

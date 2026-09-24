@@ -18,6 +18,14 @@ export const common = {
     open: "Open",
     clearSearch: "Clear search",
   },
+  keySpace: {
+    filter: "API key",
+    all: "All API keys",
+    column: "API key",
+    disabled: "Disabled: its keys are revoked and its assets are kept.",
+    disabledOption: "{{name}} · disabled",
+    partial: "Could not load {{names}}. Other API keys are shown.",
+  },
   list: {
     search: "Search",
     count: "{{n}} total",

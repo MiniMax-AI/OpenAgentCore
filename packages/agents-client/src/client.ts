@@ -172,7 +172,7 @@ export function isSessionDeletionConflict(error: unknown): error is AgentCoreErr
   return error instanceof AgentCoreError && error.status === 409 && error.code === "conflict_error";
 }
 
-function trimTrailingSlash(value: string): string {
+export function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
@@ -201,7 +201,7 @@ function invalidStartupConfiguration(): never {
   throw new AgentCoreError("Agent Core returned an invalid startup configuration.", 502, "invalid_startup_configuration");
 }
 
-function projectStartupConfiguration(value: unknown): CoreStartupConfiguration {
+export function projectStartupConfiguration(value: unknown): CoreStartupConfiguration {
   if (!isRecord(value) || !exactFields(value, startupConfigurationFields) || value.object !== "agents.core.startup_configuration" || value.schema_version !== 1 ||
     !isRecord(value.supported) || !exactFields(value.supported, startupSupportedFields) ||
     !sortedUnique(value.supported.harnesses, isHarnessKind) || !sortedUnique(value.supported.managed_sandbox_providers, isSandboxProvider) ||
@@ -1084,7 +1084,7 @@ function nullableRuntimeInteger(value: unknown): number | null {
   return projected;
 }
 
-function projectRuntimeObservation(value: unknown, expectedSessionId?: string): RuntimeObservation {
+export function projectRuntimeObservation(value: unknown, expectedSessionId?: string): RuntimeObservation {
   if (!isRecord(value) || !exactFields(value, runtimeObservationFields)) {
     return invalidRuntimeObservation();
   }

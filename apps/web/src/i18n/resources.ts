@@ -15,6 +15,8 @@ import { resources as enResources } from "./locales/en/resources";
 import { skills as enSkills } from "./locales/en/skills";
 import { workbench as enWorkbench } from "./locales/en/workbench";
 import { ownership as enOwnership } from "./locales/en/ownership";
+import { keys as enKeys } from "./locales/en/keys";
+import { system as enSystem } from "./locales/en/system";
 import { common as zhCNCommon } from "./locales/zh-CN/common";
 import { navigation as zhCNNavigation } from "./locales/zh-CN/navigation";
 import { connection as zhCNConnection } from "./locales/zh-CN/connection";
@@ -32,6 +34,8 @@ import { resources as zhCNResources } from "./locales/zh-CN/resources";
 import { skills as zhCNSkills } from "./locales/zh-CN/skills";
 import { workbench as zhCNWorkbench } from "./locales/zh-CN/workbench";
 import { ownership as zhCNOwnership } from "./locales/zh-CN/ownership";
+import { keys as zhCNKeys } from "./locales/zh-CN/keys";
+import { system as zhCNSystem } from "./locales/zh-CN/system";
 import { apiKeyChinese } from "../lib/api-key-strings";
 import { consoleAuthChinese } from "../lib/console-auth-strings";
 import { firstRunChinese } from "../lib/first-run-strings";
@@ -72,6 +76,8 @@ export const resources = {
     skills: enSkills,
     workbench: enWorkbench,
     ownership: enOwnership,
+    keys: enKeys,
+    system: enSystem,
     sandbox: enSandbox,
     firstRun: enFirstRun,
   },
@@ -93,6 +99,8 @@ export const resources = {
     skills: zhCNSkills,
     workbench: zhCNWorkbench,
     ownership: zhCNOwnership,
+    keys: zhCNKeys,
+    system: zhCNSystem,
     sandbox: zhCNSandbox,
     firstRun: zhCNFirstRun,
   },

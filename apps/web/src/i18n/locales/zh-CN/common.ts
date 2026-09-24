@@ -18,6 +18,14 @@ export const common = {
     open: "打开",
     clearSearch: "清除搜索",
   },
+  keySpace: {
+    filter: "API 密钥",
+    all: "全部 API 密钥",
+    column: "API 密钥",
+    disabled: "已停用：它的 key 都已撤销，资产保留。",
+    disabledOption: "{{name}} · 已停用",
+    partial: "无法加载 {{names}} 的数据，其余 API 密钥照常显示。",
+  },
   list: {
     search: "搜索",
     count: "共 {{n}} 个",

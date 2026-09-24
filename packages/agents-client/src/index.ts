@@ -7,3 +7,5 @@ export * from "./sandbox-client";
 export { isEnvironmentTemplateName, isRecognizedEnvironmentTemplate } from "./environment-template-projection";
 export { isOpenAIHostedSessionEnvironment } from "./session-environment-projection";
 export { compareSkillVersionNumbers, isSkillId, isSkillUploadPath, isSkillVersionId, isSkillVersionNumber, maxSkillUploadFiles } from "./skill-projection";
+export { AdminClient, adminScopePath, copyableResourceTypes, isKeySpaceName, projectCopyResult, projectKeySpace, projectSummary, projectWriteOperationPage } from "./admin-client";
+export type { AdminClientOptions, AdminIssuedKey, AdminKey, CopyableResourceType, CopyRequest, CopyResult, KeySpace, KeySpaceStatus, OwnedRuntimeObservation, SpaceSummary, SpaceUsage, SummaryQuery, WriteOperation, WriteOperationKey, WriteOperationPage, WriteOperationQuery } from "./admin-client";
