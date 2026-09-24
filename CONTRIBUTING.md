@@ -797,6 +797,13 @@ still bounds its own response wait. Do not replay mutations after a timeout or
 lost response. Retain allocation
 and checkpoint operation receipts and observe the original operation instead.
 Disconnects and read timeouts are unavailable/uncertain, never resource absence.
+Node transport preserves an exact-reference, explicit `CreateSettled` receipt
+alongside its original provider error. Settlement authorizes eventual allocation
+release, not execution. A confirmed native Create rejected by the subsequent
+read-only configuration check, before bootstrap starts, can return that receipt.
+Do not infer settlement from timeout, missing compute or successful Kill. Strict
+configuration rejection must not prevent already-authorized cleanup: Kill still
+checks ownership independently, and release still requires creation settlement.
 Runtime resource observation uses the same immutable node placement through one
 bounded read-only Provider operation. Preserve main's Runtime observation/history
 service and authorization boundaries. The node delegates only to a provider-owned

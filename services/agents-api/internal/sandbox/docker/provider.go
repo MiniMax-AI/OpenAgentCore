@@ -162,9 +162,13 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 	if p.config.Resources != nil {
 		actual, err := p.inspect(ctx, b.Reference)
 		if err != nil {
+			info.CreateSettled = true
 			return info, err
 		}
 		if err = p.verifyConfiguration(ctx, actual); err != nil {
+			// Container creation completed and bootstrap has not started. No
+			// outstanding mutation can recreate resources after owned cleanup.
+			info.CreateSettled = true
 			return info, err
 		}
 	}

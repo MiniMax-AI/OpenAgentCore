@@ -38,12 +38,12 @@ subprocess.run(['/usr/local/bin/parsar-daemon','connect','--profile','default','
                cwd='/environment/workspace',preexec_fn=runtime_user,check=True)
 `
 
-func (b backend) create(ctx context.Context) (wire.State, error) {
+func (b backend) create(ctx context.Context) (wire.Response, error) {
 	c := wire.Compute{Name: wire.Name(b.q.Config, b.q.Reference, 0)}
 	if _, _, e := b.inspect(ctx, c); e == nil {
-		return wire.State{}, sandbox.ErrExists
+		return wire.Response{}, sandbox.ErrExists
 	} else if !sdk.IsKind(e, sdk.ErrSandboxNotFound) {
-		return wire.State{}, e
+		return wire.Response{}, e
 	}
 	bootstrap := *b.q.Bootstrap
 	policy := agentnetwork.Policy{Access: bootstrap.NetworkAccess, AllowedDomains: bootstrap.AllowedDomains}
@@ -67,35 +67,60 @@ func (b backend) create(ctx context.Context) (wire.State, error) {
 			"PARSAR_DAEMON_SUSPEND_PID_FILE": "/run/parsar/daemon-suspend.json",
 		}))
 	if e != nil {
-		return wire.State{}, e
+		return wire.Response{}, e
 	}
 	defer live.Detach(context.Background())
 	c.ID = live.ID()
-	if _, _, e = b.inspect(ctx, c); e != nil {
-		return wire.State{}, e
+	h, e := sdk.GetSandbox(ctx, c.Name)
+	if e != nil {
+		return wire.Response{}, e
+	}
+	qualified, e := qualifyCreatedConfiguration(b.q.Config, b.q.Reference, c, h.ID(), string(h.Status()), h.ConfigJSON())
+	if e != nil {
+		return qualified, e
 	}
 	data, e := json.Marshal(bootstrap)
 	if e != nil {
-		return wire.State{}, e
+		return wire.Response{}, e
 	}
 	initialization, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	result, e := runCommand(initialization, live, sandbox.Command{Args: []string{"/usr/bin/python3", "-I", "-S", "-c", bootstrapScript}, Stdin: data}, "0:0")
 	if e != nil {
-		return wire.State{}, e
+		return wire.Response{}, e
 	}
 	if result.ExitCode != 0 {
-		return wire.State{}, sandbox.ErrCommandUnconfirmed
+		return wire.Response{}, sandbox.ErrCommandUnconfirmed
 	}
 	// Persist the final bootstrap receipt without restarting the live guest.
 	// v0.7.2 cannot update active labels; ownership reads persisted config.
 	_, e = live.Modify(ctx, sdk.ModifyOptions{Labels: map[string]string{bootstrapLabel: "complete"}, Policy: sdk.ModificationPolicyNextStart})
 	if e != nil {
-		return wire.State{}, e
+		return wire.Response{}, e
 	}
 	_, state, e := b.inspect(ctx, c)
 	if e == nil && !state.BootstrapComplete {
-		return wire.State{}, sandbox.ErrCommandUnconfirmed
+		return wire.Response{}, sandbox.ErrCommandUnconfirmed
 	}
-	return state, e
+	return wire.Response{State: &state}, e
+}
+
+// Only the initial post-Create inspection uses this proof. Native creation has
+// returned successfully, and no bootstrap command has started. Ordinary inspect
+// and unknown Create outcomes cannot acquire settlement through this path.
+func qualifyCreatedConfiguration(config wire.Config, ref sandbox.Reference, created wire.Compute, actualID, status, raw string) (wire.Response, error) {
+	if created.ID == "" {
+		return wire.Response{}, sandbox.ErrOwnership
+	}
+	state, err := qualifyCompute(config, ref, created, actualID, status, raw)
+	if err != nil {
+		return wire.Response{}, err
+	}
+	if state.Status == "" || state.Status == "absent" || state.BootstrapComplete {
+		return wire.Response{}, sandbox.ErrOwnership
+	}
+	if err := qualifyConfiguration(config, created, raw, false); err != nil {
+		return wire.Response{State: &state, CreateSettled: true}, err
+	}
+	return wire.Response{State: &state}, nil
 }

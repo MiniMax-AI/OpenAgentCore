@@ -78,6 +78,11 @@ func (p *Provider) state(ctx context.Context, q Request) (State, error) {
 	if e != nil {
 		return State{}, e
 	}
+	return p.responseState(ctx, q, out)
+}
+
+func (p *Provider) responseState(ctx context.Context, q Request, out Response) (State, error) {
+	var e error
 	if out.State == nil || ValidateCompute(p.config, q.Reference, out.State.Compute) != nil || out.State.Compute.ID == "" {
 		return State{}, ErrUnconfirmed
 	}
@@ -116,8 +121,25 @@ func info(r sandbox.Reference, s State) sandbox.Info {
 	return sandbox.Info{Reference: r, ProviderID: s.Compute.ID, State: s.Status, BootstrapComplete: s.BootstrapComplete}
 }
 func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
-	s, e := p.state(ctx, Request{Operation: "create", Reference: b.Reference, Bootstrap: &b})
-	return info(b.Reference, s), e
+	q := Request{Operation: "create", Reference: b.Reference, Bootstrap: &b}
+	out, err := p.call(ctx, q)
+	settledRejection := errors.Is(err, sandbox.ErrInvalid) && !errors.Is(err, ErrUnconfirmed) && out.CreateSettled
+	if err != nil && !settledRejection {
+		return sandbox.Info{Reference: b.Reference}, err
+	}
+	s, stateErr := p.responseState(ctx, q, out)
+	if stateErr != nil {
+		return sandbox.Info{Reference: b.Reference}, stateErr
+	}
+	if settledRejection && (s.Status == "" || s.Status == "absent" || s.BootstrapComplete) {
+		return sandbox.Info{Reference: b.Reference}, ErrUnconfirmed
+	}
+	result := info(b.Reference, s)
+	if settledRejection {
+		// Settlement is independent of readiness and survives the original error.
+		result.CreateSettled, result.BootstrapComplete = true, false
+	}
+	return result, err
 }
 func (p *Provider) GetInfo(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {
 	c, e := p.Initial(ctx, r)

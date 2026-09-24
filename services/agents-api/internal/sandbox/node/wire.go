@@ -316,7 +316,9 @@ func execute(ctx context.Context, p sandbox.Provider, q request) response {
 	out.ErrorCode = errorCode(err)
 	if err != nil {
 		out.Sample = nil
-		out.Info = nil
+		if !creationSettled(out.Info, q.Reference) {
+			out.Info = nil
+		}
 		out.State = nil
 		out.Command = nil
 		out.Compute = nil

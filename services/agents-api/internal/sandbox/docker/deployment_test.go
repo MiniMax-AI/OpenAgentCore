@@ -88,8 +88,12 @@ func TestManagedDriftRejectsBeforeBootstrapAndRetainsCleanup(t *testing.T) {
 			}
 			resources.CPUs = 9
 			b := sandbox.Bootstrap{Reference: sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "secret", NetworkAccess: "enabled"}
-			if _, err = p.Create(t.Context(), b); !errors.Is(err, sandbox.ErrInvalid) {
+			info, err := p.Create(t.Context(), b)
+			if !errors.Is(err, sandbox.ErrInvalid) {
 				t.Fatal("drift accepted", err)
+			}
+			if info.Reference != b.Reference || !info.CreateSettled || info.BootstrapComplete || info.ProviderID == "" || info.State == "absent" {
+				t.Fatal("pre-bootstrap rejection lost its creation settlement", info)
 			}
 			if _, err = p.GetInfo(t.Context(), b.Reference); !errors.Is(err, sandbox.ErrInvalid) {
 				t.Fatal("drift readiness accepted", err)

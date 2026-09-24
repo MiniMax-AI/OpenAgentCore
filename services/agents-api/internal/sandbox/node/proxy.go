@@ -39,12 +39,27 @@ func (p *provider) call(ctx context.Context, q request) (response, error) {
 func (p *provider) info(ctx context.Context, q request) (sandbox.Info, error) {
 	r, e := p.call(ctx, q)
 	if e != nil {
+		if creationSettled(r.Info, q.Reference) {
+			return *r.Info, e
+		}
 		return sandbox.Info{}, e
 	}
-	if r.Info == nil || r.Info.Reference != q.Reference || r.Info.ProviderID == "" {
+	if r.Info == nil || r.Info.Reference != q.Reference || r.Info.ProviderID == "" && !creationSettled(r.Info, q.Reference) {
 		return sandbox.Info{}, sandbox.ErrComputeUnconfirmed
 	}
 	return *r.Info, nil
+}
+
+// A failed operation can still carry a provider's explicit creation receipt.
+// Keep its original error: settlement is cleanup evidence, not readiness.
+func creationSettled(info *sandbox.Info, ref sandbox.Reference) bool {
+	if info == nil || info.Reference != ref || !info.CreateSettled {
+		return false
+	}
+	if info.State == "absent" {
+		return info.ProviderID == "" && !info.BootstrapComplete
+	}
+	return info.ProviderID != ""
 }
 func (p *provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
 	return p.info(ctx, request{Operation: "create", Reference: b.Reference, Bootstrap: &b})

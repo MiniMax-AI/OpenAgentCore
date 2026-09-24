@@ -341,15 +341,21 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAlloc
 		return err
 	}
 	info, err := provider.GetInfo(ctx, runtimeReference(owner))
-	if err != nil && !errors.Is(err, sandbox.ErrNotFound) {
+	cleanup := owner.SessionDeleted || owner.Expired || owner.State == "cleanup_pending"
+	// Resource drift disqualifies execution, not cleanup already authorized by
+	// Core. Kill independently verifies ownership before removing anything.
+	invalidCleanup := cleanup && errors.Is(err, sandbox.ErrInvalid) && !errors.Is(err, sandbox.ErrOwnership)
+	if err != nil && !errors.Is(err, sandbox.ErrNotFound) && !invalidCleanup {
 		return err
 	}
 	running := err == nil && info.Reference == runtimeReference(owner) && info.ProviderID != "" && info.State == "running"
-	if err == nil && info.Reference != runtimeReference(owner) {
+	if (err == nil || invalidCleanup && info.CreateSettled) && info.Reference != runtimeReference(owner) {
 		return sandbox.ErrOwnership
 	}
-	if err == nil && (info.CreateSettled || running && info.BootstrapComplete) && !owner.CreateSettled {
-		// Only the adapter can qualify completion of its bootstrap writes.
+	settled := info.CreateSettled && (err == nil || invalidCleanup)
+	if (settled || running && info.BootstrapComplete) && !owner.CreateSettled {
+		// Explicit settlement can accompany a configuration rejection. Missing
+		// compute, a timeout or a successful Kill alone cannot settle Create.
 		owner, err = r.store.SettleRuntimeCreation(ctx, owner)
 		if err != nil {
 			return err

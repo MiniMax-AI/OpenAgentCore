@@ -63,11 +63,14 @@ type Request struct {
 	Deadline  time.Time
 }
 type Response struct {
-	Version   int
-	State     *State
-	Command   *sandbox.CommandResult
-	Metrics   *Metrics
-	ErrorCode string
+	// CreateSettled accompanies a configuration rejection after native Create
+	// completed and before bootstrap began. State binds the exact created compute.
+	CreateSettled bool `json:",omitempty"`
+	Version       int
+	State         *State
+	Command       *sandbox.CommandResult
+	Metrics       *Metrics
+	ErrorCode     string
 }
 
 // Metrics is the bounded provider-helper projection used by Core observability.

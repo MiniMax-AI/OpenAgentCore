@@ -18,8 +18,7 @@ type backend struct{ q wire.Request }
 func (b backend) run(ctx context.Context) (wire.Response, error) {
 	switch b.q.Operation {
 	case "create":
-		s, e := b.create(ctx)
-		return wire.Response{State: &s}, e
+		return b.create(ctx)
 	case "inspect":
 		_, s, e := b.inspect(ctx, b.q.Compute)
 		return wire.Response{State: &s}, e
