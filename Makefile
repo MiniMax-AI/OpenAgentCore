@@ -51,7 +51,7 @@ build-agents-api-release:
 check-agents-api: build-agents-api
 	go test ./services/agents-api/... ./packages/agents-client/... -count=1
 	PYTHONDONTWRITEBYTECODE=1 python3 services/agents-api/deploy/runtime/initialize_receipt_test.py
-	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s services/agents-api/deploy/e2b -p '*_test.py'
+	PYTHONDONTWRITEBYTECODE=1 python3 services/agents-api/deploy/e2b/managed_init_test.py
 
 docker-build-agents-api:
 	./scripts/build-agents-api-image.sh
@@ -134,4 +134,5 @@ build-e2b-provider:
 
 # The pinned SDK environment is also tested when building the shipped helper.
 check-e2b-provider:
+	PYTHONDONTWRITEBYTECODE=1 $${PARSAR_E2B_SDK_PYTHON:-python3} -m unittest discover -s services/agents-api/deploy/e2b -p '*_test.py'
 	PYTHONDONTWRITEBYTECODE=1 $${PARSAR_E2B_SDK_PYTHON:-python3} -m unittest discover -s services/agents-api/tools/e2b-provider -p '*_test.py'

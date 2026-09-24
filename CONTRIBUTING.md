@@ -648,7 +648,9 @@ Python packages after selecting E2B in Web. Application-managed self_hosted tool
 remains independent and uses the same Runtime. Qualify each changed path using actual
 provider and model execution before claiming acceptance. Run `make check-e2b-provider`
 with `PARSAR_E2B_SDK_PYTHON` pointing to the pinned SDK environment; the packaged
-helper build runs these tests as well. `make check` covers shared initialization.
+helper build runs the provider tests as well. The SDK gate also covers the
+application-managed launch tests. `make check` covers shared initialization and
+managed initialization using only the Python standard library.
 
 The independent Docker Provider consumes an immutable Runtime image and retains
 one caller-owned allocation reference through partial creation and cleanup. Persist

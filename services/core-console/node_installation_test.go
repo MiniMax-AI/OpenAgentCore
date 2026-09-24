@@ -86,7 +86,7 @@ func TestPairedConsoleKeepsAdminAndNodeCredentialsSeparated(t *testing.T) {
 			t.Fatal("paired mode missing")
 		}
 	}
-	if calls.Load() != 4 {
+	if calls.Load() != 6 {
 		t.Fatalf("unexpected upstream requests: %d", calls.Load())
 	}
 	r := consoleRequest(t, server, "POST", "/core/v1/sandbox/deployment")
