@@ -39,7 +39,19 @@ OpenAI-hosted service compatibility.
 - Upstream resource source: `openai-python` 3.13.0 beta Agents resources at
   [`d7c41efe`](https://github.com/openai/openai-python/tree/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents)
 - Required beta header for `/v1/agents/**`: `OpenAI-Beta: agents=v1`. Source
-  `/v1/files**` routes deliberately omit it.
+  `/v1/files**` and `/v1/skills**` routes deliberately omit it.
+- Skills are read at the in-repository Core revision
+  [`d3f55046`](https://github.com/MiniMax-AI/parsar-core/commit/d3f55046717264876157acd567646d665997b040):
+  the eleven `/v1/skills` resource, version, default-pointer, content and deletion
+  operations. Raw HTTP fixtures for every response the console uses live in
+  `packages/agents-client/src/fixtures/parsar-d3f55046/skills.json`.
+- The Files list (`GET /v1/files`) and the complete safe Template configuration
+  are read at the same revision. Their fixtures,
+  `parsar-d3f55046/source-files-list.json` and
+  `parsar-d3f55046/environment-templates.json`, are derived from the Core handlers
+  and acceptance tests rather than captured from a running Core. Template inline
+  files report `size_bytes`; `env`, `setup_commands` and inline content are never
+  returned.
 - Core base: same-origin `/v1` through the Web proxy for stock Parsar Core; a direct
   URL only for a compatible Core or proxy with explicit CORS support
 
@@ -75,21 +87,24 @@ the Core key binding. Agents Core Web's local proxy owns the bearer server-side.
 | Function result/error | Yes | Yes | Supports text `agent.session.input.tool_result` success/error handoff for exact `function_call` actions |
 | Initial-input creation stream | Yes | Yes, bounded text messages | Accepts an exact non-empty text string or an ordered array of user messages containing `input_text` parts only. Images, attachments, non-user roles, and other content parts are not supported |
 | Environment Files.list | Yes | Operator-gated, explicit read-only | Hidden unless the complete list + managed-create profile is qualified and `AGENTS_CORE_WEB_ENVIRONMENT_FILES=1`, because Core has no capability-discovery route. For a complete supported projection, lists direct regular-file path and size metadata only; `openai_hosted` uses `/workspace`, while `self_hosted` uses its exact `workspace_directory`; no automatic load, content, download, recursion, or snapshot guarantee |
-| Source Files upload/retrieve/content/delete | Yes | Yes, explicit by ID | Multipart purpose is fixed to `user_data`; metadata and binary responses are strictly projected; Core has no Source Files list; uncertain writes are never replayed |
+| Files list | Yes | Resources › Files | `GET /v1/files` without the Beta header, 100 per page with the `after` cursor, newest or oldest first. Each entry is strictly projected; an entry with a valid File ID but unsupported metadata (for example another purpose) is shown as unrecognized with its ID only, while the rest of the page stays usable. The name/ID filter covers loaded rows only because Core has no search. 404/405 shows an unsupported state and 503 `file_storage_unavailable` a storage-not-configured state |
+| Source Files upload/retrieve/content/delete | Yes | Resources › Files | Multipart purpose is fixed to `user_data`; the browser checks 512 MiB and a 1–1024 byte name without NUL before sending, and Core validates again. An upload or deletion whose outcome is unknown is never retried; the page asks for a refresh. Deletion is confirmed and states that Session workspace copies and existing Sessions are unaffected while new Sessions from Templates referencing the File ID fail. The console offers no download because Core rejects `user_data` content with 400; the client keeps the content operation |
 | Environment Files.create | Yes | Hosted-gated | The client supports the exact `inline`/`file_id` union. UI offers bounded inline or upload → durable `file_id` copy only after an exact current basic `openai_hosted` Session projection and same-ID resource read satisfy the non-terminal, empty-installation write gate |
 | Artifacts | No | Hidden | Source Files and Environment Files are not an Artifacts API |
 | Environment connection action | Yes | Guided, not submitted | `environment_connection` is distinct from a function call; Web can show an operator-run launcher template but sends no result and never opens the native transport |
 | Environment lifecycle events | Yes | Read-only | UI projects pinned pending, ready, connected, disconnected, and failed live snapshots; unknown/malformed status events clear prior live claims and render as unavailable |
 | Environment retrieve | Yes | Yes, read-only | Strictly recognizes `self_hosted` and `openai_hosted` resource types. Session UI automatically reads the valid current Environment ID for either supported type; hosted write eligibility additionally requires the exact basic hosted projection and same-ID durable resource; there is no standalone Environment create/list/update/delete resource |
 | Environment overview | No public list API | No top-level UI | Web does not turn loaded Session projections into a catalog; a selected Session may still show its exact Environment data |
-| Environment Templates create/list | Yes | Managed-hosted-gated | The Templates navigation entry lists all pages and creates basic name/network configurations. It shares the catalog with Session creation. An unsupported or failed read is explicit, never an empty catalog |
-| Environment Templates retrieve/update/delete | Yes | Basic management | Templates supports partial name/network updates and confirmed deletion, followed by a Core catalog refresh. It neither creates Runtime instances nor edits existing Session snapshots. Advanced profiles outside the current strict client projection remain unsupported; no hidden fields are erased |
+| Environment Templates create/list | Yes | Managed-hosted-gated | The Templates navigation entry lists all pages and creates name/network configurations, including `restricted` access with a domain list. It shares the catalog with Session creation. The client projects every safe section: network (`enabled`/`disabled`/`restricted` with domains), npm/Python/system packages, capability directories, inline (`size_bytes`) and `file_id` files, `skill_reference` (version `null`, `"latest"` or a positive integer string) and inline Skills, and inline Plugins. An unknown entry type, a malformed section or an unexpected field marks only that Template as containing unrecognized configuration; its recognized sections are still shown and the rest are never guessed. An unsupported or failed read is explicit, never an empty catalog |
+| Environment Templates retrieve/update/delete | Yes | Read-only detail; name/network edits | The detail shows every section read-only, links `file_id` to Files and `skill_id` to Skills, and states that env and setup commands are confidential and never returned, so their presence is unknown. Updates send only the changed name and network, so Core keeps every other section; a `restricted` policy stays editable with its domain list, which Core validates, and an unrecognized network cannot be edited. Deletion is confirmed and states that existing Sessions are unaffected. Templates never create Runtime instances or edit existing Session snapshots |
 | Environment keys | No public browser API | Hidden | Operator-issued executor credentials stay on executor compute and never enter browser state, request previews, navigation, or Create actions |
+| Skills and Skill versions | Yes | Yes, when discovered | The first list request decides the navigation entry: 404/405 hides it, 503 `skill_storage_unavailable` shows a storage-not-configured state, other failures show a retry. The list reads cursor pages of 20, newest first, and its filter covers only loaded rows because Core has no search. Uploads are multipart without the Beta header: one ZIP as `files`, or a folder as repeated `files[]` named by relative path, plus at most one `default` field on version uploads; browser preflight (one top-level folder with `SKILL.md`, 500 files, 5 MiB compressed, 20 MiB uncompressed, clean paths) is advisory and Core validates every bundle. Frontmatter previews are plain text. Web moves the default pointer, downloads the default or an exact version as `<name>-v<version>.zip` through the client, deletes versions (the default is blocked while others remain; the sole version deletes the Skill) and deletes Skills after the name is typed. Responses are strictly projected (`skill_`/`skillver_` IDs, positive integer version strings). The Skill object has no creator, so none is shown; attaching Skills to Templates or Sessions remains unsupported |
 | Vaults and static-bearer Credentials | Yes | Yes, when discovered | Web traverses the Vault and per-Vault Credential page chains to their Core end markers before publishing one loaded metadata result, provides safe lifecycle controls and write-only token create/replace, and deterministically attaches each selected Credential's owning Vault to Session creation. The reads are non-atomic and not a current Core total. Tokens are never returned; catalog success is not runtime proof |
 | Runtime observations | Core extension | Yes, read-only | Dashboard traverses the complete tenant-scoped current-observation page chain, requires an exact Session identity join, and publishes only complete snapshots. Docker and microsandbox values remain provider evidence; unsupported, unavailable, stale, and unknown are distinct. Browser-local trends are explicitly Live and ephemeral |
 | Runtime history | Optional Core extension | Client implemented; Dashboard pending | Capability discovery and bounded Session history are strictly projected through `packages/agents-client`. Durable UI must remain disabled until capability discovery reports qualified periodic collection and a production Reader; token throughput is not synthesized into history |
 | Protocol Subagents / enabled multi-agent | Later | No | Distinct from storing multiple Agent configurations |
 | Usage/observability | Response types | Yes, scoped | Session aggregate and per-Turn token Usage are labelled separately; unavailable measurements remain unknown, not zero |
+| Per-Agent usage | Existing Session list | Yes, Agents page | Web reads `GET /agents/sessions?limit=100&order=desc` page by page, stopping once a page passes the start of the selected all-time, 7-day or 30-day range (by Session `created_at`), and rejects duplicate identities or cursors that cannot advance. Per Agent it counts Sessions by status and sums the five token fields of each Session's cumulative Usage using the Dashboard's canonical Usage check; missing or malformed Usage counts toward coverage only, never as zero. Sessions whose `agent.id` is not a loaded saved Agent (deleted or inline Agents) are grouped by that raw ID. Results stay in page memory; a failed page is not published and the read resumes from the last complete page. Usage is Core-reported and not a billing record |
 
 ## Runtime boundary
 
@@ -100,11 +115,12 @@ the Core key binding. Agents Core Web's local proxy owns the bearer server-side.
   pinned basic Codex/Docker `openai_hosted` request after an operator has qualified
   Core's managed Runtime provider. Its network choice is omitted/default enabled,
   explicitly enabled, or explicitly disabled; restricted domains are not exposed.
-  The same flag exposes reading and saving basic Environment Templates and
-  referencing one from the created Session. An omitted network inherits the
-  referenced Template policy, an enabled request is blocked before submission when
-  the Template disables network access, and an explicit null network is never sent
-  beside a reference. Saving a Template stores configuration only and allocates no
+  The same flag exposes reading Environment Templates, saving their name and network,
+  and referencing one from the created Session, including an advanced or partly
+  unrecognized Template. An omitted network inherits the referenced Template policy,
+  an enabled request is blocked before submission when the Template disables or
+  restricts network access, and an explicit null network is never sent beside a
+  reference. A created Session keeps the frozen installation metadata Core returns. Saving a Template stores configuration only and allocates no
   Runtime. Whether Core provisions that managed Runtime as a local container or a
   remote sandbox is operator-owned and invisible to this Web.
   The flag is off by default because Core has no public capability-discovery route.
@@ -173,9 +189,8 @@ the Core key binding. Agents Core Web's local proxy owns the bearer server-side.
 - Product navigation and the global Create menu do not widen the protocol. Agent
   and Session creation call the existing client methods. The top-level
   Environments destination and Environment key entries are absent because
-  Core exposes no corresponding list or management APIs. Environment Templates have
-  a Core contract but no top-level destination: they appear only inside managed
-  Session creation.
+  Core exposes no corresponding list or management APIs. Environment Templates, Skills,
+  Vaults and Files are Resources destinations backed by their Core list operations.
 - The Agent setup request preview is derived entirely from editable Agent fields and
   the sanitized Core base URL. Its authorization header always contains the literal
   `${AGENTS_CORE_API_KEY}` placeholder; it never reads or renders the connection's
@@ -392,7 +407,7 @@ the Core key binding. Agents Core Web's local proxy owns the bearer server-side.
 Environment creation and management beyond the narrow Session-scoped
 `self_hosted` and basic managed `openai_hosted` creation flows, top-level
 Environment list/CRUD, managed-provider selection/configuration, arbitrary
-Workspace content mutation, Plugins, Skills, Artifacts, Credential profiles beyond
+Workspace content mutation, Plugins, Skill selection in Templates and Sessions, Artifacts, Credential profiles beyond
 the bounded Vault static-bearer flow, populated Template initialization
 (`env`, `setup_commands`, files, packages, skills, plugins, and capability
 directories), Template editing and deletion surfaces, restricted-domain

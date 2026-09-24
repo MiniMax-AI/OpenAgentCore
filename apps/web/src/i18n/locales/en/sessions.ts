@@ -1,7 +1,7 @@
 export const sessions = {
   common: {
     agent: "Agent", session: "Session", status: "Status", unknown: "Unknown", unavailable: "Unavailable",
-    untitledAgent: "Untitled Agent", untitledSession: "Untitled Session", enabled: "Enabled", disabled: "Disabled",
+    untitledAgent: "Untitled Agent", untitledSession: "Untitled Session", enabled: "Enabled", disabled: "Disabled", restricted: "Restricted",
     cancel: "Cancel", close: "Close", done: "Done", delete: "Delete", edit: "Edit", remove: "Remove", replace: "Replace",
     refresh: "Refresh", loading: "Loading…", copied: "Copied", show: "Show", hide: "Hide", name: "Name", description: "Description",
     moveUp: "Move up", moveDown: "Move down", cancelActiveTurn: "Cancel active Turn",
@@ -39,7 +39,8 @@ export const sessions = {
   stream: { idle: "Events idle", connecting: "Connecting events…", listening: "Live events", recovering: "Reconnecting events…", failed: "Events unavailable" },
   usage: { input: "Input", output: "Output", total: "Total", cached: "Cached", reasoning: "Reasoning" },
   list: {
-    title: "Sessions", subtitle: "execution", recover: "Refresh Sessions", new: "New Session", loading: "Loading Sessions",
+    back: "Session log",
+    title: "Session console", subtitle: "Playground", recover: "Refresh Sessions", new: "New Session", loading: "Loading Sessions",
     filterByAgent: "Filter Sessions by Agent", allAgents: "All Agents", unavailableAgent: "Unavailable Agent (not loaded)", recent: "Recent",
     refreshFailed: "Couldn’t refresh Sessions", lastLoadedAvailable: "The last loaded Sessions remain available.",
     checkConnection: "Check the Agent Core connection, then retry.", loadFailed: "Couldn’t load Sessions",

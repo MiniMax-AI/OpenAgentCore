@@ -1,10 +1,11 @@
-import { KeyRound, Plus, RefreshCw, RotateCcw, ShieldCheck, Trash2, Vault as VaultIcon } from "lucide-react";
+import { KeyRound, Plus, RotateCcw, ShieldCheck, Trash2, Vault as VaultIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "../../i18n";
 
 import type { Vault, VaultCredential } from "@agents-core-web/agents-client";
 
+import { HelpTip, RefreshButton } from "../../components/console-ui";
 import { ErrorState } from "../../components/ErrorState";
 import { Modal } from "../../components/Modal";
 import { Skeleton } from "../../components/Skeleton";
@@ -104,14 +105,12 @@ export function VaultsView({ busy, catalog, coreError, coreState, operations }: 
   return (
     <section className="page-section vaults-page">
       <header className="page-header">
-        <div>
+        <div className="console-page-heading">
           <h1>{tPages("vaults.title")}</h1>
-          <p className="page-subtitle">{tPages("vaults.subtitle")}</p>
+          <HelpTip>{tPages("vaults.subtitle")}</HelpTip>
         </div>
         <div className="page-actions">
-          <button className="icon-button outline" type="button" onClick={operations.refresh} disabled={coreState === "connecting" || busy} aria-label={tPages("vaults.refresh")}>
-            <RefreshCw className={coreState === "connecting" ? "refresh-spinning" : undefined} size={14} strokeWidth={1.5} />
-          </button>
+          <RefreshButton onClick={operations.refresh} refreshing={coreState === "connecting"} disabled={busy} label={tPages("vaults.refresh")} />
           <button className="button primary" type="button" onClick={() => { setActionError(null); setCreateOpen(true); }} disabled={coreState !== "ready" || busy}>
             <Plus size={14} strokeWidth={1.5} /> {tPages("vaults.create")}
           </button>

@@ -4,13 +4,9 @@ import {
   ChevronRight,
   ChevronsUpDown,
   ChevronUp,
-  Cpu,
-  Gauge,
-  MemoryStick,
   Search,
-  Server,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   flexRender,
@@ -36,33 +32,11 @@ import {
 import { holdLastReported } from "./held-usage";
 import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";
 import { RuntimeTrendPanel, type RuntimeHistoryLoader } from "./RuntimeTrendPanel";
+import "./runtime-observability.css";
 
 const PAGE_SIZE = 10;
 
 export type { RuntimeHistoryLoader } from "./RuntimeTrendPanel";
-
-function RuntimeMetric({
-  icon,
-  label,
-  value,
-  detail,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-  detail: string;
-}) {
-  return (
-    <div className="dashboard-runtime-metric">
-      <span className="dashboard-runtime-metric-icon" aria-hidden="true">{icon}</span>
-      <span>
-        <small>{label}</small>
-        <strong>{value}</strong>
-        <span>{detail}</span>
-      </span>
-    </div>
-  );
-}
 
 function percent(usage: number | null | undefined, limit: number | null | undefined): number | null {
   if (typeof usage !== "number" || typeof limit !== "number" || limit <= 0) return null;
@@ -311,21 +285,13 @@ export function RuntimeObservabilityContent({
     () => buildRuntimeDashboardModel(snapshot.sessions, snapshot.observations, tokenTotals),
     [snapshot, tokenTotals],
   );
-  const summary = model.summary;
   return (
     <>
-      <div className="dashboard-runtime-summary" aria-label={t("runtime.resourceSnapshot")}>
-        <RuntimeMetric icon={<Server size={17} />} label={t("runtime.metrics.sandboxState")} value={t("runtime.metrics.sandboxStateValue", { active: summary.activeSandboxCount.toLocaleString(locale), sleeping: summary.sleepingSandboxCount.toLocaleString(locale) })} detail={t("runtime.metrics.sandboxStateDetail", { total: summary.sandboxTotalCount.toLocaleString(locale), transitioning: (summary.transitioningSandboxCount + summary.pendingSandboxCount).toLocaleString(locale) })} />
-        <RuntimeMetric icon={<Cpu size={17} />} label={t("runtime.metrics.cpu")} value={summary.cpuUsageSecondsTotal === null && summary.cpuCapacityCores === null ? t("runtime.metrics.noSample") : `${summary.cpuUsageSecondsTotal === null ? t("runtime.filters.unavailable") : formatDashboardDuration(summary.cpuUsageSecondsTotal)} / ${summary.cpuCapacityCores === null ? "—" : t("runtime.cores", { value: summary.cpuCapacityCores.toLocaleString(locale) })}`} detail={t("runtime.metrics.cpuDetail", { covered: summary.cpuCoverageCount, total: summary.observedRuntimeCount })} />
-        <RuntimeMetric icon={<MemoryStick size={17} />} label={t("runtime.metrics.memory")} value={summary.memoryUsageBytes === null && summary.memoryLimitBytes === null ? t("runtime.metrics.noSample") : `${summary.memoryUsageBytes === null ? t("runtime.filters.unavailable") : formatDashboardBytes(summary.memoryUsageBytes)} / ${summary.memoryLimitBytes === null ? t("runtime.filters.unavailable") : formatDashboardBytes(summary.memoryLimitBytes)}`} detail={t("runtime.metrics.memoryDetail", { covered: summary.memoryCoverageCount, total: summary.observedRuntimeCount })} />
-        <RuntimeMetric icon={<Gauge size={17} />} label={t("runtime.metrics.tokens")} value={summary.totalTokens === null ? t("runtime.filters.unavailable") : formatDashboardTokens(summary.totalTokens, locale)} detail={t("runtime.metrics.tokenDetail", { covered: summary.tokenCoverageCount, total: summary.sessionCount })} />
-      </div>
-
       <RuntimeTrendPanel snapshot={snapshot} stale={stale} loadRuntimeHistory={loadRuntimeHistory} />
 
       <details className="dashboard-runtime-explorer">
         <summary>
-          <span><strong>{t("runtime.targets")}</strong><small>{t("runtime.explorerHint")}</small></span>
+          <span><strong>{t("runtime.targets")}</strong></span>
           <span>{t("runtime.targetCount", { value: model.rows.length.toLocaleString(locale), snapshot: t(stale ? "runtime.retainedSnapshot" : "runtime.currentSnapshot") })}<ChevronDown size={15} aria-hidden="true" /></span>
         </summary>
         <RuntimeTargets rows={model.rows} onOpenSession={onOpenSession} />

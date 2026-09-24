@@ -1,0 +1,107 @@
+/* Resources › Files. Shared page grammar and tokens only; no decorative frames. */
+
+.files-search {
+  width: 300px;
+  max-width: 100%;
+}
+
+.files-table th[scope="row"] {
+  min-width: 200px;
+}
+
+.files-name {
+  display: block;
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.files-nowrap {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A freshly uploaded row fades from the accent tint back to the table surface. */
+.data-table tbody tr.files-row-new {
+  animation: files-row-new 8s var(--ease-settle) forwards;
+}
+
+@keyframes files-row-new {
+  from { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+  to { background: transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .data-table tbody tr.files-row-new {
+    animation: none;
+    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  }
+}
+
+.files-confirm-row td {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  background: color-mix(in srgb, var(--danger) 5%, var(--surface));
+}
+
+.data-table tbody tr.files-confirm-row:hover {
+  background: transparent;
+}
+
+.files-confirm,
+.files-upload-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.files-confirm {
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.files-confirm > span:first-child,
+.files-upload-note > span:first-child {
+  flex: 1 1 360px;
+  min-width: 0;
+}
+
+.files-confirm strong {
+  font-weight: 600;
+}
+
+.files-confirm-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.files-footer {
+  justify-content: flex-end;
+}
+
+/* One ID with its copy button; shared by Files and Environment Templates. */
+.copyable-id {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+}
+
+.copyable-id code {
+  overflow-wrap: anywhere;
+}
+
+.copyable-id-button {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
+  color: var(--fg-muted);
+}
+
+.copyable-id-button:hover:not(:disabled) {
+  color: var(--fg);
+}

@@ -102,7 +102,7 @@ function safeNonNegativeInteger(value: unknown): number | null {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
-function canonicalUsage(value: unknown): TokenUsage | null {
+export function canonicalUsage(value: unknown): TokenUsage | null {
   const usage = record(value);
   const inputDetails = record(usage?.input_tokens_details);
   const outputDetails = record(usage?.output_tokens_details);

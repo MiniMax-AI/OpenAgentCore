@@ -29,7 +29,7 @@ test("loads mixed OAuth and static credentials without offering OAuth static rep
     object: "list", data: [oauth, staticCredential], has_more: false, first_id: oauth.id, last_id: staticCredential.id,
   } }));
   await page.goto("/");
-  await page.getByRole("button", { name: "Vaults", exact: true }).click();
+  await page.getByRole("navigation", { name: "Console navigation", exact: true }).getByRole("button", { name: "Vaults", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Mixed credentials" })).toBeVisible();
   await expect(page.getByText("OAuth MCP", { exact: true })).toBeVisible();
   await expect(page.getByText("OAuth · Manage authorization and token replacement in your application.")).toBeVisible();

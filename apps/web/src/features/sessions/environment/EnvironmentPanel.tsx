@@ -348,7 +348,10 @@ export function EnvironmentPanel({
       ? t("common.enabled")
       : network?.access === "disabled"
         ? t("common.disabled")
-        : t("common.unavailable");
+        : network?.access === "restricted"
+          ? t("common.restricted")
+          : t("common.unavailable");
+    const allowedDomains = directories(network?.allowed_domains);
 
     return (
       <section className="environment-panel environment-panel-managed" aria-label={t("environment.statusAria")}>
@@ -379,7 +382,7 @@ export function EnvironmentPanel({
           </div>
           <div className="environment-panel-field environment-panel-field-wide">
             <span>{t("environment.allowedDomains")}</span>
-            <strong>{Array.isArray(network?.allowed_domains) && network.allowed_domains.length === 0 ? t("environment.noneBasicDomains") : t("common.unavailable")}</strong>
+            <strong>{allowedDomains ? allowedDomains.length === 0 ? t("environment.noneBasicDomains") : allowedDomains.join(", ") : t("common.unavailable")}</strong>
           </div>
           <div className="environment-panel-field environment-panel-field-wide">
             <span>{t("environment.startupPackages")}</span>

@@ -17,4 +17,50 @@
 .api-key-list span { display: block; font-size: 11px; color: var(--fg-muted); margin-top: 5px; }
 .api-key-confirm { flex-basis: 100%; font-size: 12px; }
 .api-key-error { color: var(--danger); font-size: 12px; line-height: 1.7; }
-.api-keys-page { max-width: 920px; margin: 0 auto; }
+/* Access › API keys page: header actions, one inline panel for create/issued, then the table. */
+.api-key-panel-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: var(--frame-radius);
+}
+.api-key-panel-inline .field { flex: 1 1 280px; max-width: 420px; }
+.api-key-panel-inline .field span { font-size: 12px; }
+.api-key-issued { flex-direction: column; align-items: stretch; border-color: var(--line-strong); }
+.api-key-issued-body { display: grid; gap: 12px; width: 100%; }
+.api-key-issued-body > p { margin: 0; font-size: 13px; line-height: 1.6; }
+.api-key-issued-body > p[role="alert"] { color: var(--danger); font-size: 12.5px; }
+.api-key-dialog-form { display: grid; gap: 12px; }
+.api-key-dialog-form .field { margin: 0; }
+.api-key-dialog-error { margin: 0; color: var(--danger); font-size: 12.5px; line-height: 1.6; }
+.api-key-issued-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.api-key-issued-row input {
+  flex: 1 1 320px;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+}
+.api-key-issued-row .button { height: 32px; }
+.api-key-table td { height: 44px; }
+.api-key-table td code { color: var(--fg-muted); font-size: 12.5px; }
+.api-key-table th:last-child, .api-key-table td:last-child { width: 1%; white-space: nowrap; text-align: right; }
+.api-key-table .text-action:hover:not(:disabled) { color: var(--danger); }
+.api-key-revoked td { color: var(--fg-muted); }
+.api-key-revoked td strong { font-weight: 500; }
+.api-key-confirm-row td {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  background: color-mix(in srgb, var(--danger) 5%, var(--surface));
+}
+.api-key-confirm-row td:last-child { text-align: left; }
+.api-key-confirm-row .api-key-confirm { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; font-size: 13px; }

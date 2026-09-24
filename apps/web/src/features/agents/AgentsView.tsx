@@ -1,10 +1,11 @@
-import { RefreshCw, Search } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Plus, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "../../i18n";
 
 import type { CoreStartupConfiguration, CreateAgentInput, SavedAgent, UpdateAgentInput } from "@agents-core-web/agents-client";
 
+import { PageBody, PageHeader, RefreshButton } from "../../components/console-ui";
 import { ErrorState } from "../../components/ErrorState";
 import { Skeleton } from "../../components/Skeleton";
 import type { CoreConnectionState } from "../../lib/connection";
@@ -12,9 +13,18 @@ import type { VaultCatalog } from "../vaults/vault-catalog";
 import { AgentCatalog } from "./AgentCatalog";
 import { AgentDialog } from "./AgentDialog";
 import { AgentSetupView } from "./AgentSetupView";
+import {
+  AgentUsageCaveat,
+  type AgentUsageModel,
+  AgentUsagePanel,
+  AgentUsageRangeControl,
+  AgentUsageStatus,
+  OtherAgentUsageSection,
+} from "./AgentUsage";
 import { createRequestGate, projectSavedTool } from "./agent-form";
-import { type AgentTemplate, valuesFromAgentTemplate } from "./agent-templates";
+import { aggregateAgentUsage, type AgentUsageSource } from "./agent-usage";
 import { sessionAdmissionBlocker } from "./session-admission";
+import { useAgentUsage } from "./use-agent-usage";
 
 interface AgentsViewProps {
   openAgentId?: string;
@@ -34,6 +44,11 @@ interface AgentsViewProps {
   onRetrieve?: (agentId: string) => Promise<SavedAgent | undefined>;
   onStartSession: (agentId: string) => void;
   onUpdate?: (agentId: string, input: UpdateAgentInput) => Promise<SavedAgent | undefined>;
+  /**
+   * Reads the Session list for per-Agent usage. Without it the page shows no
+   * usage statistics.
+   */
+  usageSource?: AgentUsageSource;
 }
 
 type ViewMode = "closed" | "create" | "edit" | "delete";
@@ -41,8 +56,7 @@ type ViewMode = "closed" | "create" | "edit" | "delete";
 type ReturnFocusTarget =
   | { kind: "agent"; id: string }
   | { kind: "create" }
-  | { kind: "element"; element: HTMLElement }
-  | { kind: "template"; id: string };
+  | { kind: "element"; element: HTMLElement };
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : i18n.t("requestFailed", { ns: "agents" });
@@ -158,16 +172,15 @@ export function AgentsView({
   onRetrieve,
   onStartSession,
   onUpdate,
+  usageSource,
 }: AgentsViewProps) {
   const { t } = useTranslation("agents");
   const { t: tPages } = useTranslation("pages");
   const [mode, setMode] = useState<ViewMode>("closed");
   const [selectedAgent, setSelectedAgent] = useState<SavedAgent | null>(null);
-  const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null);
   const [openingAgentId, setOpeningAgentId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [showAllAgents, setShowAllAgents] = useState(false);
   const [createSetupRevision, setCreateSetupRevision] = useState(0);
   const requestGate = useRef(createRequestGate());
   const returnFocusRef = useRef<ReturnFocusTarget | null>(null);
@@ -180,6 +193,15 @@ export function AgentsView({
     ? agents.filter((agent) => [agent.name, agent.model, agent.instructions, agent.id]
       .some((value) => value?.toLowerCase().includes(normalizedQuery)))
     : agents;
+  const usageController = useAgentUsage(usageSource, coreState === "ready");
+  const agentIds = useMemo(() => agents.map((agent) => agent.id), [agents]);
+  const usageReport = useMemo(
+    () => usageController.status === "ready"
+      ? aggregateAgentUsage(usageController.records, agentIds, usageController.rangeStart)
+      : null,
+    [agentIds, usageController.records, usageController.rangeStart, usageController.status],
+  );
+  const usage: AgentUsageModel | null = usageSource ? { controller: usageController, report: usageReport } : null;
 
   const restoreCatalogFocus = (target: ReturnFocusTarget | null) => {
     window.requestAnimationFrame(() => {
@@ -190,14 +212,6 @@ export function AgentsView({
       if (target?.kind === "agent") {
         const button = [...document.querySelectorAll<HTMLButtonElement>("button[data-agent-id]")]
           .find((candidate) => candidate.dataset.agentId === target.id);
-        if (button) {
-          button.focus();
-          return;
-        }
-      }
-      if (target?.kind === "template") {
-        const button = [...document.querySelectorAll<HTMLButtonElement>("button[data-agent-template-id]")]
-          .find((candidate) => candidate.dataset.agentTemplateId === target.id);
         if (button) {
           button.focus();
           return;
@@ -214,16 +228,14 @@ export function AgentsView({
     requestGate.current.invalidate();
     setMode("closed");
     setSelectedAgent(null);
-    setSelectedTemplate(null);
     setActionError(null);
     restoreCatalogFocus(target);
   };
 
-  const openCreateSetup = (target: ReturnFocusTarget, template: AgentTemplate | null = null) => {
+  const openCreateSetup = (target: ReturnFocusTarget) => {
     requestGate.current.invalidate();
     returnFocusRef.current = target;
     setSelectedAgent(null);
-    setSelectedTemplate(template);
     setActionError(null);
     setCreateSetupRevision((current) => current + 1);
     setMode("create");
@@ -326,7 +338,6 @@ export function AgentsView({
       if (!requestGate.current.isCurrent(request)) return;
       setMode("closed");
       setSelectedAgent(null);
-      setSelectedTemplate(null);
       returnFocusRef.current = null;
       restoreCatalogFocus(null);
     } catch (error) {
@@ -349,7 +360,6 @@ export function AgentsView({
           busy={busy}
           defaultHarness={startupConfiguration?.configured.default_harness}
           enabledHarnesses={startupConfiguration?.configured.enabled_harnesses ?? null}
-          initialValues={mode === "create" && selectedTemplate ? valuesFromAgentTemplate(selectedTemplate) : undefined}
           knownModels={knownModels}
           vaultCatalog={vaultCatalog}
           onBack={closeSetup}
@@ -361,6 +371,7 @@ export function AgentsView({
           } : undefined}
           onStartSession={startSession}
           onUpdate={submitUpdate}
+          usagePanel={usage && mode !== "create" && selectedAgent ? <AgentUsagePanel usage={usage} agentId={selectedAgent.id} /> : undefined}
         />
         {mode !== "create" ? (
           <AgentDialog
@@ -389,73 +400,93 @@ export function AgentsView({
     );
   }
 
+  const refresh = () => {
+    onRefresh();
+    if (usage) usageController.reload();
+  };
+
   return (
-    <section className="page-section agents-page">
-      <header className="page-header">
-        <h1>{tPages("agents.title")}</h1>
-        <div className="page-actions">
-          <label className="search-control">
-            <Search size={14} strokeWidth={1.5} aria-hidden="true" />
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setShowAllAgents(false);
-              }}
-              placeholder={t("searchPlaceholder")}
-              aria-label={t("searchLabel")}
-              disabled={coreState !== "ready"}
-            />
-          </label>
-          <button className="icon-button outline" type="button" onClick={onRefresh} disabled={coreState === "connecting"} aria-label={t("refreshLabel")}>
-            <RefreshCw className={coreState === "connecting" ? "refresh-spinning" : undefined} size={14} strokeWidth={1.5} />
+    <section className="page-section console-page agents-list-page" aria-labelledby="agents-heading">
+      <PageHeader
+        headingId="agents-heading"
+        title={tPages("agents.title")}
+        help={tPages("agents.subtitle")}
+        actions={<>
+          <RefreshButton onClick={refresh} refreshing={coreState === "connecting"} label={t("refreshLabel")} />
+          <button
+            className="button primary"
+            type="button"
+            data-create-agent-entry="true"
+            onClick={() => openCreateSetup({ kind: "create" })}
+            disabled={coreState !== "ready" || busy}
+          >
+            <Plus size={14} aria-hidden="true" />{t("catalog.create")}
           </button>
+        </>}
+      />
+      <PageBody>
+        <div className="agents-toolbar">
+          <div className="filter-bar agents-filter-bar" role="group" aria-label={t("filtersLabel")}>
+            <label className="search-control">
+              <Search size={14} strokeWidth={1.5} aria-hidden="true" />
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t("searchPlaceholder")}
+                aria-label={t("searchLabel")}
+                disabled={coreState !== "ready" && !agents.length}
+              />
+            </label>
+            {usage ? <AgentUsageRangeControl usage={usage} /> : null}
+          </div>
+          {usage ? <AgentUsageStatus usage={usage} /> : null}
+          {usage ? <AgentUsageCaveat /> : null}
         </div>
-      </header>
 
-      {coreState === "connecting" && !agents.length ? <AgentsLoadingSkeleton /> : null}
+        {coreState === "connecting" && !agents.length ? <AgentsLoadingSkeleton /> : null}
 
-      {coreState === "failed" ? (
-        <div className="collection-error">
-          <ErrorState
-            title={agents.length ? t("refreshFailed") : t("loadFailed")}
-            description={agents.length
-              ? t("staleDescription")
-              : t("loadDescription")}
-            detail={coreError ?? undefined}
-            hint={t("connectionHint")}
-            onRetry={onRefresh}
+        {coreState === "failed" ? (
+          <div className="collection-error">
+            <ErrorState
+              title={agents.length ? t("refreshFailed") : t("loadFailed")}
+              description={agents.length
+                ? t("staleDescription")
+                : t("loadDescription")}
+              detail={coreError ?? undefined}
+              hint={t("connectionHint")}
+              onRetry={refresh}
+            />
+          </div>
+        ) : null}
+
+        {mode === "closed" && actionError ? (
+          <div className="agent-action-error agent-open-error" role="alert">
+            <strong>{t("openFailed")}</strong>
+            <span>{actionError}</span>
+            {selectedAgent ? <button className="button outline" type="button" onClick={() => void retrieveForEdit(selectedAgent)}>{t("retry")}</button> : null}
+          </div>
+        ) : null}
+
+        {coreState === "ready" || agents.length ? (
+          <AgentCatalog
+            agents={filteredAgents}
+            busy={busy}
+            coreReady={coreState === "ready"}
+            hasSavedAgents={agents.length > 0}
+            isFiltering={Boolean(normalizedQuery)}
+            openingAgentId={openingAgentId}
+            usage={usage}
+            vaultCatalog={vaultCatalog}
+            onClearSearch={() => setQuery("")}
+            onCreate={() => openCreateSetup({ kind: "create" })}
+            onEdit={(agent) => void retrieveForEdit(agent)}
+            onStartSession={startSession}
           />
-        </div>
-      ) : null}
+        ) : null}
 
-      {mode === "closed" && actionError ? (
-        <div className="agent-action-error agent-open-error" role="alert">
-          <strong>{t("openFailed")}</strong>
-          <span>{actionError}</span>
-          {selectedAgent ? <button className="button outline" type="button" onClick={() => void retrieveForEdit(selectedAgent)}>{t("retry")}</button> : null}
-        </div>
-      ) : null}
-
-      {coreState === "ready" || agents.length ? (
-        <AgentCatalog
-          agents={filteredAgents}
-          busy={busy}
-          coreReady={coreState === "ready"}
-          hasSavedAgents={agents.length > 0}
-          isFiltering={Boolean(normalizedQuery)}
-          openingAgentId={openingAgentId}
-          expanded={showAllAgents}
-          vaultCatalog={vaultCatalog}
-          onClearSearch={() => setQuery("")}
-          onCreate={() => openCreateSetup({ kind: "create" })}
-          onEdit={(agent) => void retrieveForEdit(agent)}
-          onExpandedChange={setShowAllAgents}
-          onStartSession={startSession}
-          onUseTemplate={(template) => openCreateSetup({ kind: "template", id: template.id }, template)}
-        />
-      ) : null}
+        {usage ? <OtherAgentUsageSection usage={usage} query={query} /> : null}
+      </PageBody>
     </section>
   );
 }

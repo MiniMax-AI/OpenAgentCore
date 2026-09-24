@@ -86,11 +86,39 @@ describe("Template presentation and narrowing", () => {
     expect(hostedNetworkNarrowingBlocker(template(), null)).toBeNull();
     expect(hostedNetworkNarrowingBlocker(template({ network: { access: "enabled", allowed_domains: [] } }), "disabled")).toBeNull();
     expect(hostedNetworkNarrowingBlocker(null, "enabled")).toBeNull();
+    const restricted = template({ network: { access: "restricted", allowed_domains: ["pypi.org"] } });
+    expect(hostedNetworkNarrowingBlocker(restricted, "enabled")).toContain("never widen");
+    expect(hostedNetworkNarrowingBlocker(restricted, "disabled")).toBeNull();
+    expect(hostedNetworkNarrowingBlocker(restricted, null)).toBeNull();
   });
 
   it("recognizes only Core error statuses as an absent resource", () => {
     expect(environmentTemplatesUnsupported(new AgentCoreError("gone", 404))).toBe(true);
     expect(environmentTemplatesUnsupported(new AgentCoreError("boom", 500))).toBe(false);
     expect(environmentTemplatesUnsupported(new Error("network down"))).toBe(false);
+  });
+});
+
+describe("Advanced Templates in Session creation", () => {
+  it("keeps an advanced or partly unrecognized Template selectable", async () => {
+    const advanced = template({
+      network: { access: "restricted", allowed_domains: ["pypi.org"] },
+      packages: { npm: [], python: ["packaging==26.0"], system: ["jq"] },
+      files: [{ type: "file_id", path: "/workspace/data/input.csv", file_id: "file-2b7c9d10-4e5f-4a6b-8c7d-9e0f1a2b3c4d" }],
+      skills: [{ type: "skill_reference", skill_id: "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c", version: null }],
+    });
+    const unknownId = "4f9c1d2e-4b5a-4c7d-8e9f-0a1b2c3d4e5f";
+    const partial = {
+      id: unknownId, object: "agent.environment.template" as const, name: "Future profile",
+      created_at: 1_700_000_000, updated_at: 1_700_000_000, unrecognized: ["network"],
+    };
+    const catalog = await loadEnvironmentTemplateCatalog(core(async () => ({
+      object: "list", data: [advanced, partial], has_more: false, first_id: templateId, last_id: unknownId,
+    })));
+
+    expect(catalog).toEqual({ state: "ready", templates: [advanced, partial] });
+    expect(environmentTemplateLabel(advanced)).toBe("Restricted outbound access · network restricted");
+    expect(environmentTemplateLabel(partial)).toBe("Future profile · network unrecognized");
+    expect(hostedNetworkNarrowingBlocker(partial, "enabled")).toBeNull();
   });
 });

@@ -3,7 +3,7 @@ import { AgentCoreError } from "@agents-core-web/agents-client";
 export type BackendFailureStatus = "502" | "503" | "504" | "network";
 
 export const BACKEND_NOT_READY_NOTICE =
-  "Agent Core backend is not ready. Open the Dashboard startup guide.";
+  "Agent Core backend is not ready. Open the Overview startup guide.";
 
 export function backendFailureStatus(error: unknown): BackendFailureStatus | null {
   if (

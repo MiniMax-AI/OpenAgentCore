@@ -27,7 +27,7 @@ interface AgentFormProps {
   onSubmit: (input: AgentFormSubmitInput) => Promise<unknown>;
 }
 
-function harnessLabel(harness: CoreHarnessKind): string {
+export function harnessLabel(harness: CoreHarnessKind): string {
   if (harness === "claude_sdk") return "Claude SDK";
   if (harness === "mcode") return "MiniMax Code";
   return "Codex";

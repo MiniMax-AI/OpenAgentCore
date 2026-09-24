@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { integerTickRatios, RuntimeTrendCharts, runtimeChartCaption, runtimeChartShowsSparsePoints } from "./RuntimeTrendCharts";
+import { integerAxis, RuntimeTrendCharts, runtimeChartCaption, runtimeChartShowsSparsePoints } from "./RuntimeTrendCharts";
 import type { RuntimeTrendSample } from "./runtime-trends";
 
 function sample(sampledAt: number, cpuRatio: number | null): RuntimeTrendSample {
@@ -23,9 +23,15 @@ function sample(sampledAt: number, cpuRatio: number | null): RuntimeTrendSample 
 }
 
 describe("Runtime live-window chart accessibility", () => {
-  it("uses exact integer y-axis positions for Sandbox counts", () => {
-    expect(integerTickRatios(5).map((ratio) => ratio * 5)).toEqual([5, 3, 2, 0]);
-    expect(integerTickRatios(17).map((ratio) => ratio * 17)).toEqual([17, 11, 6, 0]);
+  it("uses round, evenly spaced integer y-axis positions for Sandbox counts", () => {
+    const ticks = (maximum: number) => {
+      const axis = integerAxis(maximum);
+      return axis.ratios.map((ratio) => Math.round(ratio * axis.maximum));
+    };
+    expect(ticks(3)).toEqual([3, 2, 1, 0]);
+    expect(ticks(8)).toEqual([8, 6, 4, 2, 0]);
+    expect(ticks(5)).toEqual([6, 4, 2, 0]);
+    expect(ticks(17)).toEqual([20, 15, 10, 5, 0]);
   });
 
   it("shows isolated or sparse values as points without inventing continuity", () => {
@@ -47,7 +53,7 @@ describe("Runtime live-window chart accessibility", () => {
     })).toBe("Memory usage all series hidden; use the legend to show a series");
   });
 
-  it("renders an unavailable current value as zero without retaining a stale value", () => {
+  it("renders an unavailable current value as missing without retaining a stale value", () => {
     const unavailable = {
       ...sample(120_000, null),
       activeSandboxCount: 0,
@@ -58,13 +64,15 @@ describe("Runtime live-window chart accessibility", () => {
       <RuntimeTrendCharts samples={[sample(60_000, .5), unavailable]} />,
     );
 
-    expect(html).toContain("Runtime worker</th><td>0%</td><td>0</td>");
-    expect(html).not.toContain("Runtime worker</th><td>50%</td><td>1</td>");
-    expect(html).toContain("used</th><td>0 B</td><td>0</td>");
+    expect(html).toContain("Runtime worker</th><td>Unavailable</td><td>1</td>");
+    expect(html).not.toContain("Runtime worker</th><td>50%</td>");
+    expect(html).not.toContain("Runtime worker</th><td>0%</td>");
+    expect(html).toContain("used</th><td>Unavailable</td><td>1</td>");
+    // A reported zero is a value, not a gap.
     expect(html).toContain("active</th><td>0</td><td>0</td>");
   });
 
-  it("renders empty retained buckets as continuous zero-value chart series", () => {
+  it("keeps empty retained buckets missing instead of drawing zero-value series", () => {
     const empty = (sampledAt: number): RuntimeTrendSample => ({
       ...sample(sampledAt, null),
       targets: [],
@@ -78,13 +86,15 @@ describe("Runtime live-window chart accessibility", () => {
       <RuntimeTrendCharts samples={[empty(60_000), empty(120_000)]} source="durable" />,
     );
 
-    expect(html).toContain("usage</th><td>0%</td><td>0</td>");
-    expect(html).toContain("used</th><td>0 B</td><td>0</td>");
+    expect(html).not.toContain("<td>0%</td>");
+    expect(html).not.toContain("<td>0 B</td>");
+    expect(html).not.toContain("<td>0/min</td>");
+    expect(html).toContain("used</th><td>Unavailable</td><td>2</td>");
+    expect(html).toContain("input</th><td>Unavailable</td><td>2</td>");
     expect(html).toContain("active</th><td>0</td><td>0</td>");
-    expect(html).toContain("input</th><td>0/min</td><td>0</td>");
-    expect(html).not.toContain("No retained CPU samples");
-    expect(html).not.toContain("No complete retained memory samples");
-    expect(html).not.toContain("No retained token samples");
+    expect(html).toContain("No retained CPU samples");
+    expect(html).toContain("No retained observed memory samples");
+    expect(html).toContain("No retained token samples");
   });
 
   it("renders uPlot chart mounts and reports trends only after two real samples", () => {

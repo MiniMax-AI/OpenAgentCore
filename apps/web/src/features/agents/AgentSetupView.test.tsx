@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import type { SavedAgent } from "@agents-core-web/agents-client";
 
 import { AgentSetupView } from "./AgentSetupView";
-import { AGENT_TEMPLATES, valuesFromAgentTemplate } from "./agent-templates";
 
 const savedAgent: SavedAgent = {
   id: "agent/with space",
@@ -97,28 +96,6 @@ describe("Agent setup page", () => {
 
     expect(html).toContain('<fieldset class="agent-form-fields" disabled=""');
     expect(html).toContain("Saving…");
-  });
-
-  it("prefills a create-only starter template in both the form and request preview", () => {
-    const template = AGENT_TEMPLATES[0]!;
-    const html = renderToStaticMarkup(
-      <AgentSetupView
-        actionError={null}
-        baseUrl="/v1"
-        busy={false}
-        initialValues={valuesFromAgentTemplate(template)}
-        knownModels={["provider/model"]}
-        onBack={() => undefined}
-        onCreate={async () => undefined}
-        onStartSession={() => undefined}
-      />,
-    );
-
-    expect(html).toContain(`value="${template.name}"`);
-    expect(html).toContain(template.instructions);
-    expect(html).toContain(`&quot;name&quot;: &quot;${template.name}&quot;`);
-    expect(html).not.toContain("Save changes");
-    expect(html).not.toContain("Saved definition");
   });
 
   it("renders an existing Agent as an editable resource instead of a details step", () => {

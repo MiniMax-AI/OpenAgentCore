@@ -1,5 +1,6 @@
 import {
   ArrowDown,
+  ArrowLeft,
   ArrowUp,
   Bot,
   Clock3,
@@ -71,6 +72,8 @@ export interface SessionCreateRequest {
 }
 
 interface SessionsViewProps {
+  /** The Session console is a secondary page of the Session log. */
+  onBack?: () => void;
   agents: SavedAgent[];
   agentFilter?: string | null;
   sessions: AgentSession[];
@@ -318,6 +321,7 @@ export function SessionsView({
   onSelect,
   onSend,
   onUpdateSession,
+  onBack,
 }: SessionsViewProps) {
   const { t, i18n } = useTranslation("sessions");
   const locale = i18n.resolvedLanguage || "en";
@@ -529,7 +533,10 @@ export function SessionsView({
     <section ref={pageRef} className="page-section session-page" tabIndex={-1}>
       <aside className="session-browser">
         <header className="session-browser-header">
-          <h1>{t("list.title")} <span>{t("list.subtitle")}</span></h1>
+          <div className="session-browser-title">
+            {onBack ? <button className="session-back" type="button" onClick={onBack}><ArrowLeft size={14} strokeWidth={1.6} aria-hidden="true" />{t("list.back")}</button> : null}
+            <h1>{t("list.title")}</h1>
+          </div>
           <div className="session-browser-actions">
             <button className="icon-button ghost" type="button" onClick={onRefresh} disabled={coreState === "connecting"} aria-label={t("list.recover")}>
               <RefreshCw className={coreState === "connecting" ? "refresh-spinning" : undefined} size={14} strokeWidth={1.5} />

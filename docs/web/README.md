@@ -1,104 +1,160 @@
-# Agents Core Web
+# Parsar Core Console
 
 **English** | [简体中文](README.zh-CN.md)
 
-Agents Core Web is the administrator console for a self-deployed Agent Core. It
-shows execution records and manages Agents, Sessions and reusable resources through
-Core APIs. Business collaboration belongs in Parsar; credentials and execution stay
-outside the browser.
+The Parsar Core console (`apps/web`) is the operations back office for one
+self-deployed Parsar Core. Applications call the OpenAI-compatible Agents API with
+their own keys; the console is where the operator sees whether that service is
+healthy, has capacity, how much it is used and where it fails. Business
+collaboration belongs in Parsar; credentials and execution stay outside the
+browser.
 
-![Agents Core Web Dashboard](images/dashboard.png)
+![Parsar Core console overview](images/overview.png)
 
-## What you can do
+## Information architecture
 
-- **Operate from one Dashboard** — see loaded Agents, active Sessions, current Runtime
-  CPU/memory evidence, compute uptime, reported token coverage, work that needs
-  attention, recent activity, and the two common create flows.
-- **Build reusable Agents** — start from a blank Agent or a practical template, then
-  configure its model, instructions, text behavior, Functions, and HTTP MCP servers.
-- **Run durable conversations** — create a Session, send messages, follow live events,
-  reopen previous work, inspect trace history, and continue after a failed Turn.
-- **Work with tools safely** — review Function calls, submit requested Function results,
-  inspect command and patch activity, and attach write-only MCP credentials through Vaults.
-- **Choose an Environment** — use Core's default execution path, connect a caller-managed
-  self-hosted executor, or use an operator-enabled managed Runtime.
-- **Understand the connection** — view Core reachability, build-supported harnesses,
-  safe process startup selections, and whether operator model endpoints are configured,
-  without exposing their addresses or credentials.
+| Group | Page | Purpose |
+| --- | --- | --- |
+| Monitor | Overview | Service health, nodes online, sandbox slots, running Sessions, work that needs attention; the fleet list (Core deployment and every node) with the selected target's capacity, host resources, hosted runtime use and allocations |
+| Monitor | Agent metrics | Requests (Agent Turns), error rate, average and P95 duration, tokens and tool calls for 1 h / 6 h / 24 h / 7 d, broken down by model, tool and Agent |
+| Monitor | Sandbox metrics | Node capacity table, hosted runtime CPU/memory/token history and the Runtime target explorer |
+| Monitor | Session log | Every Session with status, model, environment and tokens; filter and open one in the Session console |
+| Resources | Agents | Saved Agents in one table with per-Agent usage: Sessions by status, input/output/total/cached/reasoning tokens, usage coverage and last activity for all time, 7 d or 30 d; Sessions of deleted or inline Agents are kept under Other Agents |
+| Resources | Environment templates, Skills, Vaults | Reusable hosted configuration shown in full, every uploaded Skill with its versions, and write-only MCP credentials |
+| Resources | Files | Every file of the project, including API uploads: upload, copy the File ID, confirmed deletion |
+| Infrastructure | Nodes | Enroll, inspect and remove execution nodes |
+| Settings | API keys, System | Issue and revoke Agents API keys; read the Core build and startup configuration |
+| Playground | Session console, Agent builder, Getting started | Debugging tools: chat with an Agent, build and edit saved Agents, replay the introduction |
+
+Pages share one header (title, a circled help tip holding the explanation,
+actions), one body rhythm, hairline-framed tables and charts, status dots and
+capacity meters; explanations stay behind help tips instead of lines of small
+print. Missing data is shown as missing (—), never as zero.
+
+## How metrics are computed
+
+Core has no aggregate endpoint yet, so the console derives figures from existing
+reads and states their coverage on screen:
+
+- Overview, Session log and Agents re-read the complete Session list and Runtime
+  observations every 30 seconds while visible.
+- Agents usage reads the Session list newest first in pages of 100 when the page
+  opens or is refreshed, and stops once it passes the start of the selected
+  range (Sessions are placed by `created_at`). Usage is each Session's cumulative
+  total as reported by Core and is not split by day. Sessions without reported
+  usage count toward coverage but not toward token sums; an Agent whose Sessions
+  reported none shows "No data", not zero. The read can be cancelled, resumed
+  after a failure, and is kept in page memory only.
+- Agent metrics reads the Turns and Items of up to 200 most recently active
+  Sessions in the selected range, with a 15-second limit per Session and a
+  45-second budget per load. One request is one root Agent Turn; duration runs
+  from `started_at` to `completed_at`; error rate is failed ÷ finished Turns;
+  models come from each Session's Agent snapshot. Subagent Turns and deleted
+  Sessions are not counted, and a page whose reads all failed says so instead of
+  reporting no runs.
+- Node and allocation data comes from the console-only `/core/v1/sandbox` routes;
+  hosted CPU/memory history comes from Core's Runtime history.
+
+The endpoints that would replace this browser work are proposed in
+[Administrator metrics: backend requirements](admin-metrics-backend-requirements.md).
 
 ## Product tour
 
-### Dashboard
+### Overview
 
-Dashboard is the starting point. It summarizes the current Agent and Session results
-and loads complete tenant-scoped Runtime observation snapshots without inventing
-missing values. The searchable, filterable, sortable, paginated semantic table
-remains available on demand. Core stores periodic observations in its existing
-PostgreSQL database, with no separate monitoring stack. Web discovers periodic
-history and offers 1-hour, 6-hour and 24-hour ranges; reload restores data through
-Core. API-only deployments without a sampler retain the browser-local Live view.
-Token throughput uses snapshots of canonical Session Usage, preserving missing data.
-Web never connects to a database or receives telemetry credentials. Compute uptime
-is shown only in current/Live observations; History keeps CPU, memory and tokens.
-When a provider reports only
-cumulative CPU time, Web derives interval utilization only across adjacent samples
-from the same verified Runtime incarnation; restarts and counter regressions create
-gaps instead of false spikes.
+The first viewport answers four questions: is the service healthy, is there
+capacity, how much is running, and what needs attention. The fleet list on the
+left starts with the Core deployment; selecting a node shows its slot usage, host
+CPU/memory/disk, hosted runtime use of the Sessions placed on it, and its
+allocations. The attention table lists failed Sessions and Sessions waiting for a
+required action.
 
-![Runtime monitoring live trends](images/runtime-dashboard.png)
+### Agent metrics
 
-### Agents
+A time-range control scopes every figure on the page. Requests and errors are
+stacked per interval, duration shows average and P95, and the Token, model and
+tool sections pair a distribution with a trend. Colours follow each model or tool
+while it stays visible, every chart has a data-table view, and the help tip beside the title
+states how the figures are derived; a Partial data marker appears when the
+Session cap or page limits cut the range short.
 
-Agents are reusable working profiles. Create one from scratch or begin with a starter
-template for incident response, Slack collaboration, data analysis, GitHub investigation,
-or contract review. Existing Agents open directly in the editor and can start a Session
-from their card.
+![Agent metrics](images/agent-metrics.png)
 
-![Agent library and starter templates](images/agents.png)
+### Sandbox metrics
 
-### Sessions
+A node capacity table shows limits, usage, host resources and heartbeat per node.
+Below it, hosted runtime history keeps CPU, memory and tokens from Core's periodic
+observations; Web never connects to a database or receives telemetry credentials.
+When a provider reports only cumulative CPU time, Web derives interval utilization
+only across adjacent samples from the same verified Runtime incarnation.
 
-Sessions keep the conversation and work history in Core. The workspace combines Session
-navigation, live connection state, conversation output, trace inspection, tool activity,
-and follow-up input without losing the durable record.
+### Session log and Session console
 
-![Durable Session conversation](images/sessions.png)
+The Session log is the searchable record. Opening a Session moves to the Session
+console, which keeps the conversation, trace, tool activity and follow-up input of
+that Session in Core.
+
+### Agents and Agent builder
+
+The Agents page is an inventory. Editing, creating and starting a test Session
+happen in the Agent builder under Playground.
 
 ### Environment Templates
 
-In managed-Environment builds, open **Templates** to view reusable configuration,
-create a basic name/network template, edit those fields, or confirm deletion. The
-Session creation picker uses the same refreshed catalog. Saving a template does
-not start a Runtime or a model request, and edits do not change existing Sessions.
-Advanced template profiles remain outside the current Web client coverage.
+In managed-Environment builds, open **Environment templates** to see every
+reusable configuration, including templates created through the API. A template's
+page shows its network mode and allowed domains, npm/Python/system packages,
+capability directories, files (inline size or File ID, linked to Files), Skills
+(ID or name with the default, `latest` or exact version, linked to Skills) and
+Plugins. Environment variables and setup commands are confidential: Core never
+returns them, so the console cannot tell whether a template has any. A template
+with configuration this console does not recognize is marked, shows what it does
+recognize, and never affects the other templates.
+
+The console creates and edits only a template's name and network, including
+`restricted` access with its domain list; an update sends just those fields, so
+everything else is kept. Deletion is confirmed; existing Sessions are unaffected.
+Saving a template does not start a Runtime or a model request, and any template,
+however configured, can be selected when starting a managed Session.
+
+### Files
+
+**Files** lists every file of the project, including uploads made through the
+Files API, with name, size, creation time, purpose and File ID, 100 at a time,
+newest or oldest first. Upload a file of at most 512 MiB (empty files are allowed)
+and copy its File ID to reference it from a template. If an upload or deletion
+ends without a clear answer, the console does not retry it; refresh the list to
+check first. Deleting a file does not affect copies already in Session workspaces
+or existing Sessions, but new Sessions from templates that reference it will fail.
+
+Known limits: the filter covers loaded rows only because Core has no file search;
+user data files cannot be downloaded because Core rejects their content.
+
+### Skills
+
+**Skills** lists every Skill of the project, including those uploaded through the
+API, with its default and latest version, creation time and ID. Upload a ZIP or a
+folder whose single top-level folder contains `SKILL.md`; the dialog previews the
+folder, file count, size and the frontmatter name and description before sending.
+A Skill's page uploads new versions (optionally as the default), moves the default
+pointer, downloads the default or an exact version, and deletes versions or the
+whole Skill. Existing Sessions keep the Skill content they started with.
+
+Known limits: Core has no Skill search, so the filter covers loaded rows only;
+Core does not record who uploaded a Skill; browser checks are a convenience and
+Core validates every upload. The entry is hidden when the connected Core has no
+Skills API, and explains when Core has no Skill storage configured. Attaching
+Skills to Environment templates is not available yet.
 
 ### System and connection status
 
-System shows what the connected Core build supports and what this process configured at
-startup: harnesses, daemon gateway, self-hosted execution, managed sandbox provider and
-operator model endpoint presence. It does not aggregate Runtime/daemon observations, so
-configuration is never presented as model execution readiness.
+System shows what the connected Core build supports and what this process
+configured at startup: harnesses, daemon gateway, self-hosted execution, managed
+sandbox provider and operator model endpoint presence. Configuration is never
+presented as model execution readiness.
 
-![Core connection and capability status](images/system.png)
-
-## Main capabilities
-
-| Area | User experience |
-| --- | --- |
-| Dashboard | Agent and Session overview, current Runtime CPU/memory/uptime and token coverage, attention queue, recent activity, quick actions |
-| Agents | Create, search, inspect, edit, delete, use templates, and start Sessions |
-| Sessions | Durable conversation history, Agent filtering, live events, cancellation, retry and continuation |
-| Trace | Turn history, usage when reported by Core, command output, Function and patch activity |
-| Functions and MCP | Configure supported tools, inspect calls, submit requested results, attach Vault credentials |
-| Vaults | Create project Vaults and manage write-only MCP bearer credentials without reading tokens back |
-| Environments | Default execution, optional self-hosted executor connection, and optional managed Runtime views |
-| Workspace and Files | Inspect supported Environment files and manage project Source Files when enabled by Core |
-| Templates | Basic name/network configuration, full catalog reads, partial updates and confirmed deletion |
-| System | Connection status plus safe build support and process startup configuration, clearly separated from Session/Environment runtime state |
-
-Capabilities appear only when the connected Core and the Web operator configuration expose
-them. Saving an Agent proves that its definition was stored; actual execution still depends
-on the Core's runtime, model provider, credentials, and tool connectivity.
+Capabilities appear only when the connected Core and the Web operator configuration
+expose them.
 
 ## Quick start
 
@@ -134,10 +190,10 @@ Only the local Web server reads the caller-key file. Do not place a plaintext ke
 
 ### First workflow
 
-1. Open **Agents** and choose **Create agent** or a starter template.
+1. Open **Playground → Agent builder** and choose **Create agent**.
 2. Set a name, model, and instructions; add supported tools only when needed.
 3. Select **Start Session**, choose an Environment, and enter the first message for conversation-only execution. Hosted Sessions may be created without input.
-4. Continue in **Sessions** while live events and durable history update.
+4. Continue in **Session console** while live events and durable history update, then watch the run appear in **Overview** and **Agent metrics**.
 5. Use **Trace**, **Vaults**, **Environment**, or **System** when the workflow needs them.
 
 ## Local Core and Docker
@@ -179,9 +235,10 @@ daemon or model provider.
 - [Protocol coverage](protocol-coverage.md) — tested resources, events and capability boundaries
 - [Architecture](architecture.md) — components, ownership and trust boundaries
 - [Roadmap](roadmap.md) — planned product and Core integrations
+- [Administrator metrics: backend requirements](admin-metrics-backend-requirements.md) — console-only aggregate endpoints proposed for Core
 - [Contributor policy](../../AGENTS.md) — repository scope, security and quality requirements
 
-The screenshots use isolated local fixture data and do not contain production data or
+The screenshots use synthetic local data and do not contain production data or
 prove model-provider readiness.
 
 Agents Core Web is available under the [MIT License](../../LICENSE).

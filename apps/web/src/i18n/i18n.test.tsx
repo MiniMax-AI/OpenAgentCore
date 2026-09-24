@@ -41,7 +41,7 @@ describe("Web internationalization", () => {
   it("does not fall back to English plural variants in Chinese", async () => {
     await i18n.changeLanguage("zh-CN");
     expect(i18n.t("turns.linkedItems", { ns: "sessions", count: 1 })).toBe("已关联 1 个条目");
-    expect(i18n.t("turns.observed", { ns: "sessions", count: 2 })).toBe("已观测 2 个轮次");
-    expect(i18n.t("turns.unassociated", { ns: "sessions", count: 2 })).toBe("有 2 个条目尚未关联到已观测轮次。");
+    expect(i18n.t("turns.observed", { ns: "sessions", count: 2 })).toBe("已观测 2 个 Turn");
+    expect(i18n.t("turns.unassociated", { ns: "sessions", count: 2 })).toBe("有 2 个条目尚未关联到已观测 Turn。");
   });
 });

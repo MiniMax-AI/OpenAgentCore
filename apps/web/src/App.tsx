@@ -1,4 +1,3 @@
-import { Settings2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -17,20 +16,16 @@ import type {
   UpdateAgentInput,
 } from "@agents-core-web/agents-client";
 
-import { ConsoleNavigation } from "./features/first-run/ConsoleNavigation";
 import { isLocalProxyBaseUrl } from "./lib/connection";
-import { ApiKeyPanel } from "./features/api-keys/ApiKeyPanel";
+import { ApiKeysView } from "./features/api-keys/ApiKeysView";
+import { ApiWorkbenchView } from "./features/workbench/ApiWorkbenchView";
+import { probeSkillsSupport, SkillsView, type SkillsSupport } from "./features/skills/SkillsView";
 import { FirstRunHome } from "./features/first-run/FirstRunHome";
-import { ConsoleAccountMenu } from "./features/first-run/ConsoleAccess";
 import { useIntroduction } from "./features/first-run/useIntroduction";
 import { SandboxManagerView } from "./features/sandbox/SandboxManagerView";
 import { SandboxProvider } from "./features/sandbox/SandboxContext";
-import { SystemNavigation } from "./components/SystemNavigation";
 import { ConnectionModal } from "./components/ConnectionModal";
-import { CreateMenu } from "./components/CreateMenu";
-import { ProductNavigation, type ProductView } from "./components/ProductNavigation";
-import { StatusIcon } from "./components/StatusIcon";
-import { AppearanceMenu } from "./components/AppearanceMenu";
+import { ConsoleSidebar } from "./components/ConsoleSidebar";
 import { useToast } from "./components/Toast";
 import { AgentsView } from "./features/agents/AgentsView";
 import {
@@ -43,7 +38,11 @@ import {
   requestAgentDetail,
   requestAgentUpdate,
 } from "./features/agents/agent-actions";
-import { DashboardView } from "./features/dashboard/DashboardView";
+import { AgentMetricsView } from "./features/metrics/AgentMetricsView";
+import { SandboxMetricsView } from "./features/metrics/SandboxMetricsView";
+import { OverviewView } from "./features/overview/OverviewView";
+import { SessionsLogView } from "./features/resources/SessionsLogView";
+import { consoleHashForView, consoleNavParent, consoleViewFromHash, type ConsoleView } from "./lib/console-routes";
 import { loadRuntimeDurableSnapshot } from "./features/dashboard/runtime-history";
 import {
   loadRuntimeDashboardSnapshot,
@@ -103,8 +102,7 @@ import {
   turnReadIsCurrent,
   upsertTurn,
 } from "./features/sessions/turns/turn-state";
-import { SystemView } from "./features/system/SystemView";
-import type { SourceFilesOperations } from "./features/system/SourceFilesPanel";
+import { FilesView } from "./features/files/FilesView";
 import { VaultsView, type VaultOperations } from "./features/vaults/VaultsView";
 import { deriveSessionVaultPlan, loadVaultCatalog, type VaultCatalog } from "./features/vaults/vault-catalog";
 import { requestVaultCreate } from "./features/vaults/vault-operations";
@@ -150,16 +148,15 @@ import {
   waitForStreamReconnect,
 } from "./lib/stream-reconnect";
 
-type View = ProductView | "system" | "sandbox" | "api-keys";
+type View = ConsoleView;
 
 function viewFromLocation(): View {
-  if (typeof window === "undefined") return "dashboard";
-  const candidate = window.location.hash.slice(1);
-  if (candidate === "templates" && __AGENTS_CORE_WEB_OPENAI_HOSTED_SESSIONS__) return "templates";
-  return candidate === "agents" || candidate === "sessions" || candidate === "vaults" || candidate === "system" || candidate === "sandbox" || candidate === "api-keys"
-    ? candidate
-    : "dashboard";
+  if (typeof window === "undefined") return "overview";
+  return consoleViewFromHash(window.location.hash, { templates: __AGENTS_CORE_WEB_OPENAI_HOSTED_SESSIONS__ });
 }
+
+/** Views that read the Session list keep the runtime snapshot (and its Session list) fresh. */
+const RUNTIME_POLLING_VIEWS: ReadonlySet<View> = new Set<View>(["overview", "agent-metrics", "sandbox-metrics", "sessions", "playground"]);
 
 interface StreamConnection {
   sessionId: string | null;
@@ -260,11 +257,13 @@ export function App() {
   const [connection, setConnection] = useState<CoreConnection>(() => loadConnection());
   const [connectionOpen, setConnectionOpen] = useState(false);
   const introduction = useIntroduction(connection.baseUrl);
-  const showIntroduction = introduction.available && introduction.visible && view === "dashboard";
+  const showIntroduction = introduction.available && introduction.visible && view === "overview";
   const [introductionAgentId, setIntroductionAgentId] = useState<string | undefined>();
+  const [sessionLogAgent, setSessionLogAgent] = useState<string | undefined>();
+  const [sessionLogRevision, setSessionLogRevision] = useState(0);
 
   useEffect(() => {
-    const hash = view === "dashboard" ? "" : `#${view}`;
+    const hash = consoleHashForView(view);
     const next = `${window.location.pathname}${window.location.search}${hash}`;
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     if (current !== next) window.history.replaceState(window.history.state, "", next);
@@ -337,7 +336,6 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [agentCreateRequest, setAgentCreateRequest] = useState<number | null>(null);
   const [sessionCreateRequest, setSessionCreateRequest] = useState<SessionCreateRequest | null>(null);
-  const agentCreateSequenceRef = useRef(0);
   const sessionCreateSequenceRef = useRef(0);
   const selectedIdRef = useRef<string | null>(selectedId);
   const sessionsRef = useRef<AgentSession[]>(sessions);
@@ -381,14 +379,6 @@ export function App() {
   sessionAgentFilterRef.current = sessionAgentFilter;
 
   const core = useMemo(() => createCore(connection), [connection]);
-  const sourceFilesOperations = useMemo<SourceFilesOperations>(() => ({
-    uploadSourceFile: (input, options) => core.uploadSourceFile(input, options),
-    retrieveSourceFile: (fileId, options) => core.retrieveSourceFile(fileId, options),
-    deleteSourceFile: (fileId, options) => core.deleteSourceFile(fileId, options),
-    retrieveEnvironment: (environmentId, options) => core.retrieveEnvironment(environmentId, options),
-    createEnvironmentFile: (environmentId, input, options) => core.createEnvironmentFile(environmentId, input, options),
-    listEnvironmentFiles: (environmentId, options) => core.listEnvironmentFiles(environmentId, options),
-  }), [core]);
   const coreGeneration = connectionGenerationRef.current;
   const coreState: CoreConnectionState = agentCollectionState === "ready" || sessionCollectionState === "ready"
     ? "ready"
@@ -1013,10 +1003,6 @@ export function App() {
     signal: AbortSignal,
   ) => loadRuntimeDurableSnapshot(core, snapshot, range, signal), [core]);
 
-  const refreshSystem = useCallback(() => {
-    void refreshStartupConfiguration();
-  }, [refreshStartupConfiguration]);
-
   const changeSessionAgentFilter = useCallback((agentId: string | null) => {
     if (sessionAgentFilterRef.current === agentId) return;
     filteredSessionCollectionAbortRef.current?.abort();
@@ -1091,7 +1077,7 @@ export function App() {
   }, [refreshRuntimeSnapshot, sessionCollectionState]);
 
   useEffect(() => {
-    if (view !== "dashboard" && view !== "sessions") return;
+    if (!RUNTIME_POLLING_VIEWS.has(view)) return;
     let timer: number | null = null;
     const schedule = () => {
       const jitter = Math.floor(Math.random() * 5_000);
@@ -1135,8 +1121,23 @@ export function App() {
   }, [refreshFilteredSessions, sessionAgentFilter]);
 
   useEffect(() => {
-    if (vaultSupported === false && view === "vaults") setView("dashboard");
+    if (vaultSupported === false && view === "vaults") setView("overview");
   }, [vaultSupported, view]);
+
+  // Skills are shown unless this Core answers 404/405; storage and read
+  // failures are explained on the page itself. Re-probed per connection.
+  const [skillsSupport, setSkillsSupport] = useState<SkillsSupport | null>(null);
+  // A template's file reference opens the Files page filtered to that ID.
+  const [filesFocus, setFilesFocus] = useState<string | null>(null);
+  useEffect(() => {
+    setSkillsSupport(null);
+    const controller = new AbortController();
+    probeSkillsSupport(core, controller.signal).then(setSkillsSupport, () => undefined);
+    return () => controller.abort();
+  }, [core]);
+  useEffect(() => {
+    if (skillsSupport === "unsupported" && view === "skills") setView("overview");
+  }, [skillsSupport, view]);
 
   useEffect(() => {
     selectedSessionReadAbortRef.current?.abort();
@@ -1725,7 +1726,7 @@ export function App() {
       setTurns([]);
       turnsSessionIdRef.current = session.id;
       setTurnsSessionId(session.id);
-      setView("sessions");
+      setView("playground");
     };
 
     if (!input.stream) {
@@ -2256,18 +2257,12 @@ export function App() {
     setConnectionOpen(false);
   };
 
-  const openAgentSetup = () => {
-    setView("agents");
-    agentCreateSequenceRef.current += 1;
-    setAgentCreateRequest(agentCreateSequenceRef.current);
-  };
-
   const openSessionSetup = (agentId?: string) => {
     if (agentId && !agents.some((candidate) => candidate.id === agentId)) {
       notify(t("errors.setupAgentMissing", { ns: "app" }), "error");
       return;
     }
-    setView("sessions");
+    setView("playground");
     sessionCreateSequenceRef.current += 1;
     setSessionCreateRequest({ agentId: agentId ?? null, requestId: sessionCreateSequenceRef.current });
   };
@@ -2280,69 +2275,106 @@ export function App() {
     setSessionCreateRequest((current) => current?.requestId === request ? null : current);
   }, []);
 
+  const openSession = (sessionId: string) => {
+    changeSessionAgentFilter(null);
+    selectedIdRef.current = sessionId;
+    setSelectedId(sessionId);
+    setView("playground");
+  };
+
+  const openSessionLog = (agentId?: string) => {
+    setSessionLogAgent(agentId);
+    setSessionLogRevision((value) => value + 1);
+    setView("sessions");
+  };
+
+  const hiddenViews = new Set<View>([
+    ...(__AGENTS_CORE_WEB_OPENAI_HOSTED_SESSIONS__ ? [] : ["templates" as const]),
+    ...(vaultSupported === true ? [] : ["vaults" as const]),
+    ...(skillsSupport === null || skillsSupport === "unsupported" ? ["skills" as const] : []),
+    ...(isLocalProxyBaseUrl(connection.baseUrl) ? [] : ["api-keys" as const]),
+  ]);
+  const monitorSessions = runtimeSnapshot?.sessions ?? sessions;
+  const coreLabel = isLocalProxyBaseUrl(connection.baseUrl) ? t("coreReady") : connection.baseUrl.replace(/^https?:\/\//, "");
+
   return (
     <SandboxProvider connection={connection}>{showIntroduction ? <FirstRunHome
             key={`intro:${coreGeneration}`}
             connection={connection} core={core} username={introduction.username}
             initialStep={introduction.step} onStepChange={introduction.setStep}
             onDone={introduction.dismiss} onRefresh={() => { void refreshAgents(); }}
-            onOpenAgent={(id) => { setIntroductionAgentId(id); void refreshAgents(); setView("agents"); }}
+            onOpenAgent={(id) => { setIntroductionAgentId(id); void refreshAgents(); setView("builder"); }}
           /> : <div className="app-shell">
       <a className="skip-link" href="#main-content">{t("skipToContent")}</a>
-      <aside className="app-sidebar">
-        <div className="brand-lockup">
-          <span className="brand-mark-frame">
-            <img className="brand-mark brand-mark-light" src="/parsar-mark-light.png" width="18" height="18" alt="" aria-hidden="true" />
-            <img className="brand-mark brand-mark-dark" src="/parsar-mark-dark.png" width="18" height="18" alt="" aria-hidden="true" />
-          </span>
-          <span className="brand-name">Agents Core Web</span>
-        </div>
-
-        <ProductNavigation
-          active={showIntroduction || view === "system" || view === "sandbox" || view === "api-keys" ? null : view}
-          onSelect={(nextView) => setView(nextView)}
-          showVaults={vaultSupported === true}
-          showTemplates={__AGENTS_CORE_WEB_OPENAI_HOSTED_SESSIONS__}
-        />
-
-        <ConsoleNavigation showIntroduction={showIntroduction} introductionAvailable={introduction.available} keysAvailable={isLocalProxyBaseUrl(connection.baseUrl)} activeView={view}
-          onIntroduction={() => { introduction.replay(); setView("dashboard"); }} onKeys={() => setView("api-keys")} />
-        <SystemNavigation active={view === "system" || view === "sandbox" ? view : null} onSelect={setView} />
-
-        <div className="sidebar-footer">
-          <button
-            className="core-switcher"
-            type="button"
-            onClick={() => setConnectionOpen(true)}
-            aria-label={t("configureCore")}
-          >
-            <StatusIcon
-              status={coreState === "ready" ? "completed" : coreState === "failed" ? "failed" : "running"}
-              title={t("coreState", { state: coreState })}
-            />
-            <span>
-              <strong>Agent Core</strong>
-              <small>{coreState === "connecting" ? t("coreConnecting") : coreState === "ready" ? t("coreReady") : t("coreFailed")}</small>
-            </span>
-            <Settings2 size={14} strokeWidth={1.5} />
-          </button>
-          <ConsoleAccountMenu />
-          <div className="sidebar-preferences">
-            <AppearanceMenu />
-          </div>
-        </div>
-      </aside>
+      <ConsoleSidebar
+        active={consoleNavParent(view)}
+        hidden={hiddenViews}
+        coreState={coreState}
+        coreLabel={coreLabel}
+        showIntroduction={introduction.available}
+        onSelect={(nextView) => {
+          if (nextView === "sessions") openSessionLog();
+          else setView(nextView);
+        }}
+        onIntroduction={() => { introduction.replay(); setView("overview"); }}
+        onConfigureCore={() => setConnectionOpen(true)}
+      />
 
       <main className="app-main" id="main-content" tabIndex={-1}>
-        <header className="product-header">
-          <CreateMenu
-            canCreateAgent={agentCollectionState === "ready" && !busy}
-            canStartSession={sessionCollectionState === "ready" && !busy}
-            onCreateAgent={openAgentSetup}
-            onStartSession={() => openSessionSetup()}
-          />
-        </header>
-        <div className="page-transition">
+        <div className="page-transition" key={view}>
+          {view === "overview" ? (
+            <OverviewView
+              key={`overview:${coreGeneration}`}
+              coreBaseUrl={connection.baseUrl}
+              coreState={coreState}
+              agentsState={agentCollectionState}
+              agentsError={agentCollectionError}
+              sessions={sessions}
+              sessionsState={sessionCollectionState}
+              sessionsError={sessionCollectionError}
+              runtimeSnapshot={runtimeSnapshot}
+              runtimeState={runtimeCollectionState}
+              runtimeError={runtimeCollectionError}
+              onRefresh={refreshDashboard}
+              onOpenSession={openSession}
+              onNavigate={(nextView) => (nextView === "sessions" ? openSessionLog() : setView(nextView))}
+              onConfigureConnection={() => setConnectionOpen(true)}
+            />
+          ) : null}
+          {view === "agent-metrics" ? (
+            <AgentMetricsView
+              key={`agent-metrics:${coreGeneration}`}
+              source={core}
+              sessions={monitorSessions}
+              sessionsState={sessionCollectionState}
+              sessionsError={sessionCollectionError}
+              onRefreshSessions={refreshDashboard}
+            />
+          ) : null}
+          {view === "sandbox-metrics" ? (
+            <SandboxMetricsView
+              key={`sandbox-metrics:${coreGeneration}`}
+              coreBaseUrl={connection.baseUrl}
+              runtimeSnapshot={runtimeSnapshot}
+              runtimeState={runtimeCollectionState}
+              runtimeError={runtimeCollectionError}
+              loadRuntimeHistory={loadDashboardRuntimeHistory}
+              onRefresh={refreshDashboard}
+              onOpenSession={openSession}
+              onNavigate={setView}
+            />
+          ) : null}
+          {view === "sessions" ? (
+            <SessionsLogView
+              key={`sessions-log:${coreGeneration}:${sessionLogRevision}`}
+              initialAgentId={sessionLogAgent}
+              sessions={monitorSessions}
+              state={sessionCollectionState}
+              error={sessionCollectionError}
+              onRefresh={refreshDashboard}
+              onOpenSession={openSession}
+            />
+          ) : null}
           {view === "templates" ? (
             <EnvironmentTemplatesView
               key={`templates:${coreGeneration}`}
@@ -2350,39 +2382,25 @@ export function App() {
               operations={core}
               onRefresh={refreshEnvironmentTemplates}
               onConfigureConnection={() => setConnectionOpen(true)}
+              onOpenFile={(id) => { setFilesFocus(id); setView("files"); }}
+              onOpenSkill={() => setView("skills")}
             />
           ) : null}
-          <div className="cached-page-view" hidden={view !== "dashboard" || showIntroduction}>
-            <DashboardView
+          {view === "workbench" ? (
+            <ApiWorkbenchView
+              key={`workbench:${coreGeneration}`}
+              core={core}
+              baseUrl={connection.baseUrl}
               agents={agents}
-              sessions={sessions}
-              agentCollectionState={agentCollectionState}
-              agentCollectionError={agentCollectionError}
-              agentCollectionHasSnapshot={agentCollectionHasSnapshot}
-              sessionCollectionState={sessionCollectionState}
-              sessionCollectionError={sessionCollectionError}
-              sessionCollectionHasSnapshot={sessionCollectionHasSnapshot}
-              runtimeSnapshot={runtimeSnapshot}
-              runtimeCollectionState={runtimeCollectionState}
-              runtimeCollectionError={runtimeCollectionError}
-              runtimeCollectionHasSnapshot={runtimeCollectionHasSnapshot}
-              loadRuntimeHistory={loadDashboardRuntimeHistory}
-              onRefresh={refreshDashboard}
-              onCreateAgent={openAgentSetup}
-              onStartSession={() => openSessionSetup()}
-              onViewAgents={() => setView("agents")}
-              onViewSessions={() => setView("sessions")}
-              onConfigureConnection={() => setConnectionOpen(true)}
-              onOpenSession={(sessionId) => {
-                changeSessionAgentFilter(null);
-                selectedIdRef.current = sessionId;
-                setSelectedId(sessionId);
-                setView("sessions");
-              }}
+              sessions={monitorSessions}
+              harnesses={startupConfigurationState === "ready" && startupConfiguration ? startupConfiguration.configured.enabled_harnesses : []}
+              onOpenSession={openSession}
+              onChanged={refreshDashboard}
             />
-          </div>
-          {view === "sessions" ? (
+          ) : null}
+          {view === "playground" ? (
             <SessionsView
+              onBack={() => openSessionLog()}
               key={`sessions:${coreGeneration}`}
               agents={agents}
               agentFilter={sessionAgentFilter}
@@ -2431,8 +2449,9 @@ export function App() {
               onUpdateSession={updateSessionMetadata}
             />
           ) : null}
-          {view === "agents" ? (
+          {view === "builder" ? (
             <AgentsView
+              usageSource={core}
               key={`agents:${coreGeneration}`}
               openAgentId={introductionAgentId}
               onOpenAgentConsumed={(id) => setIntroductionAgentId((current) => current === id ? undefined : current)}
@@ -2453,6 +2472,10 @@ export function App() {
               onUpdate={updateAgent}
             />
           ) : null}
+          {view === "skills" && skillsSupport !== null && skillsSupport !== "unsupported" ? (
+            <SkillsView key={`skills:${coreGeneration}`} core={core} onUnsupported={() => setSkillsSupport("unsupported")} />
+          ) : null}
+          {view === "files" ? <FilesView key={`files:${coreGeneration}:${filesFocus ?? ""}`} core={core} initialQuery={filesFocus ?? undefined} /> : null}
           {view === "vaults" && vaultSupported === true ? (
             <VaultsView
               key={`vaults:${coreGeneration}`}
@@ -2463,20 +2486,8 @@ export function App() {
               operations={vaultOperations}
             />
           ) : null}
-          {view === "api-keys" && isLocalProxyBaseUrl(connection.baseUrl) ? <section className="page-section api-keys-page"><header className="page-header"><h1>{t("API keys", { ns: "firstRun" })}</h1></header><ApiKeyPanel /></section> : null}
-          {view === "sandbox" ? <SandboxManagerView key={`sandbox:${coreGeneration}`} coreBaseUrl={connection.baseUrl} /> : null}
-          {view === "system" ? (
-            <SystemView
-              key={`system:${coreGeneration}`}
-              startupConfiguration={startupConfiguration}
-              startupConfigurationState={startupConfigurationState}
-              startupConfigurationSupported={startupConfigurationSupported}
-              selfHostedWebEnabled={__AGENTS_CORE_WEB_SELF_HOSTED_SESSIONS__}
-              managedWebEnabled={__AGENTS_CORE_WEB_OPENAI_HOSTED_SESSIONS__}
-              refreshing={startupConfigurationState === "connecting"}
-              onRefresh={refreshSystem}
-            />
-          ) : null}
+          {view === "api-keys" && isLocalProxyBaseUrl(connection.baseUrl) ? <ApiKeysView key={`api-keys:${coreGeneration}`} /> : null}
+          {view === "nodes" ? <SandboxManagerView key={`sandbox:${coreGeneration}`} coreBaseUrl={connection.baseUrl} /> : null}
         </div>
       </main>
 

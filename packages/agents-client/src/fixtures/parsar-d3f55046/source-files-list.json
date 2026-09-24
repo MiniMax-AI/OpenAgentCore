@@ -1,0 +1,252 @@
+{
+  "revision": "d3f55046717264876157acd567646d665997b040",
+  "source": "Raw HTTP responses of services/agents-api/internal/api/source_files*.go, pagination.go and errors.go at this revision (derived from the handlers, not captured from a running Core). Files never use the Agents Beta header.",
+  "responses": {
+    "list_first_page": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/files",
+        "query": "limit=2"
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "object": "list",
+        "data": [
+          {
+            "id": "file-3c8d0e21-5f60-4b7c-9d8e-0f1a2b3c4d5e",
+            "object": "file",
+            "bytes": 0,
+            "created_at": 1790208120,
+            "filename": "empty.bin",
+            "purpose": "user_data",
+            "status": "processed",
+            "expires_at": null,
+            "status_details": null
+          },
+          {
+            "id": "file-2b7c9d10-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+            "object": "file",
+            "bytes": 42,
+            "created_at": 1790208060,
+            "filename": "input.csv",
+            "purpose": "user_data",
+            "status": "processed",
+            "expires_at": null,
+            "status_details": null
+          }
+        ],
+        "has_more": true,
+        "first_id": "file-3c8d0e21-5f60-4b7c-9d8e-0f1a2b3c4d5e",
+        "last_id": "file-2b7c9d10-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
+      }
+    },
+    "list_second_page": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/files",
+        "query": "after=file-2b7c9d10-4e5f-4a6b-8c7d-9e0f1a2b3c4d&limit=2"
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "object": "list",
+        "data": [
+          {
+            "id": "file-16e1f26e-8cf6-4272-9c31-d470b08d31af",
+            "object": "file",
+            "bytes": 3,
+            "created_at": 1790208000,
+            "filename": "notes.txt",
+            "purpose": "user_data",
+            "status": "processed",
+            "expires_at": null,
+            "status_details": null
+          }
+        ],
+        "has_more": false,
+        "first_id": "file-16e1f26e-8cf6-4272-9c31-d470b08d31af",
+        "last_id": "file-16e1f26e-8cf6-4272-9c31-d470b08d31af"
+      }
+    },
+    "list_ascending": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/files",
+        "query": "limit=100&order=asc"
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "object": "list",
+        "data": [
+          {
+            "id": "file-16e1f26e-8cf6-4272-9c31-d470b08d31af",
+            "object": "file",
+            "bytes": 3,
+            "created_at": 1790208000,
+            "filename": "notes.txt",
+            "purpose": "user_data",
+            "status": "processed",
+            "expires_at": null,
+            "status_details": null
+          },
+          {
+            "id": "file-2b7c9d10-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+            "object": "file",
+            "bytes": 42,
+            "created_at": 1790208060,
+            "filename": "input.csv",
+            "purpose": "user_data",
+            "status": "processed",
+            "expires_at": null,
+            "status_details": null
+          },
+          {
+            "id": "file-3c8d0e21-5f60-4b7c-9d8e-0f1a2b3c4d5e",
+            "object": "file",
+            "bytes": 0,
+            "created_at": 1790208120,
+            "filename": "empty.bin",
+            "purpose": "user_data",
+            "status": "processed",
+            "expires_at": null,
+            "status_details": null
+          }
+        ],
+        "has_more": false,
+        "first_id": "file-16e1f26e-8cf6-4272-9c31-d470b08d31af",
+        "last_id": "file-3c8d0e21-5f60-4b7c-9d8e-0f1a2b3c4d5e"
+      }
+    },
+    "list_empty": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/files",
+        "query": "limit=100"
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "object": "list",
+        "data": [],
+        "has_more": false,
+        "first_id": null,
+        "last_id": null
+      }
+    },
+    "uploaded": {
+      "request": {
+        "method": "POST",
+        "path": "/v1/files",
+        "multipart": [
+          "file=input.csv",
+          "purpose=user_data"
+        ]
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "id": "file-2b7c9d10-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+        "object": "file",
+        "bytes": 42,
+        "created_at": 1790208060,
+        "filename": "input.csv",
+        "purpose": "user_data",
+        "status": "processed",
+        "expires_at": null,
+        "status_details": null
+      }
+    },
+    "deleted": {
+      "request": {
+        "method": "DELETE",
+        "path": "/v1/files/file-2b7c9d10-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "id": "file-2b7c9d10-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+        "object": "file",
+        "deleted": true
+      }
+    },
+    "content_denied": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/files/file-2b7c9d10-4e5f-4a6b-8c7d-9e0f1a2b3c4d/content"
+      },
+      "status": 400,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "error": {
+          "message": "Not allowed to download files of purpose: user_data",
+          "type": "invalid_request_error",
+          "code": null,
+          "param": null
+        }
+      }
+    },
+    "list_invalid_purpose": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/files",
+        "query": "purpose=unknown"
+      },
+      "status": 400,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "error": {
+          "message": "Invalid purpose.",
+          "type": "invalid_request_error",
+          "code": null,
+          "param": "purpose"
+        }
+      }
+    },
+    "storage_unavailable": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/files",
+        "query": "limit=100"
+      },
+      "status": 503,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "error": {
+          "message": "Source file storage is unavailable.",
+          "type": "server_error",
+          "code": "file_storage_unavailable",
+          "param": null
+        }
+      }
+    }
+  }
+}

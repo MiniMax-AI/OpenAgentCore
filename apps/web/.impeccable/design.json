@@ -1,0 +1,692 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-24T09:59:21.057068+00:00",
+  "title": "Design System: Parsar Core Console",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ledger Ink",
+        "canonical": "#37352f",
+        "cssVar": "--fg",
+        "dark": "#d4d4d4",
+        "tonalRamp": [
+          "#292823",
+          "#4a483f",
+          "#6b675c",
+          "#8c8778",
+          "#a8a499",
+          "#c4c2ba",
+          "#e0dfdb",
+          "#f3f3f1"
+        ]
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Graphite",
+        "canonical": "#787774",
+        "cssVar": "--fg-muted",
+        "dark": "#9b9b9b",
+        "tonalRamp": [
+          "#272726",
+          "#464544",
+          "#656462",
+          "#848380",
+          "#a2a19f",
+          "#c0c0be",
+          "#dededd",
+          "#f2f2f2"
+        ]
+      },
+      "ink-subtle": {
+        "role": "neutral",
+        "displayName": "Pencil",
+        "canonical": "#9b9a97",
+        "cssVar": "--fg-subtle",
+        "dark": "#7b7b7b",
+        "tonalRamp": [
+          "#272726",
+          "#464644",
+          "#656462",
+          "#848380",
+          "#a2a29f",
+          "#c0c0be",
+          "#dededd",
+          "#f2f2f2"
+        ]
+      },
+      "sidebar-ink": {
+        "role": "neutral",
+        "displayName": "Sidebar Ink",
+        "canonical": "#5f5e5a",
+        "cssVar": "--sidebar-fg",
+        "dark": "#bdbdbd",
+        "tonalRamp": [
+          "#272725",
+          "#474643",
+          "#666561",
+          "#85847f",
+          "#a3a29e",
+          "#c1c0be",
+          "#dfdedd",
+          "#f3f2f2"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#ffffff",
+        "cssVar": "--surface",
+        "dark": "#191919",
+        "tonalRamp": [
+          "#262626",
+          "#454545",
+          "#636363",
+          "#828282",
+          "#a1a1a1",
+          "#bfbfbf",
+          "#dedede",
+          "#f2f2f2"
+        ]
+      },
+      "surface-subtle": {
+        "role": "neutral",
+        "displayName": "Margin Gray",
+        "canonical": "#fafafa",
+        "cssVar": "--surface-subtle",
+        "dark": "#202020",
+        "tonalRamp": [
+          "#262626",
+          "#454545",
+          "#636363",
+          "#828282",
+          "#a1a1a1",
+          "#bfbfbf",
+          "#dedede",
+          "#f2f2f2"
+        ]
+      },
+      "surface-muted": {
+        "role": "neutral",
+        "displayName": "Well Gray",
+        "canonical": "#f1f1f0",
+        "cssVar": "--surface-muted",
+        "dark": "#2a2a2a",
+        "tonalRamp": [
+          "#282825",
+          "#474742",
+          "#676760",
+          "#86867e",
+          "#a4a49d",
+          "#c1c1bd",
+          "#dfdfdd",
+          "#f3f3f2"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#e9e9ec",
+        "cssVar": "--line",
+        "dark": "rgb(255 255 255 / 9%)",
+        "tonalRamp": [
+          "#232329",
+          "#40404a",
+          "#5c5c6b",
+          "#79798b",
+          "#9a9aa8",
+          "#bbbbc4",
+          "#dbdbe0",
+          "#f1f1f3"
+        ]
+      },
+      "line-muted": {
+        "role": "neutral",
+        "displayName": "Faint Rule",
+        "canonical": "#efeff1",
+        "cssVar": "--line-muted",
+        "dark": "rgb(255 255 255 / 6%)",
+        "tonalRamp": [
+          "#242429",
+          "#404049",
+          "#5d5d6a",
+          "#7a7a8a",
+          "#9a9aa7",
+          "#bbbbc3",
+          "#dcdce0",
+          "#f1f1f3"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Firm Rule",
+        "canonical": "#d6d7dc",
+        "cssVar": "--line-strong",
+        "dark": "rgb(255 255 255 / 16%)",
+        "tonalRamp": [
+          "#232429",
+          "#3f414a",
+          "#5c5e6b",
+          "#787b8c",
+          "#999ca8",
+          "#babcc4",
+          "#dbdce0",
+          "#f1f2f3"
+        ]
+      },
+      "hover": {
+        "role": "neutral",
+        "displayName": "Hover Wash",
+        "canonical": "rgb(55 53 47 / 3%)",
+        "cssVar": "--hover",
+        "dark": "rgb(255 255 255 / 5.5%)",
+        "tonalRamp": []
+      },
+      "pressed": {
+        "role": "neutral",
+        "displayName": "Pressed Wash",
+        "canonical": "rgb(55 53 47 / 6%)",
+        "cssVar": "--pressed",
+        "dark": "rgb(255 255 255 / 10%)",
+        "tonalRamp": []
+      },
+      "tile": {
+        "role": "neutral",
+        "displayName": "Tile Wash",
+        "canonical": "rgb(55 53 47 / 7%)",
+        "cssVar": "--tile",
+        "dark": "rgb(255 255 255 / 10%)",
+        "tonalRamp": []
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Parsar Indigo",
+        "canonical": "#4f46e5",
+        "cssVar": "--accent",
+        "dark": "#8b90f6",
+        "tonalRamp": [
+          "#0d0943",
+          "#171179",
+          "#2119ae",
+          "#2f24e0",
+          "#625ae8",
+          "#958fef",
+          "#c8c5f7",
+          "#eae9fc"
+        ]
+      },
+      "accent-emphasis": {
+        "role": "primary",
+        "displayName": "Pressed Indigo",
+        "canonical": "#4338ca",
+        "cssVar": "--accent-emphasis",
+        "dark": "#a5a9f8",
+        "tonalRamp": [
+          "#13103c",
+          "#231d6d",
+          "#332a9d",
+          "#453aca",
+          "#726ad7",
+          "#a09ae4",
+          "#cecbf1",
+          "#ecebfa"
+        ]
+      },
+      "accent-fg": {
+        "role": "primary",
+        "displayName": "On Indigo",
+        "canonical": "#ffffff",
+        "cssVar": "--accent-fg",
+        "dark": "#14142b",
+        "tonalRamp": [
+          "#262626",
+          "#454545",
+          "#636363",
+          "#828282",
+          "#a1a1a1",
+          "#bfbfbf",
+          "#dedede",
+          "#f2f2f2"
+        ]
+      },
+      "success": {
+        "role": "signal",
+        "displayName": "Healthy Green",
+        "canonical": "#16a34a",
+        "cssVar": "--success",
+        "dark": "#3fb950",
+        "tonalRamp": [
+          "#09431f",
+          "#107937",
+          "#18af50",
+          "#23e169",
+          "#59e98e",
+          "#8ff0b3",
+          "#c5f7d7",
+          "#e9fcf0"
+        ]
+      },
+      "warning": {
+        "role": "signal",
+        "displayName": "Caution Amber",
+        "canonical": "#d97706",
+        "cssVar": "--warning",
+        "dark": "#f5a524",
+        "tonalRamp": [
+          "#4a2902",
+          "#864904",
+          "#c26a05",
+          "#f88a0c",
+          "#faa747",
+          "#fcc483",
+          "#fde0be",
+          "#fef3e6"
+        ]
+      },
+      "danger": {
+        "role": "signal",
+        "displayName": "Fault Red",
+        "canonical": "#dc2626",
+        "cssVar": "--danger",
+        "dark": "#f05252",
+        "tonalRamp": [
+          "#420b0b",
+          "#771313",
+          "#ab1c1c",
+          "#dc2828",
+          "#e55d5d",
+          "#ed9191",
+          "#f6c6c6",
+          "#fbe9e9"
+        ]
+      },
+      "status-queued": {
+        "role": "signal",
+        "displayName": "Queued Gray",
+        "canonical": "#9a9ca4",
+        "cssVar": "--status-queued",
+        "dark": "#71737b",
+        "tonalRamp": [
+          "#242528",
+          "#414348",
+          "#5e6069",
+          "#7c7e89",
+          "#9c9ea6",
+          "#bcbdc3",
+          "#dcdde0",
+          "#f2f2f3"
+        ]
+      },
+      "status-idle": {
+        "role": "signal",
+        "displayName": "Idle Gray",
+        "canonical": "#b4b4b9",
+        "cssVar": "--status-idle",
+        "dark": "#5e5e62",
+        "tonalRamp": [
+          "#252528",
+          "#424247",
+          "#606067",
+          "#7e7e86",
+          "#9d9da4",
+          "#bdbdc1",
+          "#dddddf",
+          "#f2f2f3"
+        ]
+      },
+      "series-1": {
+        "role": "data",
+        "displayName": "Cobalt",
+        "canonical": "#2a78d6",
+        "cssVar": "--series-1",
+        "dark": "#3987e5",
+        "tonalRamp": [
+          "#0c2440",
+          "#164173",
+          "#205da7",
+          "#2d7ad7",
+          "#619be1",
+          "#94bbea",
+          "#c7dcf4",
+          "#eaf1fb"
+        ]
+      },
+      "series-2": {
+        "role": "data",
+        "displayName": "Persimmon",
+        "canonical": "#eb6834",
+        "cssVar": "--series-2",
+        "dark": "#d95926",
+        "tonalRamp": [
+          "#461907",
+          "#7d2c0c",
+          "#b54012",
+          "#e9561c",
+          "#ee7f53",
+          "#f4a98b",
+          "#f9d2c3",
+          "#fdeee8"
+        ]
+      },
+      "series-3": {
+        "role": "data",
+        "displayName": "Jade",
+        "canonical": "#1baf7a",
+        "cssVar": "--series-3",
+        "dark": "#199e70",
+        "tonalRamp": [
+          "#0a422e",
+          "#127753",
+          "#1bac78",
+          "#27de9c",
+          "#5ce6b4",
+          "#91eecd",
+          "#c6f6e5",
+          "#e9fcf5"
+        ]
+      },
+      "series-4": {
+        "role": "data",
+        "displayName": "Saffron",
+        "canonical": "#eda100",
+        "cssVar": "--series-4",
+        "dark": "#c98500",
+        "tonalRamp": [
+          "#4c3400",
+          "#8a5e00",
+          "#c78700",
+          "#ffaf05",
+          "#ffc242",
+          "#ffd680",
+          "#ffeabd",
+          "#fff7e5"
+        ]
+      },
+      "series-5": {
+        "role": "data",
+        "displayName": "Rose",
+        "canonical": "#e87ba4",
+        "cssVar": "--series-5",
+        "dark": "#d55181",
+        "tonalRamp": [
+          "#410b20",
+          "#751439",
+          "#a91e52",
+          "#da2a6c",
+          "#e35e90",
+          "#ec92b4",
+          "#f5c7d8",
+          "#fbe9f0"
+        ]
+      },
+      "series-6": {
+        "role": "data",
+        "displayName": "Forest",
+        "canonical": "#008300",
+        "cssVar": "--series-6",
+        "dark": "#008300",
+        "tonalRamp": [
+          "#004c00",
+          "#008a00",
+          "#00c700",
+          "#05ff05",
+          "#42ff42",
+          "#80ff80",
+          "#bdffbd",
+          "#e5ffe5"
+        ]
+      },
+      "series-other": {
+        "role": "data",
+        "displayName": "Series Other",
+        "canonical": "#a3a3a8",
+        "cssVar": "--series-other",
+        "dark": "#6d6d72",
+        "tonalRamp": [
+          "#252527",
+          "#434347",
+          "#616166",
+          "#7f7f86",
+          "#9e9ea3",
+          "#bdbdc1",
+          "#dddddf",
+          "#f2f2f3"
+        ]
+      },
+      "meter-track": {
+        "role": "data",
+        "displayName": "Meter Track",
+        "canonical": "rgb(55 53 47 / 8%)",
+        "cssVar": "--meter-track",
+        "dark": "rgb(255 255 255 / 9%)",
+        "tonalRamp": []
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "KPI Figure",
+        "purpose": "KPI strip values only; tabular numerals."
+      },
+      "headline": {
+        "displayName": "Page Title",
+        "purpose": "One per page in the 64px header."
+      },
+      "title": {
+        "displayName": "Section Title",
+        "purpose": "Section headings; chart captions step down to 13px/600."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Table cells, controls, fields; document base is 14px/20px."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "KPI labels, status labels, text actions, segmented options."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Identifiers and code in Graphite."
+      }
+    },
+    "shadows": [
+      {
+        "name": "shadow-control",
+        "value": "0 1px 2px rgb(0 0 0 / 6%)",
+        "dark": "0 1px 2px rgb(0 0 0 / 40%)",
+        "purpose": "Raised controls only: primary/outline buttons, fields, active segment, active filter tab, selected fleet target."
+      },
+      {
+        "name": "shadow-floating",
+        "value": "0 1px 2px rgb(24 24 27 / 4%), 0 8px 24px -12px rgb(24 24 27 / 18%)",
+        "dark": "0 1px 2px rgb(0 0 0 / 30%), 0 8px 24px -12px rgb(0 0 0 / 55%)",
+        "purpose": "Help-tip popovers, chart tooltips, menus and dialogs."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-settle",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "Default easing for colour, background and opacity state changes (150ms)."
+      },
+      {
+        "name": "ease-spring",
+        "value": "cubic-bezier(0.34, 1.56, 0.64, 1)",
+        "purpose": "Button press scale to 0.97 (120ms)."
+      },
+      {
+        "name": "page-in",
+        "value": "opacity 0 to 1, 160ms ease-settle",
+        "purpose": "Page change settle; no choreography. Disabled under reduced motion."
+      },
+      {
+        "name": "help-tip-in",
+        "value": "opacity 0 to 1, 120ms ease-settle",
+        "purpose": "Help-tip popover appearance."
+      },
+      {
+        "name": "refetch-dim",
+        "value": "opacity 0.62, 180ms ease-settle",
+        "purpose": "Page body while refetching."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "min-desktop",
+        "value": "960px"
+      },
+      {
+        "name": "stack-charts",
+        "value": "1180px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one filled action on a page; indigo is reserved for this and selection.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Create key</button>",
+      "css": ".ds-btn { display:inline-flex; height:28px; align-items:center; gap:6px; padding:0 10px; font:500 13px/18px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; border:1px solid transparent; border-radius:6px; cursor:pointer; transition: background-color 150ms cubic-bezier(0.22,1,0.36,1), border-color 150ms cubic-bezier(0.22,1,0.36,1), transform 120ms cubic-bezier(0.34,1.56,0.64,1); } .ds-btn-primary { color: var(--accent-fg, #fff); background: var(--accent, #4f46e5); border-color: var(--accent, #4f46e5); box-shadow: 0 1px 2px rgb(0 0 0 / 6%); } .ds-btn-primary:hover { background: var(--accent-emphasis, #4338ca); border-color: var(--accent-emphasis, #4338ca); } .ds-btn:focus-visible { outline:none; border-color: var(--accent, #4f46e5); box-shadow: 0 0 0 1px var(--accent, #4f46e5); } .ds-btn:active { transform: scale(0.97); }"
+    },
+    {
+      "name": "Outline Button (Refresh)",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Default page-header action; Refresh keeps its last-updated time in the tooltip.",
+      "html": "<button class=\"ds-btn-outline\" title=\"Updated 17:30\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/></svg>Refresh</button>",
+      "css": ".ds-btn-outline { display:inline-flex; height:28px; align-items:center; gap:6px; padding:0 10px; color: var(--fg, #37352f); font:500 13px/18px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--surface, #fff); border:1px solid var(--line-strong, #d6d7dc); border-radius:6px; box-shadow: 0 1px 2px rgb(0 0 0 / 6%); cursor:pointer; transition: background-color 150ms cubic-bezier(0.22,1,0.36,1); } .ds-btn-outline:hover { background: var(--hover, rgb(55 53 47 / 3%)); } .ds-btn-outline:focus-visible { outline:none; border-color: var(--accent, #4f46e5); box-shadow: 0 0 0 1px var(--accent, #4f46e5); }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "28px form field with a firm rule border and indigo focus ring.",
+      "html": "<input class=\"ds-input\" placeholder=\"Key name\">",
+      "css": ".ds-input { width:240px; min-height:28px; padding:4px 8px; color: var(--fg, #37352f); font:400 13px/18px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--surface, #fff); border:1px solid var(--line-strong, #d6d7dc); border-radius:6px; box-shadow: 0 1px 2px rgb(0 0 0 / 6%); } .ds-input:focus { outline:none; border-color: var(--accent, #4f46e5); box-shadow: 0 0 0 1px var(--accent, #4f46e5); }"
+    },
+    {
+      "name": "Segmented Range Control",
+      "kind": "chip",
+      "refersTo": "segmented-option",
+      "description": "The single style for time ranges and mode switches.",
+      "html": "<div class=\"ds-seg\" role=\"radiogroup\" aria-label=\"Range\"><button role=\"radio\" aria-checked=\"false\">1 小时</button><button role=\"radio\" aria-checked=\"false\">6 小时</button><button role=\"radio\" aria-checked=\"true\">24 小时</button><button role=\"radio\" aria-checked=\"false\">7 天</button></div>",
+      "css": ".ds-seg { display:inline-flex; gap:2px; padding:2px; background: var(--surface-muted, #f1f1f0); border-radius:7px; } .ds-seg button { height:24px; padding:0 10px; color: var(--fg-muted, #787774); font:500 12.5px -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', sans-serif; background:transparent; border:0; border-radius:5px; cursor:pointer; transition: color 150ms cubic-bezier(0.22,1,0.36,1), background-color 150ms cubic-bezier(0.22,1,0.36,1); } .ds-seg button:hover { color: var(--fg, #37352f); } .ds-seg button[aria-checked='true'] { color: var(--fg, #37352f); background: var(--surface, #fff); box-shadow: 0 1px 2px rgb(0 0 0 / 6%); } .ds-seg button:focus-visible { outline:2px solid var(--accent, #4f46e5); outline-offset:2px; }"
+    },
+    {
+      "name": "Sidebar Navigation",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Grouped sidebar items on the subtle ground; active item takes the pressed wash.",
+      "html": "<nav class=\"ds-nav\"><p class=\"ds-nav-label\">Monitor</p><button class=\"active\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/></svg><span>Overview</span></button><button><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path d=\"M22 12h-4l-3 9L9 3l-3 9H2\"/></svg><span>Agent metrics</span></button></nav>",
+      "css": ".ds-nav { width:212px; padding:10px; color: var(--sidebar-fg, #5f5e5a); background: var(--surface-subtle, #fafafa); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; } .ds-nav-label { margin:0; padding:14px 8px 4px; color: var(--fg-muted, #787774); font-size:12px; line-height:16px; } .ds-nav button { display:flex; align-items:center; gap:8px; width:100%; height:30px; margin:1px 0; padding:0 8px; color:inherit; font-size:14px; background:transparent; border:0; border-radius:6px; cursor:pointer; transition: background-color 150ms cubic-bezier(0.22,1,0.36,1); } .ds-nav button:hover { background: var(--hover, rgb(55 53 47 / 3%)); } .ds-nav button.active { color: var(--fg, #37352f); font-weight:500; background: var(--pressed, rgb(55 53 47 / 6%)); } .ds-nav button:focus-visible { outline:none; box-shadow: 0 0 0 1px var(--accent, #4f46e5); }"
+    },
+    {
+      "name": "KPI Strip",
+      "kind": "card",
+      "refersTo": "kpi-cell",
+      "description": "One hairline frame of figures divided by internal rules, each label with a help tip.",
+      "html": "<dl class=\"ds-kpis\"><div class=\"ds-kpi\"><dt>Service <span class=\"ds-q\">?</span></dt><dd><i class=\"ds-tone warn\"></i>Degraded</dd></div><div class=\"ds-kpi\"><dt>Sandbox slots</dt><dd>12 / 16</dd></div><div class=\"ds-kpi\"><dt>Reported tokens</dt><dd>4.16M</dd></div><div class=\"ds-kpi\"><dt>P95 latency</dt><dd>—</dd></div></dl>",
+      "css": ".ds-kpis { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); margin:0; overflow:hidden; border:1px solid var(--line, #e9e9ec); border-radius:8px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; } .ds-kpi { display:flex; flex-direction:column; gap:6px; padding:14px 16px 16px; box-shadow: inset -1px 0 var(--line, #e9e9ec); } .ds-kpi dt { display:flex; align-items:center; gap:4px; color: var(--fg-muted, #787774); font-size:12.5px; line-height:18px; } .ds-q { display:inline-grid; place-items:center; width:13px; height:13px; border:1.2px solid var(--fg-subtle, #9b9a97); border-radius:50%; color: var(--fg-subtle, #9b9a97); font-size:9px; } .ds-kpi dd { display:flex; align-items:center; gap:7px; margin:0; color: var(--fg, #37352f); font-size:24px; font-weight:600; line-height:28px; letter-spacing:-0.02em; font-variant-numeric: tabular-nums; } .ds-tone { width:8px; height:8px; border-radius:50%; } .ds-tone.warn { background: var(--warning, #d97706); }"
+    },
+    {
+      "name": "Status Dot",
+      "kind": "custom",
+      "refersTo": "status-dot",
+      "description": "A 7px dot plus a plain label; never colour alone, never a pill.",
+      "html": "<span class=\"ds-status ok\"><i></i>Running</span> <span class=\"ds-status warn\"><i></i>Needs action</span> <span class=\"ds-status danger\"><i></i>Failed</span> <span class=\"ds-status idle\"><i></i>Idle</span>",
+      "css": ".ds-status { display:inline-flex; align-items:center; gap:6px; margin-right:12px; color: var(--fg, #37352f); font:400 12.5px/18px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; } .ds-status i { width:7px; height:7px; border-radius:50%; background: var(--fg-subtle, #9b9a97); } .ds-status.ok i { background: var(--success, #16a34a); } .ds-status.warn i { background: var(--warning, #d97706); } .ds-status.danger i { background: var(--danger, #dc2626); } .ds-status.idle i { background: var(--status-idle, #b4b4b9); }"
+    },
+    {
+      "name": "Meter",
+      "kind": "custom",
+      "refersTo": "meter",
+      "description": "Ratio against a limit; series fill until 80%, amber to 95%, red beyond.",
+      "html": "<div class=\"ds-meter-row\"><span>Active sandboxes</span><span class=\"ds-meter\"><span style=\"width:75%\"></span></span><b>12 / 16</b></div><div class=\"ds-meter-row\"><span>gpu-worker-02</span><span class=\"ds-meter warn\"><span style=\"width:87%\"></span></span><b>7 / 8</b></div>",
+      "css": ".ds-meter-row { display:grid; grid-template-columns: 120px 1fr auto; align-items:center; gap:12px; margin:6px 0; color: var(--fg-muted, #787774); font:400 12.5px/18px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; } .ds-meter-row b { color: var(--fg, #37352f); font-weight:500; font-variant-numeric: tabular-nums; } .ds-meter { position:relative; display:block; height:6px; overflow:hidden; background: var(--meter-track, rgb(55 53 47 / 8%)); border-radius:999px; } .ds-meter > span { position:absolute; inset:0 auto 0 0; background: var(--meter-fill, #2a78d6); border-radius:999px; } .ds-meter.warn > span { background: var(--warning, #d97706); }"
+    },
+    {
+      "name": "Data Table",
+      "kind": "custom",
+      "refersTo": "table-row",
+      "description": "Hairline-framed table with sticky subtle header, 44px rows, right-aligned tabular numerics.",
+      "html": "<div class=\"ds-table\"><table><thead><tr><th>Agent</th><th class=\"n\">Requests</th><th class=\"n\">Error rate</th></tr></thead><tbody><tr><td><strong>Contract checker</strong></td><td class=\"n\">57</td><td class=\"n\">1.8%</td></tr><tr><td><strong>Code reviewer</strong></td><td class=\"n\">20</td><td class=\"n\">—</td></tr></tbody></table></div>",
+      "css": ".ds-table { overflow:auto; border:1px solid var(--line, #e9e9ec); border-radius:8px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; } .ds-table table { width:100%; border-collapse:collapse; font-size:13px; line-height:18px; } .ds-table th { height:34px; padding:0 12px; color: var(--fg-muted, #787774); font-size:12px; font-weight:500; text-align:left; background: var(--surface-subtle, #fafafa); border-bottom:1px solid var(--line, #e9e9ec); } .ds-table td { height:44px; padding:6px 12px; color: var(--fg, #37352f); border-bottom:1px solid var(--line-muted, #efeff1); } .ds-table tr:last-child td { border-bottom:0; } .ds-table tbody tr:hover { background: var(--hover, rgb(55 53 47 / 3%)); } .ds-table td strong { font-weight:500; } .ds-table tbody tr:hover strong { color: var(--accent, #4f46e5); } .ds-table .n { text-align:right; font-variant-numeric: tabular-nums; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Operator's Ledger",
+    "overview": "The console is an operations back office, not a developer showroom. Every screen reads like a ledger page: one header rule, one strip of figures, then ruled sections of evidence (charts, bar lists, tables) sitting on white. Structure comes from 1px hairlines and whitespace, never from floating cards; colour is spent on data and state, almost never on decoration. The one indigo accent means \"you selected this\" or \"this is the primary action,\" and nothing else.\n\nDensity is deliberately high and calm: 13px body, 44px table rows, 28px controls, tabular figures in every column. The system is bilingual (zh-CN and English) and ships light and dark themes on the same token names; dark swaps values, never structure. It honours reduced motion and treats keyboard focus as a first-class state (2px indigo outline).\n\nThe data contract is part of the look. Core reports only what it observes, so the interface shows absence honestly: an em dash, a gap in a line, the word \"Unavailable\". An explained figure keeps its explanation one click away behind a circled question mark, so the page stays a ledger rather than a leaflet.",
+    "keyCharacteristics": [
+      "Neutral warm-gray ink on white, one indigo accent for selection and primary actions only.",
+      "Hairline frames divided by internal rules; no nested cards, no decorative shadows.",
+      "A six-slot categorical palette for data, bound to the entity, not its rank.",
+      "Tabular numerals everywhere a number can line up.",
+      "Status is always a dot plus a plain-language label.",
+      "Explanations live behind \"?\" help tips; errors, warnings and safety notices stay visible."
+    ],
+    "rules": [
+      {
+        "name": "The One Voice Rule",
+        "body": "Indigo is for selection and primary actions only. Data never wears the accent; charts, bar lists and meters draw from `--series-1..6`, `--series-other` and `--meter-fill`.",
+        "section": "colors"
+      },
+      {
+        "name": "The Entity Owns Its Colour Rule",
+        "body": "A categorical colour follows the entity (model, tool, node), never its rank. An entity keeps its slot while visible; only slots of entities that left the view are reused. Anything beyond six series collapses into Series Other.",
+        "section": "colors"
+      },
+      {
+        "name": "The Signal Is Not Decoration Rule",
+        "body": "Green, amber and red appear only when they report a state. A healthy meter stays in the series ramp; it turns amber or red only when the value crosses its threshold.",
+        "section": "colors"
+      },
+      {
+        "name": "The Columns Line Up Rule",
+        "body": "Every figure that can share a column uses tabular numerals (`font-variant-numeric: tabular-nums`): KPI values, numeric table cells (right-aligned), bar-list values, axis ticks, tooltip values, counts.",
+        "section": "typography"
+      },
+      {
+        "name": "The Honest Figure Rule",
+        "body": "Missing data renders as \"—\", a gap in the line, or \"Unavailable\"; never as 0. Compact numbers keep two decimals only when the integer part is a single digit (\"1.04M\"), otherwise one (\"415.7万\"); values under 10,000 print whole. Durations read \"850 ms / 12.4 s / 4m 12s / 3h 5m\".",
+        "section": "typography"
+      },
+      {
+        "name": "The Plain Vocabulary Rule",
+        "body": "zh-CN copy uses one term per concept: 沙箱 (sandbox), 运行时 (runtime), 已上报 (reported), 活跃 (active), 提供方 (provider). Time ranges read \"1 小时 / 6 小时 / 24 小时 / 7 天\" (English \"1h / 6h / 24h / 7d\"), always in the one segmented control style.",
+        "section": "typography"
+      },
+      {
+        "name": "The One Page Grammar Rule",
+        "body": "Every page, new or legacy, uses PageHeader, PageBody and Section. No page invents its own header height, gutter or section rhythm.",
+        "section": "layout"
+      },
+      {
+        "name": "The One Frame Rule",
+        "body": "Charts and KPI figures sit in one hairline frame divided by internal rules (inset 1px lines), never in nested cards. A frame never contains another bordered, shadowed container.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do put every explanation of a figure, section or page behind a circled \"?\" help tip; keep errors, warnings and safety notices (deletion confirmation, uncertain writes, secrets) visible on the page.",
+      "Do reserve Parsar Indigo for selection, focus and primary actions; draw data from `--series-1..6` and `--series-other`, and meters from `--meter-fill`.",
+      "Do place charts and KPI figures in one hairline frame (8px) divided by 1px internal rules.",
+      "Do render missing data as \"—\", a chart gap, or \"Unavailable\".",
+      "Do show status as a 7px dot plus a plain label.",
+      "Do use tabular numerals for every aligned figure and right-align numeric columns.",
+      "Do use the one segmented control for time ranges, labelled \"1 小时 / 6 小时 / 24 小时 / 7 天\".",
+      "Do keep compact numbers at two decimals only when the integer part is one digit.",
+      "Do build every page from PageHeader, PageBody and Section with the 24px gutter and 28px section gap."
+    ],
+    "donts": [
+      "Don't add lines of small explanatory print under headings, KPIs or charts.",
+      "Don't colour data, bars, lines or meters with the indigo accent.",
+      "Don't nest cards inside frames or lift sections with shadows; shadows are for raised controls and floating layers only.",
+      "Don't render an unreported value as 0 or draw a missing interval as a zero line.",
+      "Don't use coloured status pills or colour-only status.",
+      "Don't reassign a categorical colour by rank when data re-sorts.",
+      "Don't add uppercase letter-spaced micro-labels or eyebrow lines above headings; a section is named by its title alone.",
+      "Don't mix synonyms in zh-CN copy (for example alternating 沙盒 with 沙箱)."
+    ]
+  }
+}

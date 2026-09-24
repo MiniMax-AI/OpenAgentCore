@@ -1,0 +1,582 @@
+import { ArrowLeft, Download, Trash2, Upload } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+
+import { AgentCoreError, type AgentCore, type Skill, type SkillVersion } from "@agents-core-web/agents-client";
+
+import { EmptyState, PageBody, PageHeader, RefreshButton, Section, StatusDot } from "../../components/console-ui";
+import { Modal } from "../../components/Modal";
+import { useToast } from "../../components/Toast";
+import { formatDateTime, MISSING } from "../../lib/format";
+import { CopyableId, LatestVersion } from "./skill-parts";
+import {
+  coreErrorMessage,
+  downloadSkillArchive,
+  isAbortError,
+  isDefaultVersionConflict,
+  readSkillVersionsPage,
+  setSkillDefaultVersion,
+  versionDeleteState,
+  type VersionDeleteState,
+} from "./skill-operations";
+import { SkillUploadDialog, type SkillUploadResult } from "./SkillUploadDialog";
+import "./skills.css";
+
+export type SkillLoadStatus = "loading" | "ready" | "missing" | "failed";
+
+export interface SkillVersionsState {
+  status: "loading" | "ready" | "failed";
+  items: SkillVersion[];
+  nextAfter: string | null;
+  error: string | null;
+  loadingMore: boolean;
+  moreError: string | null;
+}
+
+const initialVersions: SkillVersionsState = {
+  status: "loading", items: [], nextAfter: null, error: null, loadingMore: false, moreError: null,
+};
+
+type Dialog =
+  | { kind: "upload"; key: number }
+  | { kind: "set-default"; version: SkillVersion }
+  | { kind: "delete-version"; version: SkillVersion; only: boolean }
+  | { kind: "delete-skill" }
+  | null;
+
+function isNotFound(error: unknown): boolean {
+  return error instanceof AgentCoreError && error.status === 404;
+}
+
+export interface SkillDetailPageProps {
+  skill: Skill | null;
+  status: SkillLoadStatus;
+  error: string | null;
+  versions: SkillVersionsState;
+  refreshing: boolean;
+  notice: string | null;
+  /** The version ID, or "default", whose download is running. */
+  downloading: string | null;
+  onBack: () => void;
+  onRefresh: () => void;
+  onUploadVersion: () => void;
+  onDownload: (version?: SkillVersion) => void;
+  onDeleteSkill: () => void;
+  onSetDefault: (version: SkillVersion) => void;
+  onDeleteVersion: (version: SkillVersion, state: VersionDeleteState) => void;
+  onLoadMoreVersions: () => void;
+}
+
+/** One Skill: its facts, header actions and the version table. */
+export function SkillDetailPage({
+  skill, status, error, versions, refreshing, notice, downloading,
+  onBack, onRefresh, onUploadVersion, onDownload, onDeleteSkill, onSetDefault, onDeleteVersion, onLoadMoreVersions,
+}: SkillDetailPageProps) {
+  const { t, i18n } = useTranslation("skills");
+  const locale = i18n.resolvedLanguage;
+  const available = skill !== null && status !== "missing";
+  const busy = downloading !== null;
+  return (
+    <section className="page-section console-page skills-page" aria-labelledby="skill-detail-heading">
+      <PageHeader
+        headingId="skill-detail-heading"
+        title={(
+          <>
+            <button type="button" className="icon-button ghost skill-back" aria-label={t("actions.back")} title={t("actions.back")} onClick={onBack}>
+              <ArrowLeft size={16} strokeWidth={1.6} aria-hidden="true" />
+            </button>
+            {skill?.name ?? t("title")}
+          </>
+        )}
+        actions={(
+          <>
+            <RefreshButton onClick={onRefresh} refreshing={refreshing} label={t("actions.refreshSkill")} />
+            <button className="button outline" type="button" disabled={!available || busy} title={t("actions.downloadDefault")} onClick={() => onDownload()}>
+              <Download size={14} aria-hidden="true" />{t("actions.download")}
+            </button>
+            <button className="button danger" type="button" disabled={!available} onClick={onDeleteSkill}>
+              <Trash2 size={14} aria-hidden="true" />{t("actions.deleteSkill")}
+            </button>
+            <button className="button primary" type="button" disabled={!available} onClick={onUploadVersion}>
+              <Upload size={14} aria-hidden="true" />{t("actions.uploadVersion")}
+            </button>
+          </>
+        )}
+      />
+      <PageBody>
+        {notice ? <p className="coverage-note coverage-note-error" role="alert">{notice}</p> : null}
+        {status === "missing" ? (
+          <EmptyState
+            title={t("detail.missingTitle")}
+            description={t("detail.missingDescription")}
+            action={<button className="button outline" type="button" onClick={onBack}>{t("actions.back")}</button>}
+          />
+        ) : !skill ? (
+          status === "failed" ? (
+            <EmptyState
+              title={t("detail.loadFailed")}
+              description={error ?? undefined}
+              action={<button className="button outline" type="button" onClick={onRefresh}>{t("actions.retry")}</button>}
+            />
+          ) : <p className="page-status" role="status">{t("detail.loading")}</p>
+        ) : (
+          <>
+            {status === "failed" && error ? <p className="coverage-note coverage-note-error" role="alert">{t("detail.refreshFailed", { reason: error })}</p> : null}
+            <dl className="skill-facts" aria-label={t("detail.facts")}>
+              <div className="skill-fact-wide"><dt>{t("detail.description")}</dt><dd className="skill-fact-text">{skill.description || MISSING}</dd></div>
+              <div><dt>{t("detail.id")}</dt><dd><CopyableId id={skill.id} /></dd></div>
+              <div><dt>{t("detail.created")}</dt><dd>{formatDateTime(skill.created_at, locale)}</dd></div>
+              <div><dt>{t("detail.defaultVersion")}</dt><dd>{t("version", { version: skill.default_version })}</dd></div>
+              <div><dt>{t("detail.latestVersion")}</dt><dd><LatestVersion skill={skill} /></dd></div>
+            </dl>
+            <Section headingId="skill-versions-heading" title={t("detail.versions")} help={t("detail.versionsHelp")}>
+              <SkillVersionsTable
+                skill={skill}
+                versions={versions}
+                downloading={downloading}
+                onRetry={onRefresh}
+                onDownload={onDownload}
+                onSetDefault={onSetDefault}
+                onDeleteVersion={onDeleteVersion}
+                onLoadMore={onLoadMoreVersions}
+              />
+            </Section>
+          </>
+        )}
+      </PageBody>
+    </section>
+  );
+}
+
+function SkillVersionsTable({
+  skill, versions, downloading, onRetry, onDownload, onSetDefault, onDeleteVersion, onLoadMore,
+}: {
+  skill: Skill;
+  versions: SkillVersionsState;
+  downloading: string | null;
+  onRetry: () => void;
+  onDownload: (version: SkillVersion) => void;
+  onSetDefault: (version: SkillVersion) => void;
+  onDeleteVersion: (version: SkillVersion, state: VersionDeleteState) => void;
+  onLoadMore: () => void;
+}) {
+  const { t, i18n } = useTranslation("skills");
+  const locale = i18n.resolvedLanguage;
+  if (!versions.items.length) {
+    if (versions.status === "loading") return <p className="page-status" role="status">{t("detail.versionsLoading")}</p>;
+    if (versions.status === "failed") {
+      return (
+        <EmptyState
+          title={t("detail.versionsFailed")}
+          description={versions.error ?? undefined}
+          action={<button className="button outline" type="button" onClick={onRetry}>{t("actions.retry")}</button>}
+        />
+      );
+    }
+    return <p className="page-status">{t("detail.versionsEmpty")}</p>;
+  }
+  const loaded = { count: versions.items.length, complete: versions.status === "ready" && versions.nextAfter === null };
+  return (
+    <>
+      {versions.status === "failed" && versions.error ? <p className="coverage-note coverage-note-error" role="alert">{t("detail.refreshFailed", { reason: versions.error })}</p> : null}
+      <div className="table-frame">
+        <table className="data-table skills-table">
+          <thead>
+            <tr>
+              <th scope="col">{t("detail.version")}</th>
+              <th scope="col">{t("detail.name")}</th>
+              <th scope="col">{t("detail.description")}</th>
+              <th scope="col">{t("detail.created")}</th>
+              <th scope="col">{t("detail.marks")}</th>
+              <th scope="col"><span className="visually-hidden">{t("detail.actions")}</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {versions.items.map((version) => {
+              const isDefault = version.version === skill.default_version;
+              const isLatest = version.version === skill.latest_version;
+              const deleteState = versionDeleteState(version, skill, loaded);
+              const label = t("version", { version: version.version });
+              return (
+                <tr key={version.id}>
+                  <th scope="row">{label}</th>
+                  <td><span className="skill-cell-text">{version.name}</span></td>
+                  <td><span className="skill-description" title={version.description}>{version.description || MISSING}</span></td>
+                  <td className="skill-nowrap">{formatDateTime(version.created_at, locale)}</td>
+                  <td>
+                    <span className="skill-marks">
+                      {isDefault ? <StatusDot tone="ok" label={t("detail.default")} /> : null}
+                      {isLatest ? <StatusDot tone="neutral" label={t("detail.latest")} /> : null}
+                    </span>
+                  </td>
+                  <td className="row-actions skill-row-actions">
+                    {isDefault ? null : (
+                      <button className="text-action" type="button" aria-label={t("actions.setDefaultVersion", { version: version.version })} onClick={() => onSetDefault(version)}>
+                        {t("actions.setDefault")}
+                      </button>
+                    )}
+                    <button
+                      className="text-action"
+                      type="button"
+                      disabled={downloading !== null}
+                      aria-label={t("actions.downloadVersion", { version: version.version })}
+                      onClick={() => onDownload(version)}
+                    >
+                      {t("actions.download")}
+                    </button>
+                    {deleteState === "blocked-default" ? (
+                      <span className="skill-disabled-action" title={t("detail.deleteBlocked")}>
+                        <button className="text-action" type="button" disabled aria-label={`${t("actions.deleteVersion", { version: version.version })}. ${t("detail.deleteBlocked")}`}>
+                          {t("actions.delete")}
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        className="text-action skill-danger-action"
+                        type="button"
+                        aria-label={t("actions.deleteVersion", { version: version.version })}
+                        onClick={() => onDeleteVersion(version, deleteState)}
+                      >
+                        {t("actions.delete")}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {versions.moreError ? <p className="coverage-note coverage-note-error" role="alert">{t("list.moreFailed", { reason: versions.moreError })}</p> : null}
+      {versions.nextAfter ? (
+        <footer className="table-footer skills-footer">
+          <span>{t("list.loaded", { count: versions.items.length })}</span>
+          <button className="button outline" type="button" disabled={versions.loadingMore} onClick={onLoadMore}>
+            {versions.loadingMore ? t("actions.loadingMore") : t("actions.loadMore")}
+          </button>
+        </footer>
+      ) : null}
+    </>
+  );
+}
+
+export interface SkillDetailProps {
+  core: AgentCore;
+  skillId: string;
+  initialSkill: Skill | null;
+  onBack: () => void;
+  /** Called with every fresh Skill read so the list row stays current. */
+  onChanged: (skill: Skill) => void;
+  /** Called once the Skill no longer exists because this page deleted it. */
+  onDeleted: (skillId: string) => void;
+}
+
+export function SkillDetail({ core, skillId, initialSkill, onBack, onChanged, onDeleted }: SkillDetailProps) {
+  const { t } = useTranslation("skills");
+  const { t: tCommon } = useTranslation();
+  const toast = useToast();
+  const [skill, setSkill] = useState<Skill | null>(initialSkill);
+  const [status, setStatus] = useState<SkillLoadStatus>("loading");
+  const [error, setError] = useState<string | null>(null);
+  const [versions, setVersions] = useState<SkillVersionsState>(initialVersions);
+  const [refreshing, setRefreshing] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const [lastDialog, setLastDialog] = useState<Dialog>(null);
+  const [dialogBusy, setDialogBusy] = useState(false);
+  const [dialogError, setDialogError] = useState<string | null>(null);
+  const [typedName, setTypedName] = useState("");
+  const request = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const mounted = useRef(true);
+  const uploadKey = useRef(0);
+  const dialogBusyRef = useRef(false);
+  const callbacks = useRef({ onChanged, onDeleted });
+  callbacks.current = { onChanged, onDeleted };
+
+  const load = useCallback(async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const id = request.current + 1;
+    request.current = id;
+    setRefreshing(true);
+    setVersions((current) => ({ ...current, status: current.items.length ? current.status : "loading", loadingMore: false, moreError: null }));
+    const [skillResult, versionsResult] = await Promise.allSettled([
+      core.retrieveSkill(skillId, { signal: controller.signal }),
+      readSkillVersionsPage(core, skillId, [], undefined, controller.signal),
+    ]);
+    if (!mounted.current || id !== request.current) return;
+    if (abortRef.current === controller) abortRef.current = null;
+    setRefreshing(false);
+    if (skillResult.status === "fulfilled") {
+      setSkill(skillResult.value);
+      setStatus("ready");
+      setError(null);
+      callbacks.current.onChanged(skillResult.value);
+    } else if (isNotFound(skillResult.reason)) {
+      setStatus("missing");
+    } else if (!isAbortError(skillResult.reason)) {
+      setStatus("failed");
+      setError(coreErrorMessage(skillResult.reason));
+    }
+    if (versionsResult.status === "fulfilled") {
+      setVersions({ ...initialVersions, status: "ready", items: versionsResult.value.values, nextAfter: versionsResult.value.nextAfter });
+    } else if (!isAbortError(versionsResult.reason)) {
+      setVersions((current) => ({ ...current, status: "failed", error: coreErrorMessage(versionsResult.reason) }));
+    }
+  }, [core, skillId]);
+
+  useEffect(() => {
+    mounted.current = true;
+    void load();
+    return () => {
+      mounted.current = false;
+      abortRef.current?.abort();
+    };
+  }, [load]);
+
+  const loadMoreVersions = async () => {
+    const after = versions.nextAfter;
+    if (!after || versions.loadingMore) return;
+    const loaded = versions.items;
+    const id = request.current;
+    setVersions((current) => ({ ...current, loadingMore: true, moreError: null }));
+    try {
+      const page = await readSkillVersionsPage(core, skillId, loaded, after);
+      if (!mounted.current || id !== request.current) return;
+      const appended = page.values.slice(loaded.length);
+      setVersions((current) => ({
+        ...current,
+        items: [...current.items, ...appended.filter((entry) => !current.items.some((existing) => existing.id === entry.id))],
+        nextAfter: page.nextAfter,
+        loadingMore: false,
+      }));
+    } catch (reason) {
+      if (!mounted.current || id !== request.current) return;
+      setVersions((current) => ({ ...current, loadingMore: false, moreError: coreErrorMessage(reason) }));
+    }
+  };
+
+  const download = async (version?: SkillVersion) => {
+    if (!skill || downloading) return;
+    setDownloading(version?.id ?? "default");
+    setNotice(null);
+    try {
+      await downloadSkillArchive(core, skill, version);
+    } catch (reason) {
+      if (mounted.current) setNotice(t("detail.downloadFailed", { reason: coreErrorMessage(reason) }));
+    } finally {
+      if (mounted.current) setDownloading(null);
+    }
+  };
+
+  const openDialog = (next: Dialog) => {
+    setDialogError(null);
+    setTypedName("");
+    setDialog(next);
+    setLastDialog(next);
+  };
+  const closeDialog = () => {
+    if (!dialogBusy) setDialog(null);
+  };
+
+  const runDialogAction = async (action: () => Promise<void>) => {
+    if (dialogBusyRef.current) return;
+    dialogBusyRef.current = true;
+    setDialogBusy(true);
+    setDialogError(null);
+    try {
+      await action();
+    } catch (reason) {
+      if (!mounted.current) return;
+      if (isNotFound(reason)) {
+        // Core does not say whether the Skill or the version is gone; a reload tells.
+        setDialog(null);
+        void load();
+      } else if (isDefaultVersionConflict(reason)) {
+        // Another client changed the versions; show the rule and reload.
+        setDialog(null);
+        setNotice(t("deleteVersion.defaultConflict"));
+        void load();
+      } else {
+        setDialogError(t("detail.actionFailed", { reason: coreErrorMessage(reason) }));
+      }
+    } finally {
+      dialogBusyRef.current = false;
+      if (mounted.current) setDialogBusy(false);
+    }
+  };
+
+  const confirmSetDefault = (version: SkillVersion) => runDialogAction(async () => {
+    const result = await setSkillDefaultVersion(core, skillId, version.version);
+    if (!mounted.current) return;
+    // This result is newer than any read still in flight.
+    request.current += 1;
+    abortRef.current?.abort();
+    setRefreshing(false);
+    setSkill(result.skill);
+    setStatus("ready");
+    setVersions({ ...initialVersions, status: "ready", items: result.versions, nextAfter: result.nextAfter });
+    callbacks.current.onChanged(result.skill);
+    setDialog(null);
+    setNotice(null);
+    toast.show(t("setDefault.done", { version: version.version }), { tone: "success" });
+  });
+
+  const confirmDeleteVersion = (version: SkillVersion, only: boolean) => runDialogAction(async () => {
+    await core.deleteSkillVersion(skillId, version.version);
+    if (!mounted.current) return;
+    setDialog(null);
+    setNotice(null);
+    if (only) {
+      toast.show(t("deleteSkill.done", { name: skill?.name ?? skillId }), { tone: "success" });
+      callbacks.current.onDeleted(skillId);
+      return;
+    }
+    toast.show(t("deleteVersion.done", { version: version.version }), { tone: "success" });
+    // latest_version may fall back to a surviving version.
+    void load();
+  });
+
+  const confirmDeleteSkill = () => runDialogAction(async () => {
+    await core.deleteSkill(skillId);
+    if (!mounted.current) return;
+    setDialog(null);
+    toast.show(t("deleteSkill.done", { name: skill?.name ?? skillId }), { tone: "success" });
+    callbacks.current.onDeleted(skillId);
+  });
+
+  const uploaded = (result: SkillUploadResult) => {
+    setDialog(null);
+    if (result.kind === "version") toast.show(t("upload.versionCreated", { version: result.version.version }), { tone: "success" });
+    void load();
+  };
+
+  // A closing dialog keeps its content while the exit animation runs.
+  const shown = dialog ?? lastDialog;
+
+  const cancelButton = (
+    <button className="button outline" type="button" disabled={dialogBusy} onClick={closeDialog}>{tCommon("actions.cancel")}</button>
+  );
+  const dialogErrorNote = dialogError ? <p className="coverage-note coverage-note-error" role="alert">{dialogError}</p> : null;
+
+  return (
+    <>
+      <SkillDetailPage
+        skill={skill}
+        status={status}
+        error={error}
+        versions={versions}
+        refreshing={refreshing}
+        notice={notice}
+        downloading={downloading}
+        onBack={onBack}
+        onRefresh={() => { setNotice(null); void load(); }}
+        onUploadVersion={() => { uploadKey.current += 1; openDialog({ kind: "upload", key: uploadKey.current }); }}
+        onDownload={(version) => void download(version)}
+        onDeleteSkill={() => openDialog({ kind: "delete-skill" })}
+        onSetDefault={(version) => openDialog({ kind: "set-default", version })}
+        onDeleteVersion={(version, state) => {
+          if (state !== "blocked-default") openDialog({ kind: "delete-version", version, only: state === "only-version" });
+        }}
+        onLoadMoreVersions={() => void loadMoreVersions()}
+      />
+      {skill && dialog?.kind === "upload" ? (
+        <SkillUploadDialog
+          key={dialog.key}
+          open
+          core={core}
+          target={{ kind: "version", skill }}
+          onClose={() => setDialog(null)}
+          onUploaded={uploaded}
+          onInterrupted={() => void load()}
+        />
+      ) : null}
+      <Modal
+        open={dialog?.kind === "set-default"}
+        title={shown?.kind === "set-default" ? t("setDefault.title", { version: shown.version.version }) : ""}
+        onClose={closeDialog}
+        footer={shown?.kind === "set-default" ? (
+          <>
+            {cancelButton}
+            <button className="button primary" type="button" disabled={dialogBusy} onClick={() => void confirmSetDefault(shown.version)}>
+              {dialogBusy ? t("setDefault.saving") : t("setDefault.confirm")}
+            </button>
+          </>
+        ) : null}
+      >
+        {shown?.kind === "set-default" && skill ? (
+          <>
+            <ul className="skill-confirm-list">
+              <li>{t("setDefault.newSessions", { version: shown.version.version })}</li>
+              <li>{t("setDefault.existingSessions")}</li>
+              <li>
+                {shown.version.name !== skill.name || shown.version.description !== skill.description
+                  ? t("setDefault.metadataChange", { version: shown.version.version, name: shown.version.name })
+                  : t("setDefault.metadata", { version: shown.version.version })}
+              </li>
+            </ul>
+            {dialogErrorNote}
+          </>
+        ) : null}
+      </Modal>
+      <Modal
+        open={dialog?.kind === "delete-version"}
+        title={shown?.kind === "delete-version"
+          ? shown.only ? t("deleteVersion.onlyTitle") : t("deleteVersion.title", { version: shown.version.version })
+          : ""}
+        onClose={closeDialog}
+        footer={shown?.kind === "delete-version" ? (
+          <>
+            {cancelButton}
+            <button className="button danger" type="button" disabled={dialogBusy} onClick={() => void confirmDeleteVersion(shown.version, shown.only)}>
+              {dialogBusy ? t("deleteVersion.deleting") : shown.only ? t("deleteVersion.confirmSkill") : t("deleteVersion.confirm")}
+            </button>
+          </>
+        ) : null}
+      >
+        {shown?.kind === "delete-version" ? (
+          <div className="skill-confirm">
+            {shown.only ? (
+              <>
+                <p className="coverage-note coverage-note-error skill-only-warning"><strong>{t("deleteVersion.onlyWarning")}</strong></p>
+                <p>{t("deleteVersion.onlyBody")}</p>
+              </>
+            ) : <p>{t("deleteVersion.body")}</p>}
+            {dialogErrorNote}
+          </div>
+        ) : null}
+      </Modal>
+      <Modal
+        open={dialog?.kind === "delete-skill"}
+        title={skill ? t("deleteSkill.title", { name: skill.name }) : ""}
+        onClose={closeDialog}
+        footer={shown?.kind === "delete-skill" && skill ? (
+          <>
+            {cancelButton}
+            <button className="button danger" type="button" disabled={dialogBusy || typedName !== skill.name} onClick={() => void confirmDeleteSkill()}>
+              {dialogBusy ? t("deleteSkill.deleting") : t("deleteSkill.confirm")}
+            </button>
+          </>
+        ) : null}
+      >
+        {shown?.kind === "delete-skill" && skill ? (
+          <div className="skill-confirm">
+            <ul className="skill-confirm-list">
+              <li>{t("deleteSkill.allVersions")}</li>
+              <li>{t("deleteSkill.existingSessions")}</li>
+              <li><strong>{t("deleteSkill.templates")}</strong></li>
+            </ul>
+            <label className="field">
+              <span>{t("deleteSkill.typeName", { name: skill.name })}</span>
+              <input value={typedName} onChange={(event) => setTypedName(event.target.value)} disabled={dialogBusy} autoComplete="off" spellCheck={false} />
+            </label>
+            {dialogErrorNote}
+          </div>
+        ) : null}
+      </Modal>
+    </>
+  );
+}

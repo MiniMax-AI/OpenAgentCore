@@ -1,0 +1,357 @@
+/* Skills: list, detail and upload dialog. Shared tokens only; no decorative frames. */
+
+.skills-page .page-header h1 {
+  align-items: center;
+  overflow-wrap: anywhere;
+}
+
+.skill-back {
+  margin-left: -6px;
+  color: var(--fg-muted);
+}
+
+.skill-back:hover:not(:disabled) {
+  color: var(--fg);
+}
+
+.skills-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.skills-table th[scope="row"] {
+  min-width: 140px;
+}
+
+.skills-table .skill-description {
+  display: block;
+  max-width: 420px;
+  overflow: hidden;
+  color: var(--fg-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-nowrap {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.skill-cell-text {
+  overflow-wrap: anywhere;
+}
+
+.skill-id {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+}
+
+.skill-id code {
+  overflow-wrap: anywhere;
+}
+
+.skill-copy {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
+  color: var(--fg-muted);
+}
+
+.skill-copy:hover:not(:disabled) {
+  color: var(--fg);
+}
+
+.skill-latest,
+.skill-marks {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.skills-footer {
+  justify-content: flex-end;
+}
+
+.skills-footer > span:empty {
+  display: none;
+}
+
+/* Empty state example */
+
+.skills-empty-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.skill-example {
+  width: min(420px, 100%);
+  margin: 0;
+  text-align: left;
+}
+
+.skill-example figcaption {
+  margin-bottom: 4px;
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+
+.skill-example pre,
+.skill-preview-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.skill-example pre {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: var(--frame-radius);
+}
+
+/* Detail facts */
+
+.skill-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, max-content));
+  gap: 14px 40px;
+  margin: 0;
+}
+
+.skill-facts > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.skill-facts .skill-fact-wide {
+  grid-column: 1 / -1;
+}
+
+.skill-facts dt {
+  color: var(--fg-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.skill-facts dd {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  margin: 0;
+  color: var(--fg);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.skill-facts .skill-fact-text {
+  display: block;
+  max-width: 72ch;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.skill-row-actions {
+  text-align: right;
+}
+
+.skill-row-actions .text-action + .text-action,
+.skill-row-actions .text-action + .skill-disabled-action {
+  margin-left: 14px;
+}
+
+/* The wrapper carries the hover explanation of a disabled delete. */
+.skill-row-actions .skill-disabled-action {
+  display: inline-flex;
+  cursor: not-allowed;
+}
+
+.skill-row-actions .text-action:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.skill-row-actions .skill-danger-action:hover {
+  color: var(--danger);
+}
+
+@media (max-width: 760px) {
+  .skill-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Upload dialog */
+
+.modal-card:has(.skill-upload) {
+  width: min(560px, 100%);
+}
+
+.skill-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.skill-upload .segmented {
+  align-self: flex-start;
+}
+
+.skill-upload input[type="file"] {
+  padding: 3px 4px;
+  font-size: 12.5px;
+}
+
+.skill-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: var(--frame-radius);
+}
+
+.skill-preview dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.skill-preview dl > div {
+  display: contents;
+}
+
+.skill-preview dt {
+  color: var(--fg-muted);
+}
+
+.skill-preview dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.skill-preview-text {
+  max-height: 96px;
+  overflow: auto;
+}
+
+.skill-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 0 18px;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+.skill-issues li {
+  overflow-wrap: anywhere;
+}
+
+.skill-issues-error {
+  color: var(--danger);
+}
+
+.skill-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.skill-upload-failure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.skill-upload-failure .text-action {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.skill-requirements {
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+.skill-requirements summary {
+  width: max-content;
+  color: var(--fg-muted);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.skill-requirements summary:hover {
+  color: var(--fg);
+}
+
+.skill-requirements summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.skill-requirements ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.skill-requirements p {
+  margin: 8px 0 0;
+  color: var(--fg-muted);
+}
+
+/* Confirmations */
+
+.skill-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skill-confirm p {
+  margin: 0;
+}
+
+.skill-confirm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  line-height: 20px;
+}
+
+.skill-confirm-list + .coverage-note {
+  margin-top: 12px;
+}
+
+.skill-only-warning strong {
+  font-weight: 600;
+}

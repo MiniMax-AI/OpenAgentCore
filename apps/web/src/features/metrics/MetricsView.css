@@ -1,0 +1,16 @@
+/* Metrics pages reuse the console grammar; the embedded runtime panel is
+   flattened so it reads as part of the page instead of a nested card. */
+
+.metrics-page .console-page-header .segmented {
+  flex: 0 0 auto;
+}
+
+.runtime-embed {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.runtime-embed .dashboard-runtime-summary {
+  margin: 0;
+}

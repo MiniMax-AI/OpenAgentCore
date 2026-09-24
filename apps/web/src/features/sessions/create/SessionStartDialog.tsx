@@ -625,7 +625,7 @@ export function SessionStartDialog({
             <label className="field">
               <span>{t("environment.networkAccess")}</span>
               <select aria-label={t("start.managedNetworkAccess")} value={hostedNetwork} onChange={(event) => { setHostedNetwork(event.target.value as HostedNetworkChoice); setRequestError(null); }} disabled={formDisabled}>
-                <option value="default">{selectedTemplate ? t("start.inheritTemplate", { access: t(`common.${selectedTemplate.network.access}` as never) }) : t("start.coreDefaultEnabled")}</option>
+                <option value="default">{selectedTemplate ? t("start.inheritTemplate", { access: selectedTemplate.network ? t(`common.${selectedTemplate.network.access}` as never) : t("common.unknown") }) : t("start.coreDefaultEnabled")}</option>
                 <option value="enabled">{t("common.enabled")}</option>
                 <option value="disabled">{t("common.disabled")}</option>
               </select>

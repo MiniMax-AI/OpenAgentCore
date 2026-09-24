@@ -17,6 +17,8 @@ import {
   type RuntimeTrendRange,
   type RuntimeTrendSample,
 } from "./runtime-trends";
+import { HelpTip, StatusDot } from "../../components/console-ui";
+import "./runtime-observability.css";
 
 export type RuntimeHistoryLoader = (
   snapshot: RuntimeDashboardSnapshot,
@@ -42,6 +44,7 @@ export function RuntimeTrendPanel({
   activeDisplay?: "sum" | "binary";
 }) {
   const { t, i18n } = useTranslation("dashboard");
+  const { t: tMetrics } = useTranslation("metrics");
   const locale = i18n.resolvedLanguage;
   const displayTitle = title ?? t("trends.title");
   const [trendSamples, setTrendSamples] = useState<RuntimeTrendSample[]>(() => appendRuntimeTrendSample([], snapshot));
@@ -133,9 +136,17 @@ export function RuntimeTrendPanel({
   return (
     <section className="dashboard-runtime-live" aria-labelledby={headingId}>
       <header className="dashboard-runtime-live-toolbar">
-        <div>
+        <div className="console-section-title">
           <h3 id={headingId}>{displayTitle}</h3>
-          <p>{t(source === "durable" ? "trends.retained" : "trends.local")}</p>
+          {/* Source, sampling and provenance live behind the title's help tip instead of small print. */}
+          <HelpTip>
+            {t(source === "durable" ? "trends.retained" : "trends.local")}
+            <br />
+            {sourceStatusStale ? null : <>{sourceStatus}<br /></>}
+            {selectedSamples.length.toLocaleString(locale)} {t(source === "durable" ? selectedSamples.length === 1 ? "trends.bucket" : "trends.buckets" : selectedSamples.length === 1 ? "trends.sample" : "trends.samples")}
+            {source === "durable" && durableSnapshot ? <> · {t("trends.observations", { actual: durableSnapshot.sampleCount, expected: durableSnapshot.expectedSampleCount })}</> : null}
+            {latestTrendSample ? <> · <time dateTime={new Date(latestTrendSample.sampledAt).toISOString()}>{new Date(latestTrendSample.sampledAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time></> : null}
+          </HelpTip>
         </div>
         <div className="dashboard-runtime-live-controls">
           {allowSourceSelection ? (
@@ -144,22 +155,8 @@ export function RuntimeTrendPanel({
               <button type="button" aria-pressed={source === "durable"} disabled={!durableAvailable} onClick={() => setSourcePreference("durable")}>{t("trends.history")}</button>
             </div>
           ) : null}
-          <span
-            className={`${sourceStatusStale ? "dashboard-runtime-live-status dashboard-runtime-live-status-stale" : "dashboard-runtime-live-status"}${source === "durable" ? " dashboard-runtime-live-status-durable" : ""}`}
-            aria-label={source === "durable"
-              ? t("trends.durableStatus", { status: sourceStatus, count: durableSnapshot?.targetCount ?? 0 })
-              : stale
-                ? t("trends.retainedFailure")
-                : t("trends.samplingInterval", { seconds: RUNTIME_SNAPSHOT_REFRESH_MS / 1_000 })}
-          >
-            <i aria-hidden="true" />{sourceStatus}
-          </span>
-          <span className="dashboard-runtime-sample-count">
-            {selectedSamples.length.toLocaleString(locale)} {t(source === "durable" ? selectedSamples.length === 1 ? "trends.bucket" : "trends.buckets" : selectedSamples.length === 1 ? "trends.sample" : "trends.samples")}
-            {source === "durable" && durableSnapshot ? <> · {t("trends.observations", { actual: durableSnapshot.sampleCount, expected: durableSnapshot.expectedSampleCount })}</> : null}
-            {latestTrendSample ? <> · <time dateTime={new Date(latestTrendSample.sampledAt).toISOString()}>{new Date(latestTrendSample.sampledAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time></> : null}
-          </span>
-          <div className="dashboard-runtime-range" role="group" aria-label={t(source === "durable" ? "trends.durableRange" : "trends.liveRange")}>
+          {sourceStatusStale ? <StatusDot tone="warning" label={sourceStatus} /> : null}
+          <div className="dashboard-runtime-range segmented" role="group" aria-label={t(source === "durable" ? "trends.durableRange" : "trends.liveRange")}>
             {rangeOptions.map((range) => (
               <button
                 key={range.label}
@@ -170,7 +167,7 @@ export function RuntimeTrendPanel({
                   else setSelectedTrendRange(range.milliseconds as RuntimeTrendRange);
                 }}
               >
-                {range.label}
+                {tMetrics(`range.${range.label}`)}
               </button>
             ))}
           </div>

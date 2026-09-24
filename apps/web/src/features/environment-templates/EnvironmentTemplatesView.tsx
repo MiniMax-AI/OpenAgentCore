@@ -1,36 +1,47 @@
-import { Plus, RefreshCw, Search } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Boxes, Plus, Search } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import i18n from "../../i18n";
-import type { AgentCore, EnvironmentTemplate } from "@agents-core-web/agents-client";
+import type { AgentCore, EnvironmentTemplateResource } from "@agents-core-web/agents-client";
+import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, StatusDot } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
-import { ErrorState } from "../../components/ErrorState";
+import { useToast } from "../../components/Toast";
+import { formatDateTime, MISSING } from "../../lib/format";
 import type { EnvironmentTemplateCatalog } from "../sessions/environment/environment-templates";
+import { TemplateDetailPage, type TemplateLinks } from "./TemplateDetail";
 import { TemplateForm } from "./TemplateForm";
-import { createTemplateWriteScope, templateName, templatePatch, type TemplateDraft } from "./template-editor";
+import { createTemplateWriteScope, draftNetwork, templateName, templatePatch, type TemplateDraft } from "./template-editor";
 import "./EnvironmentTemplatesView.css";
 
-export interface EnvironmentTemplatesViewProps {
+export interface EnvironmentTemplatesViewProps extends TemplateLinks {
   catalog: EnvironmentTemplateCatalog | null;
   operations: Pick<AgentCore, "createEnvironmentTemplate" | "updateEnvironmentTemplate" | "deleteEnvironmentTemplate">;
   onRefresh: () => Promise<void>;
   onConfigureConnection: () => void;
 }
 
-type Dialog = { kind: "create" } | { kind: "edit" | "delete"; template: EnvironmentTemplate } | null;
+type Dialog = { kind: "create" } | { kind: "edit" | "delete"; template: EnvironmentTemplateResource } | null;
 
-export function EnvironmentTemplatesView({ catalog, operations, onRefresh, onConfigureConnection }: EnvironmentTemplatesViewProps) {
-  const { t } = useTranslation("templates");
+/** Filters by name or ID; the catalog holds every page, so this covers all Templates. */
+export function filterTemplates(templates: readonly EnvironmentTemplateResource[], query: string): EnvironmentTemplateResource[] {
+  const needle = query.trim().toLocaleLowerCase();
+  return templates.filter((template) => [templateName(template), template.id].some((value) => value.toLocaleLowerCase().includes(needle)));
+}
+
+function count(value: readonly unknown[] | undefined): string | number {
+  return value === undefined ? MISSING : value.length;
+}
+
+export function EnvironmentTemplatesView({ catalog, operations, onRefresh, onConfigureConnection, onOpenFile, onOpenSkill }: EnvironmentTemplatesViewProps) {
+  const { t, i18n } = useTranslation("templates");
   const { t: tPages } = useTranslation("pages");
   const { t: tCommon } = useTranslation("common");
-  const language = i18n.resolvedLanguage ?? "en";
-  const formatTimestamp = (seconds: number) => new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short" }).format(new Date(seconds * 1000));
-  const formatCount = (value: number) => new Intl.NumberFormat(language).format(value);
+  const toast = useToast();
+  const locale = i18n.resolvedLanguage;
   const [query, setQuery] = useState("");
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [needsRefresh, setNeedsRefresh] = useState(false);
   const scope = useRef(createTemplateWriteScope());
@@ -52,8 +63,13 @@ export function EnvironmentTemplatesView({ catalog, operations, onRefresh, onCon
   const ready = catalog?.state === "ready";
   const blocked = busy || refreshing || needsRefresh || !ready;
   const templates = ready ? catalog.templates : [];
-  const needle = query.trim().toLocaleLowerCase();
-  const visible = templates.filter((template) => [templateName(template), template.id, template.network.access].some((value) => value.toLocaleLowerCase().includes(needle)));
+  const visible = filterTemplates(templates, query);
+  const selected = selectedId ? templates.find((template) => template.id === selectedId) ?? null : null;
+
+  useEffect(() => {
+    // A Template that the refreshed catalog no longer lists closes its detail.
+    if (selectedId && ready && !selected) setSelectedId(null);
+  }, [ready, selected, selectedId]);
 
   const refresh = async () => {
     if (refreshPending.current || writePending.current) return;
@@ -64,10 +80,10 @@ export function EnvironmentTemplatesView({ catalog, operations, onRefresh, onCon
     finally { refreshPending.current = false; if (mounted.current) setRefreshing(false); }
   };
 
-  const write = async (request: (signal: AbortSignal) => Promise<unknown>, success: string) => {
+  const write = async (request: (signal: AbortSignal) => Promise<unknown>, success: string, after?: () => void) => {
     if (blocked || writePending.current) return;
     writePending.current = true;
-    setBusy(true); setError(null); setNotice(null);
+    setBusy(true); setError(null);
     const result = await scope.current.run(request, onRefresh);
     writePending.current = false;
     if (!mounted.current || result.kind === "ignored") return;
@@ -78,7 +94,8 @@ export function EnvironmentTemplatesView({ catalog, operations, onRefresh, onCon
       setNeedsRefresh(true);
       setError(result.message);
     } else {
-      setNotice(success);
+      toast.show(success, { tone: "success" });
+      after?.();
       if (result.kind === "saved-refresh-failed") {
         failedCatalog.current = catalog;
         setNeedsRefresh(true);
@@ -89,7 +106,7 @@ export function EnvironmentTemplatesView({ catalog, operations, onRefresh, onCon
 
   const save = (draft: TemplateDraft) => {
     if (dialog?.kind === "create") {
-      void write((signal) => operations.createEnvironmentTemplate({ name: draft.name.trim() || null, network: { access: draft.access } }, { signal }), t("created"));
+      void write((signal) => operations.createEnvironmentTemplate({ name: draft.name.trim() || null, network: draftNetwork(draft) }, { signal }), t("created"));
     } else if (dialog?.kind === "edit") {
       const template = dialog.template;
       const patch = templatePatch(template, draft);
@@ -97,51 +114,141 @@ export function EnvironmentTemplatesView({ catalog, operations, onRefresh, onCon
     }
   };
   const close = () => { if (!busy) setDialog(null); };
+  const errorNote: ReactNode = error ? <p className="coverage-note coverage-note-error" role="alert">{error}</p> : null;
+
+  const modal = (
+    <Modal open={dialog !== null} title={dialog?.kind === "delete" ? t("modal.delete") : dialog?.kind === "edit" ? t("modal.edit") : t("modal.create")} onClose={close}>
+      {dialog?.kind === "delete" ? <div className="template-delete">
+        <p>{t("deletePrompt", { name: templateName(dialog.template) })}</p><code>{dialog.template.id}</code>
+        <p>{t("deleteWarning")}</p>
+        <div className="template-form-actions"><button className="button outline" disabled={busy} onClick={close}>{tCommon("actions.cancel")}</button><button className="button danger" disabled={blocked} onClick={() => { const template = dialog.template; void write((signal) => operations.deleteEnvironmentTemplate(template.id, { signal }), t("deleted"), () => setSelectedId((current) => current === template.id ? null : current)); }}>{busy ? t("deleting") : t("deleteTemplate")}</button></div>
+      </div> : dialog ? <TemplateForm key={dialog.kind === "edit" ? dialog.template.id : "new"} template={dialog.kind === "edit" ? dialog.template : undefined} busy={blocked} onSave={save} onCancel={close} /> : null}
+    </Modal>
+  );
+
+  if (selected) {
+    return (
+      <>
+        <TemplateDetailPage
+          template={selected}
+          blocked={blocked}
+          refreshing={refreshing}
+          notice={errorNote}
+          onBack={() => setSelectedId(null)}
+          onRefresh={() => void refresh()}
+          onEdit={() => setDialog({ kind: "edit", template: selected })}
+          onDelete={() => setDialog({ kind: "delete", template: selected })}
+          onOpenFile={onOpenFile}
+          onOpenSkill={onOpenSkill}
+        />
+        {modal}
+      </>
+    );
+  }
+
+  const configure = <button className="button outline" type="button" onClick={onConfigureConnection}>{t("configureConnection")}</button>;
+  let body: ReactNode;
+  if (catalog === null) {
+    body = <p className="page-status" role="status" aria-busy="true">{t("loading")}</p>;
+  } else if (catalog.state === "unsupported") {
+    body = <EmptyState icon={Boxes} title={t("unavailableTitle")} description={t("unavailableDescription")} action={configure} />;
+  } else if (catalog.state === "failed") {
+    body = <EmptyState title={t("loadFailedTitle")} description={t("loadFailedDescription")} action={configure} />;
+  } else if (templates.length === 0) {
+    body = <EmptyState icon={Boxes} title={t("emptyTitle")} description={t("emptyDescription")} />;
+  } else {
+    body = (
+      <>
+        <div className="filter-bar">
+          <label className="search-control templates-search">
+            <Search size={14} strokeWidth={1.5} aria-hidden="true" />
+            <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("filterPlaceholder")} aria-label={t("filterLabel")} />
+          </label>
+          <span className="filter-count" role="status">{t("count", { visible: visible.length, total: templates.length })}</span>
+        </div>
+        {visible.length === 0 ? (
+          <EmptyState title={t("noMatch")} action={<button className="button outline" type="button" onClick={() => setQuery("")}>{t("clearFilter")}</button>} />
+        ) : (
+          <div className="table-frame">
+            <table className="data-table templates-table" aria-label={t("listLabel")}>
+              <thead>
+                <tr>
+                  <th scope="col">{t("columns.name")}</th>
+                  <th scope="col">{t("columns.network")}</th>
+                  <th scope="col" className="numeric">{t("columns.packages")}</th>
+                  <th scope="col" className="numeric">{t("columns.files")}</th>
+                  <th scope="col" className="numeric">{t("columns.skills")}</th>
+                  <th scope="col" className="numeric">{t("columns.plugins")}</th>
+                  <th scope="col">{t("columns.updated")}</th>
+                  <th scope="col"><span className="visually-hidden">{t("columns.actions")}</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((template) => {
+                  const name = templateName(template);
+                  const packages = template.packages;
+                  return (
+                    <tr key={template.id} className="clickable-row" onClick={() => setSelectedId(template.id)}>
+                      <th scope="row">
+                        <button className="table-link" type="button" aria-label={t("open", { name })} onClick={(event) => { event.stopPropagation(); setSelectedId(template.id); }}>
+                          <strong>{name}</strong>
+                          <code>{template.id}</code>
+                        </button>
+                        {template.unrecognized ? (
+                          <span className="status-with-help template-flag" onClick={(event) => event.stopPropagation()}>
+                            <StatusDot tone="warning" label={t("unrecognized")} />
+                            <HelpTip>{t("unrecognizedHelp")}</HelpTip>
+                          </span>
+                        ) : null}
+                      </th>
+                      <td className="template-nowrap" title={template.network?.allowed_domains.join("\n") || undefined}>
+                        {template.network ? (
+                          <>
+                            {t(`access.${template.network.access}`)}
+                            {template.network.access === "restricted" ? <span className="table-muted"> ({template.network.allowed_domains.length})</span> : null}
+                          </>
+                        ) : MISSING}
+                      </td>
+                      <td className="numeric">{packages ? packages.npm.length + packages.python.length + packages.system.length : MISSING}</td>
+                      <td className="numeric">{count(template.files)}</td>
+                      <td className="numeric">{count(template.skills)}</td>
+                      <td className="numeric">{count(template.plugins)}</td>
+                      <td className="template-nowrap">{formatDateTime(template.updated_at, locale)}</td>
+                      <td className="row-actions">
+                        <button className="text-action" type="button" disabled={blocked} aria-label={t("editLabel", { name })} onClick={(event) => { event.stopPropagation(); setDialog({ kind: "edit", template }); }}>{t("edit")}</button>
+                        <button className="text-action" type="button" disabled={blocked} aria-label={t("deleteLabel", { name })} onClick={(event) => { event.stopPropagation(); setDialog({ kind: "delete", template }); }}>{t("delete")}</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </>
+    );
+  }
 
   return (
-    <section className="page-section templates-page" aria-labelledby="templates-heading">
-      <header className="page-header">
-        <div><h1 id="templates-heading">{tPages("templates.title")}</h1><p>{tPages("templates.subtitle")}</p></div>
-        <div className="page-actions">
-          <button className="button outline" type="button" disabled={busy || refreshing} onClick={() => void refresh()}><RefreshCw size={14} aria-hidden="true" />{refreshing ? tPages("templates.refreshing") : tPages("templates.refresh")}</button>
-          <button className="button primary" type="button" disabled={blocked} onClick={() => setDialog({ kind: "create" })}><Plus size={14} aria-hidden="true" />{tPages("templates.newTemplate")}</button>
-        </div>
-      </header>
-      <div className="templates-content">
-        <p className="templates-boundary">{t("boundary")}</p>
-        {notice ? <p className="notice success" role="status">{notice}</p> : null}
-        {error ? <p className="notice warning" role="alert">{error}</p> : null}
-        {catalog === null ? <p role="status" aria-busy="true">{t("loading")}</p> : catalog.state === "unsupported" ? (
-          <ErrorState title={t("unavailableTitle")} description={t("unavailableDescription")} action={<button className="button outline" onClick={onConfigureConnection}>{t("configureConnection")}</button>} />
-        ) : catalog.state === "failed" ? (
-          <ErrorState title={t("loadFailedTitle")} description={t("loadFailedDescription")} action={<button className="button outline" onClick={onConfigureConnection}>{t("configureConnection")}</button>} />
-        ) : (
-          <>
-            <div className="templates-toolbar">
-              <label className="templates-search"><Search size={15} aria-hidden="true" /><span className="sr-only">{t("filterLabel")}</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("filterPlaceholder")} /></label>
-              <span>{t("count", { visible: formatCount(visible.length), total: formatCount(templates.length) })}</span>
-            </div>
-            {templates.length === 0 ? <div className="templates-empty"><h2>{t("emptyTitle")}</h2><p>{t("emptyDescription")}</p></div> : visible.length === 0 ? <div className="templates-empty"><h2>{t("noMatch")}</h2><button className="button outline" onClick={() => setQuery("")}>{t("clearFilter")}</button></div> : (
-              <div className="templates-list" aria-label={t("listLabel")}>
-                {visible.map((template) => (
-                  <article className="template-row" key={template.id}>
-                    <div className="template-identity"><h2>{templateName(template)}</h2><code>{template.id}</code><small>{t("updatedAt", { date: formatTimestamp(template.updated_at) })}</small></div>
-                    <dl className="template-summary"><div><dt>{t("network")}</dt><dd>{template.network.access === "enabled" ? t("enabled") : t("disabled")}</dd></div><div><dt>{t("allowedDomains")}</dt><dd>{formatCount(template.network.allowed_domains.length)}</dd></div></dl>
-                    <div className="template-row-actions"><button className="button outline" type="button" disabled={blocked} aria-label={t("editLabel", { name: templateName(template) })} onClick={() => setDialog({ kind: "edit", template })}>{t("edit")}</button><button className="button outline" type="button" disabled={blocked} aria-label={t("deleteLabel", { name: templateName(template) })} onClick={() => setDialog({ kind: "delete", template })}>{t("delete")}</button></div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-      <Modal open={dialog !== null} title={dialog?.kind === "delete" ? t("modal.delete") : dialog?.kind === "edit" ? t("modal.edit") : t("modal.create")} onClose={close}>
-        {dialog?.kind === "delete" ? <div className="template-delete">
-          <p>{t("deletePrompt", { name: templateName(dialog.template) })}</p><code>{dialog.template.id}</code>
-          <p>{t("deleteWarning")}</p>
-          <div className="template-form-actions"><button className="button outline" disabled={busy} onClick={close}>{tCommon("actions.cancel")}</button><button className="button danger" disabled={blocked} onClick={() => { const template = dialog.template; void write((signal) => operations.deleteEnvironmentTemplate(template.id, { signal }), t("deleted")); }}>{busy ? t("deleting") : t("deleteTemplate")}</button></div>
-        </div> : dialog ? <TemplateForm key={dialog.kind === "edit" ? dialog.template.id : "new"} template={dialog.kind === "edit" ? dialog.template : undefined} busy={blocked} onSave={save} onCancel={close} /> : null}
-      </Modal>
-    </section>
+    <>
+      <section className="page-section console-page templates-page" aria-labelledby="templates-heading">
+        <PageHeader
+          headingId="templates-heading"
+          title={tPages("templates.title")}
+          help={<>{tPages("templates.subtitle")} {t("boundary")}</>}
+          actions={(
+            <>
+              <RefreshButton disabled={busy} refreshing={refreshing} onClick={() => void refresh()} />
+              <button className="button primary" type="button" disabled={blocked} onClick={() => setDialog({ kind: "create" })}><Plus size={14} aria-hidden="true" />{tPages("templates.newTemplate")}</button>
+            </>
+          )}
+        />
+        <PageBody>
+          {errorNote}
+          {body}
+        </PageBody>
+      </section>
+      {modal}
+    </>
   );
 }

@@ -5,6 +5,28 @@ import { projectAgentTurn, projectSessionItem, projectItemContent, projectHistor
 import { projectRuntimeHistory, projectRuntimeHistoryCapabilities } from "./runtime-history-projection";
 import { createSSEDecoder } from "./sse";
 import { projectVaultCredentialAuth, validCredentialURL } from "./vault-credential-auth";
+import {
+  environmentTemplateRequestBody,
+  expectedEnvironmentTemplateNetwork,
+  isRecognizedEnvironmentTemplate,
+  projectEnvironmentTemplate as projectEnvironmentTemplateResource,
+  sameEnvironmentNetwork,
+} from "./environment-template-projection";
+import {
+  isSkillId,
+  isSkillVersionId,
+  maxSkillContentBytes,
+  projectSkill,
+  projectSkillDeleted,
+  projectSkillList,
+  projectSkillVersion,
+  projectSkillVersionDeleted,
+  projectSkillVersionList,
+  requireSkillId,
+  requireSkillVersionNumber,
+  skillUploadBody,
+  validateSkillListOptions,
+} from "./skill-projection";
 import type {
   AgentCore,
   AgentDeleted,
@@ -23,6 +45,7 @@ import type {
   EnvironmentTemplate,
   EnvironmentTemplateDeleted,
   EnvironmentTemplateList,
+  EnvironmentTemplateResource,
   UpdateEnvironmentTemplateInput,
   CreateAgentInput,
   CreateSessionInput,
@@ -47,7 +70,20 @@ import type {
   SourceFile,
   SourceFileContent,
   SourceFileDeleted,
+  SourceFileList,
+  SourceFileListEntry,
+  SourceFileListOptions,
   SourceFileUploadInput,
+  Skill,
+  SkillContent,
+  SkillDeleted,
+  SkillList,
+  SkillListOptions,
+  SkillUploadInput,
+  SkillVersion,
+  SkillVersionDeleted,
+  SkillVersionList,
+  SkillVersionUploadOptions,
   StreamOptions,
   StreamError,
   UpdateAgentInput,
@@ -275,10 +311,9 @@ const maxSourceFileBytes = 512 * 1024 * 1024;
 const maxEnvironmentFileBytes = 50 * 1024 * 1024;
 // Core applies the official 5 MiB decoded bound to inline data; file_id copies keep 50 MiB.
 const maxInlineEnvironmentFileBytes = 5 * 1024 * 1024;
-const environmentTemplateFields = new Set([
-  "id", "object", "name", "network", "capability_directories", "packages",
-  "files", "plugins", "skills", "created_at", "updated_at",
-]);
+const sourceFileListFields = new Set(["object", "data", "has_more", "first_id", "last_id"]);
+// Core's Files list bound; it defaults to its maximum.
+const maxSourceFileListLimit = 10000;
 const environmentTemplateDeletedFields = new Set(["id", "object", "deleted"]);
 const vaultFields = new Set(["id", "object", "created_at", "name", "metadata"]);
 const vaultListFields = new Set(["object", "data", "has_more", "first_id", "last_id"]);
@@ -617,53 +652,8 @@ function invalidEnvironmentTemplate(message = "Agent Core returned an invalid En
   throw new AgentCoreError(message, 502, "invalid_environment_template");
 }
 
-/** Core preserves a Template name verbatim within a 1–256 Unicode character bound. */
-function isEnvironmentTemplateName(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  const characters = [...value].length;
-  return characters >= 1 && characters <= 256;
-}
-
-function isEmptyArray(value: unknown): boolean {
-  return Array.isArray(value) && value.length === 0;
-}
-
-function projectEnvironmentTemplate(value: unknown, expectedId?: string): EnvironmentTemplate {
-  if (!isRecord(value) || !exactFields(value, environmentTemplateFields)) {
-    return invalidEnvironmentTemplate();
-  }
-  const network = value.network;
-  const packages = value.packages;
-  if (
-    typeof value.id !== "string" || !canonicalUuidPattern.test(value.id) ||
-    (expectedId !== undefined && !sameUuid(value.id, expectedId)) ||
-    value.object !== "agent.environment.template" ||
-    !(value.name === null || isEnvironmentTemplateName(value.name)) ||
-    !isRecord(network) || !exactFields(network, environmentNetworkFields) ||
-    (network.access !== "enabled" && network.access !== "disabled") ||
-    !isEmptyArray(network.allowed_domains) ||
-    !isEmptyArray(value.capability_directories) ||
-    !isRecord(packages) || !exactFields(packages, environmentPackagesFields) ||
-    !isEmptyArray(packages.npm) || !isEmptyArray(packages.python) || !isEmptyArray(packages.system) ||
-    !isEmptyArray(value.files) || !isEmptyArray(value.plugins) || !isEmptyArray(value.skills) ||
-    !isNonnegativeInteger(value.created_at) ||
-    !isNonnegativeInteger(value.updated_at) || Number(value.updated_at) < Number(value.created_at)
-  ) {
-    return invalidEnvironmentTemplate();
-  }
-  return {
-    id: value.id,
-    object: "agent.environment.template",
-    name: value.name as string | null,
-    network: { access: network.access, allowed_domains: [] },
-    capability_directories: [],
-    packages: { npm: [], python: [], system: [] },
-    files: [],
-    plugins: [],
-    skills: [],
-    created_at: Number(value.created_at),
-    updated_at: Number(value.updated_at),
-  };
+function projectEnvironmentTemplate(value: unknown, expectedId?: string): EnvironmentTemplateResource {
+  return projectEnvironmentTemplateResource(value, invalidEnvironmentTemplate, expectedId);
 }
 
 function projectEnvironmentTemplateList(
@@ -677,26 +667,6 @@ function projectEnvironmentTemplateList(
     "invalid_environment_template_list",
     "Agent Core returned an invalid Environment Template list.",
   );
-}
-
-function environmentTemplateRequestBody(
-  input: CreateEnvironmentTemplateInput | UpdateEnvironmentTemplateInput,
-): string {
-  if (!isRecord(input) || !onlyFields(input, new Set(["name", "network"]))) {
-    throw new TypeError("Environment Template requests accept only name and network.");
-  }
-  if (hasOwn(input, "name") && !(input.name === null || isEnvironmentTemplateName(input.name))) {
-    throw new TypeError("An Environment Template name must be null or 1 through 256 characters.");
-  }
-  if (
-    hasOwn(input, "network") && !(input.network === null || (
-      isRecord(input.network) && exactFields(input.network, new Set(["access"])) &&
-      (input.network.access === "enabled" || input.network.access === "disabled")
-    ))
-  ) {
-    throw new TypeError("An Environment Template network accepts only enabled or disabled access.");
-  }
-  return JSON.stringify(input);
 }
 
 function invalidSessionResource(message = "Agent Core returned an invalid Session resource."): never {
@@ -791,32 +761,33 @@ function projectSessionEnvironment(value: unknown): AgentSession["environment"] 
     };
   }
   if (value.type === "openai_hosted") {
+    // A Session created from an advanced Template carries its frozen, safe
+    // installation metadata; it is admitted structurally and kept as returned.
     const network = value.network;
     const packages = value.packages;
+    const strings = (list: unknown): list is string[] => Array.isArray(list) && list.every((entry) => typeof entry === "string");
+    const records = (list: unknown): list is Record<string, unknown>[] => Array.isArray(list) && list.every(isRecord);
     if (
       !exactFields(value, hostedSessionEnvironmentFields) ||
       typeof value.id !== "string" || value.id.trim() === "" ||
-      !Array.isArray(value.capability_directories) || value.capability_directories.length !== 0 ||
+      !strings(value.capability_directories) ||
       !isRecord(network) || !exactFields(network, environmentNetworkFields) ||
-      (network.access !== "enabled" && network.access !== "disabled") ||
-      !Array.isArray(network.allowed_domains) || network.allowed_domains.length !== 0 ||
+      !strings(network.allowed_domains) ||
+      !(((network.access === "enabled" || network.access === "disabled") && network.allowed_domains.length === 0) ||
+        (network.access === "restricted" && network.allowed_domains.length > 0)) ||
       !isRecord(packages) || !exactFields(packages, environmentPackagesFields) ||
-      !Array.isArray(packages.npm) || packages.npm.length !== 0 ||
-      !Array.isArray(packages.python) || packages.python.length !== 0 ||
-      !Array.isArray(packages.system) || packages.system.length !== 0 ||
-      !Array.isArray(value.files) || value.files.length !== 0 ||
-      !Array.isArray(value.plugins) || value.plugins.length !== 0 ||
-      !Array.isArray(value.skills) || value.skills.length !== 0
+      !strings(packages.npm) || !strings(packages.python) || !strings(packages.system) ||
+      !records(value.files) || !records(value.plugins) || !records(value.skills)
     ) return invalidSessionResource();
     return {
       type: "openai_hosted",
       id: value.id,
-      capability_directories: [],
-      network: { access: network.access, allowed_domains: [] },
-      packages: { npm: [], python: [], system: [] },
-      files: [],
-      plugins: [],
-      skills: [],
+      capability_directories: [...value.capability_directories],
+      network: { access: network.access, allowed_domains: [...network.allowed_domains] },
+      packages: { npm: [...packages.npm], python: [...packages.python], system: [...packages.system] },
+      files: value.files.map((entry) => ({ ...entry })),
+      plugins: value.plugins.map((entry) => ({ ...entry })),
+      skills: value.skills.map((entry) => ({ ...entry })),
     };
   }
   return { ...value } as AgentSession["environment"];
@@ -1630,10 +1601,15 @@ function invalidSourceFileContent(message: string): never {
   throw new AgentCoreError(message, 502, "invalid_source_file_content");
 }
 
-async function readExactSourceFileBody(response: Response, expectedBytes: number): Promise<Uint8Array> {
+async function readExactSourceFileBody(
+  response: Response,
+  expectedBytes: number,
+  invalid: (message: string) => never = invalidSourceFileContent,
+  label = "Source File",
+): Promise<Uint8Array<ArrayBuffer>> {
   if (response.body === null) {
     if (expectedBytes === 0) return new Uint8Array();
-    return invalidSourceFileContent("Agent Core returned incomplete Source File content.");
+    return invalid(`Agent Core returned incomplete ${label} content.`);
   }
   const reader = response.body.getReader();
   const data = new Uint8Array(expectedBytes);
@@ -1644,7 +1620,7 @@ async function readExactSourceFileBody(response: Response, expectedBytes: number
       if (done) break;
       if (!(value instanceof Uint8Array) || value.byteLength > expectedBytes - offset) {
         await reader.cancel().catch(() => undefined);
-        return invalidSourceFileContent("Agent Core returned Source File content with a mismatched length.");
+        return invalid(`Agent Core returned ${label} content with a mismatched length.`);
       }
       data.set(value, offset);
       offset += value.byteLength;
@@ -1653,9 +1629,17 @@ async function readExactSourceFileBody(response: Response, expectedBytes: number
     reader.releaseLock();
   }
   if (offset !== expectedBytes) {
-    return invalidSourceFileContent("Agent Core returned incomplete Source File content.");
+    return invalid(`Agent Core returned incomplete ${label} content.`);
   }
   return data;
+}
+
+function invalidSkillResponse(message: string): never {
+  throw new AgentCoreError(message, 502, "invalid_skill_resource");
+}
+
+function invalidSkillContent(message: string): never {
+  throw new AgentCoreError(message, 502, "invalid_skill_content");
 }
 
 function validSourceFileId(value: unknown): value is string {
@@ -1714,6 +1698,47 @@ function projectSourceFileDeleted(value: unknown, expectedId: string): SourceFil
     deleted.deleted !== true
   ) return invalidSourceFile();
   return { id: expectedId, object: "file", deleted: true };
+}
+
+function invalidSourceFileList(): never {
+  throw new AgentCoreError("Agent Core returned an invalid Files list.", 502, "invalid_source_file_list");
+}
+
+/**
+ * One listed File. An entry with a valid File ID but metadata outside the
+ * supported user_data projection is kept as unrecognized so the rest of the
+ * page stays usable; an entry without a valid ID invalidates the page.
+ */
+function projectSourceFileListEntry(value: unknown): SourceFileListEntry {
+  if (!isRecord(value) || !validSourceFileId(value.id)) return invalidSourceFileList();
+  try {
+    return projectSourceFile(value);
+  } catch (error) {
+    if (!(error instanceof AgentCoreError)) throw error;
+    return { id: value.id, object: "file", unrecognized: true };
+  }
+}
+
+function projectSourceFileList(value: unknown, options?: SourceFileListOptions): SourceFileList {
+  if (
+    !isRecord(value) || !exactFields(value, sourceFileListFields) || value.object !== "list" ||
+    !Array.isArray(value.data) || typeof value.has_more !== "boolean"
+  ) return invalidSourceFileList();
+  const limit = options?.limit ?? maxSourceFileListLimit;
+  const order = options?.order ?? "desc";
+  if (value.data.length > limit) return invalidSourceFileList();
+  const data = value.data.map(projectSourceFileListEntry);
+  const firstId = data[0]?.id ?? null;
+  const lastId = data[data.length - 1]?.id ?? null;
+  const dated = data.filter((entry): entry is SourceFile => entry.unrecognized === undefined);
+  if (
+    new Set(data.map((entry) => entry.id)).size !== data.length ||
+    value.first_id !== firstId || value.last_id !== lastId ||
+    (value.has_more && data.length === 0) ||
+    // Public timestamps are whole seconds, so equal values cannot prove the ID tie-break.
+    dated.some((entry, index) => index > 0 && compareCreatedResource(dated[index - 1]!, entry, order) > 0)
+  ) return invalidSourceFileList();
+  return { object: "list", data, has_more: value.has_more, first_id: firstId, last_id: lastId };
 }
 
 function validEnvironmentFilePath(value: unknown): value is string {
@@ -1883,6 +1908,14 @@ function projectEnvironmentFileList(
   });
 
   return { object: "page", data: files, next: page.next as string | null, has_more: page.has_more as boolean };
+}
+
+function skillPath(skillId: string): string {
+  return `/skills/${encodeURIComponent(skillId)}`;
+}
+
+function skillVersionPath(skillId: string, version: string): string {
+  return `${skillPath(skillId)}/versions/${encodeURIComponent(version)}`;
 }
 
 export class OpenAIAgentsClient implements AgentCore {
@@ -2308,14 +2341,17 @@ export class OpenAIAgentsClient implements AgentCore {
     );
     const template = projectEnvironmentTemplate(value);
     const expectedName = input.name === undefined ? null : input.name;
-    const expectedAccess = input.network == null ? "enabled" : input.network.access;
-    if (template.name !== expectedName || template.network.access !== expectedAccess) {
+    // Web creates only name/network configurations, so the response must be fully recognized.
+    if (
+      !isRecognizedEnvironmentTemplate(template) || template.name !== expectedName ||
+      !sameEnvironmentNetwork(template.network, expectedEnvironmentTemplateNetwork(input.network))
+    ) {
       return invalidEnvironmentTemplate("Agent Core returned mismatched Environment Template configuration.");
     }
     return template;
   }
 
-  async retrieveEnvironmentTemplate(templateId: string, options?: ReadOptions): Promise<EnvironmentTemplate> {
+  async retrieveEnvironmentTemplate(templateId: string, options?: ReadOptions): Promise<EnvironmentTemplateResource> {
     const value = await this.request<unknown>(
       `/agents/environments/templates/${encodeURIComponent(templateId)}`,
       { signal: options?.signal },
@@ -2328,18 +2364,19 @@ export class OpenAIAgentsClient implements AgentCore {
     templateId: string,
     input: UpdateEnvironmentTemplateInput,
     options?: ReadOptions,
-  ): Promise<EnvironmentTemplate> {
+  ): Promise<EnvironmentTemplateResource> {
     const body = environmentTemplateRequestBody(input);
     const value = await this.request<unknown>(
       `/agents/environments/templates/${encodeURIComponent(templateId)}`,
       { method: "POST", body, signal: options?.signal },
       200,
     );
+    // Other sections are preserved by Core and may be unrecognized; only supplied fields are bound.
     const template = projectEnvironmentTemplate(value, templateId);
     const supplied = input as Record<string, unknown>;
     if (
       (hasOwn(supplied, "name") && template.name !== (input.name ?? null)) ||
-      (hasOwn(supplied, "network") && template.network.access !== (input.network == null ? "enabled" : input.network.access))
+      (hasOwn(supplied, "network") && !sameEnvironmentNetwork(template.network, expectedEnvironmentTemplateNetwork(input.network)))
     ) {
       return invalidEnvironmentTemplate("Agent Core returned mismatched Environment Template configuration.");
     }
@@ -2423,6 +2460,30 @@ export class OpenAIAgentsClient implements AgentCore {
       201,
     );
     return projectEnvironmentFile(value, environmentId, input.path, expectedSize);
+  }
+
+  /** Lists project Files without their content. Files are general resources: no Beta header. */
+  async listSourceFiles(options?: SourceFileListOptions): Promise<SourceFileList> {
+    if (options?.after !== undefined && !validSourceFileId(options.after)) {
+      throw new TypeError("A Files list cursor must be a File ID.");
+    }
+    if (
+      options?.limit !== undefined &&
+      (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > maxSourceFileListLimit)
+    ) {
+      throw new TypeError("Files list limit must be an integer from 1 through 10000.");
+    }
+    if (options?.order !== undefined && options.order !== "asc" && options.order !== "desc") {
+      throw new TypeError("Files list order must be asc or desc.");
+    }
+    if (options?.purpose !== undefined && options.purpose !== "user_data") {
+      throw new TypeError("Files list purpose must be user_data.");
+    }
+    const params = new URLSearchParams();
+    addPageOptions(params, options);
+    if (options?.purpose !== undefined) params.set("purpose", options.purpose);
+    const value = await this.request<unknown>(withQuery("/files", params), { signal: options?.signal }, 200, false);
+    return projectSourceFileList(value, options);
   }
 
   async uploadSourceFile(input: SourceFileUploadInput, options?: ReadOptions): Promise<SourceFile> {
@@ -2509,6 +2570,147 @@ export class OpenAIAgentsClient implements AgentCore {
       false,
     );
     return projectSourceFileDeleted(value, fileId);
+  }
+
+  // Skills are general resources: like Files, they never send the Agents Beta header.
+
+  async listSkills(options?: SkillListOptions): Promise<SkillList> {
+    validateSkillListOptions(options, isSkillId, "Skill");
+    const params = new URLSearchParams();
+    addPageOptions(params, options);
+    const value = await this.request<unknown>(withQuery("/skills", params), { signal: options?.signal }, 200, false);
+    return projectSkillList(value, invalidSkillResponse, options);
+  }
+
+  async retrieveSkill(skillId: string, options?: ReadOptions): Promise<Skill> {
+    requireSkillId(skillId);
+    const value = await this.request<unknown>(skillPath(skillId), { signal: options?.signal }, 200, false);
+    return projectSkill(value, invalidSkillResponse, skillId);
+  }
+
+  async uploadSkill(input: SkillUploadInput, options?: ReadOptions): Promise<Skill> {
+    const body = skillUploadBody(input);
+    const value = await this.request<unknown>("/skills", { method: "POST", body, signal: options?.signal }, 200, false);
+    const skill = projectSkill(value, invalidSkillResponse);
+    // A new Skill has exactly one version, which is both default and latest.
+    if (skill.default_version !== skill.latest_version) {
+      return invalidSkillResponse("Agent Core returned an invalid new Skill.");
+    }
+    return skill;
+  }
+
+  async updateSkillDefaultVersion(skillId: string, version: string, options?: ReadOptions): Promise<Skill> {
+    requireSkillId(skillId);
+    requireSkillVersionNumber(version);
+    const value = await this.request<unknown>(
+      skillPath(skillId),
+      { method: "POST", body: JSON.stringify({ default_version: version }), signal: options?.signal },
+      200,
+      false,
+    );
+    const skill = projectSkill(value, invalidSkillResponse, skillId);
+    if (skill.default_version !== version) {
+      return invalidSkillResponse("Agent Core returned a Skill whose default version was not updated.");
+    }
+    return skill;
+  }
+
+  async deleteSkill(skillId: string, options?: ReadOptions): Promise<SkillDeleted> {
+    requireSkillId(skillId);
+    const value = await this.request<unknown>(skillPath(skillId), { method: "DELETE", signal: options?.signal }, 200, false);
+    return projectSkillDeleted(value, invalidSkillResponse, skillId);
+  }
+
+  async downloadSkill(skillId: string, options?: ReadOptions): Promise<SkillContent> {
+    requireSkillId(skillId);
+    return this.downloadSkillContent(`${skillPath(skillId)}/content`, options);
+  }
+
+  async listSkillVersions(skillId: string, options?: SkillListOptions): Promise<SkillVersionList> {
+    requireSkillId(skillId);
+    validateSkillListOptions(options, isSkillVersionId, "Skill version");
+    const params = new URLSearchParams();
+    addPageOptions(params, options);
+    const value = await this.request<unknown>(
+      withQuery(`${skillPath(skillId)}/versions`, params),
+      { signal: options?.signal },
+      200,
+      false,
+    );
+    return projectSkillVersionList(value, invalidSkillResponse, skillId, options);
+  }
+
+  async retrieveSkillVersion(skillId: string, version: string, options?: ReadOptions): Promise<SkillVersion> {
+    requireSkillId(skillId);
+    requireSkillVersionNumber(version);
+    const value = await this.request<unknown>(skillVersionPath(skillId, version), { signal: options?.signal }, 200, false);
+    return projectSkillVersion(value, invalidSkillResponse, skillId, version);
+  }
+
+  async uploadSkillVersion(
+    skillId: string,
+    input: SkillUploadInput,
+    options?: SkillVersionUploadOptions,
+  ): Promise<SkillVersion> {
+    requireSkillId(skillId);
+    const body = skillUploadBody(input, options?.setDefault);
+    const value = await this.request<unknown>(
+      `${skillPath(skillId)}/versions`,
+      { method: "POST", body, signal: options?.signal },
+      200,
+      false,
+    );
+    return projectSkillVersion(value, invalidSkillResponse, skillId);
+  }
+
+  async deleteSkillVersion(skillId: string, version: string, options?: ReadOptions): Promise<SkillVersionDeleted> {
+    requireSkillId(skillId);
+    requireSkillVersionNumber(version);
+    const value = await this.request<unknown>(
+      skillVersionPath(skillId, version),
+      { method: "DELETE", signal: options?.signal },
+      200,
+      false,
+    );
+    return projectSkillVersionDeleted(value, invalidSkillResponse, version);
+  }
+
+  async downloadSkillVersion(skillId: string, version: string, options?: ReadOptions): Promise<SkillContent> {
+    requireSkillId(skillId);
+    requireSkillVersionNumber(version);
+    return this.downloadSkillContent(`${skillVersionPath(skillId, version)}/content`, options);
+  }
+
+  private async downloadSkillContent(path: string, options?: ReadOptions): Promise<SkillContent> {
+    const headers = this.headers({ Accept: "application/octet-stream" }, false);
+    const response = await this.fetchImpl(`${this.baseUrl}${path}`, { headers, signal: options?.signal });
+    if (!response.ok || response.status !== 200) throw await this.toError(response);
+    const contentType = response.headers.get("Content-Type");
+    const contentDisposition = response.headers.get("Content-Disposition");
+    const contentLength = response.headers.get("Content-Length");
+    const cacheControl = response.headers.get("Cache-Control");
+    const nosniff = response.headers.get("X-Content-Type-Options");
+    if (
+      contentType !== "application/octet-stream" ||
+      contentDisposition === null ||
+      !/^attachment(?:;|$)/i.test(contentDisposition) ||
+      contentLength === null ||
+      !/^(?:0|[1-9][0-9]*)$/.test(contentLength) ||
+      !Number.isSafeInteger(Number(contentLength)) ||
+      Number(contentLength) > maxSkillContentBytes ||
+      cacheControl !== "no-store" ||
+      nosniff?.toLowerCase() !== "nosniff"
+    ) {
+      await response.body?.cancel().catch(() => undefined);
+      return invalidSkillContent("Agent Core returned invalid Skill content headers.");
+    }
+    const data = await readExactSourceFileBody(response, Number(contentLength), invalidSkillContent, "Skill");
+    return {
+      data: new Blob([data], { type: "application/zip" }),
+      bytes: data.byteLength,
+      content_type: "application/octet-stream",
+      content_disposition: contentDisposition,
+    };
   }
 
   async updateSession(sessionId: string, metadata: Record<string, string> | null): Promise<AgentSession> {

@@ -29,7 +29,22 @@ repeat independent review when a correction materially changes the design or ris
 Fix in-scope blockers before delivery. Do not use `codex exec` as a substitute reviewer.
 
 The Core Web is an administrator console for execution and resource operations;
-business collaboration remains in Parsar. Environment Template management shares
+business collaboration remains in Parsar. Its navigation leads with operations: Monitor
+(Overview, Agent metrics, Sandbox metrics, Session log), Resources, Infrastructure
+and Settings; building Agents and chatting in Sessions are Playground tools for
+verifying the deployment, not the landing surface. Operations pages use the shared
+page grammar in `apps/web/src/components/console-ui.tsx` and `styles/console.css`;
+older feature pages share its header, help-tip and refresh conventions. Keep
+explanations behind help tips rather than lines of small print, but keep errors,
+warnings and safety notices visible.
+Browser-derived metrics state their coverage on screen, keep missing values
+visibly missing, bound their fan-out and time (Agent metrics reads at most 200
+recently active Sessions per load, 15 s per Session, 45 s per load), report a
+failed read as failed rather than as an empty result, and never imply
+deployment-wide or billing totals.
+Aggregate endpoints that would replace this work are console-only `/core/v1`
+routes, never additions to the public `/v1` contract; see
+`docs/web/admin-metrics-backend-requirements.md`. Environment Template management shares
 the Session creation catalog and uses the existing public client operations. Patch
 only edited fields, confirm deletion, and never automatically retry an uncertain
 write. When Core refuses to delete a busy Session, offer an explicit Cancel work

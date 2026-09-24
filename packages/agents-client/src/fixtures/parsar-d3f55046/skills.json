@@ -1,0 +1,331 @@
+{
+  "revision": "d3f55046717264876157acd567646d665997b040",
+  "source": "Raw HTTP responses of services/agents-api/internal/api/skills*.go, source_files_content.go and errors.go at this revision. Skills never use the Agents Beta header.",
+  "responses": {
+    "skill": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/skills/skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c"
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "id": "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
+        "object": "skill",
+        "created_at": 1790208000,
+        "name": "report",
+        "description": "Create the report.",
+        "default_version": "1",
+        "latest_version": "2"
+      }
+    },
+    "skill_created": {
+      "request": {
+        "method": "POST",
+        "path": "/v1/skills",
+        "multipart": [
+          "files[]=report/SKILL.md"
+        ]
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "id": "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
+        "object": "skill",
+        "created_at": 1790208000,
+        "name": "report",
+        "description": "Create the report.",
+        "default_version": "1",
+        "latest_version": "1"
+      }
+    },
+    "skill_default_updated": {
+      "request": {
+        "method": "POST",
+        "path": "/v1/skills/skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
+        "body": {
+          "default_version": "2"
+        }
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "id": "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
+        "object": "skill",
+        "created_at": 1790208000,
+        "name": "report",
+        "description": "Create the quarterly report.",
+        "default_version": "2",
+        "latest_version": "2"
+      }
+    },
+    "skill_list": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/skills",
+        "query": "limit=2"
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "object": "list",
+        "data": [
+          {
+            "id": "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
+            "object": "skill",
+            "created_at": 1790208000,
+            "name": "report",
+            "description": "Create the report.",
+            "default_version": "1",
+            "latest_version": "2"
+          },
+          {
+            "id": "skill_9d8c7b6a-5e4f-4d3c-8b2a-1f0e9d8c7b6a",
+            "object": "skill",
+            "created_at": 1790207000,
+            "name": "triage",
+            "description": "Sort incoming issues.",
+            "default_version": "1",
+            "latest_version": "1"
+          }
+        ],
+        "first_id": "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
+        "last_id": "skill_9d8c7b6a-5e4f-4d3c-8b2a-1f0e9d8c7b6a",
+        "has_more": true
+      }
+    },
+    "skill_list_empty": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/skills"
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "object": "list",
+        "data": [],
+        "first_id": null,
+        "last_id": null,
+        "has_more": false
+      }
+    },
+    "skill_version": {
+      "request": {
+        "method": "POST",
+        "path": "/v1/skills/skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c/versions",
+        "multipart": [
+          "files=report.zip"
+        ]
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "id": "skillver_1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e",
+        "object": "skill.version",
+        "created_at": 1790208600,
+        "skill_id": "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
+        "version": "2",
+        "name": "report",
+        "description": "Create the quarterly report."
+      }
+    },
+    "skill_version_list": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/skills/skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c/versions"
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "object": "list",
+        "data": [
+          {
+            "id": "skillver_1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e",
+            "object": "skill.version",
+            "created_at": 1790208600,
+            "skill_id": "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
+            "version": "2",
+            "name": "report",
+            "description": "Create the quarterly report."
+          },
+          {
+            "id": "skillver_8a7b6c5d-4e3f-4a2b-8c1d-0e9f8a7b6c5d",
+            "object": "skill.version",
+            "created_at": 1790208000,
+            "skill_id": "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
+            "version": "1",
+            "name": "report",
+            "description": "Create the report."
+          }
+        ],
+        "first_id": "skillver_1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e",
+        "last_id": "skillver_8a7b6c5d-4e3f-4a2b-8c1d-0e9f8a7b6c5d",
+        "has_more": false
+      }
+    },
+    "skill_deleted": {
+      "request": {
+        "method": "DELETE",
+        "path": "/v1/skills/skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c"
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "id": "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
+        "object": "skill.deleted",
+        "deleted": true
+      }
+    },
+    "skill_version_deleted": {
+      "request": {
+        "method": "DELETE",
+        "path": "/v1/skills/skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c/versions/1"
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "id": "skillver_8a7b6c5d-4e3f-4a2b-8c1d-0e9f8a7b6c5d",
+        "object": "skill.version.deleted",
+        "version": "1",
+        "deleted": true
+      }
+    },
+    "skill_content": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/skills/skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c/versions/1/content"
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/octet-stream",
+        "content-disposition": "attachment; filename=report.zip",
+        "content-length": "197",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff"
+      },
+      "body_base64": "UEsDBBQAAAAIAAAAOF28xEJoRQAAAFIAAAAPAAAAcmVwb3J0L1NLSUxMLm1k09XV5cpLzE21UihKLcgvKuFKSS1OLsosKMnMz7NScC5KTSxJVSjJSIVK63HpAjW45efk5JcjCSsUFOUnp6aUFqXqcQEAUEsBAhQDFAAAAAgAAAA4XbzEQmhFAAAAUgAAAA8AAAAAAAAAAAAAAIABAAAAAHJlcG9ydC9TS0lMTC5tZFBLBQYAAAAAAQABAD0AAAByAAAAAAA="
+    },
+    "error_invalid_upload": {
+      "request": {
+        "method": "POST",
+        "path": "/v1/skills"
+      },
+      "status": 400,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "error": {
+          "message": "Invalid resource identifier or request limits.",
+          "type": "invalid_request_error",
+          "code": "invalid_request",
+          "param": null
+        }
+      }
+    },
+    "error_default_version_delete": {
+      "request": {
+        "method": "DELETE",
+        "path": "/v1/skills/skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c/versions/2"
+      },
+      "status": 400,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "error": {
+          "message": "Cannot delete the default skill version.",
+          "type": "invalid_request_error",
+          "code": "invalid_value",
+          "param": "version"
+        }
+      }
+    },
+    "error_not_found": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/skills/skill_9d8c7b6a-5e4f-4d3c-8b2a-1f0e9d8c7b6a"
+      },
+      "status": 404,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "error": {
+          "message": "Resource not found.",
+          "type": "invalid_request_error",
+          "code": null,
+          "param": null
+        }
+      }
+    },
+    "error_request_too_large": {
+      "request": {
+        "method": "POST",
+        "path": "/v1/skills"
+      },
+      "status": 413,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "error": {
+          "message": "File exceeds this operation's content limit.",
+          "type": "invalid_request_error",
+          "code": "request_too_large",
+          "param": null
+        }
+      }
+    },
+    "error_storage_unavailable": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/skills"
+      },
+      "status": 503,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "error": {
+          "message": "Skill storage is unavailable.",
+          "type": "server_error",
+          "code": "skill_storage_unavailable",
+          "param": null
+        }
+      }
+    }
+  }
+}

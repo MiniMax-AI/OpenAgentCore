@@ -1,7 +1,7 @@
 import { AgentCoreError } from "@agents-core-web/agents-client";
 import type {
   AgentCore,
-  EnvironmentTemplate,
+  EnvironmentTemplateResource,
   OpenAIHostedNetworkAccess,
 } from "@agents-core-web/agents-client";
 
@@ -16,8 +16,12 @@ import { listAllCollectionPages } from "../../../lib/collection-pagination";
  * discriminator. Web therefore presents configuration, not a provider choice.
  */
 export type EnvironmentTemplateCatalog =
-  /** Core answered the pinned five-operation resource. */
-  | { state: "ready"; templates: EnvironmentTemplate[] }
+  /**
+   * Core answered the pinned five-operation resource. A Template with
+   * configuration Web does not recognize stays listed and selectable; Core
+   * remains the authority on whether a Session can be created from it.
+   */
+  | { state: "ready"; templates: EnvironmentTemplateResource[] }
   /** The connected Core build does not expose the Template resource. */
   | { state: "unsupported" }
   /** The resource exists but the read failed; selection must stay blocked. */
@@ -56,21 +60,26 @@ export async function loadEnvironmentTemplateCatalog(
   }
 }
 
-export function environmentTemplateLabel(template: EnvironmentTemplate): string {
+export function environmentTemplateLabel(template: EnvironmentTemplateResource): string {
   const name = template.name?.trim();
-  return `${name || "Unnamed Template"} · network ${template.network.access}`;
+  return `${name || "Unnamed Template"} · network ${template.network?.access ?? "unrecognized"}`;
 }
 
 /**
  * Core inherits an omitted Session network from the Template and rejects a
- * Session that tries to widen a disabled Template back to enabled.
+ * Session that tries to widen a disabled or restricted Template to enabled.
+ * An unrecognized Template policy is left to Core instead of being guessed.
  */
 export function hostedNetworkNarrowingBlocker(
-  template: EnvironmentTemplate | null,
+  template: EnvironmentTemplateResource | null,
   requested: OpenAIHostedNetworkAccess | null,
 ): string | null {
-  if (!template || requested === null) return null;
-  return template.network.access === "disabled" && requested === "enabled"
-    ? "This Template disables network access. A Session can keep or narrow that policy, never widen it."
-    : null;
+  if (!template || requested !== "enabled") return null;
+  if (template.network?.access === "disabled") {
+    return "This Template disables network access. A Session can keep or narrow that policy, never widen it.";
+  }
+  if (template.network?.access === "restricted") {
+    return "This Template restricts network access to listed domains. A Session can keep or narrow that policy, never widen it.";
+  }
+  return null;
 }

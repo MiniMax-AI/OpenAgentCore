@@ -2,6 +2,7 @@ import { ArrowUpRight, Bot, Check, Code2, Copy, Play, RefreshCw } from "lucide-r
 import { useEffect, useRef, useState } from "react";
 import type { AgentCore, CoreHarnessKind, SavedAgent } from "@agents-core-web/agents-client";
 import { useTranslation } from "react-i18next";
+import { HelpTip } from "../../components/console-ui";
 import { isLocalProxyBaseUrl, isValidDirectCoreBaseUrl, type CoreConnection } from "../../lib/connection";
 import { buildModelOptionGroups } from "../../lib/model-options";
 import { exampleForm, exampleInput, terminalExample } from "./example-request";
@@ -15,7 +16,7 @@ export function FirstRequest({ core, connection, scope, onCreated, onOpenAgent }
   const request = useExampleRequest(core, scope, onCreated);
   const [form, setForm] = useState(() => exampleForm(buildModelOptionGroups([], import.meta.env.VITE_AGENT_MODEL_PRESETS, import.meta.env.VITE_AGENT_DEFAULT_MODEL).defaultModel, request.marker));
   const [harnesses, setHarnesses] = useState<CoreHarnessKind[]>([]);
-  const [providerEnabled, setProviderEnabled] = useState(true);
+  const [providerEnabled, setProviderEnabled] = useState(false);
   const [providerUrl, setProviderUrl] = useState("");
   const [protocol, setProtocol] = useState<"responses" | "anthropic">("responses");
   const [modelKey, setModelKey] = useState("");
@@ -62,33 +63,45 @@ export function FirstRequest({ core, connection, scope, onCreated, onOpenAgent }
     setModelKey("");
     await operation;
   }
+  const runLabel = request.state.phase === "creating" ? t("Creating Agent…") : request.state.phase === "checking" ? t("Checking for your Agent…") : t("Run here");
   return <div className="first-request-workspace">
     <div className="first-request">
       <section className="first-request-form" aria-labelledby="first-agent-config-title">
-        <header><h3 id="first-agent-config-title">{t("Agent configuration")}</h3><p>{t("Fill in your Agent's settings. The request updates as you type.")}</p></header>
+        <h3 id="first-agent-config-title" className="console-section-title">{t("Agent configuration")}<HelpTip>{t("Fill in your Agent's settings. The request updates as you type.")}</HelpTip></h3>
         <fieldset disabled={pending || Boolean(agent) || busyCopy}>
           <label className="field"><span>{t("Agent name")}</span><input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} maxLength={128} /></label>
           <div className="first-request-form-row">
             <label className="field"><span>{t("Model ID")}</span><input value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })} spellCheck={false} required /></label>
             <label className="field"><span>{t("Harness")}</span><select value={form.harness} onChange={(event) => setForm({ ...form, harness: event.target.value as CoreHarnessKind | "" })}><option value="">{t("Deployment default")}</option>{harnesses.map((harness) => <option key={harness} value={harness}>{harness}</option>)}</select></label>
           </div>
-          <label className="field"><span>{t("Instructions")}</span><textarea value={form.instructions} onChange={(event) => setForm({ ...form, instructions: event.target.value })} rows={3} /></label>
-          <label className="first-request-provider-toggle"><input type="checkbox" checked={providerEnabled} onChange={(event) => { setProviderEnabled(event.target.checked); if (!event.target.checked) setModelKey(""); }} /><span>{t("Set a model provider for this Agent")}</span></label>
+          <label className="field"><span>{t("Instructions")}</span><textarea value={form.instructions} onChange={(event) => setForm({ ...form, instructions: event.target.value })} rows={4} /></label>
+          <label className="first-request-provider-toggle"><input type="checkbox" checked={providerEnabled} onChange={(event) => { setProviderEnabled(event.target.checked); if (!event.target.checked) setModelKey(""); }} /><span>{t("Set a model provider for this Agent")}</span><HelpTip>{t("Use the model provider configured for this deployment.")}</HelpTip></label>
           {providerEnabled ? <div className="first-request-provider">
             <label className="field"><span>{t("Provider protocol")}</span><select value={protocol} onChange={(event) => setProtocol(event.target.value as typeof protocol)}><option value="responses">Responses</option><option value="anthropic">Anthropic</option></select></label>
             <label className="field"><span>{t("Provider base URL")}</span><input type="url" value={providerUrl} onChange={(event) => setProviderUrl(event.target.value)} placeholder="https://api.example/v1" spellCheck={false} required /></label>
             {providerUrl && !providerValid ? <p className="field-error" role="alert">{t("Enter an HTTPS URL or a loopback HTTP URL without credentials, query parameters, or fragments.")}</p> : null}
-            <label className="field"><span>{t("Model API key")} <small>{t("Only for Run here")}</small></span><input type="password" value={modelKey} onChange={(event) => setModelKey(event.target.value)} autoComplete="off" spellCheck={false} placeholder="MODEL_API_KEY" /><small>{t("The local request asks for this key in your terminal. A key entered here is used only by Run here.")}</small></label>
-          </div> : <p className="first-request-hint">{t("Use the model provider configured for this deployment.")}</p>}
+            <label className="field"><span>{t("Model API key")}</span><input type="password" value={modelKey} onChange={(event) => setModelKey(event.target.value)} autoComplete="off" spellCheck={false} placeholder="MODEL_API_KEY" aria-describedby="first-request-model-key-help" /></label>
+            <p id="first-request-model-key-help" className="first-request-hint">{t("The local request asks for this key in your terminal. A key entered here is used only by Run here.")}</p>
+          </div> : null}
         </fieldset>
-        <footer className="first-request-local-action"><button className="button outline" type="button" onClick={() => void runHere()} disabled={!input || locked || busyCopy || !local || (providerEnabled && !modelKey.trim())}><Play size={13} />{request.state.phase === "creating" ? t("Creating Agent…") : request.state.phase === "checking" ? t("Checking for your Agent…") : t("Run here")}</button><small>{t("Uses your signed-in console connection.")}</small></footer>
       </section>
-      <section className="first-request-editor" aria-labelledby="first-request-code-title">
-        <div className="first-request-toolbar"><span id="first-request-code-title"><Code2 size={15} />POST <code>/v1/agents</code></span><span>Python 3</span></div>
+      <section className="agent-request-preview first-request-preview" aria-labelledby="first-request-code-title">
+        <header>
+          <Code2 size={15} strokeWidth={1.5} aria-hidden="true" />
+          <div>
+            <h2 id="first-request-code-title" className="console-section-title">{t("Request preview")}<HelpTip>{t(providerEnabled ? "Run locally. The request will ask for your Core API key and model key." : "Run locally. The request will ask for your Core API key.")}<br />{t("Core API key authorizes this request. Model key authorizes your model provider.")}</HelpTip></h2>
+            <p>POST <code>/v1/agents</code></p>
+          </div>
+        </header>
         <label className="first-request-api-url field"><span>{t("Core API base URL")}</span><input type="url" value={apiUrl} onChange={(event) => { setApiUrl(event.target.value); setCopyState("idle"); }} spellCheck={false} disabled={pending || busyCopy} /></label>
-        <p className="first-request-hint">{t(providerEnabled ? "Run locally. The request will ask for your Core API key and model key." : "Run locally. The request will ask for your Core API key.")}</p>
-        <div className="first-request-code"><pre tabIndex={0}><code>{code ?? t("Complete the configuration to generate your request.")}</code></pre></div>
-        <footer className="first-request-actions"><span>{t("Core API key authorizes this request. Model key authorizes your model provider.")}</span><button className="button primary" type="button" onClick={() => void copy()} disabled={!code || pending || busyCopy || Boolean(agent)}>{copyState === "copied" ? <Check size={14} /> : <Copy size={14} />}{copyState === "copied" ? t("Copied") : t("Copy request")}</button></footer>
+        <div className="agent-preview-block">
+          <span>Python 3</span>
+          <pre tabIndex={0}>{code ?? t("Complete the configuration to generate your request.")}</pre>
+        </div>
+        <footer className="first-request-actions">
+          <button className="button outline" type="button" title={t("Uses your signed-in console connection.")} onClick={() => void runHere()} disabled={!input || locked || busyCopy || !local || (providerEnabled && !modelKey.trim())}><Play size={13} aria-hidden="true" />{runLabel}</button>
+          <button className="button primary" type="button" onClick={() => void copy()} disabled={!code || pending || busyCopy || Boolean(agent)}>{copyState === "copied" ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}{copyState === "copied" ? t("Copied") : t("Copy request")}</button>
+        </footer>
       </section>
     </div>
     {copyState === "failed" ? <p className="first-request-notice" role="alert">{t("Select the request and copy it manually.")}</p> : null}

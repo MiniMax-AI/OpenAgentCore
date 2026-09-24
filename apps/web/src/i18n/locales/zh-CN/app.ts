@@ -1,8 +1,35 @@
 export const app = {
+  apiKeysDescription: "签发和撤销应用调用 Agents API 所用的密钥。控制台密码不能当作 API 密钥使用。",
+  workbench: {
+    title: "API 调试",
+    help: "用固定表单拼出 Agents API 请求。右侧的请求会随输入实时更新：可以复制后自己发送，也可以通过控制台连接直接在这里发送。",
+    tagged: "在这里创建的 Agent 和 Session 会带上 metadata.created_by = console-playground。",
+    formTitle: "请求字段",
+    kindLabel: "请求",
+    kinds: { "agent.create": "创建 Agent", "session.create": "创建 Session", "session.message": "发送消息", "object.retrieve": "按 ID 查询" },
+    objects: { session: "Session", agent: "Agent", vault: "Vault", environment_template: "环境模板", environment: "Environment", file: "文件" },
+    fields: {
+      name: "名称", model: "模型", harness: "执行引擎", deploymentDefault: "部署默认值", instructions: "指令",
+      agent: "Agent", chooseAgent: "选择一个已保存的 Agent", environment: "环境", environmentNone: "无", environmentHosted: "托管沙箱",
+      template: "环境模板 ID", input: "首条输入", session: "Session ID", message: "消息", objectType: "对象", id: "ID",
+    },
+    problems: { model: "请填写模型。", agent: "请选择 Agent。", input: "没有环境的 Session 需要首条输入。", session: "请填写 Session ID。", text: "请填写消息。", id: "请填写 ID。" },
+    request: "请求",
+    copy: "复制 {{name}}",
+    send: "发送",
+    sending: "发送中…",
+    response: "响应",
+    statusOk: "HTTP {{status}}",
+    statusRejected: "HTTP {{status}}",
+    statusUnknown: "未确认",
+    accepted: "已接受。回复会在 Session 里异步产生。",
+    openSession: "在 Session 调试中打开",
+    unknown: "请求没有完成（{{reason}}），结果未知，不会自动重试。请先确认结果再发送；Session 相关请求会沿用同一个 Idempotency-Key。",
+  },
   errors: {
-    coreRequest: "Agent Core 请求失败。", agentChanged: "加载数据集时 Agent 数据已变更。请再次刷新以同步所有已加载页。", sessionChanged: "加载数据集时会话数据已变更。请再次刷新以同步所有已加载页。", runtimeBudget: "Runtime 快照超过了 Web 15 秒刷新时限。", runtimeChanged: "加载 Runtime 观测时会话数据已变更。已保留上一个完整快照。", filteredChanged: "加载数据集时筛选后的会话数据已变更。请再次刷新以同步所有已加载页。", outsideFilter: "Agent Core 返回了不属于当前 Agent 筛选条件的会话。", streamRejected: "Agent Core 拒绝了实时事件流{{status}}。请检查 Core 连接设置。", connectionChanged: "凭据库操作开始前 Core 连接已变更。", connectionChangedConfirm: "凭据库操作确认前 Core 连接已变更。", credentialMismatch: "Agent Core 返回了不匹配的凭据元数据。", latestCredentialMissing: "最新凭据元数据不可用。替换 Token 前请先刷新。", credentialReplacementMismatch: "替换后 Agent Core 返回了不匹配的凭据元数据。", managedDisabled: "当前 Web 构建未启用托管环境配置。", sessionOutcomeUnknown: "无法确认会话创建结果。", sessionOutcomeChanged: "Core 连接变更后无法确认会话创建结果。", previousSessionUpdate: "Core 连接变更后，上一个 Core 返回了会话更新。当前 Core 视图未被修改。", previousSessionDelete: "Core 连接变更后，上一个 Core 确认了会话删除。当前 Core 视图未被修改。", waitForStream: "发送前请等待实时事件流连接。", setupAgentMissing: "选中的已保存 Agent 未加载，无法打开会话设置。",
+    coreRequest: "Agent Core 请求失败。", agentChanged: "加载数据集时 Agent 数据已变更。请再次刷新以同步所有已加载页。", sessionChanged: "加载数据集时 Session 数据已变更。请再次刷新以同步所有已加载页。", runtimeBudget: "Runtime 快照超过了 Web 15 秒刷新时限。", runtimeChanged: "加载 Runtime 观测时 Session 数据已变更。已保留上一个完整快照。", filteredChanged: "加载数据集时筛选后的 Session 数据已变更。请再次刷新以同步所有已加载页。", outsideFilter: "Agent Core 返回了不属于当前 Agent 筛选条件的 Session。", streamRejected: "Agent Core 拒绝了实时事件流{{status}}。请检查 Core 连接设置。", connectionChanged: "Vault 操作开始前 Core 连接已变更。", connectionChangedConfirm: "Vault 操作确认前 Core 连接已变更。", credentialMismatch: "Agent Core 返回了不匹配的凭据元数据。", latestCredentialMissing: "最新凭据元数据不可用。替换 Token 前请先刷新。", credentialReplacementMismatch: "替换后 Agent Core 返回了不匹配的凭据元数据。", managedDisabled: "当前 Web 构建未启用托管环境配置。", sessionOutcomeUnknown: "无法确认 Session 创建结果。", sessionOutcomeChanged: "Core 连接变更后无法确认 Session 创建结果。", previousSessionUpdate: "Core 连接变更后，上一个 Core 返回了 Session 更新。当前 Core 视图未被修改。", previousSessionDelete: "Core 连接变更后，上一个 Core 确认了 Session 删除。当前 Core 视图未被修改。", waitForStream: "发送前请等待实时事件流连接。", setupAgentMissing: "选中的已保存 Agent 未加载，无法打开 Session 设置。",
   },
   success: {
-    agentCreated: "Agent 已创建。", agentUpdated: "Agent 已更新。", agentDeleted: "Agent 已删除。", vaultCreated: "凭据库已创建。", credentialCreated: "凭据已创建，Token 仍保持隐藏。", credentialReplaced: "凭据 Token 已替换。正在运行的工作可能仍持有旧 Token。", credentialDeleted: "凭据已删除，Provider 端 Token 未被撤销。", credentialDeleteReconciled: "已根据 Core 状态同步凭据删除结果。", vaultDeleted: "凭据库及其凭据已删除，Provider 端 Token 未被撤销。", vaultDeleteReconciled: "已根据 Core 状态同步凭据库删除结果。", templateSaved: "环境模板已保存，未分配 Runtime。", idleSessionOpened: "空闲会话已创建，正在打开实时事件…", sessionOpened: "会话已打开，正在连接实时事件…", managedSessionConnected: "托管会话已创建，创建事件流已连接。", idleSessionConnected: "空闲会话已创建，创建事件流已连接。", sessionInputConnected: "带初始输入的会话已创建，创建事件流已连接。", metadataUpdated: "会话元数据已更新。", sessionDeleted: "会话已从 Agent Core 删除。", sessionAbsentAfterCancel: "取消后会话已不存在于 Agent Core。", cancellationRequested: "已请求取消。", functionSubmitted: "函数结果已提交。",
+    agentCreated: "Agent 已创建。", agentUpdated: "Agent 已更新。", agentDeleted: "Agent 已删除。", vaultCreated: "Vault 已创建。", credentialCreated: "凭据已创建，Token 仍保持隐藏。", credentialReplaced: "凭据 Token 已替换。正在运行的工作可能仍持有旧 Token。", credentialDeleted: "凭据已删除，Provider 端 Token 未被撤销。", credentialDeleteReconciled: "已根据 Core 状态同步凭据删除结果。", vaultDeleted: "Vault 及其凭据已删除，Provider 端 Token 未被撤销。", vaultDeleteReconciled: "已根据 Core 状态同步 Vault 删除结果。", templateSaved: "环境模板已保存，未分配 Runtime。", idleSessionOpened: "空闲 Session 已创建，正在打开实时事件…", sessionOpened: "Session 已打开，正在连接实时事件…", managedSessionConnected: "托管 Session 已创建，创建事件流已连接。", idleSessionConnected: "空闲 Session 已创建，创建事件流已连接。", sessionInputConnected: "带初始输入的 Session 已创建，创建事件流已连接。", metadataUpdated: "Session 元数据已更新。", sessionDeleted: "Session 已从 Agent Core 删除。", sessionAbsentAfterCancel: "取消后 Session 已不存在于 Agent Core。", cancellationRequested: "已请求取消。", functionSubmitted: "函数结果已提交。",
   },
 } as const;

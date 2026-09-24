@@ -36,4 +36,13 @@ export const apiKeyChinese = {
   "API key ready": "API 密钥已就绪",
   "Existing keys stay available. Create another only if you need one.": "已有密钥可以继续使用，需要时再创建新密钥。",
   "Save a key before continuing.": "保存一枚密钥后，就可以继续了。",
+  "Name": "名称",
+  "Key": "密钥",
+  "Status": "状态",
+  "Created": "创建时间",
+  "Actions": "操作",
+  "No API keys yet": "还没有 API 密钥",
+  "Create a key so callers can reach the Agents API.": "创建一枚密钥，调用方就能访问 Agents API。",
+  "This console cannot manage API keys": "此控制台不能管理 API 密钥",
+  "Use a key supplied by your Core administrator.": "请使用 Core 管理员提供的密钥。",
 } as const;

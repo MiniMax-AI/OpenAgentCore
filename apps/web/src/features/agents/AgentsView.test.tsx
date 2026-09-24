@@ -101,13 +101,39 @@ describe("Agents view", () => {
       />,
     );
 
-    expect(html).toContain('role="list" aria-label="Agents"');
-    expect(html).toContain('type="button" aria-label="Edit Untitled Agent (agent_1)"');
+    expect(html).toContain('<table class="data-table agent-table" aria-label="Agents">');
+    expect(html).toContain('aria-label="Edit Untitled Agent (agent_1)" data-agent-id="agent_1"');
     expect(html).toContain('aria-disabled="true" aria-label="Start a Session with Untitled Agent (agent_1)"');
-    expect(html).toContain("Create agent");
-    expect(html).toContain("Starter templates");
+    expect(html).toContain('data-create-agent-entry="true"><svg');
+    expect(html).toContain("Create agent</button>");
+    expect(html).not.toContain("Starter templates");
     expect(html).toContain('<span>Unavailable</span>');
     expect(html).toContain("Session unavailable: Current Core Session admission requires");
+    // Search lives in the page body filter bar, not in the header actions.
+    expect(html.indexOf('aria-label="Search Agents"')).toBeGreaterThan(html.indexOf('class="console-page-body"'));
+    // Without a Session source the page shows no usage statistics.
+    expect(html).not.toContain("Sessions created");
+    expect(html).not.toContain("not a basis for billing");
+  });
+
+  it("adds the usage range, caveat and pending usage columns when it can read Sessions", () => {
+    const html = renderToStaticMarkup(
+      <AgentsView
+        agents={[agent]}
+        busy={false}
+        coreError={null}
+        coreState="ready"
+        onCreate={async () => undefined}
+        onRefresh={() => undefined}
+        onStartSession={async () => undefined}
+        usageSource={{ listSessions: async () => ({ data: [], has_more: false }) }}
+      />,
+    );
+
+    expect(html).toContain('role="radiogroup" aria-label="Sessions created"');
+    expect(html).toContain("Data comes from cumulative Session usage reported by Core. It excludes unreported usage and is not a basis for billing.");
+    expect(html).toContain('<th scope="col" class="numeric">Sessions</th>');
+    expect(html).toContain('agent-usage-pending">…</td>');
   });
 
   it("keeps Session start available for the known admission profile", () => {

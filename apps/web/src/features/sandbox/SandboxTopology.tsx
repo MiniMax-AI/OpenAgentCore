@@ -22,9 +22,8 @@ export function SandboxTopology({ nodes, allocations, stale, selectedId, onSelec
     const state = stale || !node.online ? "offline" : node.provider_ready ? "online" : "warning";
     return { node, left, y, state };
   });
-  return <div className="sandbox-topology-scroll" role="region" aria-label={t("Sandbox nodes")}>
+  return <div className="sandbox-topology-scroll" role="region" aria-label={t("Sandbox nodes")} title={t("Select a node to inspect it")}>
     <div className="sandbox-topology" style={{ height }}>
-      <div className="sandbox-topology-caption"><span className="sandbox-topology-eyebrow">{t("Node network")}</span><span>{t("Select a node to inspect it")}</span></div>
       <svg className="sandbox-topology-lines" viewBox={`0 0 1000 ${height}`} preserveAspectRatio="none" aria-hidden="true">
         {positioned.map(({ node, left, y, state }) => {
           const end = left ? 320 : 680;
@@ -37,7 +36,7 @@ export function SandboxTopology({ nodes, allocations, stale, selectedId, onSelec
           </g>;
         })}
       </svg>
-      <div className="sandbox-topology-core" aria-label="Core"><span className="sandbox-core-orbit" /><span className="sandbox-core-orbit outer" /><div className="sandbox-core-body"><Network size={27} strokeWidth={1.35} aria-hidden="true" /><strong>Core</strong></div></div>
+      <div className="sandbox-topology-core" aria-label="Core"><div className="sandbox-core-body"><Network size={27} strokeWidth={1.35} aria-hidden="true" /><strong>Core</strong></div></div>
       {positioned.map(({ node, left, y, state }) => <button
         key={node.id}
         type="button"

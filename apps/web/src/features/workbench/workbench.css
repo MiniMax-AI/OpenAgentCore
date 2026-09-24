@@ -1,0 +1,153 @@
+/* Playground › API workbench: form on the left, the exact request (and, after
+   sending, the response) on the right — the same anatomy as the Agent builder. */
+.workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.workbench-form {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.workbench-form .segmented {
+  align-self: flex-start;
+}
+
+.workbench-form fieldset {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.workbench-form .field {
+  margin: 0;
+}
+
+.workbench-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.workbench-side {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+}
+
+.workbench-preview header p code {
+  font-family: var(--font-mono);
+}
+
+.workbench-block > span {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.workbench-copy {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+}
+
+.workbench-copy:hover {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.workbench-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.workbench-problem {
+  color: var(--fg-muted);
+  font-size: 12.5px;
+}
+
+.workbench-response {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.workbench-response > header {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+}
+
+.workbench-response h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.workbench-response time {
+  margin-left: auto;
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.workbench-json {
+  width: 100%;
+  max-height: 360px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.workbench-note {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.workbench-note-warning {
+  color: var(--warning);
+}
+
+@media (max-width: 1100px) {
+  .workbench {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workbench-side {
+    position: static;
+  }
+}

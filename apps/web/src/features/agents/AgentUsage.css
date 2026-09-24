@@ -1,0 +1,169 @@
+/* Per-Agent usage: the range control and caveat in the list toolbar, four
+ * numeric columns, an "Other Agents" table and the full breakdown in the
+ * Agent detail aside. */
+
+.agent-usage-range {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-usage-range-label {
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.agent-usage-status {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-usage-status-error [role="alert"] {
+  color: var(--danger);
+}
+
+.agent-usage-warning {
+  color: color-mix(in srgb, var(--warning) 78%, var(--fg));
+}
+
+.agent-usage-caveat {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+/* Other Agents ---------------------------------------------------------- */
+
+.agent-usage-other .data-table th[scope="row"] {
+  min-width: 220px;
+}
+
+.agent-usage-other .data-table th[scope="row"] code {
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+/* Detail panel ---------------------------------------------------------- */
+
+.agent-usage-panel {
+  display: grid;
+  min-width: 0;
+  padding: 16px;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: var(--shadow-control);
+}
+
+.agent-usage-panel > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.agent-usage-panel h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.agent-usage-panel .kpi-strip {
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+}
+
+.agent-usage-panel .kpi {
+  gap: 4px;
+  padding: 10px 12px 12px;
+}
+
+.agent-usage-panel .kpi dt {
+  font-size: 11.5px;
+  line-height: 16px;
+}
+
+.agent-usage-panel .kpi dd {
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.agent-usage-panel[aria-busy="true"] .kpi-value {
+  color: var(--fg-subtle);
+}
+
+.agent-usage-breakdown {
+  display: grid;
+  margin: 0;
+  gap: 10px;
+}
+
+.agent-usage-breakdown > div {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.agent-usage-breakdown > div > dt {
+  color: var(--fg-muted);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.agent-usage-breakdown > div > dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-usage-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+}
+
+.agent-usage-statuses .status-dot {
+  font-size: 12px;
+}
+
+.agent-usage-statuses strong,
+.agent-usage-tokens dd {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-usage-tokens {
+  display: grid;
+  max-width: 280px;
+  margin: 0;
+  gap: 2px;
+}
+
+.agent-usage-tokens > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-usage-tokens dt {
+  color: var(--fg-muted);
+}
+
+.agent-usage-tokens dd {
+  margin: 0;
+  text-align: right;
+}

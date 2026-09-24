@@ -218,6 +218,19 @@ describe("EnvironmentPanel", () => {
     expect(html).not.toContain("Add inline Workspace file");
   });
 
+  it("shows the restricted network of a Session created from an advanced Template", () => {
+    const html = renderToStaticMarkup(
+      <EnvironmentPanel
+        environment={{ ...managedHosted, network: { access: "restricted", allowed_domains: ["pypi.org", "files.pythonhosted.org"] } }}
+        observation={null}
+        connectionActions={[]}
+      />,
+    );
+    expect(html).toContain("Restricted");
+    expect(html).toContain("pypi.org, files.pythonhosted.org");
+    expect(html).not.toContain("Add inline Workspace file");
+  });
+
   it("projects one fail-closed status for both the header trigger and detail panel", () => {
     expect(resolveEnvironmentPresentation({ type: "none" }, null, [])).toMatchObject({
       visible: false,

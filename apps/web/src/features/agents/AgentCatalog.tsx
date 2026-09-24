@@ -1,31 +1,17 @@
-import { Bot, ChevronDown, ChevronUp, MessageSquare, PanelsTopLeft, Plus } from "lucide-react";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { Bot, Check, Copy, MessageSquare, SearchX } from "lucide-react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
-import i18n from "../../i18n";
 
 import type { SavedAgent } from "@agents-core-web/agents-client";
 
+import { EmptyState, HelpTip } from "../../components/console-ui";
+import { formatDateTime, formatInteger, formatRelative } from "../../lib/format";
 import type { VaultCatalog } from "../vaults/vault-catalog";
+import { harnessLabel } from "./AgentForm";
+import { AgentUsageCells, type AgentUsageModel } from "./AgentUsage";
 import { sessionAdmissionBlocker } from "./session-admission";
-import { AGENT_TEMPLATES, type AgentTemplate } from "./agent-templates";
 
 import "./AgentCatalog.css";
-
-const useIsomorphicLayoutEffect = typeof document === "undefined" ? useEffect : useLayoutEffect;
-
-export function twoRowSavedAgentCapacity(columnCount: number): number {
-  return Math.max(1, Math.floor(columnCount) * 2 - 1);
-}
-
-function resolvedGridColumnCount(grid: HTMLElement): number {
-  const template = window.getComputedStyle(grid).gridTemplateColumns.trim();
-  if (!template || template === "none") return 1;
-  return Math.max(1, template.split(/\s+/u).length);
-}
-
-function formatShortDate(seconds: number): string {
-  return new Intl.DateTimeFormat(i18n.resolvedLanguage ?? "en", { month: "short", day: "numeric" }).format(new Date(seconds * 1000));
-}
 
 function AgentSessionStartAction({
   agent,
@@ -41,8 +27,9 @@ function AgentSessionStartAction({
   const { t } = useTranslation("agents");
   const blocker = sessionAdmissionBlocker(agent, vaultCatalog);
   const descriptionId = useId();
+  const reason = blocker ? t("catalog.sessionUnavailable", { reason: blocker }) : null;
   return (
-    <span className="action-tooltip">
+    <span className="agent-start-action">
       <button
         className="button outline agent-session-start"
         type="button"
@@ -57,176 +44,161 @@ function AgentSessionStartAction({
         <MessageSquare size={14} strokeWidth={1.5} aria-hidden="true" />
         <span>{blocker ? t("catalog.unavailable") : t("catalog.startSession")}</span>
       </button>
-      {blocker ? (
-        <span className="action-tooltip-content" role="tooltip" id={descriptionId}>
-          {t("catalog.sessionUnavailable", { reason: blocker })}
-        </span>
+      {reason ? (
+        <>
+          <span className="visually-hidden" id={descriptionId}>{reason}</span>
+          <HelpTip label={t("catalog.unavailableHelp")}>{reason}</HelpTip>
+        </>
       ) : null}
     </span>
   );
 }
 
+function CopyAgentId({ id }: { id: string }) {
+  const { t } = useTranslation("agents");
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1_500);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+  const label = copied ? t("catalog.copied") : t("catalog.copyId", { id });
+  return (
+    <button
+      className="icon-button ghost agent-copy-id"
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={(event) => {
+        event.stopPropagation();
+        void navigator.clipboard?.writeText(id).then(() => setCopied(true), () => undefined);
+      }}
+    >
+      {copied ? <Check size={13} aria-hidden="true" /> : <Copy size={13} strokeWidth={1.6} aria-hidden="true" />}
+    </button>
+  );
+}
+
+/** Saved Agents as one table row each; a row opens the Agent's setup view. */
 export function AgentCatalog({
   agents,
   busy,
   coreReady,
   hasSavedAgents,
+  isFiltering,
   openingAgentId,
+  usage = null,
   vaultCatalog,
   onClearSearch,
   onCreate,
   onEdit,
-  onExpandedChange,
   onStartSession,
-  onUseTemplate,
-  expanded,
-  isFiltering,
 }: {
   agents: SavedAgent[];
   busy: boolean;
   coreReady: boolean;
-  expanded: boolean;
   hasSavedAgents: boolean;
   isFiltering: boolean;
   openingAgentId: string | null;
+  usage?: AgentUsageModel | null;
   vaultCatalog: VaultCatalog | null;
   onClearSearch: () => void;
-  onCreate: (returnFocus: HTMLButtonElement) => void;
-  onEdit: (agent: SavedAgent, returnFocus: HTMLButtonElement) => void;
-  onExpandedChange: (expanded: boolean) => void;
+  onCreate: () => void;
+  onEdit: (agent: SavedAgent) => void;
   onStartSession: (agentId: string) => void;
-  onUseTemplate: (template: AgentTemplate, returnFocus: HTMLButtonElement) => void;
 }) {
-  const { t } = useTranslation("agents");
-  const count = (value: number) => new Intl.NumberFormat(i18n.resolvedLanguage ?? "en").format(value);
-  const interactionDisabled = busy;
-  const gridId = useId();
-  const gridRef = useRef<HTMLDivElement>(null);
-  const [columnCount, setColumnCount] = useState(1);
-  const savedCapacity = twoRowSavedAgentCapacity(columnCount);
-  const canExpand = !isFiltering && agents.length > savedCapacity;
-  const visibleAgents = isFiltering || expanded ? agents : agents.slice(0, savedCapacity);
-  const hiddenAgentCount = Math.max(0, agents.length - savedCapacity);
+  const { t, i18n } = useTranslation("agents");
+  const locale = i18n.resolvedLanguage;
+  const now = Math.floor(Date.now() / 1_000);
 
-  useIsomorphicLayoutEffect(() => {
-    const grid = gridRef.current;
-    if (!grid) return;
-
-    const updateColumnCount = () => {
-      const next = resolvedGridColumnCount(grid);
-      setColumnCount((current) => current === next ? current : next);
-    };
-    updateColumnCount();
-
-    if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", updateColumnCount);
-      return () => window.removeEventListener("resize", updateColumnCount);
-    }
-
-    const observer = new ResizeObserver(updateColumnCount);
-    observer.observe(grid);
-    return () => observer.disconnect();
-  }, []);
+  if (!agents.length) {
+    return hasSavedAgents ? (
+      <EmptyState
+        icon={SearchX}
+        title={t("catalog.noMatch")}
+        description={t("catalog.trySearch")}
+        action={<button className="button outline" type="button" onClick={onClearSearch}>{t("catalog.clearSearch")}</button>}
+      />
+    ) : (
+      <EmptyState
+        icon={Bot}
+        title={t("catalog.noSaved")}
+        description={t("catalog.emptyHelp")}
+        action={coreReady ? (
+          <button className="button outline" type="button" onClick={onCreate} disabled={busy}>{t("catalog.create")}</button>
+        ) : undefined}
+      />
+    );
+  }
 
   return (
-    <div className="agents-catalog-scroll">
-      <section className="agent-catalog-section" aria-labelledby="saved-agents-heading">
-        <h2 id="saved-agents-heading">{t("catalog.listLabel")}</h2>
-        <div ref={gridRef} id={gridId} className="agent-card-grid" role="list" aria-label={t("catalog.listLabel")} aria-busy={openingAgentId ? true : undefined}>
-          <div className="agent-catalog-slot" role="listitem">
-            <button
-              className="agent-catalog-card agent-create-card"
-              type="button"
-              data-create-agent-entry="true"
-              onClick={(event) => onCreate(event.currentTarget)}
-              disabled={!coreReady || interactionDisabled}
-            >
-              <span className="agent-card-icon"><Plus size={19} strokeWidth={1.7} aria-hidden="true" /></span>
-              <strong>{t("catalog.create")}</strong>
-              <span className="agent-card-description">{t("catalog.createDescription")}</span>
-            </button>
-          </div>
-          {visibleAgents.map((agent) => (
-            <article className="agent-catalog-card agent-saved-card" role="listitem" key={agent.id}>
-              <button
-                className="agent-card-main"
-                type="button"
-                onClick={(event) => onEdit(agent, event.currentTarget)}
-                disabled={interactionDisabled || openingAgentId === agent.id}
-                aria-label={t("catalog.editLabel", { name: agent.name || t("catalog.untitled"), id: agent.id })}
-                data-agent-id={agent.id}
-              >
-                <span className="agent-card-icon"><Bot size={18} strokeWidth={1.7} aria-hidden="true" /></span>
-                <strong>{agent.name || t("catalog.untitled")}</strong>
-                <span className="agent-card-description">{agent.instructions || t("catalog.noInstructions")}</span>
-                <span className="agent-card-meta">
-                  <code>{agent.model}</code>
-                  <span>{t("catalog.tools", { count: agent.tools.length, formattedCount: count(agent.tools.length) })}</span>
-                  <time dateTime={new Date(agent.updated_at * 1000).toISOString()}>{formatShortDate(agent.updated_at)}</time>
-                </span>
-                {openingAgentId === agent.id ? <span className="agent-card-opening" role="status">{t("catalog.opening")}</span> : null}
-              </button>
-              <footer>
-                <AgentSessionStartAction
-                  agent={agent}
-                  busy={interactionDisabled}
-                  onStart={onStartSession}
-                  vaultCatalog={vaultCatalog}
-                />
-              </footer>
-            </article>
-          ))}
-        </div>
-        {canExpand ? (
-          <div className="agent-catalog-more">
-            <span>{expanded ? t("catalog.showingAll", { count: agents.length, formattedCount: count(agents.length) }) : t("catalog.more", { count: hiddenAgentCount, formattedCount: count(hiddenAgentCount) })}</span>
-            <button
-              className="button outline"
-              type="button"
-              aria-controls={gridId}
-              aria-expanded={expanded}
-              onClick={() => onExpandedChange(!expanded)}
-            >
-              {expanded ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
-              {expanded ? t("catalog.showLess") : t("catalog.showMore", { count: hiddenAgentCount, formattedCount: count(hiddenAgentCount) })}
-            </button>
-          </div>
-        ) : null}
-        {!agents.length ? (
-          <div className="agent-catalog-empty" role="status">
-            <strong>{hasSavedAgents ? t("catalog.noMatch") : t("catalog.noSaved")}</strong>
-            <span>{hasSavedAgents ? t("catalog.trySearch") : t("catalog.emptyHelp")}</span>
-            {hasSavedAgents ? <button className="button outline" type="button" onClick={onClearSearch}>{t("catalog.clearSearch")}</button> : null}
-          </div>
-        ) : null}
-      </section>
-
-      <section className="agent-catalog-section agent-template-section" aria-labelledby="agent-templates-heading">
-        <header>
-          <div>
-            <h2 id="agent-templates-heading">{t("catalog.templates")}</h2>
-            <p>{t("catalog.templatesHelp")}</p>
-          </div>
-        </header>
-        <div className="agent-template-grid" role="list" aria-label={t("catalog.templateList")}>
-          {AGENT_TEMPLATES.map((template) => (
-            <div className="agent-catalog-slot" role="listitem" key={template.id}>
-              <button
-                className="agent-catalog-card agent-template-card"
-                type="button"
-                data-agent-template-id={template.id}
-                onClick={(event) => onUseTemplate(template, event.currentTarget)}
-                disabled={!coreReady || interactionDisabled}
-                aria-label={t("catalog.useTemplate", { name: template.name })}
-              >
-                <span className="agent-card-icon"><PanelsTopLeft size={18} strokeWidth={1.7} aria-hidden="true" /></span>
-                <strong>{template.name}</strong>
-                <span className="agent-card-description">{template.description}</span>
-              </button>
-            </div>
-          ))}
-        </div>
-      </section>
+    <div className="table-frame agent-table-frame">
+      <table className="data-table agent-table" aria-label={t("catalog.listLabel")} aria-busy={openingAgentId ? true : undefined}>
+        <thead>
+          <tr>
+            <th scope="col">{t("catalog.columns.agent")}</th>
+            <th scope="col">{t("catalog.columns.model")}</th>
+            <th scope="col">{t("catalog.columns.harness")}</th>
+            <th scope="col" className="numeric">{t("catalog.columns.tools")}</th>
+            {usage ? (
+              <>
+                <th scope="col" className="numeric">{t("usage.sessions")}</th>
+                <th scope="col" className="numeric">{t("usage.tokens")}</th>
+                <th scope="col" className="numeric">
+                  <span className="agent-table-help">{t("usage.coverage")}<HelpTip>{t("usage.coverageHelp")}</HelpTip></span>
+                </th>
+                <th scope="col" className="numeric">{t("usage.lastActive")}</th>
+              </>
+            ) : null}
+            <th scope="col" className="numeric">{t("catalog.columns.updated")}</th>
+            <th scope="col"><span className="visually-hidden">{t("catalog.columns.actions")}</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {agents.map((agent) => {
+            const opening = openingAgentId === agent.id;
+            const name = agent.name || t("catalog.untitled");
+            const harness = agent.x_agents_core?.harness;
+            const open = () => {
+              if (!busy && !opening) onEdit(agent);
+            };
+            return (
+              <tr key={agent.id} className="clickable-row" onClick={open} aria-busy={opening || undefined}>
+                <th scope="row">
+                  <span className="agent-table-name">
+                    <button
+                      className="table-link"
+                      type="button"
+                      title={agent.id}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        open();
+                      }}
+                      disabled={busy || opening}
+                      aria-label={t("catalog.editLabel", { name, id: agent.id })}
+                      data-agent-id={agent.id}
+                    >
+                      <strong className={agent.name ? undefined : "agent-null-value"}>{name}</strong>
+                    </button>
+                    <CopyAgentId id={agent.id} />
+                  </span>
+                  {opening ? <span className="agent-table-opening" role="status">{t("catalog.opening")}</span> : null}
+                </th>
+                <td><code className="agent-table-model" title={agent.model}>{agent.model}</code></td>
+                <td className={harness ? undefined : "table-muted"}>{harness ? harnessLabel(harness) : t("catalog.coreDefaultHarness")}</td>
+                <td className="numeric">{formatInteger(agent.tools.length, locale)}</td>
+                {usage ? <AgentUsageCells usage={usage} agentId={agent.id} /> : null}
+                <td className="numeric" title={formatDateTime(agent.updated_at, locale)}>
+                  <time dateTime={new Date(agent.updated_at * 1_000).toISOString()}>{formatRelative(agent.updated_at, now, locale)}</time>
+                </td>
+                <td className="row-actions" onClick={(event) => event.stopPropagation()}>
+                  <AgentSessionStartAction agent={agent} busy={busy} onStart={onStartSession} vaultCatalog={vaultCatalog} />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

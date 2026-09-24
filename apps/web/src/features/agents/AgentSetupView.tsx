@@ -1,5 +1,5 @@
 import { Check, ChevronRight, Circle, Code2, MessageSquare, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "../../i18n";
 
@@ -88,7 +88,6 @@ export function AgentSetupView({
   busy,
   defaultHarness,
   enabledHarnesses = null,
-  initialValues,
   knownModels,
   vaultCatalog = null,
   onBack,
@@ -96,6 +95,7 @@ export function AgentSetupView({
   onDeleteRequest,
   onStartSession,
   onUpdate,
+  usagePanel,
 }: {
   actionError: string | null;
   agent?: SavedAgent;
@@ -103,7 +103,6 @@ export function AgentSetupView({
   busy: boolean;
   defaultHarness?: CoreHarnessKind;
   enabledHarnesses?: readonly CoreHarnessKind[] | null;
-  initialValues?: AgentFormValues;
   knownModels: string[];
   vaultCatalog?: VaultCatalog | null;
   onBack: () => void;
@@ -111,11 +110,13 @@ export function AgentSetupView({
   onDeleteRequest?: () => void;
   onStartSession: (agentId: string) => void;
   onUpdate?: (agentId: string, input: UpdateAgentInput) => Promise<SavedAgent | undefined>;
+  /** Usage statistics for an existing Agent, shown first in the aside. */
+  usagePanel?: ReactNode;
 }) {
   const { t } = useTranslation("agents");
   const isEditing = Boolean(agent);
   const [draft, setDraft] = useState<AgentFormValues>(() => {
-    const values = agent ? valuesFromAgent(agent, vaultCatalog) : initialValues ?? valuesFromAgent(undefined, vaultCatalog);
+    const values = valuesFromAgent(agent, vaultCatalog);
     const harness = !agent && !values.harness && defaultHarness && enabledHarnesses?.includes(defaultHarness)
       ? defaultHarness
       : values.harness;
@@ -161,7 +162,7 @@ export function AgentSetupView({
         <div className="agent-setup-breadcrumb" aria-label={t("setup.breadcrumb")}>
           <button type="button" onClick={onBack} disabled={busy}>{t("catalog.listLabel")}</button>
           <ChevronRight size={14} aria-hidden="true" />
-          <h1>{savedAgent?.name || initialValues?.name || t("setup.newAgent")}</h1>
+          <h1>{savedAgent?.name || t("setup.newAgent")}</h1>
         </div>
         <div className="agent-setup-tabs" role="tablist" aria-label={t("setup.sections")}>
           <button type="button" role="tab" aria-selected="true">{t("setup.setup")}</button>
@@ -224,6 +225,7 @@ export function AgentSetupView({
         </section>
 
         <aside className="agent-setup-aside">
+          {isEditing ? usagePanel : null}
           <AgentRequestPreview agentId={isEditing ? savedAgent?.id ?? agent?.id : undefined} baseUrl={baseUrl} values={draft} />
           {isEditing && savedAgent ? <SavedDefinitionSummary agent={savedAgent} /> : null}
           <SetupGuide saved={Boolean(savedAgent)} />

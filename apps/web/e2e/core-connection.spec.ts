@@ -406,7 +406,7 @@ test("announces loading, authenticated access, and each safe failure state from 
     methods.push(route.request().method());
     const reply = replies.shift();
     if (!reply) return route.abort("failed");
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
     if ("abort" in reply) return route.abort("failed");
     return route.fulfill({
       status: reply.status,

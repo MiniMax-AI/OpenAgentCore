@@ -4,3 +4,5 @@ export { createSSEDecoder } from "./sse";
 export type { SSEDecoder, SSEMessage } from "./sse";
 export type * from "./types";
 export * from "./sandbox-client";
+export { isEnvironmentTemplateName, isRecognizedEnvironmentTemplate } from "./environment-template-projection";
+export { compareSkillVersionNumbers, isSkillId, isSkillUploadPath, isSkillVersionId, isSkillVersionNumber, maxSkillUploadFiles } from "./skill-projection";
