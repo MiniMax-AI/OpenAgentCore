@@ -73,7 +73,7 @@ a separate public write. Public resource IDs retain their existing formats.
 Both endpoints require deployment Bearer authentication under
 `/core/v1/admin/projects/{project_id}`. The path identifies the Project, including an
 archived Project; it does not authenticate. API keys cannot call these
-routes. The retired `binding_digest` selector and inherited-key routes are removed.
+routes.
 
 ### Batch ownership
 
