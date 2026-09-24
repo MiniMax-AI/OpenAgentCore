@@ -44,14 +44,11 @@ func (h *Handler) registerProjectAPIKeyRoutes(r chi.Router) {
 	if h.projectKeys == nil || h.deploymentAuth == nil {
 		return
 	}
-	r.Route("/core/v1/admin/api-keys", func(r chi.Router) {
-		r.Use(h.deploymentAuth.authenticate)
-		r.Get("/", h.listProjectAPIKeys)
-		r.Post("/", h.createProjectAPIKey)
-		r.Get("/{key_id}", h.getProjectAPIKey)
-		r.Delete("/{key_id}", h.revokeProjectAPIKey)
-		r.Post("/{key_id}/reset", h.resetProjectAPIKey)
-	})
+	r.Get("/api-keys", h.listProjectAPIKeys)
+	r.Post("/api-keys", h.createProjectAPIKey)
+	r.Get("/api-keys/{key_id}", h.getProjectAPIKey)
+	r.Delete("/api-keys/{key_id}", h.revokeProjectAPIKey)
+	r.Post("/api-keys/{key_id}/reset", h.resetProjectAPIKey)
 }
 
 // staticBinding is retained only for static read provenance selectors.
@@ -95,7 +92,7 @@ func setAdminAuditSource(r *http.Request, keyID string) {
 	*r = *r.WithContext(adminaudit.WithSource(r.Context(), source))
 }
 func (h *Handler) listAdminKeyBindings(ctx context.Context, after string, limit int, ascending bool) (store.ProjectAPIKeyPage, error) {
-	if limit < 1 || limit > 500 {
+	if limit < 1 || limit > 100 {
 		return store.ProjectAPIKeyPage{}, store.ErrInvalidInput
 	}
 	if after != "" {
@@ -137,7 +134,7 @@ func (h *Handler) listAdminKeyBindings(ctx context.Context, after string, limit 
 // @Produce json
 // @Security DeploymentAdminAuth
 // @Param after query string false "Key ID cursor"
-// @Param limit query int false "Page size (1-500)"
+// @Param limit query int false "Page size (1-100)"
 // @Param order query string false "asc or desc by key ID"
 // @Success 200 {object} store.ProjectAPIKeyPage
 // @Failure 400,401,404,500 {object} v1.ErrorResponse

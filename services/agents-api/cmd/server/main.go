@@ -191,7 +191,7 @@ func run() error {
 	if err := api.ValidateCredentialSeparation(ctx, auth, keyAdmin, executionStore); err != nil {
 		return err
 	}
-	options = append(options, api.WithProjectAPIKeys(executionStore, keyAdmin), api.WithWriteAudit(executionStore, keyAdmin))
+	options = append(options, api.WithProjectAPIKeys(executionStore, keyAdmin), api.WithWriteAudit(executionStore, keyAdmin), api.WithAdminManagement(executionStore))
 	if history.Reader != nil {
 		historyResolver, resolverErr := historystoreresolver.NewResolver(executionStore)
 		if resolverErr != nil {

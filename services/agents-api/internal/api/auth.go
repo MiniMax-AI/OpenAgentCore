@@ -201,6 +201,9 @@ func (h *Handler) authenticateCaller(next http.Handler, reportInvalidKey bool) h
 }
 
 func tenantID(r *http.Request) string {
+	if tenant, ok := r.Context().Value(adminTenantContextKey{}).(string); ok {
+		return tenant
+	}
 	return r.Context().Value(principalContextKey{}).(identity.Principal).TenantID
 }
 

@@ -108,8 +108,13 @@ func (h *Handler) routes() *chi.Mux {
 		r.Delete("/v1/files/{file_id}", h.deleteSourceFile)
 	})
 	h.registerSandboxManagerRoutes(router)
-	h.registerProjectAPIKeyRoutes(router)
-	h.registerAdminResourceRoutes(router)
+	if h.deploymentAuth != nil && h.projectKeys != nil {
+		router.Route("/core/v1/admin", func(r chi.Router) {
+			r.Use(h.deploymentAuth.authenticate)
+			h.registerProjectAPIKeyRoutes(r)
+			h.registerAdminResourceRoutes(r)
+		})
+	}
 	h.registerEnvironmentExecutorRoutes(router)
 	router.Route("/v1", func(r chi.Router) {
 		r.Use(h.authenticate)

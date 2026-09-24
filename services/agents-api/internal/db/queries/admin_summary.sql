@@ -5,7 +5,7 @@ SELECT
  (SELECT count(*) FROM environment_templates WHERE tenant_id=sqlc.arg(tenant_id))::bigint AS environment_templates,
  (SELECT count(*) FROM source_files WHERE tenant_id=sqlc.arg(tenant_id))::bigint AS files,
  (SELECT count(*) FROM vaults WHERE tenant_id=sqlc.arg(tenant_id))::bigint AS vaults,
- (SELECT count(*) FROM vault_credentials WHERE tenant_id=sqlc.arg(tenant_id))::bigint AS credentials;
+ (SELECT count(*) FROM vault_credentials c JOIN vaults v ON v.id=c.vault_id WHERE v.tenant_id=sqlc.arg(tenant_id))::bigint AS credentials;
 
 -- name: AdminSummarySessions :many
 SELECT * FROM sessions
