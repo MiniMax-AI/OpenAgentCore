@@ -55,7 +55,8 @@ it is operational attribution, not per-key billing.
 
 ## Sandbox administration
 
-The [Hosted Sandbox Manager reference](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md)
+The [deployment configuration contract](../../contracts/agents-api/sandbox-deployment.md),
+[Hosted Sandbox Manager reference](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md)
 and [generated OpenAPI](../../contracts/agents-api/sandbox-manager.openapi.yaml)
 define deployment and node operations:
 
@@ -65,15 +66,37 @@ define deployment and node operations:
   and `GET /core/v1/sandbox/nodes/{node_id}/allocations`.
 - `POST /core/v1/sandbox/enrollment-tokens` for a one-time node installation command.
 
-A deployment selects one provider: E2B, Docker or microsandbox. E2B provisions
-cloud sandboxes without a node install; own-machine hosting enrolls nodes using
-Docker or microsandbox. Switching requires maintenance and verified cleanup of
-retained/pending resources. These operations are distinct from public Environment
-Templates and caller-owned `self_hosted` provisioning.
+PostgreSQL owns one provider, per-sandbox resource specification and immutable
+Runtime selection. POST initializes it; PUT replaces the complete selection using
+`expected_generation`. Requests carry `resources` and, for Docker/microsandbox,
+`runtime`; safe responses return `specification` and `specification_digest`.
+Response `resources.allocations` and `resources.pending` are cleanup counts, not
+CPU, memory or disk settings. E2B accepts a write-only key and exact template build
+instead of a node Runtime release, and provisions without a node installation.
 
-Enrollment, node identity and daemon WebSocket routes use their own credentials.
-They may pass through the paired console's fixed transport routes, but do not
-inherit a browser's administrator session or gain general management authority.
+Provider, resource and Runtime changes all require global maintenance and verified
+cleanup of retained/pending resources. Core validates the candidate before commit;
+a rejection preserves the previous configuration. A changed commit advances the
+generation and retires old nodes and enrollment tokens atomically. Explicitly resume
+after success. Neither switching nor editing configuration deletes resources or
+migrates existing Sessions. The management API currently has no deployment-wide
+cleanup operation that preserves public Session history and saved artifacts;
+Session deletion removes those artifacts and cannot substitute for one.
+Public Environment Templates, the `/v1` contract and
+caller-owned `self_hosted` provisioning remain unchanged.
+
+`GET /core/v1/sandbox/node/configuration` uses an enrollment Bearer token, or a
+retained node Bearer credential with `X-Parsar-Node-ID`. This read does not consume
+enrollment. Retained matching nodes can read their configuration during maintenance.
+Installers must verify the returned generation, specification digest and Runtime
+before registration; local files cannot override the saved limits. A mismatch
+returns `sandbox_specification_mismatch` without replacing node state.
+
+Node configuration, enrollment, identity and daemon WebSocket routes retain their
+own credentials through the paired console's fixed transport routes. The console
+must not substitute its administrator credential on them. They do not inherit a
+browser login or gain general management authority. E2B credentials are absent
+from node configuration and safe deployment views.
 
 ## Frontend handoff and errors
 

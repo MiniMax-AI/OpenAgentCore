@@ -3,8 +3,9 @@
 Install one matching Parsar Core distribution. By default it starts PostgreSQL,
 Core and the existing Web console in containers, with zero execution nodes.
 It does not import Runtime images, mount the Docker socket or host devices into
-Core, or generate a managed Provider configuration. Add nodes through Web after
-installation. A local sandbox provider is an optional installation choice.
+Core, or generate a managed Provider configuration. Select the provider, per-sandbox
+resources and immutable Runtime through Web or the administrator API after installation. A local node is an optional installation
+choice and uses the same database-managed configuration.
 No model key, Environment wizard or sample task is required during installation.
 
 Recommended path: [install](#verify-extract-and-install) →
@@ -133,23 +134,30 @@ management. Choose English or Chinese through the System language selector.
 
 1. Log in to the bundled Web console and open **Hosted Sandbox Manager**.
    The paired installation needs no second key or Core connection setup.
-2. Choose Docker or microsandbox. The paired console address is used
+2. Choose **E2B cloud** or **Own machines**. Own machines use Docker or
+   microsandbox; select their per-sandbox resources and matched immutable Runtime
+   release. E2B uses an account key and exact ready template build whose CPU/memory
+   match the requested limits, with no node installation. The paired console address is used
    automatically. If your network requires a different address for nodes and
    guests, change it under advanced network settings during initial setup. When
    opening the console on localhost or an HTTP address, setup requires a
    non-loopback HTTPS address that nodes and sandbox guests can reach.
 3. Select **Initialize sandbox deployment**. It takes effect without restarting Core and remains in
-   PostgreSQL across restarts. All nodes in this deployment use the chosen type;
-   this page does not switch providers. Microsandbox uses a five-minute idle
-   timeout and one-day snapshot retention.
-4. Click **Add node**, copy the command, and run it as a non-root user on the
+   PostgreSQL across restarts. The provider, limits and Runtime are one saved
+   specification; node files cannot override it. Later changes require global
+   maintenance and completed cleanup. Microsandbox uses a five-minute idle timeout
+   and one-day snapshot retention.
+4. For own-machine hosting, click **Add node**, copy the command, and run it as a non-root user on the
    target Linux amd64 host. It downloads the matched bootstrap from your console and execution assets from
    the manifest's release location (or the offline console payload), verifies
-   checksums, imports the Runtime image only when missing, writes the provider configuration,
+   checksums, reads the saved generation and specification without consuming enrollment,
+   verifies the payload matches that Runtime, imports the image only when missing,
+   and writes the matching provider configuration,
    registers the node and starts a systemd user service. The installer waits for Core to confirm
    connection and provider readiness. Web refreshes node health
    automatically. Wait for the node to be online and its provider to be ready;
-   registration alone does not mean it can accept work.
+   registration alone does not mean it can accept work. A registered retry uses its
+   retained node credential and refuses changed resource or Runtime settings.
 
 The target host needs curl, sha256sum, Python 3.9+, a systemd user session with lingering enabled,
 and either Docker socket access or microsandbox's KVM/native-library prerequisites.
@@ -225,46 +233,55 @@ reclaim user-owned Docker resources.
 ## Installation choices
 
 ```sh
-./install.sh --sandbox-provider true --provider microsandbox
-./install.sh --sandbox-provider true --provider docker
+./install.sh --sandbox-provider true --provider microsandbox --public-url https://core.example
+./install.sh --sandbox-provider true --provider docker --public-url https://core.example
 ./install.sh --core-only
-./install.sh --core-only --sandbox-provider true --provider docker
+./install.sh --core-only --sandbox-provider true --provider docker --public-url https://core.example
 ```
 
-`--sandbox-provider true` enables a local sandbox provider. If `--provider` is
+`--sandbox-provider true` installs a local node through the ordinary node installer. If `--provider` is
 omitted, it selects microsandbox. Supplying `--provider` without enabling the
 sandbox provider is an error. `--core-only` installs Core and PostgreSQL without
 Web and has no sandbox provider unless explicitly enabled.
 
+Local opt-in requires a non-loopback HTTPS `--public-url` reachable from both the
+node service and its guests. Set up the reverse proxy before installation; the
+installer does not create DNS or certificates. It starts Core, initializes an empty
+deployment through the administrator API and invokes the ordinary node installer.
+An existing database specification is never replaced by installer defaults.
+
 The provider choice does not select a harness or alter the public `openai_hosted`
-discriminator. Both providers reuse one colocated Runtime containing the native
-harnesses. The Docker option grants
-only Core access to the Docker socket; microsandbox uses the native service account's
-KVM access. Web receives neither. An enabled local provider runs through Core's
-embedded node connection and preserves its identity and owner epoch in the private
-`state/sandbox-node` directory. Docker Core mounts only this state directory
-writable in addition to its selected socket; `config` remains read-only.
-Native Core uses the same persistent directory directly. The default zero-node
-installation creates neither this state directory nor its mount.
+discriminator. Both providers use the same colocated Runtime. Core has no embedded
+node or file-managed provider selection. Docker access and microsandbox KVM/native
+paths belong to the separate node service; the Core container receives no Docker
+socket or node state mount. Web receives neither provider authority nor node secrets.
+
+Local and remote nodes keep configuration and identity under
+`~/.parsar/nodes/<installation-id>/`. Microsandbox stores its private Runtime home
+under `~/.parsar/m/<installation-hash-prefix>/`. Preserve these directories and
+backend storage across restarts. A missing identity is a recovery incident, not
+permission to register over existing resources.
 
 ### Local provider requirements
 
-Optional microsandbox also requires glibc, a running systemd user manager with
-linger enabled, and user read/write access to `/dev/kvm`. Nested cloud hosts must
-expose hardware virtualization. With this option, Core runs as a native user
-service so restarting it does not terminate the Provider's microVM processes.
-The installer checks these
-prerequisites; it does not grant host permissions or silently fall back to Docker.
-The optional Docker sandbox provider keeps Core in Compose and requires neither
-KVM nor systemd user services.
+Both node providers require a systemd user session with lingering enabled.
+Docker requires access to the host's Unix socket. Microsandbox additionally requires
+glibc, the matched native libraries and user read/write access to `/dev/kvm`;
+nested cloud hosts must expose hardware virtualization. The installer checks these
+prerequisites without granting permissions or falling back to another provider.
 
-For optional microsandbox, reserve capacity for the native Runtime: its initial
-profile uses
-4 GiB RAM, 2 CPUs, an 8 GiB root disk and an 8 GiB environment disk per active sandbox, with at most 4 active
-and 16 retained allocations. Limits are operator configuration, not model input.
-Use a trusted, single-operator host and durable local storage. The installer does
-not change host virtualization settings, install Docker, create an OS user or
-expose a remote administration service.
+With the microsandbox installation option, Core runs as a native user service and
+PostgreSQL/Web run in containers. With Docker, Core stays in Compose. In both cases
+the standalone node service owns provider processes outside Core's container.
+Stopping Core does not stop the node or prove its resources have been reclaimed.
+
+When local opt-in initializes an empty deployment, it requests 2 CPUs and 4096 MiB
+per sandbox. Microsandbox also requests an 8192 MiB root disk and an 8192 MiB
+`/environment` disk. Docker has no hard disk-capacity guarantee through this
+configuration. Node defaults allow 4 active and 16 retained allocations, separately
+from per-sandbox sizing. Change saved resources or Runtime only through the
+[drained deployment procedure](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance).
+These are installation defaults, not evidence of model or workload acceptance.
 
 ### Separate Web installation
 
@@ -285,8 +302,8 @@ The input file must be private (0600).
 
 Use `--install-dir /absolute/path`, `--core-port 8092` and `--web-port 8081` for
 separate installations. Their database volumes, provider identities and Runtime
-state are independent. Native Core connects to PostgreSQL through an automatically
-selected loopback-only port, recorded in its private installation state. Repeating the same installation command retains its
+state are independent. The microsandbox installation mode connects native Core to PostgreSQL through an
+automatically selected loopback-only port, recorded in private installation state. Repeating the same installation command retains its
 identities, secrets and data. The installer refuses mode, sandbox-provider and
 revision changes on an existing installation. This includes enabling a sandbox
 provider on an installation originally created without one; rerunning with new
@@ -329,7 +346,8 @@ with either E2B configured through Web or a connected, ready Docker/microsandbox
 The Hosted Sandbox Manager selects one scheme for the whole deployment. E2B uses
 an account API key and a qualified immutable Runtime template; Core provisions
 sandboxes without a node installer. Own machines use the existing node command.
-Enter maintenance and finish resource cleanup before switching schemes; see
+Provider, per-sandbox resources and Runtime changes all require maintenance and
+completed resource cleanup; see
 [provider switching](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance).
 Session creation supplies the model,
 harness and write-only model credentials. Core owns sandbox preparation and

@@ -2,8 +2,9 @@
 
 One Core execution owner can manage sandbox nodes on its own host and on other
 Linux hosts, or provision cloud sandboxes directly through E2B. A deployment selects
-exactly one provider: `e2b`, `docker` or `microsandbox`. Docker/microsandbox nodes
-must all use the selected provider and installation ID. These nodes
+exactly one provider: `e2b`, `docker` or `microsandbox`. PostgreSQL owns that
+selection, the per-sandbox resource limits and the immutable Runtime release.
+Docker/microsandbox nodes must match its installation, generation and specification. These nodes
 are distinct from user-managed `self_hosted` Environments, whose provisioning
 remains the user's responsibility.
 
@@ -35,8 +36,10 @@ node installation payload. Project keys cannot register, edit or remove nodes.
 
 Default installation starts Core, Web and PostgreSQL without local compute.
 Hosted Sandbox Manager first asks for **E2B cloud** or **Own machines**. Own machines
-then choose Docker or microsandbox; E2B takes an account API key and a qualified
-immutable Runtime template build (`template-id:build-uuid`). The key is write-only,
+then choose Docker or microsandbox. Supply the per-sandbox resources and matched
+Runtime release as part of initial setup. E2B takes an account API key, CPU/memory
+limits and a qualified immutable Runtime template build (`template-id:build-uuid`);
+its exact ready build must match those limits before the selection can be saved. The key is write-only,
 encrypted by Core and never returned to the browser. E2B needs no node installation. It defaults to the
 paired console origin, which forwards the required Core API and WebSocket routes.
 Use advanced network settings only when nodes and guests need a different public
@@ -45,7 +48,8 @@ opens the network field and requires a non-loopback HTTPS origin before saving.
 The API still accepts HTTP loopback for explicit local development; a guest's
 loopback address cannot reach its Core host.
 
-Saving initializes the deployment. Refresh after an uncertain response before
+Saving validates and initializes the deployment without creating compute. A failed
+candidate leaves the previous selection intact. Refresh after an uncertain response before
 trying again. Selection persists in PostgreSQL and activates without a restart.
 Removing all nodes does not reset it. E2B uses the same daemon, harness and workspace
 Runtime as node-backed hosting. Configuration alone does not prove provider or model
@@ -71,8 +75,10 @@ account/resource ownership before accepting a replacement key; an inaccessible
 sandbox or empty listing from another account is not proof of cleanup.
 
 For own machines, click **Add node**, copy the installation command from the dialog, and run it on
-the target Linux amd64 host. The command uses the saved deployment origin, or the
-paired console origin for file-managed deployments, without a routine URL field.
+the target Linux amd64 host. The command uses the saved deployment origin. Before
+installing, it reads the active specification with its enrollment token; this read
+does not consume the token. The local provider file is an installed copy of the
+server configuration and cannot select a different Runtime or resource profile.
 Closing the dialog discards its one-time command. An expired command requires
 explicit regeneration; failed or uncertain writes are never retried automatically. The installer checks prerequisites, downloads the matched payload,
 checks its hashes, prepares provider configuration and starts the existing node
@@ -91,78 +97,45 @@ forwarded headers. Preserve the installation UUID and database together.
 The startup configuration API remains a startup snapshot. Use the live sandbox
 deployment response for a selection made after startup.
 
-## Configure a local or file-managed deployment
+## Resources and Runtime
 
-Keep the existing `AGENTS_API_MANAGED_RUNTIMES_FILE` JSON. Existing Docker and
-microsandbox configurations participate through an embedded local node, using
-the same protocol as remote nodes. Local means the Core server, not the browser.
-Its durable identity is stored beside the configuration in a private directory,
-or at the absolute `AGENTS_API_SANDBOX_NODE_STATE_DIR` you supply. Preserve this
-directory across service/container restarts. Do not share it between hosts.
+The same deployment specification applies to every hosted sandbox. CPU count and
+memory in MiB are required. Microsandbox also requires separate root and
+`/environment` disk capacities. Docker and E2B reject nonzero independent disk
+limits because this contract does not enforce those hard quotas. Node active and
+retained reservation limits are separate controls; they do not resize a sandbox.
 
-Set `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` to a JSON array of SHA-256 hex digests
-of administrator bearer credentials. Keep the original randomly generated bearer
-credential in the operator's password manager. Application keys and Projects live in PostgreSQL. Core requires the deployment
-administrator credential at startup so an empty installation can create Projects
-and issue its first application key. Serve the API through HTTPS for remote
-nodes. The reverse proxy must support the WebSocket endpoint
-`/core/v1/sandbox/node/connect` and preserve Authorization headers.
+For Docker/microsandbox, select one verified distribution containing its source
+commit, Docker image ID, OCI manifest digest, microsandbox image reference,
+Runtime binary SHA-256 and firmware SHA-256. The node installer compares these
+identities with the downloaded manifest and checks installed provider settings.
+E2B selects its immutable Runtime through the template build instead. See the
+[deployment protocol](../../contracts/agents-api/sandbox-deployment.md) for fields,
+validation and safe response shapes. The response's `specification.resources`
+contains limits; its top-level `resources` contains cleanup counts.
 
-An optional `nodes` object makes local participation and reservation limits
-explicit:
+An explicitly requested local node uses the ordinary node installer and service,
+with the same database selection and registration checks as a remote node. Local
+means the Core host, not the browser. The installation option requires a
+non-loopback HTTPS `--public-url` reachable from sandbox guests. Node identity and
+configuration live under `~/.parsar/nodes/<installation-id>/`; preserve that private
+directory and its backend storage together. Core has no embedded local provider
+configuration or node identity mount.
 
-```json
-"nodes": {"local": true, "max_active": 4, "max_retained": 16}
-```
+## Older file-managed installations
 
-Without this object, local Docker defaults to four active and sixteen retained
-allocations. Local microsandbox uses its existing `max_active` and `max_retained`
-configuration. Tune capacity to the host and fixed guest resource settings.
-Capacity counts pending allocations and uncertain cleanup as well as running
-instances. Displayed host metrics are observations, not an overcommit guarantee.
+Core rejects `AGENTS_API_MANAGED_RUNTIMES_FILE`. It does not automatically convert
+an old file-managed database into a Web-managed deployment. Removing the setting
+alone is insufficient: the database retains its original configuration ownership.
 
-A Core with no local compute can instead use this Docker configuration:
-
-```json
-{
-  "core_url": "https://core.example/api/v1",
-  "provider": "docker",
-  "installation_id": "REPLACE_WITH_CANONICAL_UUID",
-  "maintenance": false,
-  "nodes": {"local": false, "max_active": 4, "max_retained": 16}
-}
-```
-
-Do not include a `docker` or `microsandbox` backend object in a remote-only Core
-configuration. For remote-only microsandbox, set `provider` to `microsandbox`
-and add positive `idle_seconds` and `retention_seconds` to `nodes`. These are the
-deployment's idle suspension policy. Local microsandbox continues to read the
-policy from its existing `microsandbox` object.
-
-`AGENTS_API_DAEMON_WS_URL` and `core_url` must be reachable from the guests.
-The embedded node connects to Core's loopback listener. If Core listens only on
-a non-loopback address, set `AGENTS_API_SANDBOX_NODE_CORE_URL` to its HTTPS origin.
-Do not expose a plaintext remote node connection.
-
-## Upgrade an existing single-host deployment
-
-Keep the original backend and configuration when upgrading. Matching installation
-IDs and socket/runtime paths alone do not prove that resources are on this host.
-Before admitting work, Core verifies each unreleased allocation against its actual
-container, exact compute instance or verified full snapshot. Stopped resources can
-provide ownership evidence; missing resources cannot. One failed or uncertain
-check rejects the complete adoption without assigning nodes or deleting resources.
-Errors identify the allocation and a safe reason such as missing resources,
-incorrect ownership or an unconfirmed snapshot.
-
-Restore access to the original backend before retrying. Docker volume-only remnants
-and unfinished transitions that have already consumed a restore lack sufficient
-read-only evidence for this upgrade; use the previous Core to finish or resolve
-that lifecycle first. There is no force-adopt or cross-host migration switch.
-Pending Environments with no allocation receive their first local placement.
-Released historical allocations remain unassigned. Successful first adoption starts
-the idle interval from Core's database clock; subsequent restarts preserve it and
-do not extend snapshot retention.
+Keep the previous release, original database and backend available to settle work
+and confirm cleanup. Stopped compute, retained snapshots, pending Environments and
+unknown operations remain owned until their normal cleanup completes. Preserve
+business data, Runtime history, private receipts and node state; never clear rows
+or prune provider storage to bypass the guard. Retire the old file configuration
+only as part of an explicit deployment transition. Automatic old-database adoption,
+cross-provider Session migration and a force-reset operation are not supported.
+The current installation path uses a database-managed deployment.
 
 ## Register a host
 
@@ -174,8 +147,10 @@ provider readiness. The enrollment token
 is transient and never a console/project credential. Python 3.9+, a systemd user
 session with lingering, and Docker access or KVM/native-library prerequisites
 must already exist on the target host. Rerunning the same command preserves the
-node's private identity; changes to its Core, installation, provider or release
-are refused. Use a newly generated token if an unconsumed one expires.
+node's private identity. A registered retry reads configuration with its retained
+node credential and `X-Parsar-Node-ID`; it does not enroll again. Changes to the
+Core origin, installation, generation, specification or release are refused
+without rewriting state. Use a newly generated token if an unconsumed one expires.
 
 For a public paired endpoint, use `install.sh --public-url https://core.example`
 and an operator-managed TLS reverse proxy preserving Host and WebSocket Upgrade.
@@ -185,9 +160,11 @@ Manual registration remains available for operator-managed payloads:
 
 
 Build/install `parsar-sandbox-node` from the same Core release. On the host,
-provide a private node provider JSON using the existing Docker or microsandbox
-backend schema. Match Core's provider and installation UUID; use that host's
-own socket, runtime paths and immutable image. Docker needs access to its local
+first read `GET /core/v1/sandbox/node/configuration` with the enrollment Bearer
+token. Build the private provider JSON from its `provider`, `installation_id`,
+`core_url`, `generation` and `specification`, using the existing local backend
+schema for the host's socket, runtime paths and network policy. The Runtime image
+and resource limits must match the server specification. Docker needs access to its local
 Unix socket and pinned image. Microsandbox needs its qualified runtime, helper,
 firmware and KVM. A node never receives arbitrary host paths from the browser.
 
@@ -244,7 +221,11 @@ Idle eligibility and its final transaction check use the database observation
 clock, including when PostgreSQL runs on a different host from Core. Snapshot
 retention starts from the same clock.
 Its full snapshot preserves guest state, files and configuration; a completed
-Agent process is not recreated as a resident process.
+Agent process is not recreated as a resident process. Native restore can omit an
+explicit root-disk size because that disk is inherited from the verified snapshot.
+Core requires matching snapshot resource proof and exact target identity for this
+case; other CPU, memory and environment-disk limits must still match. This is not
+permission to resize a retained sandbox.
 Docker remains supported without promising memory snapshots. Disconnecting a
 node does not delete or move its Sessions. An hour without internal observation
 keepalives no longer authorizes cleanup of a node-managed allocation. Reconnect the original node to observe
@@ -259,36 +240,39 @@ unknown operations or cleanup records cannot be removed. Resolve those resources
 through their normal lifecycle and then retry; the API reports the conflict.
 Offline resources remain owned and visible. Explicit removal permanently retires
 the node identity; adding that host again requires a fresh private state directory.
-Ordinary disconnects and host restarts reuse the original identity. The configured embedded local node
-also cannot be removed until its local configuration is disabled through the
-maintenance transition. That transition currently changes the deployment backend
-configuration and requires resources on all nodes to be cleared; it is not a
-per-node drain operation.
+Ordinary disconnects and host restarts reuse the original identity. A local node
+uses the same removal and resource checks as any other enrolled node.
 
-For Web-managed deployments, use **Change provider**:
+Provider, resource-limit and Runtime changes share one deployment-wide procedure:
 
 1. Enter maintenance. This blocks new hosted Sessions and allocations while allowing
    existing work, queries and cleanup.
-2. Delete no-longer-needed Sessions through their existing project-authorized flow.
-   Check the deployment's remaining allocation and pending-environment counts.
-   Stopped compute, snapshots, unknown creates and pending cleanup still block switching.
-3. Once cleanup is verified, save the new deployment-wide selection. Core rechecks
-   resources and the configuration generation under its execution lock, retires old
-   nodes and unused enrollments, then activates the new provider. History is retained.
-4. Explicitly resume. If activation fails, maintenance remains enabled; inspect the
-   configuration and refresh before retrying. Saving never automatically deletes compute.
+2. Verify the deployment's allocation and pending-Environment counts are zero.
+   Stopped compute, snapshots, unknown creates and pending cleanup still block
+   switching. The cleanup limitation below applies to retained resources.
+3. Once cleanup is verified, submit the complete replacement. Core validates the
+   candidate before changing the database or draining current workers. It then
+   drains existing manager calls and repeats the resource/generation checks in the
+   commit transaction. A changed selection advances the generation and retires old
+   nodes and unused enrollments atomically; history remains intact.
+4. Explicitly resume with the returned generation. A rejected candidate preserves
+   the old configuration and maintenance state. After an uncertain response, refresh
+   before another write. Saving never automatically deletes compute.
+
+The current management API has no deployment-wide resource-release operation
+that preserves public Session history and saved artifacts. Do not delete Sessions
+to satisfy that requirement: Session deletion removes public access and saved
+artifacts. Maintenance and configuration changes perform no cleanup. Retained
+resources continue to block replacement until their existing lifecycle confirms
+release.
 
 `GET /core/v1/sandbox/deployment` reports the safe configuration, `generation` and
 `resources` counts. `PATCH /core/v1/sandbox/deployment/maintenance` takes
 `maintenance` and `expected_generation`; `PUT /core/v1/sandbox/deployment` takes
-the replacement selection and `expected_generation`. Both require deployment admin
+the provider, complete `resources`/`runtime` selection, any E2B input and
+`expected_generation`. Both require deployment admin
 authority. The public Core origin cannot change in this operation. E2B is not
 combined with own-machine nodes, and existing Sessions never migrate providers.
-
-File-managed deployments retain their explicit maintenance/restart process. Merely
-changing a file or disconnecting a host does not clear resources. Preserve old node
-state and backend storage until cleanup is confirmed. A new backend requires a fresh
-node identity. Changing local participation also requires full cleanup.
 
 This release has one Core execution owner. It does not add Core multi-active,
 cross-node snapshot restore, automatic failover, Kubernetes or autoscaling.

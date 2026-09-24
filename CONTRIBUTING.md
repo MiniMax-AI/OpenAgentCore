@@ -693,68 +693,87 @@ only its digest; the paired console server receives the private token and inject
 it only on approved management routes after console login and same-origin checks.
 The browser never receives that token. Node/daemon transport routes instead
 forward their own credentials unchanged to Core. Zero-node Core receives neither the Docker socket nor KVM.
-The Web's first setup selects one provider and public Core origin through the
-admin-only deployment endpoint. The paired console serves only an explicit list
-of non-secret matched distribution artifacts for its node installation command;
-never serve private installation files or arbitrary paths. Node installation
-reuses the existing node process and Provider configuration, verifies downloaded
-files, retains private identity and uses a user service. It performs no SSH
-installation, Session creation or model call. PostgreSQL owns a generation-tagged
-selection under the existing execution lease and deployment lock. E2B setup needs an
-account key and a qualified immutable Runtime template, not node enrollment. Changing
-selection requires maintenance, the current generation and verified zero retained or
-pending resources. Retire old nodes and enrollment credentials in the same transaction;
-keep history. Do not automatically delete resources or retry uncertain writes.
+The Web and deployment administrator API select one provider, public Core origin,
+per-sandbox resources and immutable Runtime release. PostgreSQL owns this complete,
+generation-tagged selection under the existing execution lease and deployment lock.
+The shared `sandbox.DeploymentSpec` defines required CPU/memory and supported disk
+limits plus Runtime provenance; neither a node file nor the installer owns another
+selection. Request `resources` describes limits; response `specification.resources`
+contains those limits, while response `resources` counts retained allocations and
+pending hosted Environments. Keep these meanings distinct in clients and UI.
+See the [deployment contract](contracts/agents-api/sandbox-deployment.md).
 
-Web-managed startup claims the stable installation identity and a new owner epoch
-even before provider selection. The existing runtime manager stays present and
-loads an immutable configuration for the selected generation. A clean switch pauses
-new manager operations, drains old lifecycle calls and loops, commits the new selection
-and activates it through the existing loader. Keep the Worker and runtime manager as
-single owners. Failed replacement activation stays in maintenance and can be retried; resume only
-when the committed generation is active. A locally unavailable provider dependency
-keeps hosted admission closed while the existing scan waits for repair; it must not
-take the administrator recovery API offline, including on restart. Database and
-ownership failures still stop the execution owner. Mutation responses read actual
-resource counts in their transaction; omitted accounting must never imply cleanup.
-Observation and bootstrap share this selection. Admission refuses uninitialized hosted work without
-creating Session state. File-managed and Web-managed configuration are mutually
-exclusive. Node registration, observation and daemon bootstrap reuse existing
-contracts. Derive Runtime bootstrap and daemon WebSocket addresses from the saved
-validated origin; never infer them from inbound Host headers. Keep the startup
-configuration API a startup snapshot; use the live deployment endpoint in setup.
+Docker and E2B accept CPU/memory but reject independent nonzero disk capacities;
+do not claim hard root/workspace disk quotas for them. Docker creation and native
+inspection enforce the declared CPU/memory and exact image. E2B setup verifies the
+exact ready template build and matching CPU/memory through the pinned SDK before
+saving its encrypted account key. E2B uses direct placement without a node. Node
+providers require one immutable distribution with source commit, Docker image ID,
+OCI manifest digest, microsandbox image reference, Runtime and firmware hashes.
+These identities are distinct and cannot substitute for each other.
 
+Startup claims the stable installation identity and a new owner epoch before
+provider selection. The existing runtime manager loads one immutable generation.
+Initial setup and replacement prepare and validate candidates before database
+writes. Rejected candidates preserve the active configuration and workers. A clean
+replacement uses the existing mutation gate, pauses manager admission, drains old
+calls and loops, then repeats the resource/generation guards in the commit
+transaction. A changed selection, its generation and retirement of old nodes and
+unused enrollment tokens commit together. Publish the prevalidated configuration
+and shared observation/bootstrap cache under the manager mutex without further
+external work or a fallible activation step. Request cancellation after commit
+cannot discard that publication. Interrupted drains remain barriers for retries
+and resume. Keep the Worker and runtime manager as single owners; provider I/O and
+draining hold no database transaction or manager map mutex.
 
-A Core deployment may run without a sandbox provider. When enabled, exactly one
-sandbox provider is selected at setup: E2B, Docker or microsandbox. Keep both adapters but reject multiple provider entries,
-legacy default-provider maps and engine-based placement. Harness selection is
-independent. The configuration has one installation UUID and one provider kind.
-A local node has one explicit backend object; a remote-only Core has none. No mixed-provider or engine-based provider route is supported.
+A locally unavailable provider dependency keeps hosted admission closed while the
+existing scan waits for repair; administrator recovery remains available, including
+on restart. Database and ownership errors remain failures. Unconfigured hosted
+admission creates no Session state. Derive Runtime bootstrap and daemon WebSocket
+addresses from the saved validated origin, never inbound Host headers. Use the live
+deployment API for selections made after startup; the startup configuration API
+remains a startup snapshot.
 
-The execution database pins the selected installation and backend namespace.
-Under the existing execution lease, startup validates that identity before
-reconciling work. File-managed backend changes require starting the old and new configurations in
-maintenance. Web-managed changes use the generation-checked maintenance and deployment
-endpoints; the Core origin remains unchanged within this operation. Maintenance prevents fresh hosted Sessions and fresh allocations,
-while retaining known receipts, existing Session use and explicit cleanup.
-Unreleased allocation receipts include live/stopped compute, snapshots, uncertain
-operations and pending cleanup; all must be released before a switch. Pending
-hosted Environments that have not yet received an allocation also block a switch.
-A failed check reports why and performs no resource deletion or provider change.
-After a successful Web switch, explicitly resume through the maintenance endpoint.
-File-managed deployments restart the same configuration with maintenance off. Retain immutable historical allocation ownership; never
-migrate an existing Session to another provider or recreate a released allocation.
-Fresh adoption of a deployment with unverified retained allocations fails closed.
+Provider, resources and Runtime changes require maintenance, the current generation
+and verified zero retained or pending resources. The Core origin remains unchanged
+by this operation. Maintenance prevents fresh hosted Sessions and allocations while
+retaining admitted work, known receipts, queries and explicit cleanup. Unreleased
+allocations include stopped compute, snapshots, uncertain operations and pending
+cleanup. Pending hosted Environments without allocations also block changes.
+Failed checks never authorize resource deletion. Explicitly resume after a successful
+change. Preserve historical allocation ownership and Session placement; never migrate
+an existing Session to another provider or recreate a released allocation.
+
+Core rejects `AGENTS_API_MANAGED_RUNTIMES_FILE`; there is no file-managed startup
+path or embedded local node. An older file-managed database is not automatically
+adopted after its environment variable is removed. Settle and drain that deployment
+with its previous release and original backend, preserving business data, private
+receipts, identities and storage. This change provides no old-database conversion,
+force reset or automatic deletion. The supported current path is a database-managed
+deployment. Harness selection and public/self-hosted contracts remain unchanged.
+
+The paired console serves only matched, non-secret distribution artifacts for node
+installation. Never serve private installation files or arbitrary paths. Installation
+reads `GET /core/v1/sandbox/node/configuration` using an unconsumed enrollment token,
+or a retained node credential with `X-Parsar-Node-ID`. Reads never consume enrollment;
+registered nodes can read their matching configuration during maintenance. Validate
+installation, generation, specification digest and release before writing node files,
+registering or reconnecting. Reject drift rather than overwriting retained identity
+or using local resource defaults. Registration consumes a token only after these
+checks. The installer verifies downloaded files and starts the ordinary node process
+as a user service; it performs no SSH installation, Session creation or model call.
 
 The [Hosted Sandbox Manager](services/agents-api/HOSTED-SANDBOX-MANAGER.md) is a
-deployment-level admin surface, separate from project credentials. A direct-Core
-Web token stays in memory; the paired console token stays on its server. Node enrollment credentials authorize only registration; durable
-node credentials authorize only node transport. Project keys can read a narrow
-node directory and their own Session placement, never global allocations.
+deployment-level admin surface, separate from Project credentials. The paired
+console's administrator token stays on its server. Enrollment credentials authorize
+initial node configuration reads and registration; durable node credentials authorize
+retained configuration reads and node transport. Project keys can read a narrow node
+directory and their own Session placement, never global allocations.
 
 One execution owner manages local and remote nodes through the same finite
-Provider protocol. The embedded local node preserves existing single-host setup;
-remote nodes actively connect over authenticated TLS. Persist private node
+Provider protocol. Local opt-in uses the same standalone node installer and
+service as a remote host, with a guest-reachable, non-loopback HTTPS origin.
+All managed nodes actively connect over authenticated TLS. Persist private node
 identity and highest owner epoch; refuse another process using the same identity
 or a changed backend namespace. Reserve each NodeID before transport upgrade and
 retain that reservation through disconnect cleanup; a duplicate connection must
@@ -808,7 +827,7 @@ scans join the unreleased committed placement. Each node advances its own cursor
 including failed observations, and wraps once at EOF. Direct provisioning resolves
 the tenant-scoped existing placement before entering that same node's gate; an
 existing allocation must agree with the placement. Never choose another node.
-Legacy allocations without node identity retain one separate serial lifecycle.
+E2B direct allocations use one serial lifecycle without a node identity.
 The coordinator stops accepting work and cancels and drains all node workers and
 direct callers before releasing the sole execution lease. Lease loss is global;
 ordinary provider failures stay within their node. Session locks, deployment
@@ -821,35 +840,17 @@ identity. Automatic selection chooses an eligible node; explicit
 model-provider extension remains independent. Existing retries keep their original
 node even when it is offline. Node capacity counts pending reservations and
 unresolved resources; new placement and suspended-to-restoring admission share a
-database lock. Confirmed cleanup releases placement capacity. Under the existing
-execution lease, first adoption requires matching installation/configuration identity
-and positive Provider evidence for every unreleased allocation on the actual local
-backend. A socket or runtime path is not host identity. Before the Worker or
-listener starts, a startup-only verifier uses the local adapter's common GetInfo,
-GetCompute and ObserveOnly snapshot operations; it cannot create, restore, kill or
-replay resources. Normal operation continues exclusively through the node proxy.
-Verify each retained current, target and snapshot identity independently; absence
-alone never proves ownership. Unknown, unavailable, mismatched or corrupt resources
-reject the entire adoption. Volume-only Docker remnants and consumed-restore
-transitions without the original source receipt require resolution with the
-previous Core before upgrading; do not reconstruct missing ownership evidence.
-
-Read candidates in bounded pages without holding a transaction across Provider
-calls. Then lock the deployment and all candidate allocation rows in a short
-leased transaction, compare the complete receipt set to the verified snapshot,
-and commit node placement, binding and the database idle anchor together. Database
-reads and the final transaction have a five-second budget; each Provider check has
-its own thirty-second budget. A changed plan or lost lease commits no adoption.
-Pending Environments without allocations receive their first placement; released
-history remains unassigned and cannot be recreated. Later startups preserve the
-fixed node, idle anchor and existing snapshot retention deadline.
+database lock. Confirmed cleanup releases placement capacity. Retained ownership requires exact
+provider evidence; a socket path, missing instance or empty listing cannot prove
+cleanup or authorize replacement. Historical file-managed ownership must be resolved
+using its previous release and original backend before retiring that configuration.
+Do not add a startup adoption path to bypass the database-managed selection.
 
 Do not add node-level drain controls. Refuse node removal with pending allocations,
 instances, snapshots, unknown results or cleanup resources. Offline ownership is
-retained. Removing a node does not delete compute. Refuse deletion of the embedded local
-node while deployment configuration still enables it; changing that configuration
-requires the existing clean maintenance transition. Keep the deployment-wide
-maintenance/provider-switch guard. This boundary does not add cross-node Session
+retained. Removing a node does not delete compute. Local and remote nodes share
+the same resource guard. Keep the deployment-wide maintenance and configuration
+change guard. This boundary does not add cross-node Session
 migration, Core multi-active, autoscaling, Kubernetes or harness residency.
 
 The common
@@ -874,7 +875,11 @@ bounded by `environment_disk_mib` alongside `root_disk_mib`. Workspace, staging
 and outputs must share that filesystem; do not weaken cross-device or link
 checks to accommodate the layered root. Creation uses `/` until bootstrap creates
 the workspace. Existing full snapshots and sandbox cleanup own the disk, with
-no external mount or separate storage lifecycle.
+no external mount or separate storage lifecycle. Native restore may omit a configured
+root-disk size because it inherits the verified full snapshot. Accept that omission
+only with matching snapshot resource proof and exact source/target identity; inspect
+other native limits before retaining the inherited proof on the restored target.
+Never treat a missing root size as unlimited capacity or resize retained state.
 
 Suspend only after at least one Turn is terminal, no queued/in-progress/waiting
 root or subagent Turn, pending input/file operation or initialization remains,
@@ -909,7 +914,7 @@ roll a running generation back. Deletion, revocation and retention expiry take
 precedence over wake, including at the final database compare-and-swap. Retain
 unknown cleanup identities until owned resources are confirmed absent.
 
-Fixed guest CPU/memory/disk settings, max_active reservations, max_retained
+Database-owned guest CPU/memory and supported disk settings, max_active reservations, max_retained
 allocation count and snapshot retention bound each assigned node. Unknown operations
 retain capacity reservations. Source teardown must be confirmed before releasing
 active capacity. Delete consumed artifacts and old compute closures; do not grow
@@ -1697,9 +1702,9 @@ timeout is a diagnostic failure, not permission to relaunch. An explicit install
 origin. Keep local managed Provider routing separate; do not return an internal
 Compose hostname to a user-managed Runtime when an external origin was supplied. Bootstrap routing uses the
 node bound to the authenticated device's persisted allocation, never request Host
-or caller-supplied placement fields. An embedded managed node retains its internal
-Core route; remote managed nodes use the selected setup/public route, while
-self-hosted devices retain the deployment's advertised public address. This does
+or caller-supplied placement fields. Local and remote managed nodes use the saved
+public Core origin. Self-hosted devices retain the deployment's advertised public
+address. This does
 not widen sandbox network policies or change credential admission.
 
 The distribution build sets umask 022 for non-root-readable payloads; installation
@@ -1713,30 +1718,33 @@ socket nor host devices into Core, and generates no managed Provider configurati
 Local sandbox placement is opt-in: `--sandbox-provider true --provider microsandbox`
 or `--sandbox-provider true --provider docker`. Enabling the option without naming
 a provider selects microsandbox; `--provider` without enabling the option is an
-error. Web-only mode cannot enable a sandbox provider. Core-only mode retains the
+error. Local opt-in requires a non-loopback HTTPS `--public-url` reachable from
+sandbox guests. Web-only mode cannot enable a sandbox provider. Core-only mode retains the
 same opt-in rule. Missing KVM fails when microsandbox is selected without changing
 that choice.
 The thin distribution supplies native Core binaries. Provider helpers, the node
 agent, Runtime launcher and pinned msb runtime/firmware are separate, same-revision
-assets resolved only when selected. For microsandbox, Core is a native systemd user service with direct
-`ExecStart` and `KillMode=process`: its restart must preserve the Provider's resident
-microVM/helper processes. Never package those processes inside Core's container
-PID namespace, kill their process group on Core stop, or add recovery mechanisms to
-compensate for that packaging. User KVM access, the Linux runtime libraries and
-linger are prerequisites only for the microsandbox option. With the Docker sandbox
-option, Core runs in Compose with the canonical Docker socket. PostgreSQL/Web use
-Compose in either case; native Core
-and its Web proxy use loopback, with a private PostgreSQL port. This packaging
-choice does not change either Provider's execution contract.
+assets resolved only when selected. For the microsandbox installation option, Core
+runs as a native systemd user service; PostgreSQL/Web remain in Compose with a private
+loopback database port. The Docker option keeps Core in Compose. Core receives no
+Docker socket or node identity mount in either mode. The ordinary standalone node
+service owns its provider processes outside the Core container. Its `KillMode=process`
+preserves resident microVM/helper processes across a node-service restart. User KVM
+access and the Linux runtime libraries are prerequisites for microsandbox; both node
+providers require a systemd user session with linger. Do not add another launcher,
+scheduler or recovery path for local installation.
 The basic distroless API image and binary builds remain independent artifacts.
 The standalone API release and Core distribution both include the Hosted Sandbox
 Manager guide at the relative path used by their packaged README. Include the
 guide in each artifact checksum list so extracted documentation matches its build.
-The node asset includes the sandbox-node binary. An enabled local node uses a
-persistent private state directory, explicitly separate from read-only configuration.
-Docker grants Core write access only to that node-state mount; native Core uses the
-same installation-owned directory. Zero-node installs create no node identity
-state, but retain the paired administrator credential for first setup.
+The node asset includes the sandbox-node binary. Local opt-in initializes an empty
+deployment through the same administrator API, then invokes the ordinary node
+installer. Its initial default is 2 CPUs and 4096 MiB; microsandbox also requests
+8192 MiB for each disk. An existing database selection is never overwritten by
+installer defaults. Node configuration and identity live under
+`~/.parsar/nodes/<installation-id>/`; microsandbox uses its separate short private
+Runtime home. Zero-node installs create no node identity state but retain the paired
+administrator credential for first setup.
 
 One Runtime image contains the existing daemon, shared helpers and three native
 harness packages. Their differences remain in the adapters. Core keeps exclusive

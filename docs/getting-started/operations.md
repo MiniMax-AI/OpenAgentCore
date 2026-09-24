@@ -3,7 +3,8 @@
 The installation operator owns the host, storage and service availability.
 The default installation has zero execution nodes. After nodes are added in Web,
 their operators maintain the node services, containers or microVMs on those hosts.
-A provider enabled during installation runs locally on the Core host. Service
+A local node requested during installation runs as the same separate node service
+on the Core host. Service
 health and provider state are separate from a Session's public execution state.
 
 ## Read service health
@@ -48,12 +49,11 @@ Settle active work before a planned restart. Then:
 ```
 
 This stops the control-plane services and retains the database, Runtime state and
-credentials. Nodes added through Web run their own services; stopping Core does
-not stop those node services. For a local microsandbox installation, the Core
-systemd user unit uses `KillMode=process`:
-only Core stops; microVMs and their work may remain running. Docker-owned Runtime
+credentials. Local and remote nodes run their own services; stopping Core does not stop those
+services. The node service uses `KillMode=process`, so a service restart also
+preserves resident microsandbox processes; microVMs and their work may remain running. Docker-owned Runtime
 containers likewise remain Provider resources. The command does not promise to
-stop all compute. Release resources through the existing Core API before a full
+stop all compute. Confirm resource cleanup before a full
 shutdown; do not kill Provider processes directly. A Core restart does not promise
 transparent continuation of an interrupted native tool. Query the same
 Session after reconnecting; do not create a replacement Session to replay uncertain
@@ -88,15 +88,16 @@ Retain together:
 
 - the dedicated PostgreSQL volume, including Projects, API-key digests, provenance
   and large objects;
-- `config/credential.key` and provider identity;
+- `config/credential.key`, the database-owned deployment specification and installation identity;
 - `admin/`, including on zero-node installations, containing the separate sandbox
   administrator key and Core's digest configuration;
 - each separately installed node's private configuration and persistent identity
   directory on its host (`~/.parsar/nodes/<installation-id>/` for the Web-generated
   installer), as described in the
   [node guide](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host);
-- `state/sandbox-node` when a local provider is enabled, including its private
-  node credential and highest accepted owner epoch;
+- the same `~/.parsar/nodes/<installation-id>/` identity for a local node, including
+  its credential, generation, specification digest and highest accepted owner epoch;
+- E2B's private `state/e2b` receipts and SDK connection materials when selected;
 - microsandbox's private state/cache/disks/snapshots, or Docker-owned Runtime
   volumes and histories;
 - the exact distribution and private deployment configuration needed to recover.
@@ -117,13 +118,36 @@ apply the existing Core migration workflow and replace matched service/Runtime
 artifacts while retaining identities and backend paths. Qualify recovery before
 claiming the upgrade complete; there is no downgrade or history migration promise.
 
-The installer refuses to enable, disable or replace a sandbox provider on an
-existing installation. Changing flags and rerunning is not a migration procedure.
-This restriction does not prevent a zero-node deployment from selecting its first
-provider and adding nodes through Web. After selection, every node uses that
-provider; the Web setup does not switch it.
-For an installation with a provider, follow the [maintenance and provider-switch procedure](https://github.com/MiniMax-AI/parsar-core/blob/main/services/agents-api/deploy/microsandbox/README.md#change-the-deployment-provider).
-The installer never migrates Sessions between providers or deletes old compute.
+The installer refuses component/provider flag changes on an existing installation.
+Rerunning it does not resize sandboxes or replace the database selection. Use Web
+or the administrator API for the initial selection and all later provider,
+per-sandbox resource or Runtime changes:
+
+1. Read the current deployment generation and enter global maintenance. Existing
+   work, reads and cleanup remain available; fresh hosted admission stops.
+2. Verify both allocation and pending-Environment counts are zero. Stopped
+   compute, retained snapshots and uncertain cleanup still count. The current
+   management API has no deployment-wide cleanup operation that preserves public
+   Session history and saved artifacts. Deleting a Session removes its saved
+   artifacts and is not a substitute; retained resources remain a blocker.
+3. Submit the complete replacement with the current generation and unchanged Core
+   origin. A failed candidate keeps the previous configuration. A successful
+   changed commit retires old nodes and enrollment tokens while retaining history.
+4. Explicitly resume with the returned generation, then enroll matching nodes where
+   needed. Node enrollment requires maintenance to be off; a node-backed deployment
+   admits hosted work only after a ready node has capacity.
+
+See the [deployment contract](../../contracts/agents-api/sandbox-deployment.md) for
+exact requests and errors. After an uncertain response, read the deployment before
+another write. Editing a node file cannot change its generation, Runtime or resource
+profile; a mismatch fails without replacing identity or resources.
+
+Older installations using `AGENTS_API_MANAGED_RUNTIMES_FILE` must retain their
+previous release and backend while settling and draining work. Current Core rejects
+that setting and does not automatically adopt the old database after it is removed.
+Keep the original business data, credential key, Runtime history and private provider
+state. There is no automatic old-database conversion, force reset or resource deletion.
+The supported current path uses a database-managed deployment.
 
 ## Exposure and network policy
 
@@ -143,19 +167,21 @@ legacy installations retain Basic authentication. There is only one Web role,
 with full console authority; Agent API caller keys remain separate. Back up the
 console account state, and sign in again after a console restart.
 
-A native Core restart preserves resident microVM processes. Host reboot, user
+A Core restart leaves the separately supervised node and resident microVM processes alone. Host reboot, user
 manager termination and loss of a running microVM are not equivalent to that
-restart and are not qualified cold-recovery workflows. Completed idle snapshots
-retain their existing recovery contract.
+restart and are not qualified cold-recovery workflows. Completed idle snapshots retain their existing recovery contract. When native restore
+omits a configured root-disk size, the exact verified full snapshot must prove the
+inherited capacity; CPU, memory and environment-disk limits still need to match.
+A missing or mismatched proof does not authorize resize or replacement.
 
 microsandbox uses an explicit policy: public egress, the Core/DNS host ports needed
 for the colocated Runtime, and denied inbound/private-network access. Private
 model/MCP endpoints require an explicit operator policy change. Native tool network
 policy remains the Session's separate public configuration.
 
-The optional Docker sandbox provider uses the existing qualified nested-sandbox
-Runtime policy. Only Core can access the selected host Docker daemon.
-Install on a trusted service host and do
+The Docker node uses the existing nested-sandbox Runtime policy. Its service account
+needs access to the selected host Docker daemon; Core has no Docker socket mount.
+Install on a trusted node host and do
 not share its Docker authority with untrusted users. The default installation
 does not mount the Docker socket or host devices into Core, import Runtime images
 or generate managed Provider configuration.
