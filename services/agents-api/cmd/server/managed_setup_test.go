@@ -82,12 +82,28 @@ func TestManagedSetupNeverReusesAnotherGenerationOrUnverifiedState(t *testing.T)
 	db.err = nil
 	db.value.Generation = 2
 	// No Hub is installed; a changed generation must construct again and fail.
-	if _, err := s.load(t.Context()); err == nil {
-		t.Fatal("old provider reused after generation change")
+	if _, err := s.load(t.Context()); !errors.Is(err, execution.ErrExecutionUnavailable) {
+		t.Fatal("changed provider availability must block execution without losing recovery", err)
 	}
 	db.value.InstallationID = "other-installation"
 	db.value.Generation = 1
 	if _, err := s.load(t.Context()); err == nil {
 		t.Fatal("cache ignored installation identity")
+	}
+}
+
+func TestMissingE2BHelperReportsProviderUnavailable(t *testing.T) {
+	id := uuid.NewString()
+	t.Setenv("AGENTS_API_E2B_PROVIDER_BIN", filepath.Join(t.TempDir(), "missing-helper"))
+	t.Setenv("AGENTS_API_E2B_STATE_DIR", t.TempDir())
+	s := &managedSetup{installationID: id, store: &setupStore{value: store.SandboxSetup{
+		InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1,
+		E2B: &store.SandboxE2BConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()},
+	}}}
+	if _, err := s.load(t.Context()); !errors.Is(err, execution.ErrExecutionUnavailable) {
+		t.Fatal("missing local helper must leave administrative recovery available", err)
+	}
+	if s.selected.Load() != nil {
+		t.Fatal("unavailable provider was published")
 	}
 }

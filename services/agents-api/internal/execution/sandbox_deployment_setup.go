@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"errors"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
@@ -47,6 +48,12 @@ func (m *runtimeManager) ensureDeployment(parent context.Context) (bool, error) 
 		return true, nil
 	}
 	config, err := m.loadDeployment(ctx)
+	// A missing local provider dependency blocks hosted execution, not the
+	// administrator's recovery API. The existing scan can load it after repair.
+	// Storage and ownership failures still stop the execution owner.
+	if errors.Is(err, ErrExecutionUnavailable) {
+		return false, nil
+	}
 	if err != nil || config == nil {
 		return false, err
 	}
@@ -59,8 +66,10 @@ func (m *runtimeManager) ensureDeployment(parent context.Context) (bool, error) 
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.switching { return false,errRuntimeTransition }
- if m.closed || ctx.Err() != nil {
+	if m.switching {
+		return false, errRuntimeTransition
+	}
+	if m.closed || ctx.Err() != nil {
 		return false, ErrExecutionUnavailable
 	}
 	m.config = copied

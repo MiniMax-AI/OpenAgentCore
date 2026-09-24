@@ -692,8 +692,13 @@ even before provider selection. The existing runtime manager stays present and
 loads an immutable configuration for the selected generation. A clean switch pauses
 new manager operations, drains old lifecycle calls and loops, commits the new selection
 and activates it through the existing loader. Keep the Worker and runtime manager as
-single owners. Failed activation stays in maintenance and can be retried; resume only
-when the committed generation is active. Observation and bootstrap share this selection. Admission refuses uninitialized hosted work without
+single owners. Failed replacement activation stays in maintenance and can be retried; resume only
+when the committed generation is active. A locally unavailable provider dependency
+keeps hosted admission closed while the existing scan waits for repair; it must not
+take the administrator recovery API offline, including on restart. Database and
+ownership failures still stop the execution owner. Mutation responses read actual
+resource counts in their transaction; omitted accounting must never imply cleanup.
+Observation and bootstrap share this selection. Admission refuses uninitialized hosted work without
 creating Session state. File-managed and Web-managed configuration are mutually
 exclusive. Node registration, observation and daemon bootstrap reuse existing
 contracts. Derive Runtime bootstrap and daemon WebSocket addresses from the saved

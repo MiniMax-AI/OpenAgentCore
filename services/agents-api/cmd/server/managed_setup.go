@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -47,7 +48,7 @@ func (s *managedSetup) load(ctx context.Context) (*execution.RuntimeProvider, er
 	}
 	provider, err := s.provider(setup)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", execution.ErrExecutionUnavailable, err)
 	}
 	selected := &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, Maintenance: setup.Maintenance,
 		CoreURL: setup.CoreURL + "/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}
