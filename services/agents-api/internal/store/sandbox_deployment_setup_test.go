@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 	"testing"
 
@@ -49,10 +50,10 @@ func TestSandboxDeploymentSetupPersistsWithoutExecution(t *testing.T) {
 		t.Fatal(selected, err)
 	}
 	replay, err := w.InitializeSandboxDeployment(t.Context(), id, input)
-	if err != nil || replay != selected {
+	if err != nil || !reflect.DeepEqual(replay, selected) {
 		t.Fatal("identical retry changed selection", replay, err)
 	}
-	for _, changed := range []SandboxDeploymentSetupRequest{{Provider: "docker", CoreURL: input.CoreURL}, {Provider: input.Provider, CoreURL: "https://another.example"}} {
+	for _, changed := range []SandboxDeploymentSetupRequest{{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker", CoreURL: input.CoreURL}, {DeploymentSpec: input.DeploymentSpec, Provider: input.Provider, CoreURL: "https://another.example"}} {
 		if _, err := w.InitializeSandboxDeployment(t.Context(), id, changed); !errors.Is(err, ErrSandboxDeploymentConflict) {
 			t.Fatal("changed selection accepted", err)
 		}
@@ -73,7 +74,7 @@ func TestSandboxDeploymentSetupPersistsWithoutExecution(t *testing.T) {
 		t.Fatal(err)
 	}
 	after, err := s.GetSandboxSetup(t.Context())
-	if err != nil || after != setup {
+	if err != nil || !reflect.DeepEqual(after, setup) {
 		t.Fatal("restart lost configuration", after, err)
 	}
 	epoch, err := s.RuntimeOwnerEpoch(t.Context())

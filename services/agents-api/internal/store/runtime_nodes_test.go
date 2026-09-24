@@ -198,6 +198,7 @@ func TestRuntimeNodesLegacyAdoptionAndRetention(t *testing.T) {
 	if err := w.ConfigureRuntimeDeployment(t.Context(), &next, func(context.Context, RuntimeAllocation) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
+	legacyRuntimeSpecification(t, w, next.ProviderKind)
 	retained, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
 	if err != nil || retained.NodeID != next.LocalNodeID || retained.ProviderKey != d.InstallationID || retained.ID != owner.ID {
 		t.Fatal("adoption lost identity", retained, err)
