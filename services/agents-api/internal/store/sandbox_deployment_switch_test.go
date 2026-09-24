@@ -14,7 +14,7 @@ import (
 )
 
 func e2bSelection() SandboxDeploymentSetupRequest {
-	return SandboxDeploymentSetupRequest{Provider: "e2b", CoreURL: "https://core.example", E2B: &SandboxE2BConfiguration{APIKey: "fixture-private-api-key", Template: "runtime:" + uuid.NewString()}}
+	return SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("e2b"), Provider: "e2b", CoreURL: "https://core.example", E2B: &SandboxE2BConfiguration{APIKey: "fixture-private-api-key", Template: "runtime:" + uuid.NewString()}}
 }
 func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	_, pool := newManagedTestStore(t)
@@ -79,7 +79,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if _, err := w.SetSandboxMaintenance(t.Context(), id, SandboxMaintenanceRequest{Maintenance: true, ExpectedGeneration: 1}); err != nil {
 		t.Fatal(err)
 	}
-	update := SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: SandboxDeploymentSetupRequest{Provider: "docker", CoreURL: input.CoreURL}, ExpectedGeneration: 1}
+	update := SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker", CoreURL: input.CoreURL}, ExpectedGeneration: 1}
 	if _, err := w.UpdateSandboxDeployment(t.Context(), id, update); !errors.Is(err, ErrSandboxDeploymentConflict) {
 		t.Fatal("unknown allocation allowed switch", err)
 	}
@@ -116,14 +116,14 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.InitializeSandboxDeployment(t.Context(), id, SandboxDeploymentSetupRequest{Provider: "docker", CoreURL: "https://core.example"}); err != nil {
+	if _, err := w.InitializeSandboxDeployment(t.Context(), id, SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker", CoreURL: "https://core.example"}); err != nil {
 		t.Fatal(err)
 	}
 	token, _, err := s.CreateRuntimeEnrollment(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	node := RuntimeNodeEnrollment{NodeID: uuid.NewString(), Name: "Machine", Provider: "docker", Credential: strings.Repeat("c", 64), BackendFingerprint: strings.Repeat("b", 64), MaxActive: 2, MaxRetained: 4}
+	node := RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Name: "Machine", Provider: "docker", Credential: strings.Repeat("c", 64), BackendFingerprint: strings.Repeat("b", 64), MaxActive: 2, MaxRetained: 4}
 	if _, err := s.EnrollRuntimeNode(t.Context(), token, node); err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 	if _, err := w.SetSandboxMaintenance(t.Context(), id, SandboxMaintenanceRequest{Maintenance: true, ExpectedGeneration: 2}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.UpdateSandboxDeployment(t.Context(), id, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: SandboxDeploymentSetupRequest{Provider: "docker", CoreURL: input.CoreURL}, ExpectedGeneration: 2}); err != nil {
+	if _, err := w.UpdateSandboxDeployment(t.Context(), id, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker", CoreURL: input.CoreURL}, ExpectedGeneration: 2}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.SetSandboxMaintenance(t.Context(), id, SandboxMaintenanceRequest{ExpectedGeneration: 3}); err != nil {
@@ -217,7 +217,7 @@ func TestSandboxMaintenanceSerializesFreshDirectSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = w.UpdateSandboxDeployment(t.Context(), id, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: SandboxDeploymentSetupRequest{Provider: "docker", CoreURL: input.CoreURL}, ExpectedGeneration: 1})
+	_, err = w.UpdateSandboxDeployment(t.Context(), id, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker", CoreURL: input.CoreURL}, ExpectedGeneration: 1})
 	if view.Resources.Pending > 0 && !errors.Is(err, ErrSandboxDeploymentConflict) {
 		t.Fatal("committed pending Session bypassed switch guard", err)
 	}
@@ -278,7 +278,7 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 	if _, err := w.SetSandboxMaintenance(t.Context(), installation, SandboxMaintenanceRequest{Maintenance: true, ExpectedGeneration: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.UpdateSandboxDeployment(t.Context(), installation, SandboxDeploymentUpdateRequest{ExpectedGeneration: 1, SandboxDeploymentSetupRequest: SandboxDeploymentSetupRequest{Provider: "docker", CoreURL: selection.CoreURL}}); err != nil {
+	if _, err := w.UpdateSandboxDeployment(t.Context(), installation, SandboxDeploymentUpdateRequest{ExpectedGeneration: 1, SandboxDeploymentSetupRequest: SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker", CoreURL: selection.CoreURL}}); err != nil {
 		t.Fatal(err)
 	}
 	items, err = s.ListItems(t.Context(), tenant, history.ID, "", 100, true)

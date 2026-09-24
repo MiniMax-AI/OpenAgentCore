@@ -22,6 +22,17 @@ func deploymentConfigure(t *testing.T, w *Store, config *RuntimeDeployment) {
 	if err := w.ConfigureRuntimeDeployment(t.Context(), config, nil); err != nil {
 		t.Fatal(err)
 	}
+	if config != nil && config.ProviderKind != "" {
+		spec := SandboxDeploymentTestSpec(config.ProviderKind)
+		raw, _ := json.Marshal(spec)
+		if _, err := w.pool.Exec(t.Context(), "UPDATE runtime_deployment SET specification=$1", raw); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.pool.Exec(t.Context(), "UPDATE runtime_nodes SET deployment_generation=1,specification_digest=$1", spec.Digest(config.ProviderKind)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 }
 
 func TestRuntimeDeploymentRequiresMaintenanceBeforeIdentityChange(t *testing.T) {

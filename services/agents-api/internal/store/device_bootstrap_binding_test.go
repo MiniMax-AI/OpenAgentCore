@@ -17,7 +17,7 @@ func TestDeviceCredentialCarriesPersistedAllocationNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	remote := uuid.NewString()
-	_, err = s.EnrollRuntimeNode(t.Context(), token, RuntimeNodeEnrollment{NodeID: remote, Credential: strings.Repeat("x", 64),
+	_, err = s.EnrollRuntimeNode(t.Context(), token, RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: remote, Credential: strings.Repeat("x", 64),
 		Name: "remote", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), MaxActive: 4, MaxRetained: 8})
 	if err != nil {
 		t.Fatal(err)

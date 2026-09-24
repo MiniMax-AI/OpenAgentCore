@@ -153,7 +153,7 @@ func (q *Queries) DisconnectRuntimeNode(ctx context.Context, arg DisconnectRunti
 }
 
 const getRuntimeDeployment = `-- name: GetRuntimeDeployment :one
-SELECT singleton, installation_id, backend_fingerprint, maintenance, updated_at, provider_kind, local_node_id, owner_epoch, web_managed, core_url, idle_seconds, retention_seconds, generation, mode, e2b_template, e2b_credential FROM runtime_deployment WHERE singleton=true
+SELECT singleton, installation_id, backend_fingerprint, maintenance, updated_at, provider_kind, local_node_id, owner_epoch, web_managed, core_url, idle_seconds, retention_seconds, generation, mode, e2b_template, e2b_credential, specification FROM runtime_deployment WHERE singleton=true
 `
 
 func (q *Queries) GetRuntimeDeployment(ctx context.Context) (RuntimeDeployment, error) {
@@ -176,6 +176,7 @@ func (q *Queries) GetRuntimeDeployment(ctx context.Context) (RuntimeDeployment, 
 		&i.Mode,
 		&i.E2bTemplate,
 		&i.E2bCredential,
+		&i.Specification,
 	)
 	return i, err
 }
@@ -198,7 +199,7 @@ func (q *Queries) GetRuntimeEnrollment(ctx context.Context, tokenSha256 string) 
 }
 
 const getRuntimeNode = `-- name: GetRuntimeNode :one
-SELECT id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained, connection_id, provider_ready, health, connected_epoch, last_seen_at, created_at, removed_at FROM runtime_nodes WHERE id=$1 AND removed_at IS NULL
+SELECT id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained, connection_id, provider_ready, health, connected_epoch, last_seen_at, created_at, removed_at, specification_digest, deployment_generation FROM runtime_nodes WHERE id=$1 AND removed_at IS NULL
 `
 
 func (q *Queries) GetRuntimeNode(ctx context.Context, id pgtype.UUID) (RuntimeNode, error) {
@@ -219,6 +220,8 @@ func (q *Queries) GetRuntimeNode(ctx context.Context, id pgtype.UUID) (RuntimeNo
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.RemovedAt,
+		&i.SpecificationDigest,
+		&i.DeploymentGeneration,
 	)
 	return i, err
 }
@@ -287,18 +290,20 @@ func (q *Queries) HeartbeatRuntimeNode(ctx context.Context, arg HeartbeatRuntime
 }
 
 const insertRuntimeNode = `-- name: InsertRuntimeNode :one
-INSERT INTO runtime_nodes(id,installation_id,name,backend_fingerprint,credential_sha256,max_active,max_retained)
-VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained, connection_id, provider_ready, health, connected_epoch, last_seen_at, created_at, removed_at
+INSERT INTO runtime_nodes(id,installation_id,name,backend_fingerprint,credential_sha256,max_active,max_retained,specification_digest,deployment_generation)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained, connection_id, provider_ready, health, connected_epoch, last_seen_at, created_at, removed_at, specification_digest, deployment_generation
 `
 
 type InsertRuntimeNodeParams struct {
-	ID                 pgtype.UUID `json:"id"`
-	InstallationID     pgtype.UUID `json:"installation_id"`
-	Name               string      `json:"name"`
-	BackendFingerprint string      `json:"backend_fingerprint"`
-	CredentialSha256   string      `json:"credential_sha256"`
-	MaxActive          int32       `json:"max_active"`
-	MaxRetained        int32       `json:"max_retained"`
+	ID                   pgtype.UUID `json:"id"`
+	InstallationID       pgtype.UUID `json:"installation_id"`
+	Name                 string      `json:"name"`
+	BackendFingerprint   string      `json:"backend_fingerprint"`
+	CredentialSha256     string      `json:"credential_sha256"`
+	MaxActive            int32       `json:"max_active"`
+	MaxRetained          int32       `json:"max_retained"`
+	SpecificationDigest  string      `json:"specification_digest"`
+	DeploymentGeneration int64       `json:"deployment_generation"`
 }
 
 func (q *Queries) InsertRuntimeNode(ctx context.Context, arg InsertRuntimeNodeParams) (RuntimeNode, error) {
@@ -310,6 +315,8 @@ func (q *Queries) InsertRuntimeNode(ctx context.Context, arg InsertRuntimeNodePa
 		arg.CredentialSha256,
 		arg.MaxActive,
 		arg.MaxRetained,
+		arg.SpecificationDigest,
+		arg.DeploymentGeneration,
 	)
 	var i RuntimeNode
 	err := row.Scan(
@@ -327,6 +334,8 @@ func (q *Queries) InsertRuntimeNode(ctx context.Context, arg InsertRuntimeNodePa
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.RemovedAt,
+		&i.SpecificationDigest,
+		&i.DeploymentGeneration,
 	)
 	return i, err
 }
@@ -437,7 +446,7 @@ func (q *Queries) ListNodeRuntimeAllocations(ctx context.Context, nodeID pgtype.
 }
 
 const listRuntimeNodes = `-- name: ListRuntimeNodes :many
-SELECT n.id, n.installation_id, n.name, n.backend_fingerprint, n.credential_sha256, n.max_active, n.max_retained, n.connection_id, n.provider_ready, n.health, n.connected_epoch, n.last_seen_at, n.created_at, n.removed_at, (n.connection_id IS NOT NULL AND n.connected_epoch=d.owner_epoch AND n.last_seen_at > clock_timestamp()-interval '45 seconds')::boolean AS online,
+SELECT n.id, n.installation_id, n.name, n.backend_fingerprint, n.credential_sha256, n.max_active, n.max_retained, n.connection_id, n.provider_ready, n.health, n.connected_epoch, n.last_seen_at, n.created_at, n.removed_at, n.specification_digest, n.deployment_generation, (n.connection_id IS NOT NULL AND n.connected_epoch=d.owner_epoch AND n.last_seen_at > clock_timestamp()-interval '45 seconds')::boolean AS online,
  d.provider_kind,
  (SELECT count(*) FROM runtime_placements p LEFT JOIN runtime_allocations a ON a.environment_id=p.environment_id WHERE p.node_id=n.id AND p.released_at IS NULL AND (a.id IS NULL OR a.compute_phase <> 'suspended'))::bigint AS active,
  (SELECT count(*) FROM runtime_placements p WHERE p.node_id=n.id AND p.released_at IS NULL)::bigint AS retained,
@@ -450,28 +459,30 @@ WHERE n.removed_at IS NULL AND n.installation_id=d.installation_id ORDER BY n.id
 `
 
 type ListRuntimeNodesRow struct {
-	ID                 pgtype.UUID        `json:"id"`
-	InstallationID     pgtype.UUID        `json:"installation_id"`
-	Name               string             `json:"name"`
-	BackendFingerprint string             `json:"backend_fingerprint"`
-	CredentialSha256   string             `json:"credential_sha256"`
-	MaxActive          int32              `json:"max_active"`
-	MaxRetained        int32              `json:"max_retained"`
-	ConnectionID       pgtype.UUID        `json:"connection_id"`
-	ProviderReady      bool               `json:"provider_ready"`
-	Health             []byte             `json:"health"`
-	ConnectedEpoch     int64              `json:"connected_epoch"`
-	LastSeenAt         pgtype.Timestamptz `json:"last_seen_at"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	RemovedAt          pgtype.Timestamptz `json:"removed_at"`
-	Online             bool               `json:"online"`
-	ProviderKind       string             `json:"provider_kind"`
-	Active             int64              `json:"active"`
-	Retained           int64              `json:"retained"`
-	Reserved           int64              `json:"reserved"`
-	CleanupPending     int64              `json:"cleanup_pending"`
-	Running            int64              `json:"running"`
-	Snapshots          int64              `json:"snapshots"`
+	ID                   pgtype.UUID        `json:"id"`
+	InstallationID       pgtype.UUID        `json:"installation_id"`
+	Name                 string             `json:"name"`
+	BackendFingerprint   string             `json:"backend_fingerprint"`
+	CredentialSha256     string             `json:"credential_sha256"`
+	MaxActive            int32              `json:"max_active"`
+	MaxRetained          int32              `json:"max_retained"`
+	ConnectionID         pgtype.UUID        `json:"connection_id"`
+	ProviderReady        bool               `json:"provider_ready"`
+	Health               []byte             `json:"health"`
+	ConnectedEpoch       int64              `json:"connected_epoch"`
+	LastSeenAt           pgtype.Timestamptz `json:"last_seen_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	RemovedAt            pgtype.Timestamptz `json:"removed_at"`
+	SpecificationDigest  string             `json:"specification_digest"`
+	DeploymentGeneration int64              `json:"deployment_generation"`
+	Online               bool               `json:"online"`
+	ProviderKind         string             `json:"provider_kind"`
+	Active               int64              `json:"active"`
+	Retained             int64              `json:"retained"`
+	Reserved             int64              `json:"reserved"`
+	CleanupPending       int64              `json:"cleanup_pending"`
+	Running              int64              `json:"running"`
+	Snapshots            int64              `json:"snapshots"`
 }
 
 func (q *Queries) ListRuntimeNodes(ctx context.Context) ([]ListRuntimeNodesRow, error) {
@@ -498,6 +509,8 @@ func (q *Queries) ListRuntimeNodes(ctx context.Context) ([]ListRuntimeNodesRow, 
 			&i.LastSeenAt,
 			&i.CreatedAt,
 			&i.RemovedAt,
+			&i.SpecificationDigest,
+			&i.DeploymentGeneration,
 			&i.Online,
 			&i.ProviderKind,
 			&i.Active,
@@ -592,7 +605,7 @@ func (q *Queries) SetRuntimeObservation(ctx context.Context, arg SetRuntimeObser
 }
 
 const updateRuntimeNode = `-- name: UpdateRuntimeNode :one
-UPDATE runtime_nodes SET name=$2,max_active=$3,max_retained=$4 WHERE id=$1 AND removed_at IS NULL RETURNING id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained, connection_id, provider_ready, health, connected_epoch, last_seen_at, created_at, removed_at
+UPDATE runtime_nodes SET name=$2,max_active=$3,max_retained=$4 WHERE id=$1 AND removed_at IS NULL RETURNING id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained, connection_id, provider_ready, health, connected_epoch, last_seen_at, created_at, removed_at, specification_digest, deployment_generation
 `
 
 type UpdateRuntimeNodeParams struct {
@@ -625,6 +638,8 @@ func (q *Queries) UpdateRuntimeNode(ctx context.Context, arg UpdateRuntimeNodePa
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.RemovedAt,
+		&i.SpecificationDigest,
+		&i.DeploymentGeneration,
 	)
 	return i, err
 }

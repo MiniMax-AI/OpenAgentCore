@@ -124,6 +124,14 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	spec := store.SandboxDeploymentTestSpec("microsandbox")
+	raw, _ := json.Marshal(spec)
+	if _, err := pool.Exec(t.Context(), "UPDATE runtime_deployment SET specification=$1", raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(t.Context(), "UPDATE runtime_nodes SET specification_digest=$1,deployment_generation=1", spec.Digest("microsandbox")); err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(f.stop)
 	f.epoch, err = s.RuntimeOwnerEpoch(t.Context())
 	if err != nil {
@@ -140,7 +148,7 @@ func (f *nodeIsolationFixture) enroll(id string) {
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	_, err = f.store.EnrollRuntimeNode(f.t.Context(), token, store.RuntimeNodeEnrollment{NodeID: id, Credential: strings.Repeat("x", 64), Name: id, Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64), MaxActive: 100, MaxRetained: 100})
+	_, err = f.store.EnrollRuntimeNode(f.t.Context(), token, store.RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: store.SandboxDeploymentTestSpec("microsandbox").Digest("microsandbox"), NodeID: id, Credential: strings.Repeat("x", 64), Name: id, Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64), MaxActive: 100, MaxRetained: 100})
 	if err != nil {
 		f.t.Fatal(err)
 	}

@@ -378,7 +378,7 @@ func TestSessionDeletionKeepsProvisioningInputPlacementUntilSettled(t *testing.T
 		t.Fatal(err)
 	}
 	type state struct {
-		deleted, released pgtype.Timestamptz
+		deleted, released  pgtype.Timestamptz
 		retained, reserved int64
 	}
 	read := func() state {

@@ -17,7 +17,7 @@ func lifecycleTestNode(t *testing.T, s *Store) string {
 		t.Fatal(err)
 	}
 	id := uuid.NewString()
-	_, err = s.EnrollRuntimeNode(t.Context(), token, RuntimeNodeEnrollment{NodeID: id, Credential: strings.Repeat("n", 64), Name: "second", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), MaxActive: 100, MaxRetained: 100})
+	_, err = s.EnrollRuntimeNode(t.Context(), token, RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: id, Credential: strings.Repeat("n", 64), Name: "second", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), MaxActive: 100, MaxRetained: 100})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -239,6 +239,7 @@ type RuntimeDeployment struct {
 	Mode               string             `json:"mode"`
 	E2bTemplate        string             `json:"e2b_template"`
 	E2bCredential      []byte             `json:"e2b_credential"`
+	Specification      []byte             `json:"specification"`
 }
 
 type RuntimeDeviceAuthority struct {
@@ -268,20 +269,22 @@ type RuntimeHistorySample struct {
 }
 
 type RuntimeNode struct {
-	ID                 pgtype.UUID        `json:"id"`
-	InstallationID     pgtype.UUID        `json:"installation_id"`
-	Name               string             `json:"name"`
-	BackendFingerprint string             `json:"backend_fingerprint"`
-	CredentialSha256   string             `json:"credential_sha256"`
-	MaxActive          int32              `json:"max_active"`
-	MaxRetained        int32              `json:"max_retained"`
-	ConnectionID       pgtype.UUID        `json:"connection_id"`
-	ProviderReady      bool               `json:"provider_ready"`
-	Health             []byte             `json:"health"`
-	ConnectedEpoch     int64              `json:"connected_epoch"`
-	LastSeenAt         pgtype.Timestamptz `json:"last_seen_at"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	RemovedAt          pgtype.Timestamptz `json:"removed_at"`
+	ID                   pgtype.UUID        `json:"id"`
+	InstallationID       pgtype.UUID        `json:"installation_id"`
+	Name                 string             `json:"name"`
+	BackendFingerprint   string             `json:"backend_fingerprint"`
+	CredentialSha256     string             `json:"credential_sha256"`
+	MaxActive            int32              `json:"max_active"`
+	MaxRetained          int32              `json:"max_retained"`
+	ConnectionID         pgtype.UUID        `json:"connection_id"`
+	ProviderReady        bool               `json:"provider_ready"`
+	Health               []byte             `json:"health"`
+	ConnectedEpoch       int64              `json:"connected_epoch"`
+	LastSeenAt           pgtype.Timestamptz `json:"last_seen_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	RemovedAt            pgtype.Timestamptz `json:"removed_at"`
+	SpecificationDigest  string             `json:"specification_digest"`
+	DeploymentGeneration int64              `json:"deployment_generation"`
 }
 
 type RuntimeNodeEnrollment struct {

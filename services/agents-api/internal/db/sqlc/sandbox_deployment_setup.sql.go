@@ -32,7 +32,7 @@ func (q *Queries) ClaimWebSandboxDeployment(ctx context.Context, installationID 
 
 const initializeSandboxDeployment = `-- name: InitializeSandboxDeployment :exec
 UPDATE runtime_deployment SET provider_kind=$1, core_url=$2, backend_fingerprint=$3,
-idle_seconds=$4, retention_seconds=$5, generation=$6, mode=$7, e2b_template=$8, e2b_credential=$9, updated_at=clock_timestamp() WHERE singleton=true
+idle_seconds=$4, retention_seconds=$5, generation=$6, mode=$7, e2b_template=$8, e2b_credential=$9, specification=$10, updated_at=clock_timestamp() WHERE singleton=true
 `
 
 type InitializeSandboxDeploymentParams struct {
@@ -45,6 +45,7 @@ type InitializeSandboxDeploymentParams struct {
 	Mode               string `json:"mode"`
 	E2bTemplate        string `json:"e2b_template"`
 	E2bCredential      []byte `json:"e2b_credential"`
+	Specification      []byte `json:"specification"`
 }
 
 func (q *Queries) InitializeSandboxDeployment(ctx context.Context, arg InitializeSandboxDeploymentParams) error {
@@ -58,6 +59,7 @@ func (q *Queries) InitializeSandboxDeployment(ctx context.Context, arg Initializ
 		arg.Mode,
 		arg.E2bTemplate,
 		arg.E2bCredential,
+		arg.Specification,
 	)
 	return err
 }

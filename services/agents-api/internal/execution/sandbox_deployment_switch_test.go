@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/node"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
@@ -147,5 +148,37 @@ func TestSandboxManagerCancelledSwitchCannotResumeBeforeDrain(t *testing.T) {
 	released = true
 	if err := m.activateDeployment(t.Context(), expected); err != nil {
 		t.Fatal("drained generation did not resume", err)
+	}
+}
+
+func TestSandboxSetupRetryCannotBypassOutstandingDrain(t *testing.T) {
+	hub := node.NewHub(node.HubOptions{})
+	defer hub.Close()
+	id := uuid.NewString()
+	m, err := newRuntimeManager(nil, gateway.NewRegistry(), NewDeferredRuntimeProvider(id,
+		func(context.Context) (*RuntimeProvider, error) { return nil, nil },
+		func(_ context.Context, setup store.SandboxSetup) (PreparedRuntimeDeployment, error) {
+			return PreparedRuntimeDeployment{Config: &RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, CoreURL: setup.CoreURL + "/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), "docker")}}, nil
+		}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, finish, err := m.enter(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { finish(); m.stop(); m.drain() }()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+	if err := m.pauseDeployment(ctx); !errors.Is(err, context.DeadlineExceeded) {
+		cancel()
+		t.Fatal("pause did not retain an outstanding caller", err)
+	}
+	cancel()
+	ctx, cancel = context.WithTimeout(t.Context(), 10*time.Millisecond)
+	defer cancel()
+	w := &Worker{runtimes: m}
+	_, err = w.InitializeSandboxDeployment(ctx, store.SandboxDeploymentSetupRequest{Provider: "e2b", CoreURL: "https://core.example", E2B: &store.SandboxE2BConfiguration{APIKey: "fixture-key", Template: "runtime:" + uuid.NewString()}, DeploymentSpec: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 1024}}})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("setup retry bypassed the unfinished drain", err)
 	}
 }
