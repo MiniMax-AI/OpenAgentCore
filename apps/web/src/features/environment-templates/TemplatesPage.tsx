@@ -1,6 +1,6 @@
 import type { EnvironmentTemplateResource } from "@agents-core-web/agents-client";
 import { Boxes } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -16,6 +16,7 @@ import { filterTemplates, templateName } from "./template-name";
 import "./EnvironmentTemplatesView.css";
 import { collections } from "../../lib/queries";
 import { TableSkeleton } from "../../components/Skeleton";
+import { useTemplateDetail } from "../resources/detail-queries";
 
 function count(value: readonly unknown[] | undefined): string | number {
   return value === undefined ? MISSING : value.length;
@@ -170,62 +171,49 @@ function TemplatesList() {
   );
 }
 
-type DetailState =
-  | { status: "loading" }
-  | { status: "ready"; template: EnvironmentTemplateResource }
-  | { status: "failed"; message: string };
-
 function TemplateDetailRoute({ projectId, templateId }: { projectId: string; templateId: string }) {
   const { t } = useTranslation("templates");
   const { t: tCommon } = useTranslation();
   const { navigate } = useConsoleNavigation();
   const { byId } = useProjects();
   const project = byId.get(projectId);
-  const [state, setState] = useState<DetailState>({ status: "loading" });
-  const [revision, setRevision] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
+  // Opens from the cache (or the list row) at once; a refresh keeps the Template on screen.
+  const { read, forget } = useTemplateDetail(projectId, templateId);
   const [copy, setCopy] = useState<CopySource | null>(null);
   const back = useCallback(() => navigate("templates", { project: projectId }), [navigate, projectId]);
   const creators = useCreators("environment_template", useMemo(() => [{ projectId, id: templateId }], [projectId, templateId]));
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setRefreshing(true);
-    projectClient(projectId).retrieveEnvironmentTemplate(templateId, { signal: controller.signal }).then(
-      (template) => setState({ status: "ready", template }),
-      (error: unknown) => { if (!controller.signal.aborted) setState({ status: "failed", message: error instanceof Error ? error.message : String(error) }); },
-    ).finally(() => { if (!controller.signal.aborted) setRefreshing(false); });
-    return () => controller.abort();
-  }, [projectId, templateId, revision]);
+  const refresh = () => { forgetCreators(); void read.refetch(); };
+  const failure = read.isError ? (read.error instanceof Error ? read.error.message : String(read.error)) : null;
 
   const remove = useDeleteFlow<EnvironmentTemplateResource>(
     useCallback((template: EnvironmentTemplateResource) => projectClient(projectId).deleteEnvironmentTemplate(template.id), [projectId]),
-    back,
+    useCallback(() => { back(); forget(); }, [back, forget]),
     { uncertain: tCommon("list.deleteUncertain") },
   );
 
-  if (state.status !== "ready") {
+  if (!read.data) {
     return (
       <section className="page-section console-page templates-page" aria-labelledby="template-detail-heading">
-        <PageHeader headingId="template-detail-heading" title={t("detail.loadingTitle", { defaultValue: templateId })} actions={<RefreshButton onClick={() => setRevision((value) => value + 1)} refreshing={refreshing} />} />
+        <PageHeader headingId="template-detail-heading" title={t("detail.loadingTitle", { defaultValue: templateId })} actions={<RefreshButton onClick={refresh} refreshing={read.isFetching} />} />
         <PageBody>
-          {state.status === "loading" ? <p className="page-status" role="status">{t("loading")}</p> : (
-            <EmptyState title={t("loadFailedTitle")} description={state.message} action={<button className="button outline" type="button" onClick={back}>{t("back")}</button>} />
+          {failure === null ? <p className="page-status" role="status">{t("loading")}</p> : (
+            <EmptyState title={t("loadFailedTitle")} description={failure} action={<button className="button outline" type="button" onClick={back}>{t("back")}</button>} />
           )}
         </PageBody>
       </section>
     );
   }
 
-  const template = state.template;
+  const template = read.data;
   return (
     <>
       <TemplateDetailPage
         template={template}
         blocked={remove.busy}
-        refreshing={refreshing}
+        refreshing={read.isFetching}
+        notice={failure !== null ? <p className="coverage-note coverage-note-error" role="alert">{t("refreshFailed")} {failure}</p> : undefined}
         onBack={back}
-        onRefresh={() => { forgetCreators(); setRevision((value) => value + 1); }}
+        onRefresh={refresh}
         onDelete={() => remove.ask(template)}
         onCopy={project ? () => setCopy({ type: "environment_template", id: template.id, name: templateName(template), project }) : undefined}
         facts={(

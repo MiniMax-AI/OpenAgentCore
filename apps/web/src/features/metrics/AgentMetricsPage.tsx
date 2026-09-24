@@ -1,5 +1,6 @@
 import { AlertTriangle } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -16,13 +17,12 @@ import {
   SegmentedControl,
   StatusDot,
 } from "../../components/console-ui";
+import { TableSkeleton } from "../../components/Skeleton";
 import { formatClock, formatCompact, formatDuration, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
-import { admin, ProjectFilter, projectClient, ProjectName, useProjects, type ProjectFilterValue } from "../../lib/projects";
+import { ProjectFilter, ProjectName, useProjects, type ProjectFilterValue } from "../../lib/projects";
 import {
-  aggregateAgentMetrics,
   agentMetricsOutcome,
   INLINE_AGENT_ID,
-  metricsWindow,
   OTHER_SERIES_ID,
   type AgentMetrics,
   type AgentMetricsRange,
@@ -30,22 +30,16 @@ import {
   type NamedSeries,
   type ToolBreakdown,
 } from "./agent-metrics";
-import { loadProjectAgentMetrics } from "./agent-metrics-loader";
-import { isAbortError, type ProjectReadFailure } from "./project-sessions";
-import { keyUsageRows, type KeyUsageRow } from "./key-usage";
+import { agentMetricsQuery, keyUsageQuery, type LoadedAgentMetrics } from "./metrics-queries";
+import { type ProjectReadFailure } from "./project-sessions";
+import { type KeyUsageRow } from "./key-usage";
 import { useStableColors } from "./use-stable-colors";
 import "./MetricsView.css";
-import { type KeyRef, loadSummary, type Project, type ProjectSummary } from "../../lib/admin-view";
+import { type KeyRef, type Project, type ProjectSummary } from "../../lib/admin-view";
 
 const RANGES: readonly AgentMetricsRange[] = ["1h", "6h", "24h", "7d"];
 
-interface Loaded {
-  metrics: AgentMetrics;
-  truncatedLists: Project[];
-  listFailures: ProjectReadFailure[];
-  unrecognizedSessions: number;
-  loadedAt: number;
-}
+type Loaded = LoadedAgentMetrics;
 
 type LoadState =
   | { status: "loading"; previous: Loaded | null }
@@ -65,58 +59,44 @@ function bucketLabel(seconds: number, t: TFunction<"metrics">): string {
   return seconds >= 3_600 ? t("bucket.hours", { count: seconds / 3_600 }) : t("bucket.minutes", { count: seconds / 60 });
 }
 
+/**
+ * Agent metrics and usage by key through the query cache. A changed project
+ * filter or range keeps the last figures on screen until the new ones arrive.
+ */
+function useAgentMetricsData(projects: readonly Project[], projectsReady: boolean, filter: ProjectFilterValue, range: AgentMetricsRange) {
+  const targets = useMemo(() => projects.filter((project) => !filter || project.id === filter), [filter, projects]);
+  const metricsQuery = useQuery({ ...agentMetricsQuery(targets, filter, range), enabled: projectsReady, placeholderData: keepPreviousData });
+  const keyQuery = useQuery({ ...keyUsageQuery(filter, range), enabled: projectsReady, placeholderData: keepPreviousData });
+
+  const loaded = metricsQuery.data ?? null;
+  let state: LoadState;
+  if (metricsQuery.isError && !metricsQuery.isFetching) state = { status: "failed", error: errorText(metricsQuery.error), previous: loaded };
+  else if (loaded && !metricsQuery.isFetching) state = { status: "ready", loaded };
+  else state = { status: "loading", previous: loaded };
+
+  let keyUsage: KeyUsageState;
+  if (keyQuery.isError && !keyQuery.isFetching) keyUsage = { status: "failed", error: errorText(keyQuery.error) };
+  else if (keyQuery.data) keyUsage = { status: "ready", rows: keyQuery.data };
+  else keyUsage = { status: "loading" };
+
+  const { refetch: refetchMetrics } = metricsQuery;
+  const { refetch: refetchKeys } = keyQuery;
+  const refresh = useCallback(() => { void refetchMetrics(); void refetchKeys(); }, [refetchKeys, refetchMetrics]);
+  return { state, keyUsage, refreshing: metricsQuery.isFetching || keyQuery.isFetching, refresh };
+}
+
 export function AgentMetricsPage() {
   const { t, i18n } = useTranslation("metrics");
   const locale = i18n.resolvedLanguage;
   const { state: projectsState, byId } = useProjects();
   const [filter, setFilter] = useState<ProjectFilterValue>("");
   const [range, setRange] = useState<AgentMetricsRange>("24h");
-  const [revision, setRevision] = useState(0);
-  const [state, setState] = useState<LoadState>({ status: "loading", previous: null });
-  const [keyUsage, setKeyUsage] = useState<KeyUsageState>({ status: "loading" });
-  const latest = useRef<Loaded | null>(null);
   const projects = projectsState.projects;
   const projectsReady = projectsState.status !== "loading" || projects.length > 0;
-
-  useEffect(() => {
-    if (!projectsReady) return;
-    const controller = new AbortController();
-    const window = metricsWindow(range, Math.floor(Date.now() / 1000));
-    const targets = projects.filter((project) => !filter || project.id === filter);
-    setState({ status: "loading", previous: latest.current });
-    setKeyUsage({ status: "loading" });
-    void (async () => {
-      // The summary says which projects were active; a failed summary only means every project is read.
-      const summary = await loadSummary({ project_id: filter || undefined, signal: controller.signal }).catch((error: unknown) => {
-        if (controller.signal.aborted) throw error;
-        return null;
-      });
-      const load = await loadProjectAgentMetrics(targets, window, { clientFor: (project) => projectClient(project.id), summary }, controller.signal, { includeTools: true });
-      const loaded: Loaded = {
-        metrics: aggregateAgentMetrics(window, load.activities, load.coverage),
-        truncatedLists: load.truncatedLists,
-        listFailures: load.listFailures,
-        unrecognizedSessions: load.unrecognizedSessions,
-        loadedAt: Date.now(),
-      };
-      latest.current = loaded;
-      setState({ status: "ready", loaded });
-    })().catch((error: unknown) => {
-      if (controller.signal.aborted || isAbortError(error)) return;
-      setState({ status: "failed", error: errorText(error), previous: latest.current });
-    });
-    loadSummary({ group_by: "key", created_after: window.start, project_id: filter || undefined, signal: controller.signal }).then(
-      (rows) => setKeyUsage({ status: "ready", rows: keyUsageRows(rows) }),
-      (error: unknown) => {
-        if (!controller.signal.aborted) setKeyUsage({ status: "failed", error: errorText(error) });
-      },
-    );
-    return () => controller.abort();
-  }, [filter, projects, projectsReady, range, revision]);
+  const { state, keyUsage, refreshing, refresh } = useAgentMetricsData(projects, projectsReady, filter, range);
 
   const loaded = state.status === "ready" ? state.loaded : state.previous;
   const metrics = loaded?.metrics ?? null;
-  const loading = state.status === "loading";
   const partial = loaded ? coverageNote(loaded, t) : null;
 
   // Both model charts share one ranked set, so the requests series carries every coloured model.
@@ -138,7 +118,7 @@ export function AgentMetricsPage() {
           ) : null}
           <ProjectFilter value={filter} onChange={setFilter} />
           <SegmentedControl label={t("range.label")} value={range} options={RANGES.map((value) => ({ value, label: t(`range.${value}`) }))} onChange={setRange} />
-          <RefreshButton refreshing={loading} updatedAt={state.status === "ready" ? formatClock(state.loaded.loadedAt, locale) : null} onClick={() => setRevision((value) => value + 1)} />
+          <RefreshButton refreshing={refreshing} updatedAt={loaded ? formatClock(loaded.loadedAt, locale) : null} onClick={refresh} />
         </>}
       />
       <PageBody>
@@ -406,7 +386,7 @@ function KeyUsageSection({ state, window, showProject, projectOf }: { state: Key
   const now = Math.floor(Date.now() / 1000);
   return (
     <Section headingId="keys-heading" title={t("keys.title")} help={t("keys.help", { range: t(`range.${window.range}`) })}>
-      {state.status === "loading" ? <p className="page-status" role="status">{t("keys.loading")}</p>
+      {state.status === "loading" ? <TableSkeleton label={t("keys.loading")} rows={3} columns={showProject ? 8 : 7} />
         : state.status === "failed" ? <p className="coverage-note coverage-note-error" role="alert">{t("keys.loadFailed", { reason: state.error })}</p>
           : !state.rows.length ? <p className="page-status">{t("keys.empty", { range: t(`range.${window.range}`) })}</p> : (
             <div className="table-frame">

@@ -1,6 +1,6 @@
 import type { Vault, VaultCredential } from "@agents-core-web/agents-client";
 import { ArrowLeft, Copy, Trash2, Vault as VaultIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -15,6 +15,11 @@ import { vaultName } from "./vault-catalog";
 import "./vaults.css";
 import { collections } from "../../lib/queries";
 import { TableSkeleton } from "../../components/Skeleton";
+import { useVaultDetail } from "../resources/detail-queries";
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 /**
  * Resources › Vault: every project's Vaults and their Credential metadata.
@@ -141,11 +146,6 @@ function VaultsList() {
   );
 }
 
-type DetailState =
-  | { status: "loading" }
-  | { status: "ready"; vault: Vault; credentials: VaultCredential[] }
-  | { status: "failed"; message: string };
-
 function VaultDetail({ projectId, vaultId }: { projectId: string; vaultId: string }) {
   const { t, i18n } = useTranslation("vaults");
   const { t: tPages } = useTranslation("pages");
@@ -154,41 +154,32 @@ function VaultDetail({ projectId, vaultId }: { projectId: string; vaultId: strin
   const { navigate } = useConsoleNavigation();
   const { byId } = useProjects();
   const project = byId.get(projectId);
-  const [state, setState] = useState<DetailState>({ status: "loading" });
-  const [revision, setRevision] = useState(0);
+  // The Vault opens from the cache (or its list row) at once; its Credentials read beside it.
+  const { read, credentials: credentialsRead, forget } = useVaultDetail(projectId, vaultId);
   const [copy, setCopy] = useState<CopySource | null>(null);
   const back = useCallback(() => navigate("vaults", { project: projectId }), [navigate, projectId]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const client = projectClient(projectId);
-    setState((current) => (current.status === "ready" ? current : { status: "loading" }));
-    Promise.all([
-      client.retrieveVault(vaultId, { signal: controller.signal }),
-      readAllPages((after) => client.listVaultCredentials(vaultId, { after, limit: 100, signal: controller.signal })),
-    ]).then(
-      ([vault, credentials]) => setState({ status: "ready", vault, credentials }),
-      (error: unknown) => { if (!controller.signal.aborted) setState({ status: "failed", message: error instanceof Error ? error.message : String(error) }); },
-    );
-    return () => controller.abort();
-  }, [projectId, vaultId, revision]);
-
-  const refresh = useCallback(() => { forgetCreators(); setRevision((value) => value + 1); }, []);
-  const credentials = state.status === "ready" ? state.credentials : [];
+  const { refetch: refetchVault } = read;
+  const { refetch: refetchCredentials } = credentialsRead;
+  const refresh = useCallback(() => { forgetCreators(); void refetchVault(); void refetchCredentials(); }, [refetchVault, refetchCredentials]);
+  const refreshCredentials = useCallback(() => { forgetCreators(); void refetchCredentials(); }, [refetchCredentials]);
+  const credentials = useMemo(() => credentialsRead.data ?? [], [credentialsRead.data]);
   const vaultCreators = useCreators("vault", useMemo(() => [{ projectId, id: vaultId }], [projectId, vaultId]));
   const creators = useCreators("credential", useMemo(() => credentials.map((credential) => ({ projectId, id: credential.id })), [credentials, projectId]));
   const removeVault = useDeleteFlow<Vault>(
     useCallback((vault: Vault) => projectClient(projectId).deleteVault(vault.id), [projectId]),
-    back,
+    useCallback(() => { back(); forget(); }, [back, forget]),
     { uncertain: tCommon("list.deleteUncertain") },
   );
   const removeCredential = useDeleteFlow<VaultCredential>(
     useCallback((credential: VaultCredential) => projectClient(projectId).deleteVaultCredential(vaultId, credential.id), [projectId, vaultId]),
-    refresh,
+    refreshCredentials,
     { uncertain: tCommon("list.deleteUncertain") },
   );
 
-  const vault = state.status === "ready" ? state.vault : null;
+  const vault = read.data ?? null;
+  const failure = read.isError ? errorText(read.error) : null;
+  const credentialsFailure = credentialsRead.isError ? errorText(credentialsRead.error) : null;
   const name = vault ? vaultName(vault) : vaultId;
   return (
     <section className="page-section console-page vaults-page" aria-labelledby="vault-detail-heading">
@@ -204,7 +195,7 @@ function VaultDetail({ projectId, vaultId }: { projectId: string; vaultId: strin
         )}
         actions={(
           <>
-            <RefreshButton onClick={refresh} refreshing={state.status === "loading"} label={tPages("vaults.refresh")} />
+            <RefreshButton onClick={refresh} refreshing={read.isFetching || credentialsRead.isFetching} label={tPages("vaults.refresh")} />
             {vault && project ? (
               <button className="button outline" type="button" onClick={() => setCopy({ type: "vault", id: vault.id, name, project })}>
                 <Copy size={14} aria-hidden="true" />{tCommon("copy.action")}
@@ -217,12 +208,13 @@ function VaultDetail({ projectId, vaultId }: { projectId: string; vaultId: strin
         )}
       />
       <PageBody>
-        {state.status === "loading" ? <p className="page-status" role="status">{t("loading")}</p> : null}
-        {state.status === "failed" ? (
-          <EmptyState title={t("loadFailed")} description={state.message} action={<button className="button outline" type="button" onClick={refresh}>{tCommon("actions.retry")}</button>} />
+        {!vault && read.isPending ? <p className="page-status" role="status">{t("loading")}</p> : null}
+        {!vault && failure !== null ? (
+          <EmptyState title={t("loadFailed")} description={failure} action={<button className="button outline" type="button" onClick={refresh}>{tCommon("actions.retry")}</button>} />
         ) : null}
         {vault ? (
           <>
+            {failure !== null ? <p className="coverage-note coverage-note-error" role="alert">{t("refreshFailed")} — {failure}</p> : null}
             <dl className="resource-facts" aria-label={t("detail.facts")}>
               <div><dt>{t("detail.id")}</dt><dd><CopyableId id={vault.id} /></dd></div>
               <div><dt>{tCommon("project.column")}</dt><dd><ProjectName project={project} /></dd></div>
@@ -237,10 +229,15 @@ function VaultDetail({ projectId, vaultId }: { projectId: string; vaultId: strin
             </dl>
             <Section
               headingId="vault-credentials-heading"
-              title={<>{t("detail.credentials")} <span className="heading-count">{credentials.length}</span></>}
+              title={<>{t("detail.credentials")} {credentialsRead.data ? <span className="heading-count">{credentials.length}</span> : null}</>}
               help={<>{t("detail.credentialsHelp")} {t("oauthHelp")}</>}
             >
-              {credentials.length ? (
+              {credentialsRead.data && credentialsFailure !== null ? <p className="coverage-note coverage-note-error" role="alert">{t("refreshFailed")} — {credentialsFailure}</p> : null}
+              {!credentialsRead.data ? (
+                credentialsFailure !== null ? (
+                  <EmptyState title={t("loadFailed")} description={credentialsFailure} action={<button className="button outline" type="button" onClick={refreshCredentials}>{tCommon("actions.retry")}</button>} />
+                ) : <TableSkeleton label={t("loading")} rows={3} columns={5} />
+              ) : credentials.length ? (
                 <div className="table-frame">
                   <table className="data-table" aria-label={t("credentialsIn", { name })}>
                     <thead>

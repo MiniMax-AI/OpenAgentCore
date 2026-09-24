@@ -12,36 +12,16 @@ import { formatCompact, formatDateTime, formatInteger, formatPercent, formatRela
 import { admin, CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, readAllPages, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
 import { CopyDialog, type CopySource } from "../copy/CopyDialog";
 import "./AgentCatalog.css";
-import { loadSummary, type ProjectSummary } from "../../lib/admin-view";
+import { type ProjectSummary } from "../../lib/admin-view";
+import { refreshAgentSummaries, useAgentSummaries } from "./agent-summaries";
 import { collections } from "../../lib/queries";
 import { TableSkeleton } from "../../components/Skeleton";
+import { useAgentDetail } from "../resources/detail-queries";
 
 export function harnessLabel(harness: CoreHarnessKind): string {
   if (harness === "claude_sdk") return "Claude SDK";
   if (harness === "mcode") return "MiniMax Code";
   return "Codex";
-}
-
-/** Per-Agent usage of the listed projects, from the Web API summary. */
-function useAgentSummaries(projectIds: readonly string[]): Map<string, ProjectSummary> {
-  const [rows, setRows] = useState(new Map<string, ProjectSummary>());
-  const key = projectIds.join(",");
-  useEffect(() => {
-    if (!key) return;
-    const controller = new AbortController();
-    void Promise.allSettled(key.split(",").map((projectId) => loadSummary({ group_by: "agent", project_id: projectId, signal: controller.signal })))
-      .then((results) => {
-        if (controller.signal.aborted) return;
-        const next = new Map<string, ProjectSummary>();
-        for (const result of results) {
-          if (result.status !== "fulfilled") continue;
-          for (const row of result.value) if (row.agent_id) next.set(`${row.project_id}:${row.agent_id}`, row);
-        }
-        setRows(next);
-      });
-    return () => controller.abort();
-  }, [key]);
-  return rows;
 }
 
 function coverage(summary: ProjectSummary | undefined, locale?: string): string {
@@ -81,7 +61,7 @@ function AgentsList() {
   const projectIds = useMemo(() => [...new Set(collection.items.map((row) => row.project.id))].sort(), [collection.items]);
   const summaries = useAgentSummaries(projectIds);
   const creators = useCreators("agent", useMemo(() => collection.items.map((row) => ({ projectId: row.project.id, id: row.value.id })), [collection.items]));
-  const refresh = useCallback(() => { forgetCreators(); collection.refresh(); }, [collection]);
+  const refresh = useCallback(() => { forgetCreators(); collection.refresh(); void refreshAgentSummaries(); }, [collection]);
   const remove = useDeleteFlow<Owned<SavedAgent>>(
     useCallback((row: Owned<SavedAgent>) => projectClient(row.project.id).deleteAgent(row.value.id), []),
     refresh,
@@ -192,11 +172,6 @@ function AgentsList() {
   );
 }
 
-type DetailState =
-  | { status: "loading" }
-  | { status: "ready"; agent: SavedAgent }
-  | { status: "failed"; message: string };
-
 function toolRows(agent: SavedAgent): Array<{ type: string; name: string; target: string }> {
   return agent.tools.map((tool) => {
     const value = tool as Record<string, unknown>;
@@ -214,30 +189,22 @@ function AgentDetail({ projectId, agentId }: { projectId: string; agentId: strin
   const { navigate } = useConsoleNavigation();
   const { byId } = useProjects();
   const project = byId.get(projectId);
-  const [state, setState] = useState<DetailState>({ status: "loading" });
-  const [revision, setRevision] = useState(0);
+  // Opens from the cache (or the list row) at once; a refresh keeps the Agent on screen.
+  const { read, forget } = useAgentDetail(projectId, agentId);
   const [copy, setCopy] = useState<CopySource | null>(null);
   const back = useCallback(() => navigate("agents", { project: projectId }), [navigate, projectId]);
   const summaries = useAgentSummaries(useMemo(() => [projectId], [projectId]));
   const summary = summaries.get(`${projectId}:${agentId}`);
   const creators = useCreators("agent", useMemo(() => [{ projectId, id: agentId }], [projectId, agentId]));
 
-  useEffect(() => {
-    const controller = new AbortController();
-    projectClient(projectId).retrieveAgent(agentId).then(
-      (agent) => { if (!controller.signal.aborted) setState({ status: "ready", agent }); },
-      (error: unknown) => { if (!controller.signal.aborted) setState({ status: "failed", message: error instanceof Error ? error.message : String(error) }); },
-    );
-    return () => controller.abort();
-  }, [projectId, agentId, revision]);
-
   const remove = useDeleteFlow<SavedAgent>(
     useCallback((agent: SavedAgent) => projectClient(projectId).deleteAgent(agent.id), [projectId]),
-    back,
+    useCallback(() => { back(); forget(); }, [back, forget]),
     { uncertain: tCommon("list.deleteUncertain") },
   );
 
-  const agent = state.status === "ready" ? state.agent : null;
+  const agent = read.data ?? null;
+  const failure = read.isError ? (read.error instanceof Error ? read.error.message : String(read.error)) : null;
   const name = agent ? agent.name || t("catalog.untitled") : agentId;
   const tools = agent ? toolRows(agent) : [];
   const metadata = agent ? Object.entries(agent.metadata ?? {}) : [];
@@ -255,7 +222,7 @@ function AgentDetail({ projectId, agentId }: { projectId: string; agentId: strin
         )}
         actions={(
           <>
-            <RefreshButton onClick={() => { forgetCreators(); setRevision((value) => value + 1); }} refreshing={state.status === "loading"} />
+            <RefreshButton onClick={() => { forgetCreators(); void read.refetch(); }} refreshing={read.isFetching} />
             <button className="button outline" type="button" onClick={() => navigate("sessions", { project: projectId, id: agentId })}>
               <ListTree size={14} aria-hidden="true" />{t("view.openSessions")}
             </button>
@@ -271,10 +238,11 @@ function AgentDetail({ projectId, agentId }: { projectId: string; agentId: strin
         )}
       />
       <PageBody>
-        {state.status === "loading" ? <p className="page-status" role="status">…</p> : null}
-        {state.status === "failed" ? <EmptyState title={t("view.loadFailed")} description={state.message} action={<button className="button outline" type="button" onClick={back}>{t("view.back")}</button>} /> : null}
+        {!agent && read.isPending ? <p className="page-status" role="status">…</p> : null}
+        {!agent && failure !== null ? <EmptyState title={t("view.loadFailed")} description={failure} action={<button className="button outline" type="button" onClick={back}>{t("view.back")}</button>} /> : null}
         {agent ? (
           <>
+            {failure !== null ? <p className="coverage-note coverage-note-error" role="alert">{t("refreshFailed")} — {failure}</p> : null}
             <dl className="resource-facts" aria-label={t("view.facts")}>
               <div><dt>{t("view.id")}</dt><dd><CopyableId id={agent.id} /></dd></div>
               <div><dt>{tCommon("project.column")}</dt><dd><ProjectName project={project} /></dd></div>

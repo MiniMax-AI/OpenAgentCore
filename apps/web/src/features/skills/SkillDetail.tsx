@@ -1,20 +1,23 @@
 import { ArrowLeft, Copy, Download, Trash2 } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AgentCoreError, type Skill, type SkillVersion } from "@agents-core-web/agents-client";
 
 import type { ProjectClient } from "../../lib/projects";
+import { collections } from "../../lib/queries";
+import { skillQuery, skillVersionsQuery } from "../resources/detail-queries";
 
 import { EmptyState, PageBody, PageHeader, RefreshButton, Section, StatusDot } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
+import { TableSkeleton } from "../../components/Skeleton";
 import { useToast } from "../../components/Toast";
 import { formatDateTime, MISSING } from "../../lib/format";
 import { CopyableId, LatestVersion } from "./skill-parts";
 import {
   coreErrorMessage,
   downloadSkillArchive,
-  isAbortError,
   isDefaultVersionConflict,
   readSkillVersionsPage,
   versionDeleteState,
@@ -32,10 +35,6 @@ export interface SkillVersionsState {
   loadingMore: boolean;
   moreError: string | null;
 }
-
-const initialVersions: SkillVersionsState = {
-  status: "loading", items: [], nextAfter: null, error: null, loadingMore: false, moreError: null,
-};
 
 type Dialog =
   | { kind: "upload"; key: number }
@@ -164,7 +163,7 @@ function SkillVersionsTable({
   const { t, i18n } = useTranslation("skills");
   const locale = i18n.resolvedLanguage;
   if (!versions.items.length) {
-    if (versions.status === "loading") return <p className="page-status" role="status">{t("detail.versionsLoading")}</p>;
+    if (versions.status === "loading") return <TableSkeleton label={t("detail.versionsLoading")} rows={3} columns={6} />;
     if (versions.status === "failed") {
       return (
         <EmptyState
@@ -258,6 +257,8 @@ function SkillVersionsTable({
 
 export interface SkillDetailProps {
   core: Pick<ProjectClient, "retrieveSkill" | "listSkillVersions" | "deleteSkill" | "deleteSkillVersion" | "downloadSkill" | "downloadSkillVersion">;
+  /** The Skill's project; with the Skill ID it keys the cached reads. */
+  projectId: string;
   skillId: string;
   initialSkill: Skill | null;
   onBack: () => void;
@@ -268,15 +269,16 @@ export interface SkillDetailProps {
   onCopy?: (skill: Skill) => void;
 }
 
-export function SkillDetail({ core, skillId, initialSkill, onBack, onChanged, onDeleted, onCopy }: SkillDetailProps) {
+export function SkillDetail({ core, projectId, skillId, initialSkill, onBack, onChanged, onDeleted, onCopy }: SkillDetailProps) {
   const { t } = useTranslation("skills");
   const { t: tCommon } = useTranslation();
   const toast = useToast();
-  const [skill, setSkill] = useState<Skill | null>(initialSkill);
-  const [status, setStatus] = useState<SkillLoadStatus>("loading");
-  const [error, setError] = useState<string | null>(null);
-  const [versions, setVersions] = useState<SkillVersionsState>(initialVersions);
-  const [refreshing, setRefreshing] = useState(false);
+  const queryClient = useQueryClient();
+  // The Skill opens from the cache (or its list row) at once; a refresh keeps it on screen.
+  const skillRead = useQuery(skillQuery(projectId, skillId, core, initialSkill));
+  const versionsOptions = skillVersionsQuery(projectId, skillId, core);
+  const versionsRead = useQuery(versionsOptions);
+  const [more, setMore] = useState<{ loading: boolean; error: string | null }>({ loading: false, error: null });
   const [notice, setNotice] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -284,74 +286,66 @@ export function SkillDetail({ core, skillId, initialSkill, onBack, onChanged, on
   const [dialogBusy, setDialogBusy] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [typedName, setTypedName] = useState("");
-  const request = useRef(0);
-  const abortRef = useRef<AbortController | null>(null);
   const mounted = useRef(true);
   const dialogBusyRef = useRef(false);
   const callbacks = useRef({ onChanged, onDeleted });
   callbacks.current = { onChanged, onDeleted };
 
-  const load = useCallback(async () => {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    const id = request.current + 1;
-    request.current = id;
-    setRefreshing(true);
-    setVersions((current) => ({ ...current, status: current.items.length ? current.status : "loading", loadingMore: false, moreError: null }));
-    const [skillResult, versionsResult] = await Promise.allSettled([
-      core.retrieveSkill(skillId, { signal: controller.signal }),
-      readSkillVersionsPage(core, skillId, [], undefined, controller.signal),
-    ]);
-    if (!mounted.current || id !== request.current) return;
-    if (abortRef.current === controller) abortRef.current = null;
-    setRefreshing(false);
-    if (skillResult.status === "fulfilled") {
-      setSkill(skillResult.value);
-      setStatus("ready");
-      setError(null);
-      callbacks.current.onChanged(skillResult.value);
-    } else if (isNotFound(skillResult.reason)) {
-      setStatus("missing");
-    } else if (!isAbortError(skillResult.reason)) {
-      setStatus("failed");
-      setError(coreErrorMessage(skillResult.reason));
-    }
-    if (versionsResult.status === "fulfilled") {
-      setVersions({ ...initialVersions, status: "ready", items: versionsResult.value.values, nextAfter: versionsResult.value.nextAfter });
-    } else if (!isAbortError(versionsResult.reason)) {
-      setVersions((current) => ({ ...current, status: "failed", error: coreErrorMessage(versionsResult.reason) }));
-    }
-  }, [core, skillId]);
-
   useEffect(() => {
     mounted.current = true;
-    void load();
-    return () => {
-      mounted.current = false;
-      abortRef.current?.abort();
-    };
-  }, [load]);
+    return () => { mounted.current = false; };
+  }, []);
+
+  const skill = skillRead.data ?? null;
+  const skillError = skillRead.isError ? skillRead.error : null;
+  const status: SkillLoadStatus = isNotFound(skillError) ? "missing" : skillError ? "failed" : skill ? "ready" : "loading";
+  const error = skillError ? coreErrorMessage(skillError) : null;
+
+  const freshSkill = skillRead.isPlaceholderData ? undefined : skillRead.data;
+  useEffect(() => {
+    if (freshSkill) callbacks.current.onChanged(freshSkill);
+  }, [freshSkill, skillRead.dataUpdatedAt]);
+
+  const versionsData = versionsRead.data;
+  const versions: SkillVersionsState = {
+    status: !versionsData && versionsRead.isFetching ? "loading" : versionsRead.isError ? "failed" : versionsData ? "ready" : "loading",
+    items: versionsData?.values ?? [],
+    nextAfter: versionsData?.nextAfter ?? null,
+    error: versionsRead.isError ? coreErrorMessage(versionsRead.error) : null,
+    loadingMore: more.loading,
+    moreError: more.error,
+  };
+
+  const { refetch: refetchSkill } = skillRead;
+  const { refetch: refetchVersions } = versionsRead;
+  const load = useCallback(() => {
+    setMore({ loading: false, error: null });
+    void refetchSkill();
+    void refetchVersions();
+  }, [refetchSkill, refetchVersions]);
+
+  /** The list shows default and latest versions; it reads again after any deletion here. */
+  const listChanged = () => void queryClient.invalidateQueries({ queryKey: ["collection", ...collections.skills.key] });
+  const deleted = () => {
+    listChanged();
+    callbacks.current.onDeleted(skillId);
+    queryClient.removeQueries({ queryKey: skillQuery(projectId, skillId, core).queryKey });
+  };
 
   const loadMoreVersions = async () => {
-    const after = versions.nextAfter;
-    if (!after || versions.loadingMore) return;
-    const loaded = versions.items;
-    const id = request.current;
-    setVersions((current) => ({ ...current, loadingMore: true, moreError: null }));
+    const start = versionsRead.data;
+    const after = start?.nextAfter;
+    if (!start || !after || more.loading) return;
+    setMore({ loading: true, error: null });
     try {
-      const page = await readSkillVersionsPage(core, skillId, loaded, after);
-      if (!mounted.current || id !== request.current) return;
-      const appended = page.values.slice(loaded.length);
-      setVersions((current) => ({
-        ...current,
-        items: [...current.items, ...appended.filter((entry) => !current.items.some((existing) => existing.id === entry.id))],
-        nextAfter: page.nextAfter,
-        loadingMore: false,
-      }));
+      const page = await readSkillVersionsPage(core, skillId, start.values, after);
+      if (!mounted.current) return;
+      // A refresh that finished meanwhile replaced the first page; this page followed the old one.
+      if (queryClient.getQueryData(versionsOptions.queryKey) === start) queryClient.setQueryData(versionsOptions.queryKey, page);
+      setMore({ loading: false, error: null });
     } catch (reason) {
-      if (!mounted.current || id !== request.current) return;
-      setVersions((current) => ({ ...current, loadingMore: false, moreError: coreErrorMessage(reason) }));
+      if (!mounted.current) return;
+      setMore({ loading: false, error: coreErrorMessage(reason) });
     }
   };
 
@@ -390,12 +384,14 @@ export function SkillDetail({ core, skillId, initialSkill, onBack, onChanged, on
       if (isNotFound(reason)) {
         // Core does not say whether the Skill or the version is gone; a reload tells.
         setDialog(null);
-        void load();
+        listChanged();
+        load();
       } else if (isDefaultVersionConflict(reason)) {
         // Another client changed the versions; show the rule and reload.
         setDialog(null);
         setNotice(t("deleteVersion.defaultConflict"));
-        void load();
+        listChanged();
+        load();
       } else {
         setDialogError(t("detail.actionFailed", { reason: coreErrorMessage(reason) }));
       }
@@ -412,12 +408,13 @@ export function SkillDetail({ core, skillId, initialSkill, onBack, onChanged, on
     setNotice(null);
     if (only) {
       toast.show(t("deleteSkill.done", { name: skill?.name ?? skillId }), { tone: "success" });
-      callbacks.current.onDeleted(skillId);
+      deleted();
       return;
     }
     toast.show(t("deleteVersion.done", { version: version.version }), { tone: "success" });
     // latest_version may fall back to a surviving version.
-    void load();
+    listChanged();
+    load();
   });
 
   const confirmDeleteSkill = () => runDialogAction(async () => {
@@ -425,7 +422,7 @@ export function SkillDetail({ core, skillId, initialSkill, onBack, onChanged, on
     if (!mounted.current) return;
     setDialog(null);
     toast.show(t("deleteSkill.done", { name: skill?.name ?? skillId }), { tone: "success" });
-    callbacks.current.onDeleted(skillId);
+    deleted();
   });
 
   // A closing dialog keeps its content while the exit animation runs.
@@ -443,11 +440,11 @@ export function SkillDetail({ core, skillId, initialSkill, onBack, onChanged, on
         status={status}
         error={error}
         versions={versions}
-        refreshing={refreshing}
+        refreshing={skillRead.isFetching || versionsRead.isFetching}
         notice={notice}
         downloading={downloading}
         onBack={onBack}
-        onRefresh={() => { setNotice(null); void load(); }}
+        onRefresh={() => { setNotice(null); load(); }}
         onDownload={(version) => void download(version)}
         onDeleteSkill={() => openDialog({ kind: "delete-skill" })}
         onCopy={onCopy}

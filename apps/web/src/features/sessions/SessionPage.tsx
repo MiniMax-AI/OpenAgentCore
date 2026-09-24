@@ -1,4 +1,5 @@
 import type { AgentSession } from "@agents-core-web/agents-client";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,8 +8,11 @@ import { EmptyState, Kpi, KpiStrip, PageBody, PageHeader, RefreshButton, Section
 import { CopyableId } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatClock, formatDateTime, formatInteger, MISSING } from "../../lib/format";
-import { CreatorCell, projectClient, ProjectName, useCreators, useProjects } from "../../lib/projects";
+import { CreatorCell, ProjectName, useCreators, useProjects } from "../../lib/projects";
+import { collections } from "../../lib/queries";
+import { forgetDeleted } from "../resources/detail-queries";
 import { SessionDeleteDialog, type SessionDeleteTarget } from "./SessionDeleteDialog";
+import { sessionKey } from "./session-queries";
 import { isSessionActive } from "./session-history";
 import { environmentKind, isDeletable } from "./session-log";
 import { SessionStatus, useWaitingFor } from "./SessionStatus";
@@ -43,6 +47,7 @@ export function SessionPage() {
   const sessionId = params.id;
   const { state: projects, byId } = useProjects();
   const project = projectId ? byId.get(projectId) : undefined;
+  const queryClient = useQueryClient();
   const history = useSessionHistory(projectId, sessionId);
   const [view, setView] = useState<HistoryView>("conversation");
   const [deleteTarget, setDeleteTarget] = useState<SessionDeleteTarget | null>(null);
@@ -175,7 +180,7 @@ export function SessionPage() {
         </Section>
         {hasObservableRuntime(session) ? (
           <SessionRuntimeSection
-            client={projectClient(projectId)}
+            projectId={projectId}
             session={session}
             active={isSessionActive(session.status)}
             revision={loadedAt ?? 0}
@@ -211,7 +216,7 @@ export function SessionPage() {
         )}
       />
       <PageBody>{body}</PageBody>
-      <SessionDeleteDialog target={deleteTarget} onClose={() => setDeleteTarget(null)} onUncertain={refresh} onDeleted={() => { setDeleteTarget(null); back(); }} />
+      <SessionDeleteDialog target={deleteTarget} onClose={() => setDeleteTarget(null)} onUncertain={refresh} onDeleted={(target) => { setDeleteTarget(null); back(); forgetDeleted(queryClient, collections.sessions, sessionKey(target.project.id, target.sessionId)); }} />
     </section>
   );
 }

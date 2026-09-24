@@ -35,6 +35,7 @@ export function SkillsPage() {
         <SkillDetail
           key={`${params.project}:${params.id}`}
           core={projectClient(params.project)}
+          projectId={params.project}
           skillId={params.id}
           initialSkill={null}
           onBack={() => navigate("skills", { project: params.project })}

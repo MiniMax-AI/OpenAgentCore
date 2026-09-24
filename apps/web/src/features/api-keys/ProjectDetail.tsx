@@ -1,5 +1,5 @@
+import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 
@@ -9,61 +9,18 @@ import { formatCompact, formatDateTime, formatInteger, formatRelative } from "..
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import type { ConsoleView } from "../../lib/console-routes";
 import { admin } from "../../lib/projects";
-import { prefixLabel, sortKeys } from "./key-flows";
+import { prefixLabel } from "./key-flows";
+import { loadedFrom, projectKeysQuery, projectSummaryQuery, type Loaded } from "./project-queries";
 import { ProjectStatus } from "./ProjectStatus";
 import { WriteOperations } from "./WriteOperations";
-import { type AdminKey, listKeys, loadSummary, type Project, type ProjectSummary } from "../../lib/admin-view";
+import { type AdminKey, type Project, type ProjectSummary } from "../../lib/admin-view";
+import { TableSkeleton } from "../../components/Skeleton";
 
-export type Loaded<T> = { status: "loading"; value: T | null } | { status: "ready"; value: T } | { status: "failed"; value: T | null };
-
-/** A project's keys, active first; reloads when `revision` changes. */
-export function useProjectKeys(projectId: string | null, revision: number): Loaded<AdminKey[]> & { retry: () => void } {
-  const [keys, setKeys] = useState<{ projectId: string | null; loaded: Loaded<AdminKey[]> }>({ projectId, loaded: { status: "loading", value: null } });
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    if (!projectId) return;
-    const controller = new AbortController();
-    // Another project's keys never show while this one loads.
-    setKeys((current) => ({ projectId, loaded: { status: "loading", value: current.projectId === projectId ? current.loaded.value : null } }));
-    listKeys(projectId, controller.signal).then(
-      (value) => setKeys({ projectId, loaded: { status: "ready", value: sortKeys(value) } }),
-      () => { if (!controller.signal.aborted) setKeys((current) => ({ projectId, loaded: { status: "failed", value: current.loaded.value } })); },
-    );
-    return () => controller.abort();
-  }, [projectId, revision, attempt]);
-  const loaded: Loaded<AdminKey[]> = keys.projectId === projectId ? keys.loaded : { status: "loading", value: null };
-  return { ...loaded, retry: () => setAttempt((value) => value + 1) };
-}
-
-interface Summaries {
-  project: ProjectSummary | null;
-  /** Per creating key (the `null` entry holds Sessions whose key is unknown); null when unavailable. */
-  byKey: Map<string | null, ProjectSummary> | null;
-}
-
-function useProjectSummaries(projectId: string, revision: number): Loaded<Summaries> {
-  const [state, setState] = useState<Loaded<Summaries>>({ status: "loading", value: null });
-  useEffect(() => {
-    const controller = new AbortController();
-    setState((current) => ({ status: "loading", value: current.value }));
-    Promise.all([
-      loadSummary({ project_id: projectId, signal: controller.signal }),
-      loadSummary({ project_id: projectId, group_by: "key", signal: controller.signal }).catch(() => null),
-    ]).then(
-      ([projectRows, keyRows]) => {
-        const project = projectRows.find((row) => row.project_id === projectId && row.agent_id === null && row.key === null) ?? null;
-        let byKey: Summaries["byKey"] = null;
-        if (keyRows) {
-          byKey = new Map();
-          for (const row of keyRows) if (row.project_id === projectId) byKey.set(row.key?.id ?? null, row);
-        }
-        setState({ status: "ready", value: { project, byKey } });
-      },
-      () => { if (!controller.signal.aborted) setState((current) => ({ status: "failed", value: current.value })); },
-    );
-    return () => controller.abort();
-  }, [projectId, revision]);
-  return state;
+/** A project's keys, active first, from the query cache. */
+export function useProjectKeys(projectId: string | null): Loaded<AdminKey[]> & { retry: () => void } {
+  const query = useQuery({ ...projectKeysQuery(projectId ?? ""), enabled: projectId !== null });
+  const { refetch } = query;
+  return { ...loadedFrom(query), retry: () => { void refetch(); } };
 }
 
 const assetLinks: ReadonlyArray<{ key: "agents" | "environment_templates" | "skills" | "files" | "vaults"; view: ConsoleView }> = [
@@ -79,11 +36,9 @@ const assetLinks: ReadonlyArray<{ key: "agents" | "environment_templates" | "ski
  * page filtered to this project), its named keys with usage by key, and its
  * write-operation history.
  */
-export function ProjectDetail({ project, keys, revision, busy, onIssue, onRevoke }: {
+export function ProjectDetail({ project, keys, busy, onIssue, onRevoke }: {
   project: Project;
   keys: ReturnType<typeof useProjectKeys>;
-  /** Changes whenever the project or its keys may have changed. */
-  revision: number;
   busy: boolean;
   onIssue: () => void;
   onRevoke: (key: AdminKey, activeCount: number) => void;
@@ -92,7 +47,7 @@ export function ProjectDetail({ project, keys, revision, busy, onIssue, onRevoke
   const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
   const { navigate } = useConsoleNavigation();
-  const summaries = useProjectSummaries(project.id, revision);
+  const summaries = loadedFrom(useQuery(projectSummaryQuery(project.id)));
   const now = Math.floor(Date.now() / 1000);
   const summary = summaries.value?.project ?? null;
   const pending = summaries.status === "loading" && !summaries.value;
@@ -178,7 +133,7 @@ export function ProjectDetail({ project, keys, revision, busy, onIssue, onRevoke
         {keys.status === "failed" && !keys.value ? (
           <EmptyState title={t("detail.keysFailed")} action={<button className="button outline" type="button" onClick={keys.retry}>{tCommon("actions.retry")}</button>} />
         ) : !keys.value ? (
-          <p className="page-status" role="status">{t("detail.keysLoading")}</p>
+          <TableSkeleton label={t("detail.keysLoading")} rows={2} columns={7} />
         ) : !keys.value.length && !unknownUsage ? (
           <EmptyState
             title={t("detail.noKeys")}
@@ -247,7 +202,7 @@ export function ProjectDetail({ project, keys, revision, busy, onIssue, onRevoke
         )}
       </Section>
 
-      <WriteOperations projectId={project.id} keys={keys.value} refreshToken={revision} />
+      <WriteOperations projectId={project.id} keys={keys.value} />
     </>
   );
 }

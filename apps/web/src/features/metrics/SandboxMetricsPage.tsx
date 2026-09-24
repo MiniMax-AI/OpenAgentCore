@@ -1,5 +1,6 @@
 import { Server } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -16,21 +17,20 @@ import {
   StatusDot,
   type Tone,
 } from "../../components/console-ui";
+import { TableSkeleton } from "../../components/Skeleton";
 import { ListToolbar, listSummary, NameCell, SearchField } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatBytes, formatClock, formatCompact, formatCores, formatDuration, formatInteger, formatRelative, MISSING } from "../../lib/format";
-import { admin, ProjectFilter, projectClient, ProjectName, useProjects, type ProjectFilterValue } from "../../lib/projects";
+import { ProjectFilter, projectClient, ProjectName, useProjects, type ProjectFilterValue } from "../../lib/projects";
 import { loadRuntimeDurableSnapshot } from "../dashboard/runtime-history";
 import type { RuntimeDashboardSnapshot } from "../dashboard/runtime-snapshot";
 import { RUNTIME_SNAPSHOT_REFRESH_MS } from "../dashboard/runtime-snapshot";
 import { RuntimeTrendPanel, type RuntimeHistoryLoader } from "../dashboard/RuntimeTrendPanel";
 import { capacitySummary, nodeHealth, type NodeHealth } from "../fleet/fleet-model";
 import { fleetSnapshot, useSandboxFleet, type FleetState } from "../fleet/use-sandbox-fleet";
-import { isAbortError } from "./project-sessions";
 import {
   hostedRuntimeRows,
   hostedRuntimeUsage,
-  loadHostedRuntimes,
   matchesRuntime,
   runtimeSnapshot,
   sessionTitle,
@@ -38,7 +38,7 @@ import {
   type HostedRuntimeRow,
 } from "./sandbox-runtime";
 import "./MetricsView.css";
-import { listRuntimeObservations } from "../../lib/admin-view";
+import { hostedRuntimesQuery } from "./metrics-queries";
 
 const healthTone: Record<NodeHealth, Tone> = { available: "ok", degraded: "warning", offline: "danger" };
 
@@ -47,32 +47,20 @@ type RuntimeState =
   | { status: "ready"; load: HostedRuntimeLoad }
   | { status: "failed"; load: HostedRuntimeLoad | null; error: string };
 
+/** Hosted Runtimes through the query cache, polled while the page is visible; a refresh keeps the last load on screen. */
 function useHostedRuntimes() {
-  const [state, setState] = useState<RuntimeState>({ status: "loading", load: null });
-  const [revision, setRevision] = useState(0);
-  const latest = useRef<HostedRuntimeLoad | null>(null);
-  useEffect(() => {
-    const controller = new AbortController();
-    setState({ status: "loading", load: latest.current });
-    loadHostedRuntimes({
-      observations: (signal) => listRuntimeObservations(signal),
-      sessionReader: (projectId) => projectClient(projectId),
-    }, controller.signal).then((load) => {
-      latest.current = load;
-      setState({ status: "ready", load });
-    }, (error: unknown) => {
-      if (controller.signal.aborted || isAbortError(error)) return;
-      setState({ status: "failed", load: latest.current, error: error instanceof Error ? error.message : String(error) });
-    });
-    return () => controller.abort();
-  }, [revision]);
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (!document.hidden) setRevision((value) => value + 1);
-    }, RUNTIME_SNAPSHOT_REFRESH_MS);
-    return () => window.clearInterval(timer);
-  }, []);
-  const refresh = useCallback(() => setRevision((value) => value + 1), []);
+  const query = useQuery({
+    ...hostedRuntimesQuery,
+    refetchInterval: RUNTIME_SNAPSHOT_REFRESH_MS,
+    refetchIntervalInBackground: false,
+  });
+  const load = query.data ?? null;
+  let state: RuntimeState;
+  if (query.isError && !query.isFetching) state = { status: "failed", load, error: query.error instanceof Error ? query.error.message : String(query.error) };
+  else if (load && !query.isFetching) state = { status: "ready", load };
+  else state = { status: "loading", load };
+  const { refetch } = query;
+  const refresh = useCallback(() => { void refetch(); }, [refetch]);
   return { state, refresh };
 }
 
@@ -184,7 +172,9 @@ export function SandboxMetricsPage() {
               description={t("sandbox.noNodesDescription")}
               action={<button className="button primary" type="button" onClick={() => navigate("nodes")}>{t("sandbox.addNode")}</button>}
             />
-          ) : <p className="page-status" role={fleetState.status === "failed" ? "alert" : "status"}>{message}</p>}
+          ) : fleetState.status === "checking" || fleetState.status === "loading"
+            ? <TableSkeleton label={message} rows={3} columns={10} />
+            : <p className="page-status" role={fleetState.status === "failed" ? "alert" : "status"}>{message}</p>}
         </Section>
 
         <HostedRuntimeSection state={runtimeState} fleet={fleet} />
@@ -204,11 +194,9 @@ function HostedRuntimeSection({ state, fleet }: { state: RuntimeState; fleet: Re
 
   let body;
   if (!load || !snapshot || !usage) {
-    body = (
-      <p className="page-status" role={state.status === "failed" ? "alert" : "status"}>
-        {state.status === "failed" ? t("sandbox.runtimeUnavailable", { reason: state.error }) : t("sandbox.runtimeLoading")}
-      </p>
-    );
+    body = state.status === "failed"
+      ? <p className="page-status" role="alert">{t("sandbox.runtimeUnavailable", { reason: state.error })}</p>
+      : <TableSkeleton label={t("sandbox.runtimeLoading")} rows={4} columns={8} />;
   } else if (!usage.hosted) {
     body = <EmptyState title={t("sandbox.noRuntimeTitle")} description={t(project ? "sandbox.noRuntimeProject" : "sandbox.noRuntimeDescription")} />;
   } else {

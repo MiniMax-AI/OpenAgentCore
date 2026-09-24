@@ -1034,3 +1034,28 @@ pre {
 :where(span, strong, a, button, code) + .pill {
   margin-left: 6px;
 }
+
+/* An ID fact (a full Session or template ID) takes two grid columns so it stays on one line. */
+.resource-facts > div:has(> dd > .copyable-id > code:not(:empty)):first-child {
+  grid-column: span 2;
+}
+
+/* Tables inside Agent replies: hairline rules and tabular figures. */
+.message-markdown table {
+  width: auto;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.message-markdown th,
+.message-markdown td {
+  padding: 5px 14px 5px 0;
+  text-align: left;
+  border-bottom: 1px solid var(--grid-line);
+}
+
+.message-markdown th {
+  color: var(--ink-2);
+  font-weight: 500;
+}

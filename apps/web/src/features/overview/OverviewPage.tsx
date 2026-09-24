@@ -1,9 +1,11 @@
 import type { AgentSession, SandboxNode } from "@agents-core-web/agents-client";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
 import { TimeSeriesChart } from "../../components/charts/TimeSeriesChart";
+import { TableSkeleton } from "../../components/Skeleton";
 import {
   EmptyState,
   HelpTip,
@@ -16,12 +18,13 @@ import {
 import { NameCell } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatClock, formatCompact, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
-import { admin, projectClient, ProjectName, useProjects } from "../../lib/projects";
+import { ProjectName, useProjects } from "../../lib/projects";
 import { capacitySummary, coreStatus, type CoreStatus } from "../fleet/fleet-model";
 import { fleetSnapshot, useSandboxFleet, type FleetState } from "../fleet/use-sandbox-fleet";
-import { isAbortError, type InProject } from "../metrics/project-sessions";
+import { type InProject } from "../metrics/project-sessions";
 import { FleetTopology, TOPOLOGY_LIMIT } from "./FleetTopology";
-import { loadOverview, type OverviewData } from "./overview-loader";
+import { type OverviewData } from "./overview-loader";
+import { overviewQuery } from "./overview-queries";
 import {
   attentionCount,
   attentionSessions,
@@ -36,7 +39,7 @@ import {
   type ServiceHealth,
 } from "./overview-model";
 import "./overview.css";
-import { loadSummary, type Project, type ProjectSummary } from "../../lib/admin-view";
+import { type Project, type ProjectSummary } from "../../lib/admin-view";
 
 export const OVERVIEW_REFRESH_MS = 30_000;
 const ATTENTION_LIMIT = 8;
@@ -53,36 +56,27 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * The Overview's reads through the query cache: a revisit opens from the cache,
+ * a refresh or a changed project list keeps the last figures on screen, and the
+ * page polls while it is visible.
+ */
 function useOverviewData(projects: readonly Project[], projectsReady: boolean) {
-  const [state, setState] = useState<LoadState>({ status: "loading", data: null });
-  const [revision, setRevision] = useState(0);
-  const latest = useRef<OverviewData | null>(null);
+  const query = useQuery({
+    ...overviewQuery(projects),
+    enabled: projectsReady,
+    placeholderData: keepPreviousData,
+    refetchInterval: OVERVIEW_REFRESH_MS,
+    refetchIntervalInBackground: false,
+  });
+  const data = query.data ?? null;
+  let state: LoadState;
+  if (query.isError && !query.isFetching) state = { status: "failed", data, error: errorText(query.error) };
+  else if (data && !query.isFetching) state = { status: "ready", data };
+  else state = { status: "loading", data };
 
-  useEffect(() => {
-    if (!projectsReady) return;
-    const controller = new AbortController();
-    setState({ status: "loading", data: latest.current });
-    loadOverview(projects, {
-      summary: (signal) => loadSummary({ signal }),
-      sessions: (project) => projectClient(project.id),
-    }, Math.floor(Date.now() / 1000), controller.signal).then((data) => {
-      latest.current = data;
-      setState({ status: "ready", data });
-    }, (error: unknown) => {
-      if (controller.signal.aborted || isAbortError(error)) return;
-      setState({ status: "failed", data: latest.current, error: errorText(error) });
-    });
-    return () => controller.abort();
-  }, [projects, projectsReady, revision]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (!document.hidden) setRevision((value) => value + 1);
-    }, OVERVIEW_REFRESH_MS);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  const refresh = useCallback(() => setRevision((value) => value + 1), []);
+  const { refetch } = query;
+  const refresh = useCallback(() => { void refetch(); }, [refetch]);
   return { state, refresh };
 }
 
@@ -233,7 +227,7 @@ export function OverviewPage() {
             </div>
             <button className="text-action" type="button" onClick={() => navigate("projects")}>{t("projects.manage")}</button>
           </header>
-          <ProjectUsageTable rows={usageRows} failed={summaryError !== null} now={now} onOpen={(project) => navigate("projects", { id: project.id })} />
+          <ProjectUsageTable rows={usageRows} failed={summaryError !== null || (state.status === "failed" && data === null)} now={now} onOpen={(project) => navigate("projects", { id: project.id })} />
         </section>
 
         <section className="overview-card overview-table-card" aria-labelledby="attention-heading">
@@ -338,7 +332,7 @@ function ProjectUsageTable({ rows, failed, now, onOpen }: { rows: ProjectUsageRo
   const { t, i18n } = useTranslation("overview");
   const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
-  if (rows === null) return <p className="detail-note overview-card-note" role={failed ? "alert" : "status"}>{failed ? t("projects.unavailable") : t("projects.loading")}</p>;
+  if (rows === null) return failed ? <p className="detail-note overview-card-note" role="alert">{t("projects.unavailable")}</p> : <TableSkeleton label={t("projects.loading")} rows={4} columns={7} />;
   if (!rows.length) return <div className="overview-card-body"><EmptyState title={t("projects.emptyTitle")} /></div>;
   const count = (value: number | undefined) => (value === undefined ? MISSING : formatInteger(value, locale));
   return (
@@ -412,7 +406,7 @@ function AttentionTable({ sessions, now, onOpen }: { sessions: InProject<AgentSe
   const { t, i18n } = useTranslation("overview");
   const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
-  if (sessions === null) return <p className="detail-note overview-card-note" role="status">{t("attention.loading")}</p>;
+  if (sessions === null) return <TableSkeleton label={t("attention.loading")} rows={4} columns={5} />;
   if (!sessions.length) return <div className="overview-card-body"><EmptyState title={t("attention.emptyTitle")} description={t("attention.emptyDescription")} /></div>;
   return (
     <div className="overview-table-scroll">

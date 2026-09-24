@@ -3,6 +3,7 @@ import { QueryClientProvider, useQueries, useQuery, useQueryClient } from "@tans
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { ConsoleSelect } from "../components/console-select";
 import { HelpTip } from "../components/console-ui";
 import { admin, listCreators, type Creator, type OwnerResourceType, type Project } from "./admin-view";
 import { collectionQuery, projectsQuery, queryClient, type CollectionSpec } from "./queries";
@@ -66,19 +67,14 @@ export type ProjectFilterValue = string;
 export function ProjectFilter({ value, onChange, includeAll = true }: { value: ProjectFilterValue; onChange: (value: ProjectFilterValue) => void; includeAll?: boolean }) {
   const { t } = useTranslation("common");
   const { state } = useProjects();
-  return (
-    <label className="select-control project-filter">
-      <span className="visually-hidden">{t("project.filter")}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
-        {includeAll ? <option value="">{t("project.all")}</option> : null}
-        {state.projects.map((project) => (
-          <option key={project.id} value={project.id}>
-            {project.status === "archived" ? t("project.archivedOption", { name: project.name }) : project.name}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
+  const options = useMemo(() => [
+    ...(includeAll ? [{ value: "", label: t("project.all") }] : []),
+    ...state.projects.map((project) => ({
+      value: project.id,
+      label: project.status === "archived" ? t("project.archivedOption", { name: project.name }) : project.name,
+    })),
+  ], [includeAll, state.projects, t]);
+  return <ConsoleSelect value={value} onChange={onChange} options={options} label={t("project.filter")} />;
 }
 
 /** The project a row belongs to when a table shows every project. */

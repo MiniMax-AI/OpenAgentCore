@@ -1,15 +1,15 @@
-import { SandboxAdminClient, type CoreHarnessKind, type CoreStartupConfiguration, type SandboxDeployment } from "@agents-core-web/agents-client";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import type { CoreHarnessKind, CoreStartupConfiguration } from "@agents-core-web/agents-client";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { HelpTip, PageBody, PageHeader, RefreshButton, Section, StatusDot } from "../../components/console-ui";
 import { ErrorState } from "../../components/ErrorState";
 import { CopyableId } from "../../components/list-ui";
 import { admin } from "../../lib/projects";
+import { sandboxDeploymentQuery } from "../sandbox/sandbox-queries";
 import "./system.css";
-import { retrieveStartupConfiguration } from "../../lib/admin-view";
-
-type Loaded<T> = { status: "loading"; value: T | null } | { status: "ready"; value: T } | { status: "failed"; value: T | null };
+import { startupConfigurationQuery } from "./system-queries";
 
 const harnessNames: Record<CoreHarnessKind, string> = { claude_sdk: "Claude SDK", codex: "Codex", mcode: "MiniMax Code" };
 const providerNames: Record<string, string> = { docker: "Docker", microsandbox: "microsandbox", e2b: "E2B" };
@@ -60,34 +60,21 @@ const missing = <span className="table-muted">—</span>;
 export function SystemPage() {
   const { t } = useTranslation("system");
   const { t: tNav } = useTranslation("navigation");
-  const sandbox = useMemo(() => new SandboxAdminClient({ baseUrl: "/core/v1/sandbox" }), []);
-  const [revision, setRevision] = useState(0);
-  const [startup, setStartup] = useState<Loaded<CoreStartupConfiguration>>({ status: "loading", value: null });
-  const [deployment, setDeployment] = useState<Loaded<SandboxDeployment>>({ status: "loading", value: null });
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setStartup((current) => ({ status: "loading", value: current.value }));
-    setDeployment((current) => ({ status: "loading", value: current.value }));
-    retrieveStartupConfiguration(controller.signal).then(
-      (value) => setStartup({ status: "ready", value }),
-      () => { if (!controller.signal.aborted) setStartup((current) => ({ status: "failed", value: current.value })); },
-    );
-    sandbox.retrieveDeployment({ signal: controller.signal }).then(
-      (value) => setDeployment({ status: "ready", value }),
-      () => { if (!controller.signal.aborted) setDeployment((current) => ({ status: "failed", value: current.value })); },
-    );
-    return () => controller.abort();
-  }, [revision, sandbox]);
-
-  const refresh = useCallback(() => setRevision((value) => value + 1), []);
-  const configuration = startup.value;
+  // Both reads come from the cache; a refresh keeps the last values on screen.
+  const startup = useQuery(startupConfigurationQuery);
+  const deployment = useQuery(sandboxDeploymentQuery);
+  const { refetch: refetchStartup } = startup;
+  const { refetch: refetchDeployment } = deployment;
+  const refresh = useCallback(() => { void refetchStartup(); void refetchDeployment(); }, [refetchStartup, refetchDeployment]);
+  const startupFailed = startup.isError && !startup.isFetching;
+  const deploymentFailed = deployment.isError && !deployment.isFetching;
+  const configuration: CoreStartupConfiguration | null = startup.data ?? null;
   const managed = configuration?.configured.managed_sandbox ?? null;
   const rows = configuration ? harnessRows(configuration) : [];
   const enabled = (value: boolean | null | undefined) => (value == null ? missing : value ? t("values.enabled") : t("values.disabled"));
-  const provider = deployment.value?.provider || managed?.provider || "";
-  const maintenance = deployment.value?.maintenance ?? managed?.maintenance ?? null;
-  const mode = deployment.value?.mode || "";
+  const provider = deployment.data?.provider || managed?.provider || "";
+  const maintenance = deployment.data?.maintenance ?? managed?.maintenance ?? null;
+  const mode = deployment.data?.mode || "";
 
   return (
     <section className="page-section console-page system-page" aria-labelledby="system-heading">
@@ -95,10 +82,10 @@ export function SystemPage() {
         headingId="system-heading"
         title={tNav("views.system")}
         help={t("help")}
-        actions={<RefreshButton onClick={refresh} refreshing={startup.status === "loading" || deployment.status === "loading"} label={t("refresh")} />}
+        actions={<RefreshButton onClick={refresh} refreshing={startup.isFetching || deployment.isFetching} label={t("refresh")} />}
       />
       <PageBody>
-        {startup.status === "failed" && !configuration ? (
+        {startupFailed && !configuration ? (
           <ErrorState title={t("startupFailed")} onRetry={refresh} />
         ) : null}
 
@@ -130,7 +117,7 @@ export function SystemPage() {
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={3} className="table-muted">{startup.status === "loading" ? t("loading") : "—"}</td>
+                    <td colSpan={3} className="table-muted">{startup.isFetching || startup.isPending ? t("loading") : "—"}</td>
                   </tr>
                 )}
               </tbody>
@@ -139,7 +126,7 @@ export function SystemPage() {
         </Section>
 
         <Section headingId="system-sandbox-heading" title={t("sandbox.title")} help={t("sandbox.help")}>
-          {deployment.status === "failed" && !deployment.value ? <p className="coverage-note coverage-note-error" role="alert">{t("sandbox.deploymentFailed")}</p> : null}
+          {deploymentFailed && !deployment.data ? <p className="coverage-note coverage-note-error" role="alert">{t("sandbox.deploymentFailed")}</p> : null}
           <dl className="system-facts">
             <Fact label={t("sandbox.managed")} help={t("sandbox.managedHelp")}>{enabled(managed?.enabled)}</Fact>
             <Fact label={t("sandbox.provider")}>{provider ? providerNames[provider] ?? provider : missing}</Fact>
@@ -147,9 +134,9 @@ export function SystemPage() {
             <Fact label={t("sandbox.maintenance")} help={t("sandbox.maintenanceHelp")}>
               {maintenance === null ? missing : maintenance ? <StatusDot tone="warning" label={t("values.on")} /> : t("values.off")}
             </Fact>
-            <Fact label={t("sandbox.installation")}>{deployment.value?.installation_id ? <CopyableId id={deployment.value.installation_id} /> : missing}</Fact>
-            <Fact label={t("sandbox.coreOrigin")} help={t("sandbox.coreOriginHelp")}>{deployment.value?.core_url ? <code className="system-code">{deployment.value.core_url}</code> : missing}</Fact>
-            {deployment.value?.e2b ? <Fact label={t("sandbox.e2bTemplate")}><code className="system-code">{deployment.value.e2b.template || "—"}</code></Fact> : null}
+            <Fact label={t("sandbox.installation")}>{deployment.data?.installation_id ? <CopyableId id={deployment.data.installation_id} /> : missing}</Fact>
+            <Fact label={t("sandbox.coreOrigin")} help={t("sandbox.coreOriginHelp")}>{deployment.data?.core_url ? <code className="system-code">{deployment.data.core_url}</code> : missing}</Fact>
+            {deployment.data?.e2b ? <Fact label={t("sandbox.e2bTemplate")}><code className="system-code">{deployment.data.e2b.template || "—"}</code></Fact> : null}
           </dl>
         </Section>
 

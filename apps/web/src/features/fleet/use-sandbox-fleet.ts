@@ -1,15 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { SandboxAdminClient, type SandboxAllocation, type SandboxDeployment, type SandboxNode } from "@agents-core-web/agents-client";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback } from "react";
 
-import { sandboxConsoleConfig } from "../sandbox/console-config";
+import { consoleConfigQuery, fleetQuery, type FleetSnapshot } from "./fleet-queries";
 
-export interface FleetSnapshot {
-  deployment: SandboxDeployment;
-  nodes: SandboxNode[];
-  allocations: SandboxAllocation[];
-  /** Epoch milliseconds of the last complete read. */
-  loadedAt: number;
-}
+export type { FleetSnapshot };
 
 export type FleetState =
   | { status: "checking" }
@@ -24,65 +18,32 @@ export const FLEET_REFRESH_MS = 30_000;
 /**
  * Read-only deployment fleet: the sandbox deployment, its nodes and their
  * allocations (only when asked for) through the console's `/core/v1/sandbox`
- * routes. Node writes stay on the Nodes page.
+ * routes, read through the query cache so a revisit opens at once and a
+ * refresh keeps the last snapshot on screen. Node writes stay on the Nodes page.
  */
-export function useSandboxFleet({ poll = true, allocations: readAllocations = false }: { poll?: boolean; allocations?: boolean } = {}) {
-  const client = useMemo(() => new SandboxAdminClient({ baseUrl: "/core/v1/sandbox" }), []);
-  const [state, setState] = useState<FleetState>({ status: "checking" });
-  const [revision, setRevision] = useState(0);
-  const [adminAvailable, setAdminAvailable] = useState<boolean | null>(null);
-  const snapshotRef = useRef<FleetSnapshot | null>(null);
+export function useSandboxFleet({ poll = true, allocations = false }: { poll?: boolean; allocations?: boolean } = {}) {
+  const config = useQuery(consoleConfigQuery);
+  const adminAvailable = config.isPending ? null : config.data?.sandbox_admin === true;
+  const fleet = useQuery({
+    ...fleetQuery(allocations),
+    enabled: adminAvailable === true,
+    refetchInterval: poll ? FLEET_REFRESH_MS : false,
+    refetchIntervalInBackground: false,
+  });
 
-  useEffect(() => {
-    const controller = new AbortController();
-    void sandboxConsoleConfig(controller.signal).then((config) => {
-      if (controller.signal.aborted) return;
-      const available = config?.sandbox_admin === true;
-      setAdminAvailable(available);
-      if (!available) setState({ status: "unconfigured" });
-    });
-    return () => controller.abort();
-  }, []);
+  let state: FleetState;
+  if (adminAvailable === null) state = { status: "checking" };
+  else if (!adminAvailable) state = { status: "unconfigured" };
+  else if (fleet.data) state = { status: "ready", snapshot: fleet.data, refreshing: fleet.isFetching, error: fleet.isError && !fleet.isFetching ? fleet.error : null };
+  else if (fleet.isError && !fleet.isFetching) state = { status: "failed", error: fleet.error };
+  else state = { status: "loading" };
 
-  useEffect(() => {
-    if (adminAvailable !== true) return;
-    const controller = new AbortController();
-    const previous = snapshotRef.current;
-    setState(previous ? { status: "ready", snapshot: previous, refreshing: true, error: null } : { status: "loading" });
-    void (async () => {
-      const [deployment, nodes] = await Promise.all([
-        client.retrieveDeployment({ signal: controller.signal }),
-        client.listNodes({ signal: controller.signal }),
-      ]);
-      const allocations = readAllocations
-        ? await Promise.all(nodes.data.map((node) => client.listAllocations(node.id, { signal: controller.signal })))
-        : [];
-      if (controller.signal.aborted) return;
-      const snapshot: FleetSnapshot = {
-        deployment,
-        nodes: nodes.data,
-        allocations: allocations.flatMap((page) => page.data),
-        loadedAt: Date.now(),
-      };
-      snapshotRef.current = snapshot;
-      setState({ status: "ready", snapshot, refreshing: false, error: null });
-    })().catch((error: unknown) => {
-      if (controller.signal.aborted) return;
-      const last = snapshotRef.current;
-      setState(last ? { status: "ready", snapshot: last, refreshing: false, error } : { status: "failed", error });
-    });
-    return () => controller.abort();
-  }, [adminAvailable, client, readAllocations, revision]);
-
-  useEffect(() => {
-    if (!poll || adminAvailable !== true) return;
-    const timer = window.setInterval(() => {
-      if (!document.hidden) setRevision((value) => value + 1);
-    }, FLEET_REFRESH_MS);
-    return () => window.clearInterval(timer);
-  }, [adminAvailable, poll]);
-
-  const refresh = useCallback(() => setRevision((value) => value + 1), []);
+  const { refetch: refetchFleet } = fleet;
+  const { refetch: refetchConfig } = config;
+  // Without sandbox administration a refresh asks the console again whether it has it.
+  const refresh = useCallback(() => {
+    void (adminAvailable === true ? refetchFleet() : refetchConfig());
+  }, [adminAvailable, refetchConfig, refetchFleet]);
   return { state, refresh };
 }
 

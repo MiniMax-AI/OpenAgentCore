@@ -1,5 +1,6 @@
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { History } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 
@@ -8,24 +9,15 @@ import { CopyableId, ListToolbar, listSummary } from "../../components/list-ui";
 import { formatDateTime, shortId } from "../../lib/format";
 import { admin } from "../../lib/projects";
 import { prefixLabel } from "./key-flows";
-import { type AdminKey, type KeyRef, listWriteOperations, type OwnerResourceType, ownerResourceTypes, type WriteOperation } from "../../lib/admin-view";
-
-const PAGE_SIZE = 50;
-
+import { writeOperationsQuery } from "./project-queries";
+import { type AdminKey, type KeyRef, type OwnerResourceType, ownerResourceTypes } from "../../lib/admin-view";
+import { TableSkeleton } from "../../components/Skeleton";
 
 export const operationActions = ["create", "update", "delete", "send_events", "upload_file", "upload_version", "update_default_version"] as const;
 type OperationAction = (typeof operationActions)[number];
 
 const isType = (value: string): value is OwnerResourceType => (ownerResourceTypes as readonly string[]).includes(value);
 const isAction = (value: string): value is OperationAction => (operationActions as readonly string[]).includes(value);
-
-interface OperationsState {
-  status: "loading" | "ready" | "failed";
-  entries: WriteOperation[];
-  cursor: string | null;
-  loadingMore: boolean;
-  moreFailed: boolean;
-}
 
 /** The recorded key of a write: its name, else its prefix; "unknown" when none was recorded. */
 export function OperationKey({ value }: { value: KeyRef | null }) {
@@ -43,58 +35,44 @@ export function OperationKey({ value }: { value: KeyRef | null }) {
  * Every successful write made in one project, newest first, with cursor
  * paging (`next_cursor`). Filters go to Core; nothing is inferred.
  */
-export function WriteOperations({ projectId, keys, refreshToken }: { projectId: string; keys: readonly AdminKey[] | null; refreshToken: number }) {
+export function WriteOperations({ projectId, keys }: { projectId: string; keys: readonly AdminKey[] | null }) {
   const { t, i18n } = useTranslation("keys");
   const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
   const [type, setType] = useState<OwnerResourceType | "">("");
   const [keyId, setKeyId] = useState("");
-  const [retry, setRetry] = useState(0);
-  const [state, setState] = useState<OperationsState>({ status: "loading", entries: [], cursor: null, loadingMore: false, moreFailed: false });
-  const controller = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    controller.current?.abort();
-    const current = new AbortController();
-    controller.current = current;
-    setState({ status: "loading", entries: [], cursor: null, loadingMore: false, moreFailed: false });
-    listWriteOperations(projectId, { key_id: keyId || undefined, resource_type: type || undefined, limit: PAGE_SIZE, signal: current.signal }).then(
-      (page) => setState({ status: "ready", entries: page.data, cursor: page.has_more ? page.next_cursor : null, loadingMore: false, moreFailed: false }),
-      () => { if (!current.signal.aborted) setState({ status: "failed", entries: [], cursor: null, loadingMore: false, moreFailed: false }); },
-    );
-    return () => current.abort();
-  }, [projectId, keyId, type, refreshToken, retry]);
+  const query = useInfiniteQuery(writeOperationsQuery(projectId, { keyId, type }));
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } = query;
+  const entries = useMemo(() => data?.pages.flatMap((page) => page.data) ?? null, [data]);
+  // A failed next page leaves the rows already read on screen, with a retry.
+  const moreFailed = query.isFetchNextPageError && !isFetchingNextPage;
+  // A failed refresh keeps the rows already read; the first read failing leaves none.
+  const refreshFailed = query.isRefetchError && !query.isFetching;
 
   const loadMore = useCallback(() => {
-    if (!state.cursor || state.loadingMore) return;
-    const current = new AbortController();
-    controller.current = current;
-    const after = state.cursor;
-    setState((value) => ({ ...value, loadingMore: true, moreFailed: false }));
-    listWriteOperations(projectId, { key_id: keyId || undefined, resource_type: type || undefined, after, limit: PAGE_SIZE, signal: current.signal }).then(
-      (page) => setState((value) => ({ ...value, entries: [...value.entries, ...page.data], cursor: page.has_more ? page.next_cursor : null, loadingMore: false })),
-      () => { if (!current.signal.aborted) setState((value) => ({ ...value, loadingMore: false, moreFailed: true })); },
-    );
-  }, [projectId, keyId, state.cursor, state.loadingMore, type]);
+    if (!hasNextPage || isFetchingNextPage) return;
+    void fetchNextPage();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   const actionLabel = (action: string) => (isAction(action) ? t(`operations.actions.${action}`) : action);
   const typeLabel = (value: string) => (isType(value) ? t(`operations.types.${value}`) : value);
 
   let body;
-  if (state.status === "loading") {
-    body = <p className="page-status" role="status">{t("operations.loading")}</p>;
-  } else if (state.status === "failed") {
+  if (!entries && query.isError && !query.isFetching) {
     body = (
       <EmptyState
         title={t("operations.failed")}
-        action={<button className="button outline" type="button" onClick={() => setRetry((value) => value + 1)}>{tCommon("actions.retry")}</button>}
+        action={<button className="button outline" type="button" onClick={() => { void refetch(); }}>{tCommon("actions.retry")}</button>}
       />
     );
-  } else if (!state.entries.length) {
+  } else if (!entries) {
+    body = <TableSkeleton label={t("operations.loading")} rows={3} columns={5} />;
+  } else if (!entries.length) {
     body = <EmptyState icon={History} title={t("operations.empty")} />;
   } else {
     body = (
       <>
+        {refreshFailed ? <p className="coverage-note coverage-note-error" role="alert">{t("operations.failed")}</p> : null}
         <div className="table-frame">
           <table className="data-table operations-table" aria-label={t("operations.title")}>
             <thead>
@@ -107,7 +85,7 @@ export function WriteOperations({ projectId, keys, refreshToken }: { projectId: 
               </tr>
             </thead>
             <tbody>
-              {state.entries.map((entry) => (
+              {entries.map((entry) => (
                 <tr key={entry.id}>
                   <td className="operations-time">{formatDateTime(entry.created_at, locale)}</td>
                   <td><OperationKey value={entry.api_key} /></td>
@@ -124,11 +102,11 @@ export function WriteOperations({ projectId, keys, refreshToken }: { projectId: 
             </tbody>
           </table>
         </div>
-        {state.cursor || state.moreFailed ? (
+        {hasNextPage || moreFailed ? (
           <footer className="table-footer">
-            {state.moreFailed ? <span role="alert">{t("operations.moreFailed")}</span> : null}
-            <button className="button outline" type="button" disabled={state.loadingMore} onClick={loadMore}>
-              {state.moreFailed ? tCommon("actions.retry") : tCommon("actions.loadMore")}
+            {moreFailed ? <span role="alert">{t("operations.moreFailed")}</span> : null}
+            <button className="button outline" type="button" disabled={isFetchingNextPage} onClick={loadMore}>
+              {moreFailed ? tCommon("actions.retry") : tCommon("actions.loadMore")}
             </button>
           </footer>
         ) : null}
@@ -140,7 +118,7 @@ export function WriteOperations({ projectId, keys, refreshToken }: { projectId: 
     <Section headingId="project-operations-heading" title={t("operations.title")} help={t("operations.help")}>
       <ListToolbar
         label={t("operations.filterLabel")}
-        summary={state.status === "ready" && state.entries.length ? listSummary(tCommon, state.entries.length, state.entries.length, { hasMore: Boolean(state.cursor), locale }) : undefined}
+        summary={entries?.length ? listSummary(tCommon, entries.length, entries.length, { hasMore: hasNextPage, locale }) : undefined}
       >
         <label className="select-control">
           <span className="visually-hidden">{t("operations.columns.key")}</span>

@@ -1,3 +1,4 @@
+import { useIsFetching, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, FolderKanban, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,10 +15,11 @@ import { admin, useProjects } from "../../lib/projects";
 import { activeKeyNames, flowError, isAbort, isUsableName, matchesProject, normalizeName, prefixLabel, projectNameProblem, type FlowError } from "./key-flows";
 import { FlowErrorMessage, KeyFlowDialogs, NameField, PendingKeyNotice } from "./KeyFlowDialogs";
 import { ProjectDetail, useProjectKeys } from "./ProjectDetail";
+import { invalidateProjects, projectActivityQuery, projectScope } from "./project-queries";
 import { ProjectStatus } from "./ProjectStatus";
 import { useKeyFlow } from "./use-key-flow";
 import "./api-keys.css";
-import { type AdminKey, archiveProject, createProject, loadSummary, type Project, type ProjectSummary, renameProject, revokeKey } from "../../lib/admin-view";
+import { type AdminKey, archiveProject, createProject, type Project, renameProject, revokeKey } from "../../lib/admin-view";
 import { TableSkeleton } from "../../components/Skeleton";
 
 type Dialog =
@@ -44,13 +46,12 @@ export function ProjectsPage() {
   const { t, i18n } = useTranslation("keys");
   const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
-  const { state, refresh, byId } = useProjects();
+  const { state, byId } = useProjects();
+  const queryClient = useQueryClient();
   const { params } = useConsoleNavigation();
   const [selectedId, setSelectedId] = useState<string | null>(params.id ?? null);
   const [created, setCreated] = useState<Project | null>(null);
   const [query, setQuery] = useState("");
-  const [revision, setRevision] = useState(0);
-  const [summaries, setSummaries] = useState<ReadonlyMap<string, ProjectSummary> | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [dialogBusy, setDialogBusy] = useState(false);
   const [dialogError, setDialogError] = useState<FlowError | null>(null);
@@ -58,29 +59,29 @@ export function ProjectsPage() {
   // Links from other pages (and the sidebar) re-target the page.
   useEffect(() => { setSelectedId(params.id ?? null); }, [params]);
 
-  const changed = useCallback(() => {
-    refresh();
-    setRevision((value) => value + 1);
-  }, [refresh]);
-  const controls = useKeyFlow(changed);
+  // After a key is issued (or its outcome is uncertain), re-read the project and its keys.
+  const keyChanged = useCallback((project: Project | null) => {
+    void invalidateProjects(queryClient, { projectId: project?.id });
+  }, [queryClient]);
+  const controls = useKeyFlow(keyChanged);
   const { flow, dispatch } = controls;
   const flowBusy = flow.step !== "idle";
 
-  // Last activity for the list: one summary row per project.
-  useEffect(() => {
-    const controller = new AbortController();
-    loadSummary({ signal: controller.signal }).then(
-      (rows) => setSummaries(new Map(rows.filter((row) => row.agent_id === null && row.key === null).map((row) => [row.project_id, row]))),
-      () => undefined,
-    );
-    return () => controller.abort();
-  }, [revision]);
+  // Last activity for the list: one summary row per project. Unavailable activity shows "—".
+  const activity = useQuery(projectActivityQuery);
+  const summaries = activity.data ?? null;
 
   const projects = state.projects;
   const names = useMemo(() => projects.map((project) => project.name), [projects]);
   const visible = useMemo(() => projects.filter((project) => matchesProject(project, query)), [projects, query]);
   const selected = selectedId ? byId.get(selectedId) ?? (created?.id === selectedId ? created : null) : null;
-  const keys = useProjectKeys(selected?.id ?? null, revision);
+  const keys = useProjectKeys(selected?.id ?? null);
+  // The open project's keys and usage; its write operations show their own progress.
+  const detailFetching = useIsFetching({ queryKey: projectScope(selectedId ?? ""), predicate: (entry) => entry.queryKey[2] !== "write-operations" }) > 0;
+  const refreshAll = useCallback(() => {
+    void invalidateProjects(queryClient, { activity: true });
+    void queryClient.invalidateQueries({ queryKey: ["project"] });
+  }, [queryClient]);
   const now = Math.floor(Date.now() / 1000);
 
   const open = (id: string | null) => {
@@ -101,30 +102,39 @@ export function ProjectsPage() {
 
   const runDialog = async () => {
     if (!dialog || !dialogReady) return;
+    const current = dialog;
     setDialogBusy(true);
     setDialogError(null);
     try {
-      if (dialog.kind === "create") {
-        const project = await createProject(normalizeName(dialog.name));
+      if (current.kind === "create") {
+        const project = await createProject(normalizeName(current.name));
         setCreated(project);
         open(project.id);
-      } else if (dialog.kind === "rename") {
-        await renameProject(dialog.project.id, normalizeName(dialog.name));
-      } else if (dialog.kind === "archive") {
-        await archiveProject(dialog.project.id);
+      } else if (current.kind === "rename") {
+        await renameProject(current.project.id, normalizeName(current.name));
+      } else if (current.kind === "archive") {
+        await archiveProject(current.project.id);
       } else {
-        await revokeKey(dialog.project.id, dialog.key.id);
+        await revokeKey(current.project.id, current.key.id);
       }
       setDialog(null);
     } catch (error) {
       if (!isAbort(error)) setDialogError(flowError(error));
     } finally {
       setDialogBusy(false);
-      changed();
+      // Confirmed or uncertain, re-read what the write may have changed so the
+      // operator can check it; the write itself is never sent again.
+      void invalidateProjects(queryClient, current.kind === "create"
+        ? { activity: true }
+        : current.kind === "rename"
+          ? {}
+          // Archiving revokes every key; keys, usage by key and write operations show revocation.
+          : { projectId: current.project.id });
     }
   };
 
-  const refreshButton = <RefreshButton onClick={changed} refreshing={state.status === "loading"} label={t("page.refresh")} />;
+  const refreshing = state.status === "loading" || activity.isFetching || detailFetching;
+  const refreshButton = <RefreshButton onClick={refreshAll} refreshing={refreshing} label={t("page.refresh")} />;
   const createButton = (
     <button className="button primary" type="button" onClick={() => openDialog({ kind: "create", name: "" })}>
       <Plus size={14} aria-hidden="true" />{t("page.create")}
@@ -164,7 +174,6 @@ export function ProjectsPage() {
               key={selected.id}
               project={selected}
               keys={keys}
-              revision={revision}
               busy={flowBusy || dialogBusy}
               onIssue={() => dispatch({ type: "openIssue", project: selected })}
               onRevoke={(key, activeCount) => openDialog({ kind: "revoke", project: selected, key, activeCount })}
@@ -184,7 +193,7 @@ export function ProjectsPage() {
   } else {
     let body;
     if (state.status === "failed" && !projects.length) {
-      body = <ErrorState title={t("page.loadFailed")} detail={state.error} onRetry={changed} />;
+      body = <ErrorState title={t("page.loadFailed")} detail={state.error} onRetry={refreshAll} />;
     } else if (state.status === "loading" && !projects.length) {
       body = <TableSkeleton label={t("page.loading")} rows={4} columns={5} />;
     } else if (!projects.length) {

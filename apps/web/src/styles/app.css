@@ -10,12 +10,16 @@
 @import "@fontsource-variable/inter/opsz.css";
 @import "@fontsource-variable/geist-mono";
 @import "../app/beautifui/foundation.css";
+@import "./coss-theme.css";
 @import "../style.css";
 @import "./console.css";
 @import "./system.css";
 @import "tailwindcss/utilities.css" source(none);
-/* Utilities are generated only for Beautiful UI's registry components. The
- * console's own markup uses semantic classes (`button outline`, `table-frame`),
- * and scanning it would turn names like `outline` or `hidden` into utilities. */
+/* Utilities are generated only for the registry components (Beautiful UI,
+ * coss ui) and their thin console wrappers. The console's own markup uses
+ * semantic classes (`button outline`, `table-frame`); scanning it would turn
+ * names like `outline` or `hidden` into utilities. */
 @source "../components/atoms";
 @source "../components/primitives";
+@source "../components/ui";
+@source "../components/console-select.tsx";

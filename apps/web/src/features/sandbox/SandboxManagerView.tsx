@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { SandboxAdminClient, type InitializeSandboxDeployment, type SandboxAllocation, type SandboxDeployment, type SandboxNode } from "@agents-core-web/agents-client";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import type { InitializeSandboxDeployment, SandboxDeployment, SandboxNode } from "@agents-core-web/agents-client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Server, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState, HelpTip, RefreshButton } from "../../components/console-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { sandboxRequestError } from "../../lib/sandbox-labels";
-import { sandboxConsoleConfig, type SandboxConsoleConfig } from "./console-config";
+import type { SandboxConsoleConfig } from "./console-config";
+import { sandboxAdmin, sandboxConsoleConfigQuery, sandboxDeploymentQuery, sandboxScope, sandboxSnapshotQuery, type SandboxSnapshot } from "./sandbox-queries";
 import { SandboxSetup } from "./SandboxSetup";
 import { SandboxDeploymentSettings } from "./SandboxDeploymentSettings";
 import { NodeEnrollment } from "./NodeEnrollment";
@@ -38,19 +40,9 @@ function NodesPageHeader({ title, count, back, actions }: { title?: ReactNode; c
 
 function SandboxAccess() {
   const { t } = useTranslation("sandbox");
-  const [config, setConfig] = useState<SandboxConsoleConfig | null>(null);
-  const [checking, setChecking] = useState(true);
-  const [revision, setRevision] = useState(0);
-  useEffect(() => {
-    const controller = new AbortController();
-    setChecking(true);
-    void sandboxConsoleConfig(controller.signal).then((value) => {
-      if (!controller.signal.aborted) { setConfig(value); setChecking(false); }
-    });
-    return () => controller.abort();
-  }, [revision]);
+  const { data: config, isPending: checking, isFetching, refetch } = useQuery(sandboxConsoleConfigQuery);
   if (checking) return <><NodesPageHeader /><div className="console-page-body"><p role="status">{t("Connecting to this console's Core…")}</p></div></>;
-  if (!config?.sandbox_admin) return <><NodesPageHeader /><div className="console-page-body"><p role="alert">{t("Sandbox administration is not configured on this console. Ask the deployment administrator to configure access.")}</p><button type="button" className="button outline" onClick={() => setRevision((value) => value + 1)}>{t("Refresh sandbox state")}</button></div></>;
+  if (!config?.sandbox_admin) return <><NodesPageHeader /><div className="console-page-body"><p role="alert">{t("Sandbox administration is not configured on this console. Ask the deployment administrator to configure access.")}</p><button type="button" className="button outline" disabled={isFetching} onClick={() => { void refetch(); }}>{t("Refresh sandbox state")}</button></div></>;
   return <SandboxManager consoleConfig={config} />;
 }
 
@@ -58,40 +50,39 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const { t, i18n } = useTranslation("sandbox");
   const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
   const { params, navigate } = useConsoleNavigation();
-  const client = useMemo(() => new SandboxAdminClient({ baseUrl: "/core/v1/sandbox" }), []);
-  const [snapshot, setSnapshot] = useState<{ deployment: SandboxDeployment; nodes: SandboxNode[]; allocations: SandboxAllocation[] } | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  const [loading, setLoading] = useState(true);
-  const [fresh, setFresh] = useState(false);
+  const client = sandboxAdmin;
+  const queryClient = useQueryClient();
+  const query = useQuery(sandboxSnapshotQuery);
+  const snapshot: SandboxSnapshot | null = query.data ?? null;
+  const loading = query.isFetching;
+  // As before a reload clears the last error, a running read hides it.
+  const error: unknown = query.isFetching ? null : query.error;
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
   const [removeTarget, setRemoveTarget] = useState<SandboxNode | null>(null);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
-  const refresh = useCallback(() => setRevision((value) => value + 1), []);
   const initialCoreUrl = window.location.origin;
-  const [setupNeedsRefresh, setSetupNeedsRefresh] = useState(false);
+  // When a deployment write last had an uncertain outcome; only a read begun after it confirms the state again.
+  const [uncertainSince, setUncertainSince] = useState<number | null>(null);
+  const setupNeedsRefresh = uncertainSince !== null && !(snapshot && snapshot.readAt > uncertainSince);
+  // The state on screen is Core's last successful read, with no uncertain write since.
+  const confirmed = snapshot !== null && !query.isError && !setupNeedsRefresh;
+  // Writes additionally wait for any read in flight.
+  const fresh = confirmed && !loading;
   const [mutationError, setMutationError] = useState<unknown>(null);
+  const { refetch } = query;
+  const refresh = useCallback(() => {
+    // Each refresh starts a new read (cancelling one in flight) and resets the forms, as a reload did.
+    setRevision((value) => value + 1);
+    setMutationError(null);
+    void refetch();
+  }, [refetch]);
   const lifetime = useRef<AbortController | null>(null);
   useEffect(() => {
     const controller = new AbortController(); lifetime.current = controller;
     return () => { controller.abort(); lifetime.current = null; };
   }, []);
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true); setError(null); setMutationError(null); setFresh(false);
-    void (async () => {
-      const deployment = await client.retrieveDeployment({ signal: controller.signal });
-      const nodes = deployment.provider === "e2b" ? { data: [] } : await client.listNodes({ signal: controller.signal });
-      const allocations = await Promise.all(nodes.data.map((node) => client.listAllocations(node.id, { signal: controller.signal })));
-      if (!controller.signal.aborted) {
-        setSnapshot({ deployment, nodes: nodes.data, allocations: allocations.flatMap((page) => page.data) });
-        setSetupNeedsRefresh(false); setFresh(true);
-      }
-    })().catch((error) => { if (!controller.signal.aborted) { setError(error); setFresh(false); } })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [client, revision]);
   async function changeDeployment(operation: (signal: AbortSignal) => Promise<SandboxDeployment>) {
     const controller = lifetime.current;
     if (!controller || busy || loading || setupNeedsRefresh || !fresh) return;
@@ -99,10 +90,21 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     try {
       const deployment = await operation(controller.signal);
       if (!controller.signal.aborted) {
-        setSnapshot((current) => ({ deployment, nodes: deployment.generation === current?.deployment.generation ? current.nodes : [], allocations: deployment.generation === current?.deployment.generation ? current.allocations : [] }));
+        // Core's confirmed response replaces the deployment; nodes of an older generation no longer apply.
+        queryClient.setQueryData(sandboxSnapshotQuery.queryKey, (current): SandboxSnapshot => {
+          const same = current !== undefined && deployment.generation === current.deployment.generation;
+          return { deployment, nodes: same ? current.nodes : [], allocations: same ? current.allocations : [], readAt: current?.readAt ?? performance.now() };
+        });
+        // A later visit reads the whole snapshot again; other pages re-read the deployment now.
+        void queryClient.invalidateQueries({ queryKey: sandboxSnapshotQuery.queryKey, refetchType: "none" });
+        void queryClient.invalidateQueries({ queryKey: sandboxDeploymentQuery.queryKey });
       }
     } catch (error) {
-      if (!controller.signal.aborted) { setSetupNeedsRefresh(true); setMutationError(error); setFresh(false); }
+      if (!controller.signal.aborted) {
+        setUncertainSince(performance.now()); setMutationError(error);
+        // Nothing re-reads on its own: the operator refreshes to confirm. A later visit reads again.
+        void queryClient.invalidateQueries({ queryKey: sandboxScope, refetchType: "none" });
+      }
     } finally { if (!controller.signal.aborted) setBusy(false); }
   }
   function initialize(input: InitializeSandboxDeployment) {
@@ -141,7 +143,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const selected = params.id ? nodes.find((node) => node.id === params.id) : undefined;
   const refreshButton = <RefreshButton onClick={refresh} refreshing={loading} disabled={busy || removing} label={t("Refresh sandbox state")} />;
   const status = <>
-    {loading && !snapshot ? <p role="status">{t("Loading sandbox state…")}</p> : null}
+    {!snapshot && (loading || query.isPending) ? <p role="status">{t("Loading sandbox state…")}</p> : null}
     {busy ? <span role="status">{t("Saving sandbox change…")}</span> : null}
     {error !== null ? <p role="alert" className="sandbox-error">{sandboxRequestError(error, locale)}{snapshot ? ` ${t("Previously loaded state is shown below.")}` : ""}</p> : null}
   </>;
@@ -173,7 +175,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
       />
       <div className="console-page-body sandbox-content">
         {status}
-        {selected ? <NodeDetail node={selected} allocations={allocations} stale={!fresh} /> : snapshot && !loading ? (
+        {selected ? <NodeDetail node={selected} allocations={allocations} stale={!confirmed} /> : snapshot && !loading ? (
           <EmptyState icon={Server} title={t("Node not found")} description={t("This node is not registered. It may have been removed.")} action={<button type="button" className="button outline" onClick={back}>{t("Back to nodes")}</button>} />
         ) : null}
       </div>
@@ -183,7 +185,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
 
   const actions = <>
     {refreshButton}
-    {hostedNodes && snapshot ? <NodeEnrollment key={snapshot.deployment.generation} client={client} consoleConfig={consoleConfig} deployment={snapshot.deployment} nodes={snapshot.nodes} disabled={busy || loading || !fresh || snapshot.deployment.maintenance} fresh={fresh} onRefresh={refresh} /> : null}
+    {hostedNodes && snapshot ? <NodeEnrollment key={snapshot.deployment.generation} client={client} consoleConfig={consoleConfig} deployment={snapshot.deployment} nodes={snapshot.nodes} disabled={busy || loading || !fresh || snapshot.deployment.maintenance} fresh={confirmed} onRefresh={refresh} /> : null}
   </>;
   return <>
     <NodesPageHeader count={hostedNodes ? nodes.length : undefined} actions={actions} />
@@ -193,10 +195,10 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
       {snapshot && !snapshot.deployment.provider ? <SandboxSetup key={revision} initialCoreUrl={initialCoreUrl} disabled={busy || loading || setupNeedsRefresh || error !== null} onInitialize={initialize} /> : null}
       {snapshot?.deployment.provider ? <>
         {snapshot.deployment.maintenance ? <p className="sandbox-maintenance" role="status">{t("Maintenance is enabled. New sandbox placement is paused.")}</p> : null}
-        <SandboxDeploymentSettings key={`${snapshot.deployment.generation}:${snapshot.deployment.maintenance}:${revision}`} deployment={snapshot.deployment} fresh={fresh} disabled={busy || loading || !fresh || setupNeedsRefresh} error={writeError} onMaintenance={maintenance} onUpdate={update} onRefresh={refresh} />
+        <SandboxDeploymentSettings key={`${snapshot.deployment.generation}:${snapshot.deployment.maintenance}:${revision}`} deployment={snapshot.deployment} fresh={confirmed} disabled={busy || loading || !fresh || setupNeedsRefresh} error={writeError} onMaintenance={maintenance} onUpdate={update} onRefresh={refresh} />
         {hostedNodes ? <section aria-label={t("Sandbox nodes")}>
           {nodes.length
-            ? <NodeList nodes={nodes} allocations={allocations} stale={!fresh} disabled={busy || loading || removing} onOpen={(node) => navigate("nodes", { id: node.id })} onRemove={askRemove} />
+            ? <NodeList nodes={nodes} allocations={allocations} stale={!confirmed} disabled={busy || loading || removing} onOpen={(node) => navigate("nodes", { id: node.id })} onRemove={askRemove} />
             : <div className="sandbox-empty"><Server size={32} strokeWidth={1.25} /><h3>{t("Add your first node")}</h3><p>{t("No nodes registered. Add a node to provide hosted capacity.")}</p></div>}
         </section> : null}
       </> : null}
