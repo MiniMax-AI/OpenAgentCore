@@ -271,7 +271,9 @@ The basic `openai_hosted` profiles for Codex, Claude Code and MiniMax Code requi
 explicit operator configuration. Select the qualified native image using the
 [engine profile guides](../../contracts/agents-api/README.md#public-engine-profiles),
 then follow the [Docker setup](deploy/codex/README.md#standalone-operator-configuration).
-Core manages Docker only. For user-managed E2B, see
+Core-managed hosting supports deployment-selected E2B, Docker or microsandbox;
+see [Hosted Sandbox Manager](HOSTED-SANDBOX-MANAGER.md). For the separate
+user-managed E2B path, see
 [E2B Runtime packaging](deploy/e2b/README.md).
 Core remains independently deployed with its own database. Public idle and initial
 text Sessions share the existing preparation, execution, Files and recovery paths.

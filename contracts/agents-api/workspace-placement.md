@@ -3,7 +3,8 @@
 V1 colocates daemon, selected harness, native tools and `/workspace` in one Runtime.
 Our daemon is the user-side executor for `self_hosted`. Enrollment freezes the exact
 Session/Environment/device/key binding; it creates no managed allocation and cannot
-move a Session to another device. Core manages Docker hosting only. Users manage
+move a Session to another device. Core-managed hosting uses the deployment-selected E2B, Docker or microsandbox
+provider. Users manage
 local or E2B Runtime creation, renewal and destruction through the official SDK.
 
 All three harnesses reuse typed `LocalEnvironment`, existing preparation/start/

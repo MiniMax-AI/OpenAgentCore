@@ -6,9 +6,11 @@ A caller creates a public `self_hosted` Session and starts Runtime with its exac
 Environment ID, returned `remote_url` and scoped executor credential. This private
 transport does not interoperate with stock Codex `exec-server` or Noise.
 
-Core manages Docker for `openai_hosted`. User-managed Docker and E2B use the same
-Runtime contract; the application owns their compute. E2B create, information,
-renewal and deletion use the official E2B SDK, outside Core. Public execution and
+For `openai_hosted`, Core uses the deployment-selected
+[E2B, Docker or microsandbox provider](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md).
+This document qualifies the separate caller-managed path: Docker and E2B use the
+same Runtime contract, but the application owns their compute. In that path, E2B
+create, information, renewal and deletion use the official E2B SDK outside Core. Public execution and
 file operations continue through Core and daemon, not E2B commands or files.
 
 ## Accepted scope

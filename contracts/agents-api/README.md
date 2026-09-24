@@ -1,5 +1,9 @@
 # Agents API contract
 
+Start with the [API surface index](../../docs/api/README.md) to distinguish public
+application APIs, Web administration and Runtime transport. This document is the
+protocol coverage/evidence record, not the Web integration guide.
+
 See the [58-operation evidence inventory](operation-evidence.md) for observed official behavior, local verification and remaining unknowns.
 The [list-query comparison](list-query-semantics.md) distinguishes measured order
 errors from unresolved range, cursor and lookup semantics.
@@ -61,8 +65,9 @@ share the execution/workspace contract, with independent Core/database deploymen
 Files/Artifacts, cancellation and owned-history continuation. Optional features
 still differ. See the [accepted scope and evidence](#accepted-milestone-and-evidence).
 The same three harnesses passed historical Core-managed E2B V1 qualification in
-PR #705. That route is retired; it does not qualify the new user-managed daemon
-enrollment chain. The [user-managed V1 qualification](user-managed-runtime-v1.md)
+PR #705. That original route is historical evidence; it does not qualify the later
+user-managed enrollment or current deployment-level E2B configuration. See the
+[current hosted provider contract](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md). The [user-managed V1 qualification](user-managed-runtime-v1.md)
 records separate real deployment acceptance and its exact scope.
 Select further work only within current user authorization. Parsar cutover and
 business Team orchestration are separate from protocol coverage.
@@ -161,8 +166,11 @@ new model-issued command after a recovery prompt, not automatic API replay.
 
 ### E2B V1 qualification
 
-This is historical evidence for the retired Core-managed E2B route. It does not
-qualify current user-managed E2B enrollment or transfer compute ownership to Core.
+This is historical evidence for the original Core-managed E2B route. Current
+deployment-level E2B configuration is documented in the
+[Hosted Sandbox Manager](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md).
+This older run does not qualify later enrollment/configuration changes or transfer
+caller-owned compute to Core.
 
 PR #705 (`9cd1c46c7fab6eeef8cb35ce71f1ea0ca2cf8bc1`) separately qualified
 Codex, Claude Code and MiniMax Code with actual E2B and real Kimi/MiniMax APIs.
@@ -875,9 +883,10 @@ compatibility, other harnesses/platforms and Parsar cutover are not established.
 
 ### Caller principal foundation
 
-Caller keys now resolve an explicitly configured organization/project and typed
-user/service-account identity. An immutable project-to-tenant mapping is verified
-against PostgreSQL before startup. Optional official organization/project headers
+Caller keys resolve their database-owned Project and its shared service-account
+principal on every request. Projects own distinct tenant scopes; keys within one
+Project share the same scope and Session creator. Deployment configuration defines
+no Projects or business keys. Administrator credentials cannot authenticate `/v1`. Optional official organization/project headers
 must match the key's authorized scope; ambiguous or conflicting headers use the
 existing 401 response. Every Agents API 401 has type `invalid_request_error`, as observed
 officially; Beta routes report a null code, while Files, Skills and Core project

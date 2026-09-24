@@ -1,77 +1,49 @@
 # Parsar Core Web
 
-Parsar Core Web is the administrator console shipped with Core. Applications use
-Core's public Agents API with their own API keys; the console uses a separate
-management API and deployment credential.
+Core Web is the administrator console for a Core deployment. Its Go service
+provides console login and a restricted management proxy. Applications use Core's
+public Agents API directly with their own Project API keys.
 
-**Integration status:** the backend management contract and `AdminClient` are
-implemented in this batch. The existing React screens still need to switch to
-that client before this batch can ship as a complete console. Older screenshots
-and fixture tests describe the previous UI, not completed management acceptance.
+**Frontend status:** the management service and typed `AdminClient` are implemented.
+The frontend team owns migration of the React screens and development proxy to this
+contract. Existing execution pages, screenshots and fixture tests do not establish
+acceptance of the administrator UI.
 
-## Administrator workflows
+## Management scope
 
-The management contract supports:
+Administrators can create, rename and archive Projects; issue and revoke their
+keys; inspect resources and execution history; delete supported resources; and
+copy supported assets between Projects. They can also read summaries, Runtime
+observations and audit history, and manage deployment sandbox nodes. Deployment
+sandbox management selects E2B, Docker or microsandbox; caller-managed `self_hosted`
+Runtimes remain a separate application path.
 
-- Create, rename or archive a Project. Issue or revoke named keys within it; all
-  keys share the Project assets and execution principal. Issuance displays plaintext
-  once and stores its digest in the database. Rotate by issuing a replacement and
-  revoking the old key. Archiving disables every key and retains assets.
-- Select a Project to inspect Agents, Skills, Environment Templates, Source File
-  metadata, Vault/Credential metadata and Session history. Existing resource
-  serializers and deletion constraints are shared with the public API.
-- Delete supported resources with confirmation. Copy supported assets into another
-  active Project as independent resources, optionally including dependencies. Copies
-  never share subsequent changes or expose stored credential values.
-- Read global, Project, Agent and key summaries, usage coverage, Runtime observations and
-  administrator or API-key write history. Missing usage remains unknown; these
-  totals are not billing records. Key grouping attributes whole Sessions to their
-  creation keys, with unknown creators grouped separately.
-- Manage deployment sandbox nodes through the existing Hosted Sandbox Manager.
+A Project owns one tenant and one principal. All its keys share assets and
+permissions; writes record the individual key as provenance. Projects and keys
+live only in PostgreSQL. Key issuance returns plaintext once and stores its digest.
+Rotate by issuing another key and revoking the old one. Archive disables every key
+in the Project while retaining assets and admitted work.
 
-The console has no execution, resource creation/editing, Session-event or model
-calling authority. Administrators who need to use Agents API can separately use
-an issued API key in their own application. Business collaboration remains in
-Parsar.
+The management API cannot create or edit arbitrary application resources, start
+Sessions, submit input or cancel execution. Applications perform those operations
+through `/v1`. Core has no API users, roles or memberships.
 
-## Install and connect
+## Connect and develop
 
-Follow the [installation guide](../getting-started/install.md). The default is
-Core, Web and PostgreSQL with zero execution nodes. The paired installation gives
-only the Web server its deployment credential. It creates no Project or application
-key. The administrator creates both through the management API. Configuration files
-hold deployment settings; business identities live only in the database.
+Follow the [installation guide](../getting-started/install.md) for Core, Web and
+PostgreSQL with zero execution nodes. Installation creates no Project or application
+key; an administrator creates them through the management API. The browser signs
+in to the console, whose server keeps the deployment credential private.
 
-For a separate Web installation, use `--web-only --core-url ...
---admin-token-file /absolute/private/file`. The Core origin must be loopback or
-HTTPS. The browser signs in using the console account; it never receives the
-server's deployment credential. Full configuration is in
-[Connecting Core Web](core-connection.md).
-
-Public `/v1` traffic must go directly to Core through deployment routing. The
-console returns 404 for it, even when the request supplies its own Bearer token.
-Fixed node and daemon transport routes retain their independent authentication.
-
-## Client and validation
-
-React management screens must use `AdminClient` from `packages/agents-client`.
-It shares public resource projections but exposes only finite administrator
-operations. Keep safe resource metadata in the browser; never persist key
-plaintext, deployment credentials, model tokens or copied secret fields.
-
-Development requires Node 22, pnpm 10.30.3 and the repository's required toolchains.
-`make check` covers client, service and fixture Web tests. Real management
-acceptance must separately prove Project isolation, shared access by keys within a
-Project, auditing and copied asset use.
-Fixture screenshots and HTTP deserialization alone do not prove those properties.
-
-## References
-
-- [Design principles](../design-principles.md)
-- [Administrator API](../../contracts/agents-api/admin-api.md)
+- [Connection and authentication](core-connection.md)
 - [Architecture and ownership](architecture.md)
-- [API-key write provenance](../../contracts/agents-api/write-audit.md)
-- [Public API coverage](../../contracts/agents-api/README.md)
-- [Contributor rules](../../CONTRIBUTING.md)
+- [Management interface coverage](protocol-coverage.md)
+- [Frontend handoff and acceptance](roadmap.md)
+- [React application](../../apps/web/README.md)
+
+The [administrator API contract](../../contracts/agents-api/admin-api.md) defines
+management routes and resource behavior. The [public API contracts](../../contracts/agents-api/README.md)
+define the separate application interface. See the [design principles](../design-principles.md)
+for ownership and [contributor guide](../../CONTRIBUTING.md) for required checks.
 
 Parsar Core Web is available under the [MIT License](../../LICENSE).

@@ -1,101 +1,99 @@
 # Core Web architecture
 
-## Status and scope
-
-This document defines the administrator-console contract for the current management
-API work. The existing React frontend has not yet migrated to this contract; its
-migration owner and implementation remain pending. This document does not claim
-that the current UI provides the management workflows described below.
-
 Core Web manages a Core deployment. Applications, including Parsar, use the public
-Agents API independently with their own API keys. Core, its PostgreSQL database,
-console server and execution services remain independently deployable without the
-Parsar product stack.
+Agents API independently with their own Project keys. The management backend and
+`AdminClient` are implemented; the frontend team owns the React migration. Existing
+screens and their tests do not prove that the administrator UI is complete.
 
-The [Core design principles](../design-principles.md) define identity and authority.
-The [administrator API contract](../../contracts/agents-api/admin-api.md) defines
-routes, response shapes, pagination, copy rules and audit records.
+The [design principles](../design-principles.md) define identity and authority.
+The [administrator contract](../../contracts/agents-api/admin-api.md) defines exact
+routes, payloads, pagination, copy rules and audit records.
 
 ## Request boundaries
 
 ```mermaid
 flowchart LR
   browser["Administrator browser"]
-  console["Core console server"]
+  console["Core console service"]
   core["Core API"]
-  database[("Dedicated PostgreSQL")]
+  database[("PostgreSQL")]
   application["Application / official SDK"]
-  runtime["Existing Runtime and native adapters"]
+  runtime["Runtime and native adapters"]
 
-  browser -->|"Same-origin management requests<br/>Console login session"| console
-  console -->|"/core/v1/admin and sandbox management<br/>Deployment credential"| core
-  application -->|"/v1<br/>Application API key"| core
+  browser -->|"Same-origin management requests; console login"| console
+  console -->|"/core/v1/admin and sandbox management; deployment credential"| core
+  application -->|"/v1; Project API key"| core
   core <--> database
   core <--> runtime
 ```
 
-The frontend uses `AdminClient` from `packages/agents-client` for
-`/core/v1/admin` and the existing sandbox management client for
-`/core/v1/sandbox`. It does not use the public execution client for console
-operations. The console server does not proxy `/v1` or hold an application API key.
+React management code must use `AdminClient` from `packages/agents-client`, plus the
+existing sandbox management client for `/core/v1/sandbox`. The console service
+returns 404 for `/v1`, including requests with an explicit Bearer token. It has no
+application key and does not impersonate the selected Project.
 
-The browser authenticates to the console. The console server keeps the deployment
-credential private and supplies it to its configured Core upstream. Core rejects
-API keys on administrator routes and deployment credentials on `/v1`. Forwarded
-console account names are audit labels, not independent Core authorization.
+The console authenticates the browser, checks the request origin and forwards only
+allowed management routes. It replaces browser authorization and actor headers,
+strips browser cookies, and supplies its server-side deployment credential. Core
+rejects application keys on management routes and deployment credentials on `/v1`.
+The forwarded console account name is an audit label, not Core authorization.
+
+Fixed node enrollment and daemon transport routes retain their own credentials and
+existing transport behavior. They do not grant a browser execution authority.
 
 ## Ownership
 
 | Component | Responsibility |
 | --- | --- |
-| Core Web | Project selection, resource inspection, permitted deletion/copy, key management and operational views |
-| `AdminClient` | Typed management requests and response validation, reusing public resource projections where the wire objects match |
-| Console server | Administrator login, same-origin request checks, management-route proxying and server-side deployment authentication |
-| Core | Project isolation, resource state, deletion preconditions, atomic copies, audit/provenance and execution scheduling |
-| Runtime and native adapters | Existing allocation, process lifecycle, execution and native protocol behavior |
+| React frontend | Project selection, permitted management actions and operational views; migration owned by the frontend team |
+| `AdminClient` | Typed management requests and validation, sharing resource parsers with the public client |
+| `services/core-console` | Console authentication, origin checks, route allowlist and private upstream credential |
+| Core API and PostgreSQL | Project isolation, resource state, deletion preconditions, atomic copies, audit and scheduling |
+| Runtime and native adapters | Existing allocation, process lifecycle and execution protocols |
 
-The management API adds no execution path. Runtime ownership, native harness
-behavior and the pinned public Agents API contract remain governed by
-[CONTRIBUTING.md](../../CONTRIBUTING.md). Startup configuration and Runtime
-observations are distinct: configured support does not prove a reachable model,
-valid provider credentials or execution readiness.
+A Project owns one tenant and one principal; its keys have equal access to its
+assets. Projects and keys are database records. Configuration contains deployment
+settings, not business identities. Core has no separate API-user or role model.
 
-## Projects, keys and resources
+Revoking one key prevents new authentication without removing assets or admitted
+work. Archiving a Project disables all its keys and retains resources for
+administrator inspection, deletion or copying to an active Project.
 
-A Project owns one tenant and one execution principal. Multiple equal API keys
-belong to it and share its assets; writes record the actual key independently of
-the principal. Projects and API keys are database records. Configuration files hold
-deployment settings only, with no configuration-owned Projects or static API keys.
-Core has no separate API-user or role model.
+Management adds no execution path. It can inspect metadata and history, apply
+existing deletion rules, and copy supported assets. It cannot edit arbitrary
+resources, create Sessions, send input or cancel work. A deletion conflict cannot
+be resolved by an implicit cancellation from the console.
 
-Administrators create, rename and archive Projects, and issue or revoke their keys.
-Renaming preserves identity. Rotate a key by issuing a replacement in the same
-Project and revoking the old one. Revocation prevents new authentication without
-removing assets or accepted work. Archiving disables every key in the Project and
-retains its resources for administrator inspection, deletion or copying to an active
-Project.
+Copies receive independent IDs. Core rewrites included dependencies and rebinds
+stored encrypted values in one transaction with the copy receipt and audit record.
+Sessions and Artifacts are not copyable. Secret fields remain write-only; Skill
+source and Artifact content have explicit read routes, while Source File content
+does not have an administrator download route.
 
-Administrators may inspect resource metadata and execution history, delete resources
-under their existing deletion rules, and copy supported assets between Projects.
-They cannot create or edit arbitrary user resources, start Sessions, submit input,
-or cancel work through the management API. A busy Session therefore cannot be
-made deletable by an implicit console cancellation.
+## Deployment and application Runtime paths
 
-Copies receive independent IDs. Core copies dependencies and rebinds encrypted
-values internally in one transaction with its audit record. Sessions and Artifacts
-are not copyable. Credential values and confidential template initialization remain
-write-only; Skill source and Artifact content are readable, while Source File
-content has no administrator download route.
+Deployment sandbox management selects one provider at a time: E2B, Docker or
+microsandbox. E2B uses the deployment's provider integration; Docker and microsandbox
+use operator-managed machines. Provider setup, maintenance and node administration
+belong to the existing sandbox management surface.
 
-## Console state and writes
+An application's `self_hosted` Runtime, including one it provisions in its own E2B
+account, is a separate caller-managed path. It does not choose or reconfigure the
+deployment provider. This console contract changes neither native Runtime protocols
+nor application Session creation semantics.
 
-Session inspection uses paginated durable history and bounded polling. The
-management API has no Session SSE subscription or execution stream controller.
-Changing the selected Project must abort or discard stale reads and pending
-operation state so that results cannot appear under another Project.
+## Frontend state and validation
 
-Deletion and copy require deliberate administrator actions. The client never
-retries an uncertain write automatically. Core returns key plaintext once at issuance
-and stores its digest in the database; ordinary reads never recover the plaintext.
-The UI must not persist it in browser storage or logs. The API contract specifies explicit recovery
-and idempotency behavior for each operation.
+Session inspection uses paginated durable history and bounded polling. There is no
+management Session SSE endpoint. Project changes must discard stale reads and
+pending operation state before displaying results in another Project.
+
+The client sends each write once per explicit action. An uncertain result stays
+visible until the administrator checks state and decides how to proceed. Issued
+key plaintext must not enter browser storage or logs. Copy idempotency and key
+issuance recovery follow the administrator contract.
+
+Startup configuration describes configured support. It does not prove a reachable
+model, valid provider credentials or execution readiness. Runtime observations,
+usage coverage and audit history must retain the distinctions defined by Core.
+Native execution ownership remains governed by [CONTRIBUTING.md](../../CONTRIBUTING.md).

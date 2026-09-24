@@ -17,14 +17,15 @@ and PostgreSQL with zero execution nodes. Add execution nodes through Web when
 you are ready. Core creates each required sandbox from the shared Runtime image. Model
 credentials are supplied through the existing write-only API extension.
 
-Hosted deployments use one selected provider across local or remote nodes. The
+Hosted deployments select E2B cloud or one provider across their own local/remote
+nodes (Docker or microsandbox). The
 Hosted Sandbox Manager shows node health, capacity and Session placement. New
 Sessions use automatic placement by default or an explicitly selected node;
 existing Sessions retain their node across disconnects and resume.
 
 ## Start here
 
-The current management branch requires the coordinated Web screen switch before
+The management backend requires the coordinated Web screen switch before a paired
 release; see [console integration status](docs/web/README.md).
 
 1. **Install Core and Web.** Obtain and verify a matching Linux amd64 bundle,
@@ -35,9 +36,10 @@ release; see [console integration status](docs/web/README.md).
    ./install.sh --public-url https://core.example
    ```
 
-   This starts Core, Web and PostgreSQL with zero execution nodes. Public release
-   bundles are not published yet; see the [installation guide](docs/getting-started/install.md)
-   for building a bundle and the host/network prerequisites.
+   This starts Core, Web and PostgreSQL with zero execution nodes. Release
+   bundles are tied to a source revision; an older published bundle does not include
+   current management changes. See the [installation guide](docs/getting-started/install.md)
+   for obtaining/building a matching bundle and the host/network prerequisites.
 2. **Sign in to Web.** Open the console address printed by the installer and
    register your administrator account with a username and password. Keep them safe.
    Existing installations retain their `admin` / `console.password` login.
@@ -46,8 +48,10 @@ release; see [console integration status](docs/web/README.md).
    then issue a key within it for your application. Save the one-time plaintext
    response privately; Core stores its digest. Rotate by issuing another key in the
    same Project and revoking the old one.
-3. **Add a node.** Open **Hosted Sandbox Manager**, choose Docker or microsandbox,
-   and initialize the deployment. The paired console address is used by default;
+3. **Add a node.** Open **Hosted Sandbox Manager** and choose E2B cloud or
+   your own machines with Docker/microsandbox. E2B needs its account credentials and
+   qualified Runtime template, with no node installation. For your own machines,
+   initialize the deployment. The paired console address is used by default;
    advanced network settings allow a different reachable HTTPS origin. Select
    **Add node**, then copy and run the command on a prepared Linux host. Web shows when the node is online
    and its provider is ready. All nodes in a deployment use the same provider.
@@ -55,6 +59,7 @@ release; see [console integration status](docs/web/README.md).
 Installation and node enrollment do not call a model. Once a node is ready,
 run an optional API example with your own model credentials.
 
+- [API documentation: public API and Web management](docs/api/README.md)
 - [Make your first API request](docs/getting-started/quickstart.md)
 - [Service health, data and operations](docs/getting-started/operations.md)
 - [Hosted Sandbox Manager](services/agents-api/HOSTED-SANDBOX-MANAGER.md)
@@ -106,8 +111,8 @@ under `~/.parsar/build/`. For advanced deployment, see the
 [Web development guide](docs/web/README.md).
 
 Core-managed and user-managed environments reuse the colocated daemon, native
-harness, tools and workspace. E2B uses caller-managed provisioning through the
-official SDK; the returned `remote_url` connects our daemon, not `exec-server`.
+harness, tools and workspace. Caller-owned E2B provisioning uses the official SDK; deployment-managed E2B
+uses the configured SandboxProvider. For caller-owned environments, the returned `remote_url` connects our daemon, not `exec-server`.
 See the [Runtime enrollment guide](services/agents-api/README.md#user-managed-runtime-enrollment).
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before developing. Historical source-copy

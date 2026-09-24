@@ -1,93 +1,83 @@
 # Connecting the administrator console to Core
 
-This guide describes the target connection contract for the management API work.
-The existing frontend has not yet migrated, and ownership of that UI change is
-pending. Do not interpret the old connection form or execution controls as supported
-administrator workflows. See [architecture](architecture.md) for component
-boundaries and [design principles](../design-principles.md) for the authority model.
+`services/core-console` serves built Web assets, authenticates administrators and
+proxies an explicit management allowlist to Core. This backend contract is
+implemented. React screens and the Vite development proxy still need migration by
+the frontend team; their current execution controls are not supported management
+workflows.
 
 ## Connection model
 
-Run Core with its dedicated PostgreSQL database and the console server with its Web
-assets. Use the [installation guide](../getting-started/install.md) for deployment
-and the [operations guide](../getting-started/operations.md) for storage, upgrades
-and node operations. Native Runtime configuration remains separate from connecting
-the console; opening the console does not allocate compute or invoke a model.
+The browser calls same-origin `/core/v1/admin` through `AdminClient` and existing
+`/core/v1/sandbox` management routes through the sandbox client. The console server
+supplies the deployment administrator credential to its configured Core upstream.
+Browser code must never receive that credential.
 
-The browser calls same-origin `/core/v1/admin` through `AdminClient`, plus the
-existing `/core/v1/sandbox` management routes through the sandbox management client.
-The console server authenticates these requests to Core with its deployment
-credential. Browser code must not receive or configure that credential.
+Applications call Core's `/v1` directly with their own Project API keys and the
+public API's route-specific headers. The console returns 404 for `/v1`, even with
+an explicit Bearer token. Deployment routing must send application traffic to Core.
+The console endpoint and the public application endpoint serve different purposes,
+even if they share a host.
 
-The console does not proxy `/v1`, carry a public caller key, or impersonate a selected
-Project. An application calls Core's `/v1` endpoint directly using its own API key
-and the public API's route-specific headers. The application endpoint and console
-endpoint have different purposes even when an operator exposes both on one host.
+Use the [installation guide](../getting-started/install.md) for deployment and the
+[operations guide](../getting-started/operations.md) for storage, upgrades and node
+management. A Core, Web and PostgreSQL installation may have zero execution nodes.
+Opening the console neither allocates compute nor invokes a model. Deployment
+sandbox management selects E2B, Docker or microsandbox independently of an
+application's caller-managed `self_hosted` Runtime, including its own E2B setup.
 
-## Console server configuration
+## Server configuration and login
 
 | Setting | Purpose |
 | --- | --- |
-| `CORE_CONSOLE_UPSTREAM` | Configured HTTP(S) Core server origin, without credentials, query or path |
-| `CORE_CONSOLE_ORIGIN` | Browser-facing console origin used for request-origin checks |
-| `CORE_CONSOLE_ADMIN_TOKEN_FILE` | Absolute path to a private regular file holding the deployment credential |
-| `CORE_CONSOLE_AUTH_MODE=account` | Console account login |
-| `CORE_CONSOLE_STATE_DIR` | Private account/session state directory for account login |
+| `CORE_CONSOLE_ADDR` | Console listener address |
+| `CORE_CONSOLE_ORIGIN` | Exact browser-facing origin used for host and origin checks |
+| `CORE_CONSOLE_UPSTREAM` | Core HTTP(S) origin, without credentials, query or resource path |
+| `CORE_CONSOLE_ADMIN_TOKEN_FILE` | Absolute path to a private regular file containing the deployment credential |
+| `CORE_CONSOLE_AUTH_MODE=account` | Enables console account login |
+| `CORE_CONSOLE_STATE_DIR` | Private account and login-session state directory |
 | `CORE_CONSOLE_DIST` | Absolute directory containing the built Web assets |
 
-The existing legacy Basic-auth mode uses `CORE_CONSOLE_PASSWORD_FILE` when account
-mode is unset. Its password must differ from the deployment credential. These
-console login modes do not create API users, roles or application credentials.
+Account mode exposes `GET /console/auth` and `POST /console/auth/setup`, `/login`
+and `/logout`. Initial setup registers the console account; subsequent login uses
+a same-origin session cookie. Console accounts do not create Core API users,
+Projects, roles or application keys. `GET /console/config` provides safe console
+configuration to an authenticated browser.
 
-Use loopback listeners for local development and TLS for remote browser access.
-Preserve the console's origin checks, authenticated proxy allowlist and upstream
-header filtering. A development proxy must preserve the same management-only
-boundary; restoring `/v1` forwarding is not a migration workaround. Keep deployment,
-application, node and provider credentials out of `VITE_*`, source files, browser
-storage, URLs and logs.
+Use TLS for remote browser access and loopback listeners for local development.
+Preserve host/origin checks and the management route allowlist. Browser authorization,
+cookies and actor headers are replaced or removed before forwarding to Core.
+The service reports the authenticated console account as an audit label; a browser
+cannot choose that label. Keep deployment, application, node and provider credentials
+out of `VITE_*`, browser storage, source files, URLs and logs.
 
 ## Projects and application keys
 
-After installation, an administrator creates a Project through the management API
-and issues one or more named keys within it. The Project owns one tenant and one
-execution principal; every key in it has equal access to its assets. Core records
-the actual key separately for write provenance. There are no API users or roles.
+Installation creates no Project or application key. An administrator creates a
+Project and issues named keys using the [administrator API](../../contracts/agents-api/admin-api.md).
+The Project owns one tenant and one principal; its keys share assets and permissions.
+Writes retain each key's provenance. All Projects and application keys live in
+PostgreSQL, independently of deployment configuration.
 
-Projects and keys live only in the database. Configuration files hold deployment
-settings and credentials, never business Projects or API keys. Issuance returns
-plaintext once; Core stores its digest. Deliver the plaintext to the application
-through a private channel. Ordinary key reads return safe metadata only.
-
-Rotate by issuing a replacement in the same Project and revoking the old key.
-Revocation stops new authentication without removing assets or accepted work.
-Renaming a Project preserves its ID and principal. Archiving disables all its keys
-and retains resources for administrator inspection, deletion or copying to an
-active Project. The management UI is still pending; use the
-[administrator API contract](../../contracts/agents-api/admin-api.md) for these
-operations and their uncertain-write behavior.
+Issuance returns plaintext once; Core stores its digest. Deliver the new key to the
+application privately. Rotate by issuing a replacement in the same Project and
+revoking the old key. Archive disables every key while retaining assets and admitted
+work. Ordinary metadata reads cannot recover plaintext.
 
 ## Verification and diagnosis
 
-Check connection layers separately:
+1. Core `/healthz` proves process liveness only.
+2. Console login followed by `GET /core/v1/admin/projects` proves the authenticated
+   browser-to-console and console-to-Core path.
+3. A Project key must work on its public resources and fail on management routes.
+   The deployment credential must fail on `/v1`; `/v1` through the console stays 404.
+4. Cross-origin management writes must be rejected. Audit actor labels must reflect
+   the signed-in console account despite a forged browser header.
+5. Runtime observations and history report execution state separately from startup
+   configuration. Neither a login nor a successful configuration read proves model
+   or sandbox readiness.
 
-1. `/healthz` establishes Core process liveness only.
-2. An authenticated console login and a successful same-origin management read
-   establish the browser-to-console and console-to-Core paths. Suitable reads are
-   `/core/v1/admin/projects` and `/core/v1/admin/startup-configuration`.
-3. An application's own key must work on its permitted `/v1` resources and fail on
-   administrator routes. The deployment credential must fail on `/v1`.
-4. Runtime observations and history establish the reported execution state. A
-   successful configuration read does not prove model or sandbox readiness.
-
-A console login failure belongs to console authentication. A Core 401 on a proxied
-management request points to the configured deployment credential or upstream. A
-404 for `/v1` through the console is expected; connect the application to the public
-Core endpoint instead. Do not resolve a 401 by placing a deployment credential in
-browser code or substituting an application key for it.
-
-The console reads Session history without SSE and cannot start or cancel execution.
-A deletion conflict must remain visible to the administrator; it does not authorize
-an execution call. Resource creation, editing and execution belong to the
-application's public API workflow. Existing node transport, Runtime adapters,
-provider configuration and durable Session bindings are unchanged by this console
-connection model.
+A console login failure belongs to console authentication. An upstream 401 on a
+management request points to the deployment credential or Core connection. A resource
+deletion conflict must remain visible; it does not authorize an execution call.
+Fixed node transports and native Runtime interfaces retain their own authentication.

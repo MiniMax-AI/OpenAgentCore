@@ -28,6 +28,11 @@ fixes may use self-review, including focused corrections after a blind review;
 repeat independent review when a correction materially changes the design or risk.
 Fix in-scope blockers before delivery. Do not use `codex exec` as a substitute reviewer.
 
+The [API documentation index](docs/api/README.md) separates application,
+administrator and Runtime transport contracts. New or changed routes must identify
+their caller and authentication authority there, and link their detailed contract.
+Keep current integration guidance separate from historical qualification evidence.
+
 The Core Web is an administrator console. Its server authenticates to the explicit
 `/core/v1/admin` management surface and existing sandbox administration, never to
 `/v1` on behalf of a browser. Applications use an API key issued inside a Project. One Project owns one execution
