@@ -13,8 +13,8 @@ import "net/http"
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.SessionList
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/sessions [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/sessions [get]
 func (h *Handler) adminListSessions(w http.ResponseWriter, r *http.Request) {
 	h.listSessions(w, r)
 }
@@ -27,8 +27,8 @@ func (h *Handler) adminListSessions(w http.ResponseWriter, r *http.Request) {
 // @Param session_id path string true "Session ID"
 // @Success 200 {object} v1.Session
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/sessions/{session_id} [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/sessions/{session_id} [get]
 func (h *Handler) adminGetSession(w http.ResponseWriter, r *http.Request) {
 	h.getSession(w, r)
 }
@@ -41,8 +41,8 @@ func (h *Handler) adminGetSession(w http.ResponseWriter, r *http.Request) {
 // @Param session_id path string true "Session ID"
 // @Success 200 {object} v1.SessionDeleted
 // @Failure 400,401,404,409,413,500 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/sessions/{session_id} [delete]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/sessions/{session_id} [delete]
 func (h *Handler) adminDeleteSession(w http.ResponseWriter, r *http.Request) {
 	h.deleteSession(w, r)
 }
@@ -58,8 +58,8 @@ func (h *Handler) adminDeleteSession(w http.ResponseWriter, r *http.Request) {
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.TurnList
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/turns [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/sessions/{session_id}/turns [get]
 func (h *Handler) adminListTurns(w http.ResponseWriter, r *http.Request) {
 	h.listTurns(w, r)
 }
@@ -73,8 +73,8 @@ func (h *Handler) adminListTurns(w http.ResponseWriter, r *http.Request) {
 // @Param turn_id path string true "Turn ID"
 // @Success 200 {object} v1.Turn
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/turns/{turn_id} [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/sessions/{session_id}/turns/{turn_id} [get]
 func (h *Handler) adminGetTurn(w http.ResponseWriter, r *http.Request) {
 	h.getTurn(w, r)
 }
@@ -90,8 +90,8 @@ func (h *Handler) adminGetTurn(w http.ResponseWriter, r *http.Request) {
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.ItemList
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/items [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/sessions/{session_id}/items [get]
 func (h *Handler) adminListItems(w http.ResponseWriter, r *http.Request) {
 	h.listItems(w, r)
 }
@@ -108,8 +108,8 @@ func (h *Handler) adminListItems(w http.ResponseWriter, r *http.Request) {
 // @Param order query string false "Publication order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.SessionArtifactList
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/artifacts [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/sessions/{session_id}/artifacts [get]
 func (h *Handler) adminListSessionArtifacts(w http.ResponseWriter, r *http.Request) {
 	h.listSessionArtifacts(w, r)
 }
@@ -123,8 +123,8 @@ func (h *Handler) adminListSessionArtifacts(w http.ResponseWriter, r *http.Reque
 // @Param artifact_id path string true "Artifact ID"
 // @Success 200 {object} v1.SessionArtifact
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/artifacts/{artifact_id} [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id} [get]
 func (h *Handler) adminGetSessionArtifact(w http.ResponseWriter, r *http.Request) {
 	h.getSessionArtifact(w, r)
 }
@@ -138,8 +138,8 @@ func (h *Handler) adminGetSessionArtifact(w http.ResponseWriter, r *http.Request
 // @Param artifact_id path string true "Artifact ID"
 // @Success 200 {object} v1.SessionArtifactDeleted
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/artifacts/{artifact_id} [delete]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id} [delete]
 func (h *Handler) adminDeleteSessionArtifact(w http.ResponseWriter, r *http.Request) {
 	h.deleteSessionArtifact(w, r)
 }
@@ -153,8 +153,8 @@ func (h *Handler) adminDeleteSessionArtifact(w http.ResponseWriter, r *http.Requ
 // @Param artifact_id path string true "Artifact ID"
 // @Success 200 {file} binary
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/artifacts/{artifact_id}/content [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id}/content [get]
 func (h *Handler) adminSessionArtifactContent(w http.ResponseWriter, r *http.Request) {
 	h.sessionArtifactContent(w, r)
 }
@@ -167,8 +167,8 @@ func (h *Handler) adminSessionArtifactContent(w http.ResponseWriter, r *http.Req
 // @Param session_id path string true "Session ID"
 // @Success 200 {object} v1.SessionExecutionConfiguration
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/execution-configuration [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/sessions/{session_id}/execution-configuration [get]
 func (h *Handler) adminGetSessionExecutionConfiguration(w http.ResponseWriter, r *http.Request) {
 	h.getSessionExecutionConfiguration(w, r)
 }
@@ -181,8 +181,8 @@ func (h *Handler) adminGetSessionExecutionConfiguration(w http.ResponseWriter, r
 // @Param session_id path string true "Session ID"
 // @Success 200 {object} v1.RuntimeObservation
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/runtime-observation [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/sessions/{session_id}/runtime-observation [get]
 func (h *Handler) adminGetRuntimeObservation(w http.ResponseWriter, r *http.Request) {
 	h.getRuntimeObservation(w, r)
 }
@@ -198,8 +198,8 @@ func (h *Handler) adminGetRuntimeObservation(w http.ResponseWriter, r *http.Requ
 // @Param max_points query integer false "Maximum points per series; defaults to the lower of 120 and the advertised service maximum" minimum(2) maximum(10000)
 // @Success 200 {object} v1.RuntimeHistory
 // @Failure 400,401,404,409,503 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/sessions/{session_id}/runtime-history [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/sessions/{session_id}/runtime-history [get]
 func (h *Handler) adminGetRuntimeHistory(w http.ResponseWriter, r *http.Request) {
 	h.getRuntimeHistory(w, r)
 }

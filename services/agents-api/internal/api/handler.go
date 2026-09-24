@@ -73,13 +73,6 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 	for _, option := range options {
 		option(h)
 	}
-	if h.deploymentAuth != nil {
-		for digest := range h.deploymentAuth.digests {
-			if _, exists := auth.principals[digest]; exists {
-				return nil, errors.New("deployment administrator credentials must be separate from project credentials")
-			}
-		}
-	}
 	return CanonicalPaths(h.routes()), nil
 }
 

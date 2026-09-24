@@ -16,9 +16,9 @@ import (
 )
 
 type AdminAuditFilter struct {
-	KeyID, ResourceType, ResourceID, Action, After string
-	CreatedAfter, CreatedBefore                    *time.Time
-	Limit                                          int
+	ProjectID, ResourceType, ResourceID, Action, After string
+	CreatedAfter, CreatedBefore                        *time.Time
+	Limit                                              int
 }
 type AdminAuditOperation struct {
 	ID                string          `json:"id"`
@@ -26,7 +26,7 @@ type AdminAuditOperation struct {
 	AdminCredentialID string          `json:"admin_credential_id"`
 	ActorLabel        string          `json:"actor_label"`
 	Action            string          `json:"action"`
-	TargetKeyID       string          `json:"target_key_id"`
+	ProjectID         string          `json:"project_id"`
 	ResourceType      string          `json:"resource_type"`
 	ResourceID        string          `json:"resource_id"`
 	ResultIDs         json.RawMessage `json:"result_ids" swaggertype:"array,object"`
@@ -44,7 +44,7 @@ func (s *Store) ListAdminAudit(ctx context.Context, filter AdminAuditFilter) (Ad
 	if filter.Limit == 0 {
 		filter.Limit = 50
 	}
-	if filter.Limit < 1 || filter.Limit > 100 || !auditText(filter.KeyID, 128, false) || !auditText(filter.ResourceType, 64, false) || !auditText(filter.ResourceID, 256, false) || !auditText(filter.Action, 64, false) || filter.CreatedAfter != nil && filter.CreatedBefore != nil && !filter.CreatedAfter.Before(*filter.CreatedBefore) {
+	if filter.Limit < 1 || filter.Limit > 100 || !auditText(filter.ProjectID, 128, false) || !auditText(filter.ResourceType, 64, false) || !auditText(filter.ResourceID, 256, false) || !auditText(filter.Action, 64, false) || filter.CreatedAfter != nil && filter.CreatedBefore != nil && !filter.CreatedAfter.Before(*filter.CreatedBefore) {
 		return page, ErrInvalidInput
 	}
 	normalized := filter
@@ -61,7 +61,7 @@ func (s *Store) ListAdminAudit(ctx context.Context, filter AdminAuditFilter) (Ad
 	raw, _ := json.Marshal(normalized)
 	digest := sha256.Sum256(raw)
 	scope := hex.EncodeToString(digest[:])
-	params := sqlc.ListAdminAuditLogParams{KeyID: filter.KeyID, ResourceType: filter.ResourceType, ResourceID: filter.ResourceID, Action: filter.Action, CreatedAfter: auditTimestamp(filter.CreatedAfter), CreatedBefore: auditTimestamp(filter.CreatedBefore), AfterID: pgtype.UUID{Valid: true}, PageLimit: int32(filter.Limit + 1)}
+	params := sqlc.ListAdminAuditLogParams{ProjectID: filter.ProjectID, ResourceType: filter.ResourceType, ResourceID: filter.ResourceID, Action: filter.Action, CreatedAfter: auditTimestamp(filter.CreatedAfter), CreatedBefore: auditTimestamp(filter.CreatedBefore), AfterID: pgtype.UUID{Valid: true}, PageLimit: int32(filter.Limit + 1)}
 	if filter.After != "" {
 		raw, err := base64.RawURLEncoding.DecodeString(filter.After)
 		var cursor writeAuditCursor
@@ -89,7 +89,7 @@ func (s *Store) ListAdminAudit(ctx context.Context, filter AdminAuditFilter) (Ad
 		rows = rows[:filter.Limit]
 	}
 	for _, row := range rows {
-		page.Data = append(page.Data, AdminAuditOperation{ID: uuid.UUID(row.ID.Bytes).String(), CreatedAt: row.CreatedAt.Time, AdminCredentialID: row.AdminCredentialID, ActorLabel: row.ActorLabel, Action: row.Action, TargetKeyID: row.TargetKeyID, ResourceType: row.ResourceType, ResourceID: row.ResourceID, ResultIDs: row.ResultIds, RequestID: row.RequestID, TraceID: row.TraceID})
+		page.Data = append(page.Data, AdminAuditOperation{ID: uuid.UUID(row.ID.Bytes).String(), CreatedAt: row.CreatedAt.Time, AdminCredentialID: row.AdminCredentialID, ActorLabel: row.ActorLabel, Action: row.Action, ProjectID: uuid.UUID(row.ProjectID.Bytes).String(), ResourceType: row.ResourceType, ResourceID: row.ResourceID, ResultIDs: row.ResultIds, RequestID: row.RequestID, TraceID: row.TraceID})
 	}
 	if page.HasMore {
 		raw, _ := json.Marshal(writeAuditCursor{ID: page.Data[len(page.Data)-1].ID, Scope: scope})

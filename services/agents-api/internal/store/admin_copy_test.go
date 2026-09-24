@@ -29,13 +29,16 @@ func adminCopyFixture(t *testing.T) (*Store, string, string) {
 		if _, err := pool.Exec(t.Context(), "INSERT INTO execution_project_scopes(tenant_id,organization_id,project_id) VALUES($1,'copy-test',$2)", tenant, tenant); err != nil {
 			t.Fatal(err)
 		}
+		if _, err := pool.Exec(t.Context(), "INSERT INTO projects(id,name,tenant_id,subject_kind,subject_id) VALUES($1,'Copy fixture',$1,'service_account',$2)", tenant, "project:"+tenant); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return NewWithCredentialCipher(pool, cipher), source, target
 }
 
-func adminCopyContext(t *testing.T) context.Context {
+func adminCopyContext(t *testing.T, projectID string) context.Context {
 	t.Helper()
-	return adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "copy-admin", ActorLabel: "copy-test", RequestID: uuid.NewString(), TraceID: uuid.NewString(), TargetKeyID: uuid.NewString()})
+	return adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "copy-admin", ActorLabel: "copy-test", RequestID: uuid.NewString(), TraceID: uuid.NewString(), ProjectID: projectID})
 }
 
 func copiedID(t *testing.T, result CopyAssetsResult, kind, source string) string {
@@ -65,7 +68,7 @@ func TestAdminCopyFilesRetryIsolationAndAuditRollback(t *testing.T) {
 		group.Add(1)
 		go func() {
 			defer group.Done()
-			results[i], failures[i] = s.CopyAssets(adminCopyContext(t), source, target, input)
+			results[i], failures[i] = s.CopyAssets(adminCopyContext(t, target), source, target, input)
 		}()
 	}
 	group.Wait()
@@ -92,13 +95,13 @@ func TestAdminCopyFilesRetryIsolationAndAuditRollback(t *testing.T) {
 	}
 	changed := input
 	changed.IncludeDependencies = true
-	if _, err := s.CopyAssets(adminCopyContext(t), source, target, changed); !errors.Is(err, ErrIdempotencyConflict) {
+	if _, err := s.CopyAssets(adminCopyContext(t, target), source, target, changed); !errors.Is(err, ErrIdempotencyConflict) {
 		t.Fatal("changed retry accepted", err)
 	}
-	if _, err := s.CopyAssets(adminCopyContext(t), target, source, input); !errors.Is(err, ErrNotFound) {
+	if _, err := s.CopyAssets(adminCopyContext(t, source), target, source, input); !errors.Is(err, ErrNotFound) {
 		t.Fatal("foreign source accepted", err)
 	}
-	if _, err := s.CopyAssets(adminCopyContext(t), source, source, input); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.CopyAssets(adminCopyContext(t, target), source, source, input); !errors.Is(err, ErrInvalidInput) {
 		t.Fatal("same tenant accepted", err)
 	}
 	var owners, audits, publicOwners int
@@ -129,7 +132,7 @@ func TestAdminCopyFilesRetryIsolationAndAuditRollback(t *testing.T) {
 		_, _ = s.pool.Exec(context.Background(), "DROP FUNCTION IF EXISTS "+function+"()")
 	})
 	input.IdempotencyKey = uuid.NewString()
-	if _, err := s.CopyAssets(adminCopyContext(t), source, target, input); err == nil {
+	if _, err := s.CopyAssets(adminCopyContext(t, target), source, target, input); err == nil {
 		t.Fatal("audit failure committed")
 	}
 	if sourceObjectCount(t, s.pool) != count+1 {
@@ -189,11 +192,11 @@ func TestAdminCopySkillVersionsAndTemplateConfidentialDependencies(t *testing.T)
 		t.Fatal(err)
 	}
 	input := CopyAssetsInput{ResourceType: "environment_template", ResourceID: template.ID}
-	if _, err := s.CopyAssets(adminCopyContext(t), source, target, input); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.CopyAssets(adminCopyContext(t, target), source, target, input); !errors.Is(err, ErrInvalidInput) {
 		t.Fatal("dependencies silently omitted", err)
 	}
 	input.IncludeDependencies = true
-	result, err := s.CopyAssets(adminCopyContext(t), source, target, input)
+	result, err := s.CopyAssets(adminCopyContext(t, target), source, target, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +244,7 @@ func TestAdminCopySkillVersionsAndTemplateConfidentialDependencies(t *testing.T)
 	if err := s.pool.QueryRow(t.Context(), "SELECT count(*) FROM skills WHERE tenant_id=$1", target).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CopyAssets(adminCopyContext(t), source, target, CopyAssetsInput{ResourceType: "environment_template", ResourceID: broken.ID, IncludeDependencies: true}); !errors.Is(err, ErrNotFound) {
+	if _, err := s.CopyAssets(adminCopyContext(t, target), source, target, CopyAssetsInput{ResourceType: "environment_template", ResourceID: broken.ID, IncludeDependencies: true}); !errors.Is(err, ErrNotFound) {
 		t.Fatal("missing dependency accepted", err)
 	}
 	if err := s.pool.QueryRow(t.Context(), "SELECT count(*) FROM skills WHERE tenant_id=$1", target).Scan(&after); err != nil || before != after {

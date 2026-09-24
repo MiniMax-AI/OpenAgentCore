@@ -8,12 +8,14 @@ SELECT
  (SELECT count(*) FROM vault_credentials c JOIN vaults v ON v.id=c.vault_id WHERE v.tenant_id=sqlc.arg(tenant_id))::bigint AS credentials;
 
 -- name: AdminSummarySessions :many
-SELECT * FROM sessions
-WHERE tenant_id=sqlc.arg(tenant_id) AND deleted_at IS NULL
- AND (sqlc.narg(created_after)::timestamptz IS NULL OR created_at >= sqlc.narg(created_after)::timestamptz)
- AND (sqlc.narg(created_before)::timestamptz IS NULL OR created_at < sqlc.narg(created_before)::timestamptz)
- AND id > sqlc.arg(after_id)::uuid
-ORDER BY id LIMIT 100;
+SELECT sqlc.embed(s), a.key_id AS creation_key_id FROM sessions s
+LEFT JOIN write_audit_owners o ON o.tenant_id=s.tenant_id AND o.resource_type='session' AND o.resource_id=s.id::text
+LEFT JOIN write_audit_operations a ON a.tenant_id=o.tenant_id AND a.id=o.operation_id
+WHERE s.tenant_id=sqlc.arg(tenant_id) AND s.deleted_at IS NULL
+ AND (sqlc.narg(created_after)::timestamptz IS NULL OR s.created_at >= sqlc.narg(created_after)::timestamptz)
+ AND (sqlc.narg(created_before)::timestamptz IS NULL OR s.created_at < sqlc.narg(created_before)::timestamptz)
+ AND s.id > sqlc.arg(after_id)::uuid
+ORDER BY s.id LIMIT 100;
 
 -- name: AdminRuntimeTargets :many
 SELECT id,tenant_id,created_at FROM sessions

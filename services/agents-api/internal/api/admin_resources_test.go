@@ -10,8 +10,32 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/adminaudit"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
+
+const managementProjectID = "22222222-2222-4222-8222-222222222222"
+
+type adminProjectFixture struct {
+	ProjectAPIKeyStore
+	principal identity.Principal
+}
+
+func managementProjectStore() *adminProjectFixture {
+	key := callerBinding()
+	return &adminProjectFixture{principal: identity.Principal{ProjectScope: identity.ProjectScope{TenantID: key.TenantID, OrganizationID: key.OrganizationID, ProjectID: key.ProjectID}, SubjectKind: key.SubjectKind, SubjectID: key.SubjectID}}
+}
+
+func (s *adminProjectFixture) GetProject(_ context.Context, id string) (store.ProjectBinding, error) {
+	if id != managementProjectID {
+		return store.ProjectBinding{}, store.ErrNotFound
+	}
+	return store.ProjectBinding{Project: store.Project{ID: id, TenantID: s.principal.TenantID}, Principal: s.principal}, nil
+}
+
+func (s *adminProjectFixture) ResolveProjectAPIKey(_ context.Context, _ string) (store.ProjectAPIKeyBinding, error) {
+	return store.ProjectAPIKeyBinding{}, store.ErrNotFound
+}
 
 type adminReadFixture struct {
 	ResourceStore
@@ -39,11 +63,11 @@ func TestAdminResourcesHaveExplicitTargetWithoutCallerImpersonation(t *testing.T
 	}
 	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("admin")})
 	resources := &adminReadFixture{}
-	h, err := NewHandler(resources, auth, "codex", WithProjectAPIKeys(&projectKeyStoreFixture{}, admin))
+	h, err := NewHandler(resources, auth, "codex", WithProjectAPIKeys(managementProjectStore(), admin))
 	if err != nil {
 		t.Fatal(err)
 	}
-	base := "/core/v1/admin/api-keys/static:" + key.TokenSHA256
+	base := "/core/v1/admin/projects/" + managementProjectID
 	for _, test := range []struct {
 		method, path string
 		status       int
@@ -85,14 +109,14 @@ type summaryFixture struct {
 	filter store.AdminSummaryFilter
 }
 
-func (s *summaryFixture) ReadAdminSummary(_ context.Context, tenant string, filter store.AdminSummaryFilter, visit func(store.Session) error) (store.AdminAssetCounts, error) {
+func (s *summaryFixture) ReadAdminSummary(_ context.Context, tenant string, filter store.AdminSummaryFilter, visit func(store.Session, *string) error) (store.AdminAssetCounts, error) {
 	s.tenant, s.filter = tenant, filter
 	for i, usage := range []json.RawMessage{nil, json.RawMessage(`{"input_tokens":3,"output_tokens":5,"total_tokens":8,"input_tokens_details":{"cached_tokens":2},"output_tokens_details":{"reasoning_tokens":1}}`)} {
 		session := store.Session{ID: "session", TenantID: tenant, Configuration: json.RawMessage(`{"agent":{"id":"agent","model":"model","tools":[]},"environment":{"type":"none"}}`), CreatedAt: time.Unix(100+int64(i), 0), Usage: usage}
 		if i == 0 {
 			session.LastTurn = &store.Turn{Status: store.TurnInProgress, CreatedAt: time.Unix(110, 0)}
 		}
-		if err := visit(session); err != nil {
+		if err := visit(session, nil); err != nil {
 			return store.AdminAssetCounts{}, err
 		}
 	}
@@ -103,12 +127,12 @@ func TestAdminSummaryUsesPublicStateAndNullUsageCoverage(t *testing.T) {
 	auth, _ := NewAuthenticator([]APIKey{key})
 	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("admin")})
 	fixture := &summaryFixture{}
-	h, err := NewHandler(&recordingStore{}, auth, "codex", WithProjectAPIKeys(&projectKeyStoreFixture{}, admin), WithAdminManagement(fixture))
+	h, err := NewHandler(&recordingStore{}, auth, "codex", WithProjectAPIKeys(managementProjectStore(), admin), WithAdminManagement(fixture))
 	if err != nil {
 		t.Fatal(err)
 	}
-	base := "/core/v1/admin/summary?key_id=static:" + key.TokenSHA256 + "&created_after=1970-01-01T00:00:00Z&created_before=2030-01-01T00:00:00Z"
-	for _, group := range []string{"key", "agent"} {
+	base := "/core/v1/admin/summary?project_id=" + managementProjectID + "&created_after=1970-01-01T00:00:00Z&created_before=2030-01-01T00:00:00Z"
+	for _, group := range []string{"project", "key", "agent"} {
 		w := projectKeyHTTP(h, http.MethodGet, base+"&group_by="+group, "admin", "")
 		var response AdminSummaryResponse
 		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &response) != nil || len(response.Data) != 1 {
@@ -118,8 +142,14 @@ func TestAdminSummaryUsesPublicStateAndNullUsageCoverage(t *testing.T) {
 		if row.Sessions.Total != 2 || row.Sessions.InProgress != 1 || row.Sessions.Idle != 1 || row.Usage.TotalTokens != 8 || row.Usage.InputTokensDetails.CachedTokens != 2 || row.Coverage.MeasuredSessions != 1 || row.Coverage.Ratio == nil || *row.Coverage.Ratio != .5 || row.LastActiveAt == nil || *row.LastActiveAt != 110 {
 			t.Fatalf("incorrect aggregate %+v", row)
 		}
-		if group == "key" && (row.Assets == nil || row.Assets.Agents != 4 || row.AgentID != nil) {
-			t.Fatal("key assets omitted")
+		if group == "project" && (row.Assets == nil || row.Assets.Agents != 4 || row.AgentID != nil) {
+			t.Fatal("Project assets omitted")
+		}
+		if group == "key" && (row.Assets != nil || row.KeyID != nil) {
+			t.Fatal("unknown creator key not preserved")
+		}
+		if row.ProjectID != managementProjectID {
+			t.Fatal("wrong Project")
 		}
 		if group == "agent" && (row.Assets != nil || row.AgentID == nil || *row.AgentID != "agent") {
 			t.Fatal("agent groups incorrect")

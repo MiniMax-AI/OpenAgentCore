@@ -18,7 +18,7 @@ func TestAdminProxyUsesAccountIdentityAndServerCredential(t *testing.T) {
 		w.WriteHeader(200)
 	}))
 	h := accountConsole(t, c)
-	paths := []struct{ method, path string }{{"GET", "/core/v1/admin/api-keys?limit=5"}, {"POST", "/core/v1/admin/api-keys"}, {"POST", "/core/v1/admin/api-keys/key/reset"}, {"DELETE", "/core/v1/admin/api-keys/key"}, {"GET", "/core/v1/admin/api-keys/key/sessions/session/artifacts/artifact/content"}, {"DELETE", "/core/v1/admin/api-keys/key/skills/skill/versions/1"}, {"POST", "/core/v1/admin/copies"}, {"GET", "/core/v1/admin/summary"}}
+	paths := []struct{ method, path string }{{"GET", "/core/v1/admin/projects?limit=5"}, {"POST", "/core/v1/admin/projects"}, {"POST", "/core/v1/admin/projects/project/keys"}, {"POST", "/core/v1/admin/projects/project/archive"}, {"DELETE", "/core/v1/admin/projects/project/keys/key"}, {"GET", "/core/v1/admin/projects/key/sessions/session/artifacts/artifact/content"}, {"DELETE", "/core/v1/admin/projects/key/skills/skill/versions/1"}, {"POST", "/core/v1/admin/copies"}, {"GET", "/core/v1/admin/summary"}}
 	for _, tc := range paths {
 		if w := authRequest(h, tc.method, tc.path, `{}`, nil); w.Code != 401 {
 			t.Errorf("unauthenticated %s = %d", tc.path, w.Code)
@@ -41,7 +41,7 @@ func TestAdminProxyUsesAccountIdentityAndServerCredential(t *testing.T) {
 	if calls.Load() != int32(len(paths)) {
 		t.Fatal("unexpected admin proxy count")
 	}
-	for _, tc := range []struct{ method, path string }{{"POST", "/core/v1/admin/api-keys/key/agents"}, {"PATCH", "/core/v1/admin/api-keys/key/agents/agent"}, {"POST", "/core/v1/admin/api-keys/key/sessions"}, {"POST", "/core/v1/admin/api-keys/key/sessions/session/events"}, {"GET", "/core/v1/admin/api-keys/key/sessions/session/events"}, {"GET", "/core/v1/admin/api-keys/key/files/file/content"}, {"GET", "/core/v1/admin/unknown"}} {
+	for _, tc := range []struct{ method, path string }{{"POST", "/core/v1/admin/projects/key/agents"}, {"PATCH", "/core/v1/admin/projects/key/agents/agent"}, {"POST", "/core/v1/admin/projects/key/sessions"}, {"POST", "/core/v1/admin/projects/key/sessions/session/events"}, {"GET", "/core/v1/admin/projects/key/sessions/session/events"}, {"GET", "/core/v1/admin/projects/key/files/file/content"}, {"GET", "/core/v1/admin/unknown"}} {
 		if w := authRequest(h, tc.method, tc.path, `{}`, cookie); w.Code != 404 {
 			t.Errorf("unsupported %s %s = %d", tc.method, tc.path, w.Code)
 		}

@@ -1,6 +1,6 @@
 -- name: ListAdminAuditLog :many
 SELECT * FROM admin_audit_log
-WHERE (sqlc.arg(key_id)::text='' OR target_key_id=sqlc.arg(key_id))
+WHERE (sqlc.arg(project_id)::text='' OR project_id::text=sqlc.arg(project_id))
  AND (sqlc.arg(resource_type)::text='' OR resource_type=sqlc.arg(resource_type))
  AND (sqlc.arg(resource_id)::text='' OR resource_id=sqlc.arg(resource_id))
  AND (sqlc.arg(action)::text='' OR action=sqlc.arg(action))

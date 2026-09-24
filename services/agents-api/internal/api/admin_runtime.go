@@ -9,7 +9,7 @@ import (
 )
 
 type AdminRuntimeObservation struct {
-	KeyID       string                `json:"key_id"`
+	ProjectID   string                `json:"project_id"`
 	Observation v1.RuntimeObservation `json:"observation"`
 }
 type AdminRuntimeObservationList struct {
@@ -20,8 +20,8 @@ type AdminRuntimeObservationList struct {
 	LastID  *string                   `json:"last_id"`
 }
 
-// @Summary List Runtime observations across managed key spaces
-// @Description Deployment administrator only. Each observation is labelled with its owning key ID. Uses the existing read-only Runtime sampler, with bounded concurrency and no execution or provisioning.
+// @Summary List Runtime observations across managed Projects
+// @Description Deployment administrator only. Each observation is labelled with its owning Project ID. Uses the existing read-only Runtime sampler, with bounded concurrency and no execution or provisioning.
 // @Tags Core Administration
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -43,20 +43,20 @@ func (h *Handler) adminRuntimeObservations(w http.ResponseWriter, r *http.Reques
 	ctx, cancel := context.WithTimeout(r.Context(), runtimeObservationRequestBudget)
 	defer cancel()
 	tenants := []string{}
-	keyByTenant := map[string]string{}
+	projectByTenant := map[string]string{}
 	cursor := ""
 	for {
-		keys, err := h.listAdminKeyBindings(ctx, cursor, 100, true)
+		projects, err := h.listAdminProjects(ctx, cursor, 100, true)
 		if err != nil {
 			writeStoreError(w, r, err)
 			return
 		}
-		for _, key := range keys.Data {
-			tenants = append(tenants, key.TenantID)
-			keyByTenant[key.TenantID] = key.ID
-			cursor = key.ID
+		for _, project := range projects.Data {
+			tenants = append(tenants, project.TenantID)
+			projectByTenant[project.TenantID] = project.ID
+			cursor = project.ID
 		}
-		if !keys.HasMore {
+		if !projects.HasMore {
 			break
 		}
 	}
@@ -93,7 +93,7 @@ func (h *Handler) adminRuntimeObservations(w http.ResponseWriter, r *http.Reques
 				once.Do(func() { firstErr = err; stop() })
 				return
 			}
-			response.Data[i] = AdminRuntimeObservation{KeyID: keyByTenant[tenant], Observation: projected}
+			response.Data[i] = AdminRuntimeObservation{ProjectID: projectByTenant[tenant], Observation: projected}
 		}(i, target.TenantID, target.SessionID)
 	}
 	wg.Wait()

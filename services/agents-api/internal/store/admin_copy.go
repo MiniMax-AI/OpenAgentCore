@@ -83,6 +83,13 @@ func (s *Store) CopyAssets(ctx context.Context, sourceTenant, targetTenant strin
 		result = CopyAssetsResult{Mappings: []AssetCopyMapping{}, Skipped: []AssetCopySkipped{}}
 		err = pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead}, func(tx pgx.Tx) error {
 			q := s.queries.WithTx(tx)
+			project, err := q.LockAdminCopyTargetProject(ctx, target)
+			if err != nil {
+				return err
+			}
+			if project.ArchivedAt.Valid {
+				return ErrProjectArchived
+			}
 			if input.IdempotencyKey != "" {
 				if err := q.LockAdminAssetCopy(ctx, "admin-copy:"+targetTenant+":"+input.IdempotencyKey); err != nil {
 					return err

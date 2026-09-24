@@ -1,3 +1,6 @@
+-- name: LockAdminCopyTargetProject :one
+SELECT id, archived_at FROM projects WHERE tenant_id=$1 FOR SHARE;
+
 -- name: LockAdminAssetCopy :exec
 SELECT pg_advisory_xact_lock(hashtextextended(sqlc.arg(lock_key)::text, 0));
 

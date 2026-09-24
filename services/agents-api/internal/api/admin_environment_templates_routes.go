@@ -12,8 +12,8 @@ import "net/http"
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.EnvironmentTemplateList
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/environment-templates [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/environment-templates [get]
 func (h *Handler) adminListEnvironmentTemplates(w http.ResponseWriter, r *http.Request) {
 	h.listEnvironmentTemplates(w, r)
 }
@@ -26,8 +26,8 @@ func (h *Handler) adminListEnvironmentTemplates(w http.ResponseWriter, r *http.R
 // @Param environment_template_id path string true "Template ID"
 // @Success 200 {object} v1.EnvironmentTemplate
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/environment-templates/{environment_template_id} [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/environment-templates/{environment_template_id} [get]
 func (h *Handler) adminGetEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
 	h.getEnvironmentTemplate(w, r)
 }
@@ -40,8 +40,8 @@ func (h *Handler) adminGetEnvironmentTemplate(w http.ResponseWriter, r *http.Req
 // @Param environment_template_id path string true "Template ID"
 // @Success 200 {object} v1.EnvironmentTemplateDeleted
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/environment-templates/{environment_template_id} [delete]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/environment-templates/{environment_template_id} [delete]
 func (h *Handler) adminDeleteEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
 	h.deleteEnvironmentTemplate(w, r)
 }

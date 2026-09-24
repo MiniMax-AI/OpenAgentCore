@@ -24,7 +24,7 @@ type AdminAssetCounts struct {
 // ReadAdminSummary visits one space's Sessions from one read-only snapshot. The
 // visitor reuses the API's Session projection instead of creating another status
 // or usage model. Paging keeps the stored configurations out of an unbounded slice.
-func (s *Store) ReadAdminSummary(ctx context.Context, tenantID string, filter AdminSummaryFilter, visit func(Session) error) (AdminAssetCounts, error) {
+func (s *Store) ReadAdminSummary(ctx context.Context, tenantID string, filter AdminSummaryFilter, visit func(Session, *string) error) (AdminAssetCounts, error) {
 	var counts AdminAssetCounts
 	tenant, err := parseID(tenantID)
 	if err != nil {
@@ -47,7 +47,7 @@ func (s *Store) ReadAdminSummary(ctx context.Context, tenantID string, filter Ad
 				return err
 			}
 			for _, row := range rows {
-				session, err := sessionFromRow(row)
+				session, err := sessionFromRow(row.Session)
 				if err != nil {
 					return err
 				}
@@ -55,10 +55,15 @@ func (s *Store) ReadAdminSummary(ctx context.Context, tenantID string, filter Ad
 				if err != nil {
 					return err
 				}
-				if err := visit(session); err != nil {
+				var creator *string
+				if row.CreationKeyID.Valid {
+					id := row.CreationKeyID.String
+					creator = &id
+				}
+				if err := visit(session, creator); err != nil {
 					return err
 				}
-				params.AfterID = row.ID
+				params.AfterID = row.Session.ID
 			}
 			if len(rows) < 100 {
 				return nil

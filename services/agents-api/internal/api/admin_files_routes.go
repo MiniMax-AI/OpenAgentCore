@@ -13,8 +13,8 @@ import "net/http"
 // @Param purpose query string false "Only return Files with this purpose"
 // @Success 200 {object} v1.SourceFileList
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/files [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/files [get]
 func (h *Handler) adminListSourceFiles(w http.ResponseWriter, r *http.Request) {
 	h.listSourceFiles(w, r)
 }
@@ -27,8 +27,8 @@ func (h *Handler) adminListSourceFiles(w http.ResponseWriter, r *http.Request) {
 // @Param file_id path string true "Source file ID"
 // @Success 200 {object} v1.SourceFile
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/files/{file_id} [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/files/{file_id} [get]
 func (h *Handler) adminGetSourceFile(w http.ResponseWriter, r *http.Request) {
 	h.getSourceFile(w, r)
 }
@@ -41,8 +41,8 @@ func (h *Handler) adminGetSourceFile(w http.ResponseWriter, r *http.Request) {
 // @Param file_id path string true "Source file ID"
 // @Success 200 {object} v1.SourceFileDeleted
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/files/{file_id} [delete]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/files/{file_id} [delete]
 func (h *Handler) adminDeleteSourceFile(w http.ResponseWriter, r *http.Request) {
 	h.deleteSourceFile(w, r)
 }

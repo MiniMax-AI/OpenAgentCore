@@ -30,14 +30,15 @@ Fix in-scope blockers before delivery. Do not use `codex exec` as a substitute r
 
 The Core Web is an administrator console. Its server authenticates to the explicit
 `/core/v1/admin` management surface and existing sandbox administration, never to
-`/v1` on behalf of a browser. Applications use their own API key. One stable key
-owns one execution tenant; secret reset preserves both and invalidates the old
-secret, while revocation retains assets. Do not add a separate Core user table,
-roles, memberships or shared resource spaces. Static configured keys also require
-independent spaces. Management provides safe reads, the same public deletion
-preconditions, independent copies and key operations; it cannot execute or edit
-arbitrary user assets. Keep administrator target scope separate from caller
-principals. See [design principles](docs/design-principles.md) and the
+`/v1` on behalf of a browser. Applications use an API key issued inside a Project. One Project owns one execution
+tenant and principal; all its keys share assets and permissions while writes retain
+individual key provenance. Projects and keys are database-owned, with no static
+business keys or configuration synchronization. Revocation affects one key;
+archiving a Project revokes all its keys, retaining assets and admitted execution.
+Do not add Core users, roles, memberships or cross-Project sharing. Management
+provides safe reads, public deletion preconditions, independent copies and Project
+and key operations; it cannot execute or edit arbitrary assets. Keep administrator
+target scope separate from caller principals. See [design principles](docs/design-principles.md) and the
 [administrator contract](contracts/agents-api/admin-api.md).
 
 Administrator writes and their audit record share one PostgreSQL transaction.
@@ -48,6 +49,11 @@ creation anchors. Never call separately committing resource creators from a copy
 These anchors identify administrator copies even when API-key provenance is null;
 unknown historical provenance remains unknown. No secrets or request bodies enter
 logs. A forwarded console actor name is only a label, never an authorization input.
+
+When requirements conflict, object ownership is unclear, or a design would need
+parallel compatibility paths, raise the issue with a concrete recommendation and
+tradeoffs before implementing the disputed behavior. Continue independent work
+while the decision is pending. Do not silently preserve obsolete private designs.
 
 For subsequent alignment and milestone closure batches, the main thread coordinates
 design, shared interface agreements, file ownership, integration and merge. First
@@ -1787,18 +1793,18 @@ the static login UI, finite console authentication routes and the existing
 independently authenticated node/project transports. Authentication requests use
 same-origin JSON POSTs with bounded bodies and bounded password-hash work.
 
-Console-managed API keys live in Core PostgreSQL and own independent tenants.
-The administrator issuer creates the scope, key and audit atomically. It stores
-only a digest and safe metadata; creation and secret reset return plaintext once.
-Repeated issuance/reset IDs conflict instead of replaying a secret. Revocation is
-checked on every dynamic-key request, without an authentication cache. Database
-failures fail closed. Startup rejects static/issued tenant overlap and any API-key
-credential equal to a deployment credential. Static configuration keys are visible
-but cannot be reset or revoked through management. Fresh installation needs no
-project key: the administrator creates the first key after console login.
+Projects and application API keys live in Core PostgreSQL. Project creation owns
+its scope and shared principal; key issuance, revocation and Project archive share
+a transaction with audit. Issuance stores only a digest and metadata and returns
+plaintext once. Keys cannot be read back or reset in place; rotate by issuing a
+new key in the same Project and revoking the old key. Authentication checks the
+key and Project on every request, without a credential cache, and fails closed on
+database errors. Deployment credentials cannot authenticate to the public API.
+Configuration defines no Projects or business API keys. Fresh installation starts
+with no Projects; an administrator creates a Project and then issues a key.
 
-Administrator onboarding covers console login, key creation and optional node
-enrollment. Model execution belongs in an external API example using an issued
+Administrator onboarding covers console login, Project creation, key issuance and
+optional node enrollment. Model execution belongs in an external API example using an issued
 key. Keep secrets out of browser persistence, generated examples and URLs. Observe
 confirmed resources through the management API; do not infer Agent-to-node ownership
 or execution readiness from a host connection. Preserve keyboard focus, reduced
@@ -1811,7 +1817,7 @@ to a loopback existing Core on the same Linux host or a remote HTTPS Core.
 Installation state and secrets live in a private directory under `~/.parsar/` by
 default. No credential enters build arguments, image layers, browser bundles or
 diagnostic output. Compose configuration is confidential. The generated database,
-configured static identities, issued key spaces, provider identity and encryption
+Projects and their issued keys, provider identity and encryption
 key survive reruns; automatic
 revision replacement and provider migration are outside this initial installer.
 Reruns also refuse enabling or disabling a sandbox provider on an existing

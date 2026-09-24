@@ -55,7 +55,7 @@ func TestPairedConsoleKeepsAdminAndNodeCredentialsSeparated(t *testing.T) {
 		{"PATCH", "/core/v1/sandbox/deployment/maintenance", "basic", 200},
 		{"PATCH", "/core/v1/sandbox/deployment/maintenance", "none", 401},
 		{"GET", "/core/v1/sandbox/nodes", "node", 401},
-		{"GET", "/core/v1/admin/api-keys", "basic", 200},
+		{"GET", "/core/v1/admin/projects", "basic", 200},
 		{"POST", "/core/v1/sandbox/enroll", "node", 200},
 		{"POST", "/core/v1/sandbox/enroll", "basic", 403},
 		{"POST", "/api/v1/agent-daemon/bootstrap", "node", 200},

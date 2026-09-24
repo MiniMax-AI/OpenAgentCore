@@ -50,7 +50,7 @@ func adminDeleteContext(ctx context.Context, tenant, request string) context.Con
 	// Even an inherited public provenance context must not turn an administrator
 	// operation into a user-key operation.
 	return adminaudit.WithSource(resourceAuditContext(ctx, tenant, request), adminaudit.Source{
-		CredentialID: "87654321", ActorLabel: "administrator fixture", TargetKeyID: "target-key", RequestID: request, TraceID: "admin-mutation-trace",
+		CredentialID: "87654321", ActorLabel: "administrator fixture", ProjectID: tenant, RequestID: request, TraceID: "admin-mutation-trace",
 	})
 }
 
@@ -72,14 +72,11 @@ func adminMutationSnapshot(t *testing.T, s *Store, tables ...string) map[string]
 func assertAdminMutationAudit(t *testing.T, s *Store, tenant, request, action, kind, id string) {
 	t.Helper()
 	var credential, actor, key, trace, gotAction, gotKind, gotID, mappings, raw string
-	if err := s.pool.QueryRow(t.Context(), `SELECT admin_credential_id,actor_label,target_key_id,trace_id,action,resource_type,resource_id,result_ids::text,to_jsonb(a)::text
+	if err := s.pool.QueryRow(t.Context(), `SELECT admin_credential_id,actor_label,project_id,trace_id,action,resource_type,resource_id,result_ids::text,to_jsonb(a)::text
  FROM admin_audit_log a WHERE tenant_id=$1 AND request_id=$2`, tenant, request).Scan(&credential, &actor, &key, &trace, &gotAction, &gotKind, &gotID, &mappings, &raw); err != nil {
 		t.Fatal(err)
 	}
-	expectedKey := "target-key"
-	if kind == "api_key" {
-		expectedKey = id
-	}
+	expectedKey := tenant
 	if credential != "87654321" || actor != "administrator fixture" || key != expectedKey || trace != "admin-mutation-trace" || gotAction != action || gotKind != kind || gotID != id || mappings != "[]" {
 		t.Fatal("administrator audit identity differs")
 	}
@@ -141,6 +138,9 @@ func TestAdminDeleteResourceAuditTransactions(t *testing.T) {
 				}
 			}
 			if _, err := pool.Exec(t.Context(), "INSERT INTO execution_project_scopes(tenant_id,organization_id,project_id) VALUES($1,'admin-delete',$2)", tenant, tenant); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := pool.Exec(t.Context(), "INSERT INTO projects(id,name,tenant_id,subject_kind,subject_id) VALUES($1,'Delete fixture',$1,'service_account',$2)", tenant, "project:"+tenant); err != nil {
 				t.Fatal(err)
 			}
 			before, objects := adminMutationSnapshot(t, s, tables...), sourceObjectCount(t, pool)

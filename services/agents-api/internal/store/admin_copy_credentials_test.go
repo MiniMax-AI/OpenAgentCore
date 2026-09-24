@@ -42,7 +42,7 @@ func TestAdminCopyAgentVaultCredentialsAndEncryptedProvider(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := s.CopyAssets(adminCopyContext(t), source, target, CopyAssetsInput{ResourceType: "agent", ResourceID: agent.ID, IncludeDependencies: true})
+	result, err := s.CopyAssets(adminCopyContext(t, target), source, target, CopyAssetsInput{ResourceType: "agent", ResourceID: agent.ID, IncludeDependencies: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestAdminCopyAgentVaultCredentialsAndEncryptedProvider(t *testing.T) {
 			t.Fatal("old tenant decrypted copied grant")
 		}
 	}
-	without, err := s.CopyAssets(adminCopyContext(t), source, target, CopyAssetsInput{ResourceType: "agent", ResourceID: agent.ID})
+	without, err := s.CopyAssets(adminCopyContext(t, target), source, target, CopyAssetsInput{ResourceType: "agent", ResourceID: agent.ID})
 	if err != nil || len(without.Mappings) != 1 {
 		t.Fatal("dependency-disabled agent copy", err)
 	}
@@ -93,16 +93,16 @@ func TestAdminCopyAgentVaultCredentialsAndEncryptedProvider(t *testing.T) {
 	if json.Unmarshal(cleared.Configuration, &copied) != nil || copied.Tools[0].CredentialID != nil || copied.Tools[1].CredentialID != nil {
 		t.Fatal("dependency-disabled credential retained")
 	}
-	standalone, err := s.CopyAssets(adminCopyContext(t), source, target, CopyAssetsInput{ResourceType: "credential", ResourceID: static.ID, TargetVaultID: copyVault})
+	standalone, err := s.CopyAssets(adminCopyContext(t, target), source, target, CopyAssetsInput{ResourceType: "credential", ResourceID: static.ID, TargetVaultID: copyVault})
 	if err != nil || len(standalone.Mappings) != 1 {
 		t.Fatal("standalone credential copy", err)
 	}
-	if _, err := s.CopyAssets(adminCopyContext(t), source, target, CopyAssetsInput{ResourceType: "credential", ResourceID: static.ID, TargetVaultID: vault.ID}); !errors.Is(err, ErrNotFound) {
+	if _, err := s.CopyAssets(adminCopyContext(t, target), source, target, CopyAssetsInput{ResourceType: "credential", ResourceID: static.ID, TargetVaultID: vault.ID}); !errors.Is(err, ErrNotFound) {
 		t.Fatal("foreign target vault accepted", err)
 	}
 	// Copying a Vault directly includes every grant, independently of the optional
 	// dependency flag used by Agents and Templates.
-	direct, err := s.CopyAssets(adminCopyContext(t), source, target, CopyAssetsInput{ResourceType: "vault", ResourceID: vault.ID})
+	direct, err := s.CopyAssets(adminCopyContext(t, target), source, target, CopyAssetsInput{ResourceType: "vault", ResourceID: vault.ID})
 	if err != nil || len(direct.Mappings) != 3 || len(direct.Skipped) != 1 {
 		t.Fatal("direct vault copy incomplete", err)
 	}

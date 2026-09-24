@@ -23,7 +23,8 @@ type AdminUsageCoverage struct {
 	Ratio            *float64 `json:"ratio"`
 }
 type AdminSummaryRow struct {
-	KeyID        string                  `json:"key_id"`
+	ProjectID    string                  `json:"project_id"`
+	KeyID        *string                 `json:"key_id"`
 	AgentID      *string                 `json:"agent_id"`
 	Assets       *store.AdminAssetCounts `json:"assets"`
 	Sessions     AdminSessionCounts      `json:"sessions"`
@@ -52,31 +53,31 @@ func adminSummaryTime(r *http.Request, name string) (*time.Time, error) {
 	return &value, nil
 }
 
-// @Summary Summarize resource counts and Session usage by key or Agent
-// @Description Administrator only. after/limit/order paginate key spaces. Agent grouping returns groups within those spaces. Date bounds filter Session creation, not current asset counts. Usage sums only non-null public Session usage; coverage includes every selected Session. Each key is read in a consistent database snapshot. Totals are not billing records.
+// @Summary Summarize resource counts and Session usage by Project, Agent or creator key
+// @Description Administrator only. after/limit/order paginate Projects. Agent grouping returns groups within those spaces. Date bounds filter Session creation, not current asset counts. Usage sums only non-null public Session usage; coverage includes every selected Session. Each Project is read in a consistent database snapshot. Totals are not billing records.
 // @Tags Core Administration
 // @Produce json
 // @Security DeploymentAdminAuth
-// @Param key_id query string false "One API key space"
-// @Param group_by query string false "Grouping" Enums(key,agent) default(key)
+// @Param project_id query string false "One API Project"
+// @Param group_by query string false "Grouping" Enums(project,agent,key) default(project)
 // @Param created_after query string false "Inclusive RFC3339 Session creation time"
 // @Param created_before query string false "Exclusive RFC3339 Session creation time"
-// @Param after query string false "Last key ID in preceding page"
-// @Param limit query int false "Number of key spaces" minimum(1) maximum(100) default(20)
-// @Param order query string false "Key ID order" Enums(asc,desc) default(desc)
+// @Param after query string false "Last Project ID in preceding page"
+// @Param limit query int false "Number of Projects" minimum(1) maximum(100) default(20)
+// @Param order query string false "Project order" Enums(asc,desc) default(desc)
 // @Success 200 {object} api.AdminSummaryResponse
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /core/v1/admin/summary [get]
 func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
-	options, ok := readPage(w, r, "key_id", "group_by", "created_after", "created_before")
+	options, ok := readPage(w, r, "project_id", "group_by", "created_after", "created_before")
 	if !ok {
 		return
 	}
 	group := r.URL.Query().Get("group_by")
 	if group == "" {
-		group = "key"
+		group = "project"
 	}
-	if group != "key" && group != "agent" {
+	if group != "project" && group != "agent" && group != "key" {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
@@ -96,29 +97,33 @@ func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	var keys store.ProjectAPIKeyPage
-	if keyID := r.URL.Query().Get("key_id"); keyID != "" {
+	if group == "agent" && r.URL.Query().Get("project_id") == "" {
+		writeStoreError(w, r, store.ErrInvalidInput)
+		return
+	}
+	var projects store.ProjectPage
+	if projectID := r.URL.Query().Get("project_id"); projectID != "" {
 		if options.after != "" {
 			writeStoreError(w, r, store.ErrInvalidInput)
 			return
 		}
-		var binding store.ProjectAPIKeyBinding
-		binding, err = h.resolveAdminKey(ctx, keyID)
-		keys = store.ProjectAPIKeyPage{Data: []store.ProjectAPIKey{binding.Key}}
+		var binding store.ProjectBinding
+		binding, err = h.resolveAdminProject(ctx, projectID)
+		projects = store.ProjectPage{Data: []store.Project{binding.Project}}
 	} else {
-		keys, err = h.listAdminKeyBindings(ctx, options.after, options.limit, options.ascending)
+		projects, err = h.listAdminProjects(ctx, options.after, options.limit, options.ascending)
 	}
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	response := AdminSummaryResponse{Data: []AdminSummaryRow{}, HasMore: keys.HasMore}
-	for _, key := range keys.Data {
+	response := AdminSummaryResponse{Data: []AdminSummaryRow{}, HasMore: projects.HasMore}
+	for _, project := range projects.Data {
 		groups := map[string]*AdminSummaryRow{}
-		if group == "key" {
-			groups[""] = &AdminSummaryRow{KeyID: key.ID}
+		if group == "project" {
+			groups[""] = &AdminSummaryRow{ProjectID: project.ID}
 		}
-		counts, err := h.adminManagement.ReadAdminSummary(ctx, key.TenantID, store.AdminSummaryFilter{CreatedAfter: after, CreatedBefore: before}, func(session store.Session) error {
+		counts, err := h.adminManagement.ReadAdminSummary(ctx, project.TenantID, store.AdminSummaryFilter{CreatedAfter: after, CreatedBefore: before}, func(session store.Session, creationKeyID *string) error {
 			projected, err := sessionResponse(session, h.executorURL)
 			if err != nil {
 				return err
@@ -126,11 +131,18 @@ func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
 			groupID := ""
 			if group == "agent" {
 				groupID = projected.Agent.ID
+			} else if group == "key" && creationKeyID != nil {
+				groupID = *creationKeyID
 			}
 			row := groups[groupID]
 			if row == nil {
-				id := groupID
-				row = &AdminSummaryRow{KeyID: key.ID, AgentID: &id}
+				row = &AdminSummaryRow{ProjectID: project.ID}
+				if group == "agent" {
+					id := groupID
+					row.AgentID = &id
+				} else if group == "key" {
+					row.KeyID = creationKeyID
+				}
 				groups[groupID] = row
 			}
 			row.Sessions.Total++
@@ -163,7 +175,7 @@ func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
 			writeStoreError(w, r, err)
 			return
 		}
-		if group == "key" {
+		if group == "project" {
 			groups[""].Assets = &counts
 		}
 		ids := make([]string, 0, len(groups))
@@ -180,8 +192,8 @@ func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
 			response.Data = append(response.Data, *row)
 		}
 	}
-	if keys.HasMore && len(keys.Data) > 0 {
-		response.NextCursor = keys.Data[len(keys.Data)-1].ID
+	if projects.HasMore && len(projects.Data) > 0 {
+		response.NextCursor = projects.Data[len(projects.Data)-1].ID
 	}
 	writeJSON(w, http.StatusOK, response)
 }

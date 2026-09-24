@@ -22,7 +22,7 @@ func adminAPIRequest(r *http.Request) bool {
 	remove := r.Method == http.MethodDelete
 	if len(parts) == 1 {
 		switch parts[0] {
-		case "api-keys":
+		case "projects":
 			return read || r.Method == http.MethodPost
 		case "copies":
 			return r.Method == http.MethodPost
@@ -33,14 +33,17 @@ func adminAPIRequest(r *http.Request) bool {
 	if len(parts) == 2 && parts[0] == "runtime-history" && parts[1] == "capabilities" {
 		return read
 	}
-	if len(parts) < 2 || parts[0] != "api-keys" {
+	if len(parts) < 2 || parts[0] != "projects" {
 		return false
 	}
 	if len(parts) == 2 {
-		return read || remove
-	}
-	if len(parts) == 3 && parts[2] == "reset" {
 		return r.Method == http.MethodPost
+	}
+	if len(parts) == 3 && parts[2] == "archive" {
+		return r.Method == http.MethodPost
+	}
+	if parts[2] == "keys" {
+		return len(parts) == 3 && (read || r.Method == http.MethodPost) || len(parts) == 4 && remove
 	}
 	resource := parts[2]
 	if len(parts) == 3 {

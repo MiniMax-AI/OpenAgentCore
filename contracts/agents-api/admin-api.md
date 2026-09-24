@@ -6,36 +6,43 @@ API keys cannot authenticate these routes; the administrator credential cannot
 authenticate `/v1`. The console server supplies `X-Core-Console-Actor` from its
 signed-in account. Core records it only as an unverified display label.
 
-## Key spaces
+## Projects and keys
 
-Each key owns one tenant. There are no API users or roles.
+A Project owns one tenant and shared principal. Its keys have equal access to all
+its assets. Projects and keys are database-owned; deployment configuration defines
+neither. There are no API users, roles or configuration-managed business keys.
 
 | Operation | Path | Result |
 | --- | --- | --- |
-| List | `GET /api-keys` | `{data, has_more}` |
-| Create | `POST /api-keys` with `{id, name}` | Safe key metadata and one-time `key`; HTTP 201 |
-| Retrieve | `GET /api-keys/{key_id}` | Safe metadata, including revoked keys |
-| Reset secret | `POST /api-keys/{key_id}/reset` with `{request_id}` | Safe metadata and one-time replacement `key` |
-| Revoke | `DELETE /api-keys/{key_id}` | `{id, deleted: true}` |
+| List Projects | `GET /projects` | `{data, has_more}` |
+| Create Project | `POST /projects` with `{name}` | Project metadata; HTTP 201 |
+| Rename Project | `POST /projects/{project_id}` with `{name}` | Project metadata |
+| Archive Project | `POST /projects/{project_id}/archive` | Project metadata |
+| List keys | `GET /projects/{project_id}/keys` | `{data, has_more}` |
+| Issue key | `POST /projects/{project_id}/keys` with `{name}` | Key metadata and one-time `key`; HTTP 201 |
+| Revoke key | `DELETE /projects/{project_id}/keys/{key_id}` | `{id, deleted: true}` |
 
-Creation and reset IDs are caller-generated UUIDs. A duplicate create/reset returns
-409; the secret is never replayed. After an uncertain response, inspect safe state
-and explicitly reset using a new request UUID rather than automatically retrying.
-Reset preserves the key ID and tenant and immediately invalidates the old secret.
-Revocation retains resources, provenance and accepted execution.
+IDs are server-generated UUIDs. Project metadata contains `id`, `name`,
+`created_at`, nullable `archived_at`, and `active_key_count`. Key metadata contains
+`id`, `project_id`, `name`, `prefix`, `created_at`, and nullable `revoked_at`.
+Project names contain 1–128 characters; key names contain 1–80. Names are display
+labels and may repeat; control characters are rejected. Lists use lexical ID
+ordering, `order=asc|desc` (default `desc`), `limit=1..100` (default 20), and `after`.
+No response includes the stored digest or an existing credential's plaintext.
 
-Safe metadata: `id`, `name`, `prefix`, `kind`, `tenant_id`, `organization_id`,
-`project_id`, `created_at`, `revoked_at`. List ordering is lexical key ID,
-`order=asc|desc` (default `desc`), `limit=1..100` (default 20), and `after` is the last
-key ID. Static keys use `static:<SHA-256 digest>`, have no persisted creation time
-(the timestamp is the zero time), and reject reset/revoke with 409. Their secrets
-and spaces are managed through configuration. Issued keys have a UUID ID and
-`kind=issued`. Neither response contains the stored secret digest.
+Rotate by issuing a new key in the same Project and revoking the old one. Revoking
+one key leaves other keys, assets and admitted work intact. Archive atomically
+marks the Project archived, revokes all its keys and records audit. Archived
+Projects cannot issue keys or receive copies; their assets remain available for
+administrator inspection, deletion and copying to another active Project. There
+is no Project deletion, unarchive, key reset or automatic write retry operation.
+After an uncertain issuance response, inspect metadata and explicitly revoke any
+unusable key before issuing another; plaintext cannot be recovered.
 
 ## Resource reads and deletion
 
-Paths below are relative to `/api-keys/{key_id}`. The key selects a space, including
-a revoked space; it does not authenticate. Shared resource handlers preserve their
+Paths below are relative to `/projects/{project_id}`. The Project selects a tenant, including
+an archived Project; it does not authenticate. Shared resource handlers preserve their
 public object serialization, pagination, errors and deletion preconditions. They
 receive an explicit target tenant, not a fabricated caller identity.
 
@@ -58,9 +65,10 @@ corresponding project operations do.
 
 ## Copies
 
-`POST /copies` takes `source_key_id`, `target_key_id`, `resource_type`, `resource_id`,
+`POST /copies` takes `source_project_id`, `target_project_id`, `resource_type`, `resource_id`,
 `include_dependencies`, and optional `target_vault_id` for a standalone Credential.
-Different source and target spaces are required. `Idempotency-Key` makes identical
+Different source and target Projects are required. An archived target returns 409,
+including retries of an earlier copy; an archived source remains readable. `Idempotency-Key` makes identical
 retries return the committed result; a changed request conflicts. Without the
 header a separate request may create another copy; clients must not retry an
 uncertain copy automatically.
@@ -91,36 +99,41 @@ historical unknown resources have null source and audit ID.
 
 ## Monitoring and audit
 
-`GET /summary` supports optional `key_id`, `group_by=key|agent`, inclusive
-`created_after` and exclusive `created_before` RFC3339 Session-creation bounds.
-`after`, `limit`, `order` paginate key spaces; Agent grouping returns groups within
-that key page. Response `{data, has_more, next_cursor}` rows contain `key_id`,
-nullable `agent_id`, current `assets` counts (null for Agent groups), `sessions`
-counts (`total`, `idle`, `in_progress`, `requires_action`, `failed`), cumulative
-`usage`, `coverage` (`measured_sessions`, `total_sessions`, nullable `ratio`), and
-nullable Unix `last_active_at`. Null public Session usage contributes no tokens but
-counts in the coverage denominator. Each space is read from one database snapshot;
-the page is not a simultaneous deployment-wide snapshot. Totals are not billing.
+`GET /summary` supports optional `project_id`, `group_by=project|agent|key`
+(default `project`), inclusive `created_after` and exclusive `created_before`
+RFC3339 Session-creation bounds. Agent grouping requires `project_id`. `after`,
+`limit`, `order` paginate Projects. Response `{data, has_more, next_cursor}` rows
+contain `project_id`, nullable `agent_id` and `key_id`, current `assets` counts
+(null for Agent/key groups), `sessions` counts (`total`, `idle`, `in_progress`,
+`requires_action`, `failed`), cumulative `usage`, `coverage` (`measured_sessions`,
+`total_sessions`, nullable `ratio`), and nullable Unix `last_active_at`.
+Key groups attribute the entire Session to its recorded creation key, even if a
+different key later sends input. Missing provenance becomes a null-key group.
+Null public Session usage contributes no tokens but counts in the coverage
+denominator. Each Project is read from one database snapshot; the page is not a
+simultaneous deployment-wide snapshot. Totals are not billing records.
 
 `GET /runtime-observations` uses existing Session creation-order pagination and
-returns `{object:"list", data:[{key_id, observation}], has_more, first_id, last_id}`.
+returns `{object:"list", data:[{project_id, observation}], has_more, first_id, last_id}`.
 It reuses the bounded read-only Runtime sampler and never provisions compute.
 `GET /runtime-history/capabilities` and `GET /startup-configuration` reuse the
 existing non-secret project projections.
 
-`GET /audit-log` lists administrator writes newest first with `key_id`,
+`GET /audit-log` lists administrator writes newest first with `project_id`,
 `resource_type`, `resource_id`, `action`, inclusive `created_after`, exclusive
 `created_before`, `limit=1..100` (default 50), and opaque `after` filters. Response
 is `{data, has_more, next_cursor}`. Each row has `id`, `created_at`,
 `admin_credential_id` (credential digest prefix), `actor_label`, `action`,
-`target_key_id`, `resource_type`, `resource_id`, `result_ids`, `request_id`,
+`project_id`, `resource_type`, `resource_id`, `result_ids`, `request_id`,
 `trace_id`. Non-copy mappings are an empty array. No credential values or request
 bodies are recorded. Logs and copy ownership do not cascade away on resource
 removal or key revocation.
 
 ## Private installation transition
 
-The old inherited-static-binding issuer and management routes are removed. The
+The old configured business keys, inherited-binding issuer and key-space
+management routes are removed. Deployment administrator credentials remain
+separately configured. The
 migration refuses an installation containing old issued key records instead of
 silently changing their ownership or deleting data. Use a clean private deployment,
 or explicitly retire old key records after preserving the assets and evidence you

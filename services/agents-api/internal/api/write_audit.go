@@ -61,12 +61,12 @@ func (h *Handler) writeAuditScope(w http.ResponseWriter, r *http.Request, allowe
 // @Tags Write Audit
 // @Produce json
 // @Security DeploymentAdminAuth
-// @Param key_id path string true "API key space ID"
+// @Param project_id path string true "Project ID"
 // @Param resource_type query string true "Resource type"
 // @Param resource_ids query string true "Comma-separated public resource IDs, maximum 100"
 // @Success 200 {object} api.ResourceOwnerList
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Router /core/v1/admin/api-keys/{key_id}/resource-owners [get]
+// @Router /core/v1/admin/projects/{project_id}/resource-owners [get]
 func (h *Handler) getResourceOwners(w http.ResponseWriter, r *http.Request) {
 	values, tenant, ok := h.writeAuditScope(w, r, "resource_type", "resource_ids")
 	if !ok {
@@ -99,7 +99,7 @@ func (h *Handler) getResourceOwners(w http.ResponseWriter, r *http.Request) {
 // @Tags Write Audit
 // @Produce json
 // @Security DeploymentAdminAuth
-// @Param key_id path string true "API key space ID"
+// @Param project_id path string true "Project ID"
 // @Param key_id query string false "Recorded creator key ID"
 // @Param resource_type query string false "Resource type"
 // @Param resource_id query string false "Public resource ID"
@@ -109,7 +109,7 @@ func (h *Handler) getResourceOwners(w http.ResponseWriter, r *http.Request) {
 // @Param after query string false "Opaque next_cursor from the preceding page"
 // @Success 200 {object} store.WriteOperationPage
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Router /core/v1/admin/api-keys/{key_id}/write-operations [get]
+// @Router /core/v1/admin/projects/{project_id}/write-operations [get]
 func (h *Handler) listWriteOperations(w http.ResponseWriter, r *http.Request) {
 	values, tenant, ok := h.writeAuditScope(w, r, "key_id", "resource_type", "resource_id", "created_after", "created_before", "limit", "after")
 	if !ok {

@@ -13,7 +13,7 @@ import (
 // @Tags Core Administration
 // @Produce json
 // @Security DeploymentAdminAuth
-// @Param key_id query string false "Target API key space ID"
+// @Param project_id query string false "Target Project ID"
 // @Param resource_type query string false "Resource type"
 // @Param resource_id query string false "Resource ID"
 // @Param action query string false "Mutation action"
@@ -32,7 +32,7 @@ func (h *Handler) listAdminAudit(w http.ResponseWriter, r *http.Request) {
 	}
 	for name, entries := range values {
 		switch name {
-		case "key_id", "resource_type", "resource_id", "action", "created_after", "created_before", "limit", "after":
+		case "project_id", "resource_type", "resource_id", "action", "created_after", "created_before", "limit", "after":
 		default:
 			writeStoreError(w, r, store.ErrInvalidInput)
 			return
@@ -42,7 +42,7 @@ func (h *Handler) listAdminAudit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	filter := store.AdminAuditFilter{KeyID: values.Get("key_id"), ResourceType: values.Get("resource_type"), ResourceID: values.Get("resource_id"), Action: values.Get("action"), After: values.Get("after"), Limit: 50}
+	filter := store.AdminAuditFilter{ProjectID: values.Get("project_id"), ResourceType: values.Get("resource_type"), ResourceID: values.Get("resource_id"), Action: values.Get("action"), After: values.Get("after"), Limit: 50}
 	if limit := values.Get("limit"); limit != "" {
 		filter.Limit, err = strconv.Atoi(limit)
 		if err != nil || filter.Limit < 1 || filter.Limit > 100 {

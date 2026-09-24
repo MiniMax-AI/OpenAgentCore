@@ -11,8 +11,8 @@ import "net/http"
 // @Param limit query integer false "Page size; 0 returns an empty page" default(20) minimum(0) maximum(100)
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc)
 // @Success 200 {object} v1.SkillList
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/skills [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/skills [get]
 func (h *Handler) adminListSkills(w http.ResponseWriter, r *http.Request) {
 	h.listSkills(w, r)
 }
@@ -24,8 +24,8 @@ func (h *Handler) adminListSkills(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param skill_id path string true "Skill ID"
 // @Success 200 {object} v1.Skill
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/skills/{skill_id} [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/skills/{skill_id} [get]
 func (h *Handler) adminGetSkill(w http.ResponseWriter, r *http.Request) {
 	h.getSkill(w, r)
 }
@@ -37,8 +37,8 @@ func (h *Handler) adminGetSkill(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param skill_id path string true "Skill ID"
 // @Success 200 {object} v1.SkillDeleted
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/skills/{skill_id} [delete]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/skills/{skill_id} [delete]
 func (h *Handler) adminDeleteSkill(w http.ResponseWriter, r *http.Request) {
 	h.deleteSkill(w, r)
 }
@@ -50,8 +50,8 @@ func (h *Handler) adminDeleteSkill(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param skill_id path string true "Skill ID"
 // @Success 200 {file} binary
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/skills/{skill_id}/content [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/skills/{skill_id}/content [get]
 func (h *Handler) adminSkillContent(w http.ResponseWriter, r *http.Request) {
 	h.skillContent(w, r)
 }
@@ -66,8 +66,8 @@ func (h *Handler) adminSkillContent(w http.ResponseWriter, r *http.Request) {
 // @Param limit query integer false "Page size; 0 returns an empty page" default(20) minimum(0) maximum(100)
 // @Param order query string false "Version order; omit for descending, explicit empty values are invalid" Enums(asc,desc)
 // @Success 200 {object} v1.SkillVersionList
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/skills/{skill_id}/versions [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/skills/{skill_id}/versions [get]
 func (h *Handler) adminListSkillVersions(w http.ResponseWriter, r *http.Request) {
 	h.listSkillVersions(w, r)
 }
@@ -80,8 +80,8 @@ func (h *Handler) adminListSkillVersions(w http.ResponseWriter, r *http.Request)
 // @Param skill_id path string true "Skill ID"
 // @Param version path string true "Concrete version number"
 // @Success 200 {object} v1.SkillVersion
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/skills/{skill_id}/versions/{version} [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/skills/{skill_id}/versions/{version} [get]
 func (h *Handler) adminGetSkillVersion(w http.ResponseWriter, r *http.Request) {
 	h.getSkillVersion(w, r)
 }
@@ -94,8 +94,8 @@ func (h *Handler) adminGetSkillVersion(w http.ResponseWriter, r *http.Request) {
 // @Param skill_id path string true "Skill ID"
 // @Param version path string true "Concrete version number"
 // @Success 200 {object} v1.SkillVersionDeleted
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/skills/{skill_id}/versions/{version} [delete]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/skills/{skill_id}/versions/{version} [delete]
 func (h *Handler) adminDeleteSkillVersion(w http.ResponseWriter, r *http.Request) {
 	h.deleteSkillVersion(w, r)
 }
@@ -108,8 +108,8 @@ func (h *Handler) adminDeleteSkillVersion(w http.ResponseWriter, r *http.Request
 // @Param skill_id path string true "Skill ID"
 // @Param version path string true "Concrete version number"
 // @Success 200 {file} binary
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/skills/{skill_id}/versions/{version}/content [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/skills/{skill_id}/versions/{version}/content [get]
 func (h *Handler) adminSkillVersionContent(w http.ResponseWriter, r *http.Request) {
 	h.skillVersionContent(w, r)
 }

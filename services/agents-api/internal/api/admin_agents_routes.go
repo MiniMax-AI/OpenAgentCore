@@ -12,8 +12,8 @@ import "net/http"
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.SavedAgentList
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/agents [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/agents [get]
 func (h *Handler) adminListAgents(w http.ResponseWriter, r *http.Request) {
 	h.listAgents(w, r)
 }
@@ -26,8 +26,8 @@ func (h *Handler) adminListAgents(w http.ResponseWriter, r *http.Request) {
 // @Param agent_id path string true "Agent ID"
 // @Success 200 {object} v1.SavedAgent
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/agents/{agent_id} [get]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/agents/{agent_id} [get]
 func (h *Handler) adminGetAgent(w http.ResponseWriter, r *http.Request) {
 	h.getAgent(w, r)
 }
@@ -40,8 +40,8 @@ func (h *Handler) adminGetAgent(w http.ResponseWriter, r *http.Request) {
 // @Param agent_id path string true "Agent ID"
 // @Success 200 {object} v1.AgentDeleted
 // @Failure 400,401,404,413,500 {object} v1.ErrorResponse
-// @Param key_id path string true "API key space ID"
-// @Router /core/v1/admin/api-keys/{key_id}/agents/{agent_id} [delete]
+// @Param project_id path string true "Project ID"
+// @Router /core/v1/admin/projects/{project_id}/agents/{agent_id} [delete]
 func (h *Handler) adminDeleteAgent(w http.ResponseWriter, r *http.Request) {
 	h.deleteAgent(w, r)
 }
