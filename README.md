@@ -45,11 +45,12 @@ retain their node across disconnects and resume.
    same Project and revoking the old one.
 3. **Add a node.** Open **Nodes** and choose E2B cloud or your own machines with
    Docker/microsandbox. E2B needs its account credentials and qualified Runtime
-   template, with no node installation. For your own machines, choose the sandbox
-   size, then select **Save configuration**. The paired console address is used by default;
-   advanced network settings allow a different reachable HTTPS origin. Select
-   **Add node**, then copy and run the command on a prepared Linux host. Web shows when the node is online
-   and its provider is ready. All nodes in a deployment use the same provider.
+   template, with no node installation; your own machines also need a sandbox size.
+   Either way, finish setup with **Save configuration**. The paired console address
+   is used by default; advanced network settings allow a different reachable HTTPS
+   origin. For your own machines, then select **Add node**, and copy and run the
+   command on a prepared Linux host. Web shows when the node is online and its
+   provider is ready. All nodes in a deployment use the same provider.
 
 Installation and node enrollment do not call a model. Once a node is ready,
 run an optional API example with your own model credentials.

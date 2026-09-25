@@ -664,7 +664,8 @@ class InstallerTests(unittest.TestCase):
                          [str(bundle / ("images/" + name + ".tar")) for name in ("core", "database", "web")])
         self.assertFalse((self.root / "native").exists())
         self.assertFalse((self.root / "config/seccomp.json").exists())
-        self.assertIn("No execution node was installed by this run", output.getvalue())
+        self.assertIn("No execution node was installed by this run. Choose a sandbox backend and add nodes on the Nodes page in Web.",
+                      output.getvalue())
         self.assertIn("Core configuration file: " + str(self.root / "config/core.env"), output.getvalue())
         self.assertNotIn((self.root / "config/database.password").read_text(), output.getvalue())
         self.assertIn("Console: http://127.0.0.1:8080 (local only)", output.getvalue())
@@ -679,6 +680,29 @@ class InstallerTests(unittest.TestCase):
         admin_token = (self.root / "admin/core.key").read_text()
         self.assertEqual(health.call_args_list[-1].args[1], {"Authorization": "Bearer " + admin_token})
         self.assertNotIn(admin_token, output.getvalue())
+
+    def test_main_output_labels_local_addresses(self):
+        cases = {"core-only": (["--core-only"], [
+                     "API base URL: http://127.0.0.1:8091/v1 (local only)\n",
+                     "Next: create a Project and its API key through the Core management API at "
+                     "http://127.0.0.1:8091/core/v1 (local only) with the Core key in {key}."]),
+                 # Web answers 404 on /v1, so a loopback public URL on its port points to Core's API.
+                 "loopback": (["--public-url", "http://localhost:8080"], [
+                     "Console: http://localhost:8080 (local only)\n",
+                     "API base URL: http://127.0.0.1:8091/v1 (local only)\n"])}
+        for name, (flags, expected) in cases.items():
+            with self.subTest(name=name):
+                self.root = self.work / name
+                bundle, output = self.bundle(), io.StringIO()
+                with mock.patch.object(install, "__file__", str(bundle / "install.py")), \
+                        mock.patch.object(install.platform, "system", return_value="Linux"), \
+                        mock.patch.object(install.platform, "machine", return_value="x86_64"), \
+                        mock.patch.object(install, "run"), mock.patch.object(install, "wait_http", return_value=True), \
+                        contextlib.redirect_stdout(output):
+                    install.main(["--install-dir", str(self.root), *flags])
+                for line in expected:
+                    self.assertIn(line.format(key=self.root / "admin/core.key"), output.getvalue())
+                shutil.rmtree(bundle)
 
     def test_main_web_only_never_imports_runtime_or_leaks_administrator_token(self):
         source = self.administrator_file()
@@ -705,6 +729,9 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual([call.args[0] for call in health.call_args_list], ["http://127.0.0.1:8080/console/auth", "http://127.0.0.1:9091/core/v1/projects"])
         self.assertEqual(health.call_args_list[-1].args[1], {"Authorization": "Bearer " + source.read_text()})
         self.assertNotIn(source.read_text(), output.getvalue())
+        self.assertIn("Console: http://127.0.0.1:8080 (local only)\nNext: sign in to Web with the Core key in " +
+                      str(self.root / "admin/core.key") + ", then create a Project", output.getvalue())
+        self.assertNotIn("API base URL", output.getvalue())
         services = self.document("compose.json")["services"]
         self.assertEqual(set(services), {"web"})
         web = services["web"]
