@@ -1,6 +1,6 @@
 import { AgentCoreError, type CoreHarness, type CoreHarnessKind, type ModelProviderInput } from "@agents-core-web/agents-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useId, useState, type ReactNode } from "react";
+import { useCallback, useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -21,18 +21,22 @@ import { harnessesQuery } from "./harness-queries";
 const WRITE_TIMEOUT_MS = 30_000;
 
 type Protocol = ModelProviderInput["protocol"];
-/** Where a new provider's protocol starts: the one each harness speaks. Core validates the choice. */
-const usualProtocol: Record<CoreHarnessKind, Protocol> = { codex: "responses", claude_sdk: "anthropic", mcode: "anthropic" };
+/** The one protocol Core accepts for each harness; the form sends it and cannot change it. */
+const harnessProtocol: Record<CoreHarnessKind, Protocol> = { codex: "responses", claude_sdk: "anthropic", mcode: "anthropic" };
+/** Core stores both token limits as 32-bit integers. */
+const INT32_MAX = 2_147_483_647;
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error ?? "");
 }
 
-/** Empty is omitted (undefined); anything but a whole number is a problem (null). */
-function wholeNumber(value: string): number | undefined | null {
-  const text = value.trim();
-  if (!text) return undefined;
-  return /^\d+$/u.test(text) && Number.isSafeInteger(Number(text)) ? Number(text) : null;
+/** A token limit: empty is omitted; anything but a whole number within Core's range is a problem. */
+function tokenLimit(text: string): { value: number | undefined; problem: "whole" | "large" | null } {
+  const value = text.trim();
+  if (!value) return { value: undefined, problem: null };
+  if (!/^\d+$/u.test(value)) return { value: undefined, problem: "whole" };
+  const number = Number(value);
+  return number > INT32_MAX ? { value: undefined, problem: "large" } : { value: number, problem: null };
 }
 
 function isUrl(value: string): boolean {
@@ -73,7 +77,9 @@ export function DefaultModelsSection() {
     });
   });
 
-  const [editing, setEditing] = useState<CoreHarness | null>(null);
+  // The harness being edited, read from the latest list so a reread updates the open form's title.
+  const [editing, setEditing] = useState<CoreHarnessKind | null>(null);
+  const editingHarness = (editing && harnesses?.find((harness) => harness.id === editing)) || null;
   const clear = useDeleteFlow<CoreHarnessKind>(
     async (harness) => {
       await admin.deleteHarnessModelProvider(harness, { signal: AbortSignal.timeout(WRITE_TIMEOUT_MS) });
@@ -94,7 +100,7 @@ export function DefaultModelsSection() {
     body = (
       <div className="system-models">
         {harnesses.map((harness) => (
-          <HarnessCard key={harness.id} harness={harness} busy={clear.busy} onEdit={() => setEditing(harness)} onClear={() => clear.ask(harness.id)} />
+          <HarnessCard key={harness.id} harness={harness} busy={clear.busy} onEdit={() => setEditing(harness.id)} onClear={() => clear.ask(harness.id)} />
         ))}
       </div>
     );
@@ -105,8 +111,8 @@ export function DefaultModelsSection() {
       {body}
       <ModelProviderDialog
         // A new form for every opening: closing it drops whatever was typed, the key included.
-        key={editing?.id ?? "closed"}
-        harness={editing}
+        key={editing ?? "closed"}
+        harness={editingHarness}
         onClose={() => setEditing(null)}
         onReread={reread}
         onSaved={(harness) => {
@@ -182,9 +188,11 @@ function HarnessCard({ harness, busy, onEdit, onClear }: { harness: CoreHarness;
 
 /**
  * Sets or replaces one harness's provider. Non-secret fields start from the
- * current provider; the API key never does. The form checks only that the
- * base URL is a URL and the limits are whole numbers; Core's other rules come
- * back as its 400 message, shown beside the form.
+ * current provider; the API key never does. The protocol is the one Core
+ * accepts for the harness. The form checks that the base URL is a URL and the
+ * limits are whole numbers within Core's range, with max output no larger than
+ * the context window; Core's other rules come back as its 400 message, shown
+ * beside the form. Enter saves; a save in flight blocks another.
  */
 function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
   harness: CoreHarness | null;
@@ -195,32 +203,39 @@ function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
   const { t } = useTranslation("system");
   const { t: tCommon } = useTranslation();
   const id = useId();
+  const formId = `${id}-form`;
   const current = harness?.model_provider ?? null;
-  const [protocol, setProtocol] = useState<Protocol>(current?.protocol ?? (harness ? usualProtocol[harness.id] : "responses"));
   const [baseUrl, setBaseUrl] = useState(current?.base_url ?? "");
   const [apiKey, setApiKey] = useState("");
   const [contextWindow, setContextWindow] = useState(current?.context_window === undefined ? "" : String(current.context_window));
   const [maxOutputTokens, setMaxOutputTokens] = useState(current?.max_output_tokens === undefined ? "" : String(current.max_output_tokens));
   const [busy, setBusy] = useState(false);
+  const saving = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   const name = harness ? harnessNames[harness.id] : "";
+  const protocol = harness ? harnessProtocol[harness.id] : "responses";
   const limitsRequired = harness?.id === "mcode";
   const url = baseUrl.trim();
   const urlProblem = url && !isUrl(url) ? t("models.form.baseUrlInvalid") : null;
-  const context = wholeNumber(contextWindow);
-  const output = wholeNumber(maxOutputTokens);
-  const ready = harness !== null && !busy && url !== "" && !urlProblem && apiKey.trim() !== "" && context !== null && output !== null;
+  const context = tokenLimit(contextWindow);
+  const output = tokenLimit(maxOutputTokens);
+  const limitProblem = (limit: ReturnType<typeof tokenLimit>) => (limit.problem === "whole" ? t("models.form.wholeNumber") : limit.problem === "large" ? t("models.form.tooLarge") : null);
+  const contextProblem = limitProblem(context);
+  // Core rejects max output above the context window, an omitted window counting as 0.
+  const outputProblem = limitProblem(output) ?? (!contextProblem && output.value !== undefined && output.value > (context.value ?? 0) ? t("models.form.needsContext") : null);
+  const ready = harness !== null && !busy && url !== "" && !urlProblem && apiKey.trim() !== "" && !contextProblem && !outputProblem;
 
   async function save() {
-    if (!ready || !harness) return;
+    if (!ready || !harness || saving.current) return;
+    saving.current = true;
     setBusy(true);
     setError(null);
     try {
       await admin.setHarnessModelProvider(harness.id, {
         protocol, base_url: url, api_key: apiKey.trim(),
-        ...(context === undefined ? {} : { context_window: context }),
-        ...(output === undefined ? {} : { max_output_tokens: output }),
+        ...(context.value === undefined ? {} : { context_window: context.value }),
+        ...(output.value === undefined ? {} : { max_output_tokens: output.value }),
       }, { signal: AbortSignal.timeout(WRITE_TIMEOUT_MS) });
       onSaved(harness.id);
     } catch (caught) {
@@ -235,20 +250,33 @@ function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
         onReread();
       }
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   }
 
-  const limitField = (field: "context" | "output", value: string, setValue: (value: string) => void, parsed: number | undefined | null) => (
-    <div className="field">
-      <span className="field-label-row">
-        <label htmlFor={`${id}-${field}`}>{t(field === "context" ? "models.contextWindow" : "models.maxOutputTokens")}</label>
-        <HelpTip>{t(`models.form.${field}Help${limitsRequired ? "Required" : ""}`)}</HelpTip>
-      </span>
-      <input id={`${id}-${field}`} inputMode="numeric" autoComplete="off" value={value} onChange={(event) => setValue(event.target.value)} aria-required={limitsRequired} aria-invalid={parsed === null} />
-      {parsed === null ? <span className="field-error">{t("models.form.wholeNumber")}</span> : null}
-    </div>
-  );
+  const limitField = (field: "context" | "output", value: string, setValue: (value: string) => void, problem: string | null) => {
+    const inputId = `${id}-${field}`;
+    return (
+      <div className="field">
+        <span className="field-label-row">
+          <label htmlFor={inputId}>{t(field === "context" ? "models.contextWindow" : "models.maxOutputTokens")}</label>
+          <HelpTip id={`${inputId}-help`}>{t(`models.form.${field}Help${limitsRequired ? "Required" : ""}`)}</HelpTip>
+        </span>
+        <input
+          id={inputId}
+          inputMode="numeric"
+          autoComplete="off"
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          aria-required={limitsRequired}
+          aria-invalid={problem ? true : undefined}
+          aria-describedby={`${inputId}-help${problem ? ` ${inputId}-problem` : ""}`}
+        />
+        {problem ? <span id={`${inputId}-problem`} className="field-error">{problem}</span> : null}
+      </div>
+    );
+  };
 
   return (
     <Modal
@@ -258,32 +286,41 @@ function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
       footer={(
         <>
           <button type="button" className="button outline" disabled={busy} onClick={onClose}>{tCommon("actions.cancel")}</button>
-          <button type="button" className="button primary" disabled={!ready} onClick={() => void save()}>{busy ? t("models.form.saving") : t("models.form.save")}</button>
+          <button type="submit" form={formId} className="button primary" disabled={!ready}>{busy ? t("models.form.saving") : t("models.form.save")}</button>
         </>
       )}
     >
-      <form className="form-stack" autoComplete="off" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-        <label className="field" htmlFor={`${id}-protocol`}>
-          <span>{t("models.protocol")}</span>
-          <select id={`${id}-protocol`} value={protocol} onChange={(event) => setProtocol(event.target.value === "anthropic" ? "anthropic" : "responses")}>
-            {(["anthropic", "responses"] as const).map((value) => <option key={value} value={value}>{protocolNames[value]}</option>)}
-          </select>
-        </label>
-        <label className="field" htmlFor={`${id}-url`}>
-          <span>{t("models.baseUrl")}</span>
-          <input id={`${id}-url`} value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} autoComplete="off" spellCheck={false} aria-invalid={Boolean(urlProblem)} />
-          {urlProblem ? <span className="field-error">{urlProblem}</span> : null}
-        </label>
+      <form id={formId} className="form-stack" autoComplete="off" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <div className="field">
+          <span className="field-label-row">
+            <span>{t("models.protocol")}</span>
+            <HelpTip>{t("models.form.protocolHelp")}</HelpTip>
+          </span>
+          <p className="system-model-protocol">{protocolNames[protocol]}</p>
+        </div>
+        <div className="field">
+          <span className="field-label-row"><label htmlFor={`${id}-url`}>{t("models.baseUrl")}</label></span>
+          <input
+            id={`${id}-url`}
+            value={baseUrl}
+            onChange={(event) => setBaseUrl(event.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            aria-invalid={urlProblem ? true : undefined}
+            aria-describedby={urlProblem ? `${id}-url-problem` : undefined}
+          />
+          {urlProblem ? <span id={`${id}-url-problem`} className="field-error">{urlProblem}</span> : null}
+        </div>
         <div className="field">
           <span className="field-label-row">
             <label htmlFor={`${id}-key`}>{t("models.apiKey")}</label>
-            <HelpTip>{t("models.form.apiKeyHelp")}</HelpTip>
+            <HelpTip id={`${id}-key-help`}>{t("models.form.apiKeyHelp")}</HelpTip>
           </span>
-          <input id={`${id}-key`} type="password" autoComplete="off" spellCheck={false} value={apiKey} onChange={(event) => setApiKey(event.target.value)} aria-required="true" />
+          <input id={`${id}-key`} type="password" autoComplete="off" spellCheck={false} value={apiKey} onChange={(event) => setApiKey(event.target.value)} aria-required="true" aria-describedby={`${id}-key-help`} />
         </div>
         <div className="system-model-limits">
-          {limitField("context", contextWindow, setContextWindow, context)}
-          {limitField("output", maxOutputTokens, setMaxOutputTokens, output)}
+          {limitField("context", contextWindow, setContextWindow, contextProblem)}
+          {limitField("output", maxOutputTokens, setMaxOutputTokens, outputProblem)}
         </div>
         {error ? <p className="confirm-dialog-error" role="alert">{error}</p> : null}
       </form>
