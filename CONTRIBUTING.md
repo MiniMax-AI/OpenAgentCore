@@ -1744,7 +1744,10 @@ store identifies images by config, while its containerd store uses the OCI
 descriptor. The builder therefore selects the digest from BuildKit's build metadata
 that the local store resolves, never the `--iidfile` config digest alone, and
 disables provenance attestations so each image and archive holds one platform
-manifest in both stores. Core, node and self-hosted installers share one resolver
+manifest in both stores. For the same reason the default PostgreSQL input is pinned
+by its linux/amd64 platform manifest digest: a pulled multi-platform tag keeps its
+whole index in the containerd store, and that export holds every platform. Core,
+node and self-hosted installers share one resolver
 for these required identities: confirm Linux amd64 and the returned immutable local ID,
 then use that ID in service/provider configuration and Runtime launches. Tags do
 not replace identity verification. The microsandbox-qualified `runtime_ref`

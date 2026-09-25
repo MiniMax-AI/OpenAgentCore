@@ -200,7 +200,10 @@ build_image runtime \
   --build-arg "CODEX_IMAGE=${image_tags[0]}" --build-arg "CLAUDE_IMAGE=${image_tags[1]}" \
   --build-arg "MCODE_IMAGE=${image_tags[2]}" "$stage/combined"
 
-database_image="${CORE_DISTRIBUTION_DATABASE_IMAGE:-postgres:16-alpine}"
+# Pin the linux/amd64 platform manifest, not the multi-platform tag: the
+# containerd store keeps a pulled tag's whole index, whose export holds every
+# platform. A platform manifest stays one image in both stores.
+database_image="${CORE_DISTRIBUTION_DATABASE_IMAGE:-postgres:16-alpine@sha256:1a66d744c1b459e13b05a8fca341da84cb63383e99ce262210efee5a319d4551}"
 if [[ ! "$database_image" =~ ^sha256:[0-9a-f]{64}$ ]]; then
   docker pull --platform linux/amd64 "$database_image"
 fi

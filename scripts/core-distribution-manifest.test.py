@@ -94,26 +94,31 @@ class DistributionTests(unittest.TestCase):
             self.assertEqual(digest, distribution.sha256(self.bundle / name))
 
     def test_built_image_records_the_id_each_docker_store_resolves(self):
-        config, manifest = "sha256:" + "1" * 64, "sha256:" + "2" * 64
+        config, manifest, other = ("sha256:" + digit * 64 for digit in "123")
         metadata = self.stage / "build.json"
-        # Classic stores report the config digest twice; containerd stores resolve only the manifest digest.
-        for digests, stored, expected in (((config, config), config, config), ((config, manifest), manifest, manifest),
-                                          ((config, manifest), "sha256:" + "3" * 64, None)):
-            with self.subTest(stored=stored):
-                metadata.write_text(json.dumps({"containerimage.config.digest": digests[0],
-                                                "containerimage.digest": digests[1]}))
-                inspect = lambda command, **_: mock.Mock(returncode=0 if command[-1] == stored else 1,
-                                                         stdout=stored + "\n")
+        both = {"containerimage.config.digest": config, "containerimage.digest": manifest}
+        # Classic stores resolve the config digest, containerd stores the manifest digest. A digest
+        # resolving to another image, or metadata without a config digest, identifies nothing.
+        cases = ((dict(both, **{"containerimage.digest": config}), {config: config}, config),
+                 (both, {manifest: manifest}, manifest),
+                 (both, {config: other}, "does not identify"),
+                 ({"containerimage.digest": manifest}, {manifest: manifest}, "lacks valid image digests"))
+        for build, store, expected in cases:
+            with self.subTest(build=build, store=store):
+                metadata.write_text(json.dumps(build))
+                inspect = lambda command, **_: mock.Mock(returncode=0 if command[-1] in store else 1,
+                                                         stdout=store.get(command[-1], "") + "\n")
                 with mock.patch.object(distribution.subprocess, "run", side_effect=inspect), \
                         mock.patch.object(distribution, "verify_image") as verify, \
                         mock.patch("builtins.print") as output:
-                    if expected is None:
-                        with self.assertRaisesRegex(ValueError, "does not identify"):
-                            distribution.built_image(metadata)
-                    else:
+                    if expected.startswith("sha256:"):
                         distribution.built_image(metadata)
                         verify.assert_called_once_with(expected)
                         output.assert_called_once_with(expected)
+                    else:
+                        with self.assertRaisesRegex(ValueError, expected):
+                            distribution.built_image(metadata)
+                        verify.assert_not_called()
 
     def test_containerd_build_ids_still_publish_archive_config_ids(self):
         for name, identity in self.identities.items():
