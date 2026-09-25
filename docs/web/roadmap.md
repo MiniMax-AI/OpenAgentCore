@@ -25,7 +25,8 @@ contract. Public Agents API compatibility work is tracked in the
 - The Vite development proxy still forwards `/v1` with a local bearer for older
   tooling (`scripts/core-doctor.mjs`, `.env.example`). The console no longer sends
   `/v1`; remove the path together with that tooling.
-- Run the browser acceptance below through the production console service.
+- Run the browser acceptance below against the production console service and a
+  real Core; today it runs against a fixture.
 
 ## Acceptance before calling the UI complete
 
@@ -33,6 +34,17 @@ Verify login, Project isolation, shared access across a Project's keys, revocati
 archive retention, deletion conflicts, copy results and audit attribution through
 the production console service. Browser acceptance must also cover denied cross-origin
 writes, absent `/v1` proxying, secret handling and uncertain write outcomes.
+
+`apps/web/e2e` covers the browser side against `fixture-console.mjs`, a synthetic
+console service: administrator setup and sign-in with no credential in browser
+storage; Project creation, one-time key display, revocation and archive; an
+unconfirmed key issue that is reported and never replayed; a copy's result and the
+copy in its target Project; a refused deletion that keeps Core's reason; the
+monitor pages and a read-only Session conversation; node enrollment and removal.
+Every test also asserts that the browser sent nothing to `/v1` and no
+Authorization header. Project isolation, shared key access, audit attribution and
+cross-origin write denial are enforced by Core and the console service and are
+covered by their backend tests.
 
 A backend test pass is evidence for the service it exercises. UI completion requires
 separate browser evidence for the migrated screens; successful rendering alone is

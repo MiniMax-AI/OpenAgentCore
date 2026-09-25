@@ -33,9 +33,10 @@ export function ConsoleSelect({
       onValueChange={(next) => onChange(typeof next === "string" ? next : "")}
       items={options}
       disabled={disabled}
-      aria-label={label}
     >
+      {/* The trigger is the combobox; Base UI's root renders no element to name. */}
       <SelectTrigger
+        aria-label={label}
         size="sm"
         className={cn(
           "h-[30px] min-h-[30px] w-auto min-w-36 max-w-60 rounded-[8px] border-0 bg-surface text-[13px] text-ink shadow-btn sm:min-h-[30px] sm:text-[13px]",

@@ -10,6 +10,7 @@ import { Modal } from "../../components/Modal";
 import type { ConsoleView } from "../../lib/console-routes";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { projectClient, readAllPages, useProjects } from "../../lib/projects";
+import { queryClient } from "../../lib/queries";
 import "./copy.css";
 import { type CopyableResourceType, copyAsset, type CopyResult, type Project } from "../../lib/admin-view";
 
@@ -93,6 +94,8 @@ export function CopyDialog({ source, onClose }: { source: CopySource | null; onC
         ...(needsVault ? { target_vault_id: vaultId } : {}),
       }, { idempotencyKey: idempotency.current });
       setOutcome({ kind: "done", result });
+      // The target project now holds new assets: re-read its cached lists.
+      void queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === "collection" && query.queryKey.at(-1) === target.id });
     } catch (error) {
       // A 4xx is a definite rejection; anything else may have committed.
       const definite = error instanceof AgentCoreError && error.status >= 400 && error.status < 500;
