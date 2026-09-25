@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Check, Copy } from "lucide-react";
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
 import { HelpTip } from "../../components/console-ui";
@@ -75,18 +75,23 @@ export function ExecutorInstallPanel({ install, archived }: { install: ExecutorI
   );
 }
 
+/** Selects a block's text when the clipboard refused it (a plain-HTTP console has none), to copy by hand. */
+export function useSelectWhenCopyFails(state: ReturnType<typeof useCopy>["state"], block: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    if (state !== "failed" || !block.current) return;
+    const range = document.createRange();
+    range.selectNodeContents(block.current);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+  }, [state, block]);
+}
+
 /** The command with its copy button; when the clipboard refuses, the command is selected to copy by hand. */
 export function InstallCommand({ value }: { value: string }) {
   const { t } = useTranslation("sessions");
   const code = useRef<HTMLPreElement>(null);
   const { state, copy } = useCopy(value);
-  useEffect(() => {
-    if (state !== "failed" || !code.current) return;
-    const range = document.createRange();
-    range.selectNodeContents(code.current);
-    window.getSelection()?.removeAllRanges();
-    window.getSelection()?.addRange(range);
-  }, [state]);
+  useSelectWhenCopyFails(state, code);
   const name = state === "copied" ? t("executor.install.copied") : t("executor.install.copy");
   return (
     <div className="executor-install-command" role="region" aria-label={t("executor.install.command")}>

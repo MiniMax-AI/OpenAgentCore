@@ -16,7 +16,7 @@ import { formatDateTime, shortId } from "../../lib/format";
 import { admin, useProjects } from "../../lib/projects";
 import { useCopy } from "../api-keys/IssuedKey";
 import { saveBlob } from "../skills/skill-operations";
-import { ExecutorInstallPanel, InstallCommand, useExecutorInstall } from "./ExecutorInstallPanel";
+import { ExecutorInstallPanel, InstallCommand, useExecutorInstall, useSelectWhenCopyFails } from "./ExecutorInstallPanel";
 import { executorCredentialsQuery } from "./session-queries";
 
 /** An issuance that gets no answer in this time has an unknown outcome. */
@@ -370,6 +370,8 @@ function CredentialFile({ credential, next, command = null }: { credential: Issu
   const { t } = useTranslation("sessions");
   const text = credentialText(credential);
   const { state, copy } = useCopy(text);
+  const file = useRef<HTMLPreElement>(null);
+  useSelectWhenCopyFails(state, file);
   // A downloaded credential's object URL goes with the credential: on Done or when this leaves the page.
   const downloads = useRef<(() => void)[]>([]);
   useEffect(() => {
@@ -384,7 +386,7 @@ function CredentialFile({ credential, next, command = null }: { credential: Issu
       <p className="executor-credential-notice">{t("executor.issued.notice")}</p>
       <p className="executor-credential-next">{t(`executor.issued.next.${next}`)}</p>
       {command ? <InstallCommand value={command} /> : null}
-      <div role="region" aria-label={t("executor.issued.fileLabel")}><pre className="executor-credential-file"><code>{text}</code></pre></div>
+      <div role="region" aria-label={t("executor.issued.fileLabel")}><pre ref={file} className="executor-credential-file"><code>{text}</code></pre></div>
       <div className="executor-credential-actions">
         <button className="button primary" type="button" onClick={() => void copy()}>
           {state === "copied" ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}

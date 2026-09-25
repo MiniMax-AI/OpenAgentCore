@@ -173,7 +173,7 @@ export const sessions = {
       fileLabel: "Executor 凭据文件",
       copy: "复制凭据",
       copied: "已复制",
-      copyFailed: "无法复制凭据。请选中文本后手动复制。",
+      copyFailed: "无法复制凭据，已为你选中，请手动复制。",
       download: "下载凭据文件",
       downloadHint: {
         command: "自动化部署时，下载文件，执行 <chmod/>，再在 python3 那一行加上 <flag/>；路径中不能经过符号链接。",

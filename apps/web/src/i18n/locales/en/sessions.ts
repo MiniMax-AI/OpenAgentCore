@@ -176,7 +176,7 @@ export const sessions = {
       fileLabel: "Executor credential file",
       copy: "Copy credential",
       copied: "Copied",
-      copyFailed: "The credential could not be copied. Select the text and copy it yourself.",
+      copyFailed: "The credential could not be copied. It's selected; copy it yourself.",
       download: "Download credential file",
       downloadHint: {
         command: "For automation, download the file, run <chmod/> and add <flag/> to the python3 line; the path must not go through a symlink.",
