@@ -89,23 +89,37 @@ session = client.beta.agents.sessions.create(
 print(session.id, session.environment.id, session.environment.remote_url)
 ```
 
-Keep the API running. In a separate operator shell with the private database
-configuration, issue an executor key restricted to this Environment using the
-principal IDs from `keys.json`. `KEY_ID` is a new canonical nonzero UUID retained
-for rotation/revocation. Save the output to a new private file:
+Keep the API running. In a separate operator shell on the API host, issue an
+executor credential restricted to this Environment with the Core key, read from
+the private file named by `CORE_KEY_FILE`. `PROJECT_ID` is the Project whose key
+created the Session; `KEY_ID` is a new canonical
+lowercase UUID that you retain for listing, rotation and revocation. The response
+is the credential file and is returned only once, so save it to a new private
+file:
 
 ```sh
 umask 077
-"$AGENTS_API_BIN_DIR/agents-api-environment-key" \
-  --tenant "$TENANT_ID" --organization "$ORGANIZATION_ID" \
-  --project "$PROJECT_ID" --subject-kind service_account \
-  --subject-id "$SUBJECT_ID" --key-id "$KEY_ID" --environment "$ENVIRONMENT_ID" \
+KEY_ID=$(python3 -c 'import uuid; print(uuid.uuid4())')
+curl -fsS -X POST \
+  -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$CORE_KEY_FILE")") \
+  -H 'Content-Type: application/json' -d "{\"key_id\":\"$KEY_ID\"}" \
+  "http://127.0.0.1:8091/core/v1/projects/$PROJECT_ID/environments/$ENVIRONMENT_ID/executor-credentials" \
   > "$PARSAR_HOME/executor-key.json"
 ```
 
-With the Core key, the same restricted credential can instead be issued through
-`POST /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials`;
-see [executor credentials](../../contracts/agents-api/environment-executor-credentials.md).
+If the response is uncertain, do not retry automatically: list the credentials
+with `GET` on the same path, then rotate the same `KEY_ID` with `"rotate":true` or
+issue it again. Revoke with `DELETE …/executor-credentials/$KEY_ID`. See
+[executor credentials](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/contracts/agents-api/environment-executor-credentials.md)
+for the rules, including the 404 and 409 cases.
+
+Break-glass only: `agents-api-environment-key` issues, rotates or revokes the
+same credential directly in the database when the Core API is unavailable. It
+needs the private database configuration and the Project's execution principal
+(tenant UUID from the `projects` table, organization `core`, project
+`proj_<Project UUID>`, subject `service_account/project:<Project UUID>`). It
+bypasses the Core API: it skips the archived-Project check and writes no
+administrator audit entry, so use the Core-key route whenever Core is running.
 
 Deploy the qualified V1 Runtime containing our daemon, selected native harness,
 local tools and workspace. Transfer only its scoped key into the protected daemon
