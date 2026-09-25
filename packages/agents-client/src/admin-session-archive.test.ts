@@ -18,7 +18,7 @@ describe("administrative Session archive", () => {
     await expect(client.retrieveSessionArchive(projectId, sessionId, { signal })).resolves.toEqual(disposition);
     expect(fetch).toHaveBeenCalledTimes(2);
     for (const [url, init] of fetch.mock.calls) {
-      expect(url).toBe(`/core/v1/admin/projects/${projectId}/sessions/${sessionId}/archive`);
+      expect(url).toBe(`/core/v1/projects/${projectId}/sessions/${sessionId}/archive`);
       expect(init).toMatchObject({ signal, credentials: "same-origin", redirect: "error" });
       expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer test-admin");
       expect(new Headers(init?.headers).has("OpenAI-Beta")).toBe(false);

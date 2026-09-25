@@ -33,7 +33,7 @@ const routeCases: Array<[string, string, (client: AdminClient) => Promise<unknow
   ["DELETE", `/projects/${projectId}/keys/${keyId}`, (client) => client.revokeAPIKey(projectId, keyId)],
   ["GET", "/audit-log", (client) => client.listAuditLog()],
   ["GET", "/summary", (client) => client.retrieveSummary()],
-  ["GET", "/runtime-observations", (client) => client.listRuntimeObservations()],
+  ["GET", "/sandbox/runtime-observations", (client) => client.listRuntimeObservations()],
   ["GET", `/projects/${projectId}/agents`, (client) => client.listAgents(projectId)],
   ["GET", `/projects/${projectId}/agents/a`, (client) => client.retrieveAgent(projectId, "a")],
   ["DELETE", `/projects/${projectId}/agents/a`, (client) => client.deleteAgent(projectId, "a")],
@@ -72,6 +72,9 @@ const routeCases: Array<[string, string, (client: AdminClient) => Promise<unknow
   ["GET", `/projects/${projectId}/sessions/${sessionId}/runtime-history?start=1&end=2`, (client) => client.retrieveRuntimeHistory(projectId, sessionId, { start: 1, end: 2 })],
   ["GET", `/projects/${projectId}/resource-owners?resource_type=agent&resource_ids=a`, (client) => client.retrieveResourceOwners(projectId, "agent", ["a"])],
   ["GET", `/projects/${projectId}/write-operations`, (client) => client.listWriteOperations(projectId)],
+  ["GET", `/projects/${projectId}/environments/${resourceId}/executor-credentials`, (client) => client.listExecutorCredentials(projectId, resourceId)],
+  ["POST", `/projects/${projectId}/environments/${resourceId}/executor-credentials`, (client) => client.issueExecutorCredential(projectId, resourceId, { key_id: keyId })],
+  ["DELETE", `/projects/${projectId}/environments/${resourceId}/executor-credentials/${keyId}`, (client) => client.revokeExecutorCredential(projectId, resourceId, keyId)],
 ];
 
 describe("AdminClient transport boundary", () => {
@@ -81,7 +84,7 @@ describe("AdminClient transport boundary", () => {
     await expect(call(client)).rejects.toMatchObject({ status: 404, code: "not_found" });
     expect(fetch).toHaveBeenCalledOnce();
     const [url, init] = fetch.mock.calls[0]!;
-    expect(url).toBe(`/core/v1/admin${path}`);
+    expect(url).toBe(`/core/v1${path}`);
     expect(init).toMatchObject({ method, credentials: "same-origin", redirect: "error" });
     expect(new Headers(init?.headers).has("Authorization")).toBe(false);
     expect(new Headers(init?.headers).has("OpenAI-Beta")).toBe(false);
@@ -98,10 +101,10 @@ describe("AdminClient transport boundary", () => {
   it("only uses an explicitly supplied admin credential and forwards cancellation", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => json({ data: [], has_more: false }));
     const signal = new AbortController().signal;
-    const client = new AdminClient({ baseUrl: "https://core.test/core/v1/admin/", adminToken: () => "deployment-secret", fetch });
+    const client = new AdminClient({ baseUrl: "https://core.test/core/v1/", adminToken: () => "deployment-secret", fetch });
     await client.listAPIKeys(projectId, { after: keyId, limit: 5, order: "asc", signal });
     const [url, init] = fetch.mock.calls[0]!;
-    expect(url).toBe(`https://core.test/core/v1/admin/projects/${projectId}/keys?after=${keyId}&limit=5&order=asc`);
+    expect(url).toBe(`https://core.test/core/v1/projects/${projectId}/keys?after=${keyId}&limit=5&order=asc`);
     expect(init?.signal).toBe(signal);
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer deployment-secret");
   });
@@ -114,10 +117,34 @@ describe("AdminClient transport boundary", () => {
     expect(JSON.parse(fetch.mock.calls[0]![1]!.body as string)).toEqual({ name: "SDK" });
   });
 
+  it("issues an executor credential once with the caller's key ID and binds the result to it", async () => {
+    const issued = { key_id: keyId, environment_id: resourceId, executor_token: "once-only" };
+    const { client, fetch } = clientWith(issued);
+    expect(await client.issueExecutorCredential(projectId, resourceId, { key_id: keyId, rotate: true })).toEqual(issued);
+    expect(await client.issueExecutorCredential(projectId, resourceId, { key_id: keyId })).toEqual(issued);
+    expect(fetch.mock.calls.map(([, init]) => JSON.parse(init!.body as string))).toEqual([{ key_id: keyId, rotate: true }, { key_id: keyId, rotate: false }]);
+    for (const other of [{ ...issued, key_id: sessionId }, { ...issued, environment_id: sessionId }, { ...issued, executor_token: "" }, { ...issued, extra: 1 }]) {
+      await expect(clientWith(other).client.issueExecutorCredential(projectId, resourceId, { key_id: keyId })).rejects.toMatchObject({ code: "invalid_admin_response" });
+    }
+    const failing = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError("connection closed"));
+    await expect(new AdminClient({ fetch: failing }).issueExecutorCredential(projectId, resourceId, { key_id: keyId })).rejects.toThrow("connection closed");
+    expect(failing).toHaveBeenCalledOnce();
+  });
+
+  it("lists executor credential metadata only and revokes with 204", async () => {
+    const credential = { key_id: keyId, created_at: "2026-09-25T00:00:00Z", revoked_at: null };
+    expect(await clientWith({ data: [credential] }).client.listExecutorCredentials(projectId, resourceId)).toEqual({ data: [credential] });
+    for (const entry of [{ ...credential, executor_token: "leak" }, { ...credential, revoked_at: "later" }, { key_id: keyId, created_at: "2026-09-25T00:00:00Z" }]) {
+      await expect(clientWith({ data: [entry] }).client.listExecutorCredentials(projectId, resourceId)).rejects.toMatchObject({ code: "invalid_admin_response" });
+    }
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(null, { status: 204 }));
+    await expect(new AdminClient({ fetch }).revokeExecutorCredential(projectId, resourceId, keyId)).resolves.toBeUndefined();
+  });
+
   it("encodes identifiers and prevents normalized dot path traversal", async () => {
     const { client, fetch } = clientWith(key);
     await expect(client.listAPIKeys("../other")).rejects.toBeInstanceOf(AgentCoreError);
-    expect(fetch.mock.calls[0]![0]).toBe("/core/v1/admin/projects/..%2Fother/keys");
+    expect(fetch.mock.calls[0]![0]).toBe("/core/v1/projects/..%2Fother/keys");
     expect(() => client.deleteAgent(projectId, "..")).toThrow(TypeError);
     expect(fetch).toHaveBeenCalledOnce();
   });
@@ -203,7 +230,7 @@ describe("AdminClient deployment read models", () => {
     const audit = { data: [{ id: "audit", created_at: "2026-09-24T00:00:00Z", admin_credential_id: "digest", actor_label: "admin", action: "copy", project_id: projectId, resource_type: "agent", resource_id: "a", result_ids: [{ type: "agent", source_id: "a", target_id: "b" }], request_id: "request", trace_id: "trace" }], has_more: false, next_cursor: "" };
     const { client, fetch } = clientWith(audit);
     expect(await client.listAuditLog({ action: "copy", resource_type: "agent", project_id: projectId, after: "cursor" })).toEqual(audit);
-    expect(fetch.mock.calls[0]![0]).toBe(`/core/v1/admin/audit-log?after=cursor&project_id=${projectId}&resource_type=agent&action=copy`);
+    expect(fetch.mock.calls[0]![0]).toBe(`/core/v1/audit-log?after=cursor&project_id=${projectId}&resource_type=agent&action=copy`);
     await expect(clientWith({ ...audit, data: [{ ...audit.data[0], request_body: { token: "leak" } }] }).client.listAuditLog()).rejects.toBeInstanceOf(AgentCoreError);
   });
 
@@ -291,7 +318,7 @@ describe("AdminClient project monitoring", () => {
     const summary = { data, has_more: false, next_cursor: "" };
     const { client, fetch } = clientWith(summary);
     expect(await client.retrieveSummary({ project_id: projectId, group_by: groupBy })).toEqual(summary);
-    expect(fetch.mock.calls[0]![0]).toBe(`/core/v1/admin/summary?project_id=${projectId}&group_by=${groupBy}`);
+    expect(fetch.mock.calls[0]![0]).toBe(`/core/v1/summary?project_id=${projectId}&group_by=${groupBy}`);
     const { project_id: _, ...oldRow } = row;
     await expect(clientWith({ ...summary, data: [oldRow] }).client.retrieveSummary()).rejects.toMatchObject({ code: "invalid_admin_response" });
   });

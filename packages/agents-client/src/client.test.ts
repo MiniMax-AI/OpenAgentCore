@@ -2802,7 +2802,7 @@ describe("OpenAIAgentsClient", () => {
   it("retrieves a Runtime observation, preserves observed zeroes, and encodes the Session ID", async () => {
     const calls: FetchCall[] = [];
     const client = new AdminClient({
-      baseUrl: "https://core.example/core/v1/admin",
+      baseUrl: "https://core.example/core/v1",
       fetch: recordingFetch(jsonResponse(runtimeObservation()), calls),
     });
 
@@ -2812,7 +2812,7 @@ describe("OpenAIAgentsClient", () => {
       memory: { usage_bytes: 0 },
     });
     expect(String(calls[0]?.input)).toBe(
-      `https://core.example/core/v1/admin/projects/${runtimeProjectId}/sessions/${runtimeSessionId}/runtime-observation`,
+      `https://core.example/core/v1/projects/${runtimeProjectId}/sessions/${runtimeSessionId}/runtime-observation`,
     );
   });
 

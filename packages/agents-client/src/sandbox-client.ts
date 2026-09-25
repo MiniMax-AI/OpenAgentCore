@@ -1,4 +1,5 @@
-import { AgentCoreError, OpenAIAgentsClient } from "./client";
+import { AgentCoreError } from "./client";
+import { CoreRequester, type CoreClientOptions } from "./core-request";
 import type { ReadOptions } from "./types";
 
 export type SandboxDiagnostic = "" | "node_unavailable" | "resource_missing" | "compute_unconfirmed" | "ownership_mismatch" | "provider_unavailable";
@@ -56,7 +57,8 @@ export interface SandboxNode {
   provider: string;
   online: boolean;
   provider_ready: boolean;
-  diagnostic: SandboxNodeDiagnostic;
+  /** Absent while the provider is ready. */
+  diagnostic?: SandboxNodeDiagnostic;
   cpu_count: number | null;
   available_memory_bytes: number | null;
   available_disk_bytes: number | null;
@@ -111,23 +113,36 @@ export interface SandboxAllocation {
   initialization: string;
   created_at: string;
 }
-/** Deployment administration uses /core/v1/sandbox, through an authenticated console or an explicit server credential. */
-export class SandboxAdminClient extends OpenAIAgentsClient {
+function invalidSandboxResponse(): never {
+  throw new AgentCoreError("Core returned an invalid sandbox administration response.", 502, "invalid_admin_response");
+}
+
+/** Deployment administration under `/core/v1/sandbox`, through an authenticated console or an explicit Core key. */
+export class SandboxAdminClient {
+  readonly #core: CoreRequester;
+
+  constructor(options: CoreClientOptions = {}) {
+    this.#core = new CoreRequester(options.baseUrl ?? "/core/v1/sandbox", options.token, options.fetch, invalidSandboxResponse);
+  }
+
+  #json<T>(path: string, options?: ReadOptions, method?: string, body?: unknown): Promise<T> {
+    return this.#core.json(path, options, method, body) as Promise<T>;
+  }
   retrieveDeployment(options?: ReadOptions): Promise<SandboxDeployment> {
-    return this.request("/deployment", { signal: options?.signal }, undefined, false);
+    return this.#json("/deployment", options);
   }
   initializeDeployment(input: InitializeSandboxDeployment, options?: ReadOptions): Promise<SandboxDeployment> {
-    return this.writeDeployment("POST", input, options);
+    return this.#writeDeployment("POST", input, options);
   }
   updateDeployment(input: UpdateSandboxDeployment, options?: ReadOptions): Promise<SandboxDeployment> {
-    return this.writeDeployment("PUT", input, options);
+    return this.#writeDeployment("PUT", input, options);
   }
   setMaintenance(input: SetSandboxMaintenance, options?: ReadOptions): Promise<SandboxDeployment> {
-    return this.request("/deployment/maintenance", { method: "PATCH", body: JSON.stringify(input), signal: options?.signal }, undefined, false);
+    return this.#json("/deployment/maintenance", options, "PATCH", input);
   }
-  private async writeDeployment(method: "POST" | "PUT", input: InitializeSandboxDeployment | UpdateSandboxDeployment, options?: ReadOptions): Promise<SandboxDeployment> {
+  async #writeDeployment(method: "POST" | "PUT", input: InitializeSandboxDeployment | UpdateSandboxDeployment, options?: ReadOptions): Promise<SandboxDeployment> {
     try {
-      return await this.request("/deployment", { method, body: JSON.stringify(input), signal: options?.signal }, undefined, false);
+      return await this.#json("/deployment", options, method, input);
     } catch (error) {
       if (!input.e2b) throw error;
       // A credential-bearing rejection may reflect the key in any error field.
@@ -135,21 +150,21 @@ export class SandboxAdminClient extends OpenAIAgentsClient {
     }
   }
   listNodes(options?: ReadOptions): Promise<{ data: SandboxNode[] }> {
-    return this.request("/nodes", { signal: options?.signal }, undefined, false);
+    return this.#json("/nodes", options);
   }
   retrieveNode(nodeId: string, range: SandboxNodeHistoryRange, options?: ReadOptions): Promise<SandboxNodeDetail> {
-    return this.request(`/nodes/${encodeURIComponent(nodeId)}?range=${range}`, { signal: options?.signal }, undefined, false);
+    return this.#json(`/nodes/${encodeURIComponent(nodeId)}?range=${range}`, options);
   }
   listAllocations(nodeId: string, options?: ReadOptions): Promise<{ data: SandboxAllocation[] }> {
-    return this.request(`/nodes/${encodeURIComponent(nodeId)}/allocations`, { signal: options?.signal }, undefined, false);
+    return this.#json(`/nodes/${encodeURIComponent(nodeId)}/allocations`, options);
   }
   createEnrollment(options?: ReadOptions, capacity: { max_active?: number; max_retained?: number } = {}): Promise<{ token: string; expires_at: string }> {
-    return this.request("/enrollment-tokens", { method: "POST", body: JSON.stringify(capacity), signal: options?.signal }, undefined, false);
+    return this.#json("/enrollment-tokens", options, "POST", capacity);
   }
   updateNode(nodeId: string, input: SandboxNodeUpdate, options?: ReadOptions): Promise<{ id: string; updated: boolean }> {
-    return this.request(`/nodes/${encodeURIComponent(nodeId)}`, { method: "PATCH", body: JSON.stringify(input), signal: options?.signal }, undefined, false);
+    return this.#json(`/nodes/${encodeURIComponent(nodeId)}`, options, "PATCH", input);
   }
   removeNode(nodeId: string, options?: ReadOptions): Promise<{ id: string; deleted: boolean }> {
-    return this.request(`/nodes/${encodeURIComponent(nodeId)}`, { method: "DELETE", signal: options?.signal }, undefined, false);
+    return this.#json(`/nodes/${encodeURIComponent(nodeId)}`, options, "DELETE");
   }
 }

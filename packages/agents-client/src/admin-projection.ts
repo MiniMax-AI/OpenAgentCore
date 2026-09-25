@@ -2,7 +2,7 @@ import { AgentCoreError, projectAgentSnapshot, projectRuntimeObservation } from 
 import { projectTokenUsage } from "./usage-projection";
 import { canonicalUuid, exactFields, isNonnegativeInteger, isRecord, sameResourceId } from "./response-projection";
 import type { ListPage, SavedAgent } from "./types";
-import type { AdminAPIKey, AdminProject, AdminAuditPage, AdminSummary, AdminRuntimeObservation, RuntimeDiskObservation, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperationPage, AdminAuditResultID, AdminDeleted, AdminIssuedAPIKey, AdminPage, AdminSessionArchive, SessionArtifact, Skill, SkillVersion } from "./admin-types";
+import type { AdminAPIKey, AdminProject, AdminAuditPage, AdminSummary, AdminRuntimeObservation, RuntimeDiskObservation, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperationPage, AdminAuditResultID, AdminDeleted, AdminIssuedAPIKey, AdminPage, AdminSessionArchive, SessionArtifact, Skill, SkillVersion, ExecutorCredential, IssuedExecutorCredential } from "./admin-types";
 
 export function invalidAdminResponse(): never {
   throw new AgentCoreError("Core returned an invalid administration response.", 502, "invalid_admin_response");
@@ -44,7 +44,9 @@ export function projectAdminPage<T>(value: unknown, project: (entry: unknown) =>
   if (!Array.isArray(page.data) || typeof page.has_more !== "boolean" || (page.has_more && page.data.length === 0)) return invalidAdminResponse();
   return { data: page.data.map(project), has_more: page.has_more };
 }
-export function projectResourcePage<T extends { id: string }>(value: unknown, project: (entry: unknown) => T): ListPage<T> {
+/** A public resource page: `object`, `first_id` and `last_id` are always present. */
+export type ResourcePage<T> = ListPage<T> & { object: "list"; first_id: string | null; last_id: string | null };
+export function projectResourcePage<T extends { id: string }>(value: unknown, project: (entry: unknown) => T): ResourcePage<T> {
   const page = record(value, ["object", "data", "has_more", "first_id", "last_id"]);
   if (page.object !== "list" || !Array.isArray(page.data) || typeof page.has_more !== "boolean") return invalidAdminResponse();
   const data = page.data.map(project);
@@ -194,4 +196,21 @@ export function projectAdminAudit(value: unknown): AdminAuditPage {
     return { ...audit, result_ids: projectAuditResultIDs(audit.result_ids) };
   });
   return { data, has_more: page.has_more, next_cursor: page.next_cursor } as AdminAuditPage;
+}
+export function projectExecutorCredentials(value: unknown): { data: ExecutorCredential[] } {
+  const page = record(value, ["data"]);
+  if (!Array.isArray(page.data)) return invalidAdminResponse();
+  return { data: page.data.map((entry) => {
+    const credential = record(entry, ["key_id", "created_at", "revoked_at"]);
+    if (typeof credential.key_id !== "string" || typeof credential.created_at !== "string" || !date(credential.created_at) || !date(credential.revoked_at)) return invalidAdminResponse();
+    return { key_id: credential.key_id, created_at: credential.created_at, revoked_at: credential.revoked_at as string | null };
+  }) };
+}
+/** The one-time credential must belong to the requested key ID and Environment. */
+export function projectIssuedExecutorCredential(value: unknown, keyId: string, environmentId: string): IssuedExecutorCredential {
+  const issued = record(value, ["key_id", "environment_id", "executor_token"]);
+  if (typeof issued.key_id !== "string" || !sameResourceId(issued.key_id, keyId) ||
+    typeof issued.environment_id !== "string" || !sameResourceId(issued.environment_id, environmentId) ||
+    typeof issued.executor_token !== "string" || !issued.executor_token) return invalidAdminResponse();
+  return { key_id: issued.key_id, environment_id: issued.environment_id, executor_token: issued.executor_token };
 }

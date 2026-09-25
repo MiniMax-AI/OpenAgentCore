@@ -18,7 +18,7 @@ function jsonResponse(body: unknown): Response {
 
 function clientFor(body: unknown, calls: FetchCall[] = []): AdminClient {
   return new AdminClient({
-    baseUrl: "https://core.example/core/v1/admin",
+    baseUrl: "https://core.example/core/v1",
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       calls.push({ input, init });
       return jsonResponse(body);
@@ -91,7 +91,7 @@ describe("Runtime history client", () => {
       signal: controller.signal,
     });
     expect(String(calls[0]?.input)).toBe(
-      `https://core.example/core/v1/admin/projects/${projectId}/sessions/${sessionId}/runtime-history?start=1000&end=1120&max_points=60`,
+      `https://core.example/core/v1/projects/${projectId}/sessions/${sessionId}/runtime-history?start=1000&end=1120&max_points=60`,
     );
     expect(calls[0]?.init?.signal).toBe(controller.signal);
     expect(value.series[0]?.points[0]?.cpu?.utilization_ratio).toBe(0);

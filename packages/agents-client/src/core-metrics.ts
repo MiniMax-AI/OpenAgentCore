@@ -1,11 +1,16 @@
-import { AgentCoreError, OpenAIAgentsClient } from "./client";
+import { AgentCoreError } from "./client";
+import { CoreRequester, type CoreClientOptions } from "./core-request";
 import type { ReadOptions } from "./types";
+
+function invalidCoreMetrics(): never {
+  throw new AgentCoreError("Core metrics: the response is not JSON.", 0, "invalid_response");
+}
 
 /**
  * Core's own health as the one `agents-api` process sees it: execution slots
  * and the Turn queue (a Postgres table polled by the worker), connected
  * daemons, the PostgreSQL database, background jobs and the process itself.
- * `GET /core/v1/admin/core-metrics`, defined in
+ * `GET /core/v1/metrics`, defined in
  * contracts/agents-api/core-metrics.md; every figure Core cannot measure is
  * null, never zero.
  */
@@ -208,10 +213,15 @@ export function projectCoreMetrics(value: unknown): CoreMetrics {
   };
 }
 
-/** Reads Core's own metrics through the console's Web API (`/core/v1/admin`). */
-export class CoreMetricsClient extends OpenAIAgentsClient {
+/** Reads Core's own metrics from `/core/v1/metrics`, through an authenticated console or an explicit Core key. */
+export class CoreMetricsClient {
+  readonly #core: CoreRequester;
+
+  constructor(options: CoreClientOptions = {}) {
+    this.#core = new CoreRequester(options.baseUrl ?? "/core/v1/metrics", options.token, options.fetch, invalidCoreMetrics);
+  }
+
   async retrieveCoreMetrics(range: CoreMetricsRange, options?: ReadOptions): Promise<CoreMetrics> {
-    const value: unknown = await this.request(`/core-metrics?range=${encodeURIComponent(range)}`, { signal: options?.signal }, undefined, false);
-    return projectCoreMetrics(value);
+    return projectCoreMetrics(await this.#core.json(`?range=${encodeURIComponent(range)}`, options));
   }
 }

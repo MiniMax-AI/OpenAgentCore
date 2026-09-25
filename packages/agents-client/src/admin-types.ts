@@ -1,8 +1,13 @@
-import type { PageOptions } from "./types";
+import type {
+  AgentDeleted, AgentSession, AgentTurn, EnvironmentTemplateDeleted, EnvironmentTemplateList, EnvironmentTemplateResource, ListPage, PageOptions, ReadOptions,
+  RuntimeHistory, RuntimeHistoryQuery, RuntimeObservation, SavedAgent, SessionDeleted, SessionItem, SessionListOptions, SkillContent, SkillDeleted, SkillList,
+  SkillListOptions, SkillVersionDeleted, SkillVersionList, SourceFileDeleted, SourceFileList, SourceFileListOptions, TolerantSessionList, Vault,
+  VaultCredentialDeleted, VaultCredentialList, VaultDeleted, VaultList, VaultListOptions,
+} from "./types";
 
 export interface AdminClientOptions {
   baseUrl?: string;
-  /** Deployment credential for trusted server callers; console browsers use their same-origin session. */
+  /** Core key for trusted server callers; console browsers use their same-origin session instead. */
   adminToken?: string | (() => string | undefined);
   fetch?: typeof fetch;
 }
@@ -149,3 +154,46 @@ export interface AdminAuditEntry {
   trace_id: string;
 }
 export interface AdminAuditPage extends AdminPage<AdminAuditEntry> { next_cursor: string }
+
+/** Executor credential metadata for one self_hosted environment; the credential itself is never listed. */
+export interface ExecutorCredential { key_id: string; created_at: string; revoked_at: string | null }
+/** `key_id` is chosen by the caller, so an uncertain issuance can be reissued with the same ID and `rotate: true`. */
+export interface IssueExecutorCredentialInput { key_id: string; rotate?: boolean }
+/** Returned once, on issuance or rotation. */
+export interface IssuedExecutorCredential { key_id: string; environment_id: string; executor_token: string }
+
+/**
+ * The project-bound reads and deletions the console makes through Core, in
+ * the public projections' shapes: each method is a Core client method with
+ * its project ID bound.
+ */
+export interface CoreProjectReader {
+  listAgents(options?: PageOptions): Promise<ListPage<SavedAgent>>;
+  retrieveAgent(agentId: string): Promise<SavedAgent>;
+  deleteAgent(agentId: string): Promise<AgentDeleted>;
+  listSkills(options?: SkillListOptions): Promise<SkillList>;
+  retrieveSkill(skillId: string, options?: ReadOptions): Promise<Skill>;
+  deleteSkill(skillId: string, options?: ReadOptions): Promise<SkillDeleted>;
+  listSkillVersions(skillId: string, options?: SkillListOptions): Promise<SkillVersionList>;
+  deleteSkillVersion(skillId: string, version: string, options?: ReadOptions): Promise<SkillVersionDeleted>;
+  downloadSkill(skillId: string, options?: ReadOptions): Promise<SkillContent>;
+  downloadSkillVersion(skillId: string, version: string, options?: ReadOptions): Promise<SkillContent>;
+  listEnvironmentTemplates(options?: PageOptions): Promise<EnvironmentTemplateList>;
+  retrieveEnvironmentTemplate(templateId: string, options?: ReadOptions): Promise<EnvironmentTemplateResource>;
+  deleteEnvironmentTemplate(templateId: string, options?: ReadOptions): Promise<EnvironmentTemplateDeleted>;
+  listSourceFiles(options?: SourceFileListOptions): Promise<SourceFileList>;
+  deleteSourceFile(fileId: string, options?: ReadOptions): Promise<SourceFileDeleted>;
+  listVaults(options?: VaultListOptions): Promise<VaultList>;
+  retrieveVault(vaultId: string, options?: ReadOptions): Promise<Vault>;
+  listVaultCredentials(vaultId: string, options?: VaultListOptions): Promise<VaultCredentialList>;
+  deleteVault(vaultId: string): Promise<VaultDeleted>;
+  deleteVaultCredential(vaultId: string, credentialId: string): Promise<VaultCredentialDeleted>;
+  listSessions(options?: SessionListOptions): Promise<ListPage<AgentSession>>;
+  listSessionsTolerant(options?: SessionListOptions): Promise<TolerantSessionList>;
+  retrieveSession(sessionId: string, options?: ReadOptions): Promise<AgentSession>;
+  deleteSession(sessionId: string): Promise<SessionDeleted>;
+  listTurns(sessionId: string, options?: PageOptions): Promise<ListPage<AgentTurn>>;
+  listItems(sessionId: string, options?: PageOptions): Promise<ListPage<SessionItem>>;
+  retrieveRuntimeObservation(sessionId: string, options?: ReadOptions): Promise<RuntimeObservation>;
+  retrieveRuntimeHistory(sessionId: string, query: RuntimeHistoryQuery): Promise<RuntimeHistory>;
+}

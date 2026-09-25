@@ -1,5 +1,5 @@
 import {
-  AgentCoreError, addVaultPageOptions, projectAgentSession, projectRuntimeObservation,
+  addVaultPageOptions, projectAgentSession, projectRuntimeObservation,
   projectEnvironmentTemplate, projectEnvironmentTemplateList, projectVault, projectVaultList,
   projectVaultCredential, projectVaultCredentialList, projectSourceFile, projectSourceFileDeleted,
 } from "./client";
@@ -7,14 +7,17 @@ import { projectExecutionConfiguration } from "./execution-configuration-project
 import { projectAgentTurn, projectSessionItem, projectHistoryPage, validateHistoryPageOptions } from "./history-projection";
 import { projectRuntimeHistory } from "./runtime-history-projection";
 import { canonicalUuid, isNonnegativeInteger, isRecord } from "./response-projection";
+import { CoreRequester } from "./core-request";
 import {
   invalidAdminResponse, projectAdminProject, projectAdminKey, projectIssuedAdminKey, projectAdminPage, projectAdminDeleted, projectAdminSessionArchive,
   projectResourcePage, projectSavedAgent, projectSkill, projectSkillVersion, projectArtifact, projectSummary, projectAdminRuntimePage, projectResourceOwners, projectWriteOperations, projectAdminAudit,
+  projectExecutorCredentials, projectIssuedExecutorCredential,
 } from "./admin-projection";
-import type { PageOptions, ReadOptions, RuntimeHistoryQuery, VaultListOptions } from "./types";
+import type { PageOptions, ReadOptions, RuntimeHistoryQuery, SkillList, SkillVersionDeleted, SkillVersionList, SourceFileList, VaultListOptions } from "./types";
 import type {
   AdminClientOptions, AdminAuditOptions, AdminContent, ArchiveAdminSessionInput, CreateAdminProjectInput, RenameAdminProjectInput,
   IssueAdminAPIKeyInput, AdminSummaryOptions, AdminResourceType, AdminResourceOwner, AdminWriteOperationOptions, AdminWriteOperationPage,
+  ExecutorCredential, IssueExecutorCredentialInput, IssuedExecutorCredential,
 } from "./admin-types";
 
 function segment(value: string): string {
@@ -39,44 +42,22 @@ function vaultQuery(path: string, options?: VaultListOptions): string {
   return params.size ? `${path}?${params}` : path;
 }
 
-/** Management-only client. Browser callers authenticate through the same-origin console session. */
+/**
+ * Core's `/core/v1` administration client. Browser callers authenticate through
+ * the same-origin console session; trusted server callers pass the Core key.
+ */
 export class AdminClient {
-  readonly #baseUrl: string;
-  readonly #adminToken: AdminClientOptions["adminToken"];
-  readonly #fetch: typeof fetch;
+  readonly #core: CoreRequester;
 
   constructor(options: AdminClientOptions = {}) {
-    this.#baseUrl = (options.baseUrl ?? "/core/v1/admin").replace(/\/+$/, "");
-    this.#adminToken = options.adminToken;
-    this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
+    this.#core = new CoreRequester(options.baseUrl ?? "/core/v1", options.adminToken, options.fetch, invalidAdminResponse);
   }
 
-  async #response(path: string, options?: ReadOptions, method = "GET", body?: unknown): Promise<Response> {
-    const headers = new Headers({ Accept: "application/json" });
-    const token = typeof this.#adminToken === "function" ? this.#adminToken() : this.#adminToken;
-    if (token) headers.set("Authorization", `Bearer ${token}`);
-    if (body !== undefined) headers.set("Content-Type", "application/json");
-    const response = await this.#fetch(`${this.#baseUrl}${path}`, {
-      method, headers, signal: options?.signal, credentials: "same-origin", redirect: "error",
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-    if (!response.ok) {
-      let envelope: unknown;
-      try { envelope = await response.json(); } catch { /* An intermediary may return a non-JSON error. */ }
-      const error = isRecord(envelope) && isRecord(envelope.error) ? envelope.error : {};
-      throw new AgentCoreError(
-        typeof error.message === "string" ? error.message : `Core administration request failed (${response.status}).`,
-        response.status,
-        typeof error.code === "string" || error.code === null ? error.code : undefined,
-        typeof error.param === "string" || error.param === null ? error.param : undefined,
-        typeof error.type === "string" ? error.type : undefined,
-      );
-    }
-    return response;
+  #response(path: string, options?: ReadOptions, method?: string, body?: unknown): Promise<Response> {
+    return this.#core.response(path, options, method, body);
   }
-  async #json(path: string, options?: ReadOptions, method?: string, body?: unknown): Promise<unknown> {
-    const response = await this.#response(path, options, method, body);
-    try { return await response.json(); } catch { return invalidAdminResponse(); }
+  #json(path: string, options?: ReadOptions, method?: string, body?: unknown): Promise<unknown> {
+    return this.#core.json(path, options, method, body);
   }
   async #delete<O extends string>(path: string, id: string, object: O, options?: ReadOptions) {
     return projectAdminDeleted(await this.#json(path, options, "DELETE"), id, object);
@@ -117,7 +98,7 @@ export class AdminClient {
     return projectSummary(await this.#json(path, options));
   }
   async listRuntimeObservations(options?: PageOptions) {
-    return projectAdminRuntimePage(await this.#json(pageQuery("/runtime-observations", options), options));
+    return projectAdminRuntimePage(await this.#json(pageQuery("/sandbox/runtime-observations", options), options));
   }
 
   async listAgents(projectId: string, options?: PageOptions) {
@@ -129,7 +110,7 @@ export class AdminClient {
   deleteAgent(projectId: string, agentId: string, options?: ReadOptions) {
     return this.#delete(`${scope(projectId)}/agents/${segment(agentId)}`, agentId, "agent.deleted", options);
   }
-  async listSkills(projectId: string, options?: PageOptions) {
+  async listSkills(projectId: string, options?: PageOptions): Promise<SkillList> {
     return projectResourcePage(await this.#json(pageQuery(`${scope(projectId)}/skills`, options), options), (value) => projectSkill(value));
   }
   async retrieveSkill(projectId: string, skillId: string, options?: ReadOptions) {
@@ -138,17 +119,17 @@ export class AdminClient {
   deleteSkill(projectId: string, skillId: string, options?: ReadOptions) {
     return this.#delete(`${scope(projectId)}/skills/${segment(skillId)}`, skillId, "skill.deleted", options);
   }
-  async listSkillVersions(projectId: string, skillId: string, options?: PageOptions) {
+  async listSkillVersions(projectId: string, skillId: string, options?: PageOptions): Promise<SkillVersionList> {
     return projectResourcePage(await this.#json(pageQuery(`${scope(projectId)}/skills/${segment(skillId)}/versions`, options), options), (value) => projectSkillVersion(value, skillId));
   }
   async retrieveSkillVersion(projectId: string, skillId: string, version: string, options?: ReadOptions) {
     return projectSkillVersion(await this.#json(`${scope(projectId)}/skills/${segment(skillId)}/versions/${segment(version)}`, options), skillId, version);
   }
-  async deleteSkillVersion(projectId: string, skillId: string, version: string, options?: ReadOptions) {
+  async deleteSkillVersion(projectId: string, skillId: string, version: string, options?: ReadOptions): Promise<SkillVersionDeleted> {
     const value = await this.#json(`${scope(projectId)}/skills/${segment(skillId)}/versions/${segment(version)}`, options, "DELETE");
     if (!isRecord(value) || value.version !== version || typeof value.id !== "string") return invalidAdminResponse();
-    const { version: deletedVersion, ...receipt } = value;
-    return { ...projectAdminDeleted(receipt, value.id, "skill.version.deleted"), version: deletedVersion };
+    const { version: _, ...receipt } = value;
+    return { ...projectAdminDeleted(receipt, value.id, "skill.version.deleted"), version };
   }
   downloadSkill(projectId: string, skillId: string, options?: ReadOptions) {
     return this.#content(`${scope(projectId)}/skills/${segment(skillId)}/content`, options);
@@ -166,7 +147,7 @@ export class AdminClient {
   deleteEnvironmentTemplate(projectId: string, templateId: string, options?: ReadOptions) {
     return this.#delete(`${scope(projectId)}/environment-templates/${segment(templateId)}`, templateId, "agent.environment.template.deleted", options);
   }
-  async listSourceFiles(projectId: string, options?: PageOptions & { purpose?: string }) {
+  async listSourceFiles(projectId: string, options?: PageOptions & { purpose?: string }): Promise<SourceFileList> {
     return projectResourcePage(await this.#json(pageQuery(`${scope(projectId)}/files`, options, { purpose: options?.purpose }), options), (value) => projectSourceFile(value));
   }
   async retrieveSourceFile(projectId: string, fileId: string, options?: ReadOptions) {
@@ -269,5 +250,24 @@ export class AdminClient {
       created_after: options?.created_after, created_before: options?.created_before,
     });
     return projectWriteOperations(await this.#json(path, options));
+  }
+
+  /** Credential metadata for one self_hosted Environment; the credentials themselves are never listed. */
+  async listExecutorCredentials(projectId: string, environmentId: string, options?: ReadOptions): Promise<{ data: ExecutorCredential[] }> {
+    return projectExecutorCredentials(await this.#json(`${scope(projectId)}/environments/${segment(environmentId)}/executor-credentials`, options));
+  }
+  /**
+   * Issues, or with `rotate: true` replaces, the credential with the caller's key ID and returns it once.
+   * Sent once: after an uncertain result, refresh the list and reissue the same key ID with `rotate: true`.
+   */
+  async issueExecutorCredential(projectId: string, environmentId: string, input: IssueExecutorCredentialInput, options?: ReadOptions): Promise<IssuedExecutorCredential> {
+    const value = await this.#json(`${scope(projectId)}/environments/${segment(environmentId)}/executor-credentials`, options, "POST", {
+      key_id: input.key_id, rotate: input.rotate === true,
+    });
+    return projectIssuedExecutorCredential(value, input.key_id, environmentId);
+  }
+  /** Revokes the credential; revoking it again is safe. */
+  async revokeExecutorCredential(projectId: string, environmentId: string, keyId: string, options?: ReadOptions): Promise<void> {
+    await this.#response(`${scope(projectId)}/environments/${segment(environmentId)}/executor-credentials/${segment(keyId)}`, options, "DELETE");
   }
 }

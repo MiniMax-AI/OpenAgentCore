@@ -20,7 +20,7 @@ describe("frozen execution configuration", () => {
   it("reads a Session-scoped snapshot with auth and abort signal", async () => {
     const abort = new AbortController();
     const client = clientReturning(snapshot, (url, init) => {
-      expect(url).toBe(`/core/v1/admin/projects/${projectId}/sessions/${id}/execution-configuration`);
+      expect(url).toBe(`/core/v1/projects/${projectId}/sessions/${id}/execution-configuration`);
       expect(init?.signal).toBe(abort.signal);
       expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer admin-token");
     });
