@@ -60,7 +60,7 @@ python3 "$d/install.pyz" --source-url 'https://core.example.com' --environment-i
   // One line of JSON to paste at the installer's hidden prompt; the file is for automation.
   await expect(issued.getByRole("button", { name: "Copy credential" })).toHaveClass(/\bprimary\b/);
   await expect(issued.getByLabel("Executor credential file")).toHaveText(new RegExp(`^\\{"key_id":"[0-9a-f-]{36}","environment_id":"${environmentId}","executor_token":"exec_fixture_\\d+"\\}$`));
-  await expect(issued).toContainText("run chmod 600 <file> and add --credential-file <absolute path> to the command");
+  await expect(issued).toContainText("run chmod 600 <file> and add --credential-file <absolute path> to the python3 line; the path must not go through a symlink");
   const download = page.waitForEvent("download");
   await issued.getByRole("button", { name: "Download credential file" }).click();
   expect((await download).suggestedFilename()).toMatch(/^executor-credential-[0-9a-f]{8}\.json$/);

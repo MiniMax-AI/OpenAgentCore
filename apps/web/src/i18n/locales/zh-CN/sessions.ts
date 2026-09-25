@@ -175,7 +175,7 @@ export const sessions = {
       copied: "已复制",
       copyFailed: "无法复制凭据。请选中文本后手动复制。",
       download: "下载凭据文件",
-      downloadHint: "自动化部署时，下载文件，执行 <chmod/>，再在命令中加上 <flag/>。",
+      downloadHint: "自动化部署时，下载文件，执行 <chmod/>，再在 python3 那一行加上 <flag/>；路径中不能经过符号链接。",
       done: "完成",
     },
     install: {
