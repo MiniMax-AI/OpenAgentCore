@@ -466,7 +466,7 @@ def _apply(root, args, discard_edits, start, interactive, out, core_first=False,
     active = [name for name in affected if name in will_run]
     stopped = [name for name in affected if name not in will_run]
     if active:
-        out("Services to restart: " + ", ".join(active)
+        out(("Services to start: " if start and not state.get("applied") else "Services to restart: ") + ", ".join(active)
             + (". Every Web sign-in session ends." if "web" in active else ""))
     if stopped:
         out("Stopped services stay stopped: " + ", ".join(stopped))

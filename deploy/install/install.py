@@ -347,7 +347,7 @@ def create(root, args, config, manifest, images):
     write(root / "state.json", json.dumps(state, indent=2) + "\n")
 
 
-def finish(root, bundle, manifest, provider=None):
+def finish(root, bundle, manifest, provider=None, fresh=False):
     """Put the bundle's files in place, apply config.json and start the services."""
     state = parsar_cli.load_state(root)
     # A converted installation replaces the earlier release's binaries and payload once.
@@ -364,10 +364,10 @@ def finish(root, bundle, manifest, provider=None):
     if provider:
         local_node.install(root, dict(state, provider=provider, core_port=config["ports"]["core"],
                                       public_url=config["public_url"]), manifest, bundle, run)
-    summary(root, config, provider)
+    summary(root, config, provider, fresh)
 
 
-def summary(root, config, provider):
+def summary(root, config, provider, fresh):
     mode, public_url, ports = config["mode"], config["public_url"], config["ports"]
     if mode != "core-only":
         # The console accepts only its configured origin, so a public URL has no loopback console.
@@ -394,9 +394,10 @@ def summary(root, config, provider):
     print(f"Manage the services with {root / 'parsar'} status, start and stop.")
     if provider:
         print("Provider: " + provider + ". Local node enrolled; Core provisions Sessions on demand.")
-    elif mode == "all":
+    # Only a new installation says it has no nodes; a repaired or converted one keeps its own.
+    elif fresh and mode == "all":
         print("No execution node was installed by this run. Choose a sandbox backend and add nodes on the Nodes page in Web.")
-    elif mode == "core-only":
+    elif fresh and mode == "core-only":
         print("No execution node was installed by this run.")
     print("Services installed. No model request was made. See docs/getting-started/quickstart.md.")
 
@@ -470,7 +471,7 @@ def main(argv=None):
             free_port(config["ports"][key])
     images = image_loader(manifest, bundle)(image_names(config["mode"], config.get("native_core", False)))
     create(root, args, config, manifest, images)
-    finish(root, bundle, manifest, provider)
+    finish(root, bundle, manifest, provider, fresh=True)
 
 
 if __name__ == "__main__":

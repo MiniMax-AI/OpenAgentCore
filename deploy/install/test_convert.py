@@ -128,6 +128,7 @@ class ConvertTests(unittest.TestCase):
         self.assertNotIn("model-secret", self.output.getvalue() + (self.root / "generated/settings.json").read_text())
         self.assertNotIn("export-secret", self.output.getvalue())
         self.assertEqual(self.host.running, {"database", "core", "web"})
+        self.assertNotIn("No execution node was installed", self.output.getvalue())
         self.assertEqual((self.root / "node-payload/node-install.pyz").read_bytes(), b"synthetic verified Python bootstrap")
         self.assertTrue((self.root / "parsar").is_file())
 
