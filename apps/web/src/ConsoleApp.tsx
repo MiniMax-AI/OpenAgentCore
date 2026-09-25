@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ConsoleSidebar } from "./components/ConsoleSidebar";
@@ -62,9 +62,20 @@ function ConsoleShell() {
   const { t } = useTranslation("navigation");
   const { state } = useProjects();
   const [location, setLocation] = useState(readLocation);
-  // The console tour takes the place of the shell until it ends.
+  // The console tour takes the place of the shell until it ends; then the
+  // control that opened it, or else the page, takes the focus back.
   const [touring, setTouring] = useState(false);
+  const tourEnded = useRef(false);
   const openTour = useCallback((from: HTMLElement | null) => withTransition("enter", () => setTouring(true), from), []);
+  const endTour = useCallback((from: HTMLElement | null) => withTransition("enter", () => {
+    tourEnded.current = true;
+    setTouring(false);
+  }, from), []);
+  useEffect(() => {
+    if (touring || !tourEnded.current) return;
+    tourEnded.current = false;
+    (document.querySelector<HTMLElement>("[data-tour-opener]") ?? document.getElementById("main-content"))?.focus();
+  }, [touring]);
 
   useEffect(() => {
     const sync = () => setLocation(readLocation());
@@ -100,7 +111,7 @@ function ConsoleShell() {
     for (const project of state.projects) void queryClient.prefetchQuery(collectionQuery(spec, project.id));
   }, [state.projects]);
 
-  if (touring) return <ConsoleTourScreen onDone={(from) => withTransition("enter", () => setTouring(false), from)} />;
+  if (touring) return <ConsoleTourScreen onDone={endTour} />;
 
   return (
     <ConsoleNavigationContext.Provider value={navigation}>

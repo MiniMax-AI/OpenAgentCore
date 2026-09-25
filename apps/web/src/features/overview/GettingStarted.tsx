@@ -95,7 +95,7 @@ export function GettingStarted({ fleet, sessions }: { fleet: FleetState; session
           <HelpTip>{t("gettingStarted.help")}</HelpTip>
         </div>
         <div className="getting-started-actions">
-          <button className="button ghost" type="button" onClick={(event) => openTour(event.currentTarget)}>
+          <button className="button ghost" type="button" data-tour-opener="" onClick={(event) => openTour(event.currentTarget)}>
             <Compass size={14} aria-hidden="true" />{t("gettingStarted.tour")}
           </button>
           <button className="icon-button ghost" type="button" aria-label={t("gettingStarted.dismiss")} title={t("gettingStarted.dismiss")} onClick={() => remember("dismissed")}>

@@ -19,7 +19,11 @@ const icons: Record<TourChapter, readonly [LucideIcon, LucideIcon, LucideIcon]> 
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
-/** Opens the console tour from the console; receives the pressed button for the reveal's origin. */
+/**
+ * Opens the console tour from the console; receives the pressed button for the
+ * reveal's origin. A button marked `data-tour-opener` gets the focus back when
+ * the tour ends.
+ */
 export const ConsoleTourContext = createContext<(from: HTMLElement | null) => void>(() => undefined);
 export const useConsoleTour = () => useContext(ConsoleTourContext);
 
@@ -52,8 +56,13 @@ export function ConsoleTour({ chapter, onChapter, onDone }: {
   const [First, Second, Third] = icons[id];
   const pointIcons = [First, Second, Third];
 
+  // The tour replaces the page, so focus starts on its way forward.
+  useEffect(() => { primary.current?.focus(); }, []);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // A control that already handled the key, such as Escape closing a menu, keeps it.
+      if (event.defaultPrevented) return;
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
       if (event.key === "ArrowRight" && !last) onChapter(chapter + 1);
       if (event.key === "ArrowLeft" && chapter > 0) onChapter(chapter - 1);
