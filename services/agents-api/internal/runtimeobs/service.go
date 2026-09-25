@@ -199,6 +199,11 @@ func (s *Service) readBatch(ctx context.Context, chunk []*sourceRead, observatio
 	for index, read := range chunk {
 		targets[index] = read.target
 	}
+	// One batch read replaces up to MaxBatchTargets single reads, so it may take
+	// longer than one of them without exceeding the page's overall cost.
+	if sourceTimeout > 0 {
+		sourceTimeout = max(sourceTimeout, minBatchSourceTimeout)
+	}
 	sourceCtx, stop := sourceContext(ctx, sourceTimeout)
 	started := time.Now()
 	results, ok := batch.ObserveBatch(sourceCtx, targets)
@@ -294,6 +299,8 @@ func (s *Service) complete(ctx context.Context, read *sourceRead, sample Sample,
 	observation.ResolvedAt = s.now()
 	return s.finish(ctx, observation, collectionSource, owner)
 }
+
+const minBatchSourceTimeout = 5 * time.Second
 
 func sourceContext(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	if timeout > 0 {

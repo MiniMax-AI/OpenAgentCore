@@ -208,7 +208,7 @@ duration.
   unsupported `self_hosted` remain explicit rows rather than disappearing.
 - Default page size 20, maximum 100.
 - Sample at most eight providers concurrently.
-- Default per-source budget two seconds and whole-request budget ten seconds.
+- Default per-source budget two seconds; one batch read of up to 100 sandboxes (E2B) gets at least five seconds. Whole-request budget ten seconds.
 - Do not retry a source call inside the HTTP request.
 - An optional process-local singleflight/cache may coalesce identical reads for up
   to five seconds and retain the previous cumulative sample for CPU-rate
