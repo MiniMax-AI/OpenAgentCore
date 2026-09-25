@@ -4,6 +4,9 @@ import { archiveProject, expectManagementBoundary, openConsole } from "./console
 
 test.afterEach(async ({ request }) => expectManagementBoundary(request));
 
+/** The self-hosted installer digest the fixture console reports. */
+const SELF_HOSTED_INSTALLER_SHA256 = "5e1f".repeat(16);
+
 test("shows the deployment's health on Overview and each monitor page", async ({ page, request }) => {
   await openConsole(page, request, "overview");
   await expect(page.getByRole("article").filter({ hasText: "Service status" })).toContainText("Degraded");
@@ -32,16 +35,28 @@ test("opens a Session's conversation from the Session log, read-only", async ({ 
   await expect(page.getByRole("textbox")).toHaveCount(0);
 });
 
-test("issues an executor credential once on a self-hosted Session and revokes it", async ({ page, request }) => {
+test("issues an executor credential once on a self-hosted Session, connects a host with it and revokes it", async ({ page, request }) => {
   await openConsole(page, request, "sessions");
   await page.getByRole("row").filter({ hasText: "Self-hosted" }).first().getByRole("button", { name: /^Open Session / }).click();
   const section = page.getByRole("region", { name: "Executor credentials" });
   await expect(section).toContainText("No executor credentials yet");
+  const environmentId = await page.getByLabel("Session facts").locator("div").filter({ hasText: /^Environment/ }).locator("code").getAttribute("title");
+
+  // Connect a host: the exact install command, which carries no secret.
+  const install = section.getByRole("region", { name: "Connect a host" });
+  await expect(install.getByLabel("Executor install command")).toHaveText(`(umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT
+curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example.com/node-install/self-hosted-install.pyz' -o "$d/install.pyz" &&
+printf '%s  %s\\n' '${SELF_HOSTED_INSTALLER_SHA256}' "$d/install.pyz" | sha256sum -c --status &&
+python3 "$d/install.pyz" --source-url 'https://core.example.com' --environment-id '${environmentId}' --remote 'wss://core.example.com/api/v1/agent-daemon/ws')`);
+  await expect(install.getByRole("list", { name: "Host requirements" })).toContainText("HTTPS access to https://core.example.com");
 
   await section.getByRole("button", { name: "Issue credential" }).click();
   const issued = page.getByRole("dialog", { name: "Executor credential" });
   await expect(issued).toContainText("shown only once");
+  // Copied to paste at the installer's hidden prompt; the file is for automation.
+  await expect(issued.getByRole("button", { name: "Copy credential" })).toHaveClass(/\bprimary\b/);
   await expect(issued.getByLabel("Executor credential file")).toContainText("exec_fixture_");
+  await expect(issued).toContainText("run chmod 600 <file> and add --credential-file <absolute path> to the command");
   const download = page.waitForEvent("download");
   await issued.getByRole("button", { name: "Download credential file" }).click();
   expect((await download).suggestedFilename()).toMatch(/^executor-credential-[0-9a-f]{8}\.json$/);
@@ -52,6 +67,7 @@ test("issues an executor credential once on a self-hosted Session and revokes it
   await pending.getByRole("button", { name: "Done" }).click();
   await expect(page.getByLabel("Executor credential file")).toHaveCount(0);
   expect(await page.evaluate(() => JSON.stringify({ ...window.localStorage, ...window.sessionStorage }))).not.toContain("exec_fixture_");
+  expect(page.url()).not.toContain("exec_fixture_");
 
   const credentials = section.getByRole("table", { name: "Executor credentials" });
   await expect(credentials).toContainText("Active");
@@ -66,6 +82,19 @@ test("issues an executor credential once on a self-hosted Session and revokes it
   await expect(section).toContainText("This project is archived");
   await expect(section.getByRole("button", { name: "Issue credential" })).toHaveCount(0);
   await expect(credentials).toContainText("Revoked");
+  // The command stays; the note says the host still needs a credential.
+  await expect(install).toContainText("It asks for a credential, which this archived project can't issue or rotate");
+});
+
+test("hides Connect a host when the console does not serve the self-hosted installer", async ({ page, request }) => {
+  const config = page.waitForResponse((response) => new URL(response.url()).pathname === "/console/config");
+  await openConsole(page, request, "sessions", { installers: "none" });
+  await page.getByRole("row").filter({ hasText: "Self-hosted" }).first().getByRole("button", { name: /^Open Session / }).click();
+  const section = page.getByRole("region", { name: "Executor credentials" });
+  await expect(section).toContainText("No executor credentials yet");
+  await config;
+  await expect(section.getByRole("region", { name: "Connect a host" })).toHaveCount(0);
+  await expect(section.getByRole("button", { name: "Issue credential" })).toBeVisible();
 });
 
 test("issues a new executor credential after the unanswered one was rotated from its row", async ({ page, request }) => {

@@ -97,7 +97,7 @@ export function SessionPage() {
     const waiting = waitingFor(session);
     const metadata = Object.entries(session.metadata).filter(([key]) => key !== "title");
     const harness = session.agent.x_agents_core?.harness;
-    const environment = session.environment as { type: string; id?: unknown };
+    const environment = session.environment as { type: string; id?: unknown; remote_url?: unknown };
     body = (
       <>
         {history.gone ? <p className="coverage-note coverage-note-error" role="alert">{t("detail.gone", { time })}</p> : null}
@@ -149,7 +149,7 @@ export function SessionPage() {
           <Kpi label={t("kpi.reasoning")} value={formatInteger(usage?.output_tokens_details.reasoning_tokens, locale)} />
         </KpiStrip>
         {environment.type === "self_hosted" && typeof environment.id === "string" ? (
-          <ExecutorCredentialsSection key={environment.id} projectId={projectId} sessionId={session.id} environmentId={environment.id} />
+          <ExecutorCredentialsSection key={environment.id} projectId={projectId} sessionId={session.id} environmentId={environment.id} remoteUrl={typeof environment.remote_url === "string" ? environment.remote_url : ""} />
         ) : null}
         <Section
           headingId="session-history-heading"

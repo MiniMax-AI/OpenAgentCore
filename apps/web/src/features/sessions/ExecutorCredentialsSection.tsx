@@ -2,7 +2,7 @@ import { AgentCoreError, type ExecutorCredential, type IssuedExecutorCredential 
 import { useQuery } from "@tanstack/react-query";
 import { Check, Copy, Download, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState, Section, StatusDot } from "../../components/console-ui";
@@ -16,6 +16,7 @@ import { formatDateTime, shortId } from "../../lib/format";
 import { admin, useProjects } from "../../lib/projects";
 import { useCopy } from "../api-keys/IssuedKey";
 import { saveBlob } from "../skills/skill-operations";
+import { ExecutorInstallPanel } from "./ExecutorInstallPanel";
 import { executorCredentialsQuery } from "./session-queries";
 
 /** An issuance that gets no answer in this time has an unknown outcome. */
@@ -31,7 +32,10 @@ function newKeyId(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-/** The self-hosted executor's credential file. */
+/**
+ * The self-hosted executor's credential file. The installer's hidden prompt
+ * reads it pasted whole, and `--credential-file` reads it from disk.
+ */
 function credentialFile(credential: IssuedExecutorCredential): string {
   const { key_id, environment_id, executor_token } = credential;
   return `${JSON.stringify({ key_id, environment_id, executor_token }, null, 2)}\n`;
@@ -72,9 +76,10 @@ function seconds(value: string | null): number | null {
  * administrator rotates it (issued, secret lost) or issues it again (not
  * issued). A kept key ID that is listed is never sent again: its row's actions
  * own it. An archived project's credentials are listed and revoked but neither
- * issued nor rotated.
+ * issued nor rotated. Below the list, Connect a host gives the command that
+ * installs the executor with one of these credentials.
  */
-export function ExecutorCredentialsSection({ projectId, sessionId, environmentId }: { projectId: string; sessionId: string; environmentId: string }) {
+export function ExecutorCredentialsSection({ projectId, sessionId, environmentId, remoteUrl }: { projectId: string; sessionId: string; environmentId: string; remoteUrl: string }) {
   const { t, i18n } = useTranslation("sessions");
   const locale = i18n.resolvedLanguage;
   const toast = useToast();
@@ -282,15 +287,16 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
       {shown && !shown.open && !shown.done ? (
         <section className="executor-credential-pending" aria-label={t("executor.issued.title")}>
           <CredentialFile credential={shown.credential} />
-          <div><button className="button primary" type="button" onClick={finishShown}>{t("executor.issued.done")}</button></div>
+          <div><button className="button outline" type="button" onClick={finishShown}>{t("executor.issued.done")}</button></div>
         </section>
       ) : null}
       {body}
+      <ExecutorInstallPanel environmentId={environmentId} remoteUrl={remoteUrl} archived={archived} />
       <Modal
         open={shown?.open ?? false}
         title={t("executor.issued.title")}
         onClose={dismissShown}
-        footer={<button className="button primary" type="button" onClick={finishShown}>{t("executor.issued.done")}</button>}
+        footer={<button className="button outline" type="button" onClick={finishShown}>{t("executor.issued.done")}</button>}
       >
         {shown ? <CredentialFile credential={shown.credential} /> : null}
       </Modal>
@@ -341,7 +347,10 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
   );
 }
 
-/** The one-time credential file, with copy and download. */
+/**
+ * The one-time credential: copied to paste at the installer's hidden prompt,
+ * or downloaded as a file for automation (`--credential-file`).
+ */
 function CredentialFile({ credential }: { credential: IssuedExecutorCredential }) {
   const { t } = useTranslation("sessions");
   const text = credentialFile(credential);
@@ -352,7 +361,7 @@ function CredentialFile({ credential }: { credential: IssuedExecutorCredential }
       <p className="executor-credential-notice">{t("executor.issued.notice")}</p>
       <pre className="executor-credential-file" aria-label={t("executor.issued.fileLabel")} tabIndex={0}><code>{text}</code></pre>
       <div className="executor-credential-actions">
-        <button className="button outline" type="button" onClick={() => void copy()}>
+        <button className="button primary" type="button" onClick={() => void copy()}>
           {state === "copied" ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
           {state === "copied" ? t("executor.issued.copied") : t("executor.issued.copy")}
         </button>
@@ -361,6 +370,9 @@ function CredentialFile({ credential }: { credential: IssuedExecutorCredential }
         </button>
       </div>
       {state === "failed" ? <p className="executor-credential-error" role="alert">{t("executor.issued.copyFailed")}</p> : null}
+      <p className="executor-credential-hint">
+        <Trans t={t} i18nKey="executor.issued.downloadHint" components={{ chmod: <code>chmod 600 &lt;file&gt;</code>, flag: <code>--credential-file &lt;absolute path&gt;</code> }} />
+      </p>
     </div>
   );
 }

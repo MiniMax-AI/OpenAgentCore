@@ -11,14 +11,16 @@ export const FIXTURE_CORE_KEY = "fixture-core-key-3f9a2c71";
  * `sandbox` the sandbox deployment, `nodes: "none"` a deployment no node has joined, and
  * `installation` how config.json's public_url is set: "public" (HTTPS, the default), "local"
  * (loopback: only the Core machine reaches the API, and E2B is rejected) or "stale" (public,
- * with a node enrolled with an earlier address), and `credentials: "none"` a Core without a
- * credential encryption key, which cannot store a model provider's key.
+ * with a node enrolled with an earlier address), `credentials: "none"` a Core without a
+ * credential encryption key, which cannot store a model provider's key, and
+ * `installers: "none"` a console without its node installation payload, so it serves neither
+ * the node nor the self-hosted installer.
  */
-export interface FixtureOptions { fresh?: boolean; sandbox?: "configured" | "none" | "e2b"; nodes?: "none"; installation?: "public" | "local" | "stale"; credentials?: "none" }
+export interface FixtureOptions { fresh?: boolean; sandbox?: "configured" | "none" | "e2b"; nodes?: "none"; installation?: "public" | "local" | "stale"; credentials?: "none"; installers?: "none" }
 
 /** Fresh fixture state: signed out ("login") or already signed in ("authenticated"). */
 export async function resetFixture(request: APIRequestContext, auth: "login" | "authenticated" = "authenticated", options: FixtureOptions = {}) {
-  await request.post(`${fixture}/__fixture/reset?auth=${auth}${options.fresh ? "&projects=none" : ""}&sandbox=${options.sandbox ?? "configured"}${options.nodes ? `&nodes=${options.nodes}` : ""}&installation=${options.installation ?? "public"}${options.credentials ? `&credentials=${options.credentials}` : ""}`);
+  await request.post(`${fixture}/__fixture/reset?auth=${auth}${options.fresh ? "&projects=none" : ""}&sandbox=${options.sandbox ?? "configured"}${options.nodes ? `&nodes=${options.nodes}` : ""}&installation=${options.installation ?? "public"}${options.credentials ? `&credentials=${options.credentials}` : ""}${options.installers ? `&installers=${options.installers}` : ""}`);
 }
 
 /** Opens the console already signed in, in English. */
