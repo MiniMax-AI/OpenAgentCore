@@ -217,6 +217,9 @@ function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
       // Never retried: a rejection shows Core's reason; an unknown outcome is read again first.
       if (caught instanceof AgentCoreError && caught.status >= 400 && caught.status < 500 && caught.status !== 408) {
         setError(caught.message);
+      } else if (caught instanceof AgentCoreError && caught.code === "credential_storage_unavailable") {
+        // A deployment without a credential key stores nothing: a configuration error, not an unknown outcome.
+        setError(t("models.form.noCredentialKey"));
       } else {
         setError(t("models.form.uncertain"));
         onReread();

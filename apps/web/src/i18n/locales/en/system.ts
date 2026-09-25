@@ -77,6 +77,7 @@ export const system = {
       save: "Save",
       saving: "Saving…",
       uncertain: "Core did not confirm the change. The default models were read again; check them before trying again.",
+      noCredentialKey: "Core has no credential encryption key configured, so it can't store keys. Installer-based installs configure this automatically; for manual deployments, set AGENTS_API_CREDENTIAL_KEY_FILE for Core.",
     },
     clearDialog: {
       title: "Clear default model",

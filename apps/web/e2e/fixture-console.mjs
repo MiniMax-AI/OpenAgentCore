@@ -80,7 +80,7 @@ function e2bDeployment() {
   return { ...configuredDeployment(), provider: "e2b", mode: "direct", resources: { allocations: 3, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, e2b: { template: "parsar-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", credential_configured: true, template_build: templateBuild } };
 }
 
-function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo", address = "public") {
+function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo", address = "public", credentials = "configured") {
   const base = buildDemo();
   const now = Math.floor(Date.now() / 1000);
   const resources = buildResources(now, base.agents, base.sessions);
@@ -98,6 +98,8 @@ function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "d
     executorCredentials: new Map(),
     // How config.json's public_url is set: "public", "local" or "stale".
     installation: address,
+    // "none": Core has no credential encryption key, so it cannot store a provider's key.
+    credentialKey: credentials !== "none",
     // Startup state and deployment default model provider per harness; API keys are never kept.
     harnesses: {
       claude_sdk: { enabled: true, default: false, provider: null },
@@ -443,6 +445,8 @@ async function harnessRoute(request, response, path) {
   const input = await body(request).catch(() => null);
   const problem = providerProblem(harness, input);
   if (problem) return error(response, 400, problem[0], "invalid_request_error", problem[1]);
+  // As Core's error mapping: sealing the key needs the credential encryption key.
+  if (!state.credentialKey) return error(response, 503, "Credential encryption is not configured on this service.", "credential_storage_unavailable");
   entry.provider = {
     object: "core.model_provider", harness, protocol: input.protocol, base_url: input.base_url, api_key_configured: true,
     ...(input.context_window ? { context_window: input.context_window } : {}),
@@ -456,7 +460,7 @@ async function harnessRoute(request, response, path) {
 async function fixtureRoute(request, response, url) {
   if (url.pathname === "/__fixture/health") return send(response, 200, { ok: true });
   if (url.pathname === "/__fixture/reset" && request.method === "POST") {
-    reset(url.searchParams.get("auth") ?? "login", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured", url.searchParams.get("nodes") ?? "demo", url.searchParams.get("installation") ?? "public");
+    reset(url.searchParams.get("auth") ?? "login", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured", url.searchParams.get("nodes") ?? "demo", url.searchParams.get("installation") ?? "public", url.searchParams.get("credentials") ?? "configured");
     return send(response, 200, { ok: true });
   }
   if (url.pathname === "/__fixture/fail-next" && request.method === "POST") {

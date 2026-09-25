@@ -79,6 +79,7 @@ export const system: TranslationShape<typeof english> = {
       save: "保存",
       saving: "正在保存…",
       uncertain: "Core 没有确认这次修改。已重新读取默认模型，请先核对再重试。",
+      noCredentialKey: "Core 没有配置凭据加密密钥，因此无法保存 key。用安装器安装的会自动配置；手动部署时，请为 Core 设置 AGENTS_API_CREDENTIAL_KEY_FILE。",
     },
     clearDialog: {
       title: "清除默认模型",
