@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -120,26 +121,34 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 	var node store.RuntimeNodeIdentity
 	created("POST", "/api/v1/sandbox-node/enroll", enrollment.Token, string(enroll), &node)
 
-	routes := []struct{ name, method, path string }{
-		{"/v1", "GET", "/v1/agents"},
-		{"/core/v1", "GET", "/core/v1/projects"},
-		{"/api/v1 node", "GET", "/api/v1/sandbox-node/identity?node_id=" + nodeID},
-		{"/api/v1 executor", "GET", "/api/v1/agent-daemon/connection?environment_id=" + environment.ID},
+	// A second, unconsumed enrollment token; its only uses are enroll and configuration.
+	var unused api.SandboxEnrollmentToken
+	created("POST", "/core/v1/sandbox/enrollment-tokens", coreKey, `{}`, &unused)
+
+	routes := []struct{ name, method, path, body string }{
+		{"/v1", "GET", "/v1/agents", ""},
+		{"/core/v1", "GET", "/core/v1/projects", ""},
+		{"node identity", "GET", "/api/v1/sandbox-node/identity?node_id=" + nodeID, ""},
+		{"node configuration", "GET", "/api/v1/sandbox-node/configuration", ""},
+		{"daemon connection", "GET", "/api/v1/agent-daemon/connection?environment_id=" + environment.ID, ""},
+		{"daemon enroll", "POST", "/api/v1/agent-daemon/enroll", `{"environment_id":"` + environment.ID + `"}`},
 	}
 	for _, credential := range []struct {
-		name, token, own string
+		name, token string
+		own         []string
 	}{
-		{"Project API key", projectKey.Key, "/v1"},
-		{"Core key", coreKey, "/core/v1"},
-		{"node credential", nodeCredential, "/api/v1 node"},
-		{"executor credential", executor.Token, "/api/v1 executor"},
+		{"Project API key", projectKey.Key, []string{"/v1"}},
+		{"Core key", coreKey, []string{"/core/v1"}},
+		{"node enrollment token", unused.Token, []string{"node configuration"}},
+		{"node credential", nodeCredential, []string{"node identity"}},
+		{"executor credential", executor.Token, []string{"daemon connection", "daemon enroll"}},
 	} {
 		for _, route := range routes {
 			want := http.StatusUnauthorized
-			if route.name == credential.own {
+			if slices.Contains(credential.own, route.name) {
 				want = http.StatusOK
 			}
-			if w := call(route.method, route.path, credential.token, ""); w.Code != want {
+			if w := call(route.method, route.path, credential.token, route.body); w.Code != want {
 				t.Errorf("%s on %s = %d, want %d: %s", credential.name, route.name, w.Code, want, w.Body)
 			}
 		}
