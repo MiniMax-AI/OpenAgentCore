@@ -285,6 +285,7 @@ const EXECUTOR_CREDENTIALS = /^\/projects\/([^/]+)\/environments\/([^/]+)\/execu
  * environment of a Session in the project; the token is returned once; an
  * existing key_id is reissued only with rotate:true, which also restores a
  * revoked one; rotating an unknown key_id is not found; revoking again is safe.
+ * An archived project keeps listing and revoking but neither issues nor rotates.
  */
 async function executorCredentialRoute(request, response, projectId, environmentId, keyId) {
   const project = state.admin.projects.find((entry) => entry.id === projectId);
@@ -296,6 +297,7 @@ async function executorCredentialRoute(request, response, projectId, environment
   if (!keyId && request.method === "POST") {
     const input = await body(request);
     if (!keyIdValid(input.key_id) || (input.rotate !== undefined && typeof input.rotate !== "boolean")) return error(response, 400, "key_id must be a UUID.", "invalid_request");
+    if (project.archived_at) return error(response, 409, "The target Project is archived.", "project_archived");
     const existing = credentials.find((entry) => entry.key_id === input.key_id);
     if (existing && input.rotate !== true) return error(response, 409, "The executor credential exists; rotate it instead.", "executor_credential_exists");
     if (!existing && input.rotate === true) return error(response, 404, "No such executor credential.", "not_found_error");

@@ -13,7 +13,7 @@ import { TableSkeleton } from "../../components/Skeleton";
 import { failedLast, useFailureToast, useToast } from "../../components/Toast";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { formatDateTime, shortId } from "../../lib/format";
-import { admin } from "../../lib/projects";
+import { admin, useProjects } from "../../lib/projects";
 import { useCopy } from "../api-keys/IssuedKey";
 import { saveBlob } from "../skills/skill-operations";
 import { executorCredentialsQuery } from "./session-queries";
@@ -65,12 +65,15 @@ function seconds(value: string | null): number | null {
  * forgotten when its dialog closes. Writes are never retried automatically:
  * an issuance with an unknown outcome keeps its key ID, and after the list is
  * refreshed the administrator rotates it (issued, secret lost) or issues it
- * again (not issued).
+ * again (not issued). An archived project's credentials are listed and
+ * revoked but neither issued nor rotated.
  */
 export function ExecutorCredentialsSection({ projectId, sessionId, environmentId }: { projectId: string; sessionId: string; environmentId: string }) {
   const { t, i18n } = useTranslation("sessions");
   const locale = i18n.resolvedLanguage;
   const toast = useToast();
+  const { byId, refresh: refreshProjects } = useProjects();
+  const archived = byId.get(projectId)?.status === "archived";
   const query = useQuery(executorCredentialsQuery(projectId, sessionId, environmentId));
   const credentials = query.data ?? null;
   const { refetch } = query;
@@ -127,9 +130,16 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
         return;
       }
       setKept(null);
-      // An earlier attempt with this key ID was issued after all; its secret never arrived.
-      if (failure.code === "executor_credential_exists") openRotation(keyId, true);
-      else toast.show(t("executor.issueRejected"), { tone: "error", detail: failure.message });
+      if (failure.code === "project_archived") {
+        // Archived meanwhile: read the project again so issuing and rotating disappear.
+        toast.show(t("executor.issueRejected"), { tone: "error", detail: t("executor.archived") });
+        refreshProjects();
+      } else if (failure.code === "executor_credential_exists") {
+        // An earlier attempt with this key ID was issued after all; its secret never arrived.
+        openRotation(keyId, true);
+      } else {
+        toast.show(t("executor.issueRejected"), { tone: "error", detail: failure.message });
+      }
       reread();
     } finally {
       setIssuing(false);
@@ -146,7 +156,7 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
       return;
     }
     setKept(null);
-    if (found.revoked_at === null) openRotation(found.key_id, true);
+    if (found.revoked_at === null && !archived) openRotation(found.key_id, true);
   };
 
   const rotate = async () => {
@@ -159,14 +169,19 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
       setShown({ credential, open: true });
     } catch (error) {
       const failure = writeFailure(error);
-      setRotationError(failure.kind === "uncertain" ? t("executor.rotateDialog.uncertain") : t("executor.rotateDialog.rejected", { reason: failure.message }));
+      if (failure.kind === "rejected" && failure.code === "project_archived") {
+        setRotationError(t("executor.archived"));
+        refreshProjects();
+      } else {
+        setRotationError(failure.kind === "uncertain" ? t("executor.rotateDialog.uncertain") : t("executor.rotateDialog.rejected", { reason: failure.message }));
+      }
     } finally {
       setRotating(false);
       reread();
     }
   };
 
-  const issueButton = (
+  const issueButton = archived ? null : (
     <button className="button outline" type="button" onClick={() => void issue()} disabled={busy}>
       <Plus size={14} aria-hidden="true" />{issuing ? t("executor.issuing") : t("executor.issue")}
     </button>
@@ -208,9 +223,11 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
                   <td className="actions-cell">
                     {revoked ? null : (
                       <RowActions>
-                        <button className="text-action" type="button" aria-label={t("executor.rotateLabel", { id })} disabled={busy} onClick={() => openRotation(credential.key_id, false)}>
-                          {t("executor.rotate")}
-                        </button>
+                        {archived ? null : (
+                          <button className="text-action" type="button" aria-label={t("executor.rotateLabel", { id })} disabled={busy} onClick={() => openRotation(credential.key_id, false)}>
+                            {t("executor.rotate")}
+                          </button>
+                        )}
                         <button className="text-action danger" type="button" aria-label={t("executor.revokeLabel", { id })} disabled={busy} onClick={() => revoke.ask(credential.key_id)}>
                           {t("executor.revoke")}
                         </button>
@@ -230,6 +247,7 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
 
   return (
     <Section headingId="session-executor-heading" title={t("executor.title")} help={t("executor.help")} actions={issueButton}>
+      {archived ? <p className="coverage-note">{t("executor.archived")}</p> : null}
       {body}
       <Modal
         open={showing}

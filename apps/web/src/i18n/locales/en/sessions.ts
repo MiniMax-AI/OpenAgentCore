@@ -162,6 +162,7 @@ export const sessions = {
     revoke: "Revoke",
     revokeLabel: "Revoke credential {{id}}",
     issueRejected: "The executor credential was not issued",
+    archived: "This project is archived, so executor credentials can't be issued or rotated.",
     notIssued: "Credential {{id}} was not issued. Issue a credential again when you are ready.",
     issued: {
       title: "Executor credential",

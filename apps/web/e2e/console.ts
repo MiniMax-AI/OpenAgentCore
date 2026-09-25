@@ -24,6 +24,11 @@ export async function failNext(request: APIRequestContext, failure: { method: st
   await request.post(`${fixture}/__fixture/fail-next`, { data: failure });
 }
 
+/** Archives a project behind the console's back, as another administrator would. */
+export async function archiveProject(request: APIRequestContext, projectId: string) {
+  await request.post(`${fixture}/core/v1/projects/${projectId}/archive`, { headers: { cookie: "core_console=fixture-session" } });
+}
+
 /** Writes the browser sent through the console, as "METHOD /path". */
 export async function writes(request: APIRequestContext): Promise<string[]> {
   return (await (await request.get(`${fixture}/__fixture/requests`)).json()).writes;

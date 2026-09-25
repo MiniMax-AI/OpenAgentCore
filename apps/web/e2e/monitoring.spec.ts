@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectManagementBoundary, openConsole } from "./console";
+import { archiveProject, expectManagementBoundary, openConsole } from "./console";
 
 test.afterEach(async ({ request }) => expectManagementBoundary(request));
 
@@ -55,6 +55,13 @@ test("issues an executor credential once on a self-hosted Session and revokes it
   await page.getByRole("dialog", { name: "Revoke credential?" }).getByRole("button", { name: "Revoke" }).click();
   await expect(credentials).toContainText("Revoked");
   await expect(credentials.getByRole("button", { name: /^Rotate credential / })).toHaveCount(0);
+
+  // Archived meanwhile: Core refuses the issuance and the console stops offering it.
+  await archiveProject(request, new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("project")!);
+  await section.getByRole("button", { name: "Issue credential" }).click();
+  await expect(section).toContainText("This project is archived");
+  await expect(section.getByRole("button", { name: "Issue credential" })).toHaveCount(0);
+  await expect(credentials).toContainText("Revoked");
 });
 
 test("opens a node and a sandbox in dialogs from Sandbox metrics", async ({ page, request }) => {

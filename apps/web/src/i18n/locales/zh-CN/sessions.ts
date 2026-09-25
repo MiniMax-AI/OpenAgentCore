@@ -159,6 +159,7 @@ export const sessions = {
     revoke: "吊销",
     revokeLabel: "吊销凭据 {{id}}",
     issueRejected: "未签发 executor 凭据",
+    archived: "项目已归档，不能再签发或轮换凭据。",
     notIssued: "凭据 {{id}} 没有签发。准备好后可以再次签发。",
     issued: {
       title: "Executor 凭据",
