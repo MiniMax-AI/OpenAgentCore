@@ -92,7 +92,9 @@ func TestProjectExecutorCredentialsHTTP(t *testing.T) {
 	if w := projectKeyHTTP(h, "POST", path, "admin", `{"key_id":"`+keyID+`","rotate":true}`); w.Code != 201 || !f.rotate {
 		t.Fatal("explicit rotation", w.Code)
 	}
-	for _, body := range []string{`{}`, `{"key_id":"invalid"}`, `{"key_id":null}`, `{"key_id":"` + keyID + `","environment_id":"other"}`, `{"key_id":"` + keyID + `","executor_token":"import"}`, `{"key_id":"` + keyID + `","rotate":null}`} {
+	// key_id must be a canonical lowercase, non-nil UUID.
+	for _, body := range []string{`{}`, `{"key_id":"invalid"}`, `{"key_id":null}`, `{"key_id":"` + strings.ToUpper(keyID) + `"}`,
+		`{"key_id":"00000000-0000-0000-0000-000000000000"}`, `{"key_id":"{` + keyID + `}"}`, `{"key_id":"urn:uuid:` + keyID + `"}`, `{"key_id":"` + strings.ReplaceAll(keyID, "-", "") + `"}`, `{"key_id":"` + keyID + `","environment_id":"other"}`, `{"key_id":"` + keyID + `","executor_token":"import"}`, `{"key_id":"` + keyID + `","rotate":null}`} {
 		before := f.calls
 		if w := projectKeyHTTP(h, "POST", path, "admin", body); w.Code != 400 || before != f.calls {
 			t.Fatal("invalid request accepted", w.Code, body)
@@ -103,6 +105,10 @@ func TestProjectExecutorCredentialsHTTP(t *testing.T) {
 		t.Fatal("uncertain retry", w.Code, w.Body)
 	}
 	f.err = store.ErrNotFound
+	// Rotating a key_id that was never issued is not found.
+	if w := projectKeyHTTP(h, "POST", path, "admin", `{"key_id":"`+uuid.NewString()+`","rotate":true}`); w.Code != 404 || !f.rotate {
+		t.Fatal("unknown key rotation", w.Code)
+	}
 	if w := projectKeyHTTP(h, "DELETE", path+"/"+keyID, "admin", ""); w.Code != 404 {
 		t.Fatal("foreign revocation", w.Code)
 	}
