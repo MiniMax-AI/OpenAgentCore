@@ -51,8 +51,9 @@ through `/v1`. Core has no API users, roles or memberships.
 
 Follow the [installation guide](../getting-started/install.md) for Core, Web and
 PostgreSQL with zero execution nodes. Installation creates no Project or application
-key; an administrator creates them through the management API. The browser signs
-in to the console with the Core key; only the console server sends it to Core.
+key; an administrator creates them on the console's **Projects and keys** page or
+through the management API. The browser signs in to the console with the Core key;
+only the console server sends it to Core.
 
 - [Connection and authentication](core-connection.md)
 - [Architecture and ownership](architecture.md)

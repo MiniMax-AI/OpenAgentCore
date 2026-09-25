@@ -8,7 +8,8 @@ Docker/microsandbox nodes must match its installation, generation and specificat
 are distinct from user-managed `self_hosted` Environments, whose provisioning
 remains the user's responsibility.
 
-The Web console's **Hosted Sandbox Manager** page uses the Core key, separate from
+The Web console's **Nodes** page (shown as **Sandbox backend** when the deployment
+uses E2B) uses the Core key, separate from
 Project API keys. After console sign-in, the console server forwards the page's
 `/core/v1/sandbox` requests, like every other `/core/v1` request, with the Core
 key it reads from its private file. The Core key never reaches the browser. There
@@ -34,12 +35,14 @@ node installation payload. Project keys cannot register, edit or remove nodes.
 ## Start with zero nodes
 
 Default installation starts Core, Web and PostgreSQL without local compute.
-Hosted Sandbox Manager first asks for **E2B cloud** or **Own machines**. Own machines
-then choose Docker or microsandbox. Supply the per-sandbox resources and matched
-Runtime release as part of initial setup. E2B takes an account API key, CPU/memory
-limits and a qualified immutable Runtime template build (`template-id:build-uuid`);
-its exact ready build must match those limits before the selection can be saved. The key is write-only,
-encrypted by Core and never returned to the browser. E2B needs no node installation.
+Setup on the **Nodes** page first asks for **E2B cloud** or **Own machines**. Own
+machines then choose Docker or microsandbox. Supply the per-sandbox resources and
+matched Runtime release as part of initial setup. E2B takes an account API key and
+a qualified immutable Runtime template build (`template-id:build-uuid`) that must be
+ready before the selection can be saved. E2B CPU/memory limits are optional: Web
+sends none, and Core adopts the build's size; supplied limits must match the build.
+The key is write-only, encrypted by Core and never returned to the browser. E2B
+needs no node installation.
 The saved Core origin defaults to the paired console's public origin, where the
 reverse proxy sends `/api/v1`, including WebSocket upgrades, directly to Core; Web
 does not forward it. Use advanced network settings only when nodes and guests need
@@ -48,8 +51,8 @@ HTTPS, setup opens the network field and requires a non-loopback HTTPS origin be
 The API still accepts HTTP loopback for explicit local development; a guest's
 loopback address cannot reach its Core host.
 
-Saving validates and initializes the deployment without creating compute. A failed
-candidate leaves the previous selection intact. Refresh after an uncertain response before
+**Save configuration** validates and initializes the deployment without creating
+compute. A failed candidate leaves the previous selection intact. Refresh after an uncertain response before
 trying again. Selection persists in PostgreSQL and activates without a restart.
 Removing all nodes does not reset it. E2B uses the same daemon, harness and workspace
 Runtime as node-backed hosting. Configuration alone does not prove provider or model
@@ -107,7 +110,8 @@ the current selection, including one made after startup.
 ## Resources and Runtime
 
 The same deployment specification applies to every hosted sandbox. CPU count and
-memory in MiB are required. Microsandbox also requires separate root and
+memory in MiB are required for Docker and microsandbox; E2B may omit them and adopt
+its template build's size. Microsandbox also requires separate root and
 `/environment` disk capacities. Docker and E2B reject nonzero independent disk
 limits because this contract does not enforce those hard quotas. Node active and
 retained reservation limits are separate controls; they do not resize a sandbox.
@@ -197,7 +201,7 @@ token, then retained in PostgreSQL. Registration and node files cannot overwrite
 it. See [Configuration](../../docs/configuration.md#node-configuration-and-capacity)
 for limits, defaults and changes.
 
-In Hosted Sandbox Manager, generate a single-use registration token. Save it in
+On the **Nodes** page, generate a single-use registration token. Save it in
 a `0600` file on the host. The token expires after the duration shown by Core.
 Run the displayed command with real absolute paths, for example:
 
