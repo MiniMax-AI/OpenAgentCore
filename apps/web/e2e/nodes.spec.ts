@@ -30,6 +30,8 @@ test("adds a node: host requirements, a countdown, the same command after closin
   const field = add.getByLabel("One-time enrollment command");
   await expect(field).toHaveValue(/enroll_fixture_/);
   await expect(add.getByRole("timer")).toHaveText(/^Expires in (10:00|9:\d\d)$/);
+  const progress = add.getByRole("status", { name: "Registration progress" });
+  await expect(progress).toHaveText(/Waiting for registration.*Connect.*Docker ready/);
 
   // Closing keeps the command for the next opening.
   const first = await field.inputValue();
@@ -50,7 +52,7 @@ test("adds a node: host requirements, a countdown, the same command after closin
 
   // The node registers; past the installer's minute without connecting, the dialog points at its log.
   await setNode(request, { id: "node-new", name: "edge-04" });
-  await expect(add.getByRole("status", { name: "Registration progress" })).toContainText("Registered · edge-04");
+  await expect(progress).toHaveText(/Registered · edge-04.*Waiting to connect.*Docker ready/);
   await page.clock.fastForward("01:01");
   const problem = add.getByRole("alert");
   await expect(problem).toContainText("Not connected yet");
@@ -58,6 +60,7 @@ test("adds a node: host requirements, a countdown, the same command after closin
   // Connected, it reports why Docker isn't ready; once ready, the node is connected.
   await setNode(request, { id: "node-new", online: true, diagnostic: "docker_limits_unsupported" });
   await expect(problem).toContainText("Docker limits unsupported");
+  await expect(progress).toContainText("Waiting for Docker");
   await setNode(request, { id: "node-new", provider_ready: true, diagnostic: "" });
   await expect(add.getByText("edge-04 · Connected")).toBeVisible();
   await add.getByRole("button", { name: "Done" }).click();

@@ -72,6 +72,7 @@
 .sandbox-add-node .sandbox-enrollment-problem p { color: var(--fg); }
 .sandbox-log-hint { display: grid; gap: 4px; color: var(--fg-muted); font-size: 12px; }
 .sandbox-enrollment-progress { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; }
+.sandbox-enrollment-progress .future .status-dot { color: var(--fg-muted); }
 .sandbox-host-requirements { border: 1px solid var(--line); border-radius: 8px; font-size: 12.5px; }
 .sandbox-host-requirements summary { padding: 9px 12px; color: var(--fg); cursor: pointer; }
 .sandbox-host-requirements ul { display: grid; gap: 8px; margin: 0; padding: 0 12px 0 30px; color: var(--fg-muted); line-height: 1.5; list-style: disc; }

@@ -47,7 +47,7 @@ export function hostPrerequisites(provider: "docker" | "microsandbox"): HostPrer
     { label: "Linux amd64 with Python 3.9+, curl and sha256sum" },
     { label: "A non-root user with systemd lingering enabled", command: "sudo loginctl enable-linger <user>" },
     ...backend,
-    { label: "HTTPS to {{console}}, {{core}} and the release downloads; sandboxes must reach {{core}} too" },
+    { label: "Can reach {{console}}, {{core}} and the release downloads; sandboxes must reach {{core}}" },
   ];
 }
 
@@ -80,6 +80,18 @@ export interface EnrollmentProgress {
    * connected node and "not_connected" for one that never connected. Else "".
    */
   problem: string;
+}
+
+export type StepState = "done" | "current" | "future";
+
+/**
+ * The state of each step (registered, connected, backend ready) while the node
+ * is on its way: the steps it has passed are done and the next one is current.
+ * A ready node ends the list, so the last step is never done here.
+ */
+export function progressSteps(stage: Exclude<EnrollmentStage, "ready">): [StepState, StepState, StepState] {
+  const passed = { waiting: 0, registered: 1, connected: 2 }[stage];
+  return [0, 1, 2].map((index) => (index < passed ? "done" : index === passed ? "current" : "future")) as [StepState, StepState, StepState];
 }
 
 /** Registration progress of the enrolled node, `appearedAt` being when the console first saw it. */

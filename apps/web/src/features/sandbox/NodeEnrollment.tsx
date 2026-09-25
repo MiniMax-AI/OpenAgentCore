@@ -11,7 +11,7 @@ import { useCopy } from "../api-keys/IssuedKey";
 import { sandboxCoreOrigin, sandboxSetupOrigin } from "./core-origin";
 import type { SandboxConsoleConfig } from "./console-config";
 import { nodeInstallCommand, nodeLogCommand } from "./enrollment-command";
-import { enrolledNode, enrollmentProgress, formatCountdown, hostPrerequisites } from "./node-enrollment";
+import { enrolledNode, enrollmentProgress, formatCountdown, hostPrerequisites, progressSteps, type StepState } from "./node-enrollment";
 
 /** The host requirements open by default until this browser has shown them once. */
 const REQUIREMENTS_SEEN = "agents-core-web.node-requirements-seen";
@@ -183,10 +183,15 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
       <button className="button outline" type="button" disabled={busy} onClick={changeLimits}>{t("Change limits")}</button>
       {expired ? <button className="button primary" type="button" autoFocus disabled={busy} onClick={() => void generate()}>{busy ? t("Preparing your command…") : t("Generate new command")}</button> : null}
     </>;
-  const steps: { label: string; tone: Tone }[] = [t("Registered"), t("Connected"), t("{{backend}} ready", { backend })].map((label, index) => {
-    const done = { waiting: 0, registered: 1, connected: 2, ready: 3 }[progress.stage];
-    return { label, tone: index < done ? "ok" : index > done ? "neutral" : progress.problem ? "warning" : "pending" };
-  });
+  // Tense tells a step's state: done in the past, the current one waiting, later ones as plain nouns.
+  // Readiness from an unconfirmed read still counts as waiting.
+  const labels: Record<StepState, string>[] = [
+    { done: node ? `${t("Registered")} · ${node.name}` : t("Registered"), current: t("Waiting for registration"), future: t("Waiting for registration") },
+    { done: t("Connected"), current: t("Waiting to connect"), future: t("Connect") },
+    { done: t("{{backend}} ready", { backend }), current: t("Waiting for {{backend}}", { backend }), future: t("{{backend}} ready", { backend }) },
+  ];
+  const tones: Record<StepState, Tone> = { done: "ok", current: progress.problem ? "warning" : "pending", future: "neutral" };
+  const steps = progressSteps(progress.stage === "ready" ? "connected" : progress.stage).map((state, index) => ({ state, label: labels[index]![state], tone: tones[state] }));
   const problem = progress.problem === "not_connected"
     ? { label: t("Not connected yet"), advice: t("The node registered but its service hasn't reached Core.") }
     : sandboxDiagnosticMessage(progress.problem, locale);
@@ -227,7 +232,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
         {ready && node ? <div className="sandbox-enrollment-status connected" role="status"><span className="sandbox-status-dot" />{`${node.name} · ${t("Connected")}`}</div>
           : expired && !registered ? <div className="sandbox-enrollment-status" role="status"><span className="sandbox-status-dot" />{t("Command expired")} · {t("Generate a new command to continue.")}</div>
           : <ol className="sandbox-enrollment-progress" role="status" aria-label={t("Registration progress")}>
-            {steps.map((step, index) => <li key={index}><StatusDot tone={step.tone} label={index === 0 && node ? `${step.label} · ${node.name}` : step.label} /></li>)}
+            {steps.map((step, index) => <li key={index} className={step.state}><StatusDot tone={step.tone} label={step.label} /></li>)}
           </ol>}
         {problem && !ready ? <div className="sandbox-enrollment-problem" role="alert">
           <p><strong>{problem.label}</strong> {problem.advice}</p>

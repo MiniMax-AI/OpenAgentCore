@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { node } from "../overview/test-fixtures";
 import { nodeLogCommand } from "./enrollment-command";
-import { enrolledNode, enrollmentProgress, formatCountdown, NODE_READY_WAIT_MS } from "./node-enrollment";
+import { enrolledNode, enrollmentProgress, formatCountdown, NODE_READY_WAIT_MS, progressSteps } from "./node-enrollment";
 
 describe("node enrollment", () => {
   it("counts down to the expiry, reading 0:00 only once expired", () => {
@@ -25,6 +25,12 @@ describe("node enrollment", () => {
     expect(enrollmentProgress(connected, 0, NODE_READY_WAIT_MS)).toEqual({ stage: "connected", problem: "provider_unavailable" });
     expect(enrollmentProgress({ ...connected, diagnostic: "kvm_unavailable" }, 0, 1_000)).toEqual({ stage: "connected", problem: "kvm_unavailable" });
     expect(enrollmentProgress({ ...connected, provider_ready: true }, 0, NODE_READY_WAIT_MS * 2)).toEqual({ stage: "ready", problem: "" });
+  });
+
+  it("marks the passed steps done and waits on the next one", () => {
+    expect(progressSteps("waiting")).toEqual(["current", "future", "future"]);
+    expect(progressSteps("registered")).toEqual(["done", "current", "future"]);
+    expect(progressSteps("connected")).toEqual(["done", "done", "current"]);
   });
 
   it("points at the installer's systemd user unit", () => {
