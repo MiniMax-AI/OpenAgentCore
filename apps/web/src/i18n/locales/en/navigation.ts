@@ -26,4 +26,8 @@ export const navigation = {
   appearanceSettings: "Language and appearance",
   accountAndAppearance: "Account, language and appearance",
   account: "Account",
+  lightMode: "Light",
+  darkMode: "Dark",
+  switchToLightTheme: "Switch to light theme",
+  switchToDarkTheme: "Switch to dark theme",
 } as const;

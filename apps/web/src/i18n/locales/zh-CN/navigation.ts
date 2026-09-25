@@ -26,4 +26,8 @@ export const navigation = {
   appearanceSettings: "语言和外观",
   accountAndAppearance: "账号、语言和外观",
   account: "账号",
+  lightMode: "浅色",
+  darkMode: "深色",
+  switchToLightTheme: "切换到浅色主题",
+  switchToDarkTheme: "切换到深色主题",
 } as const;

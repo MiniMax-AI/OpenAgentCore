@@ -388,7 +388,6 @@ html[data-theme="dark"] .brand-mark-dark {
 .sidebar-footer .appearance-menu { width: 100%; }
 .sidebar-footer .appearance-menu-account-trigger { min-height: 36px; height: auto; gap: 9px; padding: 6px 7px; color: var(--fg); }
 .sidebar-footer .appearance-account-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font-size: 12px; font-weight: 550; }
-.appearance-account-section small[role="alert"] { padding: 6px 7px; color: var(--danger); font-size: 11px; }
 
 .theme-menu {
   display: inline-flex;
@@ -462,6 +461,27 @@ html[data-theme="dark"] .brand-mark-dark {
   border-radius: 9px;
   box-shadow: var(--shadow-floating);
 }
+
+.appearance-account-panel { width: 226px; padding: 0; overflow: hidden; }
+.appearance-account-header { display: flex; align-items: center; gap: 10px; padding: 14px; border-bottom: 1px solid var(--line); }
+.appearance-account-avatar { display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); font-size: 14px; font-weight: 700; }
+.appearance-account-header > div { display: grid; min-width: 0; gap: 2px; }
+.appearance-account-header strong { overflow: hidden; color: var(--fg); font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.appearance-account-header small { color: var(--fg-subtle); font-size: 11px; }
+.appearance-account-actions { padding: 6px; }
+.appearance-account-actions > button, .appearance-account-signout > button { display: flex; width: 100%; min-height: 36px; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 9px; border: 0; border-radius: 6px; background: transparent; color: var(--fg); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.appearance-account-actions > button > span, .appearance-account-value { display: inline-flex; align-items: center; gap: 9px; }
+.appearance-account-actions > button > span:first-child { font-weight: 550; }
+.appearance-account-value { min-width: 0; color: var(--fg-muted); font-size: 11px; white-space: nowrap; }
+.appearance-account-actions > button:hover, .appearance-account-actions > button:focus-visible, .appearance-account-signout > button:hover, .appearance-account-signout > button:focus-visible, .appearance-language-options button:hover, .appearance-language-options button:focus-visible { background: var(--surface-subtle); outline: none; }
+.appearance-language-options { display: grid; gap: 1px; margin: 2px 0 4px 25px; padding-left: 7px; border-left: 1px solid var(--line); }
+.appearance-language-options button { display: flex; min-height: 31px; align-items: center; justify-content: space-between; padding: 5px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--fg-muted); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.appearance-language-options button[aria-checked="true"] { color: var(--fg); font-weight: 600; }
+.appearance-account-signout { padding: 6px; border-top: 1px solid var(--line); }
+.appearance-account-signout > button { justify-content: flex-start; color: var(--danger); }
+.appearance-account-signout > button:hover, .appearance-account-signout > button:focus-visible { color: var(--danger); }
+.appearance-account-signout > button:disabled { opacity: 0.6; cursor: wait; }
+.appearance-account-signout small[role="alert"] { display: block; padding: 6px 9px; color: var(--danger); font-size: 11px; }
 
 .appearance-menu-section {
   display: grid;
