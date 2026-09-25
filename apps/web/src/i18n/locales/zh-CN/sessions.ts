@@ -74,7 +74,7 @@ export const sessions = {
     projectMissing: "找不到项目",
     loadFailed: "无法加载 Session",
     retry: "重试",
-    stale: "刷新失败，显示的是 {{time}} 加载的历史。{{reason}}",
+    stale: "刷新失败，显示的是上次加载的历史。",
     gone: "Core 中已没有这个 Session，显示的是 {{time}} 加载的历史。",
   },
   kpi: {

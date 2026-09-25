@@ -4,6 +4,7 @@ import { useCallback, useMemo, type CSSProperties, type ReactNode } from "react"
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
+import { failedLast, useFailureToast } from "../../components/Toast";
 import { LiveNumber } from "../../components/live-number";
 import { TimeSeriesChart } from "../../components/charts/TimeSeriesChart";
 import { TableSkeleton } from "../../components/Skeleton";
@@ -78,7 +79,8 @@ function useOverviewData(projects: readonly Project[], projectsReady: boolean) {
 
   const { refetch } = query;
   const refresh = useCallback(() => { void refetch(); }, [refetch]);
-  return { state, refresh };
+  // The failure lasts through the polls that retry it, so its toast shows once.
+  return { state, refresh, failure: failedLast(query) ? errorText(query.error) : null };
 }
 
 export function OverviewPage() {
@@ -89,7 +91,7 @@ export function OverviewPage() {
   const projectsState = useProjects();
   const projects = projectsState.state.projects;
   const projectsReady = projectsState.state.status !== "loading" || projects.length > 0;
-  const { state, refresh } = useOverviewData(projects, projectsReady);
+  const { state, refresh, failure } = useOverviewData(projects, projectsReady);
   const { state: fleetState, refresh: refreshFleet } = useSandboxFleet();
   const fleet = fleetSnapshot(fleetState);
   const data = state.data;
@@ -136,11 +138,11 @@ export function OverviewPage() {
   const attentionTotal = totals ? attentionCount(totals.sessions) : null;
   const truncated = data?.sessions.truncated ?? [];
 
-  const notices: string[] = [];
-  if (state.status === "failed") notices.push(t("errors.load", { reason: state.error }));
-  if (summaryError !== null) notices.push(t("errors.summary", { reason: errorText(summaryError) }));
-  if (readFailures.length) notices.push(tCommon("project.partial", { names: readFailures.map((failure) => failure.project.name).join(", ") }));
-  if (projectsState.state.status === "failed") notices.push(t("errors.projects", { reason: String(projectsState.state.error) }));
+  // Each failed read is its own toast, shown once while it lasts.
+  useFailureToast(failure !== null, t("errors.load", { reason: failure ?? "" }), "overview-load");
+  useFailureToast(summaryError !== null, t("errors.summary", { reason: summaryError === null ? "" : errorText(summaryError) }), "overview-summary");
+  useFailureToast(readFailures.length > 0, tCommon("project.partial", { names: readFailures.map((entry) => entry.project.name).join(", ") }), "overview-partial");
+  useFailureToast(projectsState.state.status === "failed", t("errors.projects", { reason: projectsState.state.status === "failed" ? String(projectsState.state.error) : "" }), "overview-projects");
 
   const openSession = (entry: InProject<AgentSession>) => navigate("session", { project: entry.project.id, id: entry.value.id });
 
@@ -153,8 +155,6 @@ export function OverviewPage() {
         actions={<RefreshButton refreshing={loading} updatedAt={updatedAt ? formatClock(updatedAt, locale) : null} onClick={() => { projectsState.refresh(); refresh(); refreshFleet(); }} />}
       />
       <PageBody>
-        {notices.length ? <p className="coverage-note coverage-note-error" role="alert">{notices.join(" ")}</p> : null}
-
         <div className="overview-tiles" aria-label={t("kpi.label")}>
           <MetricTile
             index={0}
@@ -280,6 +280,7 @@ function FleetCard({ fleetState, core }: { fleetState: FleetState; core: CoreSta
   const fleet = fleetSnapshot(fleetState);
   const hosts = fleet?.nodes ?? [];
   const hidden = Math.max(0, hosts.length - TOPOLOGY_LIMIT);
+  useFailureToast(fleetState.status === "ready" && Boolean(fleetState.error), t("fleet.stale"), "overview-fleet-refresh");
   return (
     <section className="overview-card overview-fleet" aria-labelledby="fleet-heading">
       <header className="overview-card-header">
@@ -311,13 +312,7 @@ function FleetCard({ fleetState, core }: { fleetState: FleetState; core: CoreSta
 function FleetFooter({ state, empty }: { state: FleetState; empty: boolean }) {
   const { t } = useTranslation("overview");
   if (state.status === "ready") {
-    if (!empty && !state.error) return null;
-    return (
-      <footer className="fleet-list-footer">
-        {empty ? <p>{t("fleet.noNodes")}</p> : null}
-        {state.error ? <p role="alert">{t("fleet.stale")}</p> : null}
-      </footer>
-    );
+    return empty ? <footer className="fleet-list-footer"><p>{t("fleet.noNodes")}</p></footer> : null;
   }
   return (
     <footer className="fleet-list-footer">

@@ -3,6 +3,7 @@ import { ArrowLeft, Copy, Trash2, Vault as VaultIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useFailureToast } from "../../components/Toast";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, Section } from "../../components/console-ui";
 import { CopyableId, ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
@@ -59,11 +60,16 @@ function VaultsList() {
   );
   const showProject = !filter;
 
+  // Projects that could not be read are reported in a toast; the list shows the rest.
+  const failedNames = collection.failures.map((failure) => failure.project.name).join(", ");
+  useFailureToast(collection.items.length > 0 && collection.failures.length > 0, tCommon("project.partial", { names: failedNames }), "vaults-partial");
   let body;
   if (collection.status === "loading" && !collection.items.length) {
     body = <TableSkeleton label={t("loading")} columns={6} />;
   } else if (!collection.items.length && !collection.failures.length) {
     body = <EmptyState icon={VaultIcon} title={t("noVaults")} />;
+  } else if (!collection.items.length) {
+    body = <EmptyState title={tCommon("project.failed", { names: failedNames })} description={collection.failures[0]?.message} action={<button className="button outline" type="button" onClick={collection.refresh}>{tCommon("actions.retry")}</button>} />;
   } else {
     body = (
       <>
@@ -71,9 +77,6 @@ function VaultsList() {
           <ProjectFilter value={filter} onChange={setFilter} />
           <SearchField value={query} onChange={setQuery} placeholder={t("list.filterPlaceholder")} label={t("list.filterLabel")} />
         </ListToolbar>
-        {collection.failures.length ? (
-          <p className="list-failures" role="alert">{tCommon("project.partial", { names: collection.failures.map((failure) => failure.project.name).join(", ") })}</p>
-        ) : null}
         {rows.length ? (
           <div className="table-frame">
             <table className="data-table" aria-label={t("list.label")}>
@@ -179,6 +182,9 @@ function VaultDetail({ projectId, vaultId }: { projectId: string; vaultId: strin
   const vault = read.data ?? null;
   const failure = read.isError ? errorText(read.error) : null;
   const credentialsFailure = credentialsRead.isError ? errorText(credentialsRead.error) : null;
+  // Detail reads are not polled: each failed read was asked for and is reported.
+  useFailureToast(vault !== null ? failure : null, t("refreshFailed"), "vault-refresh", read.errorUpdatedAt);
+  useFailureToast(credentialsRead.data ? credentialsFailure : null, t("refreshFailed"), "vault-credentials-refresh", credentialsRead.errorUpdatedAt);
   const name = vault ? vaultName(vault) : vaultId;
   return (
     <section className="page-section console-page vaults-page" aria-labelledby="vault-detail-heading">
@@ -213,7 +219,6 @@ function VaultDetail({ projectId, vaultId }: { projectId: string; vaultId: strin
         ) : null}
         {vault ? (
           <>
-            {failure !== null ? <p className="coverage-note coverage-note-error" role="alert">{t("refreshFailed")} — {failure}</p> : null}
             <dl className="resource-facts" aria-label={t("detail.facts")}>
               <div><dt>{t("detail.id")}</dt><dd><CopyableId id={vault.id} /></dd></div>
               <div><dt>{tCommon("project.column")}</dt><dd><ProjectName project={project} /></dd></div>
@@ -231,7 +236,6 @@ function VaultDetail({ projectId, vaultId }: { projectId: string; vaultId: strin
               title={<>{t("detail.credentials")} {credentialsRead.data ? <span className="heading-count">{credentials.length}</span> : null}</>}
               help={<>{t("detail.credentialsHelp")} {t("oauthHelp")}</>}
             >
-              {credentialsRead.data && credentialsFailure !== null ? <p className="coverage-note coverage-note-error" role="alert">{t("refreshFailed")} — {credentialsFailure}</p> : null}
               {!credentialsRead.data ? (
                 credentialsFailure !== null ? (
                   <EmptyState title={t("loadFailed")} description={credentialsFailure} action={<button className="button outline" type="button" onClick={refreshCredentials}>{tCommon("actions.retry")}</button>} />

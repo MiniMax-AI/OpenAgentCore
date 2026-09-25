@@ -1,6 +1,7 @@
 export const common = {
   actions: {
     cancel: "取消",
+    close: "关闭",
     closeDialog: "关闭对话框",
     closeNotification: "关闭通知",
     create: "新建",
@@ -25,6 +26,7 @@ export const common = {
     archived: "已归档：项目的 key 都已撤销，资产保留。",
     archivedOption: "{{name}} · 已归档",
     partial: "无法加载 {{names}} 的数据，其余项目照常显示。",
+    failed: "无法加载 {{names}} 的数据。",
   },
   creator: {
     column: "创建者",

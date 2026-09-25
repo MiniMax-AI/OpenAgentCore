@@ -6,6 +6,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -52,6 +53,32 @@ const EXIT_FALLBACK_MS = 250;
 
 export function useToast(): ToastContextValue {
   return useContext(ToastContext) ?? NO_PROVIDER;
+}
+
+/**
+ * Reports a failure that leaves the page on its last data as an error toast
+ * instead of a line inside the page. A string failure becomes the detail; the
+ * toast leaves when the failure clears. Pass a failure that lasts through the
+ * refetches retrying it, so one failure shows once. A `revision` that changes
+ * while the failure lasts (a read the administrator asked for) shows it again.
+ */
+export function useFailureToast(failure: string | boolean | null | undefined, message: string, key: string, revision?: unknown) {
+  const { show, dismiss } = useToast();
+  // The text is read when the failure appears; wording that changes while it lasts does not show it again.
+  const report = useEffectEvent(() => show(message, { tone: "error", detail: typeof failure === "string" ? failure : undefined, key }));
+  const failing = Boolean(failure);
+  useEffect(() => {
+    if (!failing) {
+      dismiss(key);
+      return;
+    }
+    report();
+  }, [dismiss, failing, key, revision]);
+}
+
+/** Whether a query's last read failed; unlike `isError`, it lasts while a refetch runs. */
+export function failedLast(query: { errorUpdatedAt: number; dataUpdatedAt: number }): boolean {
+  return query.errorUpdatedAt > query.dataUpdatedAt;
 }
 
 /** @internal Exported for the focused queue regression tests. */

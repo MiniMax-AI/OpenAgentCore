@@ -19,6 +19,7 @@ import {
   StatusDot,
 } from "../../components/console-ui";
 import { DashboardSkeleton, TableSkeleton } from "../../components/Skeleton";
+import { useFailureToast } from "../../components/Toast";
 import { formatClock, formatCompact, formatDuration, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
 import { ProjectFilter, ProjectName, useProjects, type ProjectFilterValue } from "../../lib/projects";
 import {
@@ -200,18 +201,12 @@ function AgentMetricsContent({
   const requestItems = foldBreakdown(metrics.byModel.map((entry) => ({ id: entry.id, value: entry.requests })), series.requestsByModel);
   const toolItems = metrics.byTool ? foldBreakdown(metrics.byTool.map((entry) => ({ id: entry.id, value: entry.calls })), series.callsByTool) : null;
   const toolIndex = new Map((metrics.byTool ?? []).map((tool) => [tool.id, tool]));
-  const listFailureNote = listFailures.length
-    ? <p className="coverage-note coverage-note-error" role="alert">{tCommon("project.partial", { names: listFailures.map((entry) => entry.project.name).join(", ") })}</p>
-    : null;
+  useFailureToast(Boolean(failure), t("agent.refreshFailed", { reason: failure ?? "", range: t(`range.${window.range}`) }), "agent-metrics-refresh");
+  useFailureToast(listFailures.length > 0, tCommon("project.partial", { names: listFailures.map((entry) => entry.project.name).join(", ") }), "agent-metrics-partial");
 
   const outcome = agentMetricsOutcome(metrics, listFailures.length);
   if (outcome === "failed") {
-    return (
-      <>
-        {listFailureNote}
-        <EmptyState icon={AlertTriangle} title={t("agent.readsFailedTitle")} description={t("agent.readsFailedDescription")} />
-      </>
-    );
+    return <EmptyState icon={AlertTriangle} title={t("agent.readsFailedTitle")} description={t("agent.readsFailedDescription")} />;
   }
   const failedReads = metrics.coverage.failedSessions
     ? <p className="coverage-note coverage-note-error" role="alert">{t("coverage.failed", { count: metrics.coverage.failedSessions })}</p>
@@ -219,7 +214,6 @@ function AgentMetricsContent({
   if (outcome === "empty") {
     return (
       <>
-        {listFailureNote}
         {failedReads}
         <EmptyState title={t("agent.emptyTitle")} hint={t("agent.emptyDescription", { range: t(`range.${window.range}`) })} />
       </>
@@ -229,8 +223,6 @@ function AgentMetricsContent({
 
   return (
     <>
-      {failure ? <p className="coverage-note coverage-note-error" role="alert">{t("agent.refreshFailed", { reason: failure, range: t(`range.${window.range}`) })}</p> : null}
-      {listFailureNote}
       {failedReads}
       <KpiStrip label={t("agent.kpiLabel")}>
         <Kpi label={t("agent.requests")} value={<LiveNumber value={totals.requests} />} help={t("agent.requestsDetail", { completed: integer(totals.completed), unfinished: integer(totals.unfinished) })} />

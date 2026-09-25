@@ -3,6 +3,7 @@ import { ArrowRight, LogOut } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { HelpTip } from "../../components/console-ui";
 import { ThemeMenu } from "../../components/ThemeMenu";
+import { useToast } from "../../components/Toast";
 import { setLanguage } from "../../i18n";
 import { OnboardingLayout } from "../onboarding/OnboardingLayout";
 import { withTransition } from "../onboarding/view-transition";
@@ -29,14 +30,13 @@ export function ConsoleAccountMenu() {
   const account = useConsoleAccount();
   const { t } = useTranslation("firstRun");
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const toast = useToast();
   if (!account) return null;
   return <div className="console-account-menu">
     <button type="button" title={account.username} disabled={busy} onClick={async () => {
-      setBusy(true); setFailed(false);
-      try { await account.logout(); } catch { setBusy(false); setFailed(true); }
+      setBusy(true);
+      try { await account.logout(); } catch { setBusy(false); toast.show(t("Could not sign out. Try again."), { tone: "error" }); }
     }}><LogOut size={14} aria-hidden="true" /><span>{t(busy ? "Signing out…" : "Sign out")}</span></button>
-    {failed ? <small role="alert">{t("Could not sign out. Try again.")}</small> : null}
   </div>;
 }
 

@@ -18,6 +18,7 @@ import {
 } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
 import { TableSkeleton } from "../../components/Skeleton";
+import { useFailureToast } from "../../components/Toast";
 import { ListToolbar, listSummary, NameCell, SearchField } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatBytes, formatClock, formatCompact, formatCores, formatDateTime, formatDuration, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
@@ -59,12 +60,14 @@ function useHostedRuntimes() {
   });
   const load = query.data ?? null;
   let state: RuntimeState;
-  if (query.isError && !query.isFetching) state = { status: "failed", load, error: query.error instanceof Error ? query.error.message : String(query.error) };
+  const error = query.isError ? (query.error instanceof Error ? query.error.message : String(query.error)) : null;
+  if (error !== null && !query.isFetching) state = { status: "failed", load, error };
   else if (load && !query.isFetching) state = { status: "ready", load };
   else state = { status: "loading", load };
   const { refetch } = query;
   const refresh = useCallback(() => { void refetch(); }, [refetch]);
-  return { state, refresh };
+  // The failure lasts through the polls that retry it, so its toast shows once.
+  return { state, refresh, stale: load ? error : null };
 }
 
 /** Durable history of each hosted Session, read through the Session's project. */
@@ -84,7 +87,7 @@ export function SandboxMetricsPage() {
   const locale = i18n.resolvedLanguage;
   const { navigate } = useConsoleNavigation();
   const { state: fleetState, refresh: refreshFleet } = useSandboxFleet({ allocations: true });
-  const { state: runtimeState, refresh: refreshRuntime } = useHostedRuntimes();
+  const { state: runtimeState, refresh: refreshRuntime, stale: runtimeStale } = useHostedRuntimes();
   const fleet = fleetSnapshot(fleetState);
   const capacity = fleet ? capacitySummary(fleet.nodes) : null;
   const now = Math.floor(Date.now() / 1000);
@@ -171,7 +174,7 @@ export function SandboxMetricsPage() {
             : <p className="page-status" role={fleetState.status === "failed" ? "alert" : "status"}>{message}</p>}
         </Section>
 
-        <HostedRuntimeSection state={runtimeState} fleet={fleet} range={range} onOpen={setOpenRuntime} />
+        <HostedRuntimeSection state={runtimeState} stale={runtimeStale} fleet={fleet} range={range} onOpen={setOpenRuntime} />
       </PageBody>
       <NodeDialog
         node={fleet?.nodes.find((node) => node.id === openNode) ?? null}
@@ -202,7 +205,7 @@ function useRuntimeHistory(snapshot: RuntimeDashboardSnapshot | null, range: Run
   });
 }
 
-function HostedRuntimeSection({ state, fleet, range, onOpen }: { state: RuntimeState; fleet: ReturnType<typeof fleetSnapshot>; range: RuntimeDurableRange; onOpen: (sessionId: string) => void }) {
+function HostedRuntimeSection({ state, stale, fleet, range, onOpen }: { state: RuntimeState; stale: string | null; fleet: ReturnType<typeof fleetSnapshot>; range: RuntimeDurableRange; onOpen: (sessionId: string) => void }) {
   const { t, i18n } = useTranslation("metrics");
   const locale = i18n.resolvedLanguage;
   const load = state.load;
@@ -210,6 +213,7 @@ function HostedRuntimeSection({ state, fleet, range, onOpen }: { state: RuntimeS
   const snapshot = useMemo<RuntimeDashboardSnapshot | null>(() => (load ? runtimeSnapshot(load, "") : null), [load]);
   const history = useRuntimeHistory(snapshot, range);
   const partial = load && (load.unread || load.failed) ? t("sandbox.runtimePartial", { unread: load.unread, failed: load.failed }) : null;
+  useFailureToast(Boolean(usage?.hosted && stale), t("sandbox.runtimeStale", { reason: stale ?? "" }), "sandbox-runtimes-refresh");
 
   let body;
   if (!load || !usage) {
@@ -222,7 +226,6 @@ function HostedRuntimeSection({ state, fleet, range, onOpen }: { state: RuntimeS
     const durable = history.data ?? null;
     body = (
       <>
-        {state.status === "failed" ? <p className="coverage-note coverage-note-error" role="alert">{t("sandbox.runtimeStale", { reason: state.error })}</p> : null}
         {durable ? <RuntimeCharts samples={durable.samples} resolutionSeconds={durable.resolutionSeconds} />
           : history.isError ? <p className="page-status" role="alert">{t("sandbox.charts.historyFailed", { reason: history.error instanceof Error ? history.error.message : "" })}</p>
             : history.isFetched ? <p className="page-status">{t("sandbox.charts.historyUnavailable")}</p> : null}

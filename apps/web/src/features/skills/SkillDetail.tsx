@@ -12,7 +12,7 @@ import { skillQuery, skillVersionsQuery } from "../resources/detail-queries";
 import { EmptyState, PageBody, PageHeader, RefreshButton, Section, StatusDot } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
 import { DetailSkeleton, TableSkeleton } from "../../components/Skeleton";
-import { useToast } from "../../components/Toast";
+import { useFailureToast, useToast } from "../../components/Toast";
 import { formatDateTime, MISSING } from "../../lib/format";
 import { CopyableId, LatestVersion } from "./skill-parts";
 import {
@@ -53,7 +53,6 @@ export interface SkillDetailPageProps {
   error: string | null;
   versions: SkillVersionsState;
   refreshing: boolean;
-  notice: string | null;
   /** The version ID, or "default", whose download is running. */
   downloading: string | null;
   onBack: () => void;
@@ -68,7 +67,7 @@ export interface SkillDetailPageProps {
 
 /** One Skill: its facts, header actions and the version table. */
 export function SkillDetailPage({
-  skill, status, error, versions, refreshing, notice, downloading,
+  skill, status, error, versions, refreshing, downloading,
   onBack, onRefresh, onDownload, onDeleteSkill, onCopy, onDeleteVersion, onLoadMoreVersions,
 }: SkillDetailPageProps) {
   const { t, i18n } = useTranslation("skills");
@@ -76,6 +75,7 @@ export function SkillDetailPage({
   const locale = i18n.resolvedLanguage;
   const available = skill !== null && status !== "missing";
   const busy = downloading !== null;
+  useFailureToast(skill !== null && status === "failed" && Boolean(error), t("detail.refreshFailed", { reason: error ?? "" }), "skill-refresh");
   return (
     <section className="page-section console-page skills-page" aria-labelledby="skill-detail-heading">
       <PageHeader
@@ -106,7 +106,6 @@ export function SkillDetailPage({
         )}
       />
       <PageBody>
-        {notice ? <p className="coverage-note coverage-note-error" role="alert">{notice}</p> : null}
         {status === "missing" ? (
           <EmptyState
             title={t("detail.missingTitle")}
@@ -123,7 +122,6 @@ export function SkillDetailPage({
           ) : <DetailSkeleton label={t("detail.loading")} />
         ) : (
           <>
-            {status === "failed" && error ? <p className="coverage-note coverage-note-error" role="alert">{t("detail.refreshFailed", { reason: error })}</p> : null}
             <dl className="skill-facts" aria-label={t("detail.facts")}>
               <div className="skill-fact-wide"><dt>{t("detail.description")}</dt><dd className="skill-fact-text">{skill.description || MISSING}</dd></div>
               <div><dt>{t("detail.id")}</dt><dd><CopyableId id={skill.id} /></dd></div>
@@ -162,6 +160,8 @@ function SkillVersionsTable({
 }) {
   const { t, i18n } = useTranslation("skills");
   const locale = i18n.resolvedLanguage;
+  useFailureToast(versions.items.length > 0 && versions.status === "failed" && Boolean(versions.error), t("detail.refreshFailed", { reason: versions.error ?? "" }), "skill-versions-refresh");
+  useFailureToast(versions.moreError, t("list.moreFailed", { reason: versions.moreError ?? "" }), "skill-versions-more");
   if (!versions.items.length) {
     if (versions.status === "loading") return <TableSkeleton label={t("detail.versionsLoading")} rows={3} columns={6} />;
     if (versions.status === "failed") {
@@ -178,7 +178,6 @@ function SkillVersionsTable({
   const loaded = { count: versions.items.length, complete: versions.status === "ready" && versions.nextAfter === null };
   return (
     <>
-      {versions.status === "failed" && versions.error ? <p className="coverage-note coverage-note-error" role="alert">{t("detail.refreshFailed", { reason: versions.error })}</p> : null}
       <div className="table-frame">
         <table className="data-table skills-table">
           <thead>
@@ -242,7 +241,6 @@ function SkillVersionsTable({
           </tbody>
         </table>
       </div>
-      {versions.moreError ? <p className="coverage-note coverage-note-error" role="alert">{t("list.moreFailed", { reason: versions.moreError })}</p> : null}
       {versions.nextAfter ? (
         <footer className="table-footer skills-footer">
           <span>{t("list.loaded", { count: versions.items.length })}</span>
@@ -279,7 +277,6 @@ export function SkillDetail({ core, projectId, skillId, initialSkill, onBack, on
   const versionsOptions = skillVersionsQuery(projectId, skillId, core);
   const versionsRead = useQuery(versionsOptions);
   const [more, setMore] = useState<{ loading: boolean; error: string | null }>({ loading: false, error: null });
-  const [notice, setNotice] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [lastDialog, setLastDialog] = useState<Dialog>(null);
@@ -352,11 +349,10 @@ export function SkillDetail({ core, projectId, skillId, initialSkill, onBack, on
   const download = async (version?: SkillVersion) => {
     if (!skill || downloading) return;
     setDownloading(version?.id ?? "default");
-    setNotice(null);
     try {
       await downloadSkillArchive(core, skill, version);
     } catch (reason) {
-      if (mounted.current) setNotice(t("detail.downloadFailed", { reason: coreErrorMessage(reason) }));
+      if (mounted.current) toast.show(t("detail.downloadFailed", { reason: coreErrorMessage(reason) }), { tone: "error" });
     } finally {
       if (mounted.current) setDownloading(null);
     }
@@ -389,7 +385,7 @@ export function SkillDetail({ core, projectId, skillId, initialSkill, onBack, on
       } else if (isDefaultVersionConflict(reason)) {
         // Another client changed the versions; show the rule and reload.
         setDialog(null);
-        setNotice(t("deleteVersion.defaultConflict"));
+        toast.show(t("deleteVersion.defaultConflict"), { tone: "error" });
         listChanged();
         load();
       } else {
@@ -405,7 +401,6 @@ export function SkillDetail({ core, projectId, skillId, initialSkill, onBack, on
     await core.deleteSkillVersion(skillId, version.version);
     if (!mounted.current) return;
     setDialog(null);
-    setNotice(null);
     if (only) {
       toast.show(t("deleteSkill.done", { name: skill?.name ?? skillId }), { tone: "success" });
       deleted();
@@ -441,10 +436,9 @@ export function SkillDetail({ core, projectId, skillId, initialSkill, onBack, on
         error={error}
         versions={versions}
         refreshing={skillRead.isFetching || versionsRead.isFetching}
-        notice={notice}
         downloading={downloading}
         onBack={onBack}
-        onRefresh={() => { setNotice(null); load(); }}
+        onRefresh={load}
         onDownload={(version) => void download(version)}
         onDeleteSkill={() => openDialog({ kind: "delete-skill" })}
         onCopy={onCopy}

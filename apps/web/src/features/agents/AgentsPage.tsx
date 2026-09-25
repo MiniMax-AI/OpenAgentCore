@@ -3,6 +3,7 @@ import { ArrowLeft, Bot, Copy, ListTree, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useFailureToast } from "../../components/Toast";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState, Kpi, KpiStrip, PageBody, PageHeader, RefreshButton, Section } from "../../components/console-ui";
 import { CopyableId, ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
@@ -70,11 +71,16 @@ function AgentsList() {
   const showProject = !filter;
   const untitled = t("catalog.untitled");
 
+  // Projects that could not be read are reported in a toast; the list shows the rest.
+  const failedNames = collection.failures.map((failure) => failure.project.name).join(", ");
+  useFailureToast(collection.items.length > 0 && collection.failures.length > 0, tCommon("project.partial", { names: failedNames }), "agents-partial");
   let body;
   if (collection.status === "loading" && !collection.items.length) {
     body = <TableSkeleton label={t("loading", { defaultValue: "…" })} columns={8} />;
   } else if (!collection.items.length && !collection.failures.length) {
     body = <EmptyState icon={Bot} title={t("catalog.noSaved")} />;
+  } else if (!collection.items.length) {
+    body = <EmptyState title={tCommon("project.failed", { names: failedNames })} description={collection.failures[0]?.message} action={<button className="button outline" type="button" onClick={collection.refresh}>{tCommon("actions.retry")}</button>} />;
   } else {
     body = (
       <>
@@ -82,9 +88,6 @@ function AgentsList() {
           <ProjectFilter value={filter} onChange={setFilter} />
           <SearchField value={query} onChange={setQuery} placeholder={t("view.searchPlaceholder")} label={t("view.filterLabel")} />
         </ListToolbar>
-        {collection.failures.length ? (
-          <p className="list-failures" role="alert">{tCommon("project.partial", { names: collection.failures.map((failure) => failure.project.name).join(", ") })}</p>
-        ) : null}
         {rows.length ? (
           <div className="table-frame agent-table-frame">
             <table className="data-table agent-table" aria-label={t("catalog.listLabel")}>
@@ -198,6 +201,8 @@ function AgentDetail({ projectId, agentId }: { projectId: string; agentId: strin
 
   const agent = read.data ?? null;
   const failure = read.isError ? (read.error instanceof Error ? read.error.message : String(read.error)) : null;
+  // Detail reads are not polled: each failed read was asked for and is reported.
+  useFailureToast(agent !== null ? failure : null, t("refreshFailed"), "agent-refresh", read.errorUpdatedAt);
   const name = agent ? agent.name || t("catalog.untitled") : agentId;
   const tools = agent ? toolRows(agent) : [];
   const metadata = agent ? Object.entries(agent.metadata ?? {}) : [];
@@ -235,7 +240,6 @@ function AgentDetail({ projectId, agentId }: { projectId: string; agentId: strin
         {!agent && failure !== null ? <EmptyState title={t("view.loadFailed")} description={failure} action={<button className="button outline" type="button" onClick={back}>{t("view.back")}</button>} /> : null}
         {agent ? (
           <>
-            {failure !== null ? <p className="coverage-note coverage-note-error" role="alert">{t("refreshFailed")} — {failure}</p> : null}
             <dl className="resource-facts" aria-label={t("view.facts")}>
               <div><dt>{t("view.id")}</dt><dd><CopyableId id={agent.id} /></dd></div>
               <div><dt>{tCommon("project.column")}</dt><dd><ProjectName project={project} /></dd></div>

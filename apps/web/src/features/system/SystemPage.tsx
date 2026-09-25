@@ -129,7 +129,8 @@ export function SystemPage() {
         </Section>
 
         <Section headingId="system-sandbox-heading" title={t("sandbox.title")} help={t("sandbox.help")}>
-          {deploymentFailed && !deployment.data ? <p className="coverage-note coverage-note-error" role="alert">{t("sandbox.deploymentFailed")}</p> : null}
+          {/* Without the deployment its facts would read as unreported; like the startup read, the failure stays in place. */}
+          {deploymentFailed && !deployment.data ? <ErrorState title={t("sandbox.deploymentFailed")} onRetry={refresh} /> : null}
           <dl className="system-facts">
             <Fact label={t("sandbox.managed")} help={t("sandbox.managedHelp")}>{enabled(managed?.enabled)}</Fact>
             <Fact label={t("sandbox.provider")}>{provider ? providerNames[provider] ?? provider : missing}</Fact>

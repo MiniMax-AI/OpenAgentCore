@@ -43,7 +43,6 @@ function render(props: Partial<SkillDetailPageProps>): string {
       error={null}
       versions={versions([version("3"), version("2"), version("1")])}
       refreshing={false}
-      notice={null}
       downloading={null}
       onBack={noop}
       onRefresh={noop}
@@ -110,7 +109,6 @@ describe("Skill detail page", () => {
     expect(missing).toMatch(/<button class="button danger" type="button" disabled="">/);
     expect(render({ skill: null, status: "failed", error: "boom" })).toContain("The Skill could not be loaded");
     expect(render({ versions: { ...versions([]), status: "failed", error: "timeout" } })).toContain("Versions could not be loaded");
-    expect(render({ notice: "The default version cannot be deleted. Refresh and try again." })).toContain('role="alert">The default version cannot be deleted. Refresh and try again.');
   });
 
   it("paginates versions with Load more", () => {

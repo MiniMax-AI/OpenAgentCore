@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { LiveNumber } from "../../components/live-number";
 import { TimeSeriesChart } from "../../components/charts/TimeSeriesChart";
 import { DashboardSkeleton, TableSkeleton } from "../../components/Skeleton";
+import { useFailureToast } from "../../components/Toast";
 import { EmptyState, Kpi, KpiStrip, PageBody, PageHeader, RefreshButton, Section, SegmentedControl, StatusDot, type Tone } from "../../components/console-ui";
 import { formatBucket, formatBytes, formatClock, formatDuration, formatInteger, formatRelative, MISSING } from "../../lib/format";
 import { fleetSnapshot, useSandboxFleet } from "../fleet/use-sandbox-fleet";
@@ -60,6 +61,7 @@ export function CoreMetricsPage() {
   const metrics = query.data ?? null;
   const missing = query.error instanceof AgentCoreError && (query.error.status === 404 || query.error.status === 501);
   const error = query.error instanceof Error ? query.error.message : query.error ? String(query.error) : "";
+  useFailureToast(metrics !== null && query.isError, t("core.stale", { reason: error }), "core-metrics-refresh");
 
   let body: ReactNode;
   if (!metrics) {
@@ -69,7 +71,7 @@ export function CoreMetricsPage() {
         ? <p className="page-status" role="alert">{t("core.failed", { reason: error })}</p>
         : <DashboardSkeleton label={t("core.loading")} figures={5} />;
   } else {
-    body = <CoreMetricsBody metrics={metrics} stale={query.isError ? error : null} />;
+    body = <CoreMetricsBody metrics={metrics} />;
   }
 
   return (
@@ -107,7 +109,7 @@ function ServiceMeta({ metrics }: { metrics: CoreMetrics }) {
   );
 }
 
-function CoreMetricsBody({ metrics, stale }: { metrics: CoreMetrics; stale: string | null }) {
+function CoreMetricsBody({ metrics }: { metrics: CoreMetrics }) {
   const { t, i18n } = useTranslation("metrics");
   const locale = i18n.resolvedLanguage;
   const now = Math.floor(Date.now() / 1000);
@@ -127,7 +129,6 @@ function CoreMetricsBody({ metrics, stale }: { metrics: CoreMetrics; stale: stri
 
   return (
     <>
-      {stale ? <p className="coverage-note coverage-note-error" role="alert">{t("core.stale", { reason: stale })}</p> : null}
 
       <KpiStrip label={t("core.kpiLabel")}>
         <Kpi

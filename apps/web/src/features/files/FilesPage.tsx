@@ -3,6 +3,7 @@ import { FileText } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useFailureToast } from "../../components/Toast";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, SegmentedControl } from "../../components/console-ui";
 import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
@@ -51,11 +52,16 @@ export function FilesPage() {
     { uncertain: tCommon("list.deleteUncertain") },
   );
 
+  // Projects that could not be read are reported in a toast; the list shows the rest.
+  const failedNames = collection.failures.map((failure) => failure.project.name).join(", ");
+  useFailureToast(collection.items.length > 0 && collection.failures.length > 0, tCommon("project.partial", { names: failedNames }), "files-partial");
   let body;
   if (collection.status === "loading" && !collection.items.length) {
     body = <TableSkeleton label={t("list.loading")} columns={6} />;
   } else if (!collection.items.length && !collection.failures.length) {
     body = <EmptyState icon={FileText} title={t("empty.title")} />;
+  } else if (!collection.items.length) {
+    body = <EmptyState title={tCommon("project.failed", { names: failedNames })} description={collection.failures[0]?.message} action={<button className="button outline" type="button" onClick={collection.refresh}>{tCommon("actions.retry")}</button>} />;
   } else {
     body = (
       <>
@@ -69,9 +75,6 @@ export function FilesPage() {
             onChange={setOrder}
           />
         </ListToolbar>
-        {collection.failures.length ? (
-          <p className="list-failures" role="alert">{tCommon("project.partial", { names: collection.failures.map((failure) => failure.project.name).join(", ") })}</p>
-        ) : null}
         {rows.length ? (
           <div className="table-frame">
             <table className="data-table files-table" aria-label={t("list.label")}>

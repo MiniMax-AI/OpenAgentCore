@@ -77,7 +77,7 @@ export const sessions = {
     projectMissing: "Project not found",
     loadFailed: "The Session could not be loaded",
     retry: "Retry",
-    stale: "Refresh failed; showing the history loaded at {{time}}. {{reason}}",
+    stale: "Refresh failed; showing the last loaded history.",
     gone: "This Session no longer exists in Core; showing the history loaded at {{time}}.",
   },
   kpi: {

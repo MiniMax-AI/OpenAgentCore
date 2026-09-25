@@ -1,6 +1,7 @@
 export const common = {
   actions: {
     cancel: "Cancel",
+    close: "Close",
     closeDialog: "Close dialog",
     closeNotification: "Close notification",
     create: "Create",
@@ -25,6 +26,7 @@ export const common = {
     archived: "Archived: its keys are revoked and its assets are kept.",
     archivedOption: "{{name}} · archived",
     partial: "Could not load {{names}}. Other projects are shown.",
+    failed: "Could not load {{names}}.",
   },
   creator: {
     column: "Creator",

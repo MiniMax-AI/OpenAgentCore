@@ -25,7 +25,6 @@ export interface TemplateDetailPageProps extends TemplateLinks {
   template: EnvironmentTemplateResource;
   blocked: boolean;
   refreshing: boolean;
-  notice?: ReactNode;
   onBack: () => void;
   onRefresh: () => void;
   onDelete: () => void;
@@ -131,7 +130,7 @@ function SkillRow({ skill, onOpenSkill }: { skill: EnvironmentTemplateSkill } & 
 
 /** One Template with every safe configuration section Core returns. */
 export function TemplateDetailPage({
-  template, blocked, refreshing, notice, onBack, onRefresh, onDelete, onCopy, facts, onOpenFile, onOpenSkill,
+  template, blocked, refreshing, onBack, onRefresh, onDelete, onCopy, facts, onOpenFile, onOpenSkill,
 }: TemplateDetailPageProps) {
   const { t, i18n } = useTranslation("templates");
   const { t: tCommon } = useTranslation();
@@ -168,7 +167,6 @@ export function TemplateDetailPage({
         )}
       />
       <PageBody>
-        {notice}
         {unrecognized.length ? (
           <p className="coverage-note template-unrecognized" role="note">{t("unrecognizedSections", { sections: unrecognized.join(", ") })}</p>
         ) : null}

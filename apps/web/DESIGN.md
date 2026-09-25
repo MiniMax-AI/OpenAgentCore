@@ -566,10 +566,16 @@ by Faint Rules, hover wash, right-aligned tabular numerics, clickable rows where
 detail page exists, and the list grammar above.
 
 ### Notices
-Coverage notes (Margin Gray, Hairline, 12px corners, 12.5px Graphite) state bounded
-aggregation or a stale view; the error variant tints toward Fault Red. Partial-data
-chips are amber-tinted pills with a help tip. Safety notices (a key shown once, an
-uncertain write, a destructive consequence) stay visible in body text.
+Errors are popups, never lines inserted into a page. A failed action whose outcome
+needs a decision (an uncertain sandbox change) opens an error dialog with Core's
+reason and the next step as its primary button. A failed refresh that keeps the last
+data on screen, projects that could not be read, and other failed actions are
+reported in an error toast with the reason. Only when a page or section has nothing to show
+does an error state take the place of its content; errors inside a dialog or a form
+stay beside what they concern. Coverage notes (Margin Gray, Hairline, 12px corners,
+12.5px Graphite) state bounded aggregation. Partial-data chips are amber-tinted pills
+with a help tip. Safety notices (a key shown once, a destructive consequence) stay
+visible in body text.
 
 ### Onboarding
 Signing in and first-run setup share one frame: a dark stage on the left (always
@@ -622,8 +628,8 @@ once per range, new conversation messages settle 6px upward in 260ms, pages fade
 
 ### Do:
 - **Do** put every explanation of a figure, column, section or page behind a
-  circled "?" help tip; keep errors, warnings and safety notices (deletion
-  consequences, uncertain writes, a key shown once) visible.
+  circled "?" help tip; report errors in a dialog or a toast; keep warnings and
+  safety notices (deletion consequences, a key shown once) visible.
 - **Do** start every project-scoped toolbar with the project filter, then search,
   with the count on the right.
 - **Do** end every resource table with the Creator column and then the row actions.

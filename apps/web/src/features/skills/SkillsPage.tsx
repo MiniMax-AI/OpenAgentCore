@@ -3,6 +3,7 @@ import { Puzzle } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useFailureToast } from "../../components/Toast";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState, PageBody, PageHeader, RefreshButton } from "../../components/console-ui";
 import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
@@ -73,11 +74,16 @@ function SkillsList() {
   );
   const showProject = !filter;
 
+  // Projects that could not be read are reported in a toast; the list shows the rest.
+  const failedNames = collection.failures.map((failure) => failure.project.name).join(", ");
+  useFailureToast(collection.items.length > 0 && collection.failures.length > 0, tCommon("project.partial", { names: failedNames }), "skills-partial");
   let body;
   if (collection.status === "loading" && !collection.items.length) {
     body = <TableSkeleton label={t("list.loading")} columns={6} />;
   } else if (!collection.items.length && !collection.failures.length) {
     body = <EmptyState icon={Puzzle} title={t("empty.title")} />;
+  } else if (!collection.items.length) {
+    body = <EmptyState title={tCommon("project.failed", { names: failedNames })} description={collection.failures[0]?.message} action={<button className="button outline" type="button" onClick={collection.refresh}>{tCommon("actions.retry")}</button>} />;
   } else {
     body = (
       <>
@@ -85,9 +91,6 @@ function SkillsList() {
           <ProjectFilter value={filter} onChange={setFilter} />
           <SearchField value={query} onChange={setQuery} placeholder={t("list.filterPlaceholder")} label={t("list.filterLabel")} />
         </ListToolbar>
-        {collection.failures.length ? (
-          <p className="list-failures" role="alert">{tCommon("project.partial", { names: collection.failures.map((failure) => failure.project.name).join(", ") })}</p>
-        ) : null}
         {rows.length ? (
           <div className="table-frame">
             <table className="data-table skills-table" aria-label={t("list.label")}>

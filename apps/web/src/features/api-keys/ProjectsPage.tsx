@@ -8,6 +8,7 @@ import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton } from "../../
 import { ErrorState } from "../../components/ErrorState";
 import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
 import { Modal } from "../../components/Modal";
+import { useFailureToast } from "../../components/Toast";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatDateTime, formatInteger, formatRelative } from "../../lib/format";
 import { admin, useProjects } from "../../lib/projects";
@@ -39,7 +40,7 @@ export function ProjectsPage() {
   const { t, i18n } = useTranslation("keys");
   const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
-  const { state, byId } = useProjects();
+  const { state, byId, refreshError } = useProjects();
   const queryClient = useQueryClient();
   const { params, navigate, back } = useConsoleNavigation();
   const [selectedId, setSelectedId] = useState<string | null>(params.id ?? null);
@@ -65,6 +66,7 @@ export function ProjectsPage() {
   const summaries = activity.data ?? null;
 
   const projects = state.projects;
+  useFailureToast(refreshError, t("page.refreshFailed"), "projects-refresh");
   const names = useMemo(() => projects.map((project) => project.name), [projects]);
   const visible = useMemo(() => projects.filter((project) => matchesProject(project, query)), [projects, query]);
   const selected = selectedId ? byId.get(selectedId) ?? (created?.id === selectedId ? created : null) : null;
@@ -195,7 +197,6 @@ export function ProjectsPage() {
     } else {
       body = (
         <>
-          {state.status === "failed" ? <p className="coverage-note coverage-note-error" role="alert">{t("page.refreshFailed")}</p> : null}
           <ListToolbar label={t("list.label")} summary={listSummary(tCommon, visible.length, projects.length, { locale })}>
             <SearchField value={query} onChange={setQuery} placeholder={t("list.search")} label={t("list.search")} />
           </ListToolbar>

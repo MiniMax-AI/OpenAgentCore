@@ -37,7 +37,7 @@ export function useSandboxFleet({ poll = true, allocations = false }: { poll?: b
   if (configFailed) state = config.isFetching ? { status: "checking" } : { status: "failed", error: config.error };
   else if (adminAvailable === null) state = { status: "checking" };
   else if (!adminAvailable) state = { status: "unconfigured" };
-  else if (fleet.data) state = { status: "ready", snapshot: fleet.data, refreshing: fleet.isFetching, error: fleet.isError && !fleet.isFetching ? fleet.error : null };
+  else if (fleet.data) state = { status: "ready", snapshot: fleet.data, refreshing: fleet.isFetching, error: fleet.isError ? fleet.error : null };
   else if (fleet.isError && !fleet.isFetching) state = { status: "failed", error: fleet.error };
   else state = { status: "loading" };
 

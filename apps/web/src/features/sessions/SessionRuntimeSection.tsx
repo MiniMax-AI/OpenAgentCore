@@ -3,6 +3,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { failedLast, useFailureToast } from "../../components/Toast";
 import { DashboardSkeleton } from "../../components/Skeleton";
 import { Kpi, KpiStrip, Section, SegmentedControl, type Tone } from "../../components/console-ui";
 import { formatBytes, formatCores, formatDateTime, formatPercent, formatRelative, MISSING } from "../../lib/format";
@@ -77,6 +78,9 @@ export function SessionRuntimeSection({
     value: historyRead.data ?? null,
     error: historyRead.isError ? message(historyRead.error) : null,
   };
+  // Both reads repeat while the Session runs; a failure is reported once while it lasts.
+  useFailureToast(failedLast(observationRead), t("runtime.observationFailed", { reason: observationError ?? "" }), "session-runtime-observation");
+  useFailureToast(history.value !== null && failedLast(historyRead), t("runtime.historyFailed", { reason: history.error ?? "" }), "session-runtime-history");
 
   let stateLabel = MISSING;
   let stateTone: Tone | undefined;
@@ -112,8 +116,7 @@ export function SessionRuntimeSection({
         <Kpi label={t("runtime.memory")} value={memoryValue} />
         <Kpi label={t("runtime.observed")} value={observedAt === null ? MISSING : <span title={formatDateTime(observedAt, locale)}>{formatRelative(observedAt, Math.floor(Date.now() / 1000), locale)}</span>} />
       </KpiStrip>
-      {observationError ? <p className="coverage-note coverage-note-error" role="alert">{t("runtime.observationFailed", { reason: observationError })}</p> : null}
-      {history.state === "failed" ? <p className="coverage-note coverage-note-error" role="alert">{t("runtime.historyFailed", { reason: history.error ?? "" })}</p> : null}
+      {history.state === "failed" && !history.value ? <p className="page-status">{t("runtime.historyFailed", { reason: history.error ?? "" })}</p> : null}
       {history.state === "unavailable" ? <p className="coverage-note">{t("runtime.historyUnavailable")}</p> : null}
       {history.state === "loading" && !history.value ? <DashboardSkeleton label={t("runtime.historyLoading")} figures={0} /> : null}
       {history.value ? (

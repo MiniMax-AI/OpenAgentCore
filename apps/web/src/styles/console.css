@@ -782,12 +782,6 @@ html[data-theme="dark"] {
   color: var(--danger);
 }
 
-.list-failures {
-  margin: 0;
-  color: var(--danger);
-  font-size: 13px;
-}
-
 /* Row actions sit at the end of the row with even spacing. */
 .data-table .actions-cell {
   width: 1%;

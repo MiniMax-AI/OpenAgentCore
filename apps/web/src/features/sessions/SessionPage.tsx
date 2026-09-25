@@ -4,6 +4,7 @@ import { ArrowLeft, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useFailureToast } from "../../components/Toast";
 import { DetailSkeleton } from "../../components/Skeleton";
 import { EmptyState, Kpi, KpiStrip, PageBody, PageHeader, RefreshButton, Section, SegmentedControl } from "../../components/console-ui";
 import { CopyableId } from "../../components/list-ui";
@@ -66,6 +67,13 @@ export function SessionPage() {
   const session = history.history?.session ?? null;
   const loadedAt = history.history?.loadedAt ?? null;
   const refresh = () => { setRefreshToken((value) => value + 1); history.refresh(); };
+  const time = loadedAt ? formatClock(loadedAt, locale) : MISSING;
+  const itemsError = session ? history.history?.itemsError ?? null : null;
+  const turnsError = session ? history.history?.turnsError ?? null : null;
+  // Failed reads that leave the last history on screen are reported in toasts.
+  useFailureToast(session !== null && !history.gone && history.error ? errorText(history.error) : null, t("detail.stale"), "session-refresh");
+  useFailureToast(Boolean(itemsError), t("history.itemsFailed", { reason: itemsError ?? "" }), "session-items");
+  useFailureToast(Boolean(turnsError), t("history.turnsFailed", { reason: turnsError ?? "" }), "session-turns");
 
   let body;
   if (!projectId || !sessionId) {
@@ -79,18 +87,14 @@ export function SessionPage() {
   } else {
     const items = history.history?.items ?? [];
     const turns = history.history?.turns ?? [];
-    const itemsError = history.history?.itemsError ?? null;
-    const turnsError = history.history?.turnsError ?? null;
     const usage = session.usage;
     const waiting = waitingFor(session);
     const metadata = Object.entries(session.metadata).filter(([key]) => key !== "title");
     const harness = session.agent.x_agents_core?.harness;
     const environment = session.environment as { type: string; id?: unknown };
-    const time = loadedAt ? formatClock(loadedAt, locale) : MISSING;
     body = (
       <>
-        {history.gone ? <p className="coverage-note coverage-note-error" role="alert">{t("detail.gone", { time })}</p>
-          : history.error ? <p className="coverage-note coverage-note-error" role="alert">{t("detail.stale", { time, reason: errorText(history.error) })}</p> : null}
+        {history.gone ? <p className="coverage-note coverage-note-error" role="alert">{t("detail.gone", { time })}</p> : null}
         <dl className="resource-facts session-facts" aria-label={t("detail.facts")}>
           <div><dt>{t("detail.id")}</dt><dd><CopyableId id={session.id} /></dd></div>
           <div><dt>{t("detail.project")}</dt><dd><ProjectName project={project} /></dd></div>
@@ -155,12 +159,10 @@ export function SessionPage() {
             />
           )}
         >
-          {view !== "turns" && itemsError ? <p className="coverage-note coverage-note-error" role="alert">{t("history.itemsFailed", { reason: itemsError })}</p> : null}
-          {view !== "conversation" && turnsError ? <p className="coverage-note coverage-note-error" role="alert">{t("history.turnsFailed", { reason: turnsError })}</p> : null}
           {view === "conversation" ? (
             items.length ? (
               <SessionTranscript turns={turns} items={items} agentName={session.agent.name || t("common.agent")} />
-            ) : <EmptyState title={t("history.noItems")} />
+            ) : <EmptyState title={itemsError ? t("history.itemsFailed", { reason: itemsError }) : t("history.noItems")} />
           ) : view === "trace" ? (
             <div className="session-trace-frame">
               <TraceView
@@ -176,7 +178,7 @@ export function SessionPage() {
               />
             </div>
           ) : (
-            <SessionTurnsTable turns={turns} items={items} />
+            <SessionTurnsTable turns={turns} items={items} failure={turnsError ? t("history.turnsFailed", { reason: turnsError }) : null} />
           )}
         </Section>
         {hasObservableRuntime(session) ? (

@@ -17,7 +17,7 @@ export const turnTone: Record<AgentTurn["status"], Tone> = {
 };
 
 /** One row per Turn in the order Core ran them, with timing, Item count and usage. */
-export function SessionTurnsTable({ turns, items }: { turns: readonly AgentTurn[]; items: readonly SessionItem[] }) {
+export function SessionTurnsTable({ turns, items, failure = null }: { turns: readonly AgentTurn[]; items: readonly SessionItem[]; failure?: string | null }) {
   const { t, i18n } = useTranslation("sessions");
   const locale = i18n.resolvedLanguage;
   const running = turns.some((turn) => turn.status === "in_progress" || turn.status === "waiting");
@@ -29,7 +29,8 @@ export function SessionTurnsTable({ turns, items }: { turns: readonly AgentTurn[
   }, [running]);
   const { counts, unassociated } = useMemo(() => itemsPerTurn(turns, items), [items, turns]);
 
-  if (!turns.length) return <EmptyState title={t("turnTable.none")} />;
+  // Without Turns, a failed read says so rather than "none yet".
+  if (!turns.length) return <EmptyState title={failure ?? t("turnTable.none")} />;
   return (
     <>
       <div className="table-frame">

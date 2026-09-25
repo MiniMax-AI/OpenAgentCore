@@ -6,11 +6,10 @@ import { formatBytes, MISSING } from "../../lib/format";
 import { sandboxProviderLabel } from "../../lib/sandbox-labels";
 import { SandboxSetupWizard } from "./SandboxSetupWizard";
 
-export function SandboxDeploymentSettings({ deployment, disabled, fresh, error, onMaintenance, onUpdate, onRefresh }: {
+export function SandboxDeploymentSettings({ deployment, disabled, fresh, onMaintenance, onUpdate, onRefresh }: {
   deployment: SandboxDeployment;
   disabled: boolean;
   fresh: boolean;
-  error: string | null;
   onMaintenance: (maintenance: boolean) => Promise<void>;
   onUpdate: (input: InitializeSandboxDeployment) => Promise<void>;
   onRefresh: () => void;
@@ -38,8 +37,6 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, error, 
     {deployment.provider === "e2b" ? <div className="sandbox-cloud-summary">
       <dl className="sandbox-summary"><div><dt>{t("Immutable Runtime template")}</dt><dd>{deployment.e2b?.template || t("Unknown state")}</dd></div><div><dt>{t("E2B credential")}</dt><dd>{t(deployment.e2b?.credential_configured ? "Configured" : "Not configured")}</dd></div></dl>
     </div> : null}
-    {!fresh ? <p role="status">{t("Previously loaded state is shown below.")}</p> : null}
-    {error ? <p role="alert" className="sandbox-error">{error}</p> : null}
     {!deployment.maintenance ? <button type="button" className="button outline" disabled={disabled} onClick={() => void onMaintenance(true)}>{t("Enter maintenance to change provider")}</button> : <>
       <div className="sandbox-actions"><a className="button outline" href="#sessions">{t("Open Sessions")}</a><button type="button" className="button outline" disabled={disabled} onClick={onRefresh}>{t("Check cleanup")}</button></div>
       <p role="status" className="sandbox-provider-status">

@@ -26,6 +26,8 @@ interface ProjectsContextValue {
   state: ProjectsState;
   refresh: () => void;
   byId: ReadonlyMap<string, Project>;
+  /** Why the last refresh failed while earlier projects stay on screen. */
+  refreshError: string | null;
 }
 
 const ProjectsContext = createContext<ProjectsContextValue | null>(null);
@@ -50,7 +52,8 @@ function ProjectsState({ children }: { children: ReactNode }) {
   const { refetch } = query;
   const refresh = useCallback(() => { void refetch(); }, [refetch]);
   const byId = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
-  const value = useMemo(() => ({ state, refresh, byId }), [state.status, state.error, projects, refresh, byId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const refreshError = query.isError && query.data ? (query.error instanceof Error ? query.error.message : String(query.error)) : null;
+  const value = useMemo(() => ({ state, refresh, byId, refreshError }), [state.status, state.error, projects, refresh, byId, refreshError]); // eslint-disable-line react-hooks/exhaustive-deps
   return <ProjectsContext.Provider value={value}>{children}</ProjectsContext.Provider>;
 }
 

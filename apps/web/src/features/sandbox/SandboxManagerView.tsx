@@ -5,6 +5,9 @@ import { ArrowLeft, Server, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState, HelpTip, RefreshButton } from "../../components/console-ui";
+import { ErrorDialog } from "../../components/ErrorDialog";
+import { ErrorState } from "../../components/ErrorState";
+import { useFailureToast, useToast } from "../../components/Toast";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { sandboxRequestError } from "../../lib/sandbox-labels";
 import type { SandboxConsoleConfig } from "./console-config";
@@ -71,14 +74,23 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const confirmed = snapshot !== null && !query.isError && !setupNeedsRefresh;
   // Writes additionally wait for any read in flight.
   const fresh = confirmed && !loading;
-  const [mutationError, setMutationError] = useState<unknown>(null);
+  // A failed write opens a dialog with Core's reason; the error stays for the closing animation.
+  const [writeFailure, setWriteFailure] = useState<{ error: unknown; open: boolean } | null>(null);
   const { refetch } = query;
   const refresh = useCallback(() => {
     // Each refresh starts a new read (cancelling one in flight) and resets the forms, as a reload did.
     setRevision((value) => value + 1);
-    setMutationError(null);
     void refetch();
   }, [refetch]);
+  const toast = useToast();
+  // A refresh the administrator asks for reports its failure even while an earlier one is still unconfirmed;
+  // the enrollment dialog's own repeated refreshes do not.
+  const refreshByUser = () => {
+    setRevision((value) => value + 1);
+    void refetch().then((result) => {
+      if (result.isError && result.data) toast.show(t("Refresh failed; showing the last loaded state."), { tone: "error", detail: sandboxRequestError(result.error, locale), key: "sandbox-read" });
+    });
+  };
   const lifetime = useRef<AbortController | null>(null);
   useEffect(() => {
     const controller = new AbortController(); lifetime.current = controller;
@@ -87,7 +99,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   async function changeDeployment(operation: (signal: AbortSignal) => Promise<SandboxDeployment>) {
     const controller = lifetime.current;
     if (!controller || busy || loading || setupNeedsRefresh || !fresh) return;
-    setBusy(true); setMutationError(null);
+    setBusy(true); setWriteFailure(null);
     try {
       const deployment = await operation(controller.signal);
       if (!controller.signal.aborted) {
@@ -102,7 +114,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
       }
     } catch (error) {
       if (!controller.signal.aborted) {
-        setUncertainSince(performance.now()); setMutationError(error);
+        setUncertainSince(performance.now()); setWriteFailure({ error, open: true });
         // Nothing re-reads on its own: the operator refreshes to confirm. A later visit reads again.
         void queryClient.invalidateQueries({ queryKey: sandboxScope, refetchType: "none" });
       }
@@ -117,7 +129,15 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   function maintenance(maintenance: boolean) {
     return changeDeployment((signal) => client.setMaintenance({ maintenance, expected_generation: snapshot!.deployment.generation }, { signal }));
   }
-  const writeError = mutationError === null ? null : `${sandboxRequestError(mutationError, locale)} ${t("Refresh sandbox state to confirm whether the change was saved before submitting again.")}`;
+  const writeDialog = <ErrorDialog
+    open={writeFailure?.open ?? false}
+    title={t("Couldn't confirm the sandbox change")}
+    action={{ label: t("Refresh sandbox state"), onClick: refreshByUser }}
+    onClose={() => setWriteFailure((failure) => failure && { ...failure, open: false })}
+  >
+    <p>{writeFailure ? sandboxRequestError(writeFailure.error, locale) : null}</p>
+    <p>{t("Refresh sandbox state to confirm whether the change was saved before submitting again.")}</p>
+  </ErrorDialog>;
   const askRemove = (node: SandboxNode) => { setRemoveError(null); setRemoveTarget(node); };
   async function remove() {
     const controller = lifetime.current;
@@ -142,11 +162,14 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const allocations = snapshot?.allocations ?? [];
   const hostedNodes = Boolean(snapshot?.deployment.provider && snapshot.deployment.provider !== "e2b");
   const selected = params.id ? nodes.find((node) => node.id === params.id) : undefined;
-  const refreshButton = <RefreshButton onClick={refresh} refreshing={loading} disabled={busy || removing} label={t("Refresh sandbox state")} />;
+  const refreshButton = <RefreshButton onClick={refreshByUser} refreshing={loading} disabled={busy || removing} label={t("Refresh sandbox state")} />;
+  const readFailure = error !== null ? sandboxRequestError(error, locale) : null;
+  // A failed refresh keeps the last state on screen and says so in a toast, once while the failure lasts.
+  useFailureToast(snapshot && query.isError ? sandboxRequestError(query.error, locale) : null, t("Refresh failed; showing the last loaded state."), "sandbox-read");
   const status = <>
     {!snapshot && (loading || query.isPending) ? <p role="status">{t("Loading sandbox state…")}</p> : null}
     {busy ? <span role="status">{t("Saving sandbox change…")}</span> : null}
-    {error !== null ? <p role="alert" className="sandbox-error">{sandboxRequestError(error, locale)}{snapshot ? ` ${t("Previously loaded state is shown below.")}` : ""}</p> : null}
+    {!snapshot && readFailure ? <ErrorState title={t("Sandbox state couldn't be read")} detail={readFailure} onRetry={refresh} /> : null}
   </>;
   const removeName = removeTarget ? removeTarget.name || removeTarget.id : "";
   const dialog = <ConfirmDialog
@@ -181,6 +204,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         ) : null}
       </div>
       {dialog}
+      {writeDialog}
     </>;
   }
 
@@ -192,11 +216,10 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     <NodesPageHeader count={hostedNodes ? nodes.length : undefined} actions={actions} />
     <div className="console-page-body sandbox-content">
       {status}
-      {snapshot && !snapshot.deployment.provider && writeError ? <p role="alert" className="sandbox-error">{writeError}</p> : null}
       {snapshot && !snapshot.deployment.provider ? <SandboxSetupWizard key={revision} initialCoreUrl={initialCoreUrl} disabled={busy || loading || setupNeedsRefresh || error !== null} onSubmit={initialize} /> : null}
       {snapshot?.deployment.provider ? <>
         {snapshot.deployment.maintenance ? <p className="sandbox-maintenance" role="status">{t("Maintenance is enabled. New sandbox placement is paused.")}</p> : null}
-        <SandboxDeploymentSettings key={`${snapshot.deployment.generation}:${snapshot.deployment.maintenance}:${revision}`} deployment={snapshot.deployment} fresh={confirmed} disabled={busy || loading || !fresh || setupNeedsRefresh} error={writeError} onMaintenance={maintenance} onUpdate={update} onRefresh={refresh} />
+        <SandboxDeploymentSettings key={`${snapshot.deployment.generation}:${snapshot.deployment.maintenance}:${revision}`} deployment={snapshot.deployment} fresh={confirmed} disabled={busy || loading || !fresh || setupNeedsRefresh} onMaintenance={maintenance} onUpdate={update} onRefresh={refresh} />
         {hostedNodes ? <section aria-label={t("Sandbox nodes")}>
           {nodes.length
             ? <NodeList nodes={nodes} allocations={allocations} stale={!confirmed} disabled={busy || loading || removing} onOpen={(node) => navigate("nodes", { id: node.id })} onRemove={askRemove} />
@@ -205,5 +228,6 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
       </> : null}
     </div>
     {dialog}
+    {writeDialog}
   </>;
 }

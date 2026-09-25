@@ -2,6 +2,7 @@ import { MessageSquareText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useFailureToast } from "../../components/Toast";
 import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, SegmentedControl } from "../../components/console-ui";
 import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
@@ -91,6 +92,7 @@ export function SessionLogPage() {
   const failures = collection.failures;
   const allFailed = collection.status === "ready" && !rows.length && failures.length > 0 && failures.length >= (allProjects ? projects.projects.length : 1);
 
+  useFailureToast(failures.length > 0 && !allFailed, tCommon("project.partial", { names: failures.map((failure) => failure.project.name).join(", ") }), "sessions-partial");
   let body;
   if (projects.status === "failed" && !projects.projects.length) {
     body = <EmptyState title={t("log.loadFailed")} description={projects.error} action={<button className="button outline" type="button" onClick={refresh}>{tCommon("actions.retry")}</button>} />;
@@ -192,9 +194,6 @@ export function SessionLogPage() {
             ]}
           />
         </ListToolbar>
-        {failures.length && !allFailed ? (
-          <p className="list-failures" role="alert">{tCommon("project.partial", { names: failures.map((failure) => failure.project.name).join(", ") })}</p>
-        ) : null}
         {body}
       </PageBody>
       <SessionDeleteDialog

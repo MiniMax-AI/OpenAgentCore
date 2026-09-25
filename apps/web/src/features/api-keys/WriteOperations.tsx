@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 
+import { useFailureToast } from "../../components/Toast";
 import { EmptyState, Section } from "../../components/console-ui";
 import { CopyableId, ListToolbar, listSummary } from "../../components/list-ui";
 import { formatDateTime, shortId } from "../../lib/format";
@@ -48,7 +49,6 @@ export function WriteOperations({ projectId, keys }: { projectId: string; keys: 
   // A failed next page leaves the rows already read on screen, with a retry.
   const moreFailed = query.isFetchNextPageError && !isFetchingNextPage;
   // A failed refresh keeps the rows already read; the first read failing leaves none.
-  const refreshFailed = query.isRefetchError && !query.isFetching;
 
   const loadMore = useCallback(() => {
     if (!hasNextPage || isFetchingNextPage) return;
@@ -58,6 +58,8 @@ export function WriteOperations({ projectId, keys }: { projectId: string; keys: 
   const actionLabel = (action: string) => (isAction(action) ? t(`operations.actions.${action}`) : action);
   const typeLabel = (value: string) => (isType(value) ? t(`operations.types.${value}`) : value);
 
+  useFailureToast(Boolean(entries) && query.isRefetchError && !query.isFetching, t("operations.failed"), "write-operations-refresh");
+  useFailureToast(moreFailed, t("operations.moreFailed"), "write-operations-more");
   let body;
   if (!entries && query.isError && !query.isFetching) {
     body = (
@@ -73,7 +75,6 @@ export function WriteOperations({ projectId, keys }: { projectId: string; keys: 
   } else {
     body = (
       <>
-        {refreshFailed ? <p className="coverage-note coverage-note-error" role="alert">{t("operations.failed")}</p> : null}
         <div className="table-frame">
           <table className="data-table operations-table" aria-label={t("operations.title")}>
             <thead>
@@ -105,7 +106,6 @@ export function WriteOperations({ projectId, keys }: { projectId: string; keys: 
         </div>
         {hasNextPage || moreFailed ? (
           <footer className="table-footer">
-            {moreFailed ? <span role="alert">{t("operations.moreFailed")}</span> : null}
             <button className="button outline" type="button" disabled={isFetchingNextPage} onClick={loadMore}>
               {moreFailed ? tCommon("actions.retry") : tCommon("actions.loadMore")}
             </button>
