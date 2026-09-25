@@ -21,13 +21,13 @@ func TestStartupConfigurationHTTP(t *testing.T) {
 			ModelProviders: []v1.CoreHarnessModelProviderConfiguration{{Harness: "claude_sdk"}, {Harness: "codex", EndpointConfigured: true}},
 		},
 	}
-	h, _, _ := testHandler(t, WithStartupConfiguration(configuration))
+	h, _, _ := adminTestHandler(t, WithStartupConfiguration(configuration))
 	configuration.Supported.Harnesses[0] = "mutated"
 	configuration.Configured.EnabledHarnesses[0] = "mutated"
 	*configuration.Configured.ManagedSandbox.Provider = "mutated"
 
-	request := httptest.NewRequest(http.MethodGet, "/v1/agents/core/startup-configuration", nil)
-	request.Header.Set("Authorization", "Bearer test-api-key")
+	request := httptest.NewRequest(http.MethodGet, "/core/v1/admin/startup-configuration", nil)
+	request.Header.Set("Authorization", "Bearer admin")
 	request.Header.Set("OpenAI-Beta", "agents=v1")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, request)
@@ -59,14 +59,14 @@ func TestStartupConfigurationRejectsUnsupportedReads(t *testing.T) {
 		auth   string
 		status int
 	}{
-		{name: "missing auth", option: []Option{WithStartupConfiguration(configured)}, path: "/v1/agents/core/startup-configuration", status: http.StatusUnauthorized},
-		{name: "retired discovery", option: []Option{WithStartupConfiguration(configured)}, path: "/v1/agents/core/startup-configuration?include=configuration_capabilities", auth: "Bearer test-api-key", status: http.StatusBadRequest},
-		{name: "query", option: []Option{WithStartupConfiguration(configured)}, path: "/v1/agents/core/startup-configuration?raw=true", auth: "Bearer test-api-key", status: http.StatusBadRequest},
-		{name: "malformed query", option: []Option{WithStartupConfiguration(configured)}, path: "/v1/agents/core/startup-configuration?raw;private", auth: "Bearer test-api-key", status: http.StatusBadRequest},
-		{name: "composition missing", path: "/v1/agents/core/startup-configuration", auth: "Bearer test-api-key", status: http.StatusServiceUnavailable},
+		{name: "missing auth", option: []Option{WithStartupConfiguration(configured)}, path: "/core/v1/admin/startup-configuration", status: http.StatusUnauthorized},
+		{name: "retired discovery", option: []Option{WithStartupConfiguration(configured)}, path: "/core/v1/admin/startup-configuration?include=configuration_capabilities", auth: "Bearer admin", status: http.StatusBadRequest},
+		{name: "query", option: []Option{WithStartupConfiguration(configured)}, path: "/core/v1/admin/startup-configuration?raw=true", auth: "Bearer admin", status: http.StatusBadRequest},
+		{name: "malformed query", option: []Option{WithStartupConfiguration(configured)}, path: "/core/v1/admin/startup-configuration?raw;private", auth: "Bearer admin", status: http.StatusBadRequest},
+		{name: "composition missing", path: "/core/v1/admin/startup-configuration", auth: "Bearer admin", status: http.StatusServiceUnavailable},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			h, _, _ := testHandler(t, test.option...)
+			h, _, _ := adminTestHandler(t, test.option...)
 			request := httptest.NewRequest(http.MethodGet, test.path, nil)
 			request.Header.Set("Authorization", test.auth)
 			request.Header.Set("OpenAI-Beta", "agents=v1")

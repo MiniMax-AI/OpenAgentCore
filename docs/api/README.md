@@ -1,12 +1,12 @@
 # API documentation
 
-Choose the API by its caller and authority. A route prefix alone does not establish
-OpenAI compatibility: Core also has explicitly documented extensions under `/v1`.
+Choose the API by its caller and authority. `/v1` has exactly the pinned official
+routes; its only Core additions are the `x_agents_core` fields described in the
+[public API](public-agent-api.md#core-extensions).
 
 | Surface | Caller and credential | Entry point | Reference |
 | --- | --- | --- | --- |
 | Public Agents API | Applications; a database-issued Project API key | Direct Core `/v1` | [Public API](public-agent-api.md) |
-| Project-scoped Core extensions | Applications; the same Project API key | Direct Core; extension-specific paths | [Extension index](public-agent-api.md#core-extensions) |
 | Administrator resources | Web's server or administrative automation; deployment credential | Core `/core/v1/admin` | [Management contract](../../contracts/agents-api/admin-api.md) |
 | Hosted sandbox administration | Web's server or administrative automation; deployment credential | Core `/core/v1/sandbox` management routes | [Web API](web-management.md#sandbox-administration) |
 | Console authentication | Browser; local console sign-in and session cookie | Console `/console/auth` | [Web API](web-management.md#browser-to-console) |
@@ -27,6 +27,11 @@ when given an application key or machine credential.
 
 - [Pinned upstream baseline](../../contracts/agents-api/upstream.json): OpenAI
   Python SDK 3.13.0, exact upstream commit and `agents=v1`.
+- [Pinned routes](../../contracts/agents-api/upstream-routes.json) and
+  [fields](../../contracts/agents-api/upstream-fields.json): extracted from the
+  pinned SDK by `scripts/extract-agents-api-upstream.py`. Contract tests require the
+  public OpenAPI to have exactly these routes and to keep every other field inside
+  `x_agents_core`.
 - [Public OpenAPI](../../contracts/agents-api/openapi.yaml): public schema snapshot;
   combine it with the fixed SDK and [operation evidence](../../contracts/agents-api/operation-evidence.md).
 - [Core extension OpenAPI](../../contracts/agents-api/sandbox-manager.openapi.yaml):

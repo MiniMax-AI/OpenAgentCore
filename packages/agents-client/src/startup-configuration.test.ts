@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { OpenAIAgentsClient } from "./client";
+import { AdminClient } from "./admin-client";
 
 function response(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -29,12 +29,12 @@ function fixture(): Record<string, unknown> {
 }
 
 describe("Core startup configuration", () => {
-  it("reads the exact authenticated extension path and returns a defensive projection", async () => {
+  it("reads the exact administrator path and returns a defensive projection", async () => {
     const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
     const body = fixture();
-    const client = new OpenAIAgentsClient({
-      baseUrl: "https://core.example/v1/",
-      token: "project-key",
+    const client = new AdminClient({
+      baseUrl: "https://core.example/core/v1/admin/",
+      adminToken: "admin-key",
       fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
         calls.push({ input, init });
         return response(body);
@@ -45,9 +45,9 @@ describe("Core startup configuration", () => {
     const result = await client.retrieveStartupConfiguration({ signal: abort.signal });
     (body.supported as { harnesses: string[] }).harnesses[0] = "mutated";
 
-    expect(String(calls[0]?.input)).toBe("https://core.example/v1/agents/core/startup-configuration");
+    expect(String(calls[0]?.input)).toBe("https://core.example/core/v1/admin/startup-configuration");
     expect(calls[0]?.init?.signal).toBe(abort.signal);
-    expect(new Headers(calls[0]?.init?.headers).get("Authorization")).toBe("Bearer project-key");
+    expect(new Headers(calls[0]?.init?.headers).get("Authorization")).toBe("Bearer admin-key");
     expect(result.supported.harnesses).toEqual(["claude_sdk", "codex", "mcode"]);
     expect(result.configured.managed_sandbox).toEqual({ enabled: true, provider: "docker", maintenance: false });
   });
@@ -70,7 +70,7 @@ describe("Core startup configuration", () => {
   ])("rejects %s", async (_name, mutate) => {
     const body = fixture();
     mutate(body);
-    const client = new OpenAIAgentsClient({ fetch: (async () => response(body)) as typeof fetch });
+    const client = new AdminClient({ fetch: (async () => response(body)) as typeof fetch });
     await expect(client.retrieveStartupConfiguration()).rejects.toMatchObject({
       code: "invalid_startup_configuration",
       status: 502,
@@ -80,7 +80,7 @@ describe("Core startup configuration", () => {
   it("does not reflect rejected private fields in its error", async () => {
     const body = fixture() as any;
     body.configured.private_endpoint = "https://user:secret@example.test/v1?token=private";
-    const client = new OpenAIAgentsClient({ fetch: (async () => response(body)) as typeof fetch });
+    const client = new AdminClient({ fetch: (async () => response(body)) as typeof fetch });
 
     await expect(client.retrieveStartupConfiguration()).rejects.not.toThrow(/user:secret|example\.test|token=private/u);
   });
@@ -92,7 +92,7 @@ describe("Core startup configuration", () => {
     body.configured.managed_sandbox = { enabled: false, provider: null, maintenance: false };
     body.configured.enabled_harnesses = [];
     body.configured.model_providers = [];
-    const client = new OpenAIAgentsClient({ fetch: (async () => response(body)) as typeof fetch });
+    const client = new AdminClient({ fetch: (async () => response(body)) as typeof fetch });
 
     await expect(client.retrieveStartupConfiguration()).resolves.toMatchObject({
       configured: { daemon_gateway: false, enabled_harnesses: [], model_providers: [] },

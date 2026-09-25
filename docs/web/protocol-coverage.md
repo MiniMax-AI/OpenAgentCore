@@ -47,7 +47,8 @@ storage, URLs or logs. There is no project deletion and no plaintext recovery.
 
 Routes are relative to `/core/v1/admin/projects/{project_id}` and return the same
 objects as the corresponding public `/v1` operations, so the console applies the
-public client's strict projections. Archived projects remain readable.
+public client's strict projections. Runtime observation and history exist only
+here. Archived projects remain readable.
 
 | Resource | Reads used | Deletion | Creator | Console surface |
 | --- | --- | --- | --- | --- |

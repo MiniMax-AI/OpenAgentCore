@@ -11,6 +11,10 @@ The external reference is [openai-python beta/agents](https://github.com/openai/
 pinned in `upstream.json`. Its resource methods, corresponding types, pagination
 and streaming helpers define the compatibility target. This directory records
 the boundary; it does not imply that every upstream feature is implemented.
+`upstream-routes.json` and `upstream-fields.json` are extracted from that SDK by
+`scripts/extract-agents-api-upstream.py` (run it with the pinned SDK installed).
+Contract tests require `openapi.yaml` to have exactly those method and path pairs
+and to keep every non-official field inside `x_agents_core`.
 
 Parsar owns product Agents and Teams. This service owns upstream execution
 resources, including reusable Agents and protocol subagents. The OpenAI Agents
@@ -118,14 +122,16 @@ paths start at `/vaults`, not `/agents/vaults`.
 
 The operations below are implemented Core extensions. They are excluded
 from the 42-operation upstream inventory and must not be counted as OpenAI Agents
-compatibility.
+compatibility. None is under `/v1`: [upstream-routes.json](upstream-routes.json)
+pins the exact `/v1` route set, and `/v1` objects carry Core fields only inside
+`x_agents_core`.
 
 | Extension | Operations | Current coverage |
 | --- | --- | --- |
 | Administration | `/core/v1/admin/**` | Deployment-authenticated Projects with shared keys, read/delete projections, atomic asset copies, summary, runtime observations and audit. Separate from caller authority; see [Administrator API](admin-api.md). |
 | API-key provenance | Project-scoped `/core/v1/admin/projects/{project_id}/resource-owners` and `/write-operations` | Batch ownership and retained cursor-paginated write history; see [write provenance](write-audit.md). |
-| Runtime observations | `GET /v1/agents/runtime-observations`; `GET /v1/agents/sessions/{session_id}/runtime-observation` | Current, read-only, tenant-scoped Session contexts with stable Session-keyset pagination, bounded concurrent sampling, Docker and microsandbox metrics, explicit unsupported/unavailable states, strict `packages/agents-client` projection, and no lifecycle mutation. Kubernetes, E2B, self-hosted telemetry, and automatic idle policy remain unimplemented. See [Runtime observation API](runtime-observability-api.md). |
-| Runtime history | `GET /v1/agents/runtime-history/capabilities`; `GET /v1/agents/sessions/{session_id}/runtime-history` | Optional backend-neutral capability and bounded tenant/Session-scoped history contract with allocation/incarnation fencing, explicit coverage and strict client projection. Disabled by default until a production Reader and qualified periodic collection are configured; Durable Web rendering remains pending. See [Runtime history API](runtime-history-api.md). |
+| Runtime observations | `GET /core/v1/admin/runtime-observations`; `GET /core/v1/admin/projects/{project_id}/sessions/{session_id}/runtime-observation` | Administrator only; the `/v1` forms are removed. Current, read-only Session contexts labelled by Project, with stable Session-keyset pagination, bounded concurrent sampling, Docker and microsandbox metrics, explicit unsupported/unavailable states, strict `AdminClient` projection, and no lifecycle mutation. Kubernetes, E2B, self-hosted telemetry, and automatic idle policy remain unimplemented. See [Runtime observation API](runtime-observability-api.md). |
+| Runtime history | `GET /core/v1/admin/runtime-history/capabilities`; `GET /core/v1/admin/projects/{project_id}/sessions/{session_id}/runtime-history` | Administrator only; the `/v1` forms are removed. Optional backend-neutral capability and bounded Project/Session-scoped history contract with allocation/incarnation fencing, explicit coverage and strict client projection. Disabled by default until a production Reader and qualified periodic collection are configured; Durable Web rendering remains pending. See [Runtime history API](runtime-history-api.md). |
 
 For each resource, verify the referenced request/response unions and observable
 behavior, not just the route. Non-text initial input, configuration
@@ -909,8 +915,8 @@ establish complete ownership, hosted key lifecycle or error compatibility. See t
 
 Core documents its optional [harness selection extension](harness-selection.md) separately from the pinned upstream contract.
 
-The [Core startup configuration extension](startup-configuration.md) exposes only
-safe build support and process configuration facts. It does not report Runtime,
+The administrator [Core startup configuration](startup-configuration.md) read
+exposes only safe build support and process configuration facts. It does not report Runtime,
 Session or Environment observations and is not a readiness endpoint.
 
 Model endpoints and credentials may be supplied at Session creation through the

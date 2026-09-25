@@ -86,7 +86,9 @@ See the [TypeScript client example](../../packages/agents-client/saved-agent-def
 The endpoint must use HTTPS without embedded credentials, a query or a fragment.
 Keys must be nonempty, at most 16 KiB, and contain no NUL/CR/LF. Unknown fields and
 unsupported protocol/Harness/environment combinations are rejected before creating
-a Session. Context/output limits are optional nonnegative integers, with output no
+a Session. The Session's `x_agents_core` accepts only `model_provider`; hosted node
+placement is automatic, and the removed `sandbox_node_id` is rejected with 400 like
+any other unknown member. Context/output limits are optional nonnegative integers, with output no
 larger than context; both must be positive for MiniMax Code. Use the actual model's
 limits. Native provider availability is checked during execution, not by a new probe.
 `agent.model` retains its exact meaning; this extension never changes model identity.

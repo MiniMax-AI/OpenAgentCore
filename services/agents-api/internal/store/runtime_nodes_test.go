@@ -11,6 +11,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 func managerFixture(t *testing.T, active, retained int) (*Store, *Store, RuntimeDeployment) {
@@ -38,10 +39,49 @@ func onlineManagerNode(t *testing.T, s *Store, id string) string {
 	}
 	return connection
 }
-func managerSessionInput(key, node string) CreateSessionInput {
-	input := environmentInput(key, "openai_hosted", "/workspace")
-	input.SandboxNodeID = node
-	return input
+func managerSessionInput(key string) CreateSessionInput {
+	return environmentInput(key, "openai_hosted", "/workspace")
+}
+
+// createSessionOnNode steers automatic placement in multi-node tests: only node
+// stays provider-ready while the Session is created.
+func createSessionOnNode(t *testing.T, s *Store, tenant string, input CreateSessionInput, node string) (Session, error) {
+	t.Helper()
+	var others []string
+	if err := s.pool.QueryRow(t.Context(), "WITH changed AS (UPDATE runtime_nodes SET provider_ready=false WHERE provider_ready AND id<>$1 RETURNING id) SELECT coalesce(array_agg(id::text),'{}') FROM changed", node).Scan(&others); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if _, err := s.pool.Exec(context.WithoutCancel(t.Context()), "UPDATE runtime_nodes SET provider_ready=true WHERE id::text=ANY($1)", others); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	return s.CreateSession(t.Context(), tenant, input)
+}
+
+type sessionPlacement struct {
+	NodeID    string
+	Available bool
+}
+
+// sessionRuntimePlacement reads the node a Session was placed on.
+func sessionRuntimePlacement(ctx context.Context, s *Store, tenant, session string) (sessionPlacement, error) {
+	value, err := s.GetSession(ctx, tenant, session)
+	if err != nil {
+		return sessionPlacement{}, err
+	}
+	if value.Environment == nil {
+		return sessionPlacement{}, ErrNotFound
+	}
+	id, err := parseID(value.Environment.ID)
+	if err != nil {
+		return sessionPlacement{}, err
+	}
+	p, err := s.queries.GetRuntimePlacement(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sessionPlacement{}, ErrNotFound
+	}
+	return sessionPlacement{NodeID: runtimeUUID(p.NodeID), Available: p.Available && !p.ReleasedAt.Valid}, err
 }
 func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 	s, _, d := managerFixture(t, 1, 4)
@@ -53,7 +93,7 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			result, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString(), ""))
+			result, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString()))
 			results <- result
 			failures <- err
 		}()
@@ -88,7 +128,7 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 	if err := s.DeleteSession(t.Context(), tenant, retained.ID); err != nil {
 		t.Fatal(err)
 	}
-	input := managerSessionInput("retry", d.LocalNodeID)
+	input := managerSessionInput("retry")
 	first, err := s.CreateSession(t.Context(), tenant, input)
 	if err != nil {
 		t.Fatal(err)
@@ -100,14 +140,10 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 	if err != nil || replay.ID != first.ID {
 		t.Fatal("offline retry changed Session", replay, err)
 	}
-	input.SandboxNodeID = uuid.NewString()
-	if _, err := s.CreateSession(t.Context(), tenant, input); !errors.Is(err, ErrIdempotencyConflict) {
-		t.Fatal("retry changed selector", err)
-	}
-	if _, err := s.GetSessionRuntimePlacement(t.Context(), uuid.NewString(), first.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := sessionRuntimePlacement(t.Context(), s, uuid.NewString(), first.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatal("foreign placement leaked", err)
 	}
-	placement, err := s.GetSessionRuntimePlacement(t.Context(), tenant, first.ID)
+	placement, err := sessionRuntimePlacement(t.Context(), s, tenant, first.ID)
 	if err != nil || placement.NodeID != d.LocalNodeID || placement.Available {
 		t.Fatal(placement, err)
 	}
@@ -158,13 +194,10 @@ func TestRuntimeNodesEnrollmentAndEpoch(t *testing.T) {
 	if err := s.HeartbeatRuntimeNode(t.Context(), input.NodeID, connection, epoch, RuntimeNodeHealth{ProviderReady: true}); !errors.Is(err, ErrRuntimeNodeCredential) {
 		t.Fatal("old epoch heartbeat revived node", err)
 	}
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput("stale", "")); !errors.Is(err, ErrRuntimeNodeUnavailable) {
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput("stale")); !errors.Is(err, ErrRuntimeNodeUnavailable) {
 		t.Fatal("stale node admitted", err)
 	}
 	onlineManagerNode(t, s, d.LocalNodeID)
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput("manual-offline", input.NodeID)); !errors.Is(err, ErrRuntimeNodeUnavailable) {
-		t.Fatal("manual placement fell back", err)
-	}
 	if err := s.RemoveRuntimeNode(t.Context(), input.NodeID); err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +237,7 @@ func TestRuntimeNodesLegacyAdoptionAndRetention(t *testing.T) {
 		t.Fatal("adoption lost identity", retained, err)
 	}
 	for _, session := range []Session{first, pending} {
-		placement, err := s.GetSessionRuntimePlacement(t.Context(), tenant, session.ID)
+		placement, err := sessionRuntimePlacement(t.Context(), s, tenant, session.ID)
 		if err != nil || placement.NodeID != next.LocalNodeID {
 			t.Fatal("legacy Session reassigned", placement, err)
 		}
@@ -253,7 +286,7 @@ func TestRuntimeNodesLegacyAdoptionAndRetention(t *testing.T) {
 func TestRuntimeNodesRestoreAndCreationShareCapacity(t *testing.T) {
 	s, w, d := managerFixture(t, 1, 4)
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(t.Context(), tenant, managerSessionInput("first", d.LocalNodeID))
+	session, err := s.CreateSession(t.Context(), tenant, managerSessionInput("first"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +311,7 @@ func TestRuntimeNodesRestoreAndCreationShareCapacity(t *testing.T) {
 	}()
 	go func() {
 		<-start
-		_, err := s.CreateSession(t.Context(), tenant, managerSessionInput("second", d.LocalNodeID))
+		_, err := s.CreateSession(t.Context(), tenant, managerSessionInput("second"))
 		results <- err
 	}()
 	close(start)
@@ -311,7 +344,7 @@ func managerEpoch(t *testing.T, s *Store) uint64 {
 func TestRuntimeNodesLongOfflineRetainsExactAllocation(t *testing.T) {
 	s, w, d := managerFixture(t, 1, 4)
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(t.Context(), tenant, managerSessionInput("long-offline", d.LocalNodeID))
+	session, err := s.CreateSession(t.Context(), tenant, managerSessionInput("long-offline"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,7 +397,7 @@ func TestRuntimeNodesLongOfflineRetainsExactAllocation(t *testing.T) {
 	if err != nil || same.ID != owner.ID || string(same.ComputeState) != string(retained.ComputeState) {
 		t.Fatal("snapshot changed across reconnect", same, err)
 	}
-	placement, err := s.GetSessionRuntimePlacement(t.Context(), tenant, session.ID)
+	placement, err := sessionRuntimePlacement(t.Context(), s, tenant, session.ID)
 	if err != nil || placement.NodeID != d.LocalNodeID {
 		t.Fatal(placement, err)
 	}

@@ -58,7 +58,6 @@ type Session struct {
 
 type CreateSessionInput struct {
 	ExecutionConfiguration *v1.SessionExecutionConfiguration
-	SandboxNodeID          string
 	ModelProvider          *v1.ModelProviderInput
 	// ModelOptions is a private snapshot of trusted deployment execution options.
 	ModelOptions    map[string]any
@@ -159,7 +158,6 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 	}
 	// JSON map keys are sorted by encoding/json, so key order does not affect retries.
 	canonical, err := json.Marshal(struct {
-		SandboxNodeID  string                 `json:",omitempty"`
 		ModelProvider  *v1.ModelProviderInput `json:",omitempty"`
 		ModelOptions   map[string]any         `json:",omitempty"`
 		Engine         string
@@ -168,7 +166,7 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 		InitialInputs  json.RawMessage   `json:",omitempty"`
 		InitialFiles   []InitialFile     `json:",omitempty"`
 		Initialization *EnvironmentSetup `json:",omitempty"`
-	}{input.SandboxNodeID, input.ModelProvider, input.ModelOptions, input.Engine, input.Metadata, configuration, encodedInput, input.InitialFiles, initialization})
+	}{input.ModelProvider, input.ModelOptions, input.Engine, input.Metadata, configuration, encodedInput, input.InitialFiles, initialization})
 	if err != nil {
 		return SessionCreation{}, fmt.Errorf("%w: input: %v", ErrInvalidInput, err)
 	}
@@ -183,7 +181,7 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 		Configuration: configuration, CreationRequestHash: creationHash,
 		CreatorKind: pgtype.Text{String: input.Creator.Kind, Valid: true}, CreatorID: pgtype.Text{String: input.Creator.ID, Valid: true},
 	}
-	row, environment, err := s.createSessionResources(ctx, tenantID, params, batch, encodedInput, input.InitialFiles, input.Initialization, input.ModelProvider, input.ModelOptions, input.SandboxNodeID, input.ExecutionConfiguration)
+	row, environment, err := s.createSessionResources(ctx, tenantID, params, batch, encodedInput, input.InitialFiles, input.Initialization, input.ModelProvider, input.ModelOptions, input.ExecutionConfiguration)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SessionCreation{}, ErrIdempotencyConflict
 	}

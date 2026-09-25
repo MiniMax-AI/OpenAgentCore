@@ -554,10 +554,6 @@ func TestHeadRequests(t *testing.T) {
 	for _, test := range []struct{ path, allow string }{
 		{session + "/events", "GET,POST"},
 		{"/v1/agents/environments/" + uuid.NewString() + "/files", "GET,POST"},
-		{session + "/runtime-observation", "GET"},
-		// POST and DELETE on this path route to Agent update and deletion.
-		{"/v1/agents/runtime-observations", "GET,POST,DELETE"},
-		{session + "/runtime-history", "GET"},
 		{session + "/artifacts/" + uuid.NewString() + "/content", "GET"},
 		{"/v1/files/file-missing/content", "GET"},
 		{"/v1/skills/skill-missing/content", "GET"},
@@ -570,6 +566,24 @@ func TestHeadRequests(t *testing.T) {
 		if head, _ := do(http.MethodHead, test.path, withHeaders(beta)); head.StatusCode != http.StatusUnauthorized {
 			t.Errorf("unauthenticated HEAD %s = %d", test.path, head.StatusCode)
 		}
+	}
+}
+
+// Retired Core extensions are unknown /v1 paths; the administrator reads stay
+// under /core/v1.
+func TestRetiredV1ExtensionsAreNotFound(t *testing.T) {
+	handler, _, _ := routingFixture(t)
+	session := "/v1/agents/sessions/" + uuid.NewString()
+	unknown := serve(handler, http.MethodGet, session+"/unknown", "", withHeaders(project, beta))
+	for _, path := range []string{"/v1/agents/core/startup-configuration", "/v1/agents/runtime-history/capabilities",
+		session + "/runtime-observation", session + "/runtime-history", session + "/execution-configuration", session + "/sandbox-placement", "/v1/sandbox/nodes"} {
+		if got := serve(handler, http.MethodGet, path, "", withHeaders(project, beta)); got.Code != http.StatusNotFound || got.Body.String() != unknown.Body.String() {
+			t.Errorf("GET %s = %d %s", path, got.Code, got.Body)
+		}
+	}
+	// This spelling is an Agent ID now.
+	if got := serve(handler, http.MethodGet, "/v1/agents/runtime-observations", "", withHeaders(project, beta)); got.Code != http.StatusNotFound {
+		t.Errorf("GET /v1/agents/runtime-observations = %d %s", got.Code, got.Body)
 	}
 }
 

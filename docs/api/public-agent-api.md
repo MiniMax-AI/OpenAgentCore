@@ -56,17 +56,23 @@ native execution. Do not automatically replay uncertain tool or file effects.
 
 ## Core extensions
 
-These are application-facing Core capabilities, not official OpenAI operations.
-They retain Project authentication and scope. Web administrators use the separate
-management equivalents where provided.
+The `/v1` route set is exactly the pinned SDK's operations, listed in
+[upstream-routes.json](../../contracts/agents-api/upstream-routes.json). Core adds
+fields only inside `x_agents_core`, because it runs several harnesses and accepts
+custom model access:
 
-| Extension | Reference |
-| --- | --- |
-| Harness selection and write-only model access | [Harness selection](../../contracts/agents-api/harness-selection.md), [model execution](../../contracts/agents-api/model-execution.md) |
-| Effective Session execution configuration | [Configuration query](../../contracts/agents-api/execution-configuration.md) |
-| Startup support and process configuration | [Startup configuration](../../contracts/agents-api/startup-configuration.md) |
-| Current Runtime observations and stored telemetry | [Observation API](../../contracts/agents-api/runtime-observability-api.md), [history API](../../contracts/agents-api/runtime-history-api.md) |
-| Environment-bound Runtime credential issuance/revocation | [Executor credentials](../../contracts/agents-api/environment-executor-credentials.md); `/core/v1/environments/{environment_id}/executor-credentials` is Project-authenticated despite its `/core` prefix |
+| Field | Where | Reference |
+| --- | --- | --- |
+| `x_agents_core.harness` | Saved Agent create, update and read; the inline Session `agent`; the Session's effective `agent` | [Harness selection](../../contracts/agents-api/harness-selection.md) |
+| `x_agents_core.model_provider` | Saved Agent create, update and read; Session creation. It takes `protocol`, `base_url`, optional `context_window` and `max_output_tokens`, and a write-only `api_key`; reads return `api_key_configured` instead of the key | [Model execution](../../contracts/agents-api/model-execution.md) |
+
+Any other member of `x_agents_core` is rejected with 400. Deployment, placement
+and operational reads are not part of `/v1`; they belong to the administrator API
+under `/core/v1` (see the [API index](README.md)).
+
+A `self_hosted` Runtime authenticates with an Environment-bound credential issued
+at `/core/v1/environments/{environment_id}/executor-credentials` with the Project
+key; see [executor credentials](../../contracts/agents-api/environment-executor-credentials.md).
 
 `openai_hosted` keeps the official wire name and means Core-managed compute here.
 The deployment chooses E2B or its own Docker/microsandbox nodes. A public

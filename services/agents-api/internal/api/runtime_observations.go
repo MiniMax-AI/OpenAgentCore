@@ -25,7 +25,7 @@ type RuntimeObservationService interface {
 	ObserveSessions(context.Context, []runtimeobs.SessionIdentity, runtimeobs.PageOptions) ([]runtimeobs.Observation, []error)
 }
 
-// runtimeObservationPage is the bounded fan-out shared by both list routes.
+// runtimeObservationPage bounds the administrator list fan-out.
 var runtimeObservationPage = runtimeobs.PageOptions{Concurrency: runtimeObservationConcurrency, SourceTimeout: runtimeObservationSourceBudget}
 
 func firstRuntimeObservationError(errs []error) error {
@@ -41,16 +41,7 @@ func WithRuntimeObservations(service RuntimeObservationService) Option {
 	return func(h *Handler) { h.runtimeObservations = service }
 }
 
-// @Summary Retrieve a Session Runtime observation
-// @Description Core extension returning one tenant-scoped, read-only current Runtime observation. It never provisions, renews, restarts, pauses or stops compute.
-// @Tags Runtime observations
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param session_id path string true "Session ID"
-// @Success 200 {object} v1.RuntimeObservation
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Router /agents/sessions/{session_id}/runtime-observation [get]
+// getRuntimeObservation serves the administrator per-Session observation read.
 func (h *Handler) getRuntimeObservation(w http.ResponseWriter, r *http.Request) {
 	if len(r.URL.Query()) != 0 {
 		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Runtime observation retrieval does not accept query parameters.")
@@ -71,63 +62,6 @@ func (h *Handler) getRuntimeObservation(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
-	}
-	writeJSON(w, http.StatusOK, response)
-}
-
-// @Summary List current Runtime observations
-// @Description Core extension listing one current Runtime context per tenant-owned Session in Session creation order. Each row has an independent resolved_at and optional provider observed_at; the page is not an atomic telemetry snapshot.
-// @Tags Runtime observations
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param after query string false "Last observation ID from the previous page"
-// @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
-// @Param order query string false "Session creation order" Enums(asc,desc) default(desc)
-// @Success 200 {object} v1.RuntimeObservationList
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Router /agents/runtime-observations [get]
-func (h *Handler) listRuntimeObservations(w http.ResponseWriter, r *http.Request) {
-	if h.runtimeObservations == nil {
-		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Runtime observation is not configured on this service.")
-		return
-	}
-	options, ok := readPage(w, r)
-	if !ok {
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), runtimeObservationRequestBudget)
-	defer cancel()
-	page, err := h.store.ListSessions(ctx, tenantID(r), options.after, options.limit, options.ascending, nil)
-	if err != nil {
-		writeStoreError(w, r, err)
-		return
-	}
-	sessions := make([]runtimeobs.SessionIdentity, len(page.Sessions))
-	for index, session := range page.Sessions {
-		sessions[index] = runtimeobs.SessionIdentity{TenantID: tenantID(r), SessionID: session.ID}
-	}
-	observations, errs := h.runtimeObservations.ObserveSessions(ctx, sessions, runtimeObservationPage)
-	if err := ctx.Err(); err != nil {
-		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Runtime observation collection exceeded its request budget.")
-		return
-	}
-	if err := firstRuntimeObservationError(errs); err != nil {
-		writeStoreError(w, r, err)
-		return
-	}
-	response := v1.RuntimeObservationList{Object: "list", Data: make([]v1.RuntimeObservation, 0, len(observations)), HasMore: page.NextCursor != ""}
-	for _, observation := range observations {
-		item, err := runtimeObservationResponse(observation)
-		if err != nil {
-			writeStoreError(w, r, err)
-			return
-		}
-		response.Data = append(response.Data, item)
-	}
-	if len(response.Data) > 0 {
-		response.FirstID = &response.Data[0].ID
-		response.LastID = &response.Data[len(response.Data)-1].ID
 	}
 	writeJSON(w, http.StatusOK, response)
 }

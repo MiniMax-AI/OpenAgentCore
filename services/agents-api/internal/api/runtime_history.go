@@ -27,15 +27,7 @@ func WithRuntimeHistory(service RuntimeHistoryService) Option {
 	return func(h *Handler) { h.runtimeHistory = service }
 }
 
-// @Summary Retrieve Runtime history capabilities
-// @Description Core extension advertising only safe backend-neutral Durable history availability and bounds. Available is true only when a query Reader and qualified periodic collection are both configured.
-// @Tags Runtime history
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Success 200 {object} v1.RuntimeHistoryCapabilities
-// @Failure 400,401 {object} v1.ErrorResponse
-// @Router /agents/runtime-history/capabilities [get]
+// getRuntimeHistoryCapabilities serves the administrator capability read.
 func (h *Handler) getRuntimeHistoryCapabilities(w http.ResponseWriter, r *http.Request) {
 	if len(r.URL.Query()) != 0 {
 		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Runtime history capabilities do not accept query parameters.")
@@ -44,19 +36,7 @@ func (h *Handler) getRuntimeHistoryCapabilities(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusOK, runtimeHistoryCapabilitiesResponse(h.runtimeHistory))
 }
 
-// @Summary Retrieve Session Runtime history
-// @Description Core extension returning tenant-scoped stored Runtime observations for one Session. End is exclusive; the server selects a bounded resolution. Responses contain at most 1,000 series, 10,000 points per coverage/series array, and 100,000 total coverage plus series points. It never reads or changes live compute.
-// @Tags Runtime history
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param session_id path string true "Session ID"
-// @Param start query integer true "Inclusive Unix-second start" minimum(0) maximum(9007199254740991)
-// @Param end query integer true "Exclusive Unix-second end" minimum(1) maximum(9007199254740991)
-// @Param max_points query integer false "Maximum points per series; defaults to the lower of 120 and the advertised service maximum" minimum(2) maximum(10000)
-// @Success 200 {object} v1.RuntimeHistory
-// @Failure 400,401,404,409,503 {object} v1.ErrorResponse
-// @Router /agents/sessions/{session_id}/runtime-history [get]
+// getRuntimeHistory serves the administrator per-Session history read.
 func (h *Handler) getRuntimeHistory(w http.ResponseWriter, r *http.Request) {
 	if h.runtimeHistory == nil {
 		writeError(w, http.StatusServiceUnavailable, "runtime_history_unavailable", "Durable Runtime history is not configured on this service.")

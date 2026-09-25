@@ -67,17 +67,17 @@ func (s *executionConfigurationReader) GetSessionExecutionConfiguration(_ contex
 
 func TestExecutionConfigurationReadBoundary(t *testing.T) {
 	s := &executionConfigurationReader{value: v1.SessionExecutionConfiguration{Object: "agent.session.execution_configuration", SchemaVersion: 1, SessionID: "frozen"}}
-	h, _, tenant := testHandler(t, func(h *Handler) { h.store = s })
+	h, _, tenant := adminTestHandler(t, func(h *Handler) { h.store = s })
 	for _, tc := range []struct {
 		auth   string
 		err    error
 		status int
 	}{
-		{"", nil, 401}, {"Bearer test-api-key", nil, 200}, {"Bearer test-api-key", store.ErrNotFound, 404},
+		{"", nil, 401}, {"Bearer admin", nil, 200}, {"Bearer admin", store.ErrNotFound, 404},
 	} {
 		s.err = tc.err
 		before := s.calls
-		r := httptest.NewRequest(http.MethodGet, "/v1/agents/sessions/frozen/execution-configuration?ignored=true", nil)
+		r := httptest.NewRequest(http.MethodGet, adminSessionsPath+"frozen/execution-configuration?ignored=true", nil)
 		r.Header.Set("Authorization", tc.auth)
 		r.Header.Set("OpenAI-Beta", "agents=v1")
 		w := httptest.NewRecorder()

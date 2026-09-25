@@ -49,10 +49,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 		t.Fatal("cloud enrolled a machine", err)
 	}
 	tenant := uuid.NewString()
-	if _, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString(), uuid.NewString())); !errors.Is(err, ErrInvalidInput) {
-		t.Fatal("direct accepted node selection", err)
-	}
-	session, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString(), ""))
+	session, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +195,7 @@ func TestSandboxMaintenanceSerializesFreshDirectSessions(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString(), ""))
+			_, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString()))
 			if err != nil && !errors.Is(err, ErrEnvironmentUnavailable) && !errors.Is(err, ErrRuntimeNodeUnavailable) {
 				t.Error(err)
 			}
@@ -209,7 +206,7 @@ func TestSandboxMaintenanceSerializesFreshDirectSessions(t *testing.T) {
 	}
 	wg.Wait()
 	for range 3 {
-		if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString(), "")); !errors.Is(err, ErrEnvironmentUnavailable) {
+		if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, ErrEnvironmentUnavailable) {
 			t.Fatal("fresh creation bypassed maintenance", err)
 		}
 	}
@@ -237,7 +234,7 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString(), ""))
+	session, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -346,7 +343,7 @@ func TestUnspecifiedNodeDeploymentDrainsBeforeReplacement(t *testing.T) {
 	if _, err := s.RuntimeNodeConfiguration(t.Context(), node.NodeID, node.Credential); !errors.Is(err, ErrRuntimeSpecificationMismatch) {
 		t.Fatal("node configuration served without a specification", err)
 	}
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString(), "")); !errors.Is(err, ErrEnvironmentUnavailable) {
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, ErrEnvironmentUnavailable) {
 		t.Fatal("unspecified deployment admitted a fresh sandbox", err)
 	}
 	if _, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4}); !errors.Is(err, ErrSandboxDeploymentConflict) {

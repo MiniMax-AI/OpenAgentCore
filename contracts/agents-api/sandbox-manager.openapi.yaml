@@ -4418,7 +4418,7 @@ paths:
         - Artifacts
   /core/v1/admin/projects/{project_id}/sessions/{session_id}/execution-configuration:
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Deployment administrator only; the Project ID selects the target space and does not authenticate. Returns the committed model, harness and safe provider selection with recorded sources. This read never decrypts credentials, resolves current defaults or probes execution health. Deployment provider details remain redacted. Historical provenance and missing provider projections are explicitly unknown/unavailable.
       parameters:
         - description: Session ID
           in: path
@@ -4524,7 +4524,7 @@ paths:
         - Items
   /core/v1/admin/projects/{project_id}/sessions/{session_id}/runtime-history:
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Deployment administrator only; the Project ID selects the target space and does not authenticate. Returns stored Runtime observations for one Session. End is exclusive; the server selects a bounded resolution. Responses contain at most 1,000 series, 10,000 points per coverage/series array, and 100,000 total coverage plus series points. It never reads or changes live compute.
       parameters:
         - description: Session ID
           in: path
@@ -4590,7 +4590,7 @@ paths:
         - Runtime history
   /core/v1/admin/projects/{project_id}/sessions/{session_id}/runtime-observation:
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Deployment administrator only; the Project ID selects the target space and does not authenticate. Returns one read-only current Runtime observation. It never provisions, renews, restarts, pauses or stops compute.
       parameters:
         - description: Session ID
           in: path
@@ -5392,6 +5392,7 @@ paths:
         - Write Audit
   /core/v1/admin/runtime-history/capabilities:
     get:
+      description: Deployment administrator only. Advertises only safe backend-neutral durable history availability and bounds. Available is true only when a query Reader and qualified periodic collection are both configured.
       produces:
         - application/json
       responses:
@@ -5399,6 +5400,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/v1.RuntimeHistoryCapabilities'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
@@ -5465,7 +5470,7 @@ paths:
         - Core Administration
   /core/v1/admin/startup-configuration:
     get:
-      description: Deployment administrator only. Returns the same non-secret configuration metadata as the project extension.
+      description: Deployment administrator only. Returns a secret-free snapshot of supported build capabilities and validated process startup selections. It does not inspect or aggregate daemon heartbeats, Sessions, Environments or Runtime state, and does not prove model-provider reachability, credentials, native readiness, sandbox isolation or successful execution.
       produces:
         - application/json
       responses:
@@ -5473,6 +5478,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/v1.CoreStartupConfiguration'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
         "401":
           description: Unauthorized
           schema:

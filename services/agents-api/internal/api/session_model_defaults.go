@@ -7,7 +7,6 @@ import (
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
-	"github.com/google/uuid"
 )
 
 // ModelProviderDefaults resolves deployment configuration at Session creation,
@@ -59,17 +58,11 @@ func (h *Handler) resolveSessionExecution(ctx context.Context, input sessionRequ
 	provider := inherited
 	var options map[string]any
 	if extension := input.XAgentsCore; extension != nil {
-		if extension.ModelProvider == nil && extension.SandboxNodeID == nil && !input.modelProviderNull {
+		if extension.ModelProvider == nil && !input.modelProviderNull {
 			return "", nil, nil, errors.New("x_agents_core requires an execution option")
 		}
 		if extension.ModelProvider != nil {
 			provider = extension.ModelProvider
-		}
-		if extension.SandboxNodeID != nil {
-			id, parseErr := uuid.Parse(*extension.SandboxNodeID)
-			if parseErr != nil || id == uuid.Nil || id.String() != *extension.SandboxNodeID || input.Environment.Type != "openai_hosted" {
-				return "", nil, nil, errors.New("sandbox_node_id requires a canonical UUID and hosted environment")
-			}
 		}
 	}
 	if provider == nil && input.Environment.Type == "openai_hosted" && h.modelProviderDefaults != nil {

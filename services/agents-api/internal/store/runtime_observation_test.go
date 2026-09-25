@@ -11,7 +11,7 @@ import (
 func TestRuntimeNodeObservationRetainsResourcesAndFencesStaleResults(t *testing.T) {
 	s, w, d := managerFixture(t, 1, 4)
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(t.Context(), tenant, managerSessionInput("observation", d.LocalNodeID))
+	session, err := s.CreateSession(t.Context(), tenant, managerSessionInput("observation"))
 	if err != nil {
 		t.Fatal(err)
 	}

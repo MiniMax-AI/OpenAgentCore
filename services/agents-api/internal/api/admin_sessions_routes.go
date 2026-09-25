@@ -160,7 +160,7 @@ func (h *Handler) adminSessionArtifactContent(w http.ResponseWriter, r *http.Req
 }
 
 // @Summary Retrieve frozen Session execution configuration in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Deployment administrator only; the Project ID selects the target space and does not authenticate. Returns the committed model, harness and safe provider selection with recorded sources. This read never decrypts credentials, resolves current defaults or probes execution health. Deployment provider details remain redacted. Historical provenance and missing provider projections are explicitly unknown/unavailable.
 // @Tags Core extensions
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -174,7 +174,7 @@ func (h *Handler) adminGetSessionExecutionConfiguration(w http.ResponseWriter, r
 }
 
 // @Summary Retrieve a Session Runtime observation in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Deployment administrator only; the Project ID selects the target space and does not authenticate. Returns one read-only current Runtime observation. It never provisions, renews, restarts, pauses or stops compute.
 // @Tags Runtime observations
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -188,7 +188,7 @@ func (h *Handler) adminGetRuntimeObservation(w http.ResponseWriter, r *http.Requ
 }
 
 // @Summary Retrieve Session Runtime history in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Deployment administrator only; the Project ID selects the target space and does not authenticate. Returns stored Runtime observations for one Session. End is exclusive; the server selects a bounded resolution. Responses contain at most 1,000 series, 10,000 points per coverage/series array, and 100,000 total coverage plus series points. It never reads or changes live compute.
 // @Tags Runtime history
 // @Produce json
 // @Security DeploymentAdminAuth

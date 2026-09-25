@@ -45,8 +45,8 @@ func historyCapabilities(mode runtimehistory.CollectionMode) runtimehistory.Capa
 }
 
 func TestRuntimeHistoryCapabilitiesAreSafeAndDisabledByDefault(t *testing.T) {
-	handler, _, _ := testHandler(t)
-	response := runtimeObservationRequest(handler, "/v1/agents/runtime-history/capabilities")
+	handler, _, _ := adminTestHandler(t)
+	response := runtimeObservationRequest(handler, "/core/v1/admin/runtime-history/capabilities")
 	if response.Code != http.StatusOK {
 		t.Fatalf("capabilities returned %d: %s", response.Code, response.Body)
 	}
@@ -54,7 +54,7 @@ func TestRuntimeHistoryCapabilitiesAreSafeAndDisabledByDefault(t *testing.T) {
 	if json.Unmarshal(response.Body.Bytes(), &value) != nil || value.Object != "agent.runtime_history_capabilities" || value.Available || value.Reason == nil || *value.Reason != "not_configured" || value.CollectionMode != nil || value.SampleIntervalSeconds != nil || value.RetentionSeconds != nil || value.MaximumPoints != nil || value.Metrics == nil || len(value.Metrics) != 0 {
 		t.Fatalf("unsafe disabled capabilities: %s", response.Body)
 	}
-	invalid := runtimeObservationRequest(handler, "/v1/agents/runtime-history/capabilities?backend=clickhouse")
+	invalid := runtimeObservationRequest(handler, "/core/v1/admin/runtime-history/capabilities?backend=clickhouse")
 	if invalid.Code != http.StatusBadRequest {
 		t.Fatalf("capability query was accepted: %d %s", invalid.Code, invalid.Body)
 	}
@@ -62,13 +62,13 @@ func TestRuntimeHistoryCapabilitiesAreSafeAndDisabledByDefault(t *testing.T) {
 
 func TestRuntimeHistoryRequiresQualifiedPeriodicCollection(t *testing.T) {
 	service := &runtimeHistoryFixture{capabilities: historyCapabilities(runtimehistory.CollectionOnRead)}
-	handler, _, _ := testHandler(t, WithRuntimeHistory(service))
-	capabilityResponse := runtimeObservationRequest(handler, "/v1/agents/runtime-history/capabilities")
+	handler, _, _ := adminTestHandler(t, WithRuntimeHistory(service))
+	capabilityResponse := runtimeObservationRequest(handler, "/core/v1/admin/runtime-history/capabilities")
 	var capabilities v1.RuntimeHistoryCapabilities
 	if capabilityResponse.Code != http.StatusOK || json.Unmarshal(capabilityResponse.Body.Bytes(), &capabilities) != nil || capabilities.Available || capabilities.Reason == nil || *capabilities.Reason != "periodic_collection_required" || capabilities.CollectionMode == nil || *capabilities.CollectionMode != "on_read" || capabilities.SampleIntervalSeconds != nil {
 		t.Fatalf("on-read capability was advertised as durable: %d %s", capabilityResponse.Code, capabilityResponse.Body)
 	}
-	response := runtimeObservationRequest(handler, "/v1/agents/sessions/"+uuid.NewString()+"/runtime-history?start=1&end=2")
+	response := runtimeObservationRequest(handler, adminSessionsPath+uuid.NewString()+"/runtime-history?start=1&end=2")
 	if response.Code != http.StatusServiceUnavailable || service.calls != 0 {
 		t.Fatalf("on-read history reached query service: %d calls=%d body=%s", response.Code, service.calls, response.Body)
 	}
@@ -77,13 +77,13 @@ func TestRuntimeHistoryRequiresQualifiedPeriodicCollection(t *testing.T) {
 func TestRuntimeHistoryFailsClosedForMalformedCapabilities(t *testing.T) {
 	service := &runtimeHistoryFixture{capabilities: historyCapabilities(runtimehistory.CollectionPeriodic)}
 	service.capabilities.Retention = 0
-	handler, _, _ := testHandler(t, WithRuntimeHistory(service))
-	capabilityResponse := runtimeObservationRequest(handler, "/v1/agents/runtime-history/capabilities")
+	handler, _, _ := adminTestHandler(t, WithRuntimeHistory(service))
+	capabilityResponse := runtimeObservationRequest(handler, "/core/v1/admin/runtime-history/capabilities")
 	var capabilities v1.RuntimeHistoryCapabilities
 	if capabilityResponse.Code != http.StatusOK || json.Unmarshal(capabilityResponse.Body.Bytes(), &capabilities) != nil || capabilities.Available || capabilities.Reason == nil || *capabilities.Reason != "not_configured" || capabilities.CollectionMode != nil || len(capabilities.Metrics) != 0 {
 		t.Fatalf("malformed capabilities did not fail closed: %d %s", capabilityResponse.Code, capabilityResponse.Body)
 	}
-	response := runtimeObservationRequest(handler, "/v1/agents/sessions/"+uuid.NewString()+"/runtime-history?start=1&end=2")
+	response := runtimeObservationRequest(handler, adminSessionsPath+uuid.NewString()+"/runtime-history?start=1&end=2")
 	if response.Code != http.StatusServiceUnavailable || service.calls != 0 {
 		t.Fatalf("malformed capabilities reached query service: %d calls=%d body=%s", response.Code, service.calls, response.Body)
 	}
@@ -108,7 +108,7 @@ func TestRuntimeHistoryRouteBindsAuthenticatedSessionAndPreservesCoverage(t *tes
 		CPUUtilizationRatio: &zeroRatio, CPUCapacityCores: &capacity, MemoryUsageBytes: &zeroMemory, MemoryLimitBytes: &limit,
 	}
 	service := &runtimeHistoryFixture{capabilities: historyCapabilities(runtimehistory.CollectionPeriodic)}
-	handler, _, tenant := testHandler(t, WithRuntimeHistory(service))
+	handler, _, tenant := adminTestHandler(t, WithRuntimeHistory(service))
 	scope.TenantID = tenant
 	service.response = runtimehistory.Response{
 		Capabilities: service.capabilities, Scope: scope,
@@ -117,7 +117,7 @@ func TestRuntimeHistoryRouteBindsAuthenticatedSessionAndPreservesCoverage(t *tes
 		Series:     []runtimehistory.Series{{Scope: scope, AllocationID: allocationID, StartedAt: start.Add(-time.Minute), ProviderType: "docker", Points: []runtimehistory.Point{resourcePoint}}},
 		TokenUsage: []runtimehistory.TokenUsagePoint{{Start: start, End: start.Add(time.Minute), SampledAt: start.Add(10 * time.Second), InputTokens: 120, OutputTokens: 30}},
 	}
-	response := runtimeObservationRequest(handler, "/v1/agents/sessions/"+sessionID+"/runtime-history?start="+timeString(start)+"&end="+timeString(now)+"&max_points=60")
+	response := runtimeObservationRequest(handler, adminSessionsPath+sessionID+"/runtime-history?start="+timeString(start)+"&end="+timeString(now)+"&max_points=60")
 	if response.Code != http.StatusOK {
 		t.Fatalf("history returned %d: %s", response.Code, response.Body)
 	}
@@ -136,12 +136,12 @@ func TestRuntimeHistoryRouteBindsAuthenticatedSessionAndPreservesCoverage(t *tes
 
 func TestRuntimeHistoryRejectsUnsafeQueriesAndFailures(t *testing.T) {
 	service := &runtimeHistoryFixture{capabilities: historyCapabilities(runtimehistory.CollectionPeriodic)}
-	handler, _, _ := testHandler(t, WithRuntimeHistory(service))
+	handler, _, _ := adminTestHandler(t, WithRuntimeHistory(service))
 	sessionID := uuid.NewString()
 	for _, query := range []string{
 		"", "?start=1", "?start=2&end=1", "?start=x&end=2", "?start=1&end=2&provider=docker", "?start=1&start=1&end=2", "?start=1&end=2&max_points=x", "?start=1&end=2&max_points=1", "?start=1&end=2&max_points=1001", "?start=1&end=90002", "?start=1&end=9223372036854775807",
 	} {
-		response := runtimeObservationRequest(handler, "/v1/agents/sessions/"+sessionID+"/runtime-history"+query)
+		response := runtimeObservationRequest(handler, adminSessionsPath+sessionID+"/runtime-history"+query)
 		if response.Code != http.StatusBadRequest {
 			t.Fatalf("unsafe query %q returned %d: %s", query, response.Code, response.Body)
 		}
@@ -151,7 +151,7 @@ func TestRuntimeHistoryRejectsUnsafeQueriesAndFailures(t *testing.T) {
 	}
 
 	now := time.Now().UTC().Truncate(time.Second)
-	path := "/v1/agents/sessions/" + sessionID + "/runtime-history?start=" + timeString(now.Add(-time.Hour)) + "&end=" + timeString(now)
+	path := adminSessionsPath + sessionID + "/runtime-history?start=" + timeString(now.Add(-time.Hour)) + "&end=" + timeString(now)
 	for _, tc := range []struct {
 		err  error
 		code int
@@ -181,7 +181,7 @@ func TestRuntimeHistoryRejectsMismatchedServiceResponses(t *testing.T) {
 	start := now.Add(-time.Hour)
 	sessionID := uuid.NewString()
 	service := &runtimeHistoryFixture{capabilities: historyCapabilities(runtimehistory.CollectionPeriodic)}
-	handler, _, tenant := testHandler(t, WithRuntimeHistory(service))
+	handler, _, tenant := adminTestHandler(t, WithRuntimeHistory(service))
 	base := runtimehistory.Response{
 		Capabilities: service.capabilities,
 		Scope: runtimehistory.Scope{
@@ -190,7 +190,7 @@ func TestRuntimeHistoryRejectsMismatchedServiceResponses(t *testing.T) {
 		Requested:  runtimehistory.Range{Start: start, End: now, MaxPoints: 60},
 		Resolution: time.Minute, GeneratedAt: now,
 	}
-	path := "/v1/agents/sessions/" + sessionID + "/runtime-history?start=" + timeString(start) + "&end=" + timeString(now) + "&max_points=60"
+	path := adminSessionsPath + sessionID + "/runtime-history?start=" + timeString(start) + "&end=" + timeString(now) + "&max_points=60"
 
 	for name, mutate := range map[string]func(*runtimehistory.Response){
 		"tenant":  func(value *runtimehistory.Response) { value.TenantID = uuid.NewString() },
@@ -214,9 +214,9 @@ func TestRuntimeHistoryDefaultPointBudgetRespectsCapabilities(t *testing.T) {
 	capabilities := historyCapabilities(runtimehistory.CollectionPeriodic)
 	capabilities.MaximumPoints = 60
 	service := &runtimeHistoryFixture{capabilities: capabilities, err: runtimehistory.ErrUnavailable}
-	handler, _, _ := testHandler(t, WithRuntimeHistory(service))
+	handler, _, _ := adminTestHandler(t, WithRuntimeHistory(service))
 	now := time.Now().UTC().Truncate(time.Second)
-	response := runtimeObservationRequest(handler, "/v1/agents/sessions/"+uuid.NewString()+"/runtime-history?start="+timeString(now.Add(-time.Hour))+"&end="+timeString(now))
+	response := runtimeObservationRequest(handler, adminSessionsPath+uuid.NewString()+"/runtime-history?start="+timeString(now.Add(-time.Hour))+"&end="+timeString(now))
 	if response.Code != http.StatusServiceUnavailable || service.calls != 1 || service.requested.MaxPoints != 60 {
 		t.Fatalf("default point budget ignored capabilities: status=%d calls=%d requested=%+v", response.Code, service.calls, service.requested)
 	}

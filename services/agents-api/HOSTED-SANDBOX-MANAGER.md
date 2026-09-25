@@ -220,18 +220,10 @@ identity. The enrollment token is not the node credential.
 
 ## Placement and recovery
 
-Session creation chooses an available node automatically. The advanced node
-selector requests a particular node; unavailable or full selection fails rather
-than silently falling back. API callers can use the explicit Core extension:
-
-```json
-"x_agents_core": {"sandbox_node_id": "NODE_UUID"}
-```
-
-Placement commits with Session creation and remains fixed across creation
-retries, later Turns and resume. Session details show that placement. The narrow
-project-authenticated node directory and Session placement endpoint do not grant
-administration privileges or expose other tenants' resources.
+Session creation chooses an available node automatically; callers cannot select
+one. Placement commits with Session creation and remains fixed across creation
+retries, later Turns and resume. Administrators see each node's allocations under
+`/core/v1/sandbox/nodes`.
 
 Microsandbox suspends only after a Turn has finished, no work is pending, and the
 idle interval has passed. Core measures terminal activity from its database's

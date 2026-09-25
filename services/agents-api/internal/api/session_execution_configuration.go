@@ -53,16 +53,7 @@ func sessionExecutionProjection(input sessionRequest, saved *v1.SavedAgent, inhe
 	}
 }
 
-// @Summary Retrieve frozen Session execution configuration
-// @Description Returns the committed model, harness and safe provider selection with recorded sources. This read never decrypts credentials, resolves current defaults or probes execution health. Deployment provider details remain redacted for project callers. Historical provenance and missing provider projections are explicitly unknown/unavailable.
-// @Tags Core extensions
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param session_id path string true "Session ID"
-// @Success 200 {object} v1.SessionExecutionConfiguration
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Router /agents/sessions/{session_id}/execution-configuration [get]
+// getSessionExecutionConfiguration serves the administrator per-Session read.
 func (h *Handler) getSessionExecutionConfiguration(w http.ResponseWriter, r *http.Request) {
 	source, ok := h.store.(sessionExecutionConfigurationStore)
 	if !ok {

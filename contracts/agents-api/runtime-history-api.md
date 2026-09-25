@@ -5,15 +5,17 @@ History ranges implemented. Core uses its existing database; the execution owner
 samples every 30 seconds by default. API-only processes without an execution worker
 advertise on-read collection rather than claiming periodic coverage.
 
-This is an Agents Core extension. It is read-only and backend-neutral. The browser
+These are read-only, backend-neutral administrator reads under `/core/v1/admin`,
+authenticated by the deployment administrator credential. The former project routes
+`GET /v1/agents/runtime-history/capabilities` and
+`GET /v1/agents/sessions/{session_id}/runtime-history` are removed. The browser
 never receives a storage endpoint, OTLP credential, provider-native identity or
 tenant selector.
 
 ## Capability discovery
 
 ```http
-GET /v1/agents/runtime-history/capabilities
-OpenAI-Beta: agents=v1
+GET /core/v1/admin/runtime-history/capabilities
 Authorization: Bearer ...
 ```
 
@@ -44,8 +46,7 @@ URLs, credentials, table names, and tenant data are never capability fields.
 ## Session history
 
 ```http
-GET /v1/agents/sessions/{session_id}/runtime-history?start=1789951200&end=1789954800&max_points=120
-OpenAI-Beta: agents=v1
+GET /core/v1/admin/projects/{project_id}/sessions/{session_id}/runtime-history?start=1789951200&end=1789954800&max_points=120
 Authorization: Bearer ...
 ```
 
@@ -55,9 +56,9 @@ selects an effective whole-second resolution. Unknown parameters, duplicate
 parameters, negative timestamps, invalid ranges, and invalid point limits are
 rejected before a Reader query.
 
-The caller supplies only a Session ID. Core obtains the tenant from authentication,
-resolves the Session and Environment from its store, and only then calls the
-Reader. Missing and foreign Sessions remain indistinguishable. Allocation IDs,
+The caller supplies a Project ID and a Session ID. Core resolves the Project's
+tenant, then the Session and Environment from its store, and only then calls the
+Reader. Missing Sessions and other Projects' Sessions remain indistinguishable. Allocation IDs,
 provider IDs, and backend labels are result identity, never authority-bearing
 query inputs.
 
@@ -136,8 +137,8 @@ separate sources and are never silently merged.
 | HTTP | Code | Meaning |
 | --- | --- | --- |
 | 400 | `unsupported_parameter` or `invalid_request` | Invalid query shape or range. |
-| 401 | null (type `invalid_request_error`) | Missing or invalid authentication. |
-| 404 | `not_found` | Missing or foreign Session. |
+| 401 | `invalid_admin_key` | Missing or invalid administrator credential. |
+| 404 | `not_found` | Missing Project, or a Session outside it. |
 | 409 | `runtime_history_unsupported` | The Session has no supported managed Runtime history scope. |
 | 503 | `runtime_history_unavailable` | Durable history is unconfigured, timed out, unavailable, or returned malformed data. |
 
@@ -151,9 +152,9 @@ inside the half-open request range, and contain valid safe JSON values.
 `packages/agents-client` exposes:
 
 ```ts
-interface AgentCore {
+class AdminClient {
   getRuntimeHistoryCapabilities(options?: ReadOptions): Promise<RuntimeHistoryCapabilities>;
-  retrieveRuntimeHistory(sessionId: string, query: {
+  retrieveRuntimeHistory(projectId: string, sessionId: string, query: {
     start: number;
     end: number;
     maxPoints?: number;
@@ -165,7 +166,7 @@ interface AgentCore {
 The client validates exact fields, capability consistency, requested-range echo,
 Session identity, half-open bucket ordering, coverage totals, allocation identity,
 contributor counts, token usage ordering, nullability, finite numbers, and response size. Unknown fields
-or malformed data reject the entire response with a 502 client projection error.
+or malformed data reject the entire response with a 502 `invalid_admin_response` error.
 
 ## Explicit boundaries
 

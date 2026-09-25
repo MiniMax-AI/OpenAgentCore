@@ -23,7 +23,7 @@ func validateInitialInputs(inputs []Input) ([]Input, json.RawMessage, error) {
 
 // The Session upsert locks retries. Only the new row reserves or admits work, so a
 // retry after completion or later Turns cannot submit the original input again.
-func (s *Store) createSessionResources(ctx context.Context, tenant string, params sqlc.CreateSessionParams, inputs []Input, encodedInput json.RawMessage, files []InitialFile, setup EnvironmentSetup, provider *v1.ModelProviderInput, modelOptions map[string]any, sandboxNodeID string, executionConfiguration *v1.SessionExecutionConfiguration) (sqlc.Session, *Environment, error) {
+func (s *Store) createSessionResources(ctx context.Context, tenant string, params sqlc.CreateSessionParams, inputs []Input, encodedInput json.RawMessage, files []InitialFile, setup EnvironmentSetup, provider *v1.ModelProviderInput, modelOptions map[string]any, executionConfiguration *v1.SessionExecutionConfiguration) (sqlc.Session, *Environment, error) {
 	var row sqlc.Session
 	var environment *Environment
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
@@ -41,14 +41,6 @@ func (s *Store) createSessionResources(ctx context.Context, tenant string, param
 			}
 			if err := json.Unmarshal(row.Configuration, &placement); err != nil {
 				return err
-			}
-			if sandboxNodeID != "" && placement.Environment.Type != "openai_hosted" {
-				return ErrInvalidInput
-			}
-			if sandboxNodeID != "" {
-				if _, err := parseConnectionGeneration(sandboxNodeID); err != nil {
-					return err
-				}
 			}
 			if placement.Environment.Type == "openai_hosted" {
 				if err := checkRuntimeDeploymentAdmission(ctx, q, ""); err != nil {
@@ -104,7 +96,7 @@ func (s *Store) createSessionResources(ctx context.Context, tenant string, param
 				return err
 			}
 			if placement.Environment.Type == "openai_hosted" {
-				if err := reserveRuntimePlacement(ctx, q, row.ID, sandboxNodeID); err != nil {
+				if err := reserveRuntimePlacement(ctx, q, row.ID); err != nil {
 					return err
 				}
 			}

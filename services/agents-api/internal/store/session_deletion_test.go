@@ -371,7 +371,7 @@ func TestSessionDeletionKeepsProvisioningInputPlacementUntilSettled(t *testing.T
 	s, w, d := managerFixture(t, 2, 4)
 	ctx := t.Context()
 	tenant := uuid.NewString()
-	input := managerSessionInput("reserved-input", d.LocalNodeID)
+	input := managerSessionInput("reserved-input")
 	input.InitialInputs = []Input{messageInput("reserved")}
 	session, err := s.CreateSession(ctx, tenant, input)
 	if err != nil {

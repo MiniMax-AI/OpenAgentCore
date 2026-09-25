@@ -1,8 +1,10 @@
-# Core startup configuration extension
+# Core startup configuration
 
-`GET /v1/agents/core/startup-configuration` returns a read-only, project-authenticated
-snapshot of safe configuration facts established when the Core process starts. It
-is a Core extension outside the pinned upstream Agents API.
+`GET /core/v1/admin/startup-configuration` returns a read-only snapshot of safe
+configuration facts established when the Core process starts. It is an
+administrator read outside the pinned upstream Agents API. The former project route
+`GET /v1/agents/core/startup-configuration` is removed; `/v1` serves only the
+pinned upstream routes.
 
 The response separates:
 
@@ -27,5 +29,5 @@ not reflected in this process-level endpoint.
 
 The response has a fixed `schema_version`. Clients should reject unknown or
 incomplete shapes rather than infer configuration. The endpoint rejects query
-parameters, returns `Cache-Control: no-store`, and requires the standard project
-bearer key plus `OpenAI-Beta: agents=v1`.
+parameters, returns `Cache-Control: no-store`, and requires the deployment
+administrator credential.

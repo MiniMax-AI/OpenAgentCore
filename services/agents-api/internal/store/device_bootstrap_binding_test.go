@@ -26,7 +26,7 @@ func TestDeviceCredentialCarriesPersistedAllocationNode(t *testing.T) {
 	for _, nodeID := range []string{deployment.LocalNodeID, remote} {
 		t.Run(nodeID, func(t *testing.T) {
 			tenant, bearer := uuid.NewString(), uuid.NewString()
-			session, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString(), nodeID))
+			session, err := createSessionOnNode(t, s, tenant, managerSessionInput(uuid.NewString()), nodeID)
 			if err != nil {
 				t.Fatal(err)
 			}

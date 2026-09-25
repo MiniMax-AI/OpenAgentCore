@@ -155,7 +155,7 @@ func TestSandboxSpecificationChangesWaitForEveryRetainedResource(t *testing.T) {
 			s, w, view, input := webSpecificationFixture(t, "microsandbox")
 			node := specificationNode(t, s, view)
 			tenant := uuid.NewString()
-			session, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString(), node.NodeID))
+			session, err := createSessionOnNode(t, s, tenant, managerSessionInput(uuid.NewString()), node.NodeID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -283,7 +283,7 @@ func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 	tenant := uuid.NewString()
 	var sessions []Session
 	for range 12 {
-		session, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString(), ""))
+		session, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString()))
 		if err != nil {
 			t.Fatal(err)
 		}

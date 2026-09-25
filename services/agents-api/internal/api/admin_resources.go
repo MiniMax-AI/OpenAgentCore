@@ -106,23 +106,24 @@ func (h *Handler) registerAdminResourceRoutes(router chi.Router) {
 }
 
 // @Summary Retrieve deployment startup metadata
-// @Description Deployment administrator only. Returns the same non-secret configuration metadata as the project extension.
+// @Description Deployment administrator only. Returns a secret-free snapshot of supported build capabilities and validated process startup selections. It does not inspect or aggregate daemon heartbeats, Sessions, Environments or Runtime state, and does not prove model-provider reachability, credentials, native readiness, sandbox isolation or successful execution.
 // @Tags Core Administration
 // @Produce json
 // @Security DeploymentAdminAuth
 // @Success 200 {object} v1.CoreStartupConfiguration
-// @Failure 401,503 {object} v1.ErrorResponse
+// @Failure 400,401,503 {object} v1.ErrorResponse
 // @Router /core/v1/admin/startup-configuration [get]
 func (h *Handler) adminStartupConfiguration(w http.ResponseWriter, r *http.Request) {
 	h.getStartupConfiguration(w, r)
 }
 
 // @Summary Retrieve durable Runtime history capabilities
+// @Description Deployment administrator only. Advertises only safe backend-neutral durable history availability and bounds. Available is true only when a query Reader and qualified periodic collection are both configured.
 // @Tags Core Administration
 // @Produce json
 // @Security DeploymentAdminAuth
 // @Success 200 {object} v1.RuntimeHistoryCapabilities
-// @Failure 401 {object} v1.ErrorResponse
+// @Failure 400,401 {object} v1.ErrorResponse
 // @Router /core/v1/admin/runtime-history/capabilities [get]
 func (h *Handler) adminRuntimeHistoryCapabilities(w http.ResponseWriter, r *http.Request) {
 	h.getRuntimeHistoryCapabilities(w, r)

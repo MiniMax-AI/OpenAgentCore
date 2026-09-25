@@ -111,24 +111,6 @@ export interface SandboxAllocation {
   initialization: string;
   created_at: string;
 }
-export interface SandboxDirectoryNode { id: string; name: string; available: boolean }
-export interface SandboxPlacement {
-  node_id: string;
-  node_name: string;
-  available: boolean;
-  state: string;
-  compute_phase: string;
-  diagnostic: SandboxDiagnostic;
-}
-/** Project-scoped extensions, using the ordinary /v1 project credential. */
-export class SandboxProjectClient extends OpenAIAgentsClient {
-  listSandboxNodes(options?: ReadOptions): Promise<{ data: SandboxDirectoryNode[] }> {
-    return this.request("/sandbox/nodes", { signal: options?.signal });
-  }
-  retrieveSandboxPlacement(sessionId: string, options?: ReadOptions): Promise<SandboxPlacement> {
-    return this.request(`/agents/sessions/${encodeURIComponent(sessionId)}/sandbox-placement`, { signal: options?.signal });
-  }
-}
 /** Deployment administration uses /core/v1/sandbox, through an authenticated console or an explicit server credential. */
 export class SandboxAdminClient extends OpenAIAgentsClient {
   retrieveDeployment(options?: ReadOptions): Promise<SandboxDeployment> {

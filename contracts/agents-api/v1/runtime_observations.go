@@ -37,11 +37,3 @@ type RuntimeMemoryObservation struct {
 	UsageBytes *uint64 `json:"usage_bytes" extensions:"x-nullable" binding:"required" minimum:"0"`
 	LimitBytes *uint64 `json:"limit_bytes" extensions:"x-nullable" binding:"required" minimum:"1"`
 }
-
-type RuntimeObservationList struct {
-	Object  string               `json:"object" enums:"list" binding:"required"`
-	Data    []RuntimeObservation `json:"data" binding:"required"`
-	HasMore bool                 `json:"has_more" binding:"required"`
-	FirstID *string              `json:"first_id" extensions:"x-nullable" binding:"required" format:"uuid"`
-	LastID  *string              `json:"last_id" extensions:"x-nullable" binding:"required" format:"uuid"`
-}

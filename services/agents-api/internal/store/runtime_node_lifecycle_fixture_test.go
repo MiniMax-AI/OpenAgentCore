@@ -166,11 +166,19 @@ func (f *nodeIsolationFixture) online(id string) {
 func (f *nodeIsolationFixture) session(node string, initialize bool) (string, store.Session, store.Environment) {
 	f.t.Helper()
 	tenant := uuid.NewString()
-	input := store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), SandboxNodeID: node, Configuration: json.RawMessage("{\"agent\":{\"model\":\"test\"},\"environment\":{\"type\":\"openai_hosted\"}}")}
+	input := store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage("{\"agent\":{\"model\":\"test\"},\"environment\":{\"type\":\"openai_hosted\"}}")}
 	if initialize {
 		input.InitialFiles = []store.InitialFile{{Type: "inline", Path: "/workspace/seed", Data: []byte("retained")}}
 	}
+	// Placement is automatic: only node stays provider-ready while it is created.
+	var others []string
+	if err := f.pool.QueryRow(f.t.Context(), "WITH changed AS (UPDATE runtime_nodes SET provider_ready=false WHERE provider_ready AND id<>$1 RETURNING id) SELECT coalesce(array_agg(id::text),'{}') FROM changed", node).Scan(&others); err != nil {
+		f.t.Fatal(err)
+	}
 	session, err := f.store.CreateSession(f.t.Context(), tenant, input)
+	if _, restoreErr := f.pool.Exec(f.t.Context(), "UPDATE runtime_nodes SET provider_ready=true WHERE id::text=ANY($1)", others); restoreErr != nil {
+		f.t.Fatal(restoreErr)
+	}
 	if err != nil {
 		f.t.Fatal(err)
 	}

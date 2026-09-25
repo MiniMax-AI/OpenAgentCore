@@ -19,7 +19,7 @@ func managedIdleClockFixture(t *testing.T) (*Store, *Store, RuntimeAllocation) {
 	t.Helper()
 	s, w, d := managerFixture(t, 1, 4)
 	tenant := uuid.NewString()
-	input := managerSessionInput("idle-clock", d.LocalNodeID)
+	input := managerSessionInput("idle-clock")
 	input.Configuration = json.RawMessage(`{"agent":{"id":"agent_root","model":"test","multi_agent":{"enabled":true}},"environment":{"type":"openai_hosted"}}`)
 	session, err := s.CreateSession(t.Context(), tenant, input)
 	if err != nil {

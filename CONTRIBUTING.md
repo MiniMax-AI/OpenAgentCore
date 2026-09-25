@@ -905,10 +905,8 @@ capacity transactions and revision/one-shot receipts remain authoritative, with
 no external operation holding a database lock.
 
 Commit environment-to-node placement with Session creation and its creation retry
-identity. Automatic selection chooses an eligible node; explicit
-`x_agents_core.sandbox_node_id` fails if unavailable or full. The optional
-model-provider extension remains independent. Existing retries keep their original
-node even when it is offline. Node capacity counts pending reservations and
+identity. Placement is automatic: Core chooses an eligible node, and callers cannot
+select one. Existing retries keep their original node even when it is offline. Node capacity counts pending reservations and
 unresolved resources; new placement and suspended-to-restoring admission share a
 database lock. Confirmed cleanup releases placement capacity. Retained ownership requires exact
 provider evidence; a socket path, missing instance or empty listing cannot prove
@@ -2232,16 +2230,16 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   retain one source. Project reads redact all deployment provider details. Old
   Sessions expose persisted model/harness with unknown sources and unavailable
   provider metadata, without backfill. Projection metadata does not alter retry
-  identity; retries cannot replace it. Keep this query separate from runtime
-  observations and do not touch activity or wake sandboxes. The versioned contract
-  is `contracts/agents-api/execution-configuration.md`.
+  identity; retries cannot replace it. Keep this administrator query separate from
+  runtime observations and do not touch activity or wake sandboxes. The versioned
+  contract is `contracts/agents-api/execution-configuration.md`.
 - Provider input validation uses the adapter-owned rules in `internal/harnessconfig`.
   Keep one internal registry for protocol and token-limit validation; Core owns
   credential environment and endpoint admission policy. These rules are not a
   public discovery API or Runtime registration descriptor. Operation qualification
   and live readiness retain their existing owners. The Core startup view keeps its
   basic supported/configured deployment snapshot and accepts no query parameters.
-  Session frozen execution-configuration reads remain a separate Core extension.
+  Session frozen execution-configuration reads remain a separate administrator read.
 - Public Agent updates use `POST /v1/agents/{agent_id}` with the same tenant/Beta
   boundary and shared saved-field validation. Preserve omission separately from
   null; only supplied fields replace saved values. Metadata is a separate whole-map
@@ -3444,8 +3442,7 @@ retain the official Agent response shape. See the [extension contract](contracts
 for null/retry behavior and operator configuration.
 
 Hosted provider selection belongs to deployment configuration and is independent
-of the engine. Session creation fixes a node through a Core extension or automatic
-placement; retained allocations keep that node and provider identity. Runtime images must satisfy their existing qualification rules.
+of the engine. Session creation fixes a node through automatic placement; retained allocations keep that node and provider identity. Runtime images must satisfy their existing qualification rules.
 Transient model options are partitioned by engine and must not expose another
 engine's credentials. Do not infer an engine from a model name or template.
 

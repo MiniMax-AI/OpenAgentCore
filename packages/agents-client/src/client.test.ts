@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { AdminClient } from "./admin-client";
 import { AgentCoreError, CreationStreamRetryError, createIdempotencyKey, isSessionDeletionConflict, OpenAIAgentsClient } from "./client";
 import hostedDadf64 from "./fixtures/parsar-dadf64a7/openai-hosted.json";
 import eventBatchDadf64 from "./fixtures/parsar-dadf64a7/session-event-batch.json";
@@ -103,6 +104,7 @@ function messageItem(overrides: Record<string, unknown> = {}): Record<string, un
   };
 }
 
+const runtimeProjectId = "33333333-3333-4333-8333-333333333333";
 const runtimeSessionId = "11111111-1111-4111-8111-111111111111";
 const runtimeEnvironmentId = "22222222-2222-4222-8222-222222222222";
 const runtimeAllocationId = "33333333-3333-4333-8333-333333333333";
@@ -2799,40 +2801,18 @@ describe("OpenAIAgentsClient", () => {
 
   it("retrieves a Runtime observation, preserves observed zeroes, and encodes the Session ID", async () => {
     const calls: FetchCall[] = [];
-    const client = new OpenAIAgentsClient({
-      baseUrl: "https://core.example/v1",
+    const client = new AdminClient({
+      baseUrl: "https://core.example/core/v1/admin",
       fetch: recordingFetch(jsonResponse(runtimeObservation()), calls),
     });
 
-    await expect(client.retrieveRuntimeObservation(runtimeSessionId)).resolves.toMatchObject({
+    await expect(client.retrieveRuntimeObservation(runtimeProjectId, runtimeSessionId)).resolves.toMatchObject({
       id: runtimeSessionId,
       cpu: { usage_seconds_total: 0 },
       memory: { usage_bytes: 0 },
     });
     expect(String(calls[0]?.input)).toBe(
-      `https://core.example/v1/agents/sessions/${runtimeSessionId}/runtime-observation`,
-    );
-  });
-
-  it("lists Runtime observations with stable pagination metadata and query serialization", async () => {
-    const calls: FetchCall[] = [];
-    const body = {
-      object: "list",
-      data: [runtimeObservation()],
-      has_more: true,
-      first_id: runtimeSessionId,
-      last_id: runtimeSessionId,
-    };
-    const client = new OpenAIAgentsClient({
-      baseUrl: "https://core.example/v1/",
-      fetch: recordingFetch(jsonResponse(body), calls),
-    });
-
-    await expect(client.listRuntimeObservations({
-      after: runtimeSessionId, limit: 1, order: "asc",
-    })).resolves.toMatchObject(body);
-    expect(String(calls[0]?.input)).toBe(
-      `https://core.example/v1/agents/runtime-observations?after=${runtimeSessionId}&limit=1&order=asc`,
+      `https://core.example/core/v1/admin/projects/${runtimeProjectId}/sessions/${runtimeSessionId}/runtime-observation`,
     );
   });
 
@@ -2851,8 +2831,8 @@ describe("OpenAIAgentsClient", () => {
       cpu: null,
       memory: null,
     });
-    const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(value), []) });
-    await expect(client.retrieveRuntimeObservation(runtimeSessionId)).resolves.toMatchObject(value);
+    const client = new AdminClient({ fetch: recordingFetch(jsonResponse(value), []) });
+    await expect(client.retrieveRuntimeObservation(runtimeProjectId, runtimeSessionId)).resolves.toMatchObject(value);
   });
 
   it.each([
@@ -2877,42 +2857,10 @@ describe("OpenAIAgentsClient", () => {
       usage_bytes: 1, limit_bytes: 0,
     } })],
   ])("rejects a Runtime observation with %s", async (_label, build) => {
-    const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(build()), []) });
-    await expect(client.retrieveRuntimeObservation(runtimeSessionId)).rejects.toMatchObject({
+    const client = new AdminClient({ fetch: recordingFetch(jsonResponse(build()), []) });
+    await expect(client.retrieveRuntimeObservation(runtimeProjectId, runtimeSessionId)).rejects.toMatchObject({
       status: 502,
       code: "invalid_runtime_observation",
     });
-  });
-
-  it.each([
-    ["mismatched first_id", {
-      object: "list", data: [runtimeObservation()], has_more: false,
-      first_id: runtimeEnvironmentId, last_id: runtimeSessionId,
-    }],
-    ["duplicate IDs", {
-      object: "list", data: [runtimeObservation(), runtimeObservation()], has_more: false,
-      first_id: runtimeSessionId, last_id: runtimeSessionId,
-    }],
-    ["empty continuation", {
-      object: "list", data: [], has_more: true, first_id: null, last_id: null,
-    }],
-  ])("rejects a Runtime observation list with %s", async (_label, body) => {
-    const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(body), []) });
-    await expect(client.listRuntimeObservations()).rejects.toMatchObject({
-      status: 502,
-      code: "invalid_runtime_observation",
-    });
-  });
-
-  it.each([
-    { after: "not-a-uuid" },
-    { limit: 0 },
-    { limit: 101 },
-    { order: "sideways" },
-  ])("rejects invalid Runtime observation pagination before fetch", async (options) => {
-    const calls: FetchCall[] = [];
-    const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse({}), calls) });
-    await expect(client.listRuntimeObservations(options as never)).rejects.toThrow(TypeError);
-    expect(calls).toHaveLength(0);
   });
 });

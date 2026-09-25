@@ -36,6 +36,30 @@ func (s *adminProjectFixture) ResolveProjectAPIKey(_ context.Context, _ string) 
 	return store.ProjectAPIKeyBinding{}, store.ErrNotFound
 }
 
+// adminTestHandler serves the administrator routes, authenticated by "Bearer
+// admin", for managementProjectID over the same recording store as testHandler.
+// It returns that Project's tenant.
+func adminTestHandler(t *testing.T, options ...Option) (http.Handler, *recordingStore, string) {
+	t.Helper()
+	key := callerBinding()
+	auth, err := NewAuthenticator([]APIKey{key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin, err := NewDeploymentAuthenticator([]string{device.HashCredential("admin")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &recordingStore{}
+	h, err := NewHandler(s, auth, "codex", append([]Option{WithProjectAPIKeys(managementProjectStore(key), admin)}, options...)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return h, s, key.TenantID
+}
+
+const adminSessionsPath = "/core/v1/admin/projects/" + managementProjectID + "/sessions/"
+
 type adminReadFixture struct {
 	ResourceStore
 	seenTenant                   string

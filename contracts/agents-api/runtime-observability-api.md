@@ -7,17 +7,17 @@ identity joins. Durable history uses the separate optional
 [Runtime history API](runtime-history-api.md); lifecycle controls remain outside
 this phase.
 
-This is an Agents Core extension, not an upstream OpenAI Agents resource. The
-implementation must record that status in the coverage ledger and generated
-OpenAPI contract.
+These are administrator reads under `/core/v1/admin`, authenticated by the
+deployment administrator credential, not upstream OpenAI Agents resources. The
+former project routes `GET /v1/agents/runtime-observations` and
+`GET /v1/agents/sessions/{session_id}/runtime-observation` are removed.
 
 ## Routes
 
 ### List current Runtime observations
 
 ```http
-GET /v1/agents/runtime-observations?after={target_id}&limit=20&order=desc
-OpenAI-Beta: agents=v1
+GET /core/v1/admin/runtime-observations?after={session_id}&limit=20&order=desc
 Authorization: Bearer ...
 ```
 
@@ -27,9 +27,9 @@ Authorization: Bearer ...
 | `limit` | Integer 1–100, default 20. |
 | `order` | `asc` or `desc`, default `desc`. |
 
-The list contains one current Runtime context for every Session visible to the
-authenticated tenant, including explicit `none`, unsupported `self_hosted`, and
-released managed contexts. Ordering uses the same Session creation-time and ID
+The list contains one current Runtime context for every Session of every managed
+Project, labelled with its owning `project_id`, including explicit `none`,
+unsupported `self_hosted`, and released managed contexts. Ordering uses the same Session creation-time and ID
 keyset as the Session list. An observation ID is the Session UUID, so pagination
 does not change when the underlying Runtime incarnation changes. Pages are not an
 atomic telemetry snapshot; every row has its own `resolved_at`, and a successful
@@ -41,33 +41,37 @@ before publishing a new Dashboard snapshot.
   "object": "list",
   "data": [
     {
-      "id": "6c77d3a2-71d6-4ed5-884f-687aecda02a3",
-      "object": "agent.runtime_observation",
-      "session_id": "6c77d3a2-71d6-4ed5-884f-687aecda02a3",
-      "environment_id": "6c02fb71-5fa8-4298-93e8-57c6625a3fc2",
-      "mode": "openai_hosted",
-      "provider_type": "docker",
-      "instance": {
-        "kind": "managed_allocation",
-        "allocation_id": "d23ab94e-e40b-45bd-93a2-444f1f74642b",
-        "device_id": "2e434f4f-76aa-4e54-a707-4757036d90ef",
-        "connection_generation": null
-      },
-      "status": "observed",
-      "reason": null,
-      "allocation_created_at": 1789951200,
-      "resolved_at": 1789953021,
-      "observed_at": 1789953020,
-      "started_at": 1789951220,
-      "cpu": {
-        "usage_seconds_total": 482.75,
-        "capacity_cores": 2.0,
-        "usage_cores": null,
-        "utilization_ratio": null
-      },
-      "memory": {
-        "usage_bytes": 805306368,
-        "limit_bytes": 2147483648
+      "project_id": "3f0c2a9e-2b7d-4d0f-9a51-1c8e4b6d7a20",
+      "observation": {
+        "id": "6c77d3a2-71d6-4ed5-884f-687aecda02a3",
+        "object": "agent.runtime_observation",
+        "session_id": "6c77d3a2-71d6-4ed5-884f-687aecda02a3",
+        "environment_id": "6c02fb71-5fa8-4298-93e8-57c6625a3fc2",
+        "mode": "openai_hosted",
+        "provider_type": "docker",
+        "instance": {
+          "kind": "managed_allocation",
+          "allocation_id": "d23ab94e-e40b-45bd-93a2-444f1f74642b",
+          "device_id": "2e434f4f-76aa-4e54-a707-4757036d90ef",
+          "connection_generation": null
+        },
+        "status": "observed",
+        "reason": null,
+        "allocation_created_at": 1789951200,
+        "resolved_at": 1789953021,
+        "observed_at": 1789953020,
+        "started_at": 1789951220,
+        "cpu": {
+          "usage_seconds_total": 482.75,
+          "capacity_cores": 2.0,
+          "usage_cores": null,
+          "utilization_ratio": null
+        },
+        "memory": {
+          "usage_bytes": 805306368,
+          "limit_bytes": 2147483648
+        },
+        "disk": null
       }
     }
   ],
@@ -80,17 +84,17 @@ before publishing a new Dashboard snapshot.
 ### Retrieve one Session's current Runtime observation
 
 ```http
-GET /v1/agents/sessions/{session_id}/runtime-observation
-OpenAI-Beta: agents=v1
+GET /core/v1/admin/projects/{project_id}/sessions/{session_id}/runtime-observation
 Authorization: Bearer ...
 ```
 
-This returns the same object shape as a list item. It never starts a Turn, creates
+This returns the same object shape as a list item's `observation`, without the
+administrator list's `disk` (see the [administrator contract](admin-api.md)). It never starts a Turn, creates
 an Environment, provisions compute, renews a lease, or changes lifecycle state.
 
 A valid `environment:none` Session returns `200` with status `unsupported`; the
-Session exists but has no attributable Runtime instance. A missing or foreign
-Session returns the existing indistinguishable not-found error.
+Session exists but has no attributable Runtime instance. A missing Session, or one
+outside the Project, returns the existing indistinguishable not-found error.
 
 ## Resource schema
 
@@ -185,7 +189,7 @@ Use the existing Agents API error envelope.
 | --- | --- | --- |
 | 400 | `invalid_request_error` / `invalid_request_error` | List: a repeated supported query key, or an empty or invalid limit or order, with the shared Beta list messages. Unknown list query keys are ignored. |
 | 400 | `invalid_request_error` / `unsupported_parameter` | Single-Session retrieval with any query parameter. |
-| 401 | `invalid_request_error` / null code | Missing or invalid API authentication. |
+| 401 | `invalid_request_error` / `invalid_admin_key` | Missing or invalid administrator credential. |
 | 404 | `not_found_error` / `not_found_error` | Missing, malformed or foreign Session/cursor, indistinguishably, as for the [Session list cursor](list-query-semantics.md#list-cursor-errors--september-23-2026). |
 | 500 | `server_error` / `internal_error` | Integrity, ownership, or invalid provider evidence. |
 | 503 | `server_error` / `execution_unavailable` | Required Runtime observation service is not configured, or list collection exceeded its request budget. |
@@ -221,22 +225,19 @@ type RuntimeObservation =
   | RuntimeNoneObservation
   | RuntimeSelfHostedObservation;
 
-interface RuntimeObservationList {
-  object: "list";
-  data: RuntimeObservation[];
-  has_more: boolean;
-  first_id: string | null;
-  last_id: string | null;
+interface AdminRuntimeObservation {
+  project_id: string;
+  observation: RuntimeObservation & { disk: RuntimeDiskObservation | null };
 }
 
-interface AgentCore {
+class AdminClient {
   listRuntimeObservations(options?: {
     after?: string;
     limit?: number;
     order?: "asc" | "desc";
-  }): Promise<RuntimeObservationList>;
+  }): Promise<ListPage<AdminRuntimeObservation>>;
 
-  retrieveRuntimeObservation(sessionId: string): Promise<RuntimeObservation>;
+  retrieveRuntimeObservation(projectId: string, sessionId: string): Promise<RuntimeObservation>;
 }
 ```
 

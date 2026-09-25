@@ -29,7 +29,7 @@ func TestManagedSessionArchiveReleasesPendingNodePlacement(t *testing.T) {
 		t.Fatal(err)
 	}
 	onlineManagerNode(t, s, nodeID)
-	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString(), nodeID))
+	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	archiveMaintenance(t, w, installation, true)
 	result, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 1)
 	if err != nil || result.State != "released" {
@@ -48,7 +48,7 @@ func TestManagedSessionArchiveOrdersConcurrentInput(t *testing.T) {
 	s, w, installation := managedArchiveFixture(t)
 	for range 8 {
 		archiveMaintenance(t, w, installation, false)
-		tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString(), ""))
+		tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 		archiveMaintenance(t, w, installation, true)
 		start := make(chan struct{})
 		var wg sync.WaitGroup
@@ -82,8 +82,8 @@ func TestManagedSessionArchiveOrdersConcurrentInput(t *testing.T) {
 }
 
 func TestManagedSessionArchiveRejectsFileManagedDeployment(t *testing.T) {
-	s, w, installation := managerFixture(t, 1, 1)
-	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString(), installation.LocalNodeID))
+	s, w, _ := managerFixture(t, 1, 1)
+	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	if _, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 0); !errors.Is(err, ErrSandboxDeploymentConflict) {
 		t.Fatal("archive accepted file-managed deployment", err)
 	}

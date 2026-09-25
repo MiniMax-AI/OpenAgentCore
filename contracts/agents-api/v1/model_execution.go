@@ -11,7 +11,6 @@ import (
 // SessionExecutionInput is a write-only execution extension, not a provider resource.
 type SessionExecutionInput struct {
 	ModelProvider *ModelProviderInput `json:"model_provider,omitempty"`
-	SandboxNodeID *string             `json:"sandbox_node_id,omitempty"`
 }
 
 type ModelProviderInput struct {

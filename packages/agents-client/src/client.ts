@@ -1,8 +1,6 @@
-import { projectExecutionConfiguration } from "./execution-configuration-projection";
 import { exactFields, onlyFields, isRecord, hasOwn, canonicalUuid, isNonnegativeInteger, sameResourceId } from "./response-projection";
 import { projectTokenUsage } from "./usage-projection";
 import { projectAgentTurn, projectSessionItem, projectItemContent, projectHistoryPage, validateHistoryPageOptions } from "./history-projection";
-import { projectRuntimeHistory, projectRuntimeHistoryCapabilities } from "./runtime-history-projection";
 import { projectOpenAIHostedSessionEnvironment } from "./session-environment-projection";
 import { createSSEDecoder } from "./sse";
 import { projectVaultCredentialAuth, validCredentialURL } from "./vault-credential-auth";
@@ -52,7 +50,6 @@ import type {
   CreateSessionInput,
   CreateSessionStreamOptions,
   CoreStartupConfiguration,
-  SessionExecutionConfiguration,
   CoreHarnessKind,
   CoreManagedSandboxProvider,
   FunctionResultContent,
@@ -94,10 +91,6 @@ import type {
   UpdateAgentInput,
   ReplaceVaultCredentialTokenInput,
   RuntimeObservation,
-  RuntimeObservationList,
-  RuntimeHistory,
-  RuntimeHistoryCapabilities,
-  RuntimeHistoryQuery,
   Vault,
   VaultCredential,
   VaultCredentialDeleted,
@@ -1062,14 +1055,6 @@ function invalidRuntimeObservation(message = "Agent Core returned an invalid Run
   throw new AgentCoreError(message, 502, "invalid_runtime_observation");
 }
 
-function invalidRuntimeHistoryCapabilities(message = "Agent Core returned invalid Runtime history capabilities."): never {
-  throw new AgentCoreError(message, 502, "invalid_runtime_history_capabilities");
-}
-
-function invalidRuntimeHistory(message = "Agent Core returned invalid Runtime history."): never {
-  throw new AgentCoreError(message, 502, "invalid_runtime_history");
-}
-
 function nullableRuntimeNumber(value: unknown): number | null {
   if (value === null) return null;
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
@@ -1203,28 +1188,6 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
     allocation_created_at: allocationCreatedAt, resolved_at: value.resolved_at,
     observed_at: observedAt, started_at: startedAt, cpu, memory,
   } as RuntimeObservation;
-}
-
-function projectRuntimeObservationList(value: unknown, options?: PageOptions): RuntimeObservationList {
-  if (
-    !isRecord(value) || !exactFields(value, vaultListFields) || value.object !== "list" ||
-    !Array.isArray(value.data) || typeof value.has_more !== "boolean"
-  ) return invalidRuntimeObservation("Agent Core returned an invalid Runtime observation list.");
-  const limit = options?.limit ?? 20;
-  if (
-    !Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
-    (options?.order !== undefined && options.order !== "asc" && options.order !== "desc") ||
-    value.data.length > limit
-  ) return invalidRuntimeObservation("Agent Core returned an invalid Runtime observation list.");
-  const data = value.data.map((entry) => projectRuntimeObservation(entry));
-  const firstId = data[0]?.id ?? null;
-  const lastId = data[data.length - 1]?.id ?? null;
-  if (
-    new Set(data.map((entry) => entry.id)).size !== data.length ||
-    value.first_id !== firstId || value.last_id !== lastId ||
-    (value.has_more && data.length === 0)
-  ) return invalidRuntimeObservation("Agent Core returned an invalid Runtime observation list.");
-  return { object: "list", data, has_more: value.has_more, first_id: firstId, last_id: lastId };
 }
 
 function projectStreamError(value: unknown): StreamError {
@@ -1950,11 +1913,6 @@ function skillVersionPath(skillId: string, version: string): string {
 }
 
 export class OpenAIAgentsClient implements AgentCore {
-  async retrieveStartupConfiguration(options?: ReadOptions): Promise<CoreStartupConfiguration> {
-    const value = await this.request<unknown>("/agents/core/startup-configuration", { signal: options?.signal }, 200);
-    return projectStartupConfiguration(value);
-  }
-
   private readonly baseUrl: string;
   private readonly token: OpenAIAgentsClientOptions["token"];
   private readonly fetchImpl: typeof fetch;
@@ -2222,58 +2180,6 @@ export class OpenAIAgentsClient implements AgentCore {
     return projectTolerantSessionList(value, options?.limit ?? defaultSessionListLimit, options?.order ?? "desc");
   }
 
-  async listRuntimeObservations(options?: PageOptions): Promise<RuntimeObservationList> {
-    if (
-      (options?.after !== undefined && canonicalUuid(options.after) === null) ||
-      (options?.limit !== undefined && (
-        !Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 100
-      )) ||
-      (options?.order !== undefined && options.order !== "asc" && options.order !== "desc")
-    ) throw new TypeError("Runtime observation pagination options are invalid.");
-    const params = new URLSearchParams();
-    addPageOptions(params, options);
-    const value = await this.request<unknown>(
-      withQuery("/agents/runtime-observations", params),
-      { signal: options?.signal },
-    );
-    return projectRuntimeObservationList(value, options);
-  }
-
-  async retrieveRuntimeObservation(sessionId: string, options?: ReadOptions): Promise<RuntimeObservation> {
-    const value = await this.request<unknown>(
-      `/agents/sessions/${encodeURIComponent(sessionId)}/runtime-observation`,
-      { signal: options?.signal },
-    );
-    return projectRuntimeObservation(value, sessionId);
-  }
-
-  async getRuntimeHistoryCapabilities(options?: ReadOptions): Promise<RuntimeHistoryCapabilities> {
-    const value = await this.request<unknown>(
-      "/agents/runtime-history/capabilities",
-      { signal: options?.signal },
-    );
-    return projectRuntimeHistoryCapabilities(value, invalidRuntimeHistoryCapabilities);
-  }
-
-  async retrieveRuntimeHistory(sessionId: string, query: RuntimeHistoryQuery): Promise<RuntimeHistory> {
-    const canonicalSessionId = canonicalUuid(sessionId);
-    if (
-      query == null || canonicalSessionId === null || !isNonnegativeInteger(query.start) || !isNonnegativeInteger(query.end) ||
-      query.end <= query.start || (query.maxPoints !== undefined && (
-        !Number.isSafeInteger(query.maxPoints) || query.maxPoints < 2 || query.maxPoints > 10_000
-      ))
-    ) throw new TypeError("Runtime history query is invalid.");
-    const params = new URLSearchParams();
-    params.set("start", String(query.start));
-    params.set("end", String(query.end));
-    if (query.maxPoints !== undefined) params.set("max_points", String(query.maxPoints));
-    const value = await this.request<unknown>(
-      withQuery(`/agents/sessions/${encodeURIComponent(canonicalSessionId)}/runtime-history`, params),
-      { signal: query.signal },
-    );
-    return projectRuntimeHistory(value, canonicalSessionId, query, invalidRuntimeHistory);
-  }
-
   async createSession(input: CreateSessionInput, idempotencyKey = createIdempotencyKey()): Promise<AgentSession> {
     if ((input as { stream?: boolean }).stream === true) {
       throw new TypeError("createSession only supports the JSON response; connect streamEvents after creation.");
@@ -2340,13 +2246,6 @@ export class OpenAIAgentsClient implements AgentCore {
 
         options.onEvent(projectStreamEventSession(event, createdSessionId, immutableSession));
       },
-    });
-  }
-
-  async retrieveSessionExecutionConfiguration(sessionId: string, options?: ReadOptions): Promise<SessionExecutionConfiguration> {
-    const value = await this.request<unknown>(`/agents/sessions/${encodeURIComponent(sessionId)}/execution-configuration`, { signal: options?.signal });
-    return projectExecutionConfiguration(value, sessionId, () => {
-      throw new AgentCoreError("Agent Core returned an invalid execution configuration.", 502, "invalid_execution_configuration");
     });
   }
 

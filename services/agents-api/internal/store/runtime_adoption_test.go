@@ -132,13 +132,13 @@ func TestRuntimeLegacyAdoptionRetainsStatesAndIgnoresReleasedHistory(t *testing.
 				if calls != 0 || got.NodeID != "" {
 					t.Fatal("released history was assigned", calls, got)
 				}
-				if _, err := s.GetSessionRuntimePlacement(t.Context(), a.TenantID, a.SessionID); !errors.Is(err, ErrNotFound) {
+				if _, err := sessionRuntimePlacement(t.Context(), s, a.TenantID, a.SessionID); !errors.Is(err, ErrNotFound) {
 					t.Fatal("released history placement fabricated", err)
 				}
 			} else if calls != 1 || got.NodeID != d.LocalNodeID {
 				t.Fatal(calls, got)
 			}
-			if placement, err := s.GetSessionRuntimePlacement(t.Context(), a.TenantID, pending.ID); err != nil || placement.NodeID != d.LocalNodeID {
+			if placement, err := sessionRuntimePlacement(t.Context(), s, a.TenantID, pending.ID); err != nil || placement.NodeID != d.LocalNodeID {
 				t.Fatal(placement, err)
 			}
 			if err := w.ConfigureRuntimeDeployment(t.Context(), &d, func(context.Context, RuntimeAllocation) error { t.Fatal("reverified fixed placement"); return nil }); err != nil {

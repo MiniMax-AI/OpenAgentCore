@@ -15,42 +15,31 @@ import (
 type sandboxCreationRecorder struct {
 	inputRecorder
 	calls int
-	input store.CreateSessionInput
 }
 
-func (r *sandboxCreationRecorder) CreateSession(_ context.Context, _ string, input store.CreateSessionInput) (store.Session, error) {
+func (r *sandboxCreationRecorder) CreateSession(context.Context, string, store.CreateSessionInput) (store.Session, error) {
 	r.calls++
-	r.input = input
 	return store.Session{}, store.ErrInvalidInput
 }
-func TestSandboxSelectorUsesOnlyCoreSessionExtension(t *testing.T) {
+
+// Placement is automatic. A node selector is an unknown member wherever it appears.
+func TestSessionCreationRejectsSandboxNodeSelector(t *testing.T) {
 	node := uuid.NewString()
-	for _, tc := range []struct {
-		name, body string
-		accepted   bool
-	}{
-		{"selector only", fmt.Sprintf(`{"agent":{"model":"model"},"environment":{"type":"openai_hosted"},"x_agents_core":{"sandbox_node_id":%q}}`, node), true},
-		{"empty selector", `{"agent":{"model":"model"},"environment":{"type":"openai_hosted"},"x_agents_core":{"sandbox_node_id":""}}`, false},
-		{"non hosted", fmt.Sprintf(`{"agent":{"model":"model"},"environment":{"type":"none"},"input":"hello","x_agents_core":{"sandbox_node_id":%q}}`, node), false},
-		{"official environment", fmt.Sprintf(`{"agent":{"model":"model"},"environment":{"type":"openai_hosted","sandbox_node_id":%q}}`, node), false},
-		{"agent extension", fmt.Sprintf(`{"agent":{"model":"model","x_agents_core":{"sandbox_node_id":%q}},"environment":{"type":"openai_hosted"}}`, node), false},
+	for _, body := range []string{
+		fmt.Sprintf(`{"agent":{"model":"model"},"environment":{"type":"openai_hosted"},"x_agents_core":{"sandbox_node_id":%q}}`, node),
+		fmt.Sprintf(`{"agent":{"model":"model"},"environment":{"type":"openai_hosted","sandbox_node_id":%q}}`, node),
+		fmt.Sprintf(`{"agent":{"model":"model","x_agents_core":{"sandbox_node_id":%q}},"environment":{"type":"openai_hosted"}}`, node),
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			recorder := &sandboxCreationRecorder{}
-			handler, _ := environmentCreationHandler(t, "codex", WithHostedEnvironments(), WithExecution(recorder))
-			request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(tc.body))
-			request.Header.Set("Authorization", "Bearer key")
-			request.Header.Set("OpenAI-Beta", "agents=v1")
-			request.Header.Set("Content-Type", "application/json")
-			response := httptest.NewRecorder()
-			handler.ServeHTTP(response, request)
-			if tc.accepted {
-				if recorder.calls != 1 || recorder.input.SandboxNodeID != node || strings.Contains(string(recorder.input.Configuration), "sandbox_node_id") || !strings.Contains(string(recorder.input.CreationRequest), node) {
-					t.Fatal("selector routing or retry identity invalid", recorder.input, response.Body.String())
-				}
-			} else if recorder.calls != 0 || response.Code != 400 {
-				t.Fatal("invalid selector admitted", response.Code, response.Body.String())
-			}
-		})
+		recorder := &sandboxCreationRecorder{}
+		handler, _ := environmentCreationHandler(t, "codex", WithHostedEnvironments(), WithExecution(recorder))
+		request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer key")
+		request.Header.Set("OpenAI-Beta", "agents=v1")
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if recorder.calls != 0 || response.Code != http.StatusBadRequest {
+			t.Fatal("node selector admitted", body, response.Code, response.Body.String())
+		}
 	}
 }

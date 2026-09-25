@@ -66,7 +66,7 @@ func archiveAllocation(t *testing.T, w *Store, tenant string, session Session, i
 
 func TestManagedSessionArchiveUnallocatedAndGuards(t *testing.T) {
 	s, w, installation := managedArchiveFixture(t)
-	input := managerSessionInput(uuid.NewString(), "")
+	input := managerSessionInput(uuid.NewString())
 	input.InitialInputs = []Input{{Kind: "message", Payload: json.RawMessage(`{"text":"waiting"}`)}}
 	tenant, session := managedArchiveSession(t, s, input)
 	ctx := adminDeleteContext(t.Context(), tenant, uuid.NewString())
@@ -135,7 +135,7 @@ func TestManagedSessionArchiveUnallocatedAndGuards(t *testing.T) {
 
 func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 	s, w, installation := managedArchiveFixture(t)
-	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString(), ""))
+	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	owner := archiveAllocation(t, w, tenant, session, installation)
 	file, err := s.CreateSourceFile(t.Context(), tenant, uploadSource([]byte("retained source file")))
 	if err != nil {
@@ -214,7 +214,7 @@ func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 
 func TestManagedSessionArchiveAuditFailureRollsBack(t *testing.T) {
 	s, w, installation := managedArchiveFixture(t)
-	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString(), ""))
+	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	archiveAllocation(t, w, tenant, session, installation)
 	input := submitMessage(t, s, tenant, session.ID, "running")
 	transition(t, w, tenant, session.ID, input.TurnID, TurnQueued, TurnInProgress)
@@ -239,7 +239,7 @@ func TestManagedSessionArchiveAuditFailureRollsBack(t *testing.T) {
 
 func TestManagedSessionArchivePreservesFailuresAndRejectsSelfHosted(t *testing.T) {
 	s, w, installation := managedArchiveFixture(t)
-	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString(), ""))
+	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	owner := archiveAllocation(t, w, tenant, session, installation)
 	if _, err := w.FailRuntimeInitialization(t.Context(), owner, ProvisioningFailure{Step: ProvisioningSetupCommand, Index: 0, ExitCode: 2}); err != nil {
 		t.Fatal(err)

@@ -37,7 +37,7 @@ type sessionRequest struct {
 func (request decodedSessionRequest) validated() (sessionRequest, error) {
 	input := sessionRequest{CreateSessionRequest: request.CreateSessionRequest, Input: request.Input}
 	if len(request.Execution) > 0 && !bytes.Equal(bytes.TrimSpace(request.Execution), []byte("null")) {
-		if decodeInputObject(request.Execution, &input.XAgentsCore, "model_provider", "sandbox_node_id") != nil {
+		if decodeInputObject(request.Execution, &input.XAgentsCore, "model_provider") != nil {
 			return input, store.ErrInvalidInput
 		}
 		var fields map[string]json.RawMessage

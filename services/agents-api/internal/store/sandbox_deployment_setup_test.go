@@ -41,7 +41,7 @@ func TestSandboxDeploymentSetupPersistsWithoutExecution(t *testing.T) {
 	if err != nil || before.InstallationID != id || before.Provider != "" || before.CoreURL != "" {
 		t.Fatal(before, err)
 	}
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString(), "")); !errors.Is(err, ErrRuntimeNodeUnavailable) {
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, ErrRuntimeNodeUnavailable) {
 		t.Fatal("uninitialized hosted admission", err)
 	}
 	input := SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("microsandbox"), Provider: "microsandbox", CoreURL: "https://core.example"}

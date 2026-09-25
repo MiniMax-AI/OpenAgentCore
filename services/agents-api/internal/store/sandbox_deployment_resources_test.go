@@ -26,14 +26,14 @@ func TestSandboxDeploymentMutationViewsIncludeActualResources(t *testing.T) {
 		t.Fatal(err)
 	}
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString(), ""))
+	session, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, installation, device.HashCredential(uuid.NewString())); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString(), "")); err != nil {
+	if _, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString())); err != nil {
 		t.Fatal(err)
 	}
 	want := SandboxDeploymentResources{Allocations: 1, Pending: 1}

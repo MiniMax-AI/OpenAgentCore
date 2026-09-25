@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { OpenAIAgentsClient } from "./client";
+import { AdminClient } from "./admin-client";
 
+const projectId = "66666666-6666-4666-8666-666666666666";
 const sessionId = "11111111-1111-4111-8111-111111111111";
 const environmentId = "22222222-2222-4222-8222-222222222222";
 const allocationId = "33333333-3333-4333-8333-333333333333";
@@ -15,9 +16,9 @@ function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json" } });
 }
 
-function clientFor(body: unknown, calls: FetchCall[] = []): OpenAIAgentsClient {
-  return new OpenAIAgentsClient({
-    baseUrl: "https://core.example/v1",
+function clientFor(body: unknown, calls: FetchCall[] = []): AdminClient {
+  return new AdminClient({
+    baseUrl: "https://core.example/core/v1/admin",
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       calls.push({ input, init });
       return jsonResponse(body);
@@ -98,21 +99,21 @@ describe("Runtime history client", () => {
   it("retrieves strict capabilities without exposing backend details", async () => {
     const calls: FetchCall[] = [];
     await expect(clientFor(capabilities(), calls).getRuntimeHistoryCapabilities()).resolves.toEqual(capabilities());
-    expect(String(calls[0]?.input)).toBe("https://core.example/v1/agents/runtime-history/capabilities");
+    expect(String(calls[0]?.input)).toBe("https://core.example/core/v1/admin/runtime-history/capabilities");
   });
 
   it("retrieves bounded Session history and preserves observed zeroes", async () => {
     const calls: FetchCall[] = [];
     const controller = new AbortController();
     const response = history();
-    const value = await clientFor(response, calls).retrieveRuntimeHistory(sessionId.toUpperCase(), {
+    const value = await clientFor(response, calls).retrieveRuntimeHistory(projectId, sessionId, {
       start: 1000,
       end: 1120,
       maxPoints: 60,
       signal: controller.signal,
     });
     expect(String(calls[0]?.input)).toBe(
-      `https://core.example/v1/agents/sessions/${sessionId}/runtime-history?start=1000&end=1120&max_points=60`,
+      `https://core.example/core/v1/admin/projects/${projectId}/sessions/${sessionId}/runtime-history?start=1000&end=1120&max_points=60`,
     );
     expect(calls[0]?.init?.signal).toBe(controller.signal);
     expect(value.series[0]?.points[0]?.cpu?.utilization_ratio).toBe(0);
@@ -132,7 +133,7 @@ describe("Runtime history client", () => {
       [sessionId, { start: 1000, end: 1120, maxPoints: 1 }],
       [sessionId, { start: 1000, end: 1120, maxPoints: 10001 }],
     ] as const) {
-      await expect(client.retrieveRuntimeHistory(id, query)).rejects.toThrow(TypeError);
+      await expect(client.retrieveRuntimeHistory(projectId, id, query)).rejects.toThrow(TypeError);
     }
     expect(calls).toHaveLength(0);
   });
@@ -148,7 +149,7 @@ describe("Runtime history client", () => {
     it(`rejects ${name} in capabilities`, async () => {
       await expect(clientFor(body).getRuntimeHistoryCapabilities()).rejects.toMatchObject({
         status: 502,
-        code: "invalid_runtime_history_capabilities",
+        code: "invalid_admin_response",
       });
     });
   }
@@ -258,11 +259,11 @@ describe("Runtime history client", () => {
     it(`rejects ${name} in history`, async () => {
       const value = history();
       mutate(value);
-      await expect(clientFor(value).retrieveRuntimeHistory(sessionId, {
+      await expect(clientFor(value).retrieveRuntimeHistory(projectId, sessionId, {
         start: 1000,
         end: 1120,
         maxPoints: 60,
-      })).rejects.toMatchObject({ status: 502, code: "invalid_runtime_history" });
+      })).rejects.toMatchObject({ status: 502, code: "invalid_admin_response" });
     });
   }
 });

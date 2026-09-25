@@ -27,7 +27,7 @@ func lifecycleTestNode(t *testing.T, s *Store) string {
 func lifecycleTestSession(t *testing.T, s *Store, node string) (string, Session) {
 	t.Helper()
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString(), node))
+	session, err := createSessionOnNode(t, s, tenant, managerSessionInput(uuid.NewString()), node)
 	if err != nil {
 		t.Fatal(err)
 	}

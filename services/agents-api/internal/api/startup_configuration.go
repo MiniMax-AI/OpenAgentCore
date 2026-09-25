@@ -24,15 +24,7 @@ func WithStartupConfiguration(configuration v1.CoreStartupConfiguration) Option 
 	}
 }
 
-// @Summary Retrieve safe Core startup configuration
-// @Description Returns a secret-free snapshot of supported build capabilities and validated process startup selections. It does not inspect or aggregate daemon heartbeats, Sessions, Environments or Runtime state, and does not prove model-provider reachability, credentials, native readiness, sandbox isolation or successful execution.
-// @Tags Core extensions
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Success 200 {object} v1.CoreStartupConfiguration
-// @Failure 400,401,503 {object} v1.ErrorResponse
-// @Router /agents/core/startup-configuration [get]
+// getStartupConfiguration serves the administrator startup configuration read.
 func (h *Handler) getStartupConfiguration(w http.ResponseWriter, r *http.Request) {
 	if r.URL.RawQuery != "" {
 		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Core startup configuration does not accept query parameters.")
