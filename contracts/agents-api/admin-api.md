@@ -3,8 +3,9 @@
 This Core extension uses Core key Bearer authentication under `/core/v1/admin`.
 It does not change `/v1`, the fixed Python SDK, or native Runtime interfaces.
 API keys cannot authenticate these routes; the Core key cannot authenticate `/v1`.
-The console server sends the fixed `X-Core-Console-Actor: console`; direct Core
-key requests send none. Core records it only as an unverified display label.
+`X-Core-Console-Actor` is a caller-asserted, display-only label that Core records
+without verifying. Web sends `console`; direct Core key scripts normally send none
+but could set any label. Never use it for authorization or as proof of origin.
 
 ## Projects and keys
 
@@ -172,8 +173,8 @@ existing non-secret project projections.
 `resource_type`, `resource_id`, `action`, inclusive `created_after`, exclusive
 `created_before`, `limit=1..100` (default 50), and opaque `after` filters. Response
 is `{data, has_more, next_cursor}`. Each row has `id`, `created_at`,
-`admin_credential_id` (credential digest prefix), `actor_label` (`console` for Web
-operations, empty for direct Core key requests), `action`,
+`admin_credential_id` (credential digest prefix), `actor_label` (the caller-asserted
+display label: normally `console` from Web and empty from direct Core key requests), `action`,
 `project_id`, `resource_type`, `resource_id`, `result_ids`, `request_id`,
 `trace_id`. Non-copy mappings are an empty array. No credential values or request
 bodies are recorded. Logs and copy ownership do not cascade away on resource

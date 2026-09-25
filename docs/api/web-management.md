@@ -18,9 +18,11 @@ The browser uses the console's own origin and signs in with the
 
 Sign-in errors use the console's `{"error": "…"}` envelope: 400 for a malformed
 body, 401 for a wrong key, 415 for a non-JSON body, 429 with `Retry-After` when
-attempts are limited, and 503 when the console cannot start a session. The console
-compares the submitted key with its configured Core key in constant time and never
-logs or returns it. Sessions live only in the console's memory; a console restart
+failed attempts are limited or sign-in is busy, and 503 when the console cannot
+start a session. The console compares the submitted key with its configured Core
+key in constant time and never logs or returns it. Only failed attempts count
+toward the limit; the correct key signs in even while failures are limited. The
+console refuses to start with a Core key shorter than 32 characters. Sessions live only in the console's memory; a console restart
 or Core key rotation requires signing in again. There are no console accounts,
 usernames, passwords, first-run setup or Basic authentication.
 
@@ -31,10 +33,10 @@ request checks; never put the Core key in JavaScript or browser storage.
 
 The console server injects the Core key as its Bearer credential on allowlisted
 management requests. It removes browser Authorization and forwarding-sensitive
-headers, and sets `X-Core-Console-Actor: console`. Core records that fixed value as
-the audit `actor_label`, a display label rather than an authorization input.
-Direct Core key requests from operator scripts carry no header and record an
-empty label.
+headers, and sets `X-Core-Console-Actor: console`. Core records the header as the
+audit `actor_label`. The label is caller-asserted and display-only: direct Core key
+scripts normally send none, which records an empty label, but could set any
+value. Never use it for authorization or as proof of origin.
 
 Use [AdminClient](../../packages/agents-client/src/admin-client.ts) for the typed
 management client and [the complete administrator reference](../../contracts/agents-api/admin-api.md)

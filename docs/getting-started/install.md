@@ -290,7 +290,7 @@ a remote Core must use HTTPS.
 
 Web-only mode cannot enable a sandbox provider. It starts no database or Core and
 requires no KVM. Its key remains on the server, outside the static Web files.
-The input file must be private (0600).
+The input file must be private (0600) and contain a Core key of at least 32 characters.
 
 Use `--install-dir /absolute/path`, `--core-port 8092` and `--web-port 8081` for
 separate installations. Their database volumes, provider identities and Runtime

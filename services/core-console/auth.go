@@ -17,6 +17,10 @@ import (
 const sessionCookie = "core_console_session"
 const sessionLifetime = 12 * time.Hour
 
+// minimumCoreKeyLength keeps guessing infeasible even though a correct key is
+// never rate limited. Installer-generated keys have 64 characters.
+const minimumCoreKeyLength = 32
+
 // consoleAuth signs the browser in with the Core key. Sessions live only in
 // memory, so a console restart or Core key rotation requires signing in again.
 type consoleAuth struct {
@@ -110,7 +114,9 @@ func (a *consoleAuth) setSession(w http.ResponseWriter, r *http.Request) {
 	authJSON(w, http.StatusOK, map[string]string{"mode": "authenticated"})
 }
 
-func (a *consoleAuth) admitAttempt() bool {
+// admitFailure charges one failed sign-in to the shared budget. Correct keys are
+// never charged, so failed attempts cannot lock out the key holder.
+func (a *consoleAuth) admitFailure() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	now := time.Now()
@@ -167,11 +173,6 @@ func (a *consoleAuth) serve(w http.ResponseWriter, r *http.Request) {
 		authError(w, http.StatusBadRequest, "Send a JSON object with only a non-empty core_key")
 		return
 	}
-	if !a.admitAttempt() {
-		w.Header().Set("Retry-After", "60")
-		authError(w, http.StatusTooManyRequests, "Too many sign-in attempts; try again in one minute")
-		return
-	}
 	select {
 	case a.workers <- struct{}{}:
 		defer func() { <-a.workers }()
@@ -182,11 +183,16 @@ func (a *consoleAuth) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	// Comparing fixed-size digests keeps the check constant-time for any key length.
 	submitted := sha256.Sum256([]byte(coreKey))
-	if subtle.ConstantTimeCompare(submitted[:], a.coreKey[:]) != 1 {
-		authError(w, http.StatusUnauthorized, "Invalid Core key")
+	if subtle.ConstantTimeCompare(submitted[:], a.coreKey[:]) == 1 {
+		a.setSession(w, r)
 		return
 	}
-	a.setSession(w, r)
+	if !a.admitFailure() {
+		w.Header().Set("Retry-After", "60")
+		authError(w, http.StatusTooManyRequests, "Too many failed sign-in attempts; try again in one minute")
+		return
+	}
+	authError(w, http.StatusUnauthorized, "Invalid Core key")
 }
 
 func publicConsoleAsset(r *http.Request) bool {

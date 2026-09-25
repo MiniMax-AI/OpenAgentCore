@@ -10,7 +10,8 @@ import (
 func TestConfigRejectsUnsafeURLsAndSecretFiles(t *testing.T) {
 	directory := t.TempDir()
 	key := filepath.Join(directory, "core.key")
-	if err := os.WriteFile(key, []byte("private-core-key\n"), 0o600); err != nil {
+	valid := strings.Repeat("k", 32)
+	if err := os.WriteFile(key, []byte(valid+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("CORE_CONSOLE_CORE_KEY_FILE", key)
@@ -18,7 +19,7 @@ func TestConfigRejectsUnsafeURLsAndSecretFiles(t *testing.T) {
 	t.Setenv("CORE_CONSOLE_UPSTREAM", "http://core:8091")
 	t.Setenv("CORE_CONSOLE_DIST", directory)
 	c, err := loadConfig()
-	if err != nil || c.coreKey != "private-core-key" {
+	if err != nil || c.coreKey != valid {
 		t.Fatalf("valid configuration failed: %v", err)
 	}
 	for _, value := range []string{"http://user:secret@core:8091", "http://core:8091/v1", "http://core:8091?token=secret", "http://core:8091#", "file:///config/caller.key", ""} {
@@ -30,15 +31,15 @@ func TestConfigRejectsUnsafeURLsAndSecretFiles(t *testing.T) {
 			}
 		})
 	}
-	for _, value := range []string{"", "token with spaces", strings.Repeat("x", 4097), "token\x00"} {
+	for _, value := range []string{"", "token with spaces", strings.Repeat("x", 4097), "token\x00", strings.Repeat("s", 31)} {
 		if err := os.WriteFile(key, []byte(value), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := loadConfig(); err == nil {
-			t.Fatal("invalid Core key accepted")
+		if _, err := loadConfig(); err == nil || strings.Contains(err.Error(), "sss") {
+			t.Fatal("invalid Core key accepted or echoed")
 		}
 	}
-	if err := os.WriteFile(key, []byte("valid-token"), 0o600); err != nil {
+	if err := os.WriteFile(key, []byte(valid), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chmod(key, 0o644); err != nil {
@@ -52,7 +53,7 @@ func TestConfigRejectsUnsafeURLsAndSecretFiles(t *testing.T) {
 func TestConfigRejectsRenamedAndRetiredSettings(t *testing.T) {
 	directory := t.TempDir()
 	key := filepath.Join(directory, "core.key")
-	if err := os.WriteFile(key, []byte("private-core-key"), 0o600); err != nil {
+	if err := os.WriteFile(key, []byte(strings.Repeat("k", 32)), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("CORE_CONSOLE_CORE_KEY_FILE", key)

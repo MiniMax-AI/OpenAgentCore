@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 type config struct {
@@ -45,6 +46,9 @@ func loadConfig() (config, error) {
 	c.coreKey, err = readSecret(envDefault("CORE_CONSOLE_CORE_KEY_FILE", "/admin/core.key"))
 	if err != nil {
 		return config{}, errors.New("CORE_CONSOLE_CORE_KEY_FILE must name a private regular file containing the Core key")
+	}
+	if utf8.RuneCountInString(c.coreKey) < minimumCoreKeyLength {
+		return config{}, errors.New("the Core key in CORE_CONSOLE_CORE_KEY_FILE must have at least 32 characters")
 	}
 	c.nodePayloadDir = os.Getenv("CORE_CONSOLE_NODE_PAYLOAD_DIR")
 	if c.nodePayloadDir != "" && !filepath.IsAbs(c.nodePayloadDir) {
