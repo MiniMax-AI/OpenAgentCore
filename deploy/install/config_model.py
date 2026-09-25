@@ -8,6 +8,7 @@ import ipaddress
 import json
 import os
 import re
+from urllib.parse import urlsplit
 
 MODES = ("all", "core-only", "web-only")
 SERVICES = {"all": ("core", "web", "database"), "core-only": ("core", "database"), "web-only": ("web",)}
@@ -61,28 +62,42 @@ def lookup(config, key):
 
 
 # Checks named by x-parsar.check. Core stays the authority for its own semantic rules.
-def _origin(value, https_only=False):
-    """Core's ValidateSandboxCoreURL rule: a canonical ASCII origin, HTTP only on a loopback host.
+_HOST_LABEL = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?")
 
-    IPv6 literals are refused as the installer refuses them; names are lowercase
-    letters, digits and inner hyphens, with no trailing dot; ports have no leading zero.
-    """
-    match = re.fullmatch(r"(https?)://([a-z0-9.-]+)(?::([0-9]+))?", value)
-    if not match:
-        return False
-    scheme, name, port = match.groups()
-    if port is not None and (str(int(port)) != port or not 1 <= int(port) <= 65535):
+
+def _origin(value, https_only=False):
+    """Exactly the origins Core's ValidateSandboxCoreURL accepts
+    (services/agents-api/internal/store/sandbox_deployment_setup.go): canonical, lowercase,
+    ASCII host labels or an IP literal, no leading-zero port, HTTP only on a loopback host.
+    The same rule as PR 1a's installer valid_core_origin; one shared function follows."""
+    if not isinstance(value, str) or any(char in value for char in "?#@\\% \t\r\n"):
         return False
     try:
-        loopback = ipaddress.IPv4Address(name).is_loopback
+        parsed = urlsplit(value)
     except ValueError:
-        if len(name) > 253 or not all(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
-                                      for label in name.split(".")):
+        return False
+    netloc = parsed.netloc
+    if (parsed.scheme not in ("http", "https") or value != parsed.scheme + "://" + netloc
+            or not netloc or netloc != netloc.lower() or netloc.endswith(":")):
+        return False
+    if netloc.startswith("["):
+        host, _, rest = netloc[1:].partition("]")
+        if rest and not rest.startswith(":"):
             return False
-        loopback = name == "localhost"
+        port = rest[1:] if rest else ""
+    else:
+        host, _, port = netloc.partition(":")
+    if port and not (port.isdigit() and str(int(port)) == port and 1 <= int(port) <= 65535):
+        return False
+    try:
+        loopback = ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        if netloc.startswith("[") or len(host) > 253 or not all(_HOST_LABEL.fullmatch(label) for label in host.split(".")):
+            return False
+        loopback = host == "localhost"
     if https_only:
-        return scheme == "https"
-    return scheme == "https" or loopback
+        return parsed.scheme == "https"
+    return parsed.scheme == "https" or loopback
 
 
 _DURATION_UNITS = {"ns": 1e-9, "us": 1e-6, "µs": 1e-6, "μs": 1e-6, "ms": 1e-3, "s": 1, "m": 60, "h": 3600}
