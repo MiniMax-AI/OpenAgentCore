@@ -5,15 +5,14 @@ import { useTranslation } from "react-i18next";
 import { EmptyState, HelpTip, Kpi, KpiStrip, Section } from "../../components/console-ui";
 import { CopyableId } from "../../components/list-ui";
 import { formatDateTime, formatInteger, formatRelative, MISSING } from "../../lib/format";
-import { sandboxDiagnosticMessage } from "../../lib/sandbox-diagnostic";
+import { nodeProviderDiagnostic, sandboxDiagnosticMessage } from "../../lib/sandbox-diagnostic";
 import { sandboxStateLabel } from "../../lib/sandbox-labels";
+import { DiagnosticTip } from "../fleet/DiagnosticTip";
 import { nodeState, NodeStatus, seconds } from "./NodeList";
 
-/** Why a node is not serving: disconnected, provider down, or a reported diagnostic. */
+/** Why a node is not serving: disconnected, or the reason its provider is not ready. */
 function nodeDiagnostic(node: SandboxNode): string {
-  if (!node.online) return "node_unavailable";
-  if (!node.provider_ready) return "provider_unavailable";
-  return node.diagnostic;
+  return node.online ? nodeProviderDiagnostic(node) : "node_unavailable";
 }
 
 function Diagnostic({ value }: { value: string }) {
@@ -42,7 +41,7 @@ export function NodeDetail({ node, allocations, stale }: { node: SandboxNode; al
           <dt>{t("Status")}</dt>
           <dd className="node-status-fact">
             <NodeStatus state={nodeState(node, own, stale)} />
-            {diagnostic ? <HelpTip>{sandboxDiagnosticMessage(diagnostic, shortLocale)?.advice}</HelpTip> : null}
+            {diagnostic ? <DiagnosticTip code={diagnostic} /> : null}
           </dd>
         </div>
         <div>

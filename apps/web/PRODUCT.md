@@ -67,16 +67,20 @@ workbench.
   and offer Delete.
 - **Platform**: Projects and keys (projects, their assets and usage, named keys,
   write history), Nodes (sandbox setup as pages — where sandboxes run, the
-  backend or E2B account, the size of each sandbox, a review, and advanced settings
+  backend or E2B account, the size of each sandbox (own machines only; E2B takes the
+  template build's), a review, and advanced settings
   with the complete form — then the node list with each node's capacity, host
   figures and allocations, enrollment, renaming, sandbox limits and removal; Add node
   asks for the node's sandbox limits before it issues the one-time command), System (only the sandbox
   configuration every project shares: where sandboxes run, each sandbox's size, the
-  Runtime or E2B template, the Core address and maintenance).
+  Runtime or E2B template build, microsandbox's idle suspension, the Core address and maintenance).
+- A node whose provider is not ready names the reason (Docker unreachable, no Docker
+  limits, missing Runtime image, no KVM, missing microsandbox components, a host too
+  small) and its fix in the help tip beside its status, wherever that status shows.
 - **E2B deployments** have no machines: the Nodes entry becomes Sandbox backend,
   and Overview and Sandbox metrics show the sandboxes Core holds in E2B's cloud
-  (running, starting, size, template) instead of node capacity, with no node column
-  or Add node action.
+  (running, starting, size, template build) instead of node capacity, with no node column
+  or Add node action; a sandbox's dialog adds its disk use.
 - **microsandbox** suspends idle sandboxes into snapshots, so its nodes show how
   many sleep (Core's retained minus active) on the Nodes list, a node's page, Sandbox
   metrics and Overview; Docker never suspends and shows none of it.

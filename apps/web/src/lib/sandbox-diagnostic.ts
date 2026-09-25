@@ -1,3 +1,4 @@
+import type { SandboxNode } from "@agents-core-web/agents-client";
 import { translate, type Locale } from "./locale";
 import type { MessageKey } from "./locale-strings";
 export interface SandboxDiagnosticMessage { label: string; advice: string }
@@ -23,7 +24,53 @@ const diagnostics: Record<string, { label: MessageKey; advice: MessageKey }> = {
     label: "Sandbox provider unavailable",
     advice: "Restore the provider on the assigned node, then refresh. A connected node alone does not confirm that its sandbox provider is ready.",
   },
+  // The first readiness check a node's provider failed; the node sends only the code.
+  docker_unavailable: {
+    label: "Docker unavailable",
+    advice: "The node can't reach the Docker daemon. Check that Docker is running and the node can use its socket.",
+  },
+  docker_limits_unsupported: {
+    label: "Docker limits unsupported",
+    advice: "Docker on this host doesn't enforce CPU and memory limits. Enable cgroup limits.",
+  },
+  runtime_image_unavailable: {
+    label: "Runtime image missing",
+    advice: "The pinned Runtime image isn't on the host. Run the install command again.",
+  },
+  kvm_unavailable: {
+    label: "KVM unavailable",
+    advice: "/dev/kvm isn't available to the node. Enable virtualization or use a KVM-capable host.",
+  },
+  microsandbox_artifacts_unavailable: {
+    label: "microsandbox components missing",
+    advice: "microsandbox components are missing or fail their checksum. Run the install command again.",
+  },
+  capacity_insufficient: {
+    label: "Host too small",
+    advice: "The host has less CPU or memory than one sandbox needs. Use a bigger host or a smaller sandbox size.",
+  },
 };
+
+/** The fixed codes Core reports for a node whose provider is not ready. */
+const nodeDiagnostics: ReadonlySet<string> = new Set([
+  "provider_unavailable",
+  "docker_unavailable",
+  "docker_limits_unsupported",
+  "runtime_image_unavailable",
+  "kvm_unavailable",
+  "microsandbox_artifacts_unavailable",
+  "capacity_insufficient",
+]);
+
+/**
+ * Why an online node's provider is not ready, as one fixed code; an unknown
+ * value reads as provider_unavailable. Empty while the provider is ready, and
+ * for an offline node, whose last code may no longer apply.
+ */
+export function nodeProviderDiagnostic(node: Pick<SandboxNode, "online" | "provider_ready" | "diagnostic">): string {
+  if (!node.online || (node.provider_ready && !node.diagnostic)) return "";
+  return node.diagnostic && nodeDiagnostics.has(node.diagnostic) ? node.diagnostic : "provider_unavailable";
+}
 
 export function sandboxDiagnosticMessage(value?: string, locale: Locale = "en"): SandboxDiagnosticMessage | null {
   if (!value) return null;

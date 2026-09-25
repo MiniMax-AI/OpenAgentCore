@@ -85,7 +85,7 @@ Resource-specific boundaries:
 | Resource owners | `GET /projects/{project_id}/resource-owners` | The Creator column of every resource list and the creator fact of detail pages, in batches of up to 100 IDs. An asset an administrator copied in an earlier release shows **Admin copy**; a resource without a record shows **Unknown** |
 | Write operations | `GET /projects/{project_id}/write-operations` | A project's write history, newest first, filtered by key and resource type, 50 per page |
 | Summary | `GET /summary` | Overview (per project), the Agents list (`group_by=agent`), a project's page (per project and `group_by=key`), Agent metrics (to skip idle projects, and usage by creating key since the start of the range), the Projects list (last activity) |
-| Runtime observations | `GET /runtime-observations` | Sandbox metrics: hosted Runtimes of every project, each labelled with its project |
+| Runtime observations | `GET /runtime-observations` | Sandbox metrics: hosted Runtimes of every project, each labelled with its project; an E2B sandbox's dialog adds its `observation.disk` as used / limit (null elsewhere) |
 | Core metrics | `GET /core-metrics?range=` | Core metrics page; the Core popover on Overview. A Core without the route (404) is shown as not reporting; the popover then shows only Core's status. Measurements are defined in the [Core metrics contract](../../contracts/agents-api/core-metrics.md); the Process section's CPU and resident memory are a [requested extension](core-process-metrics-requirements.md) and show as missing until Core reports them |
 
 Summary figures are cumulative per Session and are not billing records. Sessions
@@ -100,9 +100,9 @@ deployment only.
 
 | Operation | Route | Console use |
 | --- | --- | --- |
-| Deployment | `GET`, `POST`, `PUT /core/v1/sandbox/deployment` | Read the provider, Core origin, maintenance state, installation ID and specification; initialize the deployment with `resources`, the Docker or microsandbox `runtime` release, or the E2B account; change its settings with the expected generation |
+| Deployment | `GET`, `POST`, `PUT /core/v1/sandbox/deployment` | Read the provider, Core origin, maintenance state, installation ID and specification; initialize the deployment with `resources` and the Docker or microsandbox `runtime` release, or with the E2B account and no `resources` (Core adopts the template build's CPU and memory); change its settings with the expected generation. E2B's `e2b.template_build` (status, CPU, memory, disk) shows on System, the Sandbox backend summary and Sandbox metrics, and sizes each sandbox when `specification.resources` is missing; microsandbox's `suspension` (idle and retention seconds) shows on System and the Nodes summary |
 | Maintenance | `PATCH /core/v1/sandbox/deployment/maintenance` | Enter or leave maintenance to change the provider |
-| Nodes | `GET /core/v1/sandbox/nodes` | Nodes page; fleet on Overview; node capacity on Sandbox metrics |
+| Nodes | `GET /core/v1/sandbox/nodes` | Nodes page; fleet on Overview; node capacity on Sandbox metrics. An online node's `diagnostic` (`docker_unavailable`, `docker_limits_unsupported`, `runtime_image_unavailable`, `kvm_unavailable`, `microsandbox_artifacts_unavailable`, `capacity_insufficient`, `provider_unavailable`; any other value reads as `provider_unavailable`) marks it degraded and names the reason and fix in the help tip beside its status on each of these and on the node's page |
 | Node detail | `GET /core/v1/sandbox/nodes/{node_id}?range=1h\|6h\|24h` | Sandbox metrics node dialog: the host's CPU busy share and memory from its last heartbeat, and their history over the page's range |
 | Allocations | `GET /core/v1/sandbox/nodes/{node_id}/allocations` | Nodes page; Sandbox metrics |
 | Enrollment | `POST /core/v1/sandbox/enrollment-tokens` | **Add node**: the administrator sets the node's sandbox limits (`max_active`; `max_retained` only for microsandbox, equal to `max_active` for Docker) before Core issues a single-use token inside a command that verifies the installer checksum |

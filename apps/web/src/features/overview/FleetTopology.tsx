@@ -7,6 +7,8 @@ import { useTranslation } from "react-i18next";
 import { ConsolePopover } from "../../components/console-popover";
 import { StatusDot, type Tone } from "../../components/console-ui";
 import { formatBytes, formatDateTime, formatDuration, formatInteger, formatRelative, MISSING } from "../../lib/format";
+import { nodeProviderDiagnostic } from "../../lib/sandbox-diagnostic";
+import { DiagnosticTip } from "../fleet/DiagnosticTip";
 import { nodeHealth, suspendedSandboxes, type NodeHealth } from "../fleet/fleet-model";
 import { coreMetricsQuery } from "../metrics/metrics-queries";
 import { seconds } from "../sandbox/NodeList";
@@ -175,16 +177,22 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   return <div><dt>{label}</dt><dd>{children}</dd></div>;
 }
 
-/** A node at a glance: reachability, sandbox slots and what the node has left. */
+/** A node at a glance: reachability (with the reason a degraded provider is not ready), sandbox slots and what the node has left. */
 function NodeGlance({ node, health }: { node: SandboxNode; health: NodeHealth }) {
   const { t, i18n } = useTranslation("overview");
   const locale = i18n.resolvedLanguage;
   const now = Math.floor(Date.now() / 1000);
   const seen = seconds(node.last_seen_at);
   const count = (value: number) => formatInteger(value, locale);
+  const diagnostic = health === "degraded" ? nodeProviderDiagnostic(node) : "";
   return (
     <Facts>
-      <Fact label={t("fleet.facts.status")}><StatusDot tone={healthTone[health]} label={t(`nodeHealth.${health}`)} /></Fact>
+      <Fact label={t("fleet.facts.status")}>
+        <span className="status-with-help">
+          <StatusDot tone={healthTone[health]} label={t(`nodeHealth.${health}`)} />
+          {diagnostic ? <DiagnosticTip code={diagnostic} /> : null}
+        </span>
+      </Fact>
       <Fact label={t("fleet.facts.lastSeen")}><span title={seen === null ? undefined : formatDateTime(seen, locale)}>{seen === null ? t("fleet.facts.never") : formatRelative(seen, now, locale)}</span></Fact>
       <Fact label={t("fleet.facts.active")}>{count(node.active)}<span className="kpi-unit">/ {count(node.max_active)}</span></Fact>
       {node.provider === "microsandbox" ? <Fact label={t("fleet.facts.suspended")}>{count(suspendedSandboxes(node))}</Fact> : null}

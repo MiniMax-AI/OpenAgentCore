@@ -5,6 +5,8 @@ import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";
 import { NameCell, RowActions } from "../../components/list-ui";
 import { formatDateTime, formatRelative } from "../../lib/format";
 import type { MessageKey } from "../../lib/locale-strings";
+import { nodeProviderDiagnostic } from "../../lib/sandbox-diagnostic";
+import { DiagnosticTip } from "../fleet/DiagnosticTip";
 import { nodeHealth, suspendedSandboxes } from "../fleet/fleet-model";
 
 export type NodeState = "unconfirmed" | "offline" | "degraded" | "attention" | "available";
@@ -68,12 +70,15 @@ export function NodeList({ nodes, allocations, stale, disabled, suspends = false
         <tbody>
           {nodes.map((node) => {
             const name = node.name || node.id;
+            const state = nodeState(node, allocations, stale);
+            // A degraded node names the reason its provider is not ready.
+            const diagnostic = state === "degraded" ? nodeProviderDiagnostic(node) : "";
             return (
               <tr key={node.id}>
                 <th scope="row">
                   <NameCell name={node.name} id={node.id} onOpen={() => onOpen(node)} openLabel={t("Open {{name}}", { name })} idLabel={t("Node ID")} />
                 </th>
-                <td><NodeStatus state={nodeState(node, allocations, stale)} /></td>
+                <td><span className="status-with-help"><NodeStatus state={state} />{diagnostic ? <DiagnosticTip code={diagnostic} /> : null}</span></td>
                 {suspends ? <td className="numeric">{node.active} / {node.max_active}</td> : null}
                 {suspends ? <td className="numeric">{suspendedSandboxes(node)}</td> : null}
                 <td className="numeric" title={node.last_seen_at ? formatDateTime(seconds(node.last_seen_at), locale) : undefined}>

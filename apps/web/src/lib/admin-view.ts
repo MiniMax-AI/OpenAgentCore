@@ -4,6 +4,7 @@ import {
   type AdminKeyProvenance,
   type AdminProject,
   type AdminResourceType,
+  type AdminRuntimeObservation,
   type AdminSummaryEntry,
   type AdminWriteOperation,
   type RuntimeObservation,
@@ -94,7 +95,8 @@ export interface WriteOperation {
   trace_id: string;
 }
 
-export type OwnedRuntimeObservation = RuntimeObservation & { project_id: string };
+/** A Runtime observation with its project; the administrator list adds disk (E2B only, null elsewhere). */
+export type OwnedRuntimeObservation = RuntimeObservation & { project_id: string; disk?: AdminRuntimeObservation["observation"]["disk"] };
 export const ownerResourceTypes = ["agent", "session", "environment", "environment_template", "skill", "skill_version", "file", "vault", "credential", "artifact"] as const satisfies readonly AdminResourceType[];
 export type OwnerResourceType = AdminResourceType;
 

@@ -60,8 +60,9 @@ function presetOf(provider: SandboxProvider, resources: SandboxResources): Prese
 
 /**
  * Hosted sandbox setup as pages, one decision each: where sandboxes run,
- * which backend (own machines) or the E2B account, how big each sandbox is,
- * then a review. Advanced settings hold the complete form. The Runtime
+ * which backend (own machines) or the E2B account, how big each sandbox is
+ * (own machines only: E2B sandboxes take the template build's size), then a
+ * review. Advanced settings hold the complete form. The Runtime
  * release comes from this console's distribution manifest when it serves one.
  * `current` pre-selects the saved choices when a deployment changes. Keeping
  * the backend keeps its saved size and Runtime; another backend starts from its
@@ -102,10 +103,12 @@ export function SandboxSetupWizard({ initialCoreUrl, current, disabled, switchin
   const runtimeReady = !needsRuntime || isRuntimeRelease(release);
   // Core keeps no key across a change: E2B always needs one.
   const e2bReady = provider !== "e2b" || (apiKey.trim().length > 0 && validTemplate(template.trim()));
-  const sizeReady = provider !== null && validSandboxResources(provider, resources);
+  // Core sizes E2B sandboxes from the template build, so E2B sends no resources.
+  const sized = provider !== null && provider !== "e2b";
+  const sizeReady = provider !== null && (!sized || validSandboxResources(provider, resources));
   const ready = provider !== null && origin !== null && runtimeReady && e2bReady && sizeReady && !disabled && !busy;
 
-  const order: Step[] = where === "direct" ? ["where", "e2b", "size", "review"] : ["where", "backend", "size", "review"];
+  const order: Step[] = where === "direct" ? ["where", "e2b", "review"] : ["where", "backend", "size", "review"];
   const index = Math.max(0, order.indexOf(step === "advanced" ? "review" : step));
   const back = () => setStep(step === "advanced" ? "review" : order[Math.max(0, index - 1)]!);
 
@@ -128,7 +131,7 @@ export function SandboxSetupWizard({ initialCoreUrl, current, disabled, switchin
       await onSubmit({
         provider,
         core_url: origin!,
-        resources,
+        ...(sized ? { resources } : {}),
         ...(needsRuntime ? { runtime: release as SandboxRuntimeRelease } : {}),
         ...(provider === "e2b" ? { e2b: { api_key: apiKey.trim(), template: template.trim() } } : {}),
       });
@@ -168,11 +171,11 @@ export function SandboxSetupWizard({ initialCoreUrl, current, disabled, switchin
           <Field id={`${id}-key`} label={t("E2B API key")} help={t("The key is write-only: Core encrypts it and never shows it again.")}>
             <input id={`${id}-key`} type="password" autoComplete="off" spellCheck={false} value={apiKey} onChange={(event) => setApiKey(event.target.value)} />
           </Field>
-          <Field id={`${id}-template`} label={t("Template build")} help={t("The exact ready build, as template-id:build-uuid. A template alias alone is not enough. Its CPU and memory must match the size you choose next.")} error={template && !validTemplate(template.trim()) ? t("Enter a template ID and build UUID separated by a colon.") : null}>
+          <Field id={`${id}-template`} label={t("Template build")} help={t("The exact ready build, as template-id:build-uuid. A template alias alone is not enough. Each sandbox gets the build's CPU and memory.")} error={template && !validTemplate(template.trim()) ? t("Enter a template ID and build UUID separated by a colon.") : null}>
             <input id={`${id}-template`} value={template} onChange={(event) => setTemplate(event.target.value)} placeholder="parsar-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b" autoComplete="off" spellCheck={false} aria-invalid={Boolean(template && !validTemplate(template.trim()))} />
           </Field>
         </div>
-        <Nav onBack={back} onNext={() => setStep("size")} nextDisabled={!e2bReady} t={t} />
+        <Nav onBack={back} onNext={() => setStep("review")} nextDisabled={!e2bReady} t={t} />
       </Question>
     );
   } else if (step === "size") {
@@ -181,7 +184,7 @@ export function SandboxSetupWizard({ initialCoreUrl, current, disabled, switchin
     const kept = saved && provider && presetOf(provider, saved.resources) === null ? saved.resources : null;
     const disks = (value: SandboxResources) => (provider === "microsandbox" ? diskLabel(value) : undefined);
     page = (
-      <Question title={t("How big is each sandbox?")} help={t(provider === "e2b" ? "E2B gives each sandbox the CPU and memory of the template build. Choose the size that matches it." : "Every sandbox of this deployment gets these limits. How many run at once on a machine is set per node.")}>
+      <Question title={t("How big is each sandbox?")} help={t("Every sandbox of this deployment gets these limits. How many run at once on a machine is set per node.")}>
         <div className={kept ? "wizard-choices wizard-choices-4" : "wizard-choices wizard-choices-3"}>
           {kept ? <Choice title={t("Current")} value={sizeLabel(kept)} detail={disks(kept)} selected={size === "current"} onClick={() => { setSize("current"); setResources(kept); setStep("review"); }} /> : null}
           {(Object.keys(options) as Preset[]).map((key) => (
@@ -206,7 +209,7 @@ export function SandboxSetupWizard({ initialCoreUrl, current, disabled, switchin
       <Question title={t("Review and save")}>
         <dl className="wizard-review">
           <div><dt>{t("Sandboxes run on")}</dt><dd>{where === "direct" ? t("E2B cloud") : `${t("Own machines")} · ${provider === "docker" ? "Docker" : "microsandbox"}`}</dd></div>
-          <div><dt>{t("Each sandbox")}</dt><dd>{sizeLabel(resources)}{provider === "microsandbox" ? <span className="wizard-review-sub">{diskLabel(resources)}</span> : null}</dd></div>
+          <div><dt>{t("Each sandbox")}</dt><dd>{sized ? sizeLabel(resources) : t("From the template build")}{provider === "microsandbox" ? <span className="wizard-review-sub">{diskLabel(resources)}</span> : null}</dd></div>
           {provider === "e2b" ? <div><dt>{t("Template build")}</dt><dd><code>{template || "—"}</code></dd></div> : null}
           {needsRuntime ? (
             <div>
@@ -241,7 +244,7 @@ export function SandboxSetupWizard({ initialCoreUrl, current, disabled, switchin
     page = (
       <Question title={t("Advanced settings")}>
         <form className="wizard-fields" onSubmit={(event) => { event.preventDefault(); setStep("review"); }}>
-          <fieldset className="wizard-group">
+          {sized ? <fieldset className="wizard-group">
             <legend>{t("Each sandbox")}<HelpTip>{t("1–255 CPUs, 512–1048576 MiB of memory. microsandbox disks are at least 1024 MiB.")}</HelpTip></legend>
             <div className="wizard-grid">
               <NumberField id={`${id}-cpus`} label={t("CPUs")} value={resources.cpus} onChange={(cpus) => { setSize("custom"); setResources({ ...resources, cpus }); }} />
@@ -251,7 +254,7 @@ export function SandboxSetupWizard({ initialCoreUrl, current, disabled, switchin
                 <NumberField id={`${id}-data`} label={t("Data disk at /environment (MiB)")} value={resources.environment_disk_mib ?? 0} onChange={(environment_disk_mib) => setResources({ ...resources, environment_disk_mib })} />
               </> : null}
             </div>
-          </fieldset>
+          </fieldset> : null}
           {!switching ? (
             <Field id={`${id}-origin-advanced`} label={t("Core address")} help={t("The address nodes and sandboxes use to reach Core. It must be HTTPS and reachable from them; the console's own address may differ.")} error={coreUrl && !origin ? t("Enter a non-loopback HTTPS origin, such as https://core.example.") : null}>
               <input id={`${id}-origin-advanced`} type="url" value={coreUrl} onChange={(event) => setCoreUrl(event.target.value)} placeholder="https://core.example" />
@@ -277,7 +280,7 @@ export function SandboxSetupWizard({ initialCoreUrl, current, disabled, switchin
           ) : null}
           <div className="wizard-nav">
             <span />
-            <button className="button primary" type="submit" disabled={provider === null || !validSandboxResources(provider, resources)}>{t("Done")}<ArrowRight size={14} aria-hidden="true" /></button>
+            <button className="button primary" type="submit" disabled={!sizeReady}>{t("Done")}<ArrowRight size={14} aria-hidden="true" /></button>
           </div>
         </form>
       </Question>

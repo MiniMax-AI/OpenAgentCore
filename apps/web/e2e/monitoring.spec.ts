@@ -20,6 +20,8 @@ test("shows the deployment's health on Overview and each monitor page", async ({
   await expect(page.getByLabel("Agent run summary")).toContainText("Requests");
   await page.getByRole("button", { name: "Sandbox metrics" }).click();
   await expect(page.getByRole("table").first()).toContainText("core-01");
+  // A degraded node names why its provider is not ready.
+  await expect(page.getByRole("button", { name: "Docker limits unsupported" })).toBeVisible();
 });
 
 test("opens a Session's conversation from the Session log, read-only", async ({ page, request }) => {
@@ -50,6 +52,8 @@ test("opens a node and a sandbox in dialogs from Sandbox metrics", async ({ page
 test("shows E2B's cloud instead of machines", async ({ page, request }) => {
   await openConsole(page, request, "sandbox-metrics", { sandbox: "e2b" });
   await expect(page.getByRole("heading", { name: "E2B cloud" })).toBeVisible();
+  // Each sandbox takes the template build's size, disk included.
+  await expect(page.getByText("10 GiB disk")).toBeVisible();
   await expect(page.getByRole("button", { name: "Add node" })).toHaveCount(0);
   await expect(page.getByRole("columnheader", { name: "Node", exact: true })).toHaveCount(0);
 

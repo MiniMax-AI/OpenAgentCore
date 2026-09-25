@@ -20,12 +20,14 @@ const release = { source_commit: "c0ffee".padEnd(40, "0"), image_id: `sha256:${h
 const manifest = { platform: "linux/amd64", source_commit: release.source_commit, images: { runtime: release.image_id }, image_manifest_digests: { runtime: release.image_manifest_digest }, runtime_ref: release.microsandbox_ref, microsandbox: { runtime_sha256: release.runtime_sha256, firmware_sha256: release.firmware_sha256 }, artifacts: {} };
 
 function configuredDeployment() {
-  return { installation_id: "7f3c2a90-fixture", provider: "docker", core_url: `http://127.0.0.1:${port}`, maintenance: false, owner_epoch: 3, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: { resources: { cpus: 2, memory_mib: 4096 }, runtime: release }, specification_digest: "fixture" };
+  return { installation_id: "7f3c2a90-fixture", provider: "docker", core_url: `http://127.0.0.1:${port}`, maintenance: false, owner_epoch: 3, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: { resources: { cpus: 2, memory_mib: 4096 }, runtime: release }, specification_digest: "fixture", suspension: null };
 }
+/** The E2B template build as Core read it when the selection was saved. */
+const templateBuild = { status: "ready", resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 10240 } };
 
 // E2B runs sandboxes in its cloud: no nodes, only what Core holds there.
 function e2bDeployment() {
-  return { ...configuredDeployment(), provider: "e2b", mode: "direct", resources: { allocations: 3, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, e2b: { template: "parsar-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", credential_configured: true } };
+  return { ...configuredDeployment(), provider: "e2b", mode: "direct", resources: { allocations: 3, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, e2b: { template: "parsar-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", credential_configured: true, template_build: templateBuild } };
 }
 
 function reset(mode = "setup", fresh = false, sandbox = "configured") {
@@ -146,7 +148,9 @@ function adminRead(response, path, url) {
   if (path === "/projects") return send(response, 200, { data: a.projects.map(a.publicProject), has_more: false });
   if (path === "/summary") return send(response, 200, a.summary(url));
   if (path === "/runtime-observations") {
-    const data = a.runtimeObservations();
+    // Only E2B reports a sandbox's disk.
+    const e2b = state.deployment?.provider === "e2b";
+    const data = a.runtimeObservations().map((entry) => ({ ...entry, observation: { ...entry.observation, disk: e2b && entry.observation.status === "observed" ? { usage_bytes: 3 * 2 ** 30, limit_bytes: 10 * 2 ** 30 } : null } }));
     return send(response, 200, { object: "list", data, has_more: false, first_id: data[0]?.observation.id ?? null, last_id: data.at(-1)?.observation.id ?? null });
   }
   if (path === "/core-metrics") return send(response, 200, coreMetrics(url.searchParams.get("range") ?? "1h"));
@@ -206,12 +210,20 @@ async function sandboxRoute(request, response, path) {
   if (path === "/deployment" && request.method === "POST") {
     const input = await body(request);
     if (state.deployment) return error(response, 409, "The sandbox deployment is already configured.", "sandbox_deployment_conflict");
-    if (!input.resources || (input.provider !== "e2b" && !input.runtime)) return error(response, 400, "resources and runtime are required.", "invalid_sandbox_configuration");
-    state.deployment = { ...configuredDeployment(), provider: input.provider, core_url: input.core_url, mode: input.provider === "e2b" ? "direct" : "nodes", specification: { resources: input.resources, ...(input.runtime ? { runtime: input.runtime } : {}) } };
+    const e2b = input.provider === "e2b";
+    if (!e2b && (!input.resources || !input.runtime)) return error(response, 400, "resources and runtime are required.", "invalid_sandbox_configuration");
+    // As Core: E2B may omit resources and adopt its template build's CPU and memory; only microsandbox suspends.
+    const resources = input.resources ?? { cpus: templateBuild.resources.cpus, memory_mib: templateBuild.resources.memory_mib };
+    state.deployment = {
+      ...configuredDeployment(), provider: input.provider, core_url: input.core_url, mode: e2b ? "direct" : "nodes",
+      specification: { resources, ...(input.runtime ? { runtime: input.runtime } : {}) },
+      ...(e2b ? { e2b: { template: input.e2b?.template ?? "", credential_configured: true, template_build: templateBuild } } : {}),
+      suspension: input.provider === "microsandbox" ? { idle_seconds: 300, retention_seconds: 86400 } : null,
+    };
     return send(response, 201, state.deployment);
   }
   if (path === "/deployment") {
-    return send(response, 200, state.deployment ?? { installation_id: "7f3c2a90-fixture", provider: "", core_url: `http://127.0.0.1:${port}`, maintenance: false, owner_epoch: 3, generation: 0, mode: "", resources: { allocations: 0, pending: 0 } });
+    return send(response, 200, state.deployment ?? { installation_id: "7f3c2a90-fixture", provider: "", core_url: `http://127.0.0.1:${port}`, maintenance: false, owner_epoch: 3, generation: 0, mode: "", resources: { allocations: 0, pending: 0 }, suspension: null });
   }
   if (path === "/nodes") return send(response, 200, { data: state.nodes });
   if (path === "/enrollment-tokens" && request.method === "POST") {

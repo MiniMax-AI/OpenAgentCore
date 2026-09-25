@@ -1,4 +1,4 @@
-import type { SandboxProvider, SandboxResources, SandboxRuntimeRelease, SandboxSpecification } from "@agents-core-web/agents-client";
+import type { SandboxDeployment, SandboxE2BTemplateBuild, SandboxProvider, SandboxResources, SandboxRuntimeRelease, SandboxSpecification } from "@agents-core-web/agents-client";
 
 interface Manifest {
   platform?: string;
@@ -25,6 +25,23 @@ export function validSandboxResources(provider: SandboxProvider, resources: Sand
 
 export function savedSpecification(provider: SandboxProvider, savedProvider?: SandboxProvider | "", specification?: SandboxSpecification): SandboxSpecification | null {
   return provider === savedProvider && specification ? structuredClone(specification) : null;
+}
+
+/** CPU and memory of the E2B template build as Core read them when the selection was saved; null while either is unknown. */
+export function templateBuildSize(deployment: SandboxDeployment): { cpus: number; memory_mib: number } | null {
+  const build = deployment.e2b?.template_build?.resources;
+  return build && build.cpus !== null && build.memory_mib !== null ? { cpus: build.cpus, memory_mib: build.memory_mib } : null;
+}
+
+/** Core admits only a ready build; a selection saved before Core recorded the build has no status. */
+export function templateBuildStatus(build: SandboxE2BTemplateBuild | undefined): "ready" | "notReady" | "unknown" {
+  if (!build?.status) return "unknown";
+  return build.status === "ready" ? "ready" : "notReady";
+}
+
+/** Each sandbox's limits: the saved specification, else the E2B template build that an E2B selection adopts. */
+export function sandboxSize(deployment: SandboxDeployment): SandboxResources | null {
+  return deployment.specification?.resources ?? templateBuildSize(deployment);
 }
 
 /** The paired console serves one matched distribution; Core persists approval. */
