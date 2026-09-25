@@ -9,7 +9,8 @@ import { ErrorDialog } from "../../components/ErrorDialog";
 import { ErrorState } from "../../components/ErrorState";
 import { useFailureToast, useToast } from "../../components/Toast";
 import { useConsoleIntent, useConsoleNavigation } from "../../lib/console-navigation";
-import { sandboxRequestError } from "../../lib/sandbox-labels";
+import { installationQuery } from "../../lib/installation";
+import { sandboxConfigurationRejection, sandboxRequestError } from "../../lib/sandbox-labels";
 import type { SandboxConsoleConfig } from "./console-config";
 import { sandboxAdmin, sandboxConsoleConfigQuery, sandboxDeploymentQuery, sandboxScope, sandboxSnapshotQuery, type SandboxSnapshot } from "./sandbox-queries";
 import { SandboxSetupWizard } from "./SandboxSetupWizard";
@@ -59,6 +60,8 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const client = sandboxAdmin;
   const queryClient = useQueryClient();
   const query = useQuery(sandboxSnapshotQuery);
+  // Nodes enrolled with an address other than the current public_url must be added again.
+  const staleNodes = useQuery(installationQuery).data?.address_bindings.nodes_on_other_address ?? 0;
   const snapshot: SandboxSnapshot | null = query.data ?? null;
   const loading = query.isFetching;
   // As before a reload clears the last error, a running read hides it.
@@ -71,7 +74,6 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
-  const initialCoreUrl = window.location.origin;
   // When a deployment write last had an uncertain outcome; only a read begun after it confirms the state again.
   const [uncertainSince, setUncertainSince] = useState<number | null>(null);
   const setupNeedsRefresh = uncertainSince !== null && !(snapshot && snapshot.readAt > uncertainSince);
@@ -102,8 +104,8 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     const controller = new AbortController(); lifetime.current = controller;
     return () => { controller.abort(); lifetime.current = null; };
   }, []);
-  /** Whether Core confirmed the change. */
-  async function changeDeployment(operation: (signal: AbortSignal) => Promise<SandboxDeployment>): Promise<boolean> {
+  /** Whether Core confirmed the change. `fromWizard`: a configuration Core rejects is thrown back to the wizard that sent it. */
+  async function changeDeployment(operation: (signal: AbortSignal) => Promise<SandboxDeployment>, fromWizard = false): Promise<boolean> {
     const controller = lifetime.current;
     if (!controller || busy || loading || setupNeedsRefresh || !fresh) return false;
     setBusy(true); setWriteFailure(null);
@@ -124,6 +126,8 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
       }
     } catch (error) {
       if (!controller.signal.aborted) {
+        // Core rejected the configuration and saved nothing: the wizard explains why.
+        if (fromWizard && sandboxConfigurationRejection(error) !== null) throw error;
         setUncertainSince(performance.now()); setWriteFailure({ error, open: true });
         // Nothing re-reads on its own: the operator refreshes to confirm. A later visit reads again.
         void queryClient.invalidateQueries({ queryKey: sandboxScope, refetchType: "none" });
@@ -133,10 +137,10 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   }
   /** First setup; own machines continue straight to adding the first node. */
   async function initialize(input: InitializeSandboxDeployment) {
-    if (await changeDeployment((signal) => client.initializeDeployment(input, { signal })) && input.provider !== "e2b") setAdding(true);
+    if (await changeDeployment((signal) => client.initializeDeployment(input, { signal }), true) && input.provider !== "e2b") setAdding(true);
   }
   async function update(input: InitializeSandboxDeployment) {
-    await changeDeployment((signal) => client.updateDeployment({ ...input, core_url: snapshot!.deployment.core_url, expected_generation: snapshot!.deployment.generation }, { signal }));
+    await changeDeployment((signal) => client.updateDeployment({ ...input, expected_generation: snapshot!.deployment.generation }, { signal }), true);
   }
   async function maintenance(maintenance: boolean) {
     await changeDeployment((signal) => client.setMaintenance({ maintenance, expected_generation: snapshot!.deployment.generation }, { signal }));
@@ -255,9 +259,10 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     <NodesPageHeader count={hostedNodes ? nodes.length : undefined} actions={actions} cloud={snapshot?.deployment.provider === "e2b"} />
     <div className="console-page-body sandbox-content">
       {status}
-      {snapshot && !snapshot.deployment.provider ? <SandboxSetupWizard key={revision} initialCoreUrl={initialCoreUrl} disabled={busy || loading || setupNeedsRefresh || error !== null} onSubmit={initialize} /> : null}
+      {snapshot && !snapshot.deployment.provider ? <SandboxSetupWizard key={revision} coreUrl={snapshot.deployment.core_url} disabled={busy || loading || setupNeedsRefresh || error !== null} onSubmit={initialize} /> : null}
       {snapshot?.deployment.provider ? <>
         {snapshot.deployment.maintenance ? <p className="sandbox-maintenance" role="status">{t("Maintenance is enabled. New sandbox placement is paused.")}</p> : null}
+        {hostedNodes && staleNodes > 0 ? <p className="sandbox-maintenance sandbox-address-warning" role="alert">{staleNodes === 1 ? t("1 node is still bound to an old Core address. Add it again.") : t("{{count}} nodes are still bound to an old Core address. Add them again.", { count: staleNodes })}</p> : null}
         <SandboxDeploymentSettings key={`${snapshot.deployment.generation}:${snapshot.deployment.maintenance}:${revision}`} deployment={snapshot.deployment} fresh={confirmed} disabled={busy || loading || !fresh || setupNeedsRefresh} onMaintenance={maintenance} onUpdate={update} onRefresh={refresh} />
         {hostedNodes ? <section aria-label={t("Sandbox nodes")}>
           {nodes.length

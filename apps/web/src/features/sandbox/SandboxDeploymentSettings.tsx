@@ -67,7 +67,7 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, onMaint
       </p>
       {!changing ? <button type="button" className="button outline" disabled={disabled || !clean} onClick={() => setChanging(true)}>{t("Change provider or resources")}</button> : <>
         <SandboxSetupWizard
-          initialCoreUrl={deployment.core_url}
+          coreUrl={deployment.core_url}
           current={deployment.provider ? { provider: deployment.provider, specification: deployment.specification, e2bTemplate: deployment.e2b?.template } : undefined}
           disabled={disabled || !clean}
           switching
