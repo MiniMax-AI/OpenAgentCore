@@ -8,7 +8,7 @@ export const system: TranslationShape<typeof english> = {
     title: "安装",
     failed: "无法读取安装信息。",
     publicUrl: "公开地址",
-    publicUrlHelp: "应用、节点和沙箱访问 Core 使用的唯一 HTTPS 地址，即 config.json 中的 public_url。",
+    publicUrlHelp: "应用、节点和沙箱访问 Core 使用的地址，即 config.json 中的 public_url。",
     apiBaseUrl: "API 基础地址",
     apiBaseUrlHelp: "应用把它设为 OPENAI_BASE_URL，并把项目 API key 设为 OPENAI_API_KEY。",
     copyApiBaseUrl: "复制 API 基础地址",

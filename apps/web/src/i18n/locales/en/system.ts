@@ -6,7 +6,7 @@ export const system = {
     title: "Installation",
     failed: "The installation could not be read.",
     publicUrl: "Public address",
-    publicUrlHelp: "The one HTTPS address apps, nodes and sandboxes use to reach Core: public_url in config.json.",
+    publicUrlHelp: "The address apps, nodes and sandboxes use to reach Core, set as public_url in config.json.",
     apiBaseUrl: "API base URL",
     apiBaseUrlHelp: "Applications use it as OPENAI_BASE_URL, with a Project API key as OPENAI_API_KEY.",
     copyApiBaseUrl: "Copy API base URL",
