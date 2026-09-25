@@ -9,6 +9,13 @@ ALTER TABLE runtime_node_enrollments ADD COLUMN id uuid NOT NULL DEFAULT gen_ran
 CREATE UNIQUE INDEX runtime_node_enrollments_id ON runtime_node_enrollments(id);
 
 -- +goose Down
+-- +goose StatementBegin
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM runtime_nodes WHERE admission_state = 'pending_confirmation' AND removed_at IS NULL) THEN
+    RAISE EXCEPTION 'Cannot discard pending sandbox node admission';
+  END IF;
+END $$;
+-- +goose StatementEnd
 DROP INDEX runtime_node_enrollments_id;
 ALTER TABLE runtime_node_enrollments DROP COLUMN id;
 ALTER TABLE runtime_nodes DROP COLUMN last_update_digest, DROP COLUMN last_update_revision, DROP COLUMN configuration_version, DROP COLUMN admission_state;

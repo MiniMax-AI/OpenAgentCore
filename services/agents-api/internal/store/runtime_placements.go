@@ -98,9 +98,6 @@ func reserveRuntimeRestore(ctx context.Context, q *sqlc.Queries, node pgtype.UUI
 	if err != nil {
 		return err
 	}
-	if d.Maintenance {
-		return ErrRuntimeNodeUnavailable
-	}
 	nodes, err := q.ListRuntimeNodes(ctx)
 	if err != nil {
 		return err

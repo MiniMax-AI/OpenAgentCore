@@ -36,4 +36,8 @@ func TestRuntimeNodeCapacityMigrationPreservesExistingConfiguration(t *testing.T
 	if err != nil || pending.AdmissionState != "pending_confirmation" {
 		t.Fatal("new row defaults enabled", pending, err)
 	}
+	if _, err := provider.DownTo(t.Context(), 69); err == nil {
+		t.Fatal("downgrade discarded pending confirmation")
+	}
+
 }

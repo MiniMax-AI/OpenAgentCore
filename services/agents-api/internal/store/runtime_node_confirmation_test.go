@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -297,5 +298,35 @@ func TestRuntimeNodeCapacityDecreasePreservesRetainedResources(t *testing.T) {
 	decreased, err := s.UpdateRuntimeNode(t.Context(), d.LocalNodeID, request)
 	if err != nil || decreased.MaxActive != 1 || decreased.MaxRetained != 2 {
 		t.Fatal("safe offline decrease rejected", decreased, err)
+	}
+}
+
+func TestRuntimeNodeRestorePreservesAdmittedWorkInMaintenance(t *testing.T) {
+	s, w, d := managerFixture(t, 1, 4)
+	_, pending, _ := pendingRuntimeNode(t, s)
+	onlineManagerNode(t, s, pending.NodeID)
+	allocation := lifecycleTestAllocation(t, s, w, d, d.LocalNodeID)
+	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_allocations SET state='running',create_settled=true,compute_phase='suspended',compute_retained_until=clock_timestamp()+interval '1 hour',compute_state=$2::jsonb WHERE id=$1", allocation.ID, json.RawMessage(`{"snapshot":{"id":"owned"}}`)); err != nil {
+		t.Fatal(err)
+	}
+	allocation, err := s.GetRuntimeAllocation(t.Context(), allocation.TenantID, allocation.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_deployment SET maintenance=true"); err != nil {
+		t.Fatal(err)
+	}
+	until := time.Now().Add(time.Hour)
+	if _, err := w.SetRuntimeCompute(t.Context(), allocation, "restoring", json.RawMessage(`{"target":{"id":"restore"}}`), &until, 0); err != nil {
+		t.Fatal("maintenance stopped admitted restore", err)
+	}
+	if err := s.runtimeManagerTransaction(t.Context(), func(q *sqlc.Queries, _ sqlc.RuntimeDeployment) error {
+		id, _ := parseConnectionGeneration(pending.NodeID)
+		return reserveRuntimeRestore(t.Context(), q, id)
+	}); !errors.Is(err, ErrRuntimeNodeUnavailable) {
+		t.Fatal("maintenance allowed pending restore", err)
+	}
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString(), d.LocalNodeID)); !errors.Is(err, ErrEnvironmentUnavailable) {
+		t.Fatal("maintenance allowed fresh placement", err)
 	}
 }

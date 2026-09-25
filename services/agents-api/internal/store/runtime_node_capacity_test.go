@@ -29,6 +29,13 @@ func TestRuntimeNodeCapacityPolicy(t *testing.T) {
 		schedulable bool
 	}{
 		{name: "effective_limits", status: "ready", limit: 3},
+		{name: "pending_low_free_memory", change: func(n *RuntimeNode, _ *sqlc.RuntimeDeployment) {
+			n.AvailableMemoryBytes = nodeCapacityPointer(int64(1))
+		}, status: "blocked"},
+		{name: "enabled_low_free_memory", change: func(n *RuntimeNode, _ *sqlc.RuntimeDeployment) {
+			n.AdmissionState = "enabled"
+			n.AvailableMemoryBytes = nodeCapacityPointer(int64(1))
+		}, status: "ready", limit: 3, schedulable: true},
 		{name: "fractional_cpu", change: func(n *RuntimeNode, _ *sqlc.RuntimeDeployment) { n.EffectiveCPUCores = nodeCapacityPointer(2.5) }, status: "blocked"},
 		{name: "missing_effective_cpu", change: func(n *RuntimeNode, _ *sqlc.RuntimeDeployment) {
 			n.EffectiveCPUCores = nil

@@ -140,7 +140,6 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 	f.enroll(f.nodeB)
 	f.online(f.nodeA)
 	f.online(f.nodeB)
-	store.ActivateRuntimeNodeForTest(t, s, f.nodeB, 100, 100)
 	return f
 }
 func (f *nodeIsolationFixture) enroll(id string) {
@@ -153,6 +152,7 @@ func (f *nodeIsolationFixture) enroll(id string) {
 	if err != nil {
 		f.t.Fatal(err)
 	}
+	store.ActivateRuntimeNodeForTest(f.t, f.store, id, 100, 100)
 }
 func (f *nodeIsolationFixture) online(id string) {
 	f.t.Helper()
