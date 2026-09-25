@@ -54,9 +54,9 @@ export function ExecutorInstallPanel({ install, archived }: { install: ExecutorI
         <p className="executor-install-note">{archived ? t("executor.install.archived") : t("executor.install.steps")}</p>
         <InstallCommand value={install.command} />
         <div className="executor-install-requirements">
-          {/* The list carries the label for assistive technology; the visible one is not read twice. */}
+          {/* The list carries the label for assistive technology; the visible one is not read twice. Safari drops a list's semantics without list-style unless its role is explicit. */}
           <span aria-hidden="true">{t("executor.install.requirements")}</span>
-          <ul aria-label={t("executor.install.requirements")}>
+          <ul role="list" aria-label={t("executor.install.requirements")}>
             {["Linux amd64", "Python 3.9+", "curl", "sha256sum", "Docker CLI", t("executor.install.docker", { socket: DOCKER_SOCKET }), t("executor.install.https", { url: install.publicUrl })].map((item, index) => (
               <li key={item}>{index ? <span className="executor-install-separator" aria-hidden="true">·</span> : null}{item}</li>
             ))}
