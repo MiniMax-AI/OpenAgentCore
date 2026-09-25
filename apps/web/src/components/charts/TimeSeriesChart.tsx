@@ -28,6 +28,8 @@ export interface TimeSeriesChartProps {
   height?: number;
   /** Columns only: include this series in the tooltip without drawing it. */
   tooltipOnly?: readonly TimeSeries[];
+  /** The values are counts, so the axis ticks stay whole numbers. */
+  counts?: boolean;
 }
 
 /** `left` is a floor: the axis gutter grows to the widest tick label. */
@@ -75,6 +77,7 @@ export function TimeSeriesChart({
   formatAxis = formatValue,
   height = 168,
   tooltipOnly = [],
+  counts = false,
 }: TimeSeriesChartProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage;
@@ -109,7 +112,7 @@ export function TimeSeriesChart({
     }
     return max;
   }, [count, kind, series, stacked]);
-  const ticks = niceTicks(maximum);
+  const ticks = niceTicks(maximum, 4, counts);
   const top = ticks[ticks.length - 1] || 1;
   // Tick labels start at the card's content edge, under the title and legend;
   // the plot begins after the widest label, so every chart lines up the same way.

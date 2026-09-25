@@ -92,11 +92,16 @@ workbench.
   many sleep (Core's retained minus active) on the Nodes list, a node's page, Sandbox
   metrics and Overview; a node's allocations show how long each has been suspended and
   about when Core reclaims it. Docker never suspends and shows none of it.
-- **First run**: after signing in with the Core key while no project exists,
-  full-screen steps outside the shell create the first project (default name
-  `Default`) and its first project API key, show the plaintext once with an example request,
-  then give a three-chapter tour of the console (Monitor, Resources, Platform)
-  before opening it. Signing in uses the same stage.
+- **Getting started**: signing in opens the console on the Overview; nothing is
+  forced first. While a step is to do, a Getting started checklist on the Overview
+  shows three steps, in any order, each with its state and one action: sandboxes
+  ready (a saved deployment and a node online and ready, or a saved E2B deployment
+  whose template build is not reported as not ready),
+  a project with an active key, and a first Session. Completion comes from reads the
+  console already makes. It can be hidden; Show Getting started in the sidebar
+  opens it again, and it ends with a brief "You're set". The optional
+  three-chapter tour of the console (Monitor, Resources, Platform) opens from it,
+  on the sign-in stage.
 - Terminology: API terms stay in English in the Chinese UI (Agent, Session, Turn,
   Skill, Vault, Credential, API key). The sign-in credential is the Core key
   ("Core Key"); keys issued in a project for applications are project API keys

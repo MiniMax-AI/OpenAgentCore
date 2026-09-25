@@ -7,6 +7,7 @@ import {
   FolderKanban,
   Layers3,
   LayoutDashboard,
+  ListChecks,
   ListTree,
   Network,
   Puzzle,
@@ -44,11 +45,14 @@ export function ConsoleSidebar({
   active,
   onSelect,
   onIntent,
+  onGettingStarted,
 }: {
   active: ConsoleView | null;
   onSelect: (view: ConsoleView) => void;
   /** Hover or focus on an item: read its page's data before the click. */
   onIntent?: (view: ConsoleView) => void;
+  /** Opens the Overview's Getting started, even after it was hidden. */
+  onGettingStarted: () => void;
 }) {
   const { t } = useTranslation("navigation");
   const provider = useSandboxProvider();
@@ -97,6 +101,12 @@ export function ConsoleSidebar({
       </nav>
 
       <div className="sidebar-footer">
+        <div className="main-nav sidebar-help">
+          <button type="button" aria-label={t("showGettingStarted")} title={t("showGettingStarted")} onClick={onGettingStarted}>
+            <ListChecks size={15} strokeWidth={1.5} aria-hidden="true" />
+            <span>{t("showGettingStarted")}</span>
+          </button>
+        </div>
         <div className="sidebar-account">
           <ConsoleAccountMenu />
           <AppearanceMenu />

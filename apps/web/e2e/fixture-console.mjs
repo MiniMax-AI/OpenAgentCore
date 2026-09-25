@@ -36,13 +36,15 @@ function e2bDeployment() {
   return { ...configuredDeployment(), provider: "e2b", mode: "direct", resources: { allocations: 3, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, e2b: { template: "parsar-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", credential_configured: true, template_build: templateBuild } };
 }
 
-function reset(mode = "login", fresh = false, sandbox = "configured") {
+function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo") {
   const base = buildDemo();
   const now = Math.floor(Date.now() / 1000);
   const resources = buildResources(now, base.agents, base.sessions);
   const admin = buildAdmin(now, base, resources);
-  // A fresh install: no project yet, so the console starts first-run setup.
-  if (fresh) admin.projects.splice(0);
+  // A fresh install: no project, Session or Runtime yet; Getting started leads.
+  if (fresh) for (const list of [admin.projects, base.sessions, base.observations, base.allocations]) list.splice(0);
+  // "none": no node has enrolled yet.
+  if (nodes === "none") base.nodes.splice(0);
   state = {
     ...base, resources, admin,
     // "authenticated": the console holds a session for the fixture cookie; "login": it holds none.
@@ -339,7 +341,7 @@ function registeredNode(nodeId) {
 async function fixtureRoute(request, response, url) {
   if (url.pathname === "/__fixture/health") return send(response, 200, { ok: true });
   if (url.pathname === "/__fixture/reset" && request.method === "POST") {
-    reset(url.searchParams.get("auth") ?? "login", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured");
+    reset(url.searchParams.get("auth") ?? "login", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured", url.searchParams.get("nodes") ?? "demo");
     return send(response, 200, { ok: true });
   }
   if (url.pathname === "/__fixture/fail-next" && request.method === "POST") {

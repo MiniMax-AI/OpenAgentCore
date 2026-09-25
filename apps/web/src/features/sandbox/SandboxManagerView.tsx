@@ -8,7 +8,7 @@ import { EmptyState, HelpTip, RefreshButton } from "../../components/console-ui"
 import { ErrorDialog } from "../../components/ErrorDialog";
 import { ErrorState } from "../../components/ErrorState";
 import { useFailureToast, useToast } from "../../components/Toast";
-import { useConsoleNavigation } from "../../lib/console-navigation";
+import { useConsoleIntent, useConsoleNavigation } from "../../lib/console-navigation";
 import { sandboxRequestError } from "../../lib/sandbox-labels";
 import type { SandboxConsoleConfig } from "./console-config";
 import { sandboxAdmin, sandboxConsoleConfigQuery, sandboxDeploymentQuery, sandboxScope, sandboxSnapshotQuery, type SandboxSnapshot } from "./sandbox-queries";
@@ -173,6 +173,13 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const nodes = snapshot?.nodes ?? [];
   const allocations = snapshot?.allocations ?? [];
   const hostedNodes = Boolean(snapshot?.deployment.provider && snapshot.deployment.provider !== "e2b");
+  // Getting started asks for Add node on arrival. A request the first settled read cannot
+  // serve (no own-machines deployment, maintenance, a failed read) is dropped, so the
+  // dialog never opens later on its own.
+  const addNodeReadiness = loading || busy ? "wait"
+    : !snapshot ? (query.isError ? "unavailable" : "wait")
+    : hostedNodes && fresh && !snapshot.deployment.maintenance ? "ready" : "unavailable";
+  useConsoleIntent("add-node", addNodeReadiness, () => setAdding(true));
   const selected = params.id ? nodes.find((node) => node.id === params.id) : undefined;
   const refreshButton = <RefreshButton onClick={refreshByUser} refreshing={loading} disabled={busy || removing} label={t("Refresh sandbox state")} />;
   const readFailure = error !== null ? sandboxRequestError(error, locale) : null;

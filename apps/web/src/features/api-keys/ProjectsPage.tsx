@@ -9,13 +9,14 @@ import { ErrorState } from "../../components/ErrorState";
 import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
 import { Modal } from "../../components/Modal";
 import { useFailureToast } from "../../components/Toast";
-import { useConsoleNavigation } from "../../lib/console-navigation";
+import { useConsoleIntent, useConsoleNavigation } from "../../lib/console-navigation";
 import { formatDateTime, formatInteger, formatRelative } from "../../lib/format";
 import { admin, useProjects } from "../../lib/projects";
 import { activeKeyNames, flowError, isAbort, isUsableName, matchesProject, normalizeName, prefixLabel, projectNameProblem, type FlowError } from "./key-flows";
 import { FlowErrorMessage, KeyFlowDialogs, NameField, PendingKeyNotice } from "./KeyFlowDialogs";
 import { ProjectDetail, useProjectKeys } from "./ProjectDetail";
 import { invalidateProjects, projectActivityQuery, projectScope } from "./project-queries";
+import { projectsQuery } from "../../lib/queries";
 import { ProjectStatus } from "./ProjectStatus";
 import { useKeyFlow } from "./use-key-flow";
 import "./api-keys.css";
@@ -23,7 +24,8 @@ import { type AdminKey, archiveProject, createProject, type Project, renameProje
 import { TableSkeleton } from "../../components/Skeleton";
 
 type Dialog =
-  | { kind: "create"; name: string }
+  /** `thenIssue`: Getting started continues from the new project to its first key. */
+  | { kind: "create"; name: string; thenIssue?: boolean }
   | { kind: "rename"; project: Project; name: string }
   | { kind: "archive"; project: Project }
   | { kind: "revoke"; project: Project; key: AdminKey; activeCount: number };
@@ -44,7 +46,6 @@ export function ProjectsPage() {
   const queryClient = useQueryClient();
   const { params, navigate, back } = useConsoleNavigation();
   const [selectedId, setSelectedId] = useState<string | null>(params.id ?? null);
-  const [created, setCreated] = useState<Project | null>(null);
   const [query, setQuery] = useState("");
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [dialogBusy, setDialogBusy] = useState(false);
@@ -54,8 +55,8 @@ export function ProjectsPage() {
   useEffect(() => { setSelectedId(params.id ?? null); }, [params]);
 
   // After a key is issued (or its outcome is uncertain), re-read the project and its keys.
-  const keyChanged = useCallback((project: Project | null) => {
-    void invalidateProjects(queryClient, { projectId: project?.id });
+  const keyChanged = useCallback((project: Project) => {
+    void invalidateProjects(queryClient, { projectId: project.id });
   }, [queryClient]);
   const controls = useKeyFlow(keyChanged);
   const { flow, dispatch } = controls;
@@ -69,7 +70,7 @@ export function ProjectsPage() {
   useFailureToast(refreshError, t("page.refreshFailed"), "projects-refresh");
   const names = useMemo(() => projects.map((project) => project.name), [projects]);
   const visible = useMemo(() => projects.filter((project) => matchesProject(project, query)), [projects, query]);
-  const selected = selectedId ? byId.get(selectedId) ?? (created?.id === selectedId ? created : null) : null;
+  const selected = selectedId ? byId.get(selectedId) ?? null : null;
   const keys = useProjectKeys(selected?.id ?? null);
   // The open project's keys and usage; its write operations show their own progress.
   const detailFetching = useIsFetching({ queryKey: projectScope(selectedId ?? ""), predicate: (entry) => entry.queryKey[2] !== "write-operations" }) > 0;
@@ -86,6 +87,11 @@ export function ProjectsPage() {
   };
   const openDialog = (next: Dialog) => { setDialogError(null); setDialog(next); };
   const closeDialog = () => { if (!dialogBusy) setDialog(null); };
+  // Getting started opens a dialog on arrival: a new project (then its first key), or a key for an open project.
+  useConsoleIntent("create-project", "ready", () => openDialog({ kind: "create", name: "", thenIssue: true }));
+  useConsoleIntent("issue-key", selected ? (manageable(selected) && flow.step === "idle" ? "ready" : "unavailable") : state.status === "loading" ? "wait" : "unavailable", () => {
+    if (selected) dispatch({ type: "openIssue", project: selected });
+  });
 
   const dialogNameProblem = dialog?.kind === "create"
     ? projectNameProblem(dialog.name, names)
@@ -104,8 +110,10 @@ export function ProjectsPage() {
     try {
       if (current.kind === "create") {
         const project = await createProject(normalizeName(current.name));
-        setCreated(project);
-        open(project.id);
+        // The project page opens anew and finds the project in the list at once;
+        // the re-read below confirms it. The key dialog follows as its intent.
+        queryClient.setQueryData(projectsQuery.queryKey, (list) => (list && !list.some((entry) => entry.id === project.id) ? [...list, project] : list ?? [project]));
+        navigate("projects", { id: project.id }, current.thenIssue ? "issue-key" : undefined);
       } else if (current.kind === "rename") {
         await renameProject(current.project.id, normalizeName(current.name));
       } else if (current.kind === "archive") {

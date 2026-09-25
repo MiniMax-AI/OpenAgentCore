@@ -1,11 +1,11 @@
 import { flushSync } from "react-dom";
 
 /**
- * How the page changes: `step` keeps the onboarding stage still and slides
- * the panel; `enter` dissolves the onboarding and reveals the console in a
- * circle growing from the button that was pressed.
+ * How the page changes: `enter` dissolves the old page and reveals the new
+ * one in a circle growing from the button that was pressed (signing in, and
+ * opening or leaving the tour).
  */
-export type OnboardingTransition = "step" | "enter";
+export type OnboardingTransition = "enter";
 
 /**
  * Applies a state change inside a View Transition when the browser supports

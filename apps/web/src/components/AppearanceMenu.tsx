@@ -36,7 +36,9 @@ export function AppearanceMenu() {
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    // Escape belongs to the menu only while it is open; otherwise the page may use it.
     if (event.key === "Escape") {
+      if (!open) return;
       event.preventDefault();
       close();
       return;

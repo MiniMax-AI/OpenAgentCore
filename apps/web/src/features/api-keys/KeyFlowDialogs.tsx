@@ -91,7 +91,7 @@ export function KeyFlowDialogs({ controls, taken }: { controls: KeyFlowControls;
   const { flow, dispatch } = controls;
   const cancel = () => dispatch({ type: "cancel" });
 
-  if (flow.step === "issue" && flow.project) {
+  if (flow.step === "issue") {
     const ready = canIssue(flow, taken);
     return (
       <Modal

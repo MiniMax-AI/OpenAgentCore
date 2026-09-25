@@ -76,7 +76,6 @@ export const chinese = {
   "Check the log on the host:": "在主机上查看日志：",
   "Advanced network settings": "高级网络设置",
 
-  "Hosted Sandbox Manager": "托管沙箱管理",
   "System": "系统",
   "System navigation": "系统导航",
   "Deployment provider, runtime nodes and Session allocations.": "管理部署后端、运行节点和 Session 资源分配。",

@@ -1,6 +1,5 @@
 /*
- * Onboarding: signing in with the Core key, the first project and its API key,
- * and the tour.
+ * Onboarding: signing in with the Core key, and the optional console tour.
  * A dark stage (always dark, whatever the theme) holds the brand moment — Core
  * as the Parsar mark with its orbits, or a screenshot of the console during
  * the tour; the panel beside it follows the console theme and holds the task.
@@ -179,7 +178,7 @@
 .onboarding-panel-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
   padding: 22px 32px;
 }
@@ -196,13 +195,6 @@
   white-space: nowrap;
 }
 
-/* Below 1180px wide the step names give way to their numbers. */
-@media (max-width: 1180px) {
-  .onboarding-progress li:not(.current) .onboarding-progress-label {
-    display: none;
-  }
-}
-
 .onboarding-panel-body {
   display: grid;
   flex: 1;
@@ -216,115 +208,18 @@
   max-width: 420px;
 }
 
-/* Setup progress: numbered steps; the current one fills with indigo and the fill glides between steps. */
-.onboarding-progress {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 12px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.onboarding-progress li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
-  color: var(--ink-3);
-  font-size: 12.5px;
-  font-weight: 500;
-}
-
-.onboarding-progress li + li::before {
-  content: "";
-  width: 14px;
-  height: 1px;
-  margin-right: 4px;
-  background: var(--line);
-}
-
-.onboarding-progress li.current,
-.onboarding-progress li.done {
-  color: var(--ink);
-}
-
-.onboarding-progress-mark {
-  position: relative;
-  display: grid;
-  width: 22px;
-  height: 22px;
-  place-items: center;
-  border-radius: 999px;
-  box-shadow: inset 0 0 0 1px var(--line-strong);
-}
-
-.onboarding-progress li.done .onboarding-progress-mark {
-  color: var(--accent);
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 50%, transparent);
-}
-
-.onboarding-progress-fill {
-  position: absolute;
-  inset: 0;
-  background: var(--accent);
-  border-radius: 999px;
-  box-shadow: 0 0 0 4px color-mix(in oklch, var(--accent) 18%, transparent);
-}
-
-.onboarding-progress-number {
-  position: relative;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.onboarding-progress li.current .onboarding-progress-number {
-  color: #fff;
-}
-
-/* The sign-in form and the first project screens inside the panel. */
-.onboarding-panel .console-auth-form,
-.onboarding-panel .first-key-column {
+/* The sign-in form inside the panel. */
+.onboarding-panel .console-auth-form {
   width: 100%;
   max-width: 420px;
   animation: none;
 }
 
-.onboarding-panel .first-key-title,
 .onboarding-panel .console-auth-form h2 {
   font-size: 22px;
   font-weight: 600;
   line-height: 1.3;
   letter-spacing: -0.02em;
-}
-
-/* The example request types itself into a terminal. */
-.onboarding-terminal {
-  position: relative;
-}
-
-.onboarding-terminal > div:first-child {
-  max-width: none;
-  width: 100%;
-  color: oklch(0.9 0.02 277);
-  background: oklch(0.15 0.02 277);
-  border-color: oklch(1 0 0 / 0.08);
-}
-
-.onboarding-terminal pre,
-.onboarding-terminal code {
-  color: inherit;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.7;
-  white-space: pre;
-}
-
-.onboarding-terminal-copy {
-  position: absolute;
-  top: 8px;
-  right: 8px;
 }
 
 /* Tour -------------------------------------------------------------------- */
@@ -474,37 +369,9 @@
 }
 
 /* View transitions ---------------------------------------------------------
- * `step`: the stage holds still while the panel slides; `enter`: onboarding
- * dissolves forward and the console is revealed in a circle growing from the
- * pressed button (--reveal-x/y). Reduced motion never starts a transition. */
-
-html[data-transition="step"] .onboarding-stage {
-  view-transition-name: onboarding-stage;
-}
-
-html[data-transition="step"] .onboarding-panel-body {
-  view-transition-name: onboarding-panel;
-}
-
-html[data-transition="step"]::view-transition-group(onboarding-stage) {
-  animation-duration: 0s;
-}
-
-html[data-transition="step"]::view-transition-old(onboarding-panel) {
-  animation: onboarding-panel-out 240ms cubic-bezier(0.4, 0, 1, 1) both;
-}
-
-html[data-transition="step"]::view-transition-new(onboarding-panel) {
-  animation: onboarding-panel-in 520ms cubic-bezier(0.16, 1, 0.3, 1) 80ms both;
-}
-
-@keyframes onboarding-panel-out {
-  to { opacity: 0; transform: translateX(-28px); filter: blur(6px); }
-}
-
-@keyframes onboarding-panel-in {
-  from { opacity: 0; transform: translateX(36px); filter: blur(8px); }
-}
+ * `enter`: the old page dissolves forward and the new one is revealed in a
+ * circle growing from the pressed button (--reveal-x/y). Reduced motion never
+ * starts a transition. */
 
 html[data-transition="enter"]::view-transition-old(root) {
   animation: onboarding-dissolve 620ms cubic-bezier(0.4, 0, 0.2, 1) both;
@@ -549,10 +416,6 @@ html[data-transition="enter"]::view-transition-new(root) {
 
   .onboarding-panel-head {
     padding: 16px 20px;
-  }
-
-  .onboarding-progress-label {
-    display: none;
   }
 
   .onboarding-panel-body {

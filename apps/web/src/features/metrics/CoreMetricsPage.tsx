@@ -189,6 +189,7 @@ function CoreMetricsBody({ metrics }: { metrics: CoreMetrics }) {
                 { id: "queued", label: t("core.execution.queued"), color: "var(--series-3)", values: execution.series.map((entry) => entry.queued) },
               ]}
               formatValue={integer}
+              counts
             />
           </figure>
           <figure className="chart-panel">
@@ -241,6 +242,7 @@ function CoreMetricsBody({ metrics }: { metrics: CoreMetrics }) {
                 { id: "max", label: t("core.database.max"), color: "var(--ink-3)", values: database.series.map((entry) => (entry.pool_in_use === null ? null : database.pool.max)) },
               ]}
               formatValue={integer}
+              counts
             />
           </figure>
         </div>
