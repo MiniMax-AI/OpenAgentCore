@@ -20,11 +20,11 @@ func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
 	t.Setenv("AGENTS_API_SANDBOX_INSTALLATION_ID", uuid.NewString())
 	t.Setenv("AGENTS_API_DAEMON_WS_URL", "ws://core:8091/api/v1/agent-daemon/ws")
 	digest := sha256.Sum256([]byte("synthetic-admin"))
-	path := filepath.Join(t.TempDir(), "digests.json")
+	path := filepath.Join(t.TempDir(), "core-key-digests.json")
 	if err := os.WriteFile(path, []byte(`["`+hex.EncodeToString(digest[:])+`"]`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE", path)
+	t.Setenv("AGENTS_API_CORE_KEY_DIGESTS_FILE", path)
 	m, err := configureManagedNodes(nil, func(context.Context) error { return nil })
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +33,7 @@ func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
 	if m.setup == nil || m.admin == nil || m.hub == nil || m.runtime == nil || m.runtime.Provider != nil {
 		t.Fatal("zero-node setup unexpectedly instantiated local compute or omitted management")
 	}
-	t.Setenv("AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE", "")
+	t.Setenv("AGENTS_API_CORE_KEY_DIGESTS_FILE", "")
 	if _, err := configureManagedNodes(nil, nil); err == nil {
 		t.Fatal("setup accepted without admin authentication")
 	}

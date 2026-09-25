@@ -38,7 +38,7 @@ def request(core, token, method, path, value=None):
 
 def install(root, state, manifest, bundle, run):
     core = f'http://127.0.0.1:{state["core_port"]}'
-    admin = (root / "admin/sandbox-admin.key").read_text().strip()
+    admin = (root / "admin/core.key").read_text().strip()
     current = request(core, admin, "GET", "deployment")
     if current.get("installation_id") != state["installation_id"]:
         raise LocalNodeError("Core deployment identity differs; preserve its installation state")

@@ -256,7 +256,7 @@ class InstallerTests(unittest.TestCase):
         exported = {str(path.relative_to(payload)) for path in payload.rglob("*") if path.is_file()}
         self.assertEqual(len(exported), 5)
         self.assertNotIn("config/caller.key", exported)
-        self.assertNotIn("admin/sandbox-admin.key", exported)
+        self.assertNotIn("admin/core.key", exported)
         for name in exported:
             self.assertEqual((payload / name).read_bytes(), (bundle / name).read_bytes())
         install.prepare_node_payload(self.root, state, bundle)
@@ -295,49 +295,22 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(before, self.snapshot())
         self.assertFalse((self.root / "config/keys.json").exists())
 
-    def test_new_console_account_state_is_private_and_only_web_can_write_it(self):
+    def test_web_signs_in_with_the_core_key_only(self):
         state = self.initialize()
-        self.assertEqual(state["console_auth"], "account")
+        self.assertNotIn("console_auth", state)
+        self.assertFalse((self.root / "state/console").exists())
         self.assertFalse((self.root / "config/console.password").exists())
-        self.assertEqual(stat.S_IMODE((self.root / "state/console").stat().st_mode), 0o700)
-        self.assertFalse((self.root / "config/console.setup.key").exists())
-        services = self.document("compose.json")["services"]
-        web = services["web"]
-        self.assertEqual(web["environment"]["CORE_CONSOLE_AUTH_MODE"], "account")
-        self.assertNotIn("CORE_CONSOLE_SETUP_KEY_FILE", web["environment"])
-        self.assertEqual(web["environment"]["CORE_CONSOLE_STATE_DIR"], "/state/console")
-        for name, service in services.items():
-            mounts = [m for m in service.get("volumes", []) if isinstance(m, dict) and m["target"] == "/state/console"]
-            self.assertEqual(len(mounts), 1 if name == "web" else 0)
-            if mounts:
-                self.assertEqual(mounts[0]["source"], str(self.root / "state/console"))
-                self.assertFalse(mounts[0]["read_only"])
-        install.private_write(self.root / "state/console/admin.json", '{"synthetic":"retained account"}')
-        before = self.snapshot()
-        self.initialize()
-        self.assertEqual(before, self.snapshot())
+        environment = self.document("compose.json")["services"]["web"]["environment"]
+        self.assertEqual(environment["CORE_CONSOLE_CORE_KEY_FILE"], "/admin/core.key")
+        for retired in ("CORE_CONSOLE_ADMIN_TOKEN_FILE", "CORE_CONSOLE_AUTH_MODE", "CORE_CONSOLE_STATE_DIR",
+                        "CORE_CONSOLE_PASSWORD_FILE"):
+            self.assertNotIn(retired, environment)
 
-    def test_legacy_installation_keeps_basic_credentials_and_compose(self):
-        state = self.initialize()
-        state.pop("console_auth")
-        install.private_write(self.root / "config/console.password", "retained-console-password")
-        shutil.rmtree(self.root / "state/console")
-        (self.root / "installation.json").write_text(json.dumps(state))
-        compose = install.compose_config(self.root, state, self.manifest, "retained-database-password")
-        (self.root / "compose.json").write_text(json.dumps(compose))
-        self.assertEqual(compose["services"]["web"]["environment"]["CORE_CONSOLE_PASSWORD_FILE"], "/config/console.password")
-        self.assertNotIn("CORE_CONSOLE_AUTH_MODE", compose["services"]["web"]["environment"])
-        before = self.snapshot()
-        self.assertEqual(self.initialize(), state)
-        self.assertEqual(before, self.snapshot())
-
-    def test_repeat_account_install_refuses_missing_authentication_sources(self):
-        self.initialize()
-        shutil.rmtree(self.root / "state/console")
-        before = self.snapshot()
-        with self.assertRaisesRegex(install.InstallError, "authentication state"):
-            self.initialize()
-        self.assertEqual(before, self.snapshot())
+    def test_renamed_core_key_flag_is_rejected(self):
+        output = io.StringIO()
+        with contextlib.redirect_stderr(output), self.assertRaises(SystemExit):
+            self.args("--web-only", "--core-url", "http://127.0.0.1:9091", "--admin-token-file", str(self.administrator_file()))
+        self.assertIn("--core-key-file", output.getvalue())
 
     def test_retained_config_cannot_launch_an_unresolved_image(self):
         self.initialize('--sandbox-provider', 'true', '--provider', 'docker')
@@ -410,8 +383,9 @@ class InstallerTests(unittest.TestCase):
                 flags = ("--native-core",) if native else ()
                 state = self.initialize(*flags)
                 admin = self.root / "admin"
-                token = (admin / "sandbox-admin.key").read_text()
-                self.assertEqual(self.document("admin/digests.json"), [hashlib.sha256(token.encode()).hexdigest()])
+                token = (admin / "core.key").read_text()
+                self.assertEqual(self.document("admin/core-key-digests.json"), [hashlib.sha256(token.encode()).hexdigest()])
+                self.assertEqual({path.name for path in admin.iterdir()}, {"core.key", "core-key-digests.json"})
                 self.assertFalse((self.root / "config/caller.key").exists())
                 self.assertEqual(stat.S_IMODE(admin.stat().st_mode), 0o700)
                 for path in admin.iterdir():
@@ -420,8 +394,9 @@ class InstallerTests(unittest.TestCase):
                 self.initialize(*flags)
                 self.assertEqual(self.snapshot(), before)
                 environment = install.core_environment(self.root, state, "synthetic database password")
-                expected = str(admin / "digests.json") if native else "/admin/digests.json"
-                self.assertEqual(environment["AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE"], expected)
+                expected = str(admin / "core-key-digests.json") if native else "/admin/core-key-digests.json"
+                self.assertEqual(environment["AGENTS_API_CORE_KEY_DIGESTS_FILE"], expected)
+                self.assertNotIn("AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE", environment)
                 self.assertNotIn("AGENTS_API_KEYS_FILE", environment)
                 self.assertFalse((self.root / "config/keys.json").exists())
                 for name, service in self.document("compose.json")["services"].items():
@@ -429,21 +404,21 @@ class InstallerTests(unittest.TestCase):
                     mounts = [m for m in service.get("volumes", []) if isinstance(m, dict) and m["target"].startswith("/admin")]
                     self.assertEqual(len(mounts), 1 if name in ("core", "web") else 0)
                     if mounts:
-                        filename = "digests.json" if name == "core" else "sandbox-admin.key"
+                        filename = "core-key-digests.json" if name == "core" else "core.key"
                         self.assertEqual(mounts[0]["source"], str(admin / filename))
                         self.assertEqual(mounts[0]["target"], "/admin/" + filename)
                         self.assertTrue(mounts[0]["read_only"])
                     for mount in service.get("volumes", []):
                         if isinstance(mount, dict) and name != "web":
                             source = Path(mount["source"])
-                            self.assertFalse((admin / "sandbox-admin.key").is_relative_to(source))
+                            self.assertFalse((admin / "core.key").is_relative_to(source))
                     if name != "core":
-                        self.assertNotIn("AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE", service.get("environment", {}))
+                        self.assertNotIn("AGENTS_API_CORE_KEY_DIGESTS_FILE", service.get("environment", {}))
                     self.assertNotIn(token, json.dumps(service))
 
     def test_web_only_uses_existing_local_core_without_database_or_provider(self):
         source = self.administrator_file()
-        flags = ("--web-only", "--core-url", "http://127.0.0.1:9091", "--admin-token-file", str(source))
+        flags = ("--web-only", "--core-url", "http://127.0.0.1:9091", "--core-key-file", str(source))
         state = self.initialize(*flags)
         self.assertEqual(self.device_probes, [])
         self.assertEqual(self.ports.call_args_list, [mock.call(8080)])
@@ -454,12 +429,13 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(web["network_mode"], "host")
         self.assertEqual(web["environment"]["CORE_CONSOLE_ADDR"], "127.0.0.1:8080")
         self.assertEqual(web["environment"]["CORE_CONSOLE_UPSTREAM"], "http://127.0.0.1:9091")
-        self.assertEqual(web["environment"]["CORE_CONSOLE_ADMIN_TOKEN_FILE"], "/admin/sandbox-admin.key")
+        self.assertEqual(web["environment"]["CORE_CONSOLE_CORE_KEY_FILE"], "/admin/core.key")
         self.assertNotIn("CORE_CONSOLE_TOKEN_FILE", web["environment"])
         self.assertNotIn("ports", web)
         self.assertNotIn("devices", web)
         self.assertEqual({path.name for path in (self.root / "config").iterdir()}, set())
-        self.assertEqual((self.root / "admin/sandbox-admin.key").read_bytes(), source.read_bytes())
+        self.assertEqual((self.root / "admin/core.key").read_bytes(), source.read_bytes())
+        self.assertFalse((self.root / "state").exists())
         before = self.snapshot()
         self.assertEqual(state, self.initialize(*flags))
         self.assertEqual(before, self.snapshot())
@@ -482,7 +458,7 @@ class InstallerTests(unittest.TestCase):
                 source = self.administrator_file(contents, mode)
                 with self.assertRaises(install.InstallError):
                     self.initialize("--web-only", "--core-url", "http://localhost:8091",
-                                    "--admin-token-file", str(source))
+                                    "--core-key-file", str(source))
                 self.assertFalse(self.root.exists(), "invalid input left a non-retryable partial deployment")
 
     def test_web_only_rejects_directory_or_symlink_as_administrator_file(self):
@@ -494,7 +470,7 @@ class InstallerTests(unittest.TestCase):
         for path in (link, private_directory):
             with self.subTest(path=path.name), self.assertRaises(install.InstallError):
                 self.initialize("--web-only", "--core-url", "http://localhost:8091",
-                                "--admin-token-file", str(path))
+                                "--core-key-file", str(path))
             self.assertFalse(self.root.exists())
 
     def test_bundle_verifies_transferred_bytes_before_trusting_manifest(self):
@@ -540,7 +516,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.device_probes, [])
         self.assertNotIn("device_gid", state)
         self.assertFalse((self.root / "state/sandbox-node").exists())
-        self.assertTrue((self.root / "admin/digests.json").is_file())
+        self.assertTrue((self.root / "admin/core-key-digests.json").is_file())
         self.assertFalse((self.root / "config/managed-runtimes.json").exists())
         compose = self.document("compose.json")
         self.assertEqual(set(compose["services"]), {"database", "migrate", "core", "web"})
@@ -689,14 +665,14 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("No execution node was installed by this run", output.getvalue())
         self.assertIn("Core configuration file: " + str(self.root / "config/core.env"), output.getvalue())
         self.assertNotIn((self.root / "config/database.password").read_text(), output.getvalue())
-        self.assertIn("Open Web to register the administrator with your chosen username and password.", output.getvalue())
-        self.assertNotIn("Setup key", output.getvalue())
+        self.assertIn("Sign in to Web with the Core key.", output.getvalue())
+        self.assertIn("Core key file: " + str(self.root / "admin/core.key"), output.getvalue())
         self.assertFalse((self.root / "config/keys.json").exists())
         self.assertEqual([call.args[0] for call in health.call_args_list], [
             "http://127.0.0.1:8091/healthz", "http://127.0.0.1:8080/console/auth",
             "http://127.0.0.1:8091/core/v1/admin/projects",
         ])
-        admin_token = (self.root / "admin/sandbox-admin.key").read_text()
+        admin_token = (self.root / "admin/core.key").read_text()
         self.assertEqual(health.call_args_list[-1].args[1], {"Authorization": "Bearer " + admin_token})
         self.assertNotIn(admin_token, output.getvalue())
         self.assertIn("Create a Project and issue its API key through the administrator API", output.getvalue())
@@ -718,7 +694,7 @@ class InstallerTests(unittest.TestCase):
                 mock.patch.object(install, "wait_http", return_value=True) as health, \
                 contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
             install.main(["--install-dir", str(self.root), "--web-only", "--core-url",
-                          "http://127.0.0.1:9091", "--admin-token-file", str(source)])
+                          "http://127.0.0.1:9091", "--core-key-file", str(source)])
         self.assertEqual(self.device_probes, [])
         imports = [call for call in calls if call[:2] == ["docker", "load"]]
         self.assertEqual(imports, [["docker", "load", "--input", str(bundle / "images/web.tar")]])
@@ -808,7 +784,7 @@ class InstallerTests(unittest.TestCase):
                     "https://core.example/?token=synthetic-secret"):
             output = io.StringIO()
             with self.subTest(url=url), contextlib.redirect_stderr(output), self.assertRaises(SystemExit):
-                self.args("--web-only", "--core-url", url, "--admin-token-file", str(source))
+                self.args("--web-only", "--core-url", url, "--core-key-file", str(source))
             self.assertNotIn("synthetic-secret", output.getvalue())
 
     def test_status_rejects_failed_database_even_while_http_processes_are_alive(self):

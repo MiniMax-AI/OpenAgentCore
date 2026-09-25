@@ -73,14 +73,15 @@ before release. See [console integration status](../web/README.md).
 Installation creates private configuration under `~/.parsar/core`, a dedicated
 PostgreSQL volume and a credential encryption key. Installation creates no Project
 or application API key. Projects and their keys are managed in the database;
-configuration files contain deployment settings only. New installations create a
-separate deployment administrator credential. Secret values are not printed.
+configuration files contain deployment settings only. New installations create one
+management credential, the [Core key](operations.md#core-key). Secret values are
+not printed.
 
 Open the console address printed by the installer (`https://core.example` in
-the example above). On the first visit, choose an administrator username and
-password, and keep your sign-in details safe. The Web has one role: administrator,
-with access to every console operation. It has no secondary user roles. The paired
-console already connects to Core; no API key is needed to sign in.
+the example above) and sign in with the Core key from
+`~/.parsar/core/admin/core.key`. The console has no user accounts or passwords, and
+one role: administrator, with access to every console operation. The paired
+console already connects to Core with the same key on the server side.
 
 Use the administrator API to create a Project, then issue a named API key within
 it and save the one-time plaintext response privately. Core stores only its digest.
@@ -88,9 +89,9 @@ The corresponding Web management screens remain pending. Multiple keys in a Proj
 share its assets and execution principal; writes record the actual key separately.
 Rotate by issuing another key in that Project and revoking the old one. Archiving
 the Project disables all its keys and retains assets for inspection and deletion.
-API callers use their own keys and the public API endpoint. The deployment
-credential cannot call `/v1`; the console cannot execute or create Agent resources
-on their behalf. See the [management contract](../../contracts/agents-api/admin-api.md).
+API callers use their own keys and the public API endpoint. The Core key cannot
+call `/v1`; the console cannot execute or create Agent resources on their behalf.
+See the [management contract](../../contracts/agents-api/admin-api.md).
 
 Hosts registered through the console supply sandbox resources for hosted Sessions;
 self-hosted Sessions use application-managed environments. Neither installation
@@ -101,36 +102,25 @@ Default local ports and private files:
 
 - API: `http://127.0.0.1:8091/v1`
 - Web upstream: `http://127.0.0.1:8080`; use the configured public URL in your browser
-- Administrator state: `~/.parsar/core/state/console/` (`admin.json` and `registered`)
-- Deployment administrator key: `~/.parsar/core/admin/sandbox-admin.key`
+- Core key: `~/.parsar/core/admin/core.key`
+- Core key digest: `~/.parsar/core/admin/core-key-digests.json`
 
 Use exactly the displayed console address; the production proxy validates its
-configured origin. The account file contains a password hash, not a recoverable
-password. Back up the private console state along with installation configuration;
-do not remove it to reset a password or reopen registration. Cookie sessions expire
-after 12 hours and on console restart; the account survives restarts. Existing
-installations retain `admin` Basic login with `config/console.password`; rerunning
-the installer does not silently migrate their authentication mode. Account-mode
-upgrades no longer require a setup key; remove any old `CORE_CONSOLE_SETUP_KEY_FILE`
-setting and its file mount when updating your service configuration. Keep the
-existing administrator state directory mounted.
+configured origin. Sign-in sessions live in the console's memory. They expire after
+12 hours, and you sign in again after a console restart or a Core key rotation.
+Sign-in, status and sign-out use private `/console/auth` routes and do not extend
+the public Agent API. The console rejects every `/v1` request, including requests
+carrying an explicit Bearer token; it holds no caller key.
 
-Manual account-mode consoles set `CORE_CONSOLE_AUTH_MODE=account`, an absolute
-`CORE_CONSOLE_STATE_DIR` (private writable directory). Keep state outside the
-static Web root. Setup/login/logout use private `/console/auth` routes and do not
-extend the public Agent API. The console rejects every `/v1` request, including
-requests carrying an explicit Bearer token; it holds no caller key.
-
-Every Core installation creates a separate private deployment administrator key at
-`admin/sandbox-admin.key`. Core loads its SHA-256 digest from
-`AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE`. Only the Core container mounts the
-digest file read-only. The bundled Web server reads the separate administrator
-key to proxy authenticated console operations; it never sends this key to the
-browser. The migration service receives neither. A Web-only connection to an
-external Core can enable management by configuring its administrator token
-server-side through `CORE_CONSOLE_ADMIN_TOKEN_FILE`; the Web page does not
-ask the operator to enter another key. Use the same-origin console connection for
-management. Choose English or Chinese through the System language selector.
+Core loads the Core key digest from `AGENTS_API_CORE_KEY_DIGESTS_FILE`. Only the
+Core container mounts the digest file, read-only. The bundled Web server reads the
+Core key through `CORE_CONSOLE_CORE_KEY_FILE` to check sign-in and to proxy
+authenticated console operations; it never sends the key to the browser. The
+migration service receives neither. A Web-only connection to an external Core uses
+that Core's key, configured server-side. Existing installations from earlier
+releases must rename these files and settings before upgrading; see
+[Upgrade an existing installation](operations.md#upgrade-an-existing-installation).
+Choose English or Chinese through the System language selector.
 
 ## Add nodes after a default installation
 
@@ -288,14 +278,14 @@ Installation defaults are not evidence of model or workload acceptance.
 ### Separate Web installation
 
 To install only Web on a Linux host, provide the existing Core origin and a
-private deployment-administrator key file. A loopback Core uses the same host network namespace;
+private file containing that Core's Core key. A loopback Core uses the same host network namespace;
 a remote Core must use HTTPS.
 
 ```sh
 ./install.sh --web-only \
   --install-dir "$HOME/.parsar/core-console" \
   --core-url http://127.0.0.1:8091 \
-  --admin-token-file "$HOME/.parsar/core/admin/sandbox-admin.key"
+  --core-key-file "$HOME/.parsar/core/admin/core.key"
 ```
 
 Web-only mode cannot enable a sandbox provider. It starts no database or Core and

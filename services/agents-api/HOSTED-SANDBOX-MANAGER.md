@@ -10,13 +10,13 @@ remains the user's responsibility.
 
 The Web console's **Hosted Sandbox Manager** page uses deployment administrator
 authority, separate from project credentials. In a paired distribution, the
-console server reads its own administrator key and forwards it only on sandbox
-management routes after console login. No administrator key reaches the browser.
-There is no second login or manual administrator-key form. Management uses the
+console server reads the Core key and forwards it only on sandbox management
+routes after console login. The Core key never reaches the browser. There is no
+second login or manual key form. Management uses the
 same-origin paired console connection; direct remote project connections do not
 grant deployment access. An unpaired console shows setup guidance. For manual or
-Web-only deployments, an operator can configure the matching private `0600` token
-file server-side through `CORE_CONSOLE_SANDBOX_ADMIN_TOKEN_FILE`.
+Web-only deployments, an operator configures the matching private `0600` Core key
+file server-side through `CORE_CONSOLE_CORE_KEY_FILE`.
 
 The sandbox page and its setup, enrollment, status and diagnostic controls support
 Chinese and English. Choose a language in System navigation; the preference is
@@ -95,7 +95,7 @@ does not create a Session, sandbox or model request. Hosted Session admission
 fails until setup is complete and a ready node has capacity. E2B allocates directly without this node requirement.
 
 For manual zero-node deployments, set `AGENTS_API_SANDBOX_INSTALLATION_ID` to a
-stable UUID, configure `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE`, and enable the daemon
+stable UUID, configure `AGENTS_API_CORE_KEY_DIGESTS_FILE`, and enable the daemon
 gateway using `AGENTS_API_DAEMON_WS_URL`. Do not also set
 `AGENTS_API_MANAGED_RUNTIMES_FILE`. The Web-selected origin supplies hosted Runtime
 bootstrap and its public daemon WebSocket address; it never uses request Host or

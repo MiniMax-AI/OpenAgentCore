@@ -94,7 +94,7 @@ instructions, public requests, image layers or a workspace. Configuration change
 require a Core restart. Leave remote executor URLs unset for this hosted profile.
 
 ```sh
-chmod 0600 "$AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE" "$AGENTS_API_MANAGED_RUNTIMES_FILE" "$AGENTS_API_EXECUTION_OPTIONS_FILE"
+chmod 0600 "$AGENTS_API_CORE_KEY_DIGESTS_FILE" "$AGENTS_API_MANAGED_RUNTIMES_FILE" "$AGENTS_API_EXECUTION_OPTIONS_FILE"
 "$AGENTS_API_BIN_DIR/agents-api-migrate"
 "$AGENTS_API_BIN_DIR/agents-api"
 ```

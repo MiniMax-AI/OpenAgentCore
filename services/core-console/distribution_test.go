@@ -31,7 +31,7 @@ func TestOfflineArtifactsAreManifestAllowlisted(t *testing.T) {
 		}
 	}
 	upstream, _ := url.Parse("http://127.0.0.1:1")
-	h, err := newConsole(config{origin: testOrigin, upstream: upstream, dist: dist, password: "private-console-password", adminToken: "server-admin", nodePayloadDir: payload})
+	h, err := newConsole(config{origin: testOrigin, upstream: upstream, dist: dist, coreKey: "server-admin", nodePayloadDir: payload})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,6 @@ func TestOfflineArtifactsAreManifestAllowlisted(t *testing.T) {
 	defer server.Close()
 	for _, name := range []string{"matched-node", "private-key", "undeclared"} {
 		req := consoleRequest(t, server, "GET", "/node-install/artifacts/"+name)
-		req.Header.Del("Authorization")
 		response, body := responseBody(t, server, req)
 		if name == "matched-node" {
 			if response.StatusCode != 200 || !strings.Contains(body, "payload") {

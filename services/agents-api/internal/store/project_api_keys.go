@@ -190,7 +190,7 @@ func (s *Store) ValidateProjectKeySeparation(ctx context.Context, digests []stri
 			return err
 		}
 		if exists {
-			return errors.New("administrator credential overlaps a persisted API key")
+			return errors.New("the Core key overlaps a persisted project API key")
 		}
 	}
 	return nil

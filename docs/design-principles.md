@@ -64,8 +64,8 @@ user-authored conversation text, Skill source or Artifact content: administrator
 who inspect those records see their recorded contents.
 
 Public writes retain their actual API-key provenance. Administrator writes retain
-a separate audit identity and target Project. The console account name is a label;
-Core trusts the deployment credential, not that forwarded name. Audit failure rolls
+a separate audit identity and target Project. The console's fixed actor label is
+display-only; Core trusts the Core key, not that forwarded label. Audit failure rolls
 back the business transaction. Reads are not audited. Resources from the removed
 copy operation keep their `admin_copy` ownership, distinct from historical unknown
 ownership. No request bodies, secrets or file contents enter audit records.

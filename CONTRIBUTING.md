@@ -52,8 +52,8 @@ Reuse existing resource deletion and serialization code. Cross-Project copying w
 removed. `admin_resource_owners` alone feeds the historical `source:"admin_copy"`
 provenance read; `admin_asset_copies` is retained only because tables are not
 dropped. Unknown historical provenance remains unknown. No secrets or request
-bodies enter logs. A forwarded console actor name is only a label, never an
-authorization input.
+bodies enter logs. The console's fixed actor label (`console`) is only an audit
+display label, never an authorization input.
 
 When requirements conflict, object ownership is unclear, or a design would need
 parallel compatibility paths, raise the issue with a concrete recommendation and
@@ -731,10 +731,10 @@ does not qualify its isolation or enable public creation.
 ### Hosted sandbox nodes and optional suspension
 
 Default installation includes Core, Web and PostgreSQL but no execution node.
-It always creates a separate deployment administrator credential. Core receives
-only its digest; the paired console server receives the private token and injects
-it only on approved management routes after console login and same-origin checks.
-The browser never receives that token. Node and daemon connections use `/api/v1`
+It always creates the Core key. Core receives only its digest; the paired console
+server receives the private key, uses it for sign-in and injects it only on
+approved management routes after console login and same-origin checks. The
+browser never receives that key. Node and daemon connections use `/api/v1`
 with their own credentials; the reverse proxy sends them directly to Core, never
 through Web. Zero-node Core receives neither the Docker socket nor KVM.
 The Web and deployment administrator API select one provider, public Core origin,
@@ -825,7 +825,7 @@ as a user service; it performs no SSH installation, Session creation or model ca
 
 The [Hosted Sandbox Manager](services/agents-api/HOSTED-SANDBOX-MANAGER.md) is a
 deployment-level admin surface, separate from Project credentials. The paired
-console's administrator token stays on its server. Enrollment credentials authorize
+console's Core key stays on its server. Enrollment credentials authorize
 initial node configuration reads and registration; durable node credentials authorize
 retained configuration reads and node transport. Project keys can read a narrow node
 directory and their own Session placement, never global allocations.
@@ -1830,7 +1830,7 @@ installer. Its initial default is 2 CPUs and 4096 MiB; microsandbox also request
 installer defaults. Node configuration and identity live under
 `~/.parsar/nodes/<installation-id>/`; microsandbox uses its separate short private
 Runtime home. Zero-node installs create no node identity state but retain the paired
-administrator credential for first setup.
+Core key for first setup.
 
 One Runtime image contains the existing daemon, shared helpers and three native
 harness packages. Their differences remain in the adapters. Core keeps exclusive
@@ -1843,21 +1843,22 @@ credential encryption key. Provider identity/backend namespace and native histor
 must not change on a repeated install.
 
 `services/core-console` serves the production Web build and proxies only finite
-administrator and sandbox-management routes after console login. It requires a
-private `CORE_CONSOLE_ADMIN_TOKEN_FILE` and holds no project caller credential.
-Every `/v1` and `/api/v1` request returns 404, including explicit Bearer and
-WebSocket requests; Web forwards no node or daemon transport. The installer
-mounts only the administrator key into Web and only its digest into Core. The
-browser receives safe capability flags, never that key. The deployment's TLS
-reverse proxy routes `/v1` (applications) and `/api/v1` (nodes and Runtime
-daemons, with their own credentials) directly to Core and everything else to Web,
-except the Project-authenticated `/core/v1/environments/*/executor-credentials`
-routes, which also go straight to Core.
+administrator and sandbox-management routes after console login. It requires the
+private Core key file named by `CORE_CONSOLE_CORE_KEY_FILE` and holds no project
+caller credential. Every `/v1` and `/api/v1` request returns 404, including
+explicit Bearer and WebSocket requests; Web forwards no node or daemon transport.
+The installer mounts only the Core key into Web and only its digest
+(`AGENTS_API_CORE_KEY_DIGESTS_FILE`) into Core. The browser receives safe
+configuration, never that key. The deployment's TLS reverse proxy routes `/v1`
+(applications) and `/api/v1` (nodes and Runtime daemons, with their own
+credentials) directly to Core and everything else to Web, except the
+Project-authenticated `/core/v1/environments/*/executor-credentials` routes, which
+also go straight to Core.
 Nodes and Core come from one distribution; older nodes using the removed
 `/core/v1/sandbox` node paths cannot connect and are replaced through the drained
 upgrade and re-enrollment workflow.
 
-The Web manager offers no manual administrator-key fallback. A console without
+The Web manager offers no manual Core key entry outside sign-in. A console without
 paired management configuration shows setup guidance; direct remote project API
 connections do not silently administer the console's configured deployment.
 Chinese/English sandbox text, status and diagnostic formatting live in the shared
@@ -1883,20 +1884,22 @@ verification, and passes the enrollment credential only to the installer process
 Management proxy paths retain fixed-origin, cross-site, safe-path, redirect and Upgrade
 restrictions through the standard Go reverse proxy with streaming/cancellation.
 The console implements no product identity, resource semantics, Runtime discovery
-or execution loop. Its local administrator account grants the complete console
-surface; do not introduce Web roles, invitations or per-project Web identities.
-Agent API caller keys remain independent of the administrator password and cookie.
+or execution loop. Signing in with the Core key grants the complete console
+surface; do not introduce Web accounts, roles, invitations or per-project Web
+identities. Agent API caller keys remain independent of the Core key and cookie.
 
-Account mode is explicit (`CORE_CONSOLE_AUTH_MODE=account`) and requires a private
-writable state directory. The first visitor registers the sole administrator with
-a username and password; no initialization key is required. The atomic durable
-account record stores a password hash; corruption or missing registered account
-state must never reopen registration. Account creation is race-safe. Cookie sessions are
-bounded, HttpOnly, SameSite Strict and Secure for HTTPS origins; a restart requires
-sign-in again, without deleting the account. Unauthenticated access is limited to
-the static login UI, finite console authentication routes and the static node
-installation payload. Authentication requests use same-origin JSON POSTs with
-bounded bodies and bounded password-hash work.
+Web signs in only with the Core key (`POST /console/auth/login` with
+`{"core_key":"…"}`), compared in constant time with the console's configured key
+and never logged or echoed. There are no accounts, passwords, first-run setup or
+Basic authentication; `CORE_CONSOLE_AUTH_MODE`, `CORE_CONSOLE_STATE_DIR`,
+`CORE_CONSOLE_PASSWORD_FILE` and the renamed `CORE_CONSOLE_ADMIN_TOKEN_FILE` fail
+startup. Cookie sessions are in memory, bounded, HttpOnly, SameSite Strict and
+Secure for HTTPS origins; a restart or Core key rotation requires sign-in again.
+Unauthenticated access is limited to the static login UI, finite console
+authentication routes and the static node installation payload. Sign-in uses
+same-origin JSON POSTs with bounded bodies, attempt limiting and bounded
+concurrent work. See the
+[Core key operations guide](docs/getting-started/operations.md#core-key).
 
 Projects and application API keys live in Core PostgreSQL. Project creation owns
 its scope and shared principal; key issuance, revocation and Project archive share
