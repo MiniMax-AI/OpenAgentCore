@@ -112,7 +112,7 @@ export function TimeSeriesChart({
     }
     return max;
   }, [count, kind, series, stacked]);
-  const ticks = niceTicks(maximum, 4, counts ? 1 : 0);
+  const ticks = niceTicks(maximum, 4, counts);
   const top = ticks[ticks.length - 1] || 1;
   // Tick labels start at the card's content edge, under the title and legend;
   // the plot begins after the widest label, so every chart lines up the same way.
