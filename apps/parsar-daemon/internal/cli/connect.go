@@ -314,6 +314,9 @@ func mainLoopRemote(rc *runContext, profile string, prof auth.Profile, agentCLIs
 			DaemonVersion: proto.Version,
 		})
 		if remote != "" && err != nil {
+			if errors.Is(err, transport.ErrIncompatibleVersion) {
+				return nil, fmt.Errorf("Environment connection rejected: %w: %w", transport.ErrPermanent, transport.ErrIncompatibleVersion)
+			}
 			if errors.Is(err, transport.ErrPermanent) {
 				return nil, fmt.Errorf("Environment connection rejected: %w", transport.ErrPermanent)
 			}

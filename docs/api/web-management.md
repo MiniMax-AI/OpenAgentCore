@@ -15,7 +15,7 @@ The browser uses the console's own origin and signs in with the
 | `GET /console/auth` | No body | `200 {"mode":"login"}` or `200 {"mode":"authenticated"}` |
 | `POST /console/auth/login` | `Content-Type: application/json`, body `{"core_key":"…"}`; other members are rejected | `200 {"mode":"authenticated"}` and an HttpOnly, SameSite=Strict session cookie (Secure over HTTPS) |
 | `POST /console/auth/logout` | No credential payload | `200 {"mode":"login"}`; clears the cookie and the server-side session |
-| `GET /console/config` | Signed-in session | `node_installer` and `node_installer_sha256` |
+| `GET /console/config` | Signed-in session | `node_installer`, `node_installer_sha256`, `self_hosted_installer` and `self_hosted_installer_sha256` |
 
 Sign-in errors use the console's `{"error": "…"}` envelope: 400 for a malformed
 body, 401 for a wrong key, 415 for a non-JSON body, 429 with `Retry-After` when

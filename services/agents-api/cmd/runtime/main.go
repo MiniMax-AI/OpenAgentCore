@@ -27,6 +27,9 @@ func main() {
 }
 
 func run(args []string) error {
+	if len(args) > 0 && args[0] == "replace-credential" {
+		return replaceCredential(args[1:])
+	}
 	var input docker.SelfHostedLaunch
 	var credential, seccomp string
 	flags := flag.NewFlagSet("parsar-runtime", flag.ContinueOnError)
@@ -40,19 +43,15 @@ func run(args []string) error {
 	if flags.Parse(args) != nil || flags.NArg() != 0 {
 		return errors.New("invalid Runtime launch arguments")
 	}
-	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" || os.Getuid() == 0 {
-		return errors.New("run as a non-root user on Linux amd64 with Docker access")
+	if err := supportedHost(); err != nil {
+		return err
 	}
-	raw, err := readPrivateCredential(credential)
+	key, err := readCredential(credential)
 	if err != nil {
 		return err
 	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&input.Credential) != nil || decoder.Decode(new(any)) != io.EOF {
-		return errors.New("invalid restricted executor credential file")
-	}
-	raw, err = os.ReadFile(seccomp)
+	input.Credential = key
+	raw, err := os.ReadFile(seccomp)
 	if err != nil || len(raw) > 1024*1024 {
 		return errors.New("cannot read Runtime seccomp profile")
 	}
@@ -76,6 +75,58 @@ func run(args []string) error {
 		return err
 	}
 	return json.NewEncoder(os.Stdout).Encode(map[string]string{"container": name, "status": "started"})
+}
+
+// replaceCredential writes a rotated executor credential into the stopped
+// user-owned Runtime container; its volumes and native history stay.
+func replaceCredential(args []string) error {
+	var name, credential string
+	flags := flag.NewFlagSet("parsar-runtime replace-credential", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	flags.StringVar(&name, "container", "", "user-owned Runtime container name")
+	flags.StringVar(&credential, "credential-file", "", "private restricted executor credential JSON")
+	if flags.Parse(args) != nil || flags.NArg() != 0 || name == "" {
+		return errors.New("invalid credential replacement arguments")
+	}
+	if err := supportedHost(); err != nil {
+		return err
+	}
+	key, err := readCredential(credential)
+	if err != nil {
+		return err
+	}
+	c, err := client.New(client.WithHost("unix:///var/run/docker.sock"))
+	if err != nil {
+		return errors.New("cannot open local Docker")
+	}
+	defer c.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err = docker.ReplaceSelfHostedCredential(ctx, c, name, key); err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]string{"container": name, "status": "credential_replaced"})
+}
+
+func supportedHost() error {
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" || os.Getuid() == 0 {
+		return errors.New("run as a non-root user on Linux amd64 with Docker access")
+	}
+	return nil
+}
+
+func readCredential(path string) (docker.ExecutorCredential, error) {
+	var key docker.ExecutorCredential
+	raw, err := readPrivateCredential(path)
+	if err != nil {
+		return key, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&key) != nil || decoder.Decode(new(any)) != io.EOF {
+		return key, errors.New("invalid restricted executor credential file")
+	}
+	return key, nil
 }
 
 func readPrivateCredential(path string) ([]byte, error) {

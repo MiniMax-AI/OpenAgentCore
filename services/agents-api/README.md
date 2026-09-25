@@ -529,6 +529,9 @@ immutable Environment binding beside the key and refuses to adopt another
 Environment's existing native history. Rotation keeps the same key ID: update the
 protected file, then restart the daemon to authenticate with the new token.
 WebSocket authentication uses the `Authorization` header, never a URL token.
+On a permanent rejection (enrollment 401 or 409, a permanent WebSocket rejection
+or close) `connect --environment-id` prints one message naming the fix, makes no
+further requests and exits 0 on SIGTERM or SIGINT; transient failures exit 1.
 
 The private `POST /api/v1/agent-daemon/enroll` endpoint accepts that executor bearer
 and `{"environment_id":"..."}`. It returns `device_id`, `session_id`,

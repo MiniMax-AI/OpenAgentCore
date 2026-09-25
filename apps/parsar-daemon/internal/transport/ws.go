@@ -107,8 +107,10 @@ func Dial(ctx context.Context, opts DialOptions) (*Conn, error) {
 		// bails. Everything else stays transient.
 		if resp != nil {
 			switch resp.StatusCode {
-			case http.StatusUnauthorized, http.StatusForbidden, http.StatusUpgradeRequired:
+			case http.StatusUnauthorized, http.StatusForbidden:
 				return nil, fmt.Errorf("transport.Dial: ws upgrade rejected with HTTP %d: %w", resp.StatusCode, ErrPermanent)
+			case http.StatusUpgradeRequired:
+				return nil, fmt.Errorf("transport.Dial: ws upgrade rejected with HTTP %d: %w: %w", resp.StatusCode, ErrPermanent, ErrIncompatibleVersion)
 			}
 			return nil, fmt.Errorf("transport.Dial: ws upgrade rejected with HTTP %d", resp.StatusCode)
 		}

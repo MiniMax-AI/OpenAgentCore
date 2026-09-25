@@ -142,3 +142,62 @@ func TestSelfHostedRetainsExistingRuntimeWithoutWrites(t *testing.T) {
 		t.Fatal("existing history adopted", err)
 	}
 }
+
+func TestSelfHostedCredentialReplacementOnlyWritesStoppedOwnedRuntime(t *testing.T) {
+	value := selfHostedFixture()
+	labels := map[string]string{labelPrefix + "user-owned": "true", labelPrefix + "installation": value.InstallationID, labelPrefix + "environment": value.EnvironmentID}
+	rotated := value.Credential
+	rotated.Token = "rotated-private-token"
+	for _, tc := range []struct {
+		name, status, container string
+		labels                  map[string]string
+		replaced                bool
+	}{
+		{"stopped", "exited", value.Name(), labels, true},
+		{"running", "running", value.Name(), labels, false},
+		{"unlabeled", "exited", value.Name(), map[string]string{}, false},
+		{"other installation", "exited", "parsar-selfhost-" + strings.Repeat("0", 32), labels, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			files := map[string]*tar.Header{}
+			contents := map[string]string{}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				path := strings.TrimPrefix(r.URL.Path, "/v1.52")
+				w.Header().Set("Content-Type", "application/json")
+				switch {
+				case r.Method == "GET" && path == "/containers/"+tc.container+"/json":
+					_ = json.NewEncoder(w).Encode(map[string]any{"Id": "runtime-id", "Config": map[string]any{"Labels": tc.labels}, "State": map[string]any{"Status": tc.status}})
+				case r.Method == "PUT" && path == "/containers/runtime-id/archive":
+					reader := tar.NewReader(r.Body)
+					for header, err := reader.Next(); err == nil; header, err = reader.Next() {
+						content, _ := io.ReadAll(reader)
+						files[r.URL.Query().Get("path")+"/"+header.Name] = header
+						contents[r.URL.Query().Get("path")+"/"+header.Name] = string(content)
+					}
+					w.WriteHeader(200)
+				default:
+					t.Errorf("unexpected Docker request %s %s", r.Method, path)
+					w.WriteHeader(500)
+				}
+			}))
+			defer server.Close()
+			c, err := client.New(client.WithHost(server.URL), client.WithAPIVersion("1.52"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer c.Close()
+			err = ReplaceSelfHostedCredential(t.Context(), c, tc.container, rotated)
+			if !tc.replaced {
+				if err == nil || len(files) != 0 {
+					t.Fatal("credential written into a running or foreign Runtime", err)
+				}
+				return
+			}
+			key := "/home/runtime/.parsar/parsar-daemon/executor-key.json"
+			if err != nil || len(files) != 1 || files[key] == nil || files[key].Uid != 1000 || files[key].Gid != 1000 || files[key].Mode != 0600 ||
+				!strings.Contains(contents[key], rotated.Token) {
+				t.Fatal("credential not replaced privately", err)
+			}
+		})
+	}
+}

@@ -190,34 +190,30 @@ curl -fsS -X POST \
   -o executor-key.json
 ```
 
-The response is the credential file; its secret appears only once. If the
+The response is the credential; its secret appears only once. If the
 outcome is uncertain, list the credentials and rotate the same `key_id` instead
 of issuing another. The [credential contract](../../contracts/agents-api/environment-executor-credentials.md)
-describes issuance, rotation and revocation. Give the file to the executor host
-as an owned, mode-0600 file. The Core key and the application's
+describes issuance, rotation and revocation. The Core key and the application's
 `$PROJECT_API_KEY` never leave their own machines.
 
-After saving the restricted credential on your execution machine, run one command
-with your Core origin, Environment ID and returned `remote_url`. This downloads
-and verifies the matching bootstrap before starting it:
+On the Session's page, Web shows the install command for its Environment. The
+command contains no secret. Run it on the execution machine and paste the
+credential at the hidden prompt:
 
 ```sh
-(
-  set -eu
-  core=https://core.example
-  work=$(mktemp -d)
-  trap 'rm -rf "$work"' EXIT
-  curl -fsS "$core/node-install/self-hosted-install.pyz" -o "$work/self-hosted-install.pyz"
-  curl -fsS "$core/node-install/SHA256SUMS" -o "$work/SHA256SUMS"
-  (cd "$work"; awk '$2 == "self-hosted-install.pyz"' SHA256SUMS | sha256sum -c -)
-  python3 "$work/self-hosted-install.pyz" --source-url "$core" \
-    --environment-id ENVIRONMENT_UUID \
-    --remote wss://core.example/api/v1/agent-daemon/ws \
-    --credential-file /absolute/private/executor-key.json
-)
+(umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT
+curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/self-hosted-install.pyz' -o "$d/install.pyz" &&
+printf '%s  %s\n' 'SHA256' "$d/install.pyz" | sha256sum -c --status &&
+python3 "$d/install.pyz" --source-url 'https://core.example' --environment-id 'ENVIRONMENT_UUID' --remote 'wss://core.example/api/v1/agent-daemon/ws')
 ```
 
-Use the exact Environment ID and reachable `remote_url` returned by your Session.
+Web fills in the public URL, the installer's SHA-256 (the
+`self-hosted-install.pyz` line of the console's `/node-install/SHA256SUMS`), the
+Environment ID and the unchanged `remote_url` returned by your Session. The prompt
+accepts the compact or pretty-printed credential and never echoes it. For
+automation without a terminal, add
+`--credential-file /absolute/private/executor-key.json` naming an owned mode-0600
+file instead.
 The Linux amd64 host needs Python 3.9+ and Docker access as a non-root user.
 The installer prepares the matched daemon, native harnesses and local workspace
 inside the same isolated Runtime used for hosted execution. No shared node,
@@ -234,6 +230,14 @@ Installation state stays under `~/.parsar/self-hosted/ENVIRONMENT_UUID`; retain 
 credentials, volumes and native history. An uncertain launch gives inspection
 instructions instead of creating replacement history. Session deletion does not
 reclaim user-owned Docker resources.
+
+When the credential is revoked or rotated, the Runtime stops retrying: its log
+shows one message naming the fix, and the container stays up without a restart
+loop. Rotate the same credential in Web, rerun the same command and paste the new
+credential. The installer puts it into the same container, which reconnects with
+its workspace and native history. Issuing a new credential instead does not work
+for an Environment that has already connected. To remove the Runtime, stop its
+container.
 
 ## Installation choices
 

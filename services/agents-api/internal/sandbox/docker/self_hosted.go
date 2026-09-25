@@ -15,6 +15,9 @@ import (
 	"github.com/moby/moby/client"
 )
 
+// selfHostedCredentialPath is the daemon's credential file, relative to /home.
+const selfHostedCredentialPath = "runtime/.parsar/parsar-daemon/executor-key.json"
+
 // SelfHostedLaunch is local installation input, never a public execution request.
 // The caller retains the container and volumes; Core acquires no compute authority.
 type SelfHostedLaunch struct {
@@ -33,7 +36,7 @@ func (v SelfHostedLaunch) Validate() error {
 	if err != nil || u.Scheme != "wss" || u.Hostname() == "" || u.User != nil || u.Path != "/api/v1/agent-daemon/ws" || u.RawPath != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.TrimSpace(v.RemoteURL) != v.RemoteURL {
 		return errors.New("Docker Runtime requires the unchanged HTTPS-reachable wss Environment remote_url")
 	}
-	if !validID(v.InstallationID) || !validID(v.EnvironmentID) || !validID(v.Credential.KeyID) || v.Credential.EnvironmentID != v.EnvironmentID || v.Credential.Token == "" || len(v.Credential.Token) > 16384 || strings.ContainsAny(v.Credential.Token, " \t\r\n\x00") {
+	if !validID(v.InstallationID) || !validID(v.EnvironmentID) || !v.Credential.restrictedTo(v.EnvironmentID) {
 		return errors.New("invalid Environment identity or restricted executor credential")
 	}
 	if !strings.HasPrefix(v.Image, "sha256:") || len(v.Image) != 71 {
@@ -43,6 +46,10 @@ func (v SelfHostedLaunch) Validate() error {
 		return errors.New("invalid Runtime image digest or seccomp profile")
 	}
 	return nil
+}
+
+func (c ExecutorCredential) restrictedTo(environment string) bool {
+	return validID(c.KeyID) && c.EnvironmentID == environment && c.Token != "" && len(c.Token) <= 16384 && !strings.ContainsAny(c.Token, " \t\r\n\x00")
 }
 
 func (v SelfHostedLaunch) Name() string {
@@ -86,7 +93,7 @@ func LaunchSelfHosted(ctx context.Context, c *client.Client, v SelfHostedLaunch)
 		}
 	}
 	options := runtimeContainerOptions(Config{Image: v.Image, Network: "bridge", Seccomp: v.Seccomp, NestedSandbox: true}, name, labels, nil)
-	options.Config.Cmd = []string{"connect", "--profile", "default", "--remote", v.RemoteURL, "--environment-id", v.EnvironmentID, "--credential-file", "/home/runtime/.parsar/parsar-daemon/executor-key.json"}
+	options.Config.Cmd = []string{"connect", "--profile", "default", "--remote", v.RemoteURL, "--environment-id", v.EnvironmentID, "--credential-file", "/home/" + selfHostedCredentialPath}
 	options.HostConfig.RestartPolicy = container.RestartPolicy{Name: container.RestartPolicyUnlessStopped}
 	created, err := c.ContainerCreate(ctx, options)
 	if err != nil {
@@ -96,7 +103,7 @@ func LaunchSelfHosted(ctx context.Context, c *client.Client, v SelfHostedLaunch)
 	if err = copyRuntimeFiles(ctx, c, created.ID, "/home", []entry{
 		{name: "runtime", directory: true}, {name: "runtime/.parsar", directory: true},
 		{name: "runtime/.parsar/parsar-daemon", directory: true},
-		{name: "runtime/.parsar/parsar-daemon/executor-key.json", content: credential},
+		{name: selfHostedCredentialPath, content: credential},
 	}); err != nil {
 		return name, errors.New("cannot initialize private Runtime credential; retain partial state")
 	}
@@ -110,4 +117,35 @@ func LaunchSelfHosted(ctx context.Context, c *client.Client, v SelfHostedLaunch)
 		return name, errors.New("Runtime start outcome uncertain; inspect retained container")
 	}
 	return name, nil
+}
+
+// ReplaceSelfHostedCredential writes a rotated executor credential into a
+// stopped user-owned Runtime, keeping its container, volumes and native history.
+// The container must carry this installation's labels and name for the
+// credential's Environment; a running or unlabeled container is refused.
+func ReplaceSelfHostedCredential(ctx context.Context, c *client.Client, name string, credential ExecutorCredential) error {
+	if c == nil || !validID(credential.EnvironmentID) || !credential.restrictedTo(credential.EnvironmentID) {
+		return sandbox.ErrInvalid
+	}
+	inspected, err := c.ContainerInspect(ctx, name, client.ContainerInspectOptions{})
+	if err != nil {
+		return errors.New("cannot inspect Docker Runtime")
+	}
+	current := inspected.Container
+	if current.Config == nil || current.State == nil {
+		return sandbox.ErrOwnership
+	}
+	labels := current.Config.Labels
+	owner := SelfHostedLaunch{InstallationID: labels[labelPrefix+"installation"], EnvironmentID: labels[labelPrefix+"environment"]}
+	if labels[labelPrefix+"user-owned"] != "true" || !validID(owner.InstallationID) || owner.EnvironmentID != credential.EnvironmentID || owner.Name() != name {
+		return sandbox.ErrOwnership
+	}
+	if current.State.Status != container.StateExited && current.State.Status != container.StateCreated {
+		return errors.New("stop the Runtime before replacing its executor credential")
+	}
+	raw, _ := json.Marshal(credential)
+	if err = copyRuntimeFiles(ctx, c, current.ID, "/home", []entry{{name: selfHostedCredentialPath, content: raw}}); err != nil {
+		return errors.New("cannot replace the Runtime executor credential; inspect the retained container")
+	}
+	return nil
 }
