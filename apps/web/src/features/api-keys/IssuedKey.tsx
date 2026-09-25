@@ -59,18 +59,3 @@ export function PlaintextKey({ value, label, caption }: { value: string; label: 
     </div>
   );
 }
-
-/** A short command with a copy button; the console never runs it. */
-export function CommandBlock({ value, label }: { value: string; label: string }) {
-  const { t } = useTranslation("keys");
-  const { state, copy } = useCopy(value);
-  return (
-    <div className="command-block">
-      <pre aria-label={label} tabIndex={0}><code>{value}</code></pre>
-      <button type="button" className="icon-button ghost command-block-copy" aria-label={state === "copied" ? t("issued.copied") : t("issued.copyCommand")} title={state === "copied" ? t("issued.copied") : t("issued.copyCommand")} onClick={() => void copy()}>
-        {state === "copied" ? <Check size={14} strokeWidth={1.7} aria-hidden="true" /> : <Copy size={14} strokeWidth={1.7} aria-hidden="true" />}
-      </button>
-      {state === "failed" ? <p className="plaintext-key-error" role="alert">{t("issued.copyCommandFailed")}</p> : null}
-    </div>
-  );
-}

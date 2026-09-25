@@ -54,8 +54,8 @@ export function ProjectsPage() {
   useEffect(() => { setSelectedId(params.id ?? null); }, [params]);
 
   // After a key is issued (or its outcome is uncertain), re-read the project and its keys.
-  const keyChanged = useCallback((project: Project | null) => {
-    void invalidateProjects(queryClient, { projectId: project?.id });
+  const keyChanged = useCallback((project: Project) => {
+    void invalidateProjects(queryClient, { projectId: project.id });
   }, [queryClient]);
   const controls = useKeyFlow(keyChanged);
   const { flow, dispatch } = controls;

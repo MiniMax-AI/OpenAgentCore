@@ -4,8 +4,6 @@ import { type AdminIssuedKey, type AdminKey, type Project } from "../../lib/admi
 
 import {
   activeKeyNames,
-  curlExample,
-  DEFAULT_PROJECT_NAME,
   flowError,
   idleFlow,
   isUsableName,
@@ -107,21 +105,6 @@ describe("issuing a key", () => {
   });
 });
 
-describe("first run", () => {
-  it("creates the project once and retries only the key after a failure", () => {
-    const form = run([{ type: "openFirstRun" }, { type: "setName", name: "admin-laptop" }]);
-    expect(form).toMatchObject({ step: "issue", project: null, projectName: DEFAULT_PROJECT_NAME });
-    const created = run([{ type: "setProjectName", name: "Main" }, { type: "started" }, { type: "projectCreated", project: { ...project, name: "Main" } }], form);
-    expect(created).toMatchObject({ busy: true, project: { name: "Main" } });
-    const failed = keyFlowReducer(created, { type: "failed", error: { kind: "uncertain" } });
-    // The created project is kept, so a retry cannot create a second one.
-    expect(failed).toMatchObject({ step: "issue", busy: false, project: { id: project.id } });
-    expect(keyFlowReducer(failed, { type: "setProjectName", name: "Other" })).toBe(failed);
-    const retried = run([{ type: "started" }, { type: "issued", projectId: project.id, key: issued }], failed);
-    expect(retried).toMatchObject({ step: "issued", project: { id: project.id } });
-  });
-});
-
 describe("helpers", () => {
   it("lists active keys first, newest first", () => {
     const key = (id: string, created: number, revoked: number | null = null): AdminKey => ({ id, project_id: "proj_7f3a91c2", name: id, prefix: `pc_${id}`, created_at: created, revoked_at: revoked });
@@ -132,15 +115,5 @@ describe("helpers", () => {
     expect(matchesProject(project, "prod")).toBe(true);
     expect(matchesProject(project, "7F3A")).toBe(true);
     expect(matchesProject(project, "data")).toBe(false);
-  });
-
-  it("builds a request the caller runs with their own key variable", () => {
-    const command = curlExample("https://core.example/");
-    expect(command).toContain("curl https://core.example/v1/agents");
-    expect(command).toContain('"Authorization: Bearer $PROJECT_API_KEY"');
-    expect(command).not.toContain("pc_live");
-    // Anything that is not a plain origin falls back to a variable instead of reaching the shell.
-    expect(curlExample('https://core.example/$(id)')).toContain('"$CORE_URL/v1/agents"');
-    expect(curlExample(null)).toContain('"$CORE_URL/v1/agents"');
   });
 });

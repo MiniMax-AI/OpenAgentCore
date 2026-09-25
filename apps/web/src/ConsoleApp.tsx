@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ConsoleSidebar } from "./components/ConsoleSidebar";
-import { FirstProjectSetup } from "./features/api-keys/FirstProjectSetup";
 import { ProjectsPage } from "./features/api-keys/ProjectsPage";
 import { AgentsPage } from "./features/agents/AgentsPage";
 import { TemplatesPage } from "./features/environment-templates/TemplatesPage";
@@ -10,6 +9,8 @@ import { FilesPage } from "./features/files/FilesPage";
 import { AgentMetricsPage } from "./features/metrics/AgentMetricsPage";
 import { CoreMetricsPage } from "./features/metrics/CoreMetricsPage";
 import { SandboxMetricsPage } from "./features/metrics/SandboxMetricsPage";
+import { ConsoleTourContext, ConsoleTourScreen } from "./features/onboarding/ConsoleTour";
+import { withTransition } from "./features/onboarding/view-transition";
 import { OverviewPage } from "./features/overview/OverviewPage";
 import { SandboxManagerView } from "./features/sandbox/SandboxManagerView";
 import { SessionLogPage } from "./features/sessions/SessionLogPage";
@@ -61,13 +62,9 @@ function ConsoleShell() {
   const { t } = useTranslation("navigation");
   const { state } = useProjects();
   const [location, setLocation] = useState(readLocation);
-  const [setupDone, setSetupDone] = useState(false);
-  // Once first-run setup has started it stays until it finishes: a background
-  // re-read of the projects (which now include the new one) must not replace it
-  // while the first key is on screen.
-  const needsSetup = state.status === "ready" && state.projects.length === 0;
-  const [setupStarted, setSetupStarted] = useState(false);
-  useEffect(() => { if (needsSetup) setSetupStarted(true); }, [needsSetup]);
+  // The console tour takes the place of the shell until it ends.
+  const [touring, setTouring] = useState(false);
+  const openTour = useCallback((from: HTMLElement | null) => withTransition("enter", () => setTouring(true), from), []);
 
   useEffect(() => {
     const sync = () => setLocation(readLocation());
@@ -102,23 +99,21 @@ function ConsoleShell() {
     for (const project of state.projects) void queryClient.prefetchQuery(collectionQuery(spec, project.id));
   }, [state.projects]);
 
-  // First run: with no project yet, the administrator creates the first one and
-  // its API key. Signing in reads the projects first, so this opens at once.
-  if ((needsSetup || setupStarted) && !setupDone) {
-    return <FirstProjectSetup onDone={() => setSetupDone(true)} />;
-  }
+  if (touring) return <ConsoleTourScreen onDone={(from) => withTransition("enter", () => setTouring(false), from)} />;
 
   return (
     <ConsoleNavigationContext.Provider value={navigation}>
-      <div className="app-shell">
-        <a className="skip-link" href="#main-content">{t("skipToContent")}</a>
-        <ConsoleSidebar active={consoleNavParent(location.view)} onSelect={(view) => navigate(view)} onIntent={prefetch} />
-        <main className="app-main" id="main-content" tabIndex={-1}>
-          <div className="page-transition" key={`${location.view}:${location.params.project ?? ""}:${location.params.id ?? ""}`}>
-            <ConsolePage view={location.view} />
-          </div>
-        </main>
-      </div>
+      <ConsoleTourContext.Provider value={openTour}>
+        <div className="app-shell">
+          <a className="skip-link" href="#main-content">{t("skipToContent")}</a>
+          <ConsoleSidebar active={consoleNavParent(location.view)} onSelect={(view) => navigate(view)} onIntent={prefetch} />
+          <main className="app-main" id="main-content" tabIndex={-1}>
+            <div className="page-transition" key={`${location.view}:${location.params.project ?? ""}:${location.params.id ?? ""}`}>
+              <ConsolePage view={location.view} />
+            </div>
+          </main>
+        </div>
+      </ConsoleTourContext.Provider>
     </ConsoleNavigationContext.Provider>
   );
 }

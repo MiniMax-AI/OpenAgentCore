@@ -1,8 +1,5 @@
 export const consoleAuthChinese = {
   "Try again": "重试",
-  "Copied": "已复制",
-  "A place for your Agents to work.": "让你的 Agent 在这里工作。",
-  "Connect your machines. Create Agents. Watch work happen.": "连接自己的机器，创建 Agent，让工作在这里发生。",
   "Sign in to Parsar Core": "登录 Parsar Core",
   "Core key": "Core Key",
   "This deployment's Core key. The installer saved it in a private file: {{file}} in the installation directory, by default {{defaultPath}}. It is an administration credential: it cannot call the /v1 Agents API, and the console never keeps it in your browser.":
@@ -20,7 +17,4 @@ export const consoleAuthChinese = {
   "Signing out…": "正在退出…",
   "Could not sign out. Try again.": "退出失败，请重试。",
   "Console language": "控制台语言",
-  "Getting started": "开始使用",
-  "Continue setup": "继续设置",
-  "Replay introduction": "再次查看引导",
 } as const;

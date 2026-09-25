@@ -1,21 +1,15 @@
 export const onboarding = {
-  steps: {
-    label: "Setup progress",
-    project: "Project and API key",
-    tour: "Your console",
-  },
   stage: {
     login: { title: "One Core. Many Agents.", body: "Connect your machines, run your Agents, and watch every Session from one console." },
-    project: { title: "A project holds the work.", body: "Agents, Sessions, Skills, files and Vaults belong to a project. Applications reach it with the project's API keys." },
     orbit: "Core and what it manages: Agents, Sessions, Skills, Vaults, files, templates and machines",
   },
-  terminal: "Try it in a terminal",
   tour: {
+    label: "Your console",
     eyebrow: "Your console · {{n}} of {{total}}",
     skip: "Skip",
     back: "Back",
     next: "Next",
-    enter: "Open the console",
+    done: "Back to the console",
     shot: "The {{name}} pages of the console",
     chapters: {
       monitor: {

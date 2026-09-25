@@ -38,23 +38,11 @@ test("signs in with the Core key, keeps it out of the browser, and signs out and
   expect(await browserStorage(page)).not.toContain(FIXTURE_CORE_KEY);
 });
 
-test("sets up a fresh install: Core key sign-in, first project, a key shown once, the tour, then the console", async ({ page, request }) => {
+test("opens a fresh install on the Overview without asking for a project first", async ({ page, request }) => {
   await resetFixture(request, "login", { fresh: true });
   await page.addInitScript(() => window.localStorage.setItem("agents-core-web.language", "en"));
   await page.goto("/");
   await signIn(page, FIXTURE_CORE_KEY);
-
-  await expect(page.getByRole("heading", { name: "Create your first project" })).toBeVisible();
-  await page.locator("input[name=key-name]").fill("my-app");
-  await page.getByRole("button", { name: "Create project and key" }).click();
-  await expect(page.getByLabel("New key my-app")).toHaveValue(/fixture-secret/);
-  await page.getByRole("button", { name: "I've saved it, continue" }).click();
-
-  await expect(page.getByLabel("New key my-app")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Is it healthy, and where does it fail?" })).toBeVisible();
-  await page.getByRole("button", { name: "Skip" }).click();
   await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
-  const stored = await browserStorage(page);
-  expect(stored).not.toContain("fixture-secret");
-  expect(stored).not.toContain(FIXTURE_CORE_KEY);
+  expect(await browserStorage(page)).not.toContain(FIXTURE_CORE_KEY);
 });

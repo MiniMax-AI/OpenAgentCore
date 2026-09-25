@@ -31,7 +31,7 @@ describe("one-time key display", () => {
   });
 
   it("names the project and blocks a key name already used by an active key", () => {
-    const html = renderToStaticMarkup(<KeyFlowDialogs controls={controls({ step: "issue", project, projectName: project.name, name: "alice", busy: false, error: null })} taken={["alice"]} />);
+    const html = renderToStaticMarkup(<KeyFlowDialogs controls={controls({ step: "issue", project, name: "alice", busy: false, error: null })} taken={["alice"]} />);
     expect(html).toContain("Issue a key for Production");
     expect(html).toContain("An active key of this project already has this name.");
     expect(html).toMatch(/<button class="button primary" type="submit" form="key-issue-form" disabled="">/);

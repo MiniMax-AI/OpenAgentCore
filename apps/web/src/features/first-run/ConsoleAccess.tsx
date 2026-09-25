@@ -5,7 +5,6 @@ import { HelpTip } from "../../components/console-ui";
 import { ThemeMenu } from "../../components/ThemeMenu";
 import { useToast } from "../../components/Toast";
 import { setLanguage } from "../../i18n";
-import { projectsQuery, queryClient } from "../../lib/queries";
 import { OnboardingLayout } from "../onboarding/OnboardingLayout";
 import { withTransition } from "../onboarding/view-transition";
 import { changeConsoleAuth, ConsoleAuthError, readConsoleAuth, type ConsoleAuth } from "./auth";
@@ -43,15 +42,6 @@ export function ConsoleAccountMenu() {
   </div>;
 }
 
-/** True when the deployment has no project yet, so first-run setup follows signing in. */
-async function needsFirstProject(): Promise<boolean> {
-  try {
-    return (await queryClient.fetchQuery(projectsQuery)).length === 0;
-  } catch {
-    return false; // The console reports the failed read itself.
-  }
-}
-
 export function ConsoleAccess({ children }: { children: ReactNode }) {
   const { t } = useTranslation("firstRun");
   const [status, setStatus] = useState<ConsoleAuth | null>(null);
@@ -82,9 +72,9 @@ export function ConsoleAccess({ children }: { children: ReactNode }) {
   } }}>{children}</ConsoleAccountContext.Provider>;
 
   return <OnboardingLayout scene={status ? "login" : null} controls={<><ThemeMenu /><ConsoleLanguage /></>}>
-    {status && !failed ? <CoreKeyForm key={revision} onAuthenticated={(next, firstRun, from) => {
-      // Without a project, first-run setup continues on the same stage; otherwise the console opens.
-      withTransition(firstRun ? "step" : "enter", () => {
+    {status && !failed ? <CoreKeyForm key={revision} onAuthenticated={(next, from) => {
+      // The console opens on the Overview, revealed from the pressed button.
+      withTransition("enter", () => {
         generation.current++;
         setStatus(next);
       }, from);
@@ -95,7 +85,7 @@ export function ConsoleAccess({ children }: { children: ReactNode }) {
 }
 
 function CoreKeyForm({ onAuthenticated }: {
-  onAuthenticated: (status: ConsoleAuth, firstRun: boolean, from: HTMLElement | null) => void;
+  onAuthenticated: (status: ConsoleAuth, from: HTMLElement | null) => void;
 }) {
   const { t } = useTranslation("firstRun");
   const id = useId();
@@ -127,8 +117,7 @@ function CoreKeyForm({ onAuthenticated }: {
     const request = new AbortController(); controller.current = request;
     try {
       const next = await changeConsoleAuth({ action: "login", coreKey }, request.signal);
-      const firstRun = await needsFirstProject();
-      if (!request.signal.aborted) onAuthenticated(next, firstRun, submitter);
+      if (!request.signal.aborted) onAuthenticated(next, submitter);
     } catch (cause) {
       if (request.signal.aborted) return;
       setError(errorMessage(cause));
