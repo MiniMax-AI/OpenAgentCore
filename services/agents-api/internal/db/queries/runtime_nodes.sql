@@ -5,8 +5,8 @@ UPDATE runtime_deployment SET provider_kind=$1, local_node_id=$2, mode='nodes', 
 SELECT * FROM runtime_deployment WHERE singleton=true;
 
 -- name: InsertRuntimeNode :one
-INSERT INTO runtime_nodes(id,installation_id,name,backend_fingerprint,credential_sha256,max_active,max_retained,specification_digest,deployment_generation)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *;
+INSERT INTO runtime_nodes(id,installation_id,name,backend_fingerprint,credential_sha256,max_active,max_retained,specification_digest,deployment_generation,admission_state)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *;
 
 -- name: GetRuntimeNode :one
 SELECT * FROM runtime_nodes WHERE id=$1 AND removed_at IS NULL;
@@ -24,7 +24,7 @@ FROM runtime_nodes n CROSS JOIN runtime_deployment d
 WHERE n.removed_at IS NULL AND n.installation_id=d.installation_id ORDER BY n.id;
 
 -- name: UpdateRuntimeNode :one
-UPDATE runtime_nodes SET name=$2,max_active=$3,max_retained=$4 WHERE id=$1 AND removed_at IS NULL RETURNING *;
+UPDATE runtime_nodes SET name=$2,max_active=$3,max_retained=$4,admission_state=$5,configuration_version=configuration_version+1,last_update_revision=$6,last_update_digest=$7 WHERE id=$1 AND removed_at IS NULL RETURNING *;
 
 -- name: RemoveRuntimeNode :exec
 UPDATE runtime_nodes SET removed_at=clock_timestamp(),connection_id=NULL WHERE id=$1 AND removed_at IS NULL;
@@ -51,6 +51,10 @@ INSERT INTO runtime_node_enrollments(token_sha256,installation_id,expires_at) VA
 UPDATE runtime_node_enrollments SET consumed_at=clock_timestamp(),node_id=$2
 WHERE token_sha256=$1 AND consumed_at IS NULL AND expires_at>clock_timestamp()
 AND installation_id=(SELECT installation_id FROM runtime_deployment WHERE singleton=true);
+
+-- name: GetRuntimeEnrollmentReceipt :one
+SELECT id,node_id,expires_at,consumed_at FROM runtime_node_enrollments
+WHERE id=$1 AND installation_id=(SELECT installation_id FROM runtime_deployment WHERE singleton=true);
 
 -- name: GetRuntimeEnrollment :one
 SELECT * FROM runtime_node_enrollments WHERE token_sha256=$1;

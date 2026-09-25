@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/jackc/pgx/v5"
@@ -43,10 +44,13 @@ func (s *Store) HeartbeatRuntimeNode(ctx context.Context, nodeID, connectionID s
 	if health.Diagnostic != "" && health.Diagnostic != "provider_unavailable" {
 		return ErrInvalidInput
 	}
-	for _, value := range []*int64{health.CPUCount, health.AvailableMemoryBytes, health.AvailableDiskBytes} {
+	for _, value := range []*int64{health.CPUCount, health.AvailableMemoryBytes, health.AvailableDiskBytes, health.HostTotalMemoryBytes, health.EffectiveMemoryBytes} {
 		if value != nil && *value < 0 {
 			return ErrInvalidInput
 		}
+	}
+	if health.EffectiveCPUCores != nil && (*health.EffectiveCPUCores < 0 || math.IsNaN(*health.EffectiveCPUCores) || math.IsInf(*health.EffectiveCPUCores, 0)) {
+		return ErrInvalidInput
 	}
 	raw, err := json.Marshal(health)
 	if err != nil {

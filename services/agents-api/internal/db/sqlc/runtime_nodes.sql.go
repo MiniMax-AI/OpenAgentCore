@@ -182,7 +182,7 @@ func (q *Queries) GetRuntimeDeployment(ctx context.Context) (RuntimeDeployment, 
 }
 
 const getRuntimeEnrollment = `-- name: GetRuntimeEnrollment :one
-SELECT token_sha256, installation_id, expires_at, consumed_at, node_id FROM runtime_node_enrollments WHERE token_sha256=$1
+SELECT token_sha256, installation_id, expires_at, consumed_at, node_id, id FROM runtime_node_enrollments WHERE token_sha256=$1
 `
 
 func (q *Queries) GetRuntimeEnrollment(ctx context.Context, tokenSha256 string) (RuntimeNodeEnrollment, error) {
@@ -194,12 +194,37 @@ func (q *Queries) GetRuntimeEnrollment(ctx context.Context, tokenSha256 string) 
 		&i.ExpiresAt,
 		&i.ConsumedAt,
 		&i.NodeID,
+		&i.ID,
+	)
+	return i, err
+}
+
+const getRuntimeEnrollmentReceipt = `-- name: GetRuntimeEnrollmentReceipt :one
+SELECT id,node_id,expires_at,consumed_at FROM runtime_node_enrollments
+WHERE id=$1 AND installation_id=(SELECT installation_id FROM runtime_deployment WHERE singleton=true)
+`
+
+type GetRuntimeEnrollmentReceiptRow struct {
+	ID         pgtype.UUID        `json:"id"`
+	NodeID     pgtype.UUID        `json:"node_id"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt pgtype.Timestamptz `json:"consumed_at"`
+}
+
+func (q *Queries) GetRuntimeEnrollmentReceipt(ctx context.Context, id pgtype.UUID) (GetRuntimeEnrollmentReceiptRow, error) {
+	row := q.db.QueryRow(ctx, getRuntimeEnrollmentReceipt, id)
+	var i GetRuntimeEnrollmentReceiptRow
+	err := row.Scan(
+		&i.ID,
+		&i.NodeID,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
 	)
 	return i, err
 }
 
 const getRuntimeNode = `-- name: GetRuntimeNode :one
-SELECT id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained, connection_id, provider_ready, health, connected_epoch, last_seen_at, created_at, removed_at, specification_digest, deployment_generation FROM runtime_nodes WHERE id=$1 AND removed_at IS NULL
+SELECT id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained, connection_id, provider_ready, health, connected_epoch, last_seen_at, created_at, removed_at, specification_digest, deployment_generation, admission_state, configuration_version, last_update_revision, last_update_digest FROM runtime_nodes WHERE id=$1 AND removed_at IS NULL
 `
 
 func (q *Queries) GetRuntimeNode(ctx context.Context, id pgtype.UUID) (RuntimeNode, error) {
@@ -222,6 +247,10 @@ func (q *Queries) GetRuntimeNode(ctx context.Context, id pgtype.UUID) (RuntimeNo
 		&i.RemovedAt,
 		&i.SpecificationDigest,
 		&i.DeploymentGeneration,
+		&i.AdmissionState,
+		&i.ConfigurationVersion,
+		&i.LastUpdateRevision,
+		&i.LastUpdateDigest,
 	)
 	return i, err
 }
@@ -290,8 +319,8 @@ func (q *Queries) HeartbeatRuntimeNode(ctx context.Context, arg HeartbeatRuntime
 }
 
 const insertRuntimeNode = `-- name: InsertRuntimeNode :one
-INSERT INTO runtime_nodes(id,installation_id,name,backend_fingerprint,credential_sha256,max_active,max_retained,specification_digest,deployment_generation)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained, connection_id, provider_ready, health, connected_epoch, last_seen_at, created_at, removed_at, specification_digest, deployment_generation
+INSERT INTO runtime_nodes(id,installation_id,name,backend_fingerprint,credential_sha256,max_active,max_retained,specification_digest,deployment_generation,admission_state)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained, connection_id, provider_ready, health, connected_epoch, last_seen_at, created_at, removed_at, specification_digest, deployment_generation, admission_state, configuration_version, last_update_revision, last_update_digest
 `
 
 type InsertRuntimeNodeParams struct {
@@ -304,6 +333,7 @@ type InsertRuntimeNodeParams struct {
 	MaxRetained          int32       `json:"max_retained"`
 	SpecificationDigest  string      `json:"specification_digest"`
 	DeploymentGeneration int64       `json:"deployment_generation"`
+	AdmissionState       string      `json:"admission_state"`
 }
 
 func (q *Queries) InsertRuntimeNode(ctx context.Context, arg InsertRuntimeNodeParams) (RuntimeNode, error) {
@@ -317,6 +347,7 @@ func (q *Queries) InsertRuntimeNode(ctx context.Context, arg InsertRuntimeNodePa
 		arg.MaxRetained,
 		arg.SpecificationDigest,
 		arg.DeploymentGeneration,
+		arg.AdmissionState,
 	)
 	var i RuntimeNode
 	err := row.Scan(
@@ -336,6 +367,10 @@ func (q *Queries) InsertRuntimeNode(ctx context.Context, arg InsertRuntimeNodePa
 		&i.RemovedAt,
 		&i.SpecificationDigest,
 		&i.DeploymentGeneration,
+		&i.AdmissionState,
+		&i.ConfigurationVersion,
+		&i.LastUpdateRevision,
+		&i.LastUpdateDigest,
 	)
 	return i, err
 }
@@ -446,7 +481,7 @@ func (q *Queries) ListNodeRuntimeAllocations(ctx context.Context, nodeID pgtype.
 }
 
 const listRuntimeNodes = `-- name: ListRuntimeNodes :many
-SELECT n.id, n.installation_id, n.name, n.backend_fingerprint, n.credential_sha256, n.max_active, n.max_retained, n.connection_id, n.provider_ready, n.health, n.connected_epoch, n.last_seen_at, n.created_at, n.removed_at, n.specification_digest, n.deployment_generation, (n.connection_id IS NOT NULL AND n.connected_epoch=d.owner_epoch AND n.last_seen_at > clock_timestamp()-interval '45 seconds')::boolean AS online,
+SELECT n.id, n.installation_id, n.name, n.backend_fingerprint, n.credential_sha256, n.max_active, n.max_retained, n.connection_id, n.provider_ready, n.health, n.connected_epoch, n.last_seen_at, n.created_at, n.removed_at, n.specification_digest, n.deployment_generation, n.admission_state, n.configuration_version, n.last_update_revision, n.last_update_digest, (n.connection_id IS NOT NULL AND n.connected_epoch=d.owner_epoch AND n.last_seen_at > clock_timestamp()-interval '45 seconds')::boolean AS online,
  d.provider_kind,
  (SELECT count(*) FROM runtime_placements p LEFT JOIN runtime_allocations a ON a.environment_id=p.environment_id WHERE p.node_id=n.id AND p.released_at IS NULL AND (a.id IS NULL OR a.compute_phase <> 'suspended'))::bigint AS active,
  (SELECT count(*) FROM runtime_placements p WHERE p.node_id=n.id AND p.released_at IS NULL)::bigint AS retained,
@@ -475,6 +510,10 @@ type ListRuntimeNodesRow struct {
 	RemovedAt            pgtype.Timestamptz `json:"removed_at"`
 	SpecificationDigest  string             `json:"specification_digest"`
 	DeploymentGeneration int64              `json:"deployment_generation"`
+	AdmissionState       string             `json:"admission_state"`
+	ConfigurationVersion int64              `json:"configuration_version"`
+	LastUpdateRevision   string             `json:"last_update_revision"`
+	LastUpdateDigest     string             `json:"last_update_digest"`
 	Online               bool               `json:"online"`
 	ProviderKind         string             `json:"provider_kind"`
 	Active               int64              `json:"active"`
@@ -511,6 +550,10 @@ func (q *Queries) ListRuntimeNodes(ctx context.Context) ([]ListRuntimeNodesRow, 
 			&i.RemovedAt,
 			&i.SpecificationDigest,
 			&i.DeploymentGeneration,
+			&i.AdmissionState,
+			&i.ConfigurationVersion,
+			&i.LastUpdateRevision,
+			&i.LastUpdateDigest,
 			&i.Online,
 			&i.ProviderKind,
 			&i.Active,
@@ -605,14 +648,17 @@ func (q *Queries) SetRuntimeObservation(ctx context.Context, arg SetRuntimeObser
 }
 
 const updateRuntimeNode = `-- name: UpdateRuntimeNode :one
-UPDATE runtime_nodes SET name=$2,max_active=$3,max_retained=$4 WHERE id=$1 AND removed_at IS NULL RETURNING id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained, connection_id, provider_ready, health, connected_epoch, last_seen_at, created_at, removed_at, specification_digest, deployment_generation
+UPDATE runtime_nodes SET name=$2,max_active=$3,max_retained=$4,admission_state=$5,configuration_version=configuration_version+1,last_update_revision=$6,last_update_digest=$7 WHERE id=$1 AND removed_at IS NULL RETURNING id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained, connection_id, provider_ready, health, connected_epoch, last_seen_at, created_at, removed_at, specification_digest, deployment_generation, admission_state, configuration_version, last_update_revision, last_update_digest
 `
 
 type UpdateRuntimeNodeParams struct {
-	ID          pgtype.UUID `json:"id"`
-	Name        string      `json:"name"`
-	MaxActive   int32       `json:"max_active"`
-	MaxRetained int32       `json:"max_retained"`
+	ID                 pgtype.UUID `json:"id"`
+	Name               string      `json:"name"`
+	MaxActive          int32       `json:"max_active"`
+	MaxRetained        int32       `json:"max_retained"`
+	AdmissionState     string      `json:"admission_state"`
+	LastUpdateRevision string      `json:"last_update_revision"`
+	LastUpdateDigest   string      `json:"last_update_digest"`
 }
 
 func (q *Queries) UpdateRuntimeNode(ctx context.Context, arg UpdateRuntimeNodeParams) (RuntimeNode, error) {
@@ -621,6 +667,9 @@ func (q *Queries) UpdateRuntimeNode(ctx context.Context, arg UpdateRuntimeNodePa
 		arg.Name,
 		arg.MaxActive,
 		arg.MaxRetained,
+		arg.AdmissionState,
+		arg.LastUpdateRevision,
+		arg.LastUpdateDigest,
 	)
 	var i RuntimeNode
 	err := row.Scan(
@@ -640,6 +689,10 @@ func (q *Queries) UpdateRuntimeNode(ctx context.Context, arg UpdateRuntimeNodePa
 		&i.RemovedAt,
 		&i.SpecificationDigest,
 		&i.DeploymentGeneration,
+		&i.AdmissionState,
+		&i.ConfigurationVersion,
+		&i.LastUpdateRevision,
+		&i.LastUpdateDigest,
 	)
 	return i, err
 }

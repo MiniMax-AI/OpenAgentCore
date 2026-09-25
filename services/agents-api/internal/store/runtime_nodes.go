@@ -2,10 +2,8 @@ package store
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -69,53 +67,12 @@ func runtimeUUID(id pgtype.UUID) string {
 	}
 	return uuid.UUID(id.Bytes).String()
 }
-func (s *Store) ListRuntimeNodes(ctx context.Context) ([]RuntimeNode, error) {
-	rows, err := s.queries.ListRuntimeNodes(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]RuntimeNode, 0, len(rows))
-	for _, n := range rows {
-		var seen *time.Time
-		if n.LastSeenAt.Valid {
-			value := n.LastSeenAt.Time
-			seen = &value
-		}
-		var health RuntimeNodeHealth
-		if err := json.Unmarshal(n.Health, &health); err != nil {
-			return nil, err
-		}
-		health.ProviderReady = n.ProviderReady
-		out = append(out, RuntimeNode{RuntimeNodeHealth: health, Running: n.Running, Snapshots: n.Snapshots, ID: runtimeUUID(n.ID), Name: n.Name, Provider: n.ProviderKind, Online: n.Online, LastSeenAt: seen, MaxActive: int(n.MaxActive), MaxRetained: int(n.MaxRetained), Active: n.Active, Reserved: n.Reserved, Retained: n.Retained, CleanupPending: n.CleanupPending, CreatedAt: n.CreatedAt.Time})
-	}
-	return out, nil
-}
-func (s *Store) CreateRuntimeEnrollment(ctx context.Context) (string, time.Time, error) {
-	var bytes [32]byte
-	if _, err := rand.Read(bytes[:]); err != nil {
-		return "", time.Time{}, err
-	}
-	token := hex.EncodeToString(bytes[:])
-	var expires time.Time
-	err := s.runtimeManagerTransaction(ctx, func(q *sqlc.Queries, d sqlc.RuntimeDeployment) error {
-		if d.Mode != "nodes" || d.Maintenance {
-			return ErrSandboxDeploymentConflict
-		}
-		if err := q.CreateRuntimeEnrollment(ctx, sqlc.CreateRuntimeEnrollmentParams{TokenSha256: runtimeTokenDigest(token), InstallationID: d.InstallationID}); err != nil {
-			return err
-		}
-		row, err := q.GetRuntimeEnrollment(ctx, runtimeTokenDigest(token))
-		expires = row.ExpiresAt.Time
-		return err
-	})
-	return token, expires, err
-}
 func (s *Store) EnrollRuntimeNode(ctx context.Context, token string, input RuntimeNodeEnrollment) (RuntimeNodeIdentity, error) {
 	id, err := parseConnectionGeneration(input.NodeID)
 	if err != nil || len(input.Credential) < 32 || len(input.Credential) > 256 || strings.ContainsAny(input.Credential, " \t\r\n") || !validRuntimeDigest(input.BackendFingerprint) {
 		return RuntimeNodeIdentity{}, ErrInvalidInput
 	}
-	if err := validateRuntimeNode(input.Name, input.MaxActive, input.MaxRetained); err != nil {
+	if err := validateRuntimeNode(input.Name, 1, 1); err != nil {
 		return RuntimeNodeIdentity{}, err
 	}
 	var result RuntimeNodeIdentity
@@ -142,7 +99,7 @@ func (s *Store) EnrollRuntimeNode(ctx context.Context, token string, input Runti
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		row, err := q.InsertRuntimeNode(ctx, sqlc.InsertRuntimeNodeParams{ID: id, InstallationID: d.InstallationID, Name: input.Name, BackendFingerprint: input.BackendFingerprint, CredentialSha256: runtimeTokenDigest(input.Credential), MaxActive: int32(input.MaxActive), MaxRetained: int32(input.MaxRetained), SpecificationDigest: input.SpecificationDigest, DeploymentGeneration: int64(input.DeploymentGeneration)})
+		row, err := q.InsertRuntimeNode(ctx, sqlc.InsertRuntimeNodeParams{ID: id, InstallationID: d.InstallationID, Name: input.Name, BackendFingerprint: input.BackendFingerprint, CredentialSha256: runtimeTokenDigest(input.Credential), MaxActive: 1, MaxRetained: 1, AdmissionState: "pending_confirmation", SpecificationDigest: input.SpecificationDigest, DeploymentGeneration: int64(input.DeploymentGeneration)})
 		if err != nil {
 			return err
 		}
@@ -188,29 +145,6 @@ func (s *Store) AuthenticateRuntimeNode(ctx context.Context, nodeID, credential 
 		return RuntimeNodeIdentity{}, ErrRuntimeSpecificationMismatch
 	}
 	return nodeIdentity(n, d.ProviderKind), nil
-}
-func (s *Store) UpdateRuntimeNode(ctx context.Context, nodeID string, input RuntimeNodeUpdate) error {
-	if err := validateRuntimeNode(input.Name, input.MaxActive, input.MaxRetained); err != nil {
-		return err
-	}
-	id, err := parseConnectionGeneration(nodeID)
-	if err != nil {
-		return err
-	}
-	return s.runtimeManagerTransaction(ctx, func(q *sqlc.Queries, d sqlc.RuntimeDeployment) error {
-		n, err := q.GetRuntimeNode(ctx, id)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
-		if n.InstallationID != d.InstallationID {
-			return ErrNotFound
-		}
-		_, err = q.UpdateRuntimeNode(ctx, sqlc.UpdateRuntimeNodeParams{ID: id, Name: input.Name, MaxActive: int32(input.MaxActive), MaxRetained: int32(input.MaxRetained)})
-		return err
-	})
 }
 func (s *Store) RemoveRuntimeNode(ctx context.Context, nodeID string) error {
 	id, err := parseConnectionGeneration(nodeID)

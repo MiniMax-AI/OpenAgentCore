@@ -140,15 +140,16 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 	f.enroll(f.nodeB)
 	f.online(f.nodeA)
 	f.online(f.nodeB)
+	store.ActivateRuntimeNodeForTest(t, s, f.nodeB, 100, 100)
 	return f
 }
 func (f *nodeIsolationFixture) enroll(id string) {
 	f.t.Helper()
-	token, _, err := f.store.CreateRuntimeEnrollment(f.t.Context())
+	token, err := f.store.CreateRuntimeEnrollment(f.t.Context())
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	_, err = f.store.EnrollRuntimeNode(f.t.Context(), token, store.RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: store.SandboxDeploymentTestSpec("microsandbox").Digest("microsandbox"), NodeID: id, Credential: strings.Repeat("x", 64), Name: id, Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64), MaxActive: 100, MaxRetained: 100})
+	_, err = f.store.EnrollRuntimeNode(f.t.Context(), token.Token, store.RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: store.SandboxDeploymentTestSpec("microsandbox").Digest("microsandbox"), NodeID: id, Credential: strings.Repeat("x", 64), Name: id, Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64), MaxActive: 100, MaxRetained: 100})
 	if err != nil {
 		f.t.Fatal(err)
 	}

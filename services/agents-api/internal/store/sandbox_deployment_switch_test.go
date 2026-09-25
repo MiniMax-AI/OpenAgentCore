@@ -45,7 +45,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if err != nil || setup.E2B.APIKey != input.E2B.APIKey {
 		t.Fatal("internal credential unavailable", err)
 	}
-	if _, _, err := s.CreateRuntimeEnrollment(t.Context()); !errors.Is(err, ErrSandboxDeploymentConflict) {
+	if _, err := s.CreateRuntimeEnrollment(t.Context()); !errors.Is(err, ErrSandboxDeploymentConflict) {
 		t.Fatal("cloud enrolled a machine", err)
 	}
 	tenant := uuid.NewString()
@@ -119,15 +119,15 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 	if _, err := w.InitializeSandboxDeployment(t.Context(), id, SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker", CoreURL: "https://core.example"}); err != nil {
 		t.Fatal(err)
 	}
-	token, _, err := s.CreateRuntimeEnrollment(t.Context())
+	token, err := s.CreateRuntimeEnrollment(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	node := RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Name: "Machine", Provider: "docker", Credential: strings.Repeat("c", 64), BackendFingerprint: strings.Repeat("b", 64), MaxActive: 2, MaxRetained: 4}
-	if _, err := s.EnrollRuntimeNode(t.Context(), token, node); err != nil {
+	if _, err := s.EnrollRuntimeNode(t.Context(), token.Token, node); err != nil {
 		t.Fatal(err)
 	}
-	unused, _, err := s.CreateRuntimeEnrollment(t.Context())
+	unused, err := s.CreateRuntimeEnrollment(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,11 +138,11 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 	// still precedes deployment details for invalid or retired credentials.
 	spareNode := node
 	spareNode.NodeID = uuid.NewString()
-	if _, err := s.EnrollRuntimeNode(t.Context(), unused, spareNode); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.EnrollRuntimeNode(t.Context(), unused.Token, spareNode); !errors.Is(err, ErrInvalidInput) {
 		t.Fatal("maintenance accepted enrollment", err)
 	}
 	var consumed bool
-	if err := pool.QueryRow(t.Context(), "SELECT consumed_at IS NOT NULL FROM runtime_node_enrollments WHERE token_sha256=$1", runtimeTokenDigest(unused)).Scan(&consumed); err != nil || consumed {
+	if err := pool.QueryRow(t.Context(), "SELECT consumed_at IS NOT NULL FROM runtime_node_enrollments WHERE token_sha256=$1", runtimeTokenDigest(unused.Token)).Scan(&consumed); err != nil || consumed {
 		t.Fatal("maintenance consumed enrollment", err)
 	}
 	spareNode.Provider = "microsandbox"
@@ -155,7 +155,7 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := s.EnrollRuntimeNode(t.Context(), unused, spareNode); !errors.Is(err, ErrRuntimeNodeCredential) {
+	if _, err := s.EnrollRuntimeNode(t.Context(), unused.Token, spareNode); !errors.Is(err, ErrRuntimeNodeCredential) {
 		t.Fatal("retired token did not reject before cloud deployment validation", err)
 	}
 	if _, err := s.AuthenticateRuntimeNode(t.Context(), node.NodeID, node.Credential); !errors.Is(err, ErrRuntimeNodeCredential) {
@@ -171,7 +171,7 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 		t.Fatal(err)
 	}
 	node.NodeID = uuid.NewString()
-	if _, err := s.EnrollRuntimeNode(t.Context(), unused, node); !errors.Is(err, ErrRuntimeNodeCredential) {
+	if _, err := s.EnrollRuntimeNode(t.Context(), unused.Token, node); !errors.Is(err, ErrRuntimeNodeCredential) {
 		t.Fatal("old enrollment survived roundtrip", err)
 	}
 	nodes, err := s.ListRuntimeNodes(t.Context())

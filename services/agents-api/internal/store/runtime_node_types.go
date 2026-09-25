@@ -7,10 +7,11 @@ import (
 )
 
 var (
-	ErrRuntimeNodeUnavailable     = errors.New("sandbox node unavailable")
-	ErrRuntimeNodeInUse           = errors.New("sandbox node retains resources")
-	ErrRuntimeNodeCredential      = errors.New("invalid sandbox node credential")
-	ErrRuntimeLocalNodeConfigured = errors.New("local sandbox node is enabled in deployment configuration")
+	ErrRuntimeNodeConfigurationConflict = errors.New("sandbox node configuration changed or capacity unavailable")
+	ErrRuntimeNodeUnavailable           = errors.New("sandbox node unavailable")
+	ErrRuntimeNodeInUse                 = errors.New("sandbox node retains resources")
+	ErrRuntimeNodeCredential            = errors.New("invalid sandbox node credential")
+	ErrRuntimeLocalNodeConfigured       = errors.New("local sandbox node is enabled in deployment configuration")
 )
 
 type RuntimeNodeIdentity struct {
@@ -35,13 +36,25 @@ type RuntimeNodeEnrollment struct {
 	MaxRetained          int    `json:"max_retained"`
 }
 type RuntimeNodeHealth struct {
-	Diagnostic           string `json:"diagnostic,omitempty"`
-	ProviderReady        bool   `json:"provider_ready"`
-	CPUCount             *int64 `json:"cpu_count"`
-	AvailableMemoryBytes *int64 `json:"available_memory_bytes"`
-	AvailableDiskBytes   *int64 `json:"available_disk_bytes"`
+	HostTotalMemoryBytes *int64     `json:"host_total_memory_bytes"`
+	EffectiveMemoryBytes *int64     `json:"effective_memory_bytes"`
+	EffectiveCPUCores    *float64   `json:"effective_cpu_cores"`
+	ObservedAt           *time.Time `json:"observed_at"`
+	Diagnostic           string     `json:"diagnostic,omitempty"`
+	ProviderReady        bool       `json:"provider_ready"`
+	CPUCount             *int64     `json:"cpu_count"`
+	AvailableMemoryBytes *int64     `json:"available_memory_bytes"`
+	AvailableDiskBytes   *int64     `json:"available_disk_bytes"`
 }
 type RuntimeNode struct {
+	AdmissionState       string                  `json:"admission_state"`
+	ConfigRevision       string                  `json:"config_revision"`
+	Schedulable          bool                    `json:"schedulable"`
+	Host                 *RuntimeNodeHost        `json:"host"`
+	SandboxSpec          *RuntimeNodeSandboxSpec `json:"sandbox_spec"`
+	Capacity             RuntimeNodeCapacity     `json:"capacity"`
+	deploymentGeneration int64
+	specificationDigest  string
 	RuntimeNodeHealth
 	Running        int64      `json:"running"`
 	Snapshots      int64      `json:"snapshots"`
@@ -50,8 +63,8 @@ type RuntimeNode struct {
 	Provider       string     `json:"provider"`
 	Online         bool       `json:"online"`
 	LastSeenAt     *time.Time `json:"last_seen_at"`
-	MaxActive      int        `json:"max_active"`
-	MaxRetained    int        `json:"max_retained"`
+	MaxActive      int        `json:"max_active" extensions:"x-nullable"`
+	MaxRetained    int        `json:"max_retained" extensions:"x-nullable"`
 	Active         int64      `json:"active"`
 	Reserved       int64      `json:"reserved"`
 	Retained       int64      `json:"retained"`
@@ -59,9 +72,22 @@ type RuntimeNode struct {
 	CreatedAt      time.Time  `json:"created_at"`
 }
 type RuntimeNodeUpdate struct {
-	Name        string `json:"name"`
-	MaxActive   int    `json:"max_active"`
-	MaxRetained int    `json:"max_retained"`
+	Name                   *string `json:"name,omitempty"`
+	MaxActive              *int    `json:"max_active,omitempty"`
+	MaxRetained            *int    `json:"max_retained,omitempty"`
+	AdmissionState         *string `json:"admission_state,omitempty"`
+	ExpectedConfigRevision string  `json:"expected_config_revision"`
+}
+type RuntimeEnrollmentToken struct {
+	ID        string    `json:"id"`
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+type RuntimeEnrollmentReceipt struct {
+	ID        string    `json:"id"`
+	Status    string    `json:"status"`
+	NodeID    *string   `json:"node_id"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 type RuntimePlacement struct {
 	Diagnostic   string `json:"diagnostic"`

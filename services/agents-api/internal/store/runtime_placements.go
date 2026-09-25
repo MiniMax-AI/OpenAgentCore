@@ -44,7 +44,7 @@ func reserveRuntimePlacement(ctx context.Context, q *sqlc.Queries, session pgtyp
 		if selected != "" && runtimeUUID(n.ID) != selected {
 			continue
 		}
-		if !n.Online || !n.ProviderReady || n.Active >= int64(n.MaxActive) || n.Retained >= int64(n.MaxRetained) {
+		if n.AdmissionState != "enabled" || !runtimeNodeMatchesDeployment(n.DeploymentGeneration, n.SpecificationDigest, d) || !n.Online || !n.ProviderReady || n.Active >= int64(n.MaxActive) || n.Retained >= int64(n.MaxRetained) {
 			continue
 		}
 		if chosen == nil || n.Active < chosen.Active {
@@ -94,8 +94,12 @@ func reserveRuntimeRestore(ctx context.Context, q *sqlc.Queries, node pgtype.UUI
 	if !node.Valid {
 		return nil
 	}
-	if _, err := q.LockRuntimeDeployment(ctx); err != nil {
+	d, err := q.LockRuntimeDeployment(ctx)
+	if err != nil {
 		return err
+	}
+	if d.Maintenance {
+		return ErrRuntimeNodeUnavailable
 	}
 	nodes, err := q.ListRuntimeNodes(ctx)
 	if err != nil {
@@ -103,7 +107,7 @@ func reserveRuntimeRestore(ctx context.Context, q *sqlc.Queries, node pgtype.UUI
 	}
 	for _, n := range nodes {
 		if n.ID == node {
-			if !n.Online || !n.ProviderReady || n.Active >= int64(n.MaxActive) {
+			if n.AdmissionState != "enabled" || !runtimeNodeMatchesDeployment(n.DeploymentGeneration, n.SpecificationDigest, d) || !n.Online || !n.ProviderReady || n.Active >= int64(n.MaxActive) {
 				return ErrRuntimeNodeUnavailable
 			}
 			return nil

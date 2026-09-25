@@ -12,17 +12,18 @@ import (
 
 func TestDeviceCredentialCarriesPersistedAllocationNode(t *testing.T) {
 	s, writer, deployment := managerFixture(t, 4, 8)
-	token, _, err := s.CreateRuntimeEnrollment(t.Context())
+	token, err := s.CreateRuntimeEnrollment(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	remote := uuid.NewString()
-	_, err = s.EnrollRuntimeNode(t.Context(), token, RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: remote, Credential: strings.Repeat("x", 64),
+	_, err = s.EnrollRuntimeNode(t.Context(), token.Token, RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: remote, Credential: strings.Repeat("x", 64),
 		Name: "remote", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), MaxActive: 4, MaxRetained: 8})
 	if err != nil {
 		t.Fatal(err)
 	}
 	onlineManagerNode(t, s, remote)
+	ActivateRuntimeNodeForTest(t, s, remote, 4, 8)
 	for _, nodeID := range []string{deployment.LocalNodeID, remote} {
 		t.Run(nodeID, func(t *testing.T) {
 			tenant, bearer := uuid.NewString(), uuid.NewString()

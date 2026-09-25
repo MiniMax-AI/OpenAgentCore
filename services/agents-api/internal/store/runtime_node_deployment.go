@@ -60,12 +60,11 @@ func configureRuntimeManager(ctx context.Context, q *sqlc.Queries, previous sqlc
 		}
 		n, err := q.GetRuntimeNode(ctx, id)
 		if errors.Is(err, pgx.ErrNoRows) {
-			_, err = q.InsertRuntimeNode(ctx, sqlc.InsertRuntimeNodeParams{ID: id, InstallationID: installation, Name: "Local", BackendFingerprint: selected.BackendFingerprint, CredentialSha256: selected.LocalCredentialSHA256, MaxActive: int32(selected.LocalMaxActive), MaxRetained: int32(selected.LocalMaxRetained)})
+			_, err = q.InsertRuntimeNode(ctx, sqlc.InsertRuntimeNodeParams{ID: id, InstallationID: installation, Name: "Local", BackendFingerprint: selected.BackendFingerprint, CredentialSha256: selected.LocalCredentialSHA256, MaxActive: int32(selected.LocalMaxActive), MaxRetained: int32(selected.LocalMaxRetained), AdmissionState: "enabled"})
 		} else if err == nil {
 			if n.InstallationID != installation || n.BackendFingerprint != selected.BackendFingerprint || n.CredentialSha256 != selected.LocalCredentialSHA256 {
 				return fmt.Errorf("local sandbox node identity does not match the retained backend")
 			}
-			_, err = q.UpdateRuntimeNode(ctx, sqlc.UpdateRuntimeNodeParams{ID: id, Name: n.Name, MaxActive: int32(selected.LocalMaxActive), MaxRetained: int32(selected.LocalMaxRetained)})
 		}
 		if err != nil {
 			return err

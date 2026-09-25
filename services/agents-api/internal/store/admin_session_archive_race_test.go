@@ -20,15 +20,16 @@ func TestManagedSessionArchiveReleasesPendingNodePlacement(t *testing.T) {
 	if _, err := w.InitializeSandboxDeployment(t.Context(), installation, SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker", CoreURL: "https://core.example"}); err != nil {
 		t.Fatal(err)
 	}
-	token, _, err := s.CreateRuntimeEnrollment(t.Context())
+	token, err := s.CreateRuntimeEnrollment(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	nodeID := uuid.NewString()
-	if _, err := s.EnrollRuntimeNode(t.Context(), token, RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: nodeID, Name: "Archive fixture", Provider: "docker", Credential: strings.Repeat("x", 64), BackendFingerprint: strings.Repeat("b", 64), MaxActive: 1, MaxRetained: 1}); err != nil {
+	if _, err := s.EnrollRuntimeNode(t.Context(), token.Token, RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: nodeID, Name: "Archive fixture", Provider: "docker", Credential: strings.Repeat("x", 64), BackendFingerprint: strings.Repeat("b", 64), MaxActive: 1, MaxRetained: 1}); err != nil {
 		t.Fatal(err)
 	}
 	onlineManagerNode(t, s, nodeID)
+	ActivateRuntimeNodeForTest(t, s, nodeID, 1, 1)
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString(), nodeID))
 	archiveMaintenance(t, w, installation, true)
 	result, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 1)

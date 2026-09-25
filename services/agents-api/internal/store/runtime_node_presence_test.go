@@ -22,12 +22,12 @@ func runtimePresenceContext(t *testing.T) context.Context {
 
 func runtimePresenceOtherNode(t *testing.T, s *Store) string {
 	t.Helper()
-	token, _, err := s.CreateRuntimeEnrollment(t.Context())
+	token, err := s.CreateRuntimeEnrollment(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	input := RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Credential: strings.Repeat("x", 64), Name: "presence-other", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), MaxActive: 1, MaxRetained: 1}
-	if _, err := s.EnrollRuntimeNode(t.Context(), token, input); err != nil {
+	if _, err := s.EnrollRuntimeNode(t.Context(), token.Token, input); err != nil {
 		t.Fatal(err)
 	}
 	return input.NodeID

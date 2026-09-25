@@ -114,20 +114,20 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 }
 func TestRuntimeNodesEnrollmentAndEpoch(t *testing.T) {
 	s, w, d := managerFixture(t, 2, 4)
-	token, _, err := s.CreateRuntimeEnrollment(t.Context())
+	token, err := s.CreateRuntimeEnrollment(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	input := RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Credential: strings.Repeat("x", 64), Name: "remote", Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64), MaxActive: 2, MaxRetained: 4}
-	if _, err := s.EnrollRuntimeNode(t.Context(), token, input); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.EnrollRuntimeNode(t.Context(), token.Token, input); !errors.Is(err, ErrInvalidInput) {
 		t.Fatal("mixed provider accepted", err)
 	}
 	input.Provider = "docker"
-	enrolled, err := s.EnrollRuntimeNode(t.Context(), token, input)
+	enrolled, err := s.EnrollRuntimeNode(t.Context(), token.Token, input)
 	if err != nil || enrolled.InstallationID != d.InstallationID {
 		t.Fatal(enrolled, err)
 	}
-	if _, err := s.EnrollRuntimeNode(t.Context(), token, input); !errors.Is(err, ErrRuntimeNodeCredential) {
+	if _, err := s.EnrollRuntimeNode(t.Context(), token.Token, input); !errors.Is(err, ErrRuntimeNodeCredential) {
 		t.Fatal("enrollment token reused", err)
 	}
 	if _, err := s.AuthenticateRuntimeNode(t.Context(), input.NodeID, input.Credential); err != nil {

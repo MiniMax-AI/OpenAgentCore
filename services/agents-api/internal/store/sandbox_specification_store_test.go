@@ -39,16 +39,17 @@ func webSpecificationFixture(t *testing.T, provider string) (*Store, *Store, Run
 
 func specificationNode(t *testing.T, s *Store, view RuntimeDeploymentView) RuntimeNodeEnrollment {
 	t.Helper()
-	token, _, err := s.CreateRuntimeEnrollment(t.Context())
+	token, err := s.CreateRuntimeEnrollment(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	input := RuntimeNodeEnrollment{NodeID: uuid.NewString(), Name: "specification fixture", Credential: strings.Repeat("n", 64), Provider: view.Provider,
 		BackendFingerprint: strings.Repeat("b", 64), MaxActive: 4, MaxRetained: 16, DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest}
-	if _, err := s.EnrollRuntimeNode(t.Context(), token, input); err != nil {
+	if _, err := s.EnrollRuntimeNode(t.Context(), token.Token, input); err != nil {
 		t.Fatal(err)
 	}
 	onlineManagerNode(t, s, input.NodeID)
+	ActivateRuntimeNodeForTest(t, s, input.NodeID, 4, 16)
 	return input
 }
 
@@ -85,12 +86,12 @@ func TestSandboxSpecificationRoundTripAndFileConfigurationCannotOverride(t *test
 
 func TestSandboxSpecificationBootstrapReadDoesNotConsumeEnrollment(t *testing.T) {
 	s, w, view, input := webSpecificationFixture(t, "docker")
-	token, _, err := s.CreateRuntimeEnrollment(t.Context())
+	token, err := s.CreateRuntimeEnrollment(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	for range 2 {
-		config, err := s.RuntimeNodeConfiguration(t.Context(), "", token)
+		config, err := s.RuntimeNodeConfiguration(t.Context(), "", token.Token)
 		if err != nil || config.Generation != view.Generation || config.InstallationID != view.InstallationID || !reflect.DeepEqual(config.Specification, input.DeploymentSpec) || config.SpecificationDigest != view.SpecificationDigest {
 			t.Fatal("bootstrap did not return the saved configuration", err)
 		}
@@ -105,14 +106,14 @@ func TestSandboxSpecificationBootstrapReadDoesNotConsumeEnrollment(t *testing.T)
 	} {
 		wrong := node
 		change(&wrong)
-		if _, err := s.EnrollRuntimeNode(t.Context(), token, wrong); !errors.Is(err, ErrRuntimeSpecificationMismatch) {
+		if _, err := s.EnrollRuntimeNode(t.Context(), token.Token, wrong); !errors.Is(err, ErrRuntimeSpecificationMismatch) {
 			t.Fatal("mismatched node configuration enrolled", err)
 		}
 	}
-	if _, err := s.EnrollRuntimeNode(t.Context(), token, node); err != nil {
+	if _, err := s.EnrollRuntimeNode(t.Context(), token.Token, node); err != nil {
 		t.Fatal("read or mismatch consumed the enrollment", err)
 	}
-	if _, err := s.RuntimeNodeConfiguration(t.Context(), "", token); !errors.Is(err, ErrRuntimeNodeCredential) {
+	if _, err := s.RuntimeNodeConfiguration(t.Context(), "", token.Token); !errors.Is(err, ErrRuntimeNodeCredential) {
 		t.Fatal("consumed enrollment still authorized bootstrap", err)
 	}
 	if _, err := w.SetSandboxMaintenance(t.Context(), view.InstallationID, SandboxMaintenanceRequest{ExpectedGeneration: view.Generation, Maintenance: true}); err != nil {

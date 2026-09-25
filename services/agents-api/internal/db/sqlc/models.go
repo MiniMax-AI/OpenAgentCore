@@ -285,6 +285,10 @@ type RuntimeNode struct {
 	RemovedAt            pgtype.Timestamptz `json:"removed_at"`
 	SpecificationDigest  string             `json:"specification_digest"`
 	DeploymentGeneration int64              `json:"deployment_generation"`
+	AdmissionState       string             `json:"admission_state"`
+	ConfigurationVersion int64              `json:"configuration_version"`
+	LastUpdateRevision   string             `json:"last_update_revision"`
+	LastUpdateDigest     string             `json:"last_update_digest"`
 }
 
 type RuntimeNodeEnrollment struct {
@@ -293,6 +297,7 @@ type RuntimeNodeEnrollment struct {
 	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
 	ConsumedAt     pgtype.Timestamptz `json:"consumed_at"`
 	NodeID         pgtype.UUID        `json:"node_id"`
+	ID             pgtype.UUID        `json:"id"`
 }
 
 type RuntimePlacement struct {
