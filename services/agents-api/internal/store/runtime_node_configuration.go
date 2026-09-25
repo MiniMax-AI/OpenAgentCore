@@ -46,11 +46,13 @@ func (s *Store) RuntimeNodeConfiguration(ctx context.Context, nodeID, token stri
 			}
 			node, installation, active, retained = &n, n.InstallationID, n.MaxActive, n.MaxRetained
 		}
+		// A claimed installation rejects foreign credentials identically before
+		// and after initialization.
+		if d.InstallationID.Valid && installation != d.InstallationID {
+			return ErrRuntimeNodeCredential
+		}
 		if !runtimeDeploymentInitialized(d) {
 			return ErrRuntimeNodeUnavailable
-		}
-		if installation != d.InstallationID {
-			return ErrRuntimeNodeCredential
 		}
 		if d.Mode != "nodes" {
 			return ErrSandboxDeploymentConflict

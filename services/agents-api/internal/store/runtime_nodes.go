@@ -164,11 +164,11 @@ func (s *Store) EnrollRuntimeNode(ctx context.Context, token string, input Runti
 		if receipt.ConsumedAt.Valid || !receipt.ExpiresAt.Time.After(time.Now()) {
 			return ErrRuntimeNodeCredential
 		}
+		if d.InstallationID.Valid && receipt.InstallationID != d.InstallationID {
+			return ErrRuntimeNodeCredential
+		}
 		if !runtimeDeploymentInitialized(d) {
 			return ErrRuntimeNodeUnavailable
-		}
-		if receipt.InstallationID != d.InstallationID {
-			return ErrRuntimeNodeCredential
 		}
 		if d.Mode != "nodes" || d.Maintenance || input.Provider != d.ProviderKind {
 			return ErrInvalidInput
