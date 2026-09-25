@@ -15,7 +15,7 @@ the administrator API are defined by the [administrator API contract](../../cont
 
 | Interface | Paths | Authentication | Console use |
 | --- | --- | --- | --- |
-| Console server | `/console/auth`, `/console/auth/{login,logout}`, `/console/config` | Core key at sign-in, then the console session cookie | Sign-in with the Core key and sign-out; the node installer (`node_installer`, `node_installer_sha256`) |
+| Console server | `/console/auth`, `/console/auth/{login,logout}`, `/console/config` | Core key at sign-in, then the console session cookie | Sign-in with the Core key and sign-out; the node installer (`node_installer`, `node_installer_sha256`), the self-hosted executor installer (`self_hosted_installer`, `self_hosted_installer_sha256`) and the providers whose node assets it holds (`node_artifacts`) |
 | Administrator API | `/core/v1/**` outside `/core/v1/sandbox` | Core key, added by the console server | Projects, keys, resource reads and deletion, executor credentials, provenance, summaries, Core metrics, the installation |
 | Sandbox administration | `/core/v1/sandbox/**` | Core key, added by the console server | Nodes page; fleet and capacity figures on Overview and Sandbox metrics; Runtime observations of every project |
 | Agents API | `/v1/**` | Project API key | Not used. Wherever a new key is shown, the console gives shell exports of `OPENAI_BASE_URL` (the installation's `api_base_url`) and `OPENAI_API_KEY` (the new key) with `curl` and Python examples for `/v1/agents`, and sends none of them; when the installation is `local_only` it says the API is reachable only on the Core machine, and without an `api_base_url` it says to set `public_url` |
@@ -112,8 +112,19 @@ allows.
 Summary figures are cumulative per Session and are not billing records. Sessions
 without reported usage count toward coverage but not toward token sums, and the
 console shows missing values as missing, never as zero. The administrator audit
-log (`GET /core/v1/audit-log`) is not consumed; System shows the installation and
-the sandbox deployment.
+log (`GET /core/v1/audit-log`) is not consumed; System shows the installation,
+each harness's default model and the sandbox deployment.
+
+## Default models
+
+| Operation | Route | Console use |
+| --- | --- | --- |
+| List harnesses | `GET /core/v1/harnesses` | System's Default model cards (each harness's read-only `enabled` and `default`, and its `model_provider` view without the key); the Overview's Getting started (a default model on the default harness, or on any enabled harness when none is default) |
+| Set or replace | `PUT /core/v1/harnesses/{harness}/model-provider` | **Set** or **Replace**: the complete provider with the write-only key, never prefilled and never retried; a 400 shows Core's message in the form, and a 503 `credential_storage_unavailable` says Core has no credential encryption key; then the list is read again |
+| Clear | `DELETE /core/v1/harnesses/{harness}/model-provider` | **Clear**, confirmed, then the list is read again |
+
+The single-provider read (`GET /core/v1/harnesses/{harness}/model-provider`) is not
+consumed; the list carries each provider.
 
 ## Sandbox administration
 
@@ -130,7 +141,9 @@ the sandbox deployment.
 | Runtime observations | `GET /core/v1/sandbox/runtime-observations` | Sandbox metrics: hosted Runtimes of every project, each labelled with its project; an E2B sandbox's dialog adds its `observation.disk` as used / limit (null elsewhere) |
 
 Signing in grants administration, so `/console/config` reports only the node
-installer (`node_installer`, `node_installer_sha256`). These pages appear unless
+installer (`node_installer`, `node_installer_sha256`), the self-hosted executor
+installer (`self_hosted_installer`, `self_hosted_installer_sha256`) and the providers
+whose node assets the console holds (`node_artifacts`). These pages appear unless
 the console has no `/console/config` (404) or reports `sandbox_admin: false`. An E2B
 deployment has no nodes; its API key is write-only. The Runtime release sent for
 Docker and microsandbox comes from the console's own `GET /node-install/manifest.json`

@@ -11,11 +11,11 @@ import (
 func TestRuntimeEnrollmentApprovedCapacity(t *testing.T) {
 	s, _, view, _ := webSpecificationFixture(t, "microsandbox")
 	for _, capacity := range []RuntimeNodeCapacity{{0, 8}, {3, 2}, {1, 1000001}} {
-		if _, _, err := s.CreateRuntimeEnrollment(t.Context(), capacity); !errors.Is(err, ErrInvalidInput) {
+		if _, err := s.CreateRuntimeEnrollment(t.Context(), capacity); !errors.Is(err, ErrInvalidInput) {
 			t.Fatal("invalid capacity accepted", err)
 		}
 	}
-	token, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{1, 3})
+	token, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{1, 3}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestRuntimeEnrollmentApprovedCapacity(t *testing.T) {
 	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_deployment SET maintenance=true"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{3, 2}); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{3, 2}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatal("invalid capacity reported as a conflict", err)
 	}
 }
@@ -72,7 +72,7 @@ func TestDockerRetainedLimitFollowsActive(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	token, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 3, MaxRetained: 1})
+	token, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 3, MaxRetained: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestDockerRetainedLimitFollowsActive(t *testing.T) {
 	if identity, err := s.EnrollRuntimeNode(t.Context(), token, current); err != nil || identity.MaxRetained != 3 {
 		t.Fatal("enrollment kept a separate Docker retained limit", identity, err)
 	}
-	legacyToken, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 8})
+	legacyToken, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 8}))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,6 +11,9 @@ var (
 	ErrRuntimeNodeInUse           = errors.New("sandbox node retains resources")
 	ErrRuntimeNodeCredential      = errors.New("invalid sandbox node credential")
 	ErrRuntimeLocalNodeConfigured = errors.New("local sandbox node is enabled in deployment configuration")
+	// ErrRuntimeNodeAddressMismatch rejects an enrollment whose Core address is not
+	// the installation public URL. The token stays unconsumed.
+	ErrRuntimeNodeAddressMismatch = errors.New("sandbox node Core address differs from the public URL")
 )
 
 type RuntimeNodeIdentity struct {
@@ -22,6 +25,15 @@ type RuntimeNodeIdentity struct {
 	BackendFingerprint   string `json:"-"`
 	MaxActive            int    `json:"max_active"`
 	MaxRetained          int    `json:"max_retained"`
+}
+
+// RuntimeNodeEnrollmentToken is an issued one-use node enrollment token. ID is a
+// public, non-secret handle that never authenticates; the node the token registers
+// reports it as enrollment_id.
+type RuntimeNodeEnrollmentToken struct {
+	Token     string
+	ExpiresAt time.Time
+	ID        string
 }
 type RuntimeNodeCapacity struct {
 	MaxActive   int `json:"max_active"`
@@ -36,6 +48,8 @@ type RuntimeNodeEnrollment struct {
 	Name                 string `json:"name"`
 	Provider             string `json:"provider"`
 	BackendFingerprint   string `json:"backend_fingerprint"`
+	// The Core origin this node stores and connects to, such as https://core.example. It must equal the installation public URL; otherwise enrollment gets 409 sandbox_node_address_mismatch and the token stays unused.
+	CoreURL string `json:"core_url"`
 }
 type RuntimeNodeHealth struct {
 	Host *RuntimeNodeHost `json:"-"`
@@ -65,6 +79,8 @@ type RuntimeNode struct {
 	// The Core address this node enrolled with. A node whose address differs
 	// from the installation public URL receives no new sandboxes; re-add it.
 	CoreURL string `json:"core_url"`
+	// The enrollment_id of the command that registered this node (POST /core/v1/sandbox/enrollment-tokens); null for nodes enrolled before Core recorded it.
+	EnrollmentID *string `json:"enrollment_id" extensions:"x-nullable"`
 }
 type RuntimeNodeUpdate struct {
 	Name      string `json:"name"`

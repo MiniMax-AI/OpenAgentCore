@@ -55,6 +55,11 @@ class SpecificationTests(unittest.TestCase):
                 node_spec.fetch(self.args, token, self.retained, opener, allow_enrollment=allowed)
             self.assertEqual(opener.call_count, 1)
 
+    def test_changed_public_url_says_to_generate_a_new_command(self):
+        self.data["core_url"] = "https://core-new.example"
+        with self.assertRaisesRegex(node_spec.SpecificationError, "public URL changed"):
+            node_spec.fetch(self.args, "once", None, mock.Mock(return_value=self.response()))
+
     def test_failures_name_their_cause(self):
         for failure, message in ((urllib.error.HTTPError("https://core.example", 404, "", {}, None), "route /api/v1"),
                                  (urllib.error.HTTPError("https://core.example", 409, "", {}, None), "maintenance"),

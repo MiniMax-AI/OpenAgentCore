@@ -3,7 +3,7 @@ export const overview = {
   description: "Health, capacity, usage and failures across every project of this Parsar Core deployment.",
   gettingStarted: {
     title: "Getting started",
-    help: "Three steps to a working deployment, in any order.",
+    help: "Four steps to a working deployment, in any order.",
     progress: "{{done}} of {{total}} done",
     tour: "Take the tour",
     dismiss: "Hide Getting started",
@@ -22,6 +22,11 @@ export const overview = {
       nodes: "Open Nodes",
       backend: "Open sandbox backend",
     },
+    model: {
+      title: "Set a default model",
+      body: "Core-hosted Sessions and Sessions without an environment need a model provider. Apps can also pass one in each request or save one on the Agent; this only sets the default.",
+      open: "Open System",
+    },
     key: {
       title: "Create a project and issue a key",
       body: "Applications call Core with a project API key.",
@@ -35,7 +40,7 @@ export const overview = {
     },
     complete: {
       title: "You're set",
-      body: "Sandboxes are ready, a project has a key and the first Session ran.",
+      body: "Sandboxes are ready, a default model is set, a project has a key and the first Session ran.",
       dismiss: "Dismiss",
     },
   },

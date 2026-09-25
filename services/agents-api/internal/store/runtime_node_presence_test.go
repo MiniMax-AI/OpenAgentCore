@@ -22,7 +22,7 @@ func runtimePresenceContext(t *testing.T) context.Context {
 
 func runtimePresenceOtherNode(t *testing.T, s *Store) string {
 	t.Helper()
-	token, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 1, MaxRetained: 1})
+	token, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 1, MaxRetained: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}

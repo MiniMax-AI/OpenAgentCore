@@ -17,6 +17,8 @@ type SandboxAllocationList struct {
 type SandboxEnrollmentToken struct {
 	Token     string    `json:"token"`
 	ExpiresAt time.Time `json:"expires_at"`
+	// Public, non-secret handle of this command; never a credential. The node it registers reports the same value as enrollment_id.
+	EnrollmentID string `json:"enrollment_id"`
 }
 type SandboxMutationResponse struct {
 	ID      string `json:"id"`
@@ -188,16 +190,16 @@ func (h *Handler) createSandboxEnrollment(w http.ResponseWriter, r *http.Request
 	if input.MaxRetained != nil {
 		capacity.MaxRetained = *input.MaxRetained
 	}
-	token, expires, err := h.sandboxStore.CreateRuntimeEnrollment(r.Context(), capacity)
+	enrollment, err := h.sandboxStore.CreateRuntimeEnrollment(r.Context(), capacity)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, SandboxEnrollmentToken{Token: token, ExpiresAt: expires})
+	writeJSON(w, http.StatusCreated, SandboxEnrollmentToken{Token: enrollment.Token, ExpiresAt: enrollment.ExpiresAt, EnrollmentID: enrollment.ID})
 }
 
 // @Summary Enroll a sandbox node
-// @Description Node machine connection. Consumes a one-use enrollment token; grants no project or administrator access. Responses contain only explicit safe fields.
+// @Description Node machine connection. Consumes a one-use enrollment token; grants no project or administrator access. Responses contain only explicit safe fields. core_url is required and must equal the installation public URL; a different address gets 409 sandbox_node_address_mismatch and leaves the token unused.
 // @Tags Sandbox Node
 // @Produce json
 // @Security NodeEnrollmentAuth
@@ -217,8 +219,12 @@ func (h *Handler) enrollSandboxNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input store.RuntimeNodeEnrollment
-	if decodeInputObject(raw, &input, "node_id", "credential", "name", "provider", "backend_fingerprint", "deployment_generation", "specification_digest") != nil {
+	if decodeInputObject(raw, &input, "node_id", "credential", "name", "provider", "backend_fingerprint", "deployment_generation", "specification_digest", "core_url") != nil {
 		writeStoreError(w, r, store.ErrInvalidInput)
+		return
+	}
+	if input.CoreURL == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request_error", "Enrollment requires core_url, the Core origin this node uses. Install the node with this Core's node installer.", "core_url")
 		return
 	}
 	value, err := h.sandboxStore.EnrollRuntimeNode(r.Context(), token, input)

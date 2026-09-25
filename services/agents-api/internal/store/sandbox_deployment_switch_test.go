@@ -45,7 +45,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if err != nil || setup.E2B.APIKey != input.E2B.APIKey {
 		t.Fatal("internal credential unavailable", err)
 	}
-	if _, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 8}); !errors.Is(err, ErrSandboxDeploymentConflict) {
+	if _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 8}); !errors.Is(err, ErrSandboxDeploymentConflict) {
 		t.Fatal("cloud enrolled a machine", err)
 	}
 	tenant := uuid.NewString()
@@ -116,7 +116,7 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 	if _, err := w.InitializeSandboxDeployment(t.Context(), id, SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
 		t.Fatal(err)
 	}
-	token, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4})
+	token, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 	if _, err := s.EnrollRuntimeNode(t.Context(), token, node); err != nil {
 		t.Fatal(err)
 	}
-	unused, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 8})
+	unused, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 8}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +318,7 @@ func TestUnspecifiedNodeDeploymentDrainsBeforeReplacement(t *testing.T) {
 	if _, err := w.InitializeSandboxDeployment(t.Context(), id, selection); err != nil {
 		t.Fatal(err)
 	}
-	token, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4})
+	token, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -346,7 +346,7 @@ func TestUnspecifiedNodeDeploymentDrainsBeforeReplacement(t *testing.T) {
 	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, ErrEnvironmentUnavailable) {
 		t.Fatal("unspecified deployment admitted a fresh sandbox", err)
 	}
-	if _, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4}); !errors.Is(err, ErrSandboxDeploymentConflict) {
+	if _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4}); !errors.Is(err, ErrSandboxDeploymentConflict) {
 		t.Fatal("unspecified deployment issued an enrollment token", err)
 	}
 

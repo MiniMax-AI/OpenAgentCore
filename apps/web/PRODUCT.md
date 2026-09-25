@@ -78,10 +78,12 @@ workbench.
   template build's), a review, and advanced settings
   with the complete form — then the node list with each node's capacity, host
   figures and allocations, enrollment, renaming, sandbox limits and removal; Add node
-  asks for the node's sandbox limits before it issues the one-time command), System (read-only: the
-  installation's public address, API base URL, installation ID and source commit; Core's
-  startup settings from config.json, with the file and the apply command that change them;
-  and the sandbox configuration every project shares, with a link to Nodes where it changes).
+  asks for the node's sandbox limits before it issues the one-time command), System (the
+  installation's public address, API base URL, installation ID and source commit, read-only;
+  each harness's default model, set, replaced or cleared there beside its read-only startup
+  state; the sandbox configuration every project shares, with a link to Nodes where it
+  changes; and Core's startup settings from config.json, with the file and the apply command
+  that change them).
 - A node whose provider is not ready names the reason (Docker unreachable, no Docker
   limits, missing Runtime image, no KVM, missing microsandbox components, a host too
   small) and its fix in the help tip beside its status, wherever that status shows.
@@ -95,9 +97,10 @@ workbench.
   about when Core reclaims it. Docker never suspends and shows none of it.
 - **Getting started**: signing in opens the console on the Overview; nothing is
   forced first. While a step is to do, a Getting started checklist on the Overview
-  shows three steps, in any order, each with its state and one action: sandboxes
+  shows four steps, in any order, each with its state and one action: sandboxes
   ready (a saved deployment and a node online and ready, or a saved E2B deployment
-  whose template build is not reported as not ready),
+  whose template build is not reported as not ready), a default model on the default
+  harness (on any enabled harness when none is default),
   a project with an active key, and a first Session. Completion comes from reads the
   console already makes. It can be hidden; Show Getting started in the sidebar
   opens it again, and it ends with a brief "You're set". The optional

@@ -180,7 +180,9 @@ func (a *agent) connect(ctx context.Context) error {
 	if err != nil {
 		if resp != nil {
 			_ = resp.Body.Close()
-			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			// Only Core's 401 rejects the credential for good; a 403 may come from a
+			// proxy or firewall in front of Core, so the node keeps retrying.
+			if resp.StatusCode == http.StatusUnauthorized {
 				return ErrAuthentication
 			}
 		}

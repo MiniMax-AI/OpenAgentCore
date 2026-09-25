@@ -3,7 +3,7 @@ export const overview = {
   description: "这套 Parsar Core 部署在所有项目下的健康、容量、用量与故障。",
   gettingStarted: {
     title: "新手引导",
-    help: "让部署可用的三步，顺序不限。",
+    help: "让部署可用的四步，顺序不限。",
     progress: "已完成 {{done}} / {{total}}",
     tour: "认识控制台",
     dismiss: "隐藏新手引导",
@@ -22,6 +22,11 @@ export const overview = {
       nodes: "打开节点",
       backend: "打开沙箱后端",
     },
+    model: {
+      title: "设置默认模型",
+      body: "Core 托管的 Session 和没有环境的 Session 需要模型服务。应用也可以在每个请求里传入，或保存在 Agent 上；这里只设置默认值。",
+      open: "打开系统",
+    },
     key: {
       title: "创建项目并签发 key",
       body: "应用用项目 API Key 调用 Core。",
@@ -35,7 +40,7 @@ export const overview = {
     },
     complete: {
       title: "一切就绪",
-      body: "沙箱已就绪，项目已有 key，第一个 Session 也已运行。",
+      body: "沙箱已就绪，已设置默认模型，项目已有 key，第一个 Session 也已运行。",
       dismiss: "关闭",
     },
   },

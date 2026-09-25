@@ -5,9 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
 	"time"
 )
 
@@ -29,6 +32,7 @@ func Enroll(ctx context.Context, coreURL, dir, token string, input EnrollmentReq
 	input.SpecificationDigest, input.DeploymentGeneration = stored.Identity.SpecificationDigest, stored.Identity.DeploymentGeneration
 	input.NodeID, input.Credential = stored.Identity.NodeID, stored.Credential
 	input.Provider, input.BackendFingerprint = stored.Identity.Provider, stored.Identity.BackendFingerprint
+	input.CoreURL = coreURL
 	client := &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	// This also recovers a consumed registration whose success response was lost.
 	target, err := endpoint(coreURL, "/api/v1/sandbox-node/identity")
@@ -74,7 +78,7 @@ func readEnrollment(r *http.Response) (EnrollmentResponse, error) {
 	defer r.Body.Close()
 	var out EnrollmentResponse
 	if r.StatusCode < 200 || r.StatusCode >= 300 {
-		return out, errors.New("node enrollment rejected")
+		return out, enrollmentRejection(r)
 	}
 	d := json.NewDecoder(io.LimitReader(r.Body, 16384))
 	d.DisallowUnknownFields()
@@ -136,4 +140,29 @@ func RefreshIdentity(ctx context.Context, dir string) (StoredIdentity, error) {
 		return StoredIdentity{}, err
 	}
 	return retainEnrollment(dir, stored, out)
+}
+
+// coreErrorCode is the shape of Core's fixed error codes, the only part of a
+// rejection body that reaches the node's output.
+var coreErrorCode = regexp.MustCompile(`^[a-z_]{1,64}$`)
+
+// enrollmentRejection names Core's status and error code. Only Core's 401 is
+// ErrAuthentication: the node was removed or retired, or the enrollment token is
+// invalid, so retrying cannot succeed. A 403 may come from a proxy or firewall in
+// front of Core, so it stays retryable.
+func enrollmentRejection(r *http.Response) error {
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	_ = json.NewDecoder(io.LimitReader(r.Body, 16384)).Decode(&body)
+	detail := "HTTP " + strconv.Itoa(r.StatusCode)
+	if coreErrorCode.MatchString(body.Error.Code) {
+		detail += " " + body.Error.Code
+	}
+	if r.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("node enrollment rejected (%s): %w", detail, ErrAuthentication)
+	}
+	return fmt.Errorf("node enrollment rejected (%s)", detail)
 }

@@ -144,7 +144,7 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 }
 func (f *nodeIsolationFixture) enroll(id string) {
 	f.t.Helper()
-	token, _, err := f.store.CreateRuntimeEnrollment(f.t.Context(), store.RuntimeNodeCapacity{MaxActive: 100, MaxRetained: 100})
+	token, err := store.EnrollmentTestToken(f.store.CreateRuntimeEnrollment(f.t.Context(), store.RuntimeNodeCapacity{MaxActive: 100, MaxRetained: 100}))
 	if err != nil {
 		f.t.Fatal(err)
 	}

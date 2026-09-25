@@ -2,6 +2,7 @@
 import gzip
 import hashlib
 import http.server
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -28,6 +29,8 @@ class ArtifactTests(unittest.TestCase):
             def do_GET(self):
                 test.requests.append(self.path)
                 self.send_response(test.status)
+                if test.status == 302:
+                    self.send_header('Location', 'https://elsewhere.example' + self.path)
                 self.end_headers()
                 if test.status == 200:
                     self.wfile.write(test.data)
@@ -120,6 +123,17 @@ class ArtifactTests(unittest.TestCase):
             distribution.obtain_artifact(self.manifest, 'native/bin/node', self.root / 'link')
 
 
+    def test_redirects_are_refused(self):
+        # The console never redirects; following one could fetch verified names from another origin.
+        self.status = 302
+        with self.assertRaisesRegex(distribution.DistributionError, 'do not follow redirects'):
+            distribution.obtain_artifact(self.manifest, 'native/bin/node', self.root / 'node')
+        with self.assertRaisesRegex(distribution.DistributionError, 'do not follow redirects'):
+            distribution.load_manifest(source_url=f'http://127.0.0.1:{self.server.server_port}')
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(list(self.root.iterdir()), [])
+
+
 class DockerIdentityTests(unittest.TestCase):
     def setUp(self):
         self.config = 'sha256:' + 'a' * 64
@@ -181,6 +195,26 @@ class DockerIdentityTests(unittest.TestCase):
                 command.assert_not_called()
                 self.archive.assert_not_called()
             self.manifest[field] = original
+
+
+class ManifestSourceTests(unittest.TestCase):
+    """A release URL recorded by the build is never an artifact source."""
+
+    def test_console_is_the_only_artifact_source(self):
+        manifest = json.dumps({'source_commit': 'a' * 40, 'platform': 'linux/amd64',
+                               'artifact_base_url': 'https://github.com/example/releases/download/tag'}).encode()
+        sums = (hashlib.sha256(manifest).hexdigest() + '  manifest.json\n').encode()
+        root = Path.home() / '.parsar/tests/distribution'
+        root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=root) as bundle:
+            (Path(bundle) / 'manifest.json').write_bytes(manifest)
+            (Path(bundle) / 'SHA256SUMS').write_bytes(sums)
+            self.assertEqual(distribution.load_manifest(offline_root=bundle)['artifact_base_url'], '')
+        files = {'SHA256SUMS': sums, 'manifest.json': manifest}
+        opener = Mock(open=lambda url, timeout: io.BytesIO(files[url.rsplit('/', 1)[1]]))
+        with patch.object(distribution.urllib.request, 'build_opener', return_value=opener):
+            loaded = distribution.load_manifest(source_url='https://console.example')
+        self.assertEqual(loaded['artifact_base_url'], 'https://console.example/node-install/artifacts')
 
 
 if __name__ == '__main__':

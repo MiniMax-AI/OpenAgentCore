@@ -244,6 +244,9 @@ func TestEnrollmentLostResponseRecoversWithPersistedCredential(t *testing.T) {
 		if json.NewDecoder(r.Body).Decode(&body) != nil || body.Credential != stored.Credential || body.NodeID != id.NodeID {
 			t.Error("unpersisted credential used")
 		}
+		if body.CoreURL != "http://"+r.Host {
+			t.Error("enrollment did not name the node's Core address", body.CoreURL)
+		}
 		enrollments++
 		registered = true
 		hijacker := w.(http.Hijacker)
@@ -308,5 +311,27 @@ func TestHealthSendsOnlyFixedDiagnosticCode(t *testing.T) {
 		if err != nil || h.Diagnostic != tc.want || h.ProviderReady != (tc.err == nil) || strings.Contains(string(raw), "private") {
 			t.Fatalf("heartbeat = %s, %v", raw, err)
 		}
+	}
+}
+
+// A rejected credential stops the node for good; any other rejection names Core's
+// status and error code so the installer can say what to fix.
+func TestEnrollmentRejectionNamesCoreCode(t *testing.T) {
+	reject := func(status int, body string) error {
+		recorder := httptest.NewRecorder()
+		recorder.WriteHeader(status)
+		_, _ = recorder.WriteString(body)
+		_, err := readEnrollment(recorder.Result())
+		return err
+	}
+	if err := reject(http.StatusUnauthorized, `{"error":{"code":"invalid_node_credential"}}`); !errors.Is(err, ErrAuthentication) {
+		t.Fatal("a rejected credential was not an authentication failure", err)
+	}
+	if err := reject(http.StatusForbidden, `forbidden by proxy`); errors.Is(err, ErrAuthentication) {
+		t.Fatal("a proxy's 403 stopped the node for good", err)
+	}
+	err := reject(http.StatusConflict, `{"error":{"code":"sandbox_node_address_mismatch","message":"x"}}`)
+	if errors.Is(err, ErrAuthentication) || err.Error() != "node enrollment rejected (HTTP 409 sandbox_node_address_mismatch)" {
+		t.Fatal(err)
 	}
 }

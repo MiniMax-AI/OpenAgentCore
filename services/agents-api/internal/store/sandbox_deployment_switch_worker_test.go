@@ -64,7 +64,7 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 	if _, err := w.InitializeSandboxDeployment(t.Context(), store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
 		t.Fatal(err)
 	}
-	enrollment, _, err := s.CreateRuntimeEnrollment(t.Context(), store.RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4})
+	enrollment, err := store.EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), store.RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4}))
 	if err != nil {
 		t.Fatal(err)
 	}

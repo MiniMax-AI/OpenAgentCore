@@ -17,3 +17,8 @@ func SandboxDeploymentTestSpec(provider string) sandbox.DeploymentSpec {
 	}
 	return s
 }
+
+// EnrollmentTestToken keeps only the secret token of an issued node enrollment.
+func EnrollmentTestToken(issued RuntimeNodeEnrollmentToken, err error) (string, error) {
+	return issued.Token, err
+}

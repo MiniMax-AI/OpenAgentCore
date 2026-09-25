@@ -40,6 +40,7 @@ class NodeInstallTests(unittest.TestCase):
         self.calls = []
         self.fail_service = False
         self.fail_registration = False
+        self.register_stderr = None
         for patch in (mock.patch.object(installer.Path, "home", return_value=self.home),
                       mock.patch.object(installer, "preflight"),
                       mock.patch.object(installer, "wait_ready"),
@@ -64,6 +65,8 @@ class NodeInstallTests(unittest.TestCase):
         return io.BytesIO(json.dumps(configuration).encode())
 
     def artifact_response(self, url, **kwargs):
+        # The fixture manifest records a release URL; nodes still download from their console.
+        self.assertTrue(url.startswith(self.args.source_url + "/node-install/artifacts/"), url)
         for name, item in self.manifest["artifacts"].items():
             if url.endswith("/" + item["filename"]):
                 return io.BytesIO(self.payloads[name])
@@ -95,6 +98,8 @@ class NodeInstallTests(unittest.TestCase):
             path = self.root / "state/node/identity.json"
             path.write_text(json.dumps({"identity": identity, "credential": "a" * 64, "core_url": self.args.core_url}))
             path.chmod(0o600)
+            if self.register_stderr:
+                raise kwargs["explain"](self.register_stderr)
             if self.fail_registration:
                 raise installer.InstallError(failure)
         if "enable" in arguments and self.fail_service:
@@ -131,6 +136,9 @@ class NodeInstallTests(unittest.TestCase):
         unit = (self.root / ("parsar-node-" + self.args.installation_id + ".service")).read_text()
         self.assertIn(" run --config ", unit)
         self.assertIn("KillMode=process", unit)
+        # Keeps retrying while Core is down; stops once Core rejects the removed node's credential.
+        self.assertIn("StartLimitIntervalSec=0", unit)
+        self.assertIn("RestartPreventExitStatus=78", unit)
         self.assertNotIn("synthetic-once-token", unit)
         self.assertEqual(list(self.root.glob(".enrollment-*")), [])
         self.assertTrue(any("register" in call for call, _ in self.calls))
@@ -201,6 +209,22 @@ class NodeInstallTests(unittest.TestCase):
         self.assertFalse((self.root / "registered.json").exists())
         self.assertEqual(list(self.root.glob(".enrollment-*")), [])
         self.assertFalse(any("enable" in call for call, _ in self.calls))
+
+    def test_registration_failure_names_only_cores_fixed_answer(self):
+        self.assertEqual(str(installer.registration_failure(b"secret /home/path details")), installer.REGISTRATION_UNCONFIRMED)
+
+    def test_changed_public_url_clears_unregistered_state_for_a_new_command(self):
+        # Core refused the address before consuming the token, so it has no record of this node.
+        self.register_stderr = b"node enrollment rejected (HTTP 409 sandbox_node_address_mismatch)\n"
+        with self.assertRaisesRegex(installer.InstallError, "public URL changed.*token was not used"):
+            self.install()
+        for name in ("installation.json", "provider.json", "state/node/identity.json", "registered.json"):
+            self.assertFalse((self.root / name).exists(), name)
+        self.assertTrue((self.root / installer.COMMON[0]).is_file())
+        self.register_stderr = None
+        self.args.core_url = "https://core-new.example"
+        self.install()
+        self.assertEqual(json.loads((self.root / "registered.json").read_text())["core_url"], "https://core-new.example")
 
     def test_microsandbox_registration_retry_retains_original_dns_policy(self):
         self.args.provider = "microsandbox"

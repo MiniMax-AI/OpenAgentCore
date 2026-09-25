@@ -111,12 +111,12 @@ def safe_url(value):
     return value
 
 
-class SecureRedirect(urllib.request.HTTPRedirectHandler):
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Downloads come only from the console, which never redirects; a redirect
+    could hand verified names to another origin, so every one is refused."""
     def redirect_request(self, request, fp, code, message, headers, newurl):
-        safe_url(newurl)
-        if urlsplit(request.full_url).scheme == 'https' and urlsplit(newurl).scheme != 'https':
-            raise DistributionError('Artifact redirect cannot downgrade HTTPS')
-        return super().redirect_request(request, fp, code, message, headers, newurl)
+        raise DistributionError('Artifact and metadata downloads do not follow redirects; check the console URL '
+                                'and the reverse proxy in front of it')
 
 
 def checked_path(path):
@@ -156,7 +156,7 @@ def obtain_artifact(manifest, logical_path, destination, offline_root=None):
         fd, temporary = tempfile.mkstemp(prefix='.artifact-', dir=target.parent)
         try:
             with os.fdopen(fd, 'wb') as output:
-                stream = source.open('rb') if source else urllib.request.build_opener(SecureRedirect()).open(url, timeout=30)
+                stream = source.open('rb') if source else urllib.request.build_opener(NoRedirect()).open(url, timeout=30)
                 with stream:
                     count = 0
                     while True:
@@ -232,7 +232,7 @@ def load_manifest(source_url=None, offline_root=None):
             url = safe_url(source_url.rstrip('/') + '/node-install/' + name)
             for attempt in range(3):
                 try:
-                    with urllib.request.build_opener(SecureRedirect()).open(url, timeout=30) as stream:
+                    with urllib.request.build_opener(NoRedirect()).open(url, timeout=30) as stream:
                         data = stream.read(1024 * 1024 + 1)
                     break
                 except urllib.error.HTTPError as error:
@@ -259,8 +259,8 @@ def load_manifest(source_url=None, offline_root=None):
         if (manifest.get('platform') != 'linux/amd64'
                 or not re.fullmatch(r'[0-9a-f]{40}', manifest.get('source_commit', ''))):
             raise DistributionError('Unsupported distribution platform or revision')
-        if not manifest.get('artifact_base_url') and source_url:
-            manifest['artifact_base_url'] = source_url.rstrip('/') + '/node-install/artifacts'
+        # Artifacts come only from the console, never from a release URL the build recorded.
+        manifest['artifact_base_url'] = source_url.rstrip('/') + '/node-install/artifacts' if source_url and offline_root is None else ''
         return manifest
     except (ValueError, TypeError, AttributeError):
         raise DistributionError('Invalid distribution metadata') from None

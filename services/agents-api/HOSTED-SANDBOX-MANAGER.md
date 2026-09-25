@@ -150,7 +150,10 @@ The current installation path uses a database-managed deployment.
 
 The paired console provides a complete installation command. It downloads only
 a matched bootstrap from `/node-install/`, then checksum-verified prebuilt assets
-from the manifest release URL or offline console payload. It reuses verified cache
+from the same console's payload, never from a release URL the build recorded. The
+console must hold them: install from the offline bundle, or place the release assets
+in the bundle's `artifacts/` directory first; `/console/config` lists the providers
+whose assets it holds (`node_artifacts`). It reuses verified cache
 entries and exact imported images, then waits for Core to confirm connection and
 provider readiness. The enrollment token
 is transient and never a console/project credential. Python 3.9+, a systemd user
@@ -174,6 +177,13 @@ credentials; Web does not forward them and no administrator credential applies:
 | `POST /api/v1/sandbox-node/enroll` | One-use enrollment token |
 | `GET /api/v1/sandbox-node/identity?node_id=` | Node credential |
 | WebSocket `GET /api/v1/sandbox-node/connect?node_id=` | Node credential |
+
+Enrollment sends the Core origin the node stores (`core_url`, from `register
+--core-url`). Core refuses one that is not the installation public URL with 409
+`sandbox_node_address_mismatch`, before consuming the token, so a node never records
+an address Core no longer uses. `POST /core/v1/sandbox/enrollment-tokens` also returns
+a non-secret `enrollment_id`; the node it registers reports the same value in
+`/core/v1/sandbox/nodes`, and nodes enrolled before Core recorded it report null.
 
 A node and its Core must come from the same distribution. Nodes from releases
 that used the removed `/core/v1/sandbox` node paths cannot connect to this Core:
@@ -262,6 +272,10 @@ unknown operations or cleanup records cannot be removed. Resolve those resources
 through their normal lifecycle and then retry; the API reports the conflict.
 Offline resources remain owned and visible. Explicit removal permanently retires
 the node identity; adding that host again requires a fresh private state directory.
+The node program then exits with status 78 when Core answers 401 to its credential,
+and the installed service does not restart it. Other failures, including an
+unreachable Core or a 403 from a proxy in front of it, restart the service every
+5 seconds without a start limit.
 Ordinary disconnects and host restarts reuse the original identity. A local node
 uses the same removal and resource checks as any other enrolled node.
 

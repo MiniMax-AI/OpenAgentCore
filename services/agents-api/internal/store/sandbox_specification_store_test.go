@@ -39,12 +39,12 @@ func webSpecificationFixture(t *testing.T, provider string) (*Store, *Store, Run
 
 func specificationNode(t *testing.T, s *Store, view RuntimeDeploymentView) RuntimeNodeEnrollment {
 	t.Helper()
-	token, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 4, MaxRetained: 16})
+	token, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 4, MaxRetained: 16}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	input := RuntimeNodeEnrollment{NodeID: uuid.NewString(), Name: "specification fixture", Credential: strings.Repeat("n", 64), Provider: view.Provider,
-		BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest}
+		BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: s.publicURL}
 	if _, err := s.EnrollRuntimeNode(t.Context(), token, input); err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestSandboxSpecificationRoundTripAndFileConfigurationCannotOverride(t *test
 
 func TestSandboxSpecificationBootstrapReadDoesNotConsumeEnrollment(t *testing.T) {
 	s, w, view, input := webSpecificationFixture(t, "docker")
-	token, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4})
+	token, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,6 +363,53 @@ func TestNodeBoundToAnotherPublicURLGetsNoNewSandboxes(t *testing.T) {
 	s.SetPublicURL("https://old.example")
 	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); err != nil {
 		t.Fatal("node on the current address rejected placement", err)
+	}
+}
+
+// Enrollment records the command's public ID and the node's Core address. A node
+// using another address is refused without consuming the token, and a node
+// enrolled with a token issued before Core recorded IDs reports none.
+func TestEnrollmentRecordsItsIDAndRefusesAnotherAddress(t *testing.T) {
+	s, _, view, _ := webSpecificationFixture(t, "docker")
+	s.SetPublicURL("https://core.example")
+	issued, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 2})
+	if err != nil || uuid.Validate(issued.ID) != nil || issued.Token == "" {
+		t.Fatal(issued.ID, err)
+	}
+	input := RuntimeNodeEnrollment{NodeID: uuid.NewString(), Name: "addressed", Credential: strings.Repeat("a", 64), Provider: "docker",
+		BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: "https://other.example"}
+	if _, err := s.EnrollRuntimeNode(t.Context(), issued.Token, input); !errors.Is(err, ErrRuntimeNodeAddressMismatch) {
+		t.Fatal("enrolled a node that uses another Core address", err)
+	}
+	input.CoreURL = "https://core.example"
+	if _, err := s.EnrollRuntimeNode(t.Context(), issued.Token, input); err != nil {
+		t.Fatal("the refused enrollment consumed its token", err)
+	}
+	earlier := strings.Repeat("e", 64)
+	if _, err := s.pool.Exec(t.Context(), "INSERT INTO runtime_node_enrollments(token_sha256,installation_id,expires_at) VALUES($1,$2,clock_timestamp()+interval '10 minutes')",
+		runtimeTokenDigest(earlier), view.InstallationID); err != nil {
+		t.Fatal(err)
+	}
+	older := input
+	older.NodeID, older.Credential = uuid.NewString(), strings.Repeat("o", 64)
+	if _, err := s.EnrollRuntimeNode(t.Context(), earlier, older); err != nil {
+		t.Fatal(err)
+	}
+	nodes, err := s.ListRuntimeNodes(t.Context())
+	if err != nil || len(nodes) != 2 {
+		t.Fatal(nodes, err)
+	}
+	for _, node := range nodes {
+		switch node.ID {
+		case input.NodeID:
+			if node.EnrollmentID == nil || *node.EnrollmentID != issued.ID || node.CoreURL != "https://core.example" {
+				t.Fatal("the node did not record its enrollment", node.EnrollmentID, node.CoreURL)
+			}
+		case older.NodeID:
+			if node.EnrollmentID != nil {
+				t.Fatal("a token without an ID reported one", *node.EnrollmentID)
+			}
+		}
 	}
 }
 

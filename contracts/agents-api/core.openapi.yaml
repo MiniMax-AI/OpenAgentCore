@@ -422,6 +422,9 @@ definitions:
     type: object
   api.SandboxEnrollmentToken:
     properties:
+      enrollment_id:
+        description: Public, non-secret handle of this command; never a credential. The node it registers reports the same value as enrollment_id.
+        type: string
       expires_at:
         type: string
       token:
@@ -939,6 +942,10 @@ definitions:
           - microsandbox_artifacts_unavailable
           - capacity_insufficient
         type: string
+      enrollment_id:
+        description: The enrollment_id of the command that registered this node (POST /core/v1/sandbox/enrollment-tokens); null for nodes enrolled before Core recorded it.
+        type: string
+        x-nullable: true
       id:
         type: string
       last_seen_at:
@@ -1021,6 +1028,10 @@ definitions:
           - microsandbox_artifacts_unavailable
           - capacity_insufficient
         type: string
+      enrollment_id:
+        description: The enrollment_id of the command that registered this node (POST /core/v1/sandbox/enrollment-tokens); null for nodes enrolled before Core recorded it.
+        type: string
+        x-nullable: true
       history:
         $ref: '#/definitions/store.NodeHostHistory'
       host:

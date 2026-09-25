@@ -4,7 +4,7 @@ import { Server } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, Section, StatusDot } from "../../components/console-ui";
+import { EmptyState, PageBody, PageHeader, RefreshButton, Section, StatusDot } from "../../components/console-ui";
 import { ErrorState } from "../../components/ErrorState";
 import { CopyableId } from "../../components/list-ui";
 import { TableSkeleton } from "../../components/Skeleton";
@@ -13,6 +13,9 @@ import { formatBytes, formatPeriod } from "../../lib/format";
 import { installationQuery } from "../../lib/installation";
 import { sandboxSize, templateBuildSize, templateBuildStatus } from "../sandbox/deployment-specification";
 import { sandboxDeploymentQuery } from "../sandbox/sandbox-queries";
+import { DefaultModelsSection } from "./DefaultModelsSection";
+import { Fact } from "./Fact";
+import { harnessesQuery } from "./harness-queries";
 import { StartupSettings } from "./StartupSettings";
 import "./system.css";
 
@@ -33,24 +36,14 @@ function FactsSkeleton({ facts }: { facts: number }) {
   );
 }
 
-function Fact({ label, help, children }: { label: string; help?: string; children: ReactNode }) {
-  return (
-    <div className="system-fact">
-      <dt>
-        <span>{label}</span>
-        {help ? <HelpTip>{help}</HelpTip> : null}
-      </dt>
-      <dd>{children}</dd>
-    </div>
-  );
-}
-
 /**
- * Platform › System: this installation's addresses, the sandbox configuration
- * every project shares — where sandboxes run, how big each one is, the Runtime
- * or E2B template build they run, microsandbox's idle suspension and
- * maintenance — and Core's startup settings. Each says where it is changed:
- * sandboxes on the Nodes page, startup settings in config.json.
+ * Platform › System: this installation's addresses; each harness's default
+ * model for Core-hosted Sessions and Sessions without an environment, set
+ * here; the sandbox configuration every project shares — where sandboxes run,
+ * how big each one is, the Runtime or E2B template build they run,
+ * microsandbox's idle suspension and maintenance — and Core's startup
+ * settings. Each says where it is changed: sandboxes on the Nodes page,
+ * startup settings in config.json.
  */
 export function SystemPage() {
   const { t, i18n } = useTranslation("system");
@@ -59,8 +52,9 @@ export function SystemPage() {
   const { navigate } = useConsoleNavigation();
   const deployment = useQuery(sandboxDeploymentQuery);
   const installation = useQuery(installationQuery);
+  const harnesses = useQuery(harnessesQuery);
   const data = deployment.data ?? null;
-  const refresh = () => { void deployment.refetch(); void installation.refetch(); };
+  const refresh = () => { void deployment.refetch(); void installation.refetch(); void harnesses.refetch(); };
   const spec = data?.specification ?? null;
   // An E2B selection may adopt its template build's size instead of saving one.
   const each = data ? sandboxSize(data) : null;
@@ -135,7 +129,8 @@ export function SystemPage() {
     ? <ErrorState title={t("installation.failed")} onRetry={() => void installation.refetch()} />
     : <FactsSkeleton facts={4} />;
   // One announcement while either first read is still out; each slot shows only its own placeholder.
-  const reading = (!data && !(deployment.isError && !deployment.isFetching)) || (!about && !(installation.isError && !installation.isFetching));
+  const reading = (!data && !(deployment.isError && !deployment.isFetching)) || (!about && !(installation.isError && !installation.isFetching)) ||
+    (!harnesses.data && !(harnesses.isError && !harnesses.isFetching));
 
   return (
     <section className="page-section console-page system-page" aria-labelledby="system-heading">
@@ -143,11 +138,12 @@ export function SystemPage() {
         headingId="system-heading"
         title={tNav("views.system")}
         help={t("help")}
-        actions={<RefreshButton onClick={refresh} refreshing={deployment.isFetching || installation.isFetching} label={t("refresh")} />}
+        actions={<RefreshButton onClick={refresh} refreshing={deployment.isFetching || installation.isFetching || harnesses.isFetching} label={t("refresh")} />}
       />
       <PageBody>
         {reading ? <p className="visually-hidden" role="status">{t("loading")}</p> : null}
         {facts}
+        <DefaultModelsSection />
         {body}
         {about ? <StartupSettings configuration={about.configuration} /> : installation.isError ? null : <TableSkeleton rows={4} columns={3} />}
       </PageBody>

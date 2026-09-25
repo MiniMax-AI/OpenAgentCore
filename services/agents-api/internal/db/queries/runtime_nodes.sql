@@ -5,8 +5,8 @@ UPDATE runtime_deployment SET provider_kind=$1, local_node_id=$2, mode='nodes', 
 SELECT * FROM runtime_deployment WHERE singleton=true;
 
 -- name: InsertRuntimeNode :one
-INSERT INTO runtime_nodes(id,installation_id,name,backend_fingerprint,credential_sha256,max_active,max_retained,specification_digest,deployment_generation,core_url)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *;
+INSERT INTO runtime_nodes(id,installation_id,name,backend_fingerprint,credential_sha256,max_active,max_retained,specification_digest,deployment_generation,core_url,enrollment_id)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *;
 
 -- name: GetRuntimeNode :one
 SELECT * FROM runtime_nodes WHERE id=$1 AND removed_at IS NULL;
@@ -46,7 +46,7 @@ SELECT id FROM runtime_nodes WHERE id=$1 FOR UPDATE;
 UPDATE runtime_nodes SET connection_id=NULL FROM runtime_deployment d WHERE runtime_nodes.id=$1 AND connection_id=$2 AND connected_epoch=d.owner_epoch AND d.owner_epoch=sqlc.arg(owner_epoch);
 
 -- name: CreateRuntimeEnrollment :exec
-INSERT INTO runtime_node_enrollments(token_sha256,installation_id,expires_at,max_active,max_retained) VALUES($1,$2,clock_timestamp()+interval '10 minutes',$3,$4);
+INSERT INTO runtime_node_enrollments(id,token_sha256,installation_id,expires_at,max_active,max_retained) VALUES($1,$2,$3,clock_timestamp()+interval '10 minutes',$4,$5);
 
 -- name: ConsumeRuntimeEnrollment :execrows
 UPDATE runtime_node_enrollments SET consumed_at=clock_timestamp(),node_id=$2

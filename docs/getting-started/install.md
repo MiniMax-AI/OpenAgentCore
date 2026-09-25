@@ -62,9 +62,14 @@ Adding a node downloads only its selected provider's assets. Runtime images use
 compressed archives; verified local files and already imported images are reused.
 Downloads use temporary files and bounded retries, so a truncated response is
 never promoted into the cache. An optional `-offline.tar.gz` bundle contains the
-same assets locally. For console-based distribution without a release host, build
-that offline bundle with no release URL. A bundle that records a release URL
-retains that URL for remote node downloads; it does not silently change mirrors.
+same assets locally.
+
+Nodes download these assets only from the console (Web) that generated their
+command, never from a release URL the build recorded, so node hosts need no access
+to GitHub. The installer copies them into the console's node payload from the
+offline bundle, or from the release's `parsar-core-<commit>-linux-amd64-*` assets
+if you download them into the thin bundle's `artifacts/` directory before running
+`install.sh`. A console without them does not offer Add node for that provider.
 
 ## Sign in to Web
 
@@ -140,12 +145,13 @@ Choose English or Chinese through the System language selector.
    maintenance and completed cleanup. Microsandbox uses a five-minute idle timeout
    and one-day snapshot retention.
 4. For own-machine hosting, click **Add node**, copy the command, and run it as a non-root user on the
-   target Linux amd64 host. It downloads the matched bootstrap from your console and execution assets from
-   the manifest's release location (or the offline console payload), verifies
+   target Linux amd64 host. It downloads the matched bootstrap and execution assets from your console
+   (never from a release URL), verifies
    checksums, reads the saved generation and specification without consuming enrollment,
    verifies the payload matches that Runtime, imports the image only when missing,
    and writes the matching provider configuration,
-   registers the node and starts a systemd user service. The installer waits for Core to confirm
+   registers the node and starts a systemd user service. The service keeps retrying while Core
+   is unreachable and stops for good once the node is removed. The installer waits for Core to confirm
    connection and provider readiness. Web refreshes node health
    automatically. Wait for the node to be online and its provider to be ready;
    registration alone does not mean it can accept work. A registered retry uses its
@@ -259,7 +265,8 @@ container.
 ./install.sh --core-only --sandbox-provider true --provider docker --public-url https://core.example
 ```
 
-`--sandbox-provider true` installs a local node through the ordinary node installer. If `--provider` is
+`--sandbox-provider true` installs a local node through the ordinary node installer, using the node assets in
+the bundle: use the offline bundle, or place the release assets in its `artifacts/` directory. If `--provider` is
 omitted, it selects microsandbox. Supplying `--provider` without enabling the
 sandbox provider is an error. `--core-only` installs Core and PostgreSQL without
 Web and has no sandbox provider unless explicitly enabled.
@@ -477,9 +484,8 @@ exact bundle before distribution. See the [contributor guide](https://github.com
 
 The release base must host the generated flat asset filenames over HTTPS. Use
 `CORE_DISTRIBUTION_OFFLINE=1` to also emit a full offline archive; a build without
-any release URL must select offline mode. A fully disconnected console deployment
-uses that empty-URL offline build; remote node installers then obtain assets from
-the console. The release workflow prepares pinned
+any release URL must select offline mode. Node installers always obtain assets
+from the console, whichever build recorded a release URL. The release workflow prepares pinned
 harness dependencies, builds versioned assets, and uploads an Actions artifact.
 An explicit manual option can create an unpublished draft release. Neither a
 successful build nor a draft makes a private repository anonymously downloadable;
@@ -514,8 +520,8 @@ same release identity. Publishing a Release does not change repository visibilit
 For an offline installation, extract the matching `-offline.tar.gz` archive and run
 its `install.sh`, which copies the bundled assets into the console's node payload.
 `install.sh` has no `--offline-root` option; only `self-hosted-install.pyz` accepts
-one, for an executor host. Remote node commands use the manifest's release URL; use
-the explicitly configured console-hosted offline build described above when node
-hosts cannot access that URL. Download access errors should be fixed at the
+one, for an executor host. Node commands always download from the console that
+generated them, so install from the offline bundle (or place the release assets in
+the bundle) to let the console serve nodes. Download access errors should be fixed at the
 distribution source, without passing repository credentials into Runtime or
 changing its executor authorization.

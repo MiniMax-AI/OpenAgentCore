@@ -110,3 +110,74 @@
   align-items: center;
   gap: 4px 6px;
 }
+
+/* Default model: one card per harness, its startup state and provider facts. */
+.system-models {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  align-items: start;
+  gap: 16px;
+}
+
+.system-model {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.system-model-header {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--grid-line);
+}
+
+.system-model-header h3 {
+  margin: 0;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.system-model-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.system-model-facts {
+  margin: 0;
+}
+
+.system-model-facts .system-fact {
+  grid-template-columns: 136px minmax(0, 1fr);
+}
+
+.system-model-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* The two token limits side by side in the provider form. */
+.system-model-limits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* The fixed protocol in the provider form: a value, not a control. */
+.system-model-protocol {
+  margin: 0;
+  color: var(--fg);
+  font-size: 13px;
+  line-height: 18px;
+}

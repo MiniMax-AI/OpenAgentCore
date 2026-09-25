@@ -37,14 +37,17 @@ Node capacity is separate from the deployment specification. The administrator's
 `max_retained`, defaulting to 2 and 8. Microsandbox uses both limits. Docker never
 suspends, so its `max_retained` always equals `max_active`; Core replaces any
 submitted value, here and in `PATCH /core/v1/sandbox/nodes/{node_id}`. Core stores
-that approval with the token and copies it to the registered node. Node enrollment
+that approval with the token and copies it to the registered node. The response
+is `{token, expires_at, enrollment_id}`: `enrollment_id` is a public, non-secret
+handle of that command and never a credential. Node enrollment
 cannot submit capacity overrides. The existing node configuration/identity reads
 expose approved limits for that credential; node updates remain administrator
 operations. Local host capacity checks may reject a deployment that cannot run
 safely, but never raise its limits.
 
-Each node in `GET /core/v1/sandbox/nodes` and its detail reports `core_url`: the
-installation public URL when the node enrolled. A node whose `core_url` differs from
+Each node in `GET /core/v1/sandbox/nodes` and its detail reports `enrollment_id`,
+the handle of the command that registered it (null for nodes enrolled before Core
+recorded it), and `core_url`: the installation public URL when the node enrolled. A node whose `core_url` differs from
 the current public URL receives no new placements. Work already placed on it
 finishes there: a hosted Environment that was placed but not yet allocated before
 the change is still allocated on that node, and its retained sandboxes can still
@@ -252,8 +255,11 @@ or E2B credential. It is available only for node-backed providers.
 The installer reads this configuration before preparing local assets. Its provider
 file records `generation` and `specification`, alongside the host's socket, paths
 and network policy. Enrollment at `POST /api/v1/sandbox-node/enroll` includes
-`deployment_generation` and `specification_digest`. A mismatch rejects before
-token consumption. Retained node authentication checks the same generation and
+`deployment_generation`, `specification_digest` and `core_url`, the Core origin the
+node stores. A specification mismatch rejects with 409
+`sandbox_specification_mismatch` and a `core_url` other than the installation public
+URL with 409 `sandbox_node_address_mismatch`, both before token consumption. A
+missing `core_url` gets 400 `invalid_request_error` with `param: "core_url"`. Retained node authentication checks the same generation and
 digest. A changed local resource setting, Runtime or generation must fail rather
 than rewrite the retained identity or silently use a local default.
 

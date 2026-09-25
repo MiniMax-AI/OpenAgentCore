@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import shutil
 import socket
 import stat
 import subprocess
@@ -53,15 +54,51 @@ def origin(value):
     return value.rstrip("/")
 
 
-def checked(arguments, failure, **kwargs):
+def checked(arguments, failure, explain=None, **kwargs):
+    # explain(stderr) may replace the failure with an InstallError carrying fixed text only.
     try:
         result = subprocess.run(arguments, check=False, stdin=subprocess.DEVNULL,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=kwargs.pop("timeout", 30), **kwargs)
         if result.returncode:
-            raise InstallError(failure)
+            raise explain(result.stderr) if explain else InstallError(failure)
         return result.stdout.decode().strip()
     except (OSError, subprocess.SubprocessError):
         raise InstallError(failure) from None
+
+
+REGISTRATION_UNCONFIRMED = ("Node enrollment was not confirmed. Check the Core URL, enrollment expiry and local provider "
+                            "prerequisites; keep its state and rerun the command to recover.")
+# The node program's rejection line: Core's status and fixed error code, nothing else.
+REJECTION = re.compile(rb"node enrollment rejected \(HTTP (\d{3})(?: ([a-z_]{1,64}))?\)")
+
+
+class AddressChanged(InstallError):
+    """Core refused the node's address before consuming the token, so it has no record of this node."""
+
+
+def registration_failure(stderr):
+    """A fixed message for Core's answer to registration; never the node program's own text."""
+    matches = list(REJECTION.finditer(stderr or b""))
+    if not matches:
+        return InstallError(REGISTRATION_UNCONFIRMED)
+    status, code = matches[-1].group(1).decode(), (matches[-1].group(2) or b"").decode()
+    if code == "sandbox_node_address_mismatch":
+        return AddressChanged(node_spec.PUBLIC_URL_CHANGED + " The token was not used; downloaded files are kept.")
+    if status == "401":
+        return InstallError("The enrollment command expired or was already used. Generate a new command on the Nodes "
+                            "page and run it on this host; downloaded files are kept.")
+    return InstallError(REGISTRATION_UNCONFIRMED + " Core answered HTTP " + status + (" " + code if code else "") + ".")
+
+
+def discard_unregistered(root):
+    """Remove the files that name the old address, so a new command can register this host.
+
+    Only for a node Core never recorded: downloads, the image and the service file stay."""
+    for name in ("installation.json", "provider.json"):
+        if existing_file(root / name):
+            (root / name).unlink()
+    if (root / "state/node").is_dir() and not (root / "state/node").is_symlink():
+        shutil.rmtree(root / "state/node")
 
 
 def preflight(provider):
@@ -136,8 +173,8 @@ def metadata(source, bundle=None):
     distribution.image_identities(manifest, "runtime")
     for name in (COMMON[0], "images/runtime.tar.gz") + MICRO:
         distribution.artifact(manifest, name)
-    if not manifest.get("artifact_base_url") and source:
-        manifest["artifact_base_url"] = source + "/node-install/artifacts"
+    # Nodes download only from their console, never from a release URL the build recorded.
+    manifest["artifact_base_url"] = source + "/node-install/artifacts" if source else ""
     return manifest, sums
 
 
@@ -272,10 +309,13 @@ def prepare_runtime(root, args, manifest):
 def service_unit(root):
     def quote(value):
         return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'
-    return ("[Unit]\nDescription=Parsar sandbox node\n\n[Service]\nType=exec\nExecStart=:"
+    # The node keeps retrying while Core is unreachable (no start limit). It exits 78
+    # when Core rejects its credential, as after removal; that ends the restarts.
+    return ("[Unit]\nDescription=Parsar sandbox node\nStartLimitIntervalSec=0\n\n[Service]\nType=exec\nExecStart=:"
             + quote(root / COMMON[0]) + " run --config " + quote(root / "provider.json") + " --state-dir " + quote(root / "state/node")
             + "\nWorkingDirectory=" + str(root).replace("%", "%%")
-            + "\nRestart=on-failure\nKillMode=process\nUMask=0077\n\n[Install]\nWantedBy=default.target\n")
+            + "\nRestart=on-failure\nRestartSec=5s\nRestartPreventExitStatus=78\nKillMode=process\nUMask=0077"
+            + "\n\n[Install]\nWantedBy=default.target\n")
 
 
 def install(args, token):
@@ -347,9 +387,13 @@ def install(args, token):
                 with os.fdopen(descriptor, "w") as secret:
                     secret.write(token)
                 print("Registering this node with Core...", flush=True)
-                checked([str(root / COMMON[0]), "register", "--config", str(root / "provider.json"), "--state-dir", str(root / "state/node"),
-                         "--core-url", args.core_url, "--name", socket.gethostname(),
-                         "--enrollment-token-file", secret_path], "Node enrollment was not confirmed. Check the Core URL, enrollment expiry and local provider prerequisites; keep its state and rerun the command to recover.")
+                try:
+                    checked([str(root / COMMON[0]), "register", "--config", str(root / "provider.json"), "--state-dir", str(root / "state/node"),
+                             "--core-url", args.core_url, "--name", socket.gethostname(),
+                             "--enrollment-token-file", secret_path], REGISTRATION_UNCONFIRMED, explain=registration_failure)
+                except AddressChanged:
+                    discard_unregistered(root)
+                    raise
                 write_once(marker, json_text(state))
             finally:
                 if os.path.exists(secret_path):

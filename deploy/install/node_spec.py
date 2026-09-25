@@ -12,6 +12,10 @@ class SpecificationError(Exception):
     pass
 
 
+PUBLIC_URL_CHANGED = ("Core's public URL changed after this command was generated. Generate a new command on the "
+                      "Nodes page and run it on this host.")
+
+
 def release(manifest):
     return {"source_commit": manifest["source_commit"],
             "image_id": manifest["images"]["runtime"],
@@ -36,6 +40,8 @@ def digest(provider, specification):
 
 
 def validate(data, args):
+    if isinstance(data, dict) and isinstance(data.get("core_url"), str) and data["core_url"] != args.core_url:
+        raise SpecificationError(PUBLIC_URL_CHANGED)
     try:
         provider, spec = data["provider"], data["specification"]
         if (provider not in ("docker", "microsandbox") or data["installation_id"] != args.installation_id

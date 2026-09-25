@@ -50,3 +50,61 @@ func TestOfflineArtifactsAreManifestAllowlisted(t *testing.T) {
 		}
 	}
 }
+
+// /console/config names the providers whose node files this console holds, so
+// Web offers Add node only when a node can download everything it needs. Node
+// downloads can resume with HTTP Range.
+func TestConsoleReportsServableNodeProviders(t *testing.T) {
+	dist, payload := t.TempDir(), t.TempDir()
+	write := func(path, body string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(dist, "index.html"), "console")
+	write(filepath.Join(payload, "node-install.pyz"), "bootstrap")
+	write(filepath.Join(payload, "self-hosted-install.pyz"), "executor bootstrap")
+	artifacts := map[string]any{}
+	for logical := range map[string]bool{"native/bin/parsar-sandbox-node": true, "images/runtime.tar.gz": true, "native/microsandbox/msb": true} {
+		name := strings.ReplaceAll(logical, "/", "-")
+		artifacts[logical] = map[string]any{"filename": name, "size": len("runtime-bytes")}
+		write(filepath.Join(payload, "artifacts", name), "runtime-bytes")
+	}
+	raw, _ := json.Marshal(map[string]any{"artifacts": artifacts})
+	write(filepath.Join(payload, "manifest.json"), string(raw))
+	upstream, _ := url.Parse("http://127.0.0.1:1")
+	h, err := newConsole(config{origin: testOrigin, upstream: upstream, dist: dist, coreKey: testCoreKey, nodePayloadDir: payload})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	server := serveSignedIn(t, h)
+	if _, body := responseBody(t, server, consoleRequest(t, server, "GET", "/console/config")); !strings.Contains(body, `"node_artifacts":["docker"]`) {
+		t.Fatal("microsandbox reported without its helper and firmware:", body)
+	}
+	request := consoleRequest(t, server, "GET", "/node-install/artifacts/images-runtime.tar.gz")
+	request.Header.Set("Range", "bytes=8-")
+	if response, body := responseBody(t, server, request); response.StatusCode != 206 || body != "bytes" {
+		t.Fatal("artifact download cannot resume", response.StatusCode, body)
+	}
+	if err := os.RemoveAll(filepath.Join(payload, "artifacts")); err != nil {
+		t.Fatal(err)
+	}
+	if _, body := responseBody(t, server, consoleRequest(t, server, "GET", "/console/config")); !strings.Contains(body, `"node_artifacts":[]`) {
+		t.Fatal("a console without node files offered them:", body)
+	}
+	// A console without any node payload also reports an empty list, never null.
+	bare, err := newConsole(config{origin: testOrigin, upstream: upstream, dist: dist, coreKey: testCoreKey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer bare.Close()
+	bareServer := serveSignedIn(t, bare)
+	if _, body := responseBody(t, bareServer, consoleRequest(t, bareServer, "GET", "/console/config")); !strings.Contains(body, `"node_artifacts":[]`) {
+		t.Fatal("a console without a node payload did not report an empty list:", body)
+	}
+}

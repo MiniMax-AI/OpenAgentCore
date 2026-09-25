@@ -607,15 +607,15 @@ orbits hold their places, the grid is a still frame and no transition runs.
 
 ### Getting started
 The first card on the Overview while any step is to do: a card header ("Getting
-started", "n of 3 done", a help tip, then a ghost Take the tour button and an icon
-button that hides it) over three rows split by Faint Rules. Each row has a 22px
+started", "n of 4 done", a help tip, then a ghost Take the tour button and an icon
+button that hides it) over four rows split by Faint Rules. Each row has a 22px
 numbered ring (a check on the tile wash when done), a 13px/600 title over one
 12.5px Graphite line, a status dot (Done in green, To do in Idle Gray, Checking
 pending, Unknown for a failed read) and one outline action while the step is to
-do: Set up sandboxes, Add node, Open Nodes or Open sandbox backend; Create project
-(which continues to the new project's first key) or Issue key; Projects and keys.
-Add node, Create project and Issue key open their page with the dialog already
-open. Every step done turns it into one line, "You're set", with Take the tour and
+do: Set up sandboxes, Add node, Open Nodes or Open sandbox backend; Open System;
+Create project (which continues to the new project's first key) or Issue key;
+Projects and keys. Add node, Create project and Issue key open their page with the
+dialog already open; Open System focuses the default harness's Set or Replace. Every step done turns it into one line, "You're set", with Take the tour and
 Dismiss; it stays, through the tour, until dismissed, and the checklist does not
 come back on its own. The choice is kept per installation in the browser, also
 while the deployment cannot be read; Show Getting started, a quiet row above the
@@ -644,14 +644,21 @@ offered as Current); another backend starts from its standard size and this
 console's Runtime, and E2B always needs its key again. Rules sit behind help tips.
 
 ### System page
-Read-only facts in three sections, each saying where it changes. Installation: the
-public address, API base URL, installation ID and source commit as a fact card.
-Sandboxes: the shared sandbox configuration, with a "Change on the Nodes page"
-text action in the section header. Startup settings: a line naming the config file
-and the apply command as copyable chips, with when they were last applied, over a
-table of each setting, its value and the services a change restarts. Sensitive
-settings show only Configured or Not set; Default and Fixed after install are
-neutral pills beside the value.
+Four sections, each saying where it changes. Installation: the public address, API
+base URL, installation ID and source commit as a fact card. Default model, the one
+section changed here: one card per harness in an auto-fill grid, its header holding
+the harness name and outline actions (Set, or Replace and Clear); fact rows give the
+harness's read-only startup state (a status dot and a Default pill, its source behind
+a help tip), then the provider's protocol, base URL, whether a key is configured,
+token limits when set and the update time, or Not set. Set and Replace open one form
+dialog; the key field is a required password input, never prefilled or shown and
+forgotten when the form closes. Core's rejection stays in red inside the form; Clear
+is a ConfirmDialog. Sandboxes: the shared sandbox configuration, with a "Change on
+the Nodes page" text action in the section header. Startup settings: a line naming
+the config file and the apply command as copyable chips, with when they were last
+applied, over a table of each setting, its value and the services a change restarts.
+Sensitive settings show only Configured or Not set; Default and Fixed after install
+are neutral pills beside the value.
 
 ### Loading and motion
 The console has no spinners and no "Loading…" lines. Reads are cached (TanStack

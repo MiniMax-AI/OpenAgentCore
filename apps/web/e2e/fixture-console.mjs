@@ -1,6 +1,6 @@
 // Browser acceptance fixture: the console service's routes (/console/**) and the
 // Core management tree it forwards (/core/v1/**: installation, projects, summary,
-// audit log, metrics and /core/v1/sandbox/**), with synthetic, deterministic data and
+// audit log, metrics, harness default models and /core/v1/sandbox/**), with synthetic, deterministic data and
 // in-memory writes. It never serves /v1; any /v1 request, and any
 // browser-supplied Authorization header, is recorded so a test can assert that
 // the console stays on its management boundary.
@@ -80,7 +80,7 @@ function e2bDeployment() {
   return { ...configuredDeployment(), provider: "e2b", mode: "direct", resources: { allocations: 3, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, e2b: { template: "parsar-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", credential_configured: true, template_build: templateBuild } };
 }
 
-function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo", address = "public") {
+function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo", address = "public", credentials = "configured") {
   const base = buildDemo();
   const now = Math.floor(Date.now() / 1000);
   const resources = buildResources(now, base.agents, base.sessions);
@@ -98,6 +98,15 @@ function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "d
     executorCredentials: new Map(),
     // How config.json's public_url is set: "public", "local" or "stale".
     installation: address,
+    // "none": Core has no credential encryption key, so it cannot store a provider's key.
+    credentialKey: credentials !== "none",
+    // Startup state and deployment default model provider per harness; API keys are never kept.
+    // The demo deployment's default harness has a default model; a fresh install has none.
+    harnesses: {
+      claude_sdk: { enabled: true, default: false, provider: null },
+      codex: { enabled: true, default: true, provider: fresh ? null : { object: "core.model_provider", harness: "codex", protocol: "responses", base_url: "https://model.example/v1", api_key_configured: true, updated_at: new Date((now - 86400) * 1000).toISOString().replace(/\.\d{3}Z$/, "Z") } },
+      mcode: { enabled: false, default: false, provider: null },
+    },
     // "none": the deployment is not configured yet, so the Nodes page offers setup.
     deployment: null,
   };
@@ -112,11 +121,11 @@ function send(response, status, body, headers = {}) {
   response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store", ...headers });
   response.end(JSON.stringify(body));
 }
-function error(response, status, message, code = null, param = null) {
+function error(response, status, message, code = null) {
   // Derive `type` as Core's writeError does (services/agents-api/internal/api/errors.go).
   const type = status >= 500 ? "server_error" : status === 409 ? "conflict_error"
     : code === "not_found_error" || code === "invalid_beta" ? code : "invalid_request_error";
-  send(response, status, { error: { message, type, code, param } });
+  send(response, status, { error: { message, type, code, param: null } });
 }
 async function body(request) {
   const chunks = [];
@@ -394,11 +403,82 @@ function registeredNode(nodeId) {
   return { id: nodeId, name: nodeId, provider: state.deployment?.provider ?? "docker", core_url: publicUrl(), online: false, provider_ready: false, cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, snapshots: 0, last_seen_at: null, ...limits, active: 0, reserved: 0, retained: 0, cleanup_pending: 0, created_at: new Date().toISOString() };
 }
 
+const HARNESS_PROVIDER = /^\/harnesses\/([^/]+)\/model-provider$/;
+const PROVIDER_FIELDS = new Set(["protocol", "base_url", "api_key", "context_window", "max_output_tokens"]);
+/** Each harness's protocol, as Core's registry declares it; only mcode requires token limits. */
+const HARNESS_PROTOCOL = { claude_sdk: "anthropic", codex: "responses", mcode: "anthropic" };
+/** Core's one message for a body that is not a complete provider; it never echoes a value. */
+const PROVIDER_SHAPE = "The body must be a complete model provider: protocol, base_url, api_key and optional nonnegative context_window and max_output_tokens.";
+const httpsBase = (value) => { try { const url = new URL(value); return url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password && !url.search && !url.hash; } catch { return false; } };
+/** An omitted limit, or a nonnegative integer that fits Core's int32. */
+const tokenLimit = (value) => value === undefined || (Number.isInteger(value) && value >= 0 && value <= 2 ** 31 - 1);
+const jsonKind = (value) => Array.isArray(value) ? "an array" : typeof value === "string" ? "a string" : typeof value === "boolean" ? "a boolean" : Number.isInteger(value) ? "an integer" : "a number";
+
+/** The first rule a provider body breaks, in Core's order and words; null when valid. */
+function providerProblem(harness, input) {
+  if (Object.keys(input).some((key) => !PROVIDER_FIELDS.has(key)) || ["protocol", "base_url", "api_key"].some((key) => typeof input[key] !== "string") ||
+    !tokenLimit(input.context_window) || !tokenLimit(input.max_output_tokens)) return PROVIDER_SHAPE;
+  if (!httpsBase(input.base_url)) return "model provider requires an HTTPS base_url without credentials, query or fragment";
+  if (input.protocol !== "anthropic" && input.protocol !== "responses") return "unsupported model provider protocol";
+  if (!input.api_key.trim() || Buffer.byteLength(input.api_key) > 16384 || /[\0\r\n]/.test(input.api_key)) return "invalid model provider API key";
+  if ((input.max_output_tokens ?? 0) > (input.context_window ?? 0)) return "invalid model token limits";
+  if (input.protocol !== HARNESS_PROTOCOL[harness]) return "selected harness does not support this model provider protocol";
+  if (harness === "mcode" && !(input.context_window > 0 && input.max_output_tokens > 0)) return "selected harness requires positive model context_window and max_output_tokens";
+  return null;
+}
+
+/**
+ * Harnesses and their deployment default model providers, as Core serves them
+ * (services/agents-api/internal/api/harness_model_providers.go): the list
+ * reflects every write; an unknown harness or an unset provider is 404; PUT
+ * takes a JSON object of at most 32 KiB, is a full replacement that needs the
+ * key every time (mcode also both limits) and answers with the safe view;
+ * DELETE is 204 and safe to repeat. A disabled harness may still be configured.
+ */
+async function harnessRoute(request, response, path) {
+  const view = (id) => ({ object: "core.harness", id, enabled: state.harnesses[id].enabled, default: state.harnesses[id].default, model_provider: state.harnesses[id].provider });
+  if (path === "/harnesses" && request.method === "GET") return send(response, 200, { object: "list", data: Object.keys(state.harnesses).map(view) });
+  const match = path.match(HARNESS_PROVIDER);
+  const harness = match && Object.hasOwn(state.harnesses, match[1]) ? match[1] : null;
+  if (!harness) return error(response, 404, "This harness does not exist.", "not_found");
+  const entry = state.harnesses[harness];
+  if (request.method === "GET") return entry.provider ? send(response, 200, entry.provider) : error(response, 404, "This harness has no deployment default model provider.", "not_found");
+  if (request.method === "DELETE") {
+    entry.provider = null;
+    response.writeHead(204, { "cache-control": "no-store" });
+    return response.end();
+  }
+  if (request.method !== "PUT") return error(response, 405, "Method not allowed.");
+  // Core's shared JSON body gate, with this route's 32 KiB limit.
+  if (!/^application\/json\s*(;|$)/i.test(request.headers["content-type"] ?? "")) return error(response, 400, "expected request with Content-Type: application/json", "invalid_request_error");
+  const chunks = [];
+  for await (const chunk of request) chunks.push(chunk);
+  const raw = Buffer.concat(chunks);
+  if (raw.length > 32 * 1024) return error(response, 413, "Request exceeds 32 KiB.", "request_too_large");
+  let input;
+  try { input = raw.length ? JSON.parse(raw.toString("utf8")) : null; } catch {
+    return error(response, 400, "Invalid body: failed to parse JSON value. Please check the value to ensure it is valid JSON. (Common errors include trailing commas, missing closing brackets, missing quotation marks, etc.)", "invalid_request_error");
+  }
+  input ??= {};
+  if (typeof input !== "object" || Array.isArray(input)) return error(response, 400, `Invalid type: expected an object, but got ${jsonKind(input)} instead.`, "invalid_request_error");
+  const problem = providerProblem(harness, input);
+  if (problem) return error(response, 400, problem, "invalid_request_error");
+  // As Core's error mapping: sealing the key needs the credential encryption key.
+  if (!state.credentialKey) return error(response, 503, "Credential encryption is not configured on this service.", "credential_storage_unavailable");
+  entry.provider = {
+    object: "core.model_provider", harness, protocol: input.protocol, base_url: input.base_url, api_key_configured: true,
+    ...(input.context_window ? { context_window: input.context_window } : {}),
+    ...(input.max_output_tokens ? { max_output_tokens: input.max_output_tokens } : {}),
+    updated_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+  };
+  return send(response, 200, entry.provider);
+}
+
 /** Test controls: reset state, inject one failure, register or change a node, and read what the browser sent. */
 async function fixtureRoute(request, response, url) {
   if (url.pathname === "/__fixture/health") return send(response, 200, { ok: true });
   if (url.pathname === "/__fixture/reset" && request.method === "POST") {
-    reset(url.searchParams.get("auth") ?? "login", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured", url.searchParams.get("nodes") ?? "demo", url.searchParams.get("installation") ?? "public");
+    reset(url.searchParams.get("auth") ?? "login", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured", url.searchParams.get("nodes") ?? "demo", url.searchParams.get("installation") ?? "public", url.searchParams.get("credentials") ?? "configured");
     return send(response, 200, { ok: true });
   }
   if (url.pathname === "/__fixture/fail-next" && request.method === "POST") {
@@ -443,6 +523,7 @@ http.createServer(async (request, response) => {
     if (url.pathname.startsWith("/core/v1/sandbox/")) return await sandboxRoute(request, response, url.pathname.slice("/core/v1/sandbox".length));
     if (url.pathname.startsWith("/core/v1/")) {
       const path = url.pathname.slice("/core/v1".length);
+      if (path === "/harnesses" || path.startsWith("/harnesses/")) return await harnessRoute(request, response, path);
       const credentials = path.match(EXECUTOR_CREDENTIALS);
       if (credentials) return await executorCredentialRoute(request, response, credentials[1], credentials[2], credentials[3]);
       return write ? await adminWrite(request, response, path) : adminRead(response, path, url);

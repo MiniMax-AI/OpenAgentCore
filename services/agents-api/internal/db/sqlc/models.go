@@ -310,6 +310,7 @@ type RuntimeNode struct {
 	SpecificationDigest  string             `json:"specification_digest"`
 	DeploymentGeneration int64              `json:"deployment_generation"`
 	CoreUrl              string             `json:"core_url"`
+	EnrollmentID         pgtype.UUID        `json:"enrollment_id"`
 }
 
 type RuntimeNodeEnrollment struct {
@@ -320,6 +321,7 @@ type RuntimeNodeEnrollment struct {
 	NodeID         pgtype.UUID        `json:"node_id"`
 	MaxActive      int32              `json:"max_active"`
 	MaxRetained    int32              `json:"max_retained"`
+	ID             pgtype.UUID        `json:"id"`
 }
 
 type RuntimePlacement struct {

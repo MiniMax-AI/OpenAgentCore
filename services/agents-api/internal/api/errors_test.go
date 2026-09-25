@@ -127,6 +127,7 @@ func TestConflictErrorsUseConflictType(t *testing.T) {
 		store.ErrSandboxDeploymentConflict:     "sandbox_deployment_conflict",
 		store.ErrRuntimeNodeInUse:              "runtime_node_in_use",
 		store.ErrRuntimeLocalNodeConfigured:    "runtime_local_node_configured",
+		store.ErrRuntimeNodeAddressMismatch:    "sandbox_node_address_mismatch",
 		store.ErrEnvironmentUnavailable:        "environment_unavailable",
 		execution.ErrEnvironmentInputExpired:   "environment_input_expired",
 		execution.ErrEnvironmentInputCancelled: "environment_input_cancelled",
