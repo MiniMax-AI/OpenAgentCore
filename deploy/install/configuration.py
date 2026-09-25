@@ -175,7 +175,7 @@ def settings_document(root, config, applied_at):
             "applied_at": applied_at, "settings": config_model.settings(config)}
 
 
-def compose_config(root, config, state, inputs):
+def compose_config(root, config, state):
     root = Path(root)
     mode, native = config["mode"], config.get("native_core", False)
     identity = f'{state["uid"]}:{state["gid"]}'
@@ -210,7 +210,7 @@ def compose_config(root, config, state, inputs):
             shared = {"image": images["core"], "user": identity,
                       "env_file": [str(root / "generated/core.env").replace("$", "$$")], "volumes": mounts,
                       "read_only": True, "tmpfs": ["/tmp:mode=1777"], "init": True,
-                      "security_opt": ["no-new-privileges:true"], "labels": {"io.parsar.inputs": inputs["core"]}}
+                      "security_opt": ["no-new-privileges:true"]}
             services["migrate"] = dict(shared, command=["/usr/local/bin/agents-api-migrate"],
                                        depends_on={"database": {"condition": "service_healthy"}})
             services["core"] = dict(shared, restart="unless-stopped", ports=[f'127.0.0.1:{config["ports"]["core"]}:8091'],
@@ -232,7 +232,7 @@ def compose_config(root, config, state, inputs):
                "ports": [f'127.0.0.1:{config["ports"]["web"]}:8080'], "read_only": True,
                "security_opt": ["no-new-privileges:true"],
                "volumes": [bind(root / "secrets/core.key", f"{RUN}/core.key"), bind(root / "node-payload", "/node-payload")],
-               "environment": environment, "labels": {"io.parsar.inputs": inputs["web"]}}
+               "environment": environment}
         if mode == "web-only" or native:
             web.pop("ports")
             web["network_mode"] = "host"
@@ -241,8 +241,17 @@ def compose_config(root, config, state, inputs):
     return doc
 
 
+LABEL = "io.parsar.inputs"
+
+
 class Rendered:
-    """Generated file contents plus one digest per service for restart planning."""
+    """Generated file contents, plus the inputs digest each service must run with.
+
+    The digest covers everything a service reads: its Compose definition, the
+    env_file content and the files and secrets it mounts. It is the service's
+    `io.parsar.inputs` label, or PARSAR_INPUTS in the native unit, so the running
+    services can be compared with a render at any time.
+    """
 
     def __init__(self, files, services, unit):
         self.files, self.services, self.unit = files, services, unit
@@ -255,7 +264,7 @@ def render(root, config, state, applied_at):
     settings = settings_document(root, config, applied_at)
     files = {"config.schema.json": config_model.SCHEMA_TEXT,
              "settings.json": json.dumps(settings, indent=2) + "\n"}
-    inputs, core_env, unit = {}, "", None
+    external, core_env, unit = {}, "", None
     if mode != "web-only":
         files["core-key-digests.json"] = json.dumps([sha256(read_core_key(root))]) + "\n"
         history = config["core"]["runtime_history"]
@@ -267,25 +276,41 @@ def render(root, config, state, applied_at):
         # leaves Core running. Its snapshot then refreshes on Core's next restart.
         core_settings = [item for item in settings["settings"] if "core" in item["restarts"]]
         retained = state.get("execution_options_file")
-        inputs["core"] = sha256(json.dumps({
+        external["core"] = json.dumps({
             "core-key-digests.json": sha256(files["core-key-digests.json"]),
             "settings": sha256(json.dumps([settings["path"], settings["apply_command"], core_settings], sort_keys=True)),
             "runtime-history.json": sha256(files.get("runtime-history.json", "")),
             "credential.key": secrets["credential.key"], "database.password": secrets["database.password"],
             "execution-options": retained_digest(retained),
-        }, sort_keys=True))
-        if native:
-            unit = native_service.unit_name(state)
-            files[unit] = native_service.unit_text(root, edit_hint(root))
+        }, sort_keys=True)
     if mode != "core-only":
-        inputs["web"] = sha256(json.dumps({"core.key": secrets["core.key"]}))
-    compose = compose_config(root, config, state, inputs)
-    files["compose.json"] = json.dumps(compose, indent=2) + "\n"
+        external["web"] = json.dumps({"core.key": secrets["core.key"]})
+    compose = compose_config(root, config, state)
     services = {}
     for name, service in compose["services"].items():
         # Compose resolves env_file into the service configuration, so its content counts.
         text = json.dumps(service, sort_keys=True) + (core_env if "env_file" in service else "")
-        services[name] = sha256(text)
+        services[name] = sha256(text + external.get("core" if name == "migrate" else name, ""))
+        service["labels"] = {LABEL: services[name]}
+    files["compose.json"] = json.dumps(compose, indent=2) + "\n"
     if native:
-        services["core"] = sha256(core_env + files[unit] + inputs["core"])
+        unit = native_service.unit_name(state)
+        services["core"] = sha256(core_env + native_service.unit_text(root, edit_hint(root)) + external["core"])
+        files[unit] = native_service.unit_text(root, edit_hint(root), services["core"])
     return Rendered(files, services, unit)
+
+
+def rendered_inputs(files, unit):
+    """The inputs digest per service that a set of generated files asks for."""
+    result = {}
+    if files.get("compose.json"):
+        try:
+            for name, service in json.loads(files["compose.json"])["services"].items():
+                result[name] = service.get("labels", {}).get(LABEL)
+        except (ValueError, KeyError, AttributeError):
+            return {}
+    if unit and files.get(unit):
+        text = files[unit].decode() if isinstance(files[unit], bytes) else files[unit]
+        match = re.search(r"^Environment=PARSAR_INPUTS=([0-9a-f]{64})$", text, re.M)
+        result["core"] = match[1] if match else None
+    return result

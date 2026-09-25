@@ -324,7 +324,7 @@ def layout(root):
     return "config" if config else "legacy" if legacy else "other"
 
 
-def create(root, args, config, manifest, images):
+def create(root, args, config, manifest, images, provider=None):
     """Write the new installation's secrets, config.json and state.json."""
     mode = config["mode"]
     token = read_core_key_file(args.core_key_file) if mode == "web-only" else secrets.token_hex(32)
@@ -341,29 +341,43 @@ def create(root, args, config, manifest, images):
              "uid": os.getuid(), "gid": os.getgid(), "mode": mode, "native_core": config.get("native_core", False),
              "source_commit": manifest["source_commit"], "images": images,
              "secrets_sha256": configuration.secret_digests(root, mode), "core_installation_id": None,
-             "execution_options_file": None, "applied": None, "converted_from": None}
+             "execution_options_file": None, "converted_from": None, "generated": {},
+             # A requested local node is enrolled once the services first start; a repair retries it.
+             "local_node": provider}
     state["secrets_sha256"].pop("core.key")
     write(root / "config.json", json.dumps(config, indent=2) + "\n")
     write(root / "state.json", json.dumps(state, indent=2) + "\n")
 
 
-def finish(root, bundle, manifest, provider=None, fresh=False):
+def unfinished_conversion(state):
+    return bool(state.get("converted_from")) and not state["converted_from"].get("finished")
+
+
+def finish(root, bundle, manifest, fresh=False):
     """Put the bundle's files in place, apply config.json and start the services."""
     state = parsar_cli.load_state(root)
+    converting = unfinished_conversion(state)
     # A converted installation replaces the earlier release's binaries and payload once.
-    replace = bool(state.get("converted_from")) and not state.get("applied")
-    prepare_node_payload(root, state, bundle, replace)
-    native_service.prepare(root, state, bundle, replace)
+    prepare_node_payload(root, state, bundle, converting)
+    native_service.prepare(root, state, bundle, converting)
     install_parsar(root, bundle)
-    parsar_cli.apply(root, start=True)
-    config, _ = parsar_cli.load_config(root)
+    retry = f"rerun ./install.sh {'--convert ' if converting else ''}--install-dir {root}"
+    parsar_cli.apply(root, start=True, retry=retry)
+    config = parsar_cli.load_config(root)
     mode = config["mode"]
     # An earlier-release Core has no /core/v1/installation (404); apply noted it and Web still works.
     if mode == "web-only" and parsar_cli.paired_core(root, config)[0] not in (200, 404):
         raise InstallError("Core key authentication failed. Inspect secrets/core.key and web.core_url; no model was called")
+    provider = state.get("local_node")
     if provider:
         local_node.install(root, dict(state, provider=provider, core_port=config["ports"]["core"],
                                       public_url=config["public_url"]), manifest, bundle, run)
+    state = parsar_cli.load_state(root)
+    if provider or converting:
+        state["local_node"] = None
+        if converting:
+            state["converted_from"] = dict(state["converted_from"], finished=True)
+        parsar_cli.save_state(root, state)
     summary(root, config, provider, fresh)
 
 
@@ -423,11 +437,12 @@ def main(argv=None):
         return
     if kind == "config" and args.convert:
         state = parsar_cli.load_state(root)
-        # The layout is converted, but the first apply of the new release has not finished.
-        if not (state.get("converted_from") and not state.get("applied")):
+        # The layout is converted, but the new release has not started successfully yet.
+        if not unfinished_conversion(state):
             raise InstallError(f"{root} already uses config.json; edit it and run {root / 'parsar'} apply")
-        if set(args.given) - {"convert", "yes"}:
-            raise InstallError("Finishing a conversion accepts only --install-dir and --yes")
+        if set(args.given) - {"convert", "yes", "public_url"}:
+            raise InstallError("Finishing a conversion accepts only --install-dir, --yes and --public-url")
+        convert.check_resumed_public_url(root, args.public_url)
         check_host()
         manifest = verify_bundle(bundle)
         if state["source_commit"] != manifest["source_commit"]:
@@ -470,8 +485,8 @@ def main(argv=None):
         if key in config["ports"]:
             free_port(config["ports"][key])
     images = image_loader(manifest, bundle)(image_names(config["mode"], config.get("native_core", False)))
-    create(root, args, config, manifest, images)
-    finish(root, bundle, manifest, provider, fresh=True)
+    create(root, args, config, manifest, images, provider)
+    finish(root, bundle, manifest, fresh=True)
 
 
 if __name__ == "__main__":

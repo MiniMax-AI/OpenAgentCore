@@ -340,8 +340,9 @@ release. `--sandbox-provider` and `--provider` apply only to a new installation.
 ## Convert an earlier installation
 
 Installations made before `config.json` have `installation.json`, `config/core.env`
-and `admin/`. Plain `./install.sh` refuses them. Convert one with this release's
-bundle:
+and `admin/`: those of the installers since the Core key was introduced, including
+the release that added `AGENTS_API_PUBLIC_URL`. Plain `./install.sh` refuses them.
+Convert one with this release's bundle:
 
 ```sh
 ./install.sh --convert --install-dir "$HOME/.parsar/core"
@@ -358,19 +359,23 @@ with the same Compose project, database and installation ID.
 It stops before changing anything, and lists each reason, when an item can't be
 converted: an edited `compose.json`, an unknown or edited generated value in
 `core.env`, an external database, or an installation public URL that differs from
-the sandbox deployment's Core URL. For the last case, rerun with
+the sandbox deployment's Core URL. An `AGENTS_API_PUBLIC_URL` set by hand in
+`core.env` is the address Core uses, so it becomes `public_url`. For the last case, rerun with
 `--public-url` naming one of the two; choosing the installation's URL means the
 deployment's nodes must be removed and added again. Hand-set settings such as
 `AGENTS_API_EXECUTION_CONCURRENCY`, `PARSAR_LOG_*` or a Runtime history file move
 into `config.json`. An existing `AGENTS_API_EXECUTION_OPTIONS_FILE` and its file
-stay as they are and are reported; `config.json` holds no model settings. Unknown
+stay as they are and are reported; `config.json` holds no model settings. A
+Runtime history file inside the installation is removed once `config.json` holds
+its settings; one elsewhere is reported as a second copy to delete. Unknown
 files in `config/` and `admin/` are reported and left in place, and a public URL
 that differs from Core's canonical form only by letter case is lowercased. Secret
 files that are links or readable by other users stop the conversion before
 anything changes.
 
 If conversion is interrupted, or the new release fails to start afterwards, fix the
-cause and rerun the same `--convert` command to finish it. In a split deployment,
+cause and rerun `./install.sh --convert` with the same bundle to finish it;
+`--public-url` may be repeated but not changed. In a split deployment,
 convert the Core host first, then each Web-only host. A Web-only host converted
 first keeps working; after its Core is converted, run its `parsar apply` to record
 which Core it is paired with.

@@ -1717,8 +1717,11 @@ across upgrades. This is the same managed Runtime, not user-managed enrollment.
 Every process setting has one home: the installation's private `config.json`,
 described by `deploy/install/config.schema.json`. The operator edits only that
 file; `parsar apply` validates it, derives `generated/` (Compose file, `core.env`,
-native unit, Core key digest file, settings snapshot) and recreates or restarts
-exactly the services whose inputs changed. Installation flags only seed it, and
+native unit, Core key digest file, settings snapshot) and converges on what actually
+runs: each service carries the digest of its inputs (Compose label
+`io.parsar.inputs`, native `PARSAR_INPUTS`), and exactly the services whose running
+inputs differ are recreated or restarted. Decide restarts from what runs, never
+from recorded bookkeeping, so the next apply finishes any interrupted one. Installation flags only seed it, and
 rerunning the installer rejects them. Runtime settings stay in PostgreSQL and
 change through Web or `/core/v1`. Secrets live once each in `secrets/`; identity and
 install facts live in tool-written `state.json`. Core still reads only its

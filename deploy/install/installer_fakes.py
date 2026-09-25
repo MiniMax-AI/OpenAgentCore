@@ -1,17 +1,23 @@
 """A fake Docker, systemd and HTTP host for installer tests. Nothing real is started.
 
-Compose is modelled by its observable contract: `up` recreates a service exactly when
-its resolved configuration (including env_file content) changed, and Core loads its
-Core key digests when it starts.
+Compose is modelled by its observable contract: `up` recreates a container exactly
+when its resolved configuration (including env_file content) changed, each container
+keeps the labels it was created with, and Core loads its Core key digests when it
+starts. systemd runs the unit it last loaded; its process keeps the environment it
+started with.
 """
 import hashlib
 import json
 from pathlib import Path
+import re
 import subprocess
 from types import SimpleNamespace
 from unittest import mock
 
+import native_service
 import parsar_cli
+
+LABEL = "io.parsar.inputs"
 
 
 def sha256(data):
@@ -21,10 +27,11 @@ def sha256(data):
 class FakeHost:
     def __init__(self, test):
         self.commands = []
-        self.containers = {}  # service -> configuration hash of its container
-        self.running = set()
+        self.containers = {}  # service -> {hash, inputs, running}
+        self.project = None
         self.recreated = []
-        self.native = {"active": False, "starts": 0, "restarts": 0, "reloads": 0, "addr": None, "digests": []}
+        self.native = {"active": False, "starts": 0, "restarts": 0, "reloads": 0, "addr": None, "digests": [],
+                       "inputs": None, "loaded": None, "environment": ""}
         self.core = {"port": None, "digests": [], "fails": False, "log": ""}
         self.web_port = None
         self.native_root = None  # the installation whose native unit systemctl manages
@@ -34,14 +41,22 @@ class FakeHost:
         self.nodes = []
         self.remote_core = {}  # web-only: origin -> (status, installation_id)
         self.deployment_core_url = ""  # what an old Core reports for its sandbox deployment
-        for target, replacement in ((subprocess, "run"),):
-            patcher = mock.patch.object(target, replacement, side_effect=self.run)
+        for target, name, value in ((subprocess, "run", mock.Mock(side_effect=self.run)),
+                                    (parsar_cli, "http", self.http),
+                                    (parsar_cli, "time", SimpleNamespace(sleep=lambda seconds: None)),
+                                    (native_service, "_process_environment", self.process_environment)):
+            patcher = mock.patch.object(target, name, value)
             patcher.start()
             test.addCleanup(patcher.stop)
-        for name, value in (("http", self.http), ("time", SimpleNamespace(sleep=lambda seconds: None))):
-            patcher = mock.patch.object(parsar_cli, name, value)
-            patcher.start()
-            test.addCleanup(patcher.stop)
+
+    def running(self):
+        return {name for name, item in self.containers.items() if item["running"]}
+
+    def run_container(self, name, port=None, digests=None):
+        """A container of an installation made outside the test, such as an earlier release."""
+        self.containers[name] = {"hash": "external", "inputs": None, "running": True}
+        if name == "core":
+            self.core.update(port=port, digests=digests or [])
 
     # Commands ---------------------------------------------------------------
     def run(self, args, check=False, **kwargs):
@@ -55,6 +70,12 @@ class FakeHost:
         elif args[:3] == ["docker", "image", "inspect"]:
             code = 1 if args[3] in self.missing_images else 0
             stdout = "" if code else args[3] + " linux/amd64"
+        elif args[:2] == ["docker", "ps"]:
+            stdout = "\n".join("id-" + name for name in self.containers)
+        elif args[:2] == ["docker", "inspect"]:
+            stdout = "\n".join(f'{name}\t{self.containers[name]["inputs"] or ""}\t'
+                               f'{"running" if self.containers[name]["running"] else "exited"}\t'
+                               for name in (item[3:] for item in args[4:]) if name in self.containers)
         elif args[0] == "systemctl":
             code, stdout = self.systemctl(args[2:])
         elif args[0] == "loginctl":
@@ -76,36 +97,42 @@ class FakeHost:
     def compose(self, path, args):
         document = json.loads(path.read_text()) if path.exists() else {"services": {}}
         services = document["services"]
-        if args[:1] == ["ps"]:
-            rows = [{"Service": name, "State": "running" if name in self.running else "exited", "Health": ""}
-                    for name in self.containers if name in services]
-            return 0, json.dumps(rows)
         if args[:1] == ["stop"]:
-            self.running -= set(args[1:] or services)
+            for name in args[1:] or services:
+                if name in self.containers:
+                    self.containers[name]["running"] = False
+            return 0, ""
+        if args[:1] == ["restart"]:
+            for name in args[1:]:
+                self.containers[name]["running"] = True
+                if name == "core":
+                    self.load_core(path.parent.parent, services[name])
             return 0, ""
         if args[:1] == ["logs"]:
             return 0, self.core["log"]
-        if args[:1] == ["exec"]:
-            return 0, ""
         if args[:1] == ["up"]:
             targets = [item for item in args[1:] if not item.startswith("-") and not item.isdigit()]
-            names = list(services) if not targets else [name for name in ("database", "migrate", "core")
-                                                         if name in services]
+            names = list(services) if not targets else [
+                name for name in ("database", "migrate", *targets) if name in services and
+                (name in targets or name in ("database", "migrate") and "core" in targets)]
             for name in names:
                 digest = self.service_hash(document, name)
-                if self.containers.get(name) != digest:
-                    self.containers[name] = digest
+                current = self.containers.get(name)
+                if current is None or current["hash"] != digest:
+                    self.containers[name] = {"hash": digest, "inputs": services[name].get("labels", {}).get(LABEL),
+                                             "running": False}
                     self.recreated.append(name)
                     if name == "core":
                         self.load_core(path.parent.parent, services[name])
                 if name != "migrate":
-                    self.running.add(name)
+                    self.containers[name]["running"] = True
             if "web" in names:
                 web = services["web"]
                 self.web_port = int(web["ports"][0].split(":")[1]) if "ports" in web else int(
                     web["environment"]["CORE_CONSOLE_ADDR"].rsplit(":", 1)[1])
             if "core" in names and self.core["fails"]:
-                self.running.discard("core")
+                self.containers["core"]["running"] = False
+                self.core["failed"] = True
                 return 1, ""
         return 0, ""
 
@@ -115,16 +142,29 @@ class FakeHost:
         digests = root / "generated/core-key-digests.json"
         self.core["digests"] = json.loads(digests.read_text()) if digests.exists() else json.loads(
             (root / "admin/core-key-digests.json").read_text())
+        environment = root / "generated/core.env"
+        self.core["environment"] = environment.read_text() if environment.exists() else ""
+
+    def unit_file(self):
+        found = sorted(self.native_root.glob("generated/parsar-*-core.service")) + \
+            sorted(self.native_root.glob("config/parsar-*-core.service"))
+        return found[0].read_text() if found else ""
 
     def systemctl(self, args):
         native = self.native
         if args[0] == "daemon-reload":
             native["reloads"] += 1
+            native["loaded"] = self.unit_file()
         elif args[0] in ("enable", "restart", "start"):
             if args[0] != "restart" and native["active"]:
                 return 0, ""  # systemd leaves an active unit alone on start and enable --now
             native["starts" if args[0] != "restart" else "restarts"] += 1
+            if native["loaded"] is None:
+                native["loaded"] = self.unit_file()
             native["active"] = not self.core["fails"]
+            self.core["failed"] = self.core.get("failed") or self.core["fails"]
+            match = re.search(r"^Environment=PARSAR_INPUTS=(\w+)$", native["loaded"], re.M)
+            native["inputs"] = match[1] if match and native["active"] else None
             root = self.native_root
             for environment, digests in ((root / "generated/core.env", root / "generated/core-key-digests.json"),
                                          (root / "config/core.env", root / "admin/core-key-digests.json")):
@@ -136,16 +176,21 @@ class FakeHost:
                     native["environment"] = environment.read_text()
                     break
         elif args[0] in ("stop", "disable"):
-            native["active"] = False
+            native["active"], native["inputs"] = False, None
         elif args[0] == "is-active":
             return (0 if native["active"] else 3), ""
+        elif args[0] == "show" and "--property=MainPID" in args:
+            return 0, "4242" if native["active"] else "0"
         elif args[0] == "show":
             return 0, "252"
         return 0, ""
 
+    def process_environment(self, pid):
+        return {"PARSAR_INPUTS": self.native["inputs"]} if self.native["inputs"] else {}
+
     # HTTP -------------------------------------------------------------------
     def core_listening(self, port):
-        if "core" in self.running and self.core["port"] == port:
+        if self.containers.get("core", {}).get("running") and self.core["port"] == port:
             return self.core["digests"]
         if self.native["active"] and self.native["addr"] == port:
             return self.native["digests"]
@@ -161,18 +206,21 @@ class FakeHost:
                 return status, json.dumps({"installation_id": installation}).encode()
         port = int(origin.rsplit(":", 1)[1])
         digests = self.core_listening(port)
+        web_up = self.containers.get("web", {}).get("running") and self.web_port == port
         if path == "/healthz":
-            if digests is not None or ("web" in self.running and self.web_port == port):
-                return 200, b"{}"
-            return 0, b""
+            return (200, b"{}") if digests is not None or web_up else (0, b"")
         if path == "/console/auth":
-            return (200, b"{}") if "web" in self.running and self.web_port == port else (0, b"")
+            return (200, b"{}") if web_up else (0, b"")
         if digests is None:
             return 0, b""
         if sha256(key) not in digests:
             return 401, b""
         if path == "/core/v1/installation":
-            return 200, json.dumps({"installation_id": self.core_installation_id,
+            native = self.native["active"] and self.native["addr"] == port
+            environment = self.native["environment"] if native else self.core.get("environment", "")
+            match = re.search(r'^AGENTS_API_PUBLIC_URL="([^"]+)"$', environment, re.M)
+            public = match[1] if match else None
+            return 200, json.dumps({"installation_id": self.core_installation_id, "public_url": public,
                                     "address_bindings": self.bindings}).encode()
         if path == "/core/v1/sandbox/nodes":
             return 200, json.dumps({"data": self.nodes}).encode()

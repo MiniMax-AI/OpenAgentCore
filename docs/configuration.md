@@ -31,15 +31,17 @@ mode `0700`. Keep every file in it private to the installation user.
 | `config.json` | Operator settings; the only file you edit |
 | `parsar` | Management command: `status`, `start`, `stop`, `apply`, `rotate-core-key` |
 | `secrets/` | `core.key`, `credential.key` and `database.password`, one copy each |
-| `state.json` | Installation ID, Compose project, images and applied digests; written by tools only |
+| `state.json` | Installation ID, Compose project, images and the digests of written files; written by tools only |
 | `generated/` | Files derived from `config.json`: `compose.json`, `core.env`, `core-key-digests.json`, `settings.json`, the native unit and `runtime-history.json` when set |
 | `state/e2b/`, `native/`, `node-payload/` | E2B receipts, native Core binaries and the public node payload |
 
-`parsar apply` overwrites `generated/` and records a digest of each file. It
-refuses to run when a generated file was edited by hand; move the change into
-`config.json` and run `parsar apply --discard-edits`, which keeps the edited copy
-as `generated/<file>.edited-<time>`. `parsar status` reports edited files and
-`config.json` changes that are not applied yet.
+`parsar apply` overwrites `generated/` and records the digests of the files it
+writes. A generated file that matches neither those digests nor what `config.json`
+renders now was edited by hand: `apply` refuses to run until you move the change
+into `config.json` and run `parsar apply --discard-edits`, which keeps the edited
+copy as `generated/<file>.edited-<time>`. A missing generated file is simply
+written again. `parsar status` reports edited files, `config.json` changes that are
+not applied yet and services that run with other inputs than `config.json` renders.
 
 ## config.json
 
@@ -54,10 +56,18 @@ from a prepared file instead. Afterwards edit it and run:
 ```
 
 `apply` validates the file first and changes nothing when a value is invalid. It
-then writes the generated files and recreates or restarts exactly the services
-whose inputs changed; stopped services stay stopped. A Web restart ends every Web
-sign-in session. If Core rejects a value at startup, `apply` restores the previous
-files, restarts again and prints Core's startup error line. `mode` and
+then writes the generated files and compares them with what actually runs: each
+Compose container carries the digest of its inputs in the `io.parsar.inputs`
+label, and native Core carries it as `PARSAR_INPUTS` in its process environment.
+`apply` recreates or restarts exactly the services whose running inputs differ,
+Core first, then Web; a Web restart ends every Web sign-in session. When no service
+runs (after `parsar stop`), `apply` only writes the files and the installation
+stays stopped; while any service runs, `apply` also starts the ones that are
+stopped. Because the comparison is with what runs, an interrupted `apply`,
+rotation or rollback is finished by the next `apply`. If Core rejects a value at
+startup and every service was running with the previous files, `apply` restores
+those files, converges on them again and prints Core's startup error line;
+otherwise it reports the failure and leaves the next `apply` to finish. `mode` and
 `native_core` are fixed; install into a new directory to change them. `state.json`
 records both at installation and wins: `apply` refuses a `config.json` that differs,
 and `parsar status` reports it.

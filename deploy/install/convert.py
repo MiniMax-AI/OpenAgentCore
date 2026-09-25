@@ -1,5 +1,9 @@
 """install.sh --convert: move an installation made before config.json to the new layout.
 
+It accepts the layout of the installers since #124 (deploy/install/configuration.py
+at 5c3dcc16) and of #138 (b37e43b9), which changed only config/core.env: the public
+URL, the database password file and no retired variables.
+
 Conversion is also an upgrade to this bundle's release, because the earlier Core does
 not read the new environment names. The preflight changes no file: it builds
 config.json and state.json in memory, and anything it can't convert stops it with
@@ -26,8 +30,11 @@ MAPPED = {"AGENTS_API_EXECUTION_CONCURRENCY", "PARSAR_LOG_LEVEL", "PARSAR_LOG_FO
           "AGENTS_API_OAUTH_TRUSTED_ORIGINS", "AGENTS_API_RUNTIME_HISTORY_FILE", "AGENTS_API_EXECUTION_OPTIONS_FILE",
           "AGENTS_API_DATABASE_URL"}
 DERIVED = ("AGENTS_API_ADDR", "AGENTS_API_CREDENTIAL_KEY_FILE", "AGENTS_API_CORE_KEY_DIGESTS_FILE",
-           "AGENTS_API_SANDBOX_INSTALLATION_ID", "AGENTS_API_CONFIG_FILE", "AGENTS_API_E2B_PROVIDER_BIN",
-           "AGENTS_API_E2B_STATE_DIR", "AGENTS_API_DAEMON_WS_URL")
+           "AGENTS_API_SANDBOX_INSTALLATION_ID", "AGENTS_API_E2B_PROVIDER_BIN", "AGENTS_API_E2B_STATE_DIR")
+# Written before #138 and retired by it; either layout may lack them.
+RETIRED = ("AGENTS_API_DAEMON_WS_URL", "AGENTS_API_CONFIG_FILE")
+# Written since #138.
+PUBLIC_URL, PASSWORD_FILE = "AGENTS_API_PUBLIC_URL", "AGENTS_API_DATABASE_PASSWORD_FILE"
 
 
 class ConvertError(Exception):
@@ -60,6 +67,18 @@ def legacy_core_environment(root, state, database_password):
                                              else "/admin/core-key-digests.json"),
         "AGENTS_API_SANDBOX_INSTALLATION_ID": state["installation_id"],
         "AGENTS_API_CONFIG_FILE": config + "/core.env",
+    }
+
+
+def legacy138_core_environment(root, state):
+    """core.env as the #138 installer wrote it (b37e43b9)."""
+    native = state["native_core"]
+    config = str(Path(root) / "config") if native else "/config"
+    database = f'127.0.0.1:{state["database_port"]}' if native else "database:5432"
+    return {
+        "AGENTS_API_DATABASE_URL": f"postgres://agents_api@{database}/agents_api?sslmode=disable",
+        PASSWORD_FILE: config + "/database.password",
+        PUBLIC_URL: state.get("public_url") or f'http://127.0.0.1:{state["core_port"]}',
     }
 
 
@@ -227,6 +246,12 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
     plan = Plan()
     mode = old["mode"]
     native = bool(old["native_core"]) and mode != "web-only"
+    try:
+        info = os.lstat(root)
+        if not stat.S_ISDIR(info.st_mode) or stat.S_IMODE(info.st_mode) & 0o077 or info.st_uid != os.geteuid():
+            raise OSError
+    except OSError:
+        plan.problem(str(root), "", "must be a directory with mode 0700, owned by you, and not a link")
     private = ["admin/core.key"] + ([] if mode == "web-only" else ["config/credential.key", "config/database.password"])
     for name in private:
         try:
@@ -259,7 +284,7 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
     if mode == "web-only":
         config["web"] = {"core_url": canonical(old.get("core_url"), "web.core_url", plan)}
     config["log"] = {"level": "info", "format": "auto", "add_source": False}
-    retained = None
+    retained, env_public = None, None
     known = {"config": set(), "admin": {"core.key"}}
     if mode != "web-only":
         known["config"] = {"core.env", "credential.key", "database.password"}
@@ -272,7 +297,7 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
             plan.problem("config/core.env", "", "must be a private file of double-quoted literal values")
             env = None
         if env is not None:
-            retained = map_environment(root, old, env, password, config, plan, known)
+            retained, env_public = map_environment(root, old, env, password, config, plan, known)
         try:
             digests = json.loads((root / "admin/core-key-digests.json").read_text())
         except ValueError:
@@ -284,7 +309,7 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
             plan.notes.append(f"admin/core-key-digests.json lists {len(digests) - 1} more Core key digest(s). "
                               "They are dropped; only admin/core.key works after conversion.")
 
-    public = canonical(old.get("public_url"), "public_url", plan, public_url_override)
+    public = env_public or canonical(old.get("public_url"), "public_url", plan, public_url_override)
     if public_url_override is not None and old.get("public_url") and not origin(old["public_url"].lower()):
         public, public_url_override = public_url_override, None
     started = False
@@ -322,7 +347,7 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
                 if entry.name not in known[directory]:
                     plan.leftovers.append(f"{directory}/{entry.name}")
     plan.moves = [("admin/core.key", "secrets/core.key")]
-    plan.deletions = ["compose.json"]
+    plan.deletions = ["compose.json"] + plan.deletions
     if mode != "web-only":
         plan.moves += [("config/credential.key", "secrets/credential.key"),
                        ("config/database.password", "secrets/database.password")]
@@ -335,30 +360,49 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
         "source_commit": bundle_manifest["source_commit"], "images": images,
         "secrets_sha256": {Path(target).name: configuration.sha256((root / source).read_bytes())
                            for source, target in plan.moves if target != "secrets/core.key"},
-        "core_installation_id": None, "execution_options_file": retained, "applied": None,
+        "core_installation_id": None, "execution_options_file": retained, "generated": {}, "local_node": None,
         "converted_from": {"source_commit": old["source_commit"],
-                           "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}}
+                           "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                           "remove": [name for name in plan.deletions if name.startswith(("config/", "state/"))]}}
     return old, plan, started
 
 
 def map_environment(root, old, env, password, config, plan, known):
-    expected = legacy_core_environment(root, old, password)
+    """Map config/core.env into config.json; return the retained options file and a set public URL."""
+    before, since = legacy_core_environment(root, old, password), legacy138_core_environment(root, old)
+    where = "config/core.env"
     for name in DERIVED:
-        if env.get(name) != expected[name]:
-            plan.problem("config/core.env", name, "differs from the value the installer generated; restore it")
-    for name in sorted(set(env) - set(DERIVED) - MAPPED):
-        plan.problem("config/core.env", name, "is not a setting config.json can hold; remove it")
+        if name in env and env[name] != before[name]:
+            plan.problem(where, name, "differs from the value the installer generated, and config.json can't hold "
+                         "it; undo the edit")
+    for name in RETIRED:
+        if name in env and env[name] != before[name]:
+            plan.problem(where, name, "is retired and was edited; remove the line")
+    if PASSWORD_FILE in env and env[PASSWORD_FILE] != since[PASSWORD_FILE]:
+        plan.problem(where, PASSWORD_FILE, "names another file; only the installation's config/database.password "
+                     "can be converted")
+    public = None
+    if PUBLIC_URL in env and env[PUBLIC_URL] != since[PUBLIC_URL]:
+        # Set by hand when Core was upgraded in place: it is the address Core uses.
+        public = canonical(env[PUBLIC_URL], "AGENTS_API_PUBLIC_URL", plan)
+        plan.notes.append(f"public_url is taken from AGENTS_API_PUBLIC_URL in config/core.env, the address Core uses.")
+    for name in sorted(set(env) - set(DERIVED) - set(RETIRED) - {PUBLIC_URL, PASSWORD_FILE} - MAPPED):
+        plan.problem(where, name, "is not a setting config.json can hold; remove it")
     base, _, query = env.get("AGENTS_API_DATABASE_URL", "").partition("?")
-    pool = {}
     parameters = parse_qsl(query, keep_blank_values=True)
-    if base + "?sslmode=disable" != expected["AGENTS_API_DATABASE_URL"] or ("sslmode", "disable") not in parameters:
-        plan.problem("config/core.env", "AGENTS_API_DATABASE_URL", "names another database, user or password; "
+    with_password = before["AGENTS_API_DATABASE_URL"].partition("?")[0]
+    without_password = since["AGENTS_API_DATABASE_URL"].partition("?")[0]
+    if base not in (with_password, without_password) or ("sslmode", "disable") not in parameters:
+        plan.problem(where, "AGENTS_API_DATABASE_URL", "names another database, user or password; "
                      "only the installation's own PostgreSQL can be converted")
+    elif base == without_password and PASSWORD_FILE not in env:
+        plan.problem(where, "AGENTS_API_DATABASE_URL", f"has no password and {PASSWORD_FILE} is not set")
+    pool = {}
     for name, value in parameters:
         if name == "sslmode":
             continue
         if name not in POOL or POOL[name] in pool:
-            plan.problem("config/core.env", "AGENTS_API_DATABASE_URL", f"query parameter {name} can't be converted")
+            plan.problem(where, "AGENTS_API_DATABASE_URL", f"query parameter {name} can't be converted")
             continue
         pool[POOL[name]] = int(value) if value.isdigit() and POOL[name].endswith("conns") else value
     core = {"database_pool": {key: pool.get(key) for key, _ in configuration.POOL}}
@@ -375,10 +419,14 @@ def map_environment(root, old, env, password, config, plan, known):
         path = host_path(root, old, env["AGENTS_API_RUNTIME_HISTORY_FILE"])
         try:
             core["runtime_history"] = json.loads(path.read_text())
-            plan.notes.append(f"Runtime history settings from {path} are now in config.json. The file is kept; "
-                              "delete it if it holds export credentials.")
-            if path.parent == root / "config":
+            if path.parent in (root / "config", root / "state/e2b"):
+                # config.json holds the settings now; the old copy may hold export credentials.
+                plan.deletions.append(str(path.relative_to(root)))
                 known["config"].add(path.name)
+                plan.notes.append(f"Runtime history settings move from {path} into config.json; the old file is removed.")
+            else:
+                plan.notes.append(f"Runtime history settings from {path} are now in config.json. Delete {path}, "
+                                  "which may hold export credentials; it is a second copy.")
         except (AttributeError, OSError, ValueError):
             plan.problem("config/core.env", "AGENTS_API_RUNTIME_HISTORY_FILE", "names a file that can't be read as JSON")
     retained = None
@@ -402,7 +450,7 @@ def map_environment(root, old, env, password, config, plan, known):
     if any(name.startswith("PARSAR_LOG_") for name in env):
         plan.notes.append("PARSAR_LOG_* had no effect before this release; the log settings now apply.")
     config["core"] = core
-    return retained
+    return retained, public
 
 
 # Steps -----------------------------------------------------------------------
@@ -464,7 +512,16 @@ def finish_layout(root, old, moves, deletions):
     (root / "installation.json").unlink()
 
 
-def resume(root, out):
+def check_resumed_public_url(root, value):
+    """A resumed conversion keeps the public URL it chose; --public-url may only repeat it."""
+    if value is not None:
+        chosen = json.loads((root / "config.json").read_text()).get("public_url")
+        if value != chosen:
+            raise ConvertError(f"This conversion already set public_url to {chosen}; rerun without --public-url, "
+                               "and change it in config.json after the conversion")
+
+
+def resume(root, state, out):
     old = json.loads((root / "installation.json").read_text())
     moves = [("admin/core.key", "secrets/core.key")]
     deletions = ["compose.json"]
@@ -474,6 +531,7 @@ def resume(root, out):
         deletions += ["config/core.env", "admin/core-key-digests.json"]
         if native_service.is_native(old):
             deletions.append("config/" + native_service.unit_name(old))
+    deletions += [name for name in state["converted_from"].get("remove", []) if name not in deletions]
     out("Resuming an interrupted conversion.")
     finish_layout(root, old, moves, deletions)
 
@@ -482,8 +540,12 @@ def convert(root, manifest, load_images, public_url_override, yes, run, interact
     """Steps 1-5. The caller then loads the bundle's files and applies (step 6)."""
     interactive = sys.stdin.isatty() if interactive is None else interactive
     if (root / "config.json").exists():
-        load_images(json.loads((root / "state.json").read_text())["images"])
-        resume(root, out)
+        state = json.loads((root / "state.json").read_text())
+        if state["source_commit"] != manifest["source_commit"]:
+            raise ConvertError("Finish the conversion with the bundle it started with, release " + state["source_commit"])
+        check_resumed_public_url(root, public_url_override)
+        load_images(state["images"])
+        resume(root, state, out)
         return
     old = detect(root)
     wanted = ["web"] if old["mode"] == "web-only" else (["database"] if old["native_core"] else ["core", "database"])

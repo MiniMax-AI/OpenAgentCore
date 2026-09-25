@@ -73,7 +73,7 @@ class InstallerTests(unittest.TestCase):
         for path in [self.root, *self.root.rglob("*")]:
             expected = 0o700 if path.is_dir() or path.name == "parsar" else 0o600
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), expected, path)
-        self.assertEqual(self.host.running, {"database", "core", "web"})
+        self.assertEqual(self.host.running(), {"database", "core", "web"})
         output = self.output.getvalue()
         for name in ("core.key", "credential.key", "database.password"):
             self.assertNotIn((self.root / "secrets" / name).read_text(), output)
@@ -184,11 +184,20 @@ class InstallerTests(unittest.TestCase):
             with self.subTest(flags=flags), self.assertRaisesRegex(install.InstallError, message):
                 self.install(*flags)
             self.assertFalse(self.root.exists())
-        with mock.patch.object(install.local_node, "install") as enroll:
+        # A first start that fails leaves the local node to the repair run, which takes no flags.
+        self.host.core["fails"] = True
+        with mock.patch.object(install.local_node, "install") as enroll, \
+                self.assertRaisesRegex(install.parsar_cli.ParsarError, f"rerun ./install.sh --install-dir {self.root}$"):
             self.install("--sandbox-provider", "true", "--provider", "docker", "--public-url", "https://core.example")
+        enroll.assert_not_called()
+        self.assertEqual(self.document("state.json")["local_node"], "docker")
+        self.host.core["fails"] = False
+        with mock.patch.object(install.local_node, "install") as enroll:
+            self.install()
         state = enroll.call_args.args[1]
         self.assertEqual((state["provider"], state["core_port"], state["public_url"]), ("docker", 8091, "https://core.example"))
         self.assertNotIn("provider", self.document("config.json"))
+        self.assertIsNone(self.document("state.json")["local_node"])
 
     def test_node_payload_exports_only_matched_distribution_files(self):
         self.install()
