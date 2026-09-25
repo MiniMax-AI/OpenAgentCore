@@ -110,6 +110,7 @@ class ConvertTests(unittest.TestCase):
         self.assertEqual((state["installation_id"], state["project"]), ("94be54a1-138c-4f30-bc87-b13686272dbe", "parsar-0123456789"))
         self.assertEqual(state["source_commit"], "a" * 40)
         self.assertEqual(state["converted_from"]["source_commit"], "b" * 40)
+        self.assertEqual(set(state["secrets_sha256"]), {"credential.key", "database.password"})
         for name, inode in inodes.items():
             self.assertEqual((self.root / "secrets" / name).stat().st_ino, inode)
         for name in ("installation.json", "compose.json", "config/core.env", "config/credential.key",
@@ -139,6 +140,16 @@ class ConvertTests(unittest.TestCase):
         self.assertNotIn("web", self.document("generated/compose.json")["services"])
         self.assertIn("adopted from the sandbox deployment", self.output.getvalue())
 
+    def test_web_only_converts_before_its_core(self):
+        self.legacy("web-only", core_url="https://core.example")
+        self.host.remote_core["https://core.example"] = (404, None)
+        self.convert()
+        self.assertIsNone(self.document("state.json")["core_installation_id"])
+        self.assertIn("the paired Core runs an earlier release", self.output.getvalue())
+        self.host.remote_core["https://core.example"] = (200, self.host.core_installation_id)
+        install.parsar_cli.apply(self.root, interactive=False, out=lambda line: None)
+        self.assertEqual(self.document("state.json")["core_installation_id"], self.host.core_installation_id)
+
     def test_web_only_moves_only_the_core_key(self):
         self.legacy("web-only", core_url="https://core.example", public_url="https://console.example")
         self.convert()
@@ -152,7 +163,11 @@ class ConvertTests(unittest.TestCase):
 
     def test_native_core_keeps_its_unit_name_and_database_port(self):
         self.legacy(native=True)
+        # As after an interrupted conversion: the old unit is disabled, so it starts by path.
+        self.host.native["active"] = False
         self.convert()
+        self.assertIn(["systemctl", "--user", "enable", "--now", str(self.root / "config/parsar-0123456789-core.service")],
+                      self.host.commands)
         config = self.document("config.json")
         self.assertEqual((config["native_core"], config["ports"]["database"]), (True, 15432))
         self.assertIn(["systemctl", "--user", "disable", "--now", "parsar-0123456789-core.service"], self.host.commands)
@@ -176,6 +191,28 @@ class ConvertTests(unittest.TestCase):
             self.assertIn(part, message)
         self.assertEqual(self.snapshot(), before)
 
+    def test_unsafe_secret_files_are_refused_without_changes(self):
+        self.legacy()
+        password = self.root / "config/database.password"
+        elsewhere = self.work / "elsewhere.password"
+        elsewhere.write_bytes(password.read_bytes())
+        password.unlink()
+        password.symlink_to(elsewhere)
+        (self.root / "admin/core.key").chmod(0o644)
+        before = self.snapshot()
+        with self.assertRaises(convert.ConvertError) as raised:
+            self.convert()
+        for name in ("admin/core.key", "config/database.password"):
+            self.assertIn(name + ": must be a private regular file", str(raised.exception))
+        self.assertEqual(self.snapshot(), before)
+
+    def test_old_uppercase_public_url_is_lowercased(self):
+        self.legacy(public_url="https://Core.Example")
+        self.host.deployment_core_url = "https://core.example"
+        self.convert()
+        self.assertEqual(self.document("config.json")["public_url"], "https://core.example")
+        self.assertIn("is written as https://core.example", self.output.getvalue())
+
     def test_conflicting_public_addresses_need_an_explicit_choice(self):
         self.legacy(public_url="https://core.example")
         self.host.deployment_core_url = "https://nodes.example"
@@ -185,6 +222,18 @@ class ConvertTests(unittest.TestCase):
         self.assertEqual(self.snapshot(), before)
         self.convert("--public-url", "https://nodes.example")
         self.assertEqual(self.document("config.json")["public_url"], "https://nodes.example")
+
+    def test_failed_first_start_is_finished_by_rerunning_convert(self):
+        self.legacy()
+        self.host.core["fails"] = True
+        with self.assertRaisesRegex(install.parsar_cli.ParsarError, "rerun install.sh"):
+            self.convert()
+        self.host.core["fails"] = False
+        self.convert()
+        self.assertEqual(self.host.running, {"database", "core", "web"})
+        self.assertIsNotNone(self.document("state.json")["applied"])
+        with self.assertRaisesRegex(install.InstallError, "already uses config.json"):
+            self.convert()
 
     def test_interrupted_conversion_resumes(self):
         self.legacy()

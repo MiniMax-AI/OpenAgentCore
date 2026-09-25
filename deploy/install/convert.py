@@ -11,9 +11,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import stat
-import subprocess
 import sys
 from urllib.parse import parse_qsl, urlsplit
 
@@ -185,6 +183,24 @@ class Plan:
         self.problems.append(f"{where}{': ' + key if key else ''}: {reason}")
 
 
+def origin(value):
+    return config_model.CHECKS["origin"][0](value)
+
+
+def canonical(value, key, plan, override=None):
+    """An earlier installer kept the case it was given; lowercase it when that is the only problem."""
+    if value is None or origin(value):
+        return value
+    if origin(value.lower()):
+        plan.notes.append(f"{key} {value} is written as {value.lower()}, the canonical form Core requires.")
+        return value.lower()
+    if override is None:
+        remedy = ("rerun with --public-url naming the canonical origin" if key == "public_url"
+                  else "install Web again with a canonical --core-url")
+        plan.problem("installation.json", key, f"{value} is not a canonical origin ({config_model.CHECKS['origin'][1]}); {remedy}")
+    return value
+
+
 def old_core_deployment(root, old, plan, run):
     """Read the sandbox deployment's core_url from the old Core, starting it with its old files."""
     base = f'http://127.0.0.1:{old["core_port"]}'
@@ -192,7 +208,8 @@ def old_core_deployment(root, old, plan, run):
     if parsar_cli.http(base + "/healthz")[0] != 200:
         run(["docker", "compose", "-f", str(root / "compose.json"), "up", "--detach", "--wait"])
         if native_service.is_native(old):
-            run(["systemctl", "--user", "start", native_service.unit_name(old)])
+            # By path: an interrupted conversion may already have disabled the unit.
+            run(["systemctl", "--user", "enable", "--now", str(root / "config" / native_service.unit_name(old))])
         started = True
         parsar_cli.wait_status(base + "/healthz")
     key = (root / "admin/core.key").read_text().strip()
@@ -210,6 +227,14 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
     plan = Plan()
     mode = old["mode"]
     native = bool(old["native_core"]) and mode != "web-only"
+    private = ["admin/core.key"] + ([] if mode == "web-only" else ["config/credential.key", "config/database.password"])
+    for name in private:
+        try:
+            parsar_cli.check_private(root / name, name)
+        except parsar_cli.ParsarError:
+            plan.problem(name, "", "must be a private regular file (mode 0600, owned by you, not a link); fix it and rerun")
+    if plan.problems:
+        return old, plan, False
     if (root / "config/managed-runtimes.json").exists():
         plan.problem("config/managed-runtimes.json", "", "retired file-managed provider configuration; preserve its "
                      "resources and follow the deployment replacement guide")
@@ -232,7 +257,7 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
         ports["database"] = old["database_port"]
     config["ports"] = ports
     if mode == "web-only":
-        config["web"] = {"core_url": old.get("core_url")}
+        config["web"] = {"core_url": canonical(old.get("core_url"), "web.core_url", plan)}
     config["log"] = {"level": "info", "format": "auto", "add_source": False}
     retained = None
     known = {"config": set(), "admin": {"core.key"}}
@@ -259,7 +284,9 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
             plan.notes.append(f"admin/core-key-digests.json lists {len(digests) - 1} more Core key digest(s). "
                               "They are dropped; only admin/core.key works after conversion.")
 
-    public = old.get("public_url")
+    public = canonical(old.get("public_url"), "public_url", plan, public_url_override)
+    if public_url_override is not None and old.get("public_url") and not origin(old["public_url"].lower()):
+        public, public_url_override = public_url_override, None
     started = False
     if mode != "web-only" and not plan.problems:
         deployment, started = old_core_deployment(root, old, plan, run)
@@ -307,7 +334,7 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
         "uid": old["uid"], "gid": old["gid"], "mode": mode, "native_core": native,
         "source_commit": bundle_manifest["source_commit"], "images": images,
         "secrets_sha256": {Path(target).name: configuration.sha256((root / source).read_bytes())
-                           for source, target in plan.moves},
+                           for source, target in plan.moves if target != "secrets/core.key"},
         "core_installation_id": None, "execution_options_file": retained, "applied": None,
         "converted_from": {"source_commit": old["source_commit"],
                            "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}}

@@ -121,13 +121,20 @@ class FakeHost:
         if args[0] == "daemon-reload":
             native["reloads"] += 1
         elif args[0] in ("enable", "restart", "start"):
+            if args[0] != "restart" and native["active"]:
+                return 0, ""  # systemd leaves an active unit alone on start and enable --now
             native["starts" if args[0] != "restart" else "restarts"] += 1
             native["active"] = not self.core["fails"]
-            if (self.native_root / "generated/core.env").exists():
-                environment = (self.native_root / "generated/core.env").read_text()
-                address = next(line for line in environment.splitlines() if line.startswith("AGENTS_API_ADDR="))
-                native["addr"] = int(address.rsplit(":", 1)[1].rstrip('"'))
-                native["digests"] = json.loads((self.native_root / "generated/core-key-digests.json").read_text())
+            root = self.native_root
+            for environment, digests in ((root / "generated/core.env", root / "generated/core-key-digests.json"),
+                                         (root / "config/core.env", root / "admin/core-key-digests.json")):
+                if environment.exists():
+                    address = next(line for line in environment.read_text().splitlines()
+                                   if line.startswith("AGENTS_API_ADDR="))
+                    native["addr"] = int(address.rsplit(":", 1)[1].rstrip('"'))
+                    native["digests"] = json.loads(digests.read_text())
+                    native["environment"] = environment.read_text()
+                    break
         elif args[0] in ("stop", "disable"):
             native["active"] = False
         elif args[0] == "is-active":

@@ -364,8 +364,16 @@ deployment's nodes must be removed and added again. Hand-set settings such as
 `AGENTS_API_EXECUTION_CONCURRENCY`, `PARSAR_LOG_*` or a Runtime history file move
 into `config.json`. An existing `AGENTS_API_EXECUTION_OPTIONS_FILE` and its file
 stay as they are and are reported; `config.json` holds no model settings. Unknown
-files in `config/` and `admin/` are reported and left in place. If conversion is
-interrupted, rerun the same command to finish it.
+files in `config/` and `admin/` are reported and left in place, and a public URL
+that differs from Core's canonical form only by letter case is lowercased. Secret
+files that are links or readable by other users stop the conversion before
+anything changes.
+
+If conversion is interrupted, or the new release fails to start afterwards, fix the
+cause and rerun the same `--convert` command to finish it. In a split deployment,
+convert the Core host first, then each Web-only host. A Web-only host converted
+first keeps working; after its Core is converted, run its `parsar apply` to record
+which Core it is paired with.
 
 ## Expose Core and Web
 

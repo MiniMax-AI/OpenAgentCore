@@ -7,7 +7,6 @@ import json
 import os
 from pathlib import Path
 import runpy
-import shutil
 import stat
 import subprocess
 import sys
@@ -18,7 +17,7 @@ from unittest import mock
 import config_model
 import distribution
 import install
-from installer_fakes import MANIFEST, FakeHost, make_bundle, run_installer, write_checksums
+from installer_fakes import MANIFEST, FakeHost, make_bundle, run_installer
 
 
 class InstallerTests(unittest.TestCase):

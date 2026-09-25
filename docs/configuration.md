@@ -58,13 +58,16 @@ then writes the generated files and recreates or restarts exactly the services
 whose inputs changed; stopped services stay stopped. A Web restart ends every Web
 sign-in session. If Core rejects a value at startup, `apply` restores the previous
 files, restarts again and prints Core's startup error line. `mode` and
-`native_core` are fixed; install into a new directory to change them.
+`native_core` are fixed; install into a new directory to change them. `state.json`
+records both at installation and wins: `apply` refuses a `config.json` that differs,
+and `parsar status` reports it.
 
 Changing `public_url` moves everything Core derives from it: the daemon
 WebSocket URL, the self-hosted `remote_url`, the hosted sandbox bootstrap URL and
 node configuration. When nodes, hosted sandboxes or self-hosted executors are bound
 to the current address, `apply` lists them and asks you to type the new URL
-(`--confirm-public-url-change URL` when non-interactive). Nodes on the old address
+(`--confirm-public-url-change URL` when non-interactive); it also asks when the
+applied value can't be read. Nodes on the old address
 then get no new sandboxes and must be removed and added again. With
 `public_url: null`, Core uses `http://127.0.0.1:<ports.core>` and only local access
 works; set a real HTTPS URL later without reinstalling.

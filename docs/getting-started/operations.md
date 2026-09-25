@@ -122,7 +122,10 @@ The command asks for confirmation (`--yes` skips it), stops Web, writes a new
 64-character key to `secrets/core.key`, regenerates the digest file, restarts Core
 and waits until it is healthy, then starts Web. It checks that Core accepts the
 new key and rejects the old one. The old key stops working at once, and every Web
-sign-in session ends: sign in again with the new key and update your scripts.
+sign-in session ends: sign in again with the new key and update your scripts. If
+the command stops before the new key is recorded, the current key stays. If it
+stops later, `parsar status` reports that Core rejects the key in `secrets/core.key`;
+run `parsar stop` and `parsar start`.
 
 A separate Web-only installation keeps its own copy of the key. After rotating,
 copy `secrets/core.key` from the Core host to that installation's

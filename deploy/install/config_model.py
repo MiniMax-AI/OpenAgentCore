@@ -62,30 +62,23 @@ def lookup(config, key):
 
 # Checks named by x-parsar.check. Core stays the authority for its own semantic rules.
 def _origin(value, https_only=False):
-    """Mirror of Core's ValidateSandboxCoreURL: a canonical origin, HTTP only on loopback."""
-    match = re.fullmatch(r"(https?)://([^/?#@\\\s%]+)", value)
-    if not match or match[2] != match[2].lower() or match[2].endswith(":"):
+    """Core's ValidateSandboxCoreURL rule: a canonical ASCII origin, HTTP only on a loopback host.
+
+    IPv6 literals are refused as the installer refuses them; names are lowercase
+    letters, digits and inner hyphens, with no trailing dot; ports have no leading zero.
+    """
+    match = re.fullmatch(r"(https?)://([a-z0-9.-]+)(?::([0-9]+))?", value)
+    if not match:
         return False
-    scheme, host = match[1], match[2]
-    port = None
-    if host.startswith("["):
-        bracket = re.fullmatch(r"\[([^\]]+)\](?::([0-9]+))?", host)
-        if not bracket:
-            return False
-        name, port = bracket[1], bracket[2]
-    else:
-        name, _, port = host.partition(":")
-        port = port or None
-    if port is not None and (not port.isdigit() or str(int(port)) != port or not 1 <= int(port) <= 65535):
+    scheme, name, port = match.groups()
+    if port is not None and (str(int(port)) != port or not 1 <= int(port) <= 65535):
         return False
     try:
-        loopback = ipaddress.ip_address(name).is_loopback
+        loopback = ipaddress.IPv4Address(name).is_loopback
     except ValueError:
-        if host.startswith("[") or len(name) > 253:
+        if len(name) > 253 or not all(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
+                                      for label in name.split(".")):
             return False
-        for label in name.split("."):
-            if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label):
-                return False
         loopback = name == "localhost"
     if https_only:
         return scheme == "https"

@@ -151,10 +151,16 @@ def plan_running(state, services, was_running, start):
     return result
 
 
-def converge(root, state, services, was_running, core_port, start=False, reload_unit=False, core_first=False):
-    """Bring the services that run to the written files. Stopped services stay stopped."""
+def converge(root, state, services, was_running, core_port, restarts=(), start=False, reload_unit=False,
+             core_first=False):
+    """Bring the services that run to the written files. Stopped services stay stopped.
+
+    Compose recreates exactly the containers whose configuration changed. Native Core
+    restarts only when its inputs changed; `enable --now` leaves an active unit alone.
+    """
     native = native_service.is_native(state)
     will_run = plan_running(state, services, was_running, start)
+    restart_native = native and "core" in was_running and "core" in restarts
     if native and reload_unit:
         native_service.daemon_reload()
     if core_first and "core" in will_run:
@@ -170,7 +176,7 @@ def converge(root, state, services, was_running, core_port, start=False, reload_
         if start:
             migrate_native(root)
             native_service.start(root, state)
-        else:
+        if restart_native:
             native_service.restart(state)
 
 
@@ -285,12 +291,19 @@ def execution_options_import(root, state, out):
 
 
 def edited_files(root, state):
-    """Generated files whose content differs from what the last apply wrote."""
+    """Generated files whose content differs from what an apply wrote.
+
+    An apply records the digests it is about to write as `pending` before writing,
+    so a run interrupted between the files and state.json is not mistaken for edits.
+    """
+    applied = (state.get("applied") or {}).get("files") or {}
+    pending = state.get("pending") or {}
     edited = []
-    for name, digest in ((state.get("applied") or {}).get("files") or {}).items():
+    for name in sorted(set(applied) | set(pending)):
         path = root / "generated" / name
         current = None if path.is_symlink() or not path.is_file() else configuration.sha256(path.read_bytes())
-        if current != digest:
+        # A file the last apply did not write may be absent; so may one an interrupted run removed.
+        if current not in ({applied.get(name), pending.get(name)} if pending else {applied.get(name)}):
             edited.append(name)
     return edited
 
@@ -307,22 +320,27 @@ def previous_values(root, state, edited):
     return values
 
 
-def confirm_public_url(root, config, previous, was_running, args, interactive, out):
-    """Changing the public URL strands what is bound to the old one; list it and confirm."""
-    old = configuration.local_public_url({"public_url": previous["public_url"],
-                                          "ports": {"core": previous["ports.core"]}})
+def confirm_public_url(root, config, old, core_port, was_running, args, interactive, out):
+    """Changing the public URL strands what is bound to the old one; list it and confirm.
+
+    old is the applied public URL, or None when it can't be read; then the change
+    always needs confirmation.
+    """
     new = configuration.local_public_url(config)
     if old == new:
         return
     counts, nodes = None, []
-    if "core" in was_running:
-        base, key = f'http://127.0.0.1:{previous["ports.core"]}', configuration.read_core_key(root)
+    if "core" in was_running and old is not None:
+        base, key = f"http://127.0.0.1:{core_port}", configuration.read_core_key(root)
         status, body = http(base + "/core/v1/installation", bearer(key))
         if status == 200:
             counts = json.loads(body).get("address_bindings") or {}
             status, body = http(base + "/core/v1/sandbox/nodes", bearer(key))
             nodes = json.loads(body).get("data", []) if status == 200 else []
-    out(f"The public URL changes from {old} to {new}.")
+    if old is None:
+        out(f"The applied public URL can't be read, so the change to {new} needs confirmation.")
+    else:
+        out(f"The public URL changes from {old} to {new}.")
     if counts is not None:
         out(f'Bound to the current address: {counts.get("nodes", 0)} node(s), '
             f'{counts.get("hosted_sandboxes", 0)} hosted sandbox(es), '
@@ -331,7 +349,7 @@ def confirm_public_url(root, config, previous, was_running, args, interactive, o
             out(f'  node {node.get("name")}: {"online" if node.get("online") else "offline"}')
         if not any(counts.get(name) for name in ("nodes", "hosted_sandboxes", "self_hosted_executors")):
             return
-    else:
+    elif old is not None:
         out("Core is not running, so the nodes, sandboxes and executors bound to the address can't be counted.")
     out("After the change, nodes on the old address get no new sandboxes; remove them in Web and add them again.\n"
         "Existing sandboxes and executors keep working only while the old address still reaches this Core, so\n"
@@ -360,6 +378,9 @@ def check_paired_core(root, config, state, args, interactive, out):
     if status == 401:
         out("Warning: Core rejects this Web host's Core key; the key is out of date. "
             "Copy secrets/core.key from the Core host, then run parsar apply.")
+    elif status == 404:
+        out("Note: the paired Core runs an earlier release without /core/v1/installation. Convert or upgrade the "
+            "Core host, then run parsar apply here to record which Core Web is paired with.")
     if status != 200:
         return state.get("core_installation_id")
     recorded = state.get("core_installation_id")
@@ -389,7 +410,10 @@ def apply(root, dry_run=False, yes=False, discard_edits=False, confirm_public_ur
         return _apply(root, args, discard_edits, start, interactive, out)
 
 
-def _apply(root, args, discard_edits, start, interactive, out, core_first=False, was_running=None, restore=None):
+def _apply(root, args, discard_edits, start, interactive, out, core_first=False, was_running=None, restore=None,
+           progress=None):
+    """Plan and apply config.json. progress["committed"] is true while state.json holds the new apply."""
+    progress = {} if progress is None else progress
     config, config_digest = load_config(root)
     state = load_state(root)
     check_fixed(config, state)
@@ -402,12 +426,19 @@ def _apply(root, args, discard_edits, start, interactive, out, core_first=False,
                           + "\nPut the change in config.json and run parsar apply --discard-edits, which keeps the"
                           " edited copy as generated/<file>.edited-<time>. Nothing was applied.")
     previous = previous_values(root, state, edited)
-    rendered = configuration.render(root, config, state, applied.get("at") or now())
-    before = read_generated(root, set(rendered.files) | set(applied.get("files") or {}))
-    changed = [name for name, text in rendered.files.items() if before[name] != text.encode()]
-    removed = [name for name in (applied.get("files") or {}) if name not in rendered.files and before[name] is not None]
+    names = set(applied.get("files") or {}) | set(state.get("pending") or {})
+
+    def plan(applied_at):
+        rendered = configuration.render(root, config, state, applied_at)
+        before = read_generated(root, set(rendered.files) | names)
+        changed = [name for name, text in rendered.files.items() if before[name] != text.encode()]
+        removed = [name for name in names if name not in rendered.files and before[name] is not None]
+        return rendered, before, changed, removed
+
+    rendered, before, changed, removed = plan(applied.get("at") or now())
     if changed or removed:
-        rendered = configuration.render(root, config, state, now())
+        # Anything to write also stamps the snapshot, so settings.json changes too.
+        rendered, before, changed, removed = plan(now())
     restarts = [name for name, digest in rendered.services.items() if (applied.get("services") or {}).get(name) != digest]
     was_running = running(root, state) if was_running is None else was_running
     current = config_model.values(config)
@@ -416,8 +447,14 @@ def _apply(root, args, discard_edits, start, interactive, out, core_first=False,
     core_installation_id = state.get("core_installation_id")
     if config["mode"] == "web-only":
         core_installation_id = check_paired_core(root, config, state, args, interactive, out)
-    elif previous is not None:
-        confirm_public_url(root, config, previous, was_running, args, interactive, out)
+    elif state.get("applied"):
+        if previous is not None:
+            old = configuration.local_public_url({"public_url": previous["public_url"],
+                                                  "ports": {"core": previous["ports.core"]}})
+            core_port = previous["ports.core"]
+        else:
+            old, core_port = applied.get("public_url"), config["ports"]["core"]
+        confirm_public_url(root, config, old, core_port, was_running, args, interactive, out)
 
     if previous is not None:
         out("Changed settings: " + (", ".join(keys) if keys else "none"))
@@ -436,13 +473,16 @@ def _apply(root, args, discard_edits, start, interactive, out, core_first=False,
     if args.dry_run:
         out("Dry run: nothing was changed.")
         return
-    if not changed and not removed and not start and not edited:
+    if not (changed or removed or start or edited or restarts or state.get("pending")):
         if config_digest != applied.get("config_sha256") or core_installation_id != state.get("core_installation_id"):
             save_state(root, dict(state, core_installation_id=core_installation_id,
                                   applied=dict(applied, config_sha256=config_digest)))
         out("Nothing to apply.")
         return
 
+    files = {name: configuration.sha256(text) for name, text in rendered.files.items()}
+    # Record what is about to be written, so an interrupted write is not taken for hand edits.
+    save_state(root, dict(state, pending=files))
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     for name in edited:
         if before.get(name) is not None:
@@ -452,18 +492,24 @@ def _apply(root, args, discard_edits, start, interactive, out, core_first=False,
             write_private(root / "generated" / name, rendered.files[name])
     for name in removed:
         (root / "generated" / name).unlink()
-    new_state = dict(state, core_installation_id=core_installation_id, applied={
+    new_state = {key: value for key, value in state.items() if key != "pending"}
+    new_state.update(core_installation_id=core_installation_id, applied={
         "at": json.loads(rendered.files["settings.json"])["applied_at"], "config_sha256": config_digest,
-        "files": {name: configuration.sha256(text) for name, text in rendered.files.items()},
-        "services": rendered.services})
+        "public_url": configuration.local_public_url(config) if config["mode"] != "web-only" else config["public_url"],
+        "files": files, "services": rendered.services})
     save_state(root, new_state)
+    progress["committed"] = True
     try:
-        converge(root, new_state, rendered.services, was_running, config["ports"].get("core"), start=start,
+        converge(root, new_state, rendered.services, was_running, config["ports"].get("core"), restarts, start=start,
                  reload_unit=rendered.unit in changed, core_first=core_first)
         health(root, config, will_run)
     except (ParsarError, RuntimeError, subprocess.CalledProcessError) as error:
         if not state.get("applied"):
-            raise ParsarError(f"{describe(error)}. Run parsar status; the installation files were kept") from None
+            # The first apply stays unfinished, so rerunning install.sh starts it again.
+            save_state(root, {key: value for key, value in state.items() if key != "pending"})
+            progress["committed"] = False
+            raise ParsarError(f"{describe(error)}. The installation files were kept; run parsar status, fix the "
+                              "cause and rerun install.sh with the same options") from None
         line = core_error_line(root, new_state)
         for name, data in before.items():
             path = root / "generated" / name
@@ -471,12 +517,13 @@ def _apply(root, args, discard_edits, start, interactive, out, core_first=False,
                 path.unlink(missing_ok=True)
             else:
                 write_private(path, data)
-        save_state(root, state)
+        save_state(root, {key: value for key, value in state.items() if key != "pending"})
+        progress["committed"] = False
         if restore:
             restore()
         with contextlib.suppress(ParsarError, RuntimeError, subprocess.CalledProcessError):
             converge(root, state, applied.get("services") or rendered.services, was_running,
-                     previous["ports.core"] if previous and "ports.core" in previous else None,
+                     previous["ports.core"] if previous and "ports.core" in previous else None, restarts,
                      reload_unit=rendered.unit in changed)
         if line:
             out(line)
@@ -529,6 +576,14 @@ def status(root, out=print):
         core_ok = http(core_base(config) + "/healthz")[0] == 200
         healthy = healthy and core_ok
         out("Core API: " + ("healthy" if core_ok else "unavailable"))
+        key = configuration.read_core_key(root)
+        digests = root / "generated/core-key-digests.json"
+        if digests.is_file() and configuration.sha256(key) not in json.loads(digests.read_text()):
+            out("secrets/core.key does not match generated/core-key-digests.json; run parsar apply")
+        if core_ok and http(core_base(config) + "/core/v1/installation", bearer(key))[0] == 401:
+            out("Core rejects secrets/core.key because it started with another key. Run parsar apply, or "
+                "parsar stop and parsar start when nothing is left to apply.")
+            healthy = False
     if mode != "core-only":
         web_ok = http(f'http://127.0.0.1:{config["ports"]["web"]}/healthz')[0] == 200
         healthy = healthy and web_ok
@@ -539,7 +594,14 @@ def status(root, out=print):
     if mode != "core-only":
         out("Console: " + (config["public_url"] or f'http://127.0.0.1:{config["ports"]["web"]}'))
     out("Source commit: " + state["source_commit"])
-    if config_digest != (state.get("applied") or {}).get("config_sha256"):
+    if loaded is not None:
+        for key in ("mode", "native_core"):
+            if loaded.get(key, False) != state[key]:
+                out(f"config.json sets {key} to {json.dumps(loaded.get(key, False))}, but it is fixed at "
+                    f"{json.dumps(state[key])} for this installation (state.json); restore it")
+    if state.get("pending"):
+        out(f"An earlier apply was interrupted; run {root / 'parsar'} apply")
+    elif config_digest != (state.get("applied") or {}).get("config_sha256"):
         out(f"config.json has unapplied changes; run {root / 'parsar'} apply")
     for name in edited_files(root, state):
         out(f"generated/{name} was edited by hand; put the change in config.json and run parsar apply --discard-edits")
@@ -551,6 +613,8 @@ def status(root, out=print):
             out("Paired Core: rejects this Web host's Core key; the key is out of date. Copy secrets/core.key "
                 "from the Core host, then run parsar apply.")
             healthy = False
+        elif code == 404:
+            out("Paired Core: runs an earlier release without /core/v1/installation; upgrade or convert the Core host")
         elif code != 200:
             out("Paired Core: unreachable at " + config["web"]["core_url"])
             healthy = False
@@ -599,11 +663,11 @@ def stop(root, out=print):
 
 def rotate_core_key(root, yes=False, interactive=None, out=print):
     interactive = sys.stdin.isatty() if interactive is None else interactive
-    state = load_state(root)
-    if state["mode"] == "web-only":
-        raise ParsarError("Core owns the Core key. Copy secrets/core.key from the Core host into this "
-                          "installation, then run parsar apply.")
     with locked(root):
+        state = load_state(root)
+        if state["mode"] == "web-only":
+            raise ParsarError("Core owns the Core key. Copy secrets/core.key from the Core host into this "
+                              "installation, then run parsar apply.")
         config, config_digest = load_config(root)
         if config_digest != (state.get("applied") or {}).get("config_sha256"):
             raise ParsarError("config.json has unapplied changes; run parsar apply first")
@@ -621,16 +685,20 @@ def rotate_core_key(root, yes=False, interactive=None, out=print):
         if "web" in was_running:
             compose(root, "stop", "web")
         os.replace(replacement, root / "secrets/core.key")
-        # A failed rotation keeps the current key: apply's rollback restores its digest.
+        # Until state.json records the new apply, a failure keeps the current key; apply's
+        # rollback restores its digest. After that point the new key is the installation's.
         restore = lambda: write_private(root / "secrets/core.key", original)
         args = argparse.Namespace(dry_run=False, yes=True, confirm_public_url_change=None)
+        progress = {}
         try:
-            _apply(root, args, False, False, False, out, core_first=True, was_running=was_running, restore=restore)
+            _apply(root, args, False, False, False, out, core_first=True, was_running=was_running, restore=restore,
+                   progress=progress)
         except BaseException:
-            restore()
-            if "web" in was_running:
-                with contextlib.suppress(subprocess.CalledProcessError, OSError):
-                    compose(root, "up", "--detach", "--wait", "--wait-timeout", "300", "web")
+            if not progress.get("committed"):
+                restore()
+                if "web" in was_running:
+                    with contextlib.suppress(subprocess.CalledProcessError, OSError):
+                        compose(root, "up", "--detach", "--wait", "--wait-timeout", "300", "web")
             raise
     if "core" in was_running:
         new = bearer(configuration.read_core_key(root))

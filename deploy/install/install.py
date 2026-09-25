@@ -349,7 +349,8 @@ def finish(root, bundle, manifest, provider=None):
     parsar_cli.apply(root, start=True)
     config, _ = parsar_cli.load_config(root)
     mode = config["mode"]
-    if mode == "web-only" and parsar_cli.paired_core(root, config)[0] != 200:
+    # An earlier-release Core has no /core/v1/installation (404); apply noted it and Web still works.
+    if mode == "web-only" and parsar_cli.paired_core(root, config)[0] not in (200, 404):
         raise InstallError("Core key authentication failed. Inspect secrets/core.key and web.core_url; no model was called")
     if provider:
         local_node.install(root, dict(state, provider=provider, core_port=config["ports"]["core"],
@@ -408,6 +409,20 @@ def main(argv=None):
         check_host()
         manifest = verify_bundle(bundle)
         convert.convert(root, manifest, image_loader(manifest, bundle), args.public_url, args.yes, run)
+        finish(root, bundle, manifest)
+        return
+    if kind == "config" and args.convert:
+        state = parsar_cli.load_state(root)
+        # The layout is converted, but the first apply of the new release has not finished.
+        if not (state.get("converted_from") and not state.get("applied")):
+            raise InstallError(f"{root} already uses config.json; edit it and run {root / 'parsar'} apply")
+        if set(args.given) - {"convert", "yes"}:
+            raise InstallError("Finishing a conversion accepts only --install-dir and --yes")
+        check_host()
+        manifest = verify_bundle(bundle)
+        if state["source_commit"] != manifest["source_commit"]:
+            raise InstallError("Finish the conversion with the bundle it started with, release " + state["source_commit"])
+        image_loader(manifest, bundle)(list(state["images"]))
         finish(root, bundle, manifest)
         return
     if args.convert:

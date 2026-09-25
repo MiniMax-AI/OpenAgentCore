@@ -145,7 +145,9 @@ def compose_config(root, config, state, inputs):
     identity = f'{state["uid"]}:{state["gid"]}'
     images = state["images"]
     doc = {"name": state["project"],
-           "x-parsar": {"generated_from": str(root / "config.json"), "edit": "config.json, then parsar apply"},
+           # Compose interpolates every string, extension fields included.
+           "x-parsar": {"generated_from": str(root / "config.json").replace("$", "$$"),
+                        "edit": "config.json, then parsar apply"},
            "services": {}}
     services = doc["services"]
     if mode != "web-only":

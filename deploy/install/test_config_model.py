@@ -51,6 +51,9 @@ class ConfigModelTests(unittest.TestCase):
             ({"public_url": "https://core.example/"}, "public_url: must be a canonical origin"),
             ({"public_url": "https://Core.example"}, "public_url: must be a canonical origin"),
             ({"public_url": "http://core.example"}, "public_url: must be a canonical origin"),
+            *(({"public_url": origin}, "public_url: must be a canonical origin") for origin in (
+                "https://[::1]:8443", "https://a_b.example", "https://core.example.", "https://b\u00fccher.example",
+                "https://core.example:0443", "https://core.example:")),
             ({"surprise": 1}, "surprise: unknown key"),
             ({"web": {"core_url": "https://core.example"}}, "web: does not apply when mode is \"all\""),
             ({"ports": {"core": 8080}}, "ports: core, web need different ports"),
