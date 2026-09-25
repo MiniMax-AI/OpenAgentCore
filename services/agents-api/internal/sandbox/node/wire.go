@@ -43,6 +43,9 @@ type Health struct {
 	CPUCount             *int64    `json:"cpu_count,omitempty"`
 	AvailableMemoryBytes *int64    `json:"available_memory_bytes,omitempty"`
 	AvailableDiskBytes   *int64    `json:"available_disk_bytes,omitempty"`
+	HostTotalMemoryBytes *int64    `json:"host_total_memory_bytes"`
+	EffectiveMemoryBytes *int64    `json:"effective_memory_bytes"`
+	EffectiveCPUCores    *float64  `json:"effective_cpu_cores"`
 }
 
 type EnrollmentRequest struct {
