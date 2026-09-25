@@ -178,7 +178,7 @@ export const sessions = {
     },
     install: {
       title: "Connect a host",
-      lifecycle: "After the credential is revoked or rotated, the host's executor stops with a single message. To reconnect, rotate that same credential, rerun the same command and paste the rotated credential; issuing a new credential doesn't reconnect an Environment that has already connected. To remove the Runtime, stop its container.",
+      lifecycle: "After the credential is revoked or rotated, the host's executor disconnects with a single message and won't retry; its container keeps running. To reconnect, rotate that same credential, rerun the same command and paste the rotated credential; issuing a new credential doesn't reconnect an Environment that has already connected. To remove the Runtime, stop its container.",
       steps: "Run this command on the host. At its hidden prompt, paste a credential from this section: it's shown once, after Issue credential or Rotate. The same command is safe to rerun.",
       archived: "Run this command on the host. It asks for a credential, which this archived project can't issue or rotate; a host that already has one keeps it when you rerun the command.",
       terminal: "Terminal",
@@ -215,7 +215,7 @@ export const sessions = {
     revokeDialog: {
       title: "Revoke credential?",
       prompt: "Revoke credential {{id}}?",
-      consequence: "The executor can no longer connect; a running process is not stopped.",
+      consequence: "The executor disconnects and won't retry; its container keeps running until you stop it.",
       confirm: "Revoke",
       busy: "Revoking…",
       uncertain: "The revocation was not confirmed. The list was read again; check it before trying again.",

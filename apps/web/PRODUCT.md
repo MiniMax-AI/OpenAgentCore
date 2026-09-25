@@ -142,19 +142,19 @@ workbench.
   executor needs, with the deployment's Core key. A Session page whose environment
   is self-hosted has an Executor credentials section: issue a credential (shown
   once as one line of JSON, to copy or download, never stored), rotate it (the
-  old one stops working immediately) or revoke it (the executor can no longer
-  connect; a running process is not stopped). The file lets one executor connect
-  for that environment only; it cannot call the Agents API.
+  old one stops working immediately) or revoke it (the executor disconnects and
+  won't retry; its container keeps running until stopped). The file lets one
+  executor connect for that environment only; it cannot call the Agents API.
 - **Connect a host.** When the console serves the self-hosted installer, the
   section also gives the command that installs the executor on the
   administrator's host from Core's `public_url` (checksum-verified, no secret in
   it; the installer asks for the credential at a hidden prompt, or reads
   `--credential-file`). The same command is safe to rerun. Revoking or rotating
-  stops the host's executor; reconnecting takes that same credential, rotated
-  (Rotate on a revoked row restores it), and the same command, because a newly issued credential does not reconnect an
-  environment that already connected. Without a `public_url`, or when the Session's
-  `remote_url` is not `wss://`, the section says why instead of showing a
-  command.
+  disconnects the host's executor; reconnecting takes that same credential,
+  rotated (Rotate on a revoked row restores it), and the same command, because a
+  newly issued credential does not reconnect an environment that already
+  connected. Without a `public_url`, or when the Session's `remote_url` is not
+  `wss://`, the section says why instead of showing a command.
 - **Figures.** Project, Agent and key usage comes from Core's summary; Agent run,
   tool and activity figures are still assembled in the browser from bounded reads
   and state their coverage. Metrics that need new Core endpoints are recorded as
