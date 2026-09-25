@@ -106,7 +106,6 @@ test("sets up own-machine sandboxes page by page, with the Runtime from the dist
   await page.getByRole("button", { name: "Docker" }).click();
   await page.getByRole("button", { name: /^Standard/ }).click();
   await expect(page.getByRole("heading", { name: "Review and save" })).toBeVisible();
-  await page.getByLabel("Core address").fill("https://core.example.com");
   await page.getByRole("button", { name: "Save configuration" }).click();
 
   // The saved specification carries the Runtime read from the console's manifest.
@@ -155,6 +154,8 @@ test("keeps the saved size and Runtime for the same backend, and starts another 
   await save.click();
   await expect.poll(() => submitted?.resources).toEqual(current.resources);
   expect(submitted?.runtime).toEqual(runtime);
+  // Core's address is config.json's public_url: a change never sends it.
+  expect(submitted).not.toHaveProperty("core_url");
 
   // Another backend starts from its own size, with disks, and this console's Runtime.
   await back.click();

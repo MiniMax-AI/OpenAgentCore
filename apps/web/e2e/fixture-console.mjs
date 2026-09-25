@@ -1,6 +1,6 @@
 // Browser acceptance fixture: the console service's routes (/console/**) and the
-// Core management tree it forwards (/core/v1/**: projects, summary, audit log,
-// metrics and /core/v1/sandbox/**), with synthetic, deterministic data and
+// Core management tree it forwards (/core/v1/**: installation, projects, summary,
+// audit log, metrics and /core/v1/sandbox/**), with synthetic, deterministic data and
 // in-memory writes. It never serves /v1; any /v1 request, and any
 // browser-supplied Authorization header, is recorded so a test can assert that
 // the console stays on its management boundary.
@@ -25,8 +25,42 @@ const hex = (c) => c.repeat(64);
 const release = { source_commit: "c0ffee".padEnd(40, "0"), image_id: `sha256:${hex("1")}`, image_manifest_digest: `sha256:${hex("2")}`, microsandbox_ref: `parsar-core-runtime@sha256:${hex("3")}`, runtime_sha256: hex("4"), firmware_sha256: hex("5") };
 const manifest = { platform: "linux/amd64", source_commit: release.source_commit, images: { runtime: release.image_id }, image_manifest_digests: { runtime: release.image_manifest_digest }, runtime_ref: release.microsandbox_ref, microsandbox: { runtime_sha256: release.runtime_sha256, firmware_sha256: release.firmware_sha256 }, artifacts: {} };
 
+/**
+ * config.json's public_url. "public": an HTTPS address, so applications get an API base URL;
+ * "local": the installer's loopback default, reachable only on the Core machine;
+ * "stale": public, with a node still enrolled with an earlier address.
+ */
+const PUBLIC_URL = "https://core.example.com";
+const LOCAL_URL = "http://127.0.0.1:8091";
+const publicUrl = () => (state.installation === "local" ? LOCAL_URL : PUBLIC_URL);
+
+/** GET /core/v1/installation: the address, the startup settings from config.json and what is bound to the address. */
+function installation() {
+  const local = state.installation === "local";
+  const setting = (key, value, fallback, restarts, extra = {}) => ({ key, value, default: fallback, changeable: true, sensitive: false, restarts, ...extra });
+  const secret = (key, restarts) => ({ key, value: null, default: null, changeable: true, sensitive: true, restarts, configured: true });
+  const nodes = state.deployment?.provider && state.deployment.provider !== "e2b" ? state.nodes.length : 0;
+  return {
+    object: "core.installation", installation_id: "7f3c2a90-fixture", public_url: publicUrl(), api_base_url: local ? null : `${PUBLIC_URL}/v1`,
+    local_only: local, source_commit: release.source_commit,
+    configuration: {
+      path: "/opt/parsar/config.json", apply_command: "sudo parsar apply", applied_at: "2026-09-24T09:30:00Z",
+      settings: [
+        setting("public_url", publicUrl(), LOCAL_URL, ["core", "web"]),
+        setting("listen_address", "127.0.0.1:8091", "127.0.0.1:8091", ["core"]),
+        setting("web_listen_address", "127.0.0.1:4173", "127.0.0.1:4173", ["web"]),
+        setting("data_dir", "/var/lib/parsar", "/var/lib/parsar", [], { changeable: false }),
+        setting("log_level", "debug", "info", ["core", "web"]),
+        secret("core_key", ["core", "web"]),
+        secret("database_url", ["core"]),
+      ],
+    },
+    address_bindings: { nodes, nodes_on_other_address: state.installation === "stale" ? Math.min(1, nodes) : 0, hosted_sandboxes: 0, self_hosted_executors: 0 },
+  };
+}
+
 function configuredDeployment() {
-  return { installation_id: "7f3c2a90-fixture", provider: "docker", core_url: `http://127.0.0.1:${port}`, maintenance: false, owner_epoch: 3, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: { resources: { cpus: 2, memory_mib: 4096 }, runtime: release }, specification_digest: "fixture", suspension: null };
+  return { installation_id: "7f3c2a90-fixture", provider: "docker", core_url: publicUrl(), maintenance: false, owner_epoch: 3, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: { resources: { cpus: 2, memory_mib: 4096 }, runtime: release }, specification_digest: "fixture", suspension: null };
 }
 /** The E2B template build as Core read it when the selection was saved. */
 const templateBuild = { status: "ready", resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 10240 } };
@@ -36,7 +70,7 @@ function e2bDeployment() {
   return { ...configuredDeployment(), provider: "e2b", mode: "direct", resources: { allocations: 3, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, e2b: { template: "parsar-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", credential_configured: true, template_build: templateBuild } };
 }
 
-function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo") {
+function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo", address = "public") {
   const base = buildDemo();
   const now = Math.floor(Date.now() / 1000);
   const resources = buildResources(now, base.agents, base.sessions);
@@ -52,9 +86,12 @@ function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "d
     violations: [], writes: [], failNext: null, nextId: 1,
     // Executor credential metadata by environment ID; tokens are never kept.
     executorCredentials: new Map(),
+    // How config.json's public_url is set: "public", "local" or "stale".
+    installation: address,
     // "none": the deployment is not configured yet, so the Nodes page offers setup.
-    deployment: sandbox === "none" ? null : sandbox === "e2b" ? e2bDeployment() : configuredDeployment(),
+    deployment: null,
   };
+  state.deployment = sandbox === "none" ? null : sandbox === "e2b" ? e2bDeployment() : configuredDeployment();
   if (sandbox === "e2b") Object.assign(state, { nodes: [], allocations: [] });
 }
 reset();
@@ -63,11 +100,11 @@ function send(response, status, body, headers = {}) {
   response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store", ...headers });
   response.end(JSON.stringify(body));
 }
-function error(response, status, message, code = null) {
+function error(response, status, message, code = null, param = null) {
   // Derive `type` as Core's writeError does (services/agents-api/internal/api/errors.go).
   const type = status >= 500 ? "server_error" : status === 409 ? "conflict_error"
     : code === "not_found_error" || code === "invalid_beta" ? code : "invalid_request_error";
-  send(response, status, { error: { message, type, code, param: null } });
+  send(response, status, { error: { message, type, code, param } });
 }
 async function body(request) {
   const chunks = [];
@@ -173,6 +210,7 @@ async function adminWrite(request, response, path) {
 
 function adminRead(response, path, url) {
   const a = state.admin;
+  if (path === "/installation") return send(response, 200, installation());
   if (path === "/projects") return send(response, 200, { data: a.projects.map(a.publicProject), has_more: false });
   if (path === "/summary") return send(response, 200, a.summary(url));
   if (path === "/metrics") return send(response, 200, coreMetrics(url.searchParams.get("range") ?? "1h"));
@@ -235,23 +273,30 @@ async function sandboxRoute(request, response, path) {
     const data = state.admin.runtimeObservations().map((entry) => ({ ...entry, observation: { ...entry.observation, disk: e2b && entry.observation.status === "observed" ? { usage_bytes: 3 * 2 ** 30, limit_bytes: 10 * 2 ** 30 } : null } }));
     return send(response, 200, { object: "list", data, has_more: false, first_id: data[0]?.observation.id ?? null, last_id: data.at(-1)?.observation.id ?? null });
   }
-  if (path === "/deployment" && request.method === "POST") {
+  if (path === "/deployment" && (request.method === "POST" || request.method === "PUT")) {
     const input = await body(request);
-    if (state.deployment) return error(response, 409, "The sandbox deployment is already configured.", "sandbox_deployment_conflict");
+    const initialize = request.method === "POST";
+    if (initialize && state.deployment) return error(response, 409, "The sandbox deployment is already configured.", "sandbox_deployment_conflict");
+    if (!initialize && !state.deployment) return error(response, 409, "The sandbox deployment is not configured.", "sandbox_deployment_conflict");
+    // As Core: the address is config.json's public_url and read-only.
+    if ("core_url" in input) return error(response, 400, "core_url is read-only; set public_url in config.json.", "invalid_sandbox_configuration", "core_url");
     const e2b = input.provider === "e2b";
     if (!e2b && (!input.resources || !input.runtime)) return error(response, 400, "resources and runtime are required.", "invalid_sandbox_configuration");
+    // E2B sandboxes reach Core over the internet, which a loopback or HTTP public_url cannot serve.
+    if (e2b && !publicUrl().startsWith("https://")) return error(response, 409, "E2B sandboxes need an HTTPS public_url. Set public_url in config.json, then run parsar apply.", "sandbox_configuration_error");
     // As Core: E2B may omit resources and adopt its template build's CPU and memory; only microsandbox suspends.
     const resources = input.resources ?? { cpus: templateBuild.resources.cpus, memory_mib: templateBuild.resources.memory_mib };
     state.deployment = {
-      ...configuredDeployment(), provider: input.provider, core_url: input.core_url, mode: e2b ? "direct" : "nodes",
+      ...configuredDeployment(), provider: input.provider, mode: e2b ? "direct" : "nodes",
+      ...(initialize ? {} : { maintenance: true, generation: state.deployment.generation + 1 }),
       specification: { resources, ...(input.runtime ? { runtime: input.runtime } : {}) },
       ...(e2b ? { e2b: { template: input.e2b?.template ?? "", credential_configured: true, template_build: templateBuild } } : {}),
       suspension: input.provider === "microsandbox" ? { idle_seconds: 300, retention_seconds: 86400 } : null,
     };
-    return send(response, 201, state.deployment);
+    return send(response, initialize ? 201 : 200, state.deployment);
   }
   if (path === "/deployment") {
-    return send(response, 200, state.deployment ?? { installation_id: "7f3c2a90-fixture", provider: "", core_url: `http://127.0.0.1:${port}`, maintenance: false, owner_epoch: 3, generation: 0, mode: "", resources: { allocations: 0, pending: 0 }, suspension: null });
+    return send(response, 200, state.deployment ?? { installation_id: "7f3c2a90-fixture", provider: "", core_url: publicUrl(), maintenance: false, owner_epoch: 3, generation: 0, mode: "", resources: { allocations: 0, pending: 0 }, suspension: null });
   }
   if (path === "/nodes") return send(response, 200, { data: state.nodes });
   if (path === "/enrollment-tokens" && request.method === "POST") {
@@ -341,7 +386,7 @@ function registeredNode(nodeId) {
 async function fixtureRoute(request, response, url) {
   if (url.pathname === "/__fixture/health") return send(response, 200, { ok: true });
   if (url.pathname === "/__fixture/reset" && request.method === "POST") {
-    reset(url.searchParams.get("auth") ?? "login", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured", url.searchParams.get("nodes") ?? "demo");
+    reset(url.searchParams.get("auth") ?? "login", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured", url.searchParams.get("nodes") ?? "demo", url.searchParams.get("installation") ?? "public");
     return send(response, 200, { ok: true });
   }
   if (url.pathname === "/__fixture/fail-next" && request.method === "POST") {
