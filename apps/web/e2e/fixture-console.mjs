@@ -62,7 +62,10 @@ function send(response, status, body, headers = {}) {
   response.end(JSON.stringify(body));
 }
 function error(response, status, message, code = null) {
-  send(response, status, { error: { message, type: "invalid_request_error", code, param: null } });
+  // Derive `type` as Core's writeError does (services/agents-api/internal/api/errors.go).
+  const type = status >= 500 ? "server_error" : status === 409 ? "conflict_error"
+    : code === "not_found_error" || code === "invalid_beta" ? code : "invalid_request_error";
+  send(response, status, { error: { message, type, code, param: null } });
 }
 async function body(request) {
   const chunks = [];

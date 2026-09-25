@@ -92,7 +92,7 @@ test("reports a failed sandbox change in a dialog, then reads the state again", 
   await page.route("**/core/v1/sandbox/deployment/maintenance", (route) => route.fulfill({
     status: 409,
     contentType: "application/json",
-    body: JSON.stringify({ error: { message: "The deployment changed.", type: "invalid_request_error", code: "sandbox_deployment_conflict", param: null } }),
+    body: JSON.stringify({ error: { message: "The deployment changed.", type: "conflict_error", code: "sandbox_deployment_conflict", param: null } }),
   }));
   await page.getByRole("button", { name: "Enter maintenance to change provider" }).click();
   const failed = page.getByRole("dialog", { name: "Couldn't confirm the sandbox change" });
