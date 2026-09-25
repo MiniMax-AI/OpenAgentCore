@@ -1,8 +1,8 @@
 import type { SandboxDeployment } from "@agents-core-web/agents-client";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { FleetState } from "../fleet/use-sandbox-fleet";
-import { checklistStorageKey, checklistView, gettingStartedSteps } from "./getting-started";
+import { checklistStorageKey, checklistView, gettingStartedSteps, rememberInstallation } from "./getting-started";
 import { node, project } from "./test-fixtures";
 
 const deployment = (overrides: Partial<SandboxDeployment> = {}): SandboxDeployment => ({
@@ -52,9 +52,16 @@ describe("Getting started visibility", () => {
     expect(checklistView(["todo", "todo", "todo"], "closed")).toBe("hidden");
   });
 
-  it("remembers the choice per installation", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("remembers the choice per installation, and keeps the last one while the deployment cannot be read", () => {
+    const stored = new Map<string, string>();
+    vi.stubGlobal("window", { localStorage: { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => stored.set(key, value) } });
+    const down: FleetState = { status: "failed", error: new Error("down") };
     expect(checklistStorageKey(fleet(deployment({ installation_id: "inst-1" })))).toBe("agents-core-web.getting-started.inst-1");
-    expect(checklistStorageKey({ status: "unconfigured" })).toBe("agents-core-web.getting-started");
+    expect(checklistStorageKey(down)).toBe("agents-core-web.getting-started");
+    rememberInstallation("inst-1");
+    expect(checklistStorageKey(down)).toBe("agents-core-web.getting-started.inst-1");
     expect(checklistStorageKey({ status: "loading" })).toBeNull();
   });
 });

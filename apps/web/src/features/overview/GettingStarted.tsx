@@ -13,6 +13,7 @@ import {
   checklistView,
   gettingStartedSteps,
   readChecklistMemory,
+  rememberInstallation,
   writeChecklistMemory,
   type ChecklistMemory,
   type StepState,
@@ -34,6 +35,8 @@ export function GettingStarted({ fleet, sessions }: { fleet: FleetState; session
   const allDone = states.every((state) => state === "done");
 
   // Remembered per installation; a choice made here overrides what was read.
+  const installationId = fleet.status === "ready" ? fleet.snapshot.deployment.installation_id : "";
+  useEffect(() => { if (installationId) rememberInstallation(installationId); }, [installationId]);
   const storageKey = checklistStorageKey(fleet);
   const stored = useMemo(() => (storageKey === null ? null : readChecklistMemory(storageKey)), [storageKey]);
   const [chosen, setChosen] = useState<{ key: string; memory: ChecklistMemory } | null>(null);

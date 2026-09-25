@@ -86,27 +86,45 @@ export function checklistView(states: readonly StepState[], memory: ChecklistMem
   return memory === "open" && states.some((state) => state !== null) ? "full" : "hidden";
 }
 
+const MEMORY_KEY = "agents-core-web.getting-started";
+/** The installation this browser last read, so the checklist keeps its entry while the deployment cannot be read. */
+const INSTALLATION_KEY = "agents-core-web.last-installation";
+
 /**
  * The storage entry for this installation, so a reinstall at the same origin
- * starts again; the unscoped entry when the console cannot read the
- * deployment, and null while it is still reading it.
+ * starts again. While the console cannot read the deployment it uses the
+ * installation it last read (the unscoped entry if none); null while reading.
  */
 export function checklistStorageKey(fleet: FleetState): string | null {
-  const base = "agents-core-web.getting-started";
-  if (fleet.status === "ready") return fleet.snapshot.deployment.installation_id ? `${base}.${fleet.snapshot.deployment.installation_id}` : base;
-  return fleet.status === "failed" || fleet.status === "unconfigured" ? base : null;
+  const installation = fleet.status === "ready" ? fleet.snapshot.deployment.installation_id
+    : fleet.status === "failed" || fleet.status === "unconfigured" ? readStored(INSTALLATION_KEY) ?? ""
+    : null;
+  if (installation === null) return null;
+  return installation ? `${MEMORY_KEY}.${installation}` : MEMORY_KEY;
+}
+
+export function rememberInstallation(installationId: string): void {
+  writeStored(INSTALLATION_KEY, installationId);
 }
 
 export function readChecklistMemory(key: string): ChecklistMemory {
+  const value = readStored(key);
+  return value === "open" || value === "closed" ? value : null;
+}
+
+export function writeChecklistMemory(key: string, value: Exclude<ChecklistMemory, null>): void {
+  writeStored(key, value);
+}
+
+function readStored(key: string): string | null {
   try {
-    const value = window.localStorage.getItem(key);
-    return value === "open" || value === "closed" ? value : null;
+    return window.localStorage.getItem(key);
   } catch {
     return null;
   }
 }
 
-export function writeChecklistMemory(key: string, value: Exclude<ChecklistMemory, null>): void {
+function writeStored(key: string, value: string): void {
   try {
     window.localStorage.setItem(key, value);
   } catch {
