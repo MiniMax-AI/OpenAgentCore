@@ -213,15 +213,18 @@ export function projectCoreMetrics(value: unknown): CoreMetrics {
   };
 }
 
-/** Reads Core's own metrics from `/core/v1/metrics`, through an authenticated console or an explicit Core key. */
+/**
+ * Reads Core's own metrics from `/metrics` under `baseUrl` (default `/core/v1`),
+ * through an authenticated console or an explicit Core key.
+ */
 export class CoreMetricsClient {
   readonly #core: CoreRequester;
 
   constructor(options: CoreClientOptions = {}) {
-    this.#core = new CoreRequester(options.baseUrl ?? "/core/v1/metrics", options.token, options.fetch, invalidCoreMetrics);
+    this.#core = new CoreRequester(options.baseUrl ?? "/core/v1", options.token, options.fetch, invalidCoreMetrics);
   }
 
   async retrieveCoreMetrics(range: CoreMetricsRange, options?: ReadOptions): Promise<CoreMetrics> {
-    return projectCoreMetrics(await this.#core.json(`?range=${encodeURIComponent(range)}`, options));
+    return projectCoreMetrics(await this.#core.json(`/metrics?range=${encodeURIComponent(range)}`, options));
   }
 }

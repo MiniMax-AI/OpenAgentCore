@@ -4,9 +4,11 @@ import type { ReadOptions } from "./types";
 
 /** Constructor options of the Core clients that take a plain bearer `token`. */
 export interface CoreClientOptions {
+  /** Prefix that request paths are appended to: `/core/v1/sandbox` for SandboxAdminClient, `/core/v1` for CoreMetricsClient by default. */
   baseUrl?: string;
   /** Core key for trusted server callers; console browsers use their same-origin session instead. */
   token?: string | (() => string | undefined);
+  /** Fetch implementation; defaults to the global fetch. */
   fetch?: typeof fetch;
 }
 

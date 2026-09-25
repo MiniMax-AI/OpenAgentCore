@@ -10,9 +10,11 @@ describe("Core metrics client", () => {
     const client = new CoreMetricsClient({ fetch });
     expect(client).not.toBeInstanceOf(OpenAIAgentsClient);
     await client.retrieveCoreMetrics("6h");
-    await new CoreMetricsClient({ token: "core-key", fetch }).retrieveCoreMetrics("1h");
-    const [[url, init], [, authorized]] = fetch.mock.calls as [[string, RequestInit], [string, RequestInit]];
+    // baseUrl is a prefix, like the other Core clients.
+    await new CoreMetricsClient({ baseUrl: "https://core.example/core/v1/", token: "core-key", fetch }).retrieveCoreMetrics("1h");
+    const [[url, init], [prefixed, authorized]] = fetch.mock.calls as [[string, RequestInit], [string, RequestInit]];
     expect(url).toBe("/core/v1/metrics?range=6h");
+    expect(prefixed).toBe("https://core.example/core/v1/metrics?range=1h");
     expect(init).toMatchObject({ credentials: "same-origin", redirect: "error" });
     expect(new Headers(init.headers).has("Authorization")).toBe(false);
     expect(new Headers(init.headers).has("OpenAI-Beta")).toBe(false);

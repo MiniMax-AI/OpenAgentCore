@@ -6,9 +6,11 @@ import type {
 } from "./types";
 
 export interface AdminClientOptions {
+  /** Prefix that request paths are appended to; defaults to `/core/v1`. */
   baseUrl?: string;
   /** Core key for trusted server callers; console browsers use their same-origin session instead. */
   adminToken?: string | (() => string | undefined);
+  /** Fetch implementation; defaults to the global fetch. */
   fetch?: typeof fetch;
 }
 
