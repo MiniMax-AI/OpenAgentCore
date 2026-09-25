@@ -189,13 +189,15 @@ for (const operation of ["setup", "enrollment"] as const) {
 }
 
 test("unpaired or unavailable consoles show setup guidance without admin credentials or manager requests", async ({ page, request }) => {
+  await expect.poll(async () => ((await (await request.get(`${fixture}/__fixture/sandbox`)).json()) as { calls: unknown[] }).calls.length).toBeGreaterThan(0);
+  const initialCalls = ((await (await request.get(`${fixture}/__fixture/sandbox`)).json()) as { calls: unknown[] }).calls.length;
   for (const body of [{ sandbox_admin: false, node_installer: true }, null]) {
     await page.route("**/console/config", (route) => route.fulfill(body ? { contentType: "application/json", body: JSON.stringify(body) } : { status: 404, body: "Not found" }));
     await page.reload();
     await page.getByRole("button", { name: "Hosted Sandbox Manager", exact: true }).click();
     await expect(page.getByRole("alert")).toContainText("Sandbox administration is not configured");
     await expect(page.getByLabel("Deployment admin key")).toHaveCount(0);
-    expect((await (await request.get(`${fixture}/__fixture/sandbox`)).json()).calls).toHaveLength(0);
+    expect((await (await request.get(`${fixture}/__fixture/sandbox`)).json()).calls).toHaveLength(initialCalls);
   }
   await page.route("**/console/config", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ sandbox_admin: true, node_installer: true, node_installer_sha256: "a".repeat(64) }) }));
   await page.getByRole("button", { name: "Refresh sandbox state" }).click();

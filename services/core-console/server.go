@@ -72,9 +72,9 @@ func newConsole(c config) (*console, error) {
 			r.Out.Header.Del("Cookie")
 			r.Out.Header.Del("Origin")
 			r.Out.Header.Del("Referer")
-			if ((publicAPIRequest(r.In) || projectExtensionRequest(r.In)) && explicitBearer(r.In)) || nodeTransportRequest(r.In) || (sandboxAdminRequest(r.In) && c.adminToken == "") {
+			if ((publicAPIRequest(r.In) || projectExtensionRequest(r.In)) && explicitBearer(r.In)) || nodeTransportRequest(r.In) || ((sandboxAdminRequest(r.In) || observabilityAdminRequest(r.In)) && c.adminToken == "") {
 				r.Out.Header.Set("Authorization", r.In.Header.Get("Authorization"))
-			} else if sandboxAdminRequest(r.In) || projectKeyAdminRequest(r.In) {
+			} else if sandboxAdminRequest(r.In) || observabilityAdminRequest(r.In) || projectKeyAdminRequest(r.In) {
 				r.Out.Header.Set("Authorization", "Bearer "+c.adminToken)
 			} else {
 				r.Out.Header.Set("Authorization", "Bearer "+c.token)
@@ -170,7 +170,7 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if (r.URL.Path == "/core" || strings.HasPrefix(r.URL.Path, "/core/")) && h.adminToken == "" && !projectExtensionRequest(r) {
-		if !sandboxAdminRequest(r) {
+		if !sandboxAdminRequest(r) && !observabilityAdminRequest(r) {
 			http.NotFound(w, r)
 			return
 		}
@@ -206,7 +206,7 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Path == "/core" || strings.HasPrefix(r.URL.Path, "/core/") {
-		if !sandboxAdminRequest(r) && !projectExtensionRequest(r) {
+		if !sandboxAdminRequest(r) && !observabilityAdminRequest(r) && !projectExtensionRequest(r) {
 			http.NotFound(w, r)
 			return
 		}

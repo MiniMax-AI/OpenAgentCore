@@ -1,4 +1,20 @@
 export const dashboard = {
+  system: {
+    title: "系统观测", subtitle: "已完成的 HTTP 请求、采集覆盖与 Sandbox 节点",
+    range: "系统指标时间范围", loading: "正在加载管理员指标…", stale: "管理员指标不可用 · 正在重试",
+    adminUnavailable: "当前连接无法读取部署管理员指标。", source: "Core 管理员指标 · 已完成的时间桶",
+    unavailableValue: "不可用", requestRate: "请求速率", requestCount: "已观测 {{count}} 个完成请求",
+    serverErrorRate: "HTTP 5xx 比例", serverErrorCount: "已观测 {{count}} 个服务端错误", latencyP95: "延迟 p95", histogramEstimate: "按固定延迟桶估算",
+    collectorCoverage: "请求采集时间桶", collectorLoss: "{{count}} 次丢弃或写入失败", nodes: "就绪节点", nodeCapacity: "配置 {{count}} 个活动名额",
+    routeTable: "请求分类", coveredBuckets: "已观测时间桶：{{covered}}/{{total}}", route: "路由分类", requests: "请求数", errors: "5xx", p95: "p95",
+    requestTrend: "请求量", requestTrendDetail: "覆盖 {{covered}}/{{total}} 个时间桶 · 缺口表示不可用", requestTrendLabel: "请求量趋势；覆盖 {{covered}}/{{total}} 个时间桶",
+    collectorTable: "采集健康", sourceName: "来源", attempted: "尝试", observed: "成功", lost: "丢弃／失败",
+    turnTable: "终态 Turn", turnStatus: "结果", turnCount: "Turn 数", queueP95: "最差时间桶排队 p95", executionP95: "最差时间桶执行 p95", noTurns: "该时段没有终态 Turn。",
+    toolTable: "实际工具调用", toolCategory: "类别", toolOutcome: "结果", toolCount: "调用数", toolTiming: "时间桶 p95 · 时长覆盖", noToolAttempts: "该时段没有终态工具调用观测。",
+    modelTable: "实际模型调用", modelUnavailable: "各 Harness 尚未提供完整的单次调用采集。不会将配置模型或 Turn 用量当作调用次数。",
+    nodeTable: "Sandbox 节点", node: "节点", status: "状态", active: "活动／容量", retained: "保留", cores: "CPU 核数", availableMemory: "可用内存", online: "就绪", offline: "不可用",
+    noRequestSamples: "该时段尚无请求时间桶。", noCollectorSamples: "该时段尚无采集覆盖记录。", noNodes: "尚未注册 Sandbox 节点。", nodeUnavailable: "节点数据不可用。",
+  },
   sandbox: {
     title: "Sandbox 诊断", subtitle: "按分配身份查看采样覆盖、生命周期与内存压力",
     current: "当前完整快照", retained: "上次完整快照 · 刷新失败",

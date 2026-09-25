@@ -44,6 +44,7 @@ func TestSandboxAdminProxyPreservesIndependentCredential(t *testing.T) {
 		{"DELETE", "/core/v1/sandbox/nodes/node-id"},
 		{"GET", "/core/v1/sandbox/nodes/node-id/allocations"},
 		{"POST", "/core/v1/sandbox/enrollment-tokens"},
+		{"GET", "/core/v1/observability/summary?range=1h"},
 	} {
 		t.Run(tc.method+tc.path, func(t *testing.T) {
 			r := adminRequest(t, server.URL, tc.method, tc.path, "separate-admin-key")
@@ -56,7 +57,7 @@ func TestSandboxAdminProxyPreservesIndependentCredential(t *testing.T) {
 			}
 		})
 	}
-	if calls.Load() != 6 {
+	if calls.Load() != 7 {
 		t.Fatalf("proxied %d operations", calls.Load())
 	}
 }
@@ -129,6 +130,8 @@ func TestSandboxNodeControlAndUnknownCoreRoutesAreNotProxied(t *testing.T) {
 		{"POST", "/core/v1/sandbox/nodes"},
 		{"GET", "/core/v1/sandbox/enrollment-tokens"},
 		{"GET", "/core/v1/sandbox/nodes/id/allocations/extra"},
+		{"POST", "/core/v1/observability/summary"},
+		{"GET", "/core/v1/observability/summary/extra"},
 	} {
 		t.Run(tc.method+tc.path, func(t *testing.T) {
 			r := adminRequest(t, server.URL, tc.method, tc.path, "separate-admin-key")

@@ -35,6 +35,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/api"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/observability"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtime"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeenrollment"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimehistory"
@@ -103,6 +104,9 @@ func run() error {
 		return err
 	}
 	executionStore := store.NewWithCredentialCipherAndOAuthRefresh(pool, credentialKey, oauthClient)
+	toolMetricsCtx, cancelToolMetrics := context.WithCancel(ctx)
+	toolMetrics := observability.NewToolRecorder(toolMetricsCtx, executionStore)
+	defer func() { cancelToolMetrics(); <-toolMetrics.Done() }()
 	if err := executionStore.EnsureProjectScopes(ready, auth.ProjectScopes()); err != nil {
 		return err
 	}
@@ -187,6 +191,7 @@ func run() error {
 		}
 	}
 	options = append(options, api.WithProjectAPIKeys(executionStore, keyAdmin), api.WithWriteAudit(executionStore, keyAdmin))
+	options = append(options, api.WithOperatorMetrics(executionStore, keyAdmin))
 	if history.Reader != nil {
 		historyResolver, resolverErr := historystoreresolver.NewResolver(executionStore)
 		if resolverErr != nil {
@@ -210,7 +215,7 @@ func run() error {
 	}
 	if registry != nil {
 		dispatcher := &execution.Dispatcher{Store: executionStore, Registry: registry,
-			ManagedRuntimes: managed, Options: transientOptions}
+			ManagedRuntimes: managed, Options: transientOptions, ToolRecorder: toolMetrics}
 
 		worker, err = execution.StartWorker(ctx, dispatcher)
 		if err != nil {
@@ -264,6 +269,17 @@ func run() error {
 		startupManaged = managedNodes.setup.selected.Load()
 	}
 	options = append(options, api.WithStartupConfiguration(coreStartupConfiguration(engine, kinds, registry != nil, modelProviderEndpoints, managedRuntimeProviderKind(startupManaged), startupManaged)))
+	requestMetricsCtx, cancelRequestMetrics := context.WithCancel(ctx)
+	requestMetrics := observability.NewRequestRecorder(requestMetricsCtx, executionStore)
+	defer func() { cancelRequestMetrics(); <-requestMetrics.Done() }()
+	options = append(options, api.WithRequestMetrics(requestMetrics))
+	operatorCleanupCtx, cancelOperatorCleanup := context.WithCancel(ctx)
+	operatorCleanupDone := make(chan struct{})
+	go func() {
+		defer close(operatorCleanupDone)
+		runOperatorMetricsCleanup(operatorCleanupCtx, executionStore)
+	}()
+	defer func() { cancelOperatorCleanup(); <-operatorCleanupDone }()
 	handler, err := api.NewHandler(executionStore, auth, engine, options...)
 	if err != nil {
 		return err

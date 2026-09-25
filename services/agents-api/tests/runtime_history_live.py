@@ -33,7 +33,7 @@ class SafeAPI(base.API):
         encoded = json.dumps(value)
         base.require(not any(secret in encoded for secret in self.secrets), "public_response_exposed_secret")
         base.require(not any(marker in encoded for marker in (
-            "postgres://", "postgresql://", "runtime_history_samples", "token_sha256",
+            "postgres://", "postgresql://", "observability_runtime_samples", "token_sha256",
             "unix:///", "host.microsandbox.internal", "/home/parsar-acceptance/")),
             "public_response_exposed_backend_configuration")
         return value

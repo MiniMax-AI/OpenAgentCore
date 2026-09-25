@@ -39,6 +39,11 @@ func sandboxAdminRequest(r *http.Request) bool {
 	return false
 }
 
+// Operator metrics expose only the fixed, read-only deployment summary.
+func observabilityAdminRequest(r *http.Request) bool {
+	return r.URL.Path == "/core/v1/observability/summary" && r.Method == http.MethodGet
+}
+
 func explicitBearer(r *http.Request) bool {
 	parts := strings.Fields(r.Header.Get("Authorization"))
 	return len(r.Header.Values("Authorization")) == 1 && len(parts) == 2 && strings.EqualFold(parts[0], "Bearer")

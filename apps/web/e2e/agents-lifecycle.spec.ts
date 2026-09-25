@@ -210,6 +210,36 @@ test("opens Dashboard as the default landing page", async ({ page, request }) =>
   await expect(page.locator(".dashboard-page")).toBeVisible();
 });
 
+test("shows operator tables and keeps incomplete request coverage unavailable", async ({ page, request }, testInfo) => {
+  await resetFixture(request);
+  await page.route("**/console/config", (route) => route.fulfill({ json: {
+    sandbox_admin: true, node_installer: false, node_installer_sha256: "",
+  } }));
+  const end = new Date(Math.floor(Date.now() / 60_000) * 60_000);
+  const start = new Date(end.getTime() - 60 * 60_000);
+  await page.route("**/core/v1/observability/summary?range=1h", (route) => route.fulfill({ json: {
+    generated_at: end.toISOString(), start: start.toISOString(), end: end.toISOString(), step_seconds: 60,
+    requests: [{ start: start.toISOString(), route_family: "sessions", outcome: "server_error", count: 2,
+      latency_sum_ms: 120, latency_bucket_counts: [0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0] }],
+    collector: [{ start: start.toISOString(), source: "request", attempted_count: 2, observed_count: 2,
+      unavailable_count: 0, timeout_count: 0, dropped_count: 0, export_failed_count: 0 }],
+    turns: [{ start: start.toISOString(), status: "failed", count: 1, queue_p95_ms: 50, execution_p95_ms: 400 }],
+    tools: [{ start: start.toISOString(), category: "command", outcome: "error", count: 1,
+      timed_count: 1, duration_p95_ms: 300 }],
+  } }));
+  await page.goto("/");
+  await page.getByRole("tab", { name: "Observability" }).click();
+  const system = page.locator(".dashboard-system");
+  await expect(system.getByRole("heading", { name: "System observability" })).toBeVisible();
+  await expect(system.getByRole("heading", { name: "Terminal Turns" })).toBeVisible();
+  await expect(system.getByRole("heading", { name: "Actual model invocations" })).toBeVisible();
+  await expect(system.getByRole("heading", { name: "Sandbox nodes" })).toBeVisible();
+  await expect(system.getByText("Unavailable", { exact: true }).first()).toBeVisible();
+  await expect(system.getByRole("rowheader", { name: "sessions" })).toBeVisible();
+  await expect(system.getByRole("rowheader", { name: "command" })).toBeVisible();
+  await attachElementScreenshot(system, testInfo, "system-observability-dashboard");
+});
+
 test("explains a 502 Core backend failure and opens copyable Docker recovery steps", async ({ page }) => {
   await page.route("**/v1/agents**", async (route) => {
     await route.fulfill({
@@ -2388,9 +2418,8 @@ test("presents Dashboard page-chain results and System boundaries without extra 
   await expect(dashboard).toContainText("Latest complete paginated reads");
   await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Agents" })).toContainText("3");
   await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Sessions" })).toContainText("1");
-  await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "In progress" })).toContainText("0");
-  await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Needs attention" })).toContainText("0");
-  await expect(dashboard).not.toContainText("Reported aggregate tokens");
+  await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Active sandboxes" })).toBeVisible();
+  await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Reported tokens" })).toBeVisible();
   await expect(dashboard).toContainText("No Sessions currently need attention.");
   await expect(dashboard.getByRole("button", { name: /Create agent/ })).toBeVisible();
   await expect(dashboard.getByRole("button", { name: /Start session/ })).toBeVisible();
@@ -2683,6 +2712,7 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
   await page.goto("/");
   const dashboard = page.locator(".dashboard-page");
   await expect(dashboard.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+  await dashboard.getByRole("tab", { name: "Observability" }).click();
   const refresh = dashboard.getByRole("button", { name: "Refresh Dashboard snapshot" });
   const sandboxDiagnostics = dashboard.getByRole("region", { name: "Sandbox diagnostics" });
   await expect(sandboxDiagnostics).toBeVisible();
@@ -2918,6 +2948,7 @@ test("restores retained Runtime history after a Dashboard reload", async ({ page
   });
 
   await page.goto("/");
+  await page.getByRole("tab", { name: "Observability" }).click();
   const dashboard = page.locator(".dashboard-runtime-panel");
   await expect(dashboard.getByRole("group", { name: "Runtime trend source" })).toHaveCount(0);
   await expect(dashboard.getByLabel(/Durable · 30s; 1 Runtime targets/)).toBeVisible();
@@ -2978,6 +3009,7 @@ test("restores retained Runtime history after a Dashboard reload", async ({ page
   await expect(refreshedDurableCpuChart).toHaveAttribute("data-view-end", String(durableZoomEnd));
 
   await page.reload();
+  await page.getByRole("tab", { name: "Observability" }).click();
   await expect(dashboard.getByRole("group", { name: "Runtime trend source" })).toHaveCount(0);
   await expect(dashboard.getByLabel(/Durable · 30s; 1 Runtime targets/)).toBeVisible();
   await expect(dashboard.getByText("CPU usage durable trend available")).toBeAttached();

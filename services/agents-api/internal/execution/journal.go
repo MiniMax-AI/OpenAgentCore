@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/observability"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
+	"github.com/google/uuid"
 )
 
 type journal struct {
@@ -14,9 +16,14 @@ type journal struct {
 	tenant, session, turn string
 	next                  int32
 	batch                 []store.ExecutionEvent
+	batchTimes            []time.Time
 	bytes                 int
 	pendingCount          int
 	observeSubagents      bool
+	toolRecorder          interface {
+		Record(observability.ToolAttempt)
+	}
+	toolStarts map[string]time.Time
 }
 
 type eventWriter interface {
@@ -67,8 +74,64 @@ func (j *journal) enqueue(env proto.Envelope) error {
 		return store.ErrEventLimit
 	}
 	j.batch = append(j.batch, store.ExecutionEvent{Kind: env.Type, Payload: env.Payload})
+	j.batchTimes = append(j.batchTimes, time.Now().UTC())
 	j.bytes += len(env.Payload)
 	return nil
+}
+
+func (j *journal) observeToolAttempt(raw json.RawMessage, observedAt time.Time) {
+	if j.toolRecorder == nil {
+		return
+	}
+	var call proto.ToolCallPayload
+	if json.Unmarshal(raw, &call) != nil || call.ID == "" {
+		return
+	}
+	if call.Stage == "before" {
+		if j.toolStarts == nil {
+			j.toolStarts = make(map[string]time.Time)
+		}
+		if _, exists := j.toolStarts[call.ID]; !exists {
+			j.toolStarts[call.ID] = observedAt
+		}
+		return
+	}
+	if call.Stage != "after" {
+		return
+	}
+	finished := observedAt
+	var started *time.Time
+	if value, exists := j.toolStarts[call.ID]; exists {
+		started = &value
+		delete(j.toolStarts, call.ID)
+	}
+	category, outcome := "other", "unknown"
+	var duration *int64
+	if call.Observation != nil {
+		switch call.Observation.Kind {
+		case "command", "mcp", "function", "web_search", "file":
+			category = call.Observation.Kind
+		}
+		switch call.Observation.Status {
+		case "completed":
+			outcome = "success"
+		case "failed":
+			outcome = "error"
+		}
+		if call.Observation.DurationMS != nil && *call.Observation.DurationMS >= 0 {
+			value := *call.Observation.DurationMS
+			duration = &value
+		}
+	}
+	if duration == nil && started != nil {
+		value := finished.Sub(*started).Milliseconds()
+		duration = &value
+	}
+	j.toolRecorder.Record(observability.ToolAttempt{
+		ID:       uuid.NewSHA1(uuid.NameSpaceOID, []byte(j.turn+":"+call.ID)).String(),
+		TenantID: j.tenant, SessionID: j.session, TurnID: j.turn,
+		StartedAt: started, FinishedAt: finished, Category: category, Outcome: outcome, DurationMS: duration,
+	})
 }
 
 func (j *journal) flush(ctx context.Context) error {
@@ -96,12 +159,19 @@ func (j *journal) flush(ctx context.Context) error {
 		if err := j.store.AppendTurnEvents(ctx, j.tenant, j.session, j.turn, j.next, j.batch[:count]); err != nil {
 			return err
 		}
+		for index, event := range j.batch[:count] {
+			if event.Kind == proto.TypeToolCall {
+				j.observeToolAttempt(event.Payload, j.batchTimes[index])
+			}
+		}
 		j.pendingCount = 0
 		j.next += int32(count)
 		j.bytes -= size
 		j.batch = j.batch[count:]
+		j.batchTimes = j.batchTimes[count:]
 	}
 	j.batch = nil
+	j.batchTimes = nil
 	return nil
 }
 

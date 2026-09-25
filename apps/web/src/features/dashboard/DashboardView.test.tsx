@@ -128,13 +128,14 @@ describe("Dashboard loaded-result presentation", () => {
 
   it("keeps a Runtime-only 503 scoped to the optional observation feature", () => {
     const html = render({
+      initialTab: "observability",
       runtimeSnapshot: null,
       runtimeCollectionState: "failed",
       runtimeCollectionError: "Agent core request failed (503).",
       runtimeCollectionHasSnapshot: false,
     });
 
-    expect(html).toContain("Runtime: Agent core request failed (503).");
+    expect(html).toContain("Agent core request failed (503).");
     expect(html).toContain("Runtime observations unavailable");
     expect(html).not.toContain("Agent Core backend is not ready");
     expect(html).not.toContain("Core backend is offline");
@@ -239,6 +240,7 @@ describe("Dashboard loaded-result presentation", () => {
       memory: { usage_bytes: 536_870_912, limit_bytes: 2_147_483_648 },
     };
     const html = render({
+      initialTab: "observability",
       runtimeSnapshot: { sessions: [hosted], observations: [observation], loadedAt: 1_700_000_100_000 },
     });
 
@@ -250,6 +252,7 @@ describe("Dashboard loaded-result presentation", () => {
     expect(html).toContain("Sandbox diagnostics");
     expect(html).toContain("Memory ≥80%");
     const withoutMemory = render({
+      initialTab: "observability",
       runtimeSnapshot: { sessions: [hosted], observations: [{ ...observation, memory: { usage_bytes: null, limit_bytes: null } }], loadedAt: 1_700_000_100_000 },
     });
     expect(withoutMemory).toMatch(/Memory ≥80%<\/small><strong>Unavailable<\/strong>/);
@@ -361,13 +364,14 @@ describe("Dashboard loaded-result presentation", () => {
       memory: null,
     };
     const html = render({
+      initialTab: "observability",
       runtimeSnapshot: { sessions: [runtimeSession], observations: [observation], loadedAt: 1_700_000_100_000 },
       runtimeCollectionState: "failed",
       runtimeCollectionError: "Runtime refresh failed",
       runtimeCollectionHasSnapshot: true,
     });
 
-    expect(html).toContain("Runtime: Runtime refresh failed");
+    expect(html).toContain("Runtime refresh failed");
     expect(html).toContain("Live · loading history");
     expect(html).not.toContain("Live · 30s");
   });

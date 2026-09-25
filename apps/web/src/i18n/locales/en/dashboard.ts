@@ -1,4 +1,20 @@
 export const dashboard = {
+  system: {
+    title: "System observability", subtitle: "Completed HTTP requests, collection coverage, and sandbox nodes",
+    range: "System metrics range", loading: "Loading operator metrics…", stale: "Operator metrics unavailable · retrying",
+    adminUnavailable: "Deployment administrator metrics are unavailable on this connection.", source: "Core operator metrics · completed time buckets",
+    unavailableValue: "Unavailable", requestRate: "Request rate", requestCount: "{{count}} observed completed requests",
+    serverErrorRate: "HTTP 5xx rate", serverErrorCount: "{{count}} observed server errors", latencyP95: "Latency p95", histogramEstimate: "Estimated from fixed latency buckets",
+    collectorCoverage: "Request collector buckets", collectorLoss: "{{count}} dropped or failed writes", nodes: "Ready nodes", nodeCapacity: "{{count}} active slots configured",
+    routeTable: "Request routes", coveredBuckets: "Observed buckets: {{covered}}/{{total}}", route: "Route family", requests: "Requests", errors: "5xx", p95: "p95",
+    requestTrend: "Request volume", requestTrendDetail: "{{covered}}/{{total}} buckets covered · gaps are unavailable", requestTrendLabel: "Request volume over time; {{covered}} of {{total}} buckets covered",
+    collectorTable: "Collector health", sourceName: "Source", attempted: "Attempted", observed: "Observed", lost: "Dropped / failed",
+    turnTable: "Terminal Turns", turnStatus: "Outcome", turnCount: "Turns", queueP95: "Worst bucket queue p95", executionP95: "Worst bucket run p95", noTurns: "No terminal Turns in this range.",
+    toolTable: "Actual tool attempts", toolCategory: "Category", toolOutcome: "Outcome", toolCount: "Attempts", toolTiming: "Bucket p95 · timed coverage", noToolAttempts: "No terminal tool attempt observations in this range.",
+    modelTable: "Actual model invocations", modelUnavailable: "Invocation-level collection is not yet available from every harness. Configured models and Turn usage are not counted as calls.",
+    nodeTable: "Sandbox nodes", node: "Node", status: "Status", active: "Active / capacity", retained: "Retained", cores: "CPU cores", availableMemory: "Available memory", online: "Ready", offline: "Unavailable",
+    noRequestSamples: "No request buckets collected in this range.", noCollectorSamples: "No collector coverage recorded in this range.", noNodes: "No sandbox nodes registered.", nodeUnavailable: "Node data unavailable.",
+  },
   sandbox: {
     title: "Sandbox diagnostics", subtitle: "Current allocation identity, sampling coverage, and memory pressure",
     current: "Current complete snapshot", retained: "Last complete snapshot · refresh failed",

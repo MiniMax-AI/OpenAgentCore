@@ -6,21 +6,26 @@ import {
   RefreshCw,
   Rows3,
 } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { AgentSession, SavedAgent } from "@agents-core-web/agents-client";
+import { SandboxAdminClient, type AgentSession, type SandboxNode, type SavedAgent } from "@agents-core-web/agents-client";
 
 import { StatusIcon, type StatusKind } from "../../components/StatusIcon";
 import { backendFailureStatus } from "../../lib/core-readiness";
+import { isLocalProxyBaseUrl } from "../../lib/connection";
+import { sandboxConsoleConfig } from "../sandbox/console-config";
 import {
   buildDashboardSnapshot,
   buildRuntimeDashboardModel,
+  formatDashboardBytes,
   formatDashboardTimestamp,
+  formatDashboardTokens,
   type DashboardCollectionState,
   type DashboardSessionRow,
 } from "./dashboard-model";
 import { RuntimeObservabilityContent, type RuntimeHistoryLoader } from "./RuntimeObservabilityContent";
+import { SystemObservabilityContent } from "./SystemObservabilityContent";
 import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";
 import "./DashboardView.css";
 
@@ -38,6 +43,8 @@ export interface DashboardViewProps {
   runtimeCollectionError: string | null;
   runtimeCollectionHasSnapshot: boolean;
   loadRuntimeHistory: RuntimeHistoryLoader;
+  coreBaseUrl?: string;
+  initialTab?: "overview" | "observability";
   onRefresh: () => void;
   onCreateAgent: () => void;
   onStartSession: () => void;
@@ -247,6 +254,8 @@ export function DashboardView({
   runtimeCollectionError,
   runtimeCollectionHasSnapshot,
   loadRuntimeHistory,
+  coreBaseUrl = "/v1",
+  initialTab = "overview",
   onRefresh,
   onCreateAgent,
   onStartSession,
@@ -257,6 +266,25 @@ export function DashboardView({
 }: DashboardViewProps) {
   const { t, i18n } = useTranslation("pages");
   const locale = i18n.resolvedLanguage;
+	const [tab, setTab] = useState<"overview" | "observability">(initialTab);
+	const [nodes, setNodes] = useState<SandboxNode[] | null>(null);
+	const [nodeRefresh, setNodeRefresh] = useState(0);
+	useEffect(() => {
+		const timer = window.setInterval(() => setNodeRefresh((value) => value + 1), 30_000);
+		return () => window.clearInterval(timer);
+	}, []);
+	useEffect(() => {
+		if (!isLocalProxyBaseUrl(coreBaseUrl)) { setNodes(null); return; }
+		const controller = new AbortController();
+		void (async () => {
+			const config = await sandboxConsoleConfig(controller.signal);
+			if (!config?.sandbox_admin) { if (!controller.signal.aborted) setNodes(null); return; }
+			const client = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox" });
+			const result = await client.listNodes({ signal: controller.signal });
+			if (!controller.signal.aborted) setNodes(result.data);
+		})().catch(() => { if (!controller.signal.aborted) setNodes(null); });
+		return () => controller.abort();
+	}, [coreBaseUrl, nodeRefresh]);
   const snapshot = useMemo(() => buildDashboardSnapshot(agents, sessions, 6, 5), [agents, sessions]);
   const runtimeModel = useMemo(() => runtimeSnapshot
     ? buildRuntimeDashboardModel(runtimeSnapshot.sessions, runtimeSnapshot.observations)
@@ -302,7 +330,7 @@ export function DashboardView({
           <button
             className="button outline"
             type="button"
-            onClick={onRefresh}
+            onClick={() => { setNodeRefresh((value) => value + 1); onRefresh(); }}
             disabled={refreshing}
             aria-label={t("dashboard.refreshLabel")}
           >
@@ -313,6 +341,11 @@ export function DashboardView({
       </header>
 
       <div className="dashboard-scroll">
+        <div className="dashboard-view-tabs" role="tablist" aria-label={t("dashboard.viewTabs")}>
+          <button type="button" role="tab" aria-selected={tab === "overview"} onClick={() => setTab("overview")}>{t("dashboard.overviewTab")}</button>
+          <button type="button" role="tab" aria-selected={tab === "observability"} onClick={() => setTab("observability")}>{t("dashboard.observabilityTab")}</button>
+        </div>
+        {tab === "overview" ? <>
         <section className="dashboard-overview" aria-labelledby="dashboard-overview-heading">
           <div className="dashboard-snapshot-bar">
             <div className="dashboard-snapshot-copy">
@@ -371,16 +404,16 @@ export function DashboardView({
           <dl className="dashboard-summary" aria-label={t("dashboard.coreSnapshot")}>
             <Metric label={t("dashboard.agents")} value={agentsAvailable ? snapshot.loadedAgentCount.toLocaleString(locale) : t("dashboard.unavailable")} detail={t("dashboard.savedDefinitions")} />
             <Metric label={t("dashboard.sessions")} value={sessionsAvailable ? snapshot.loadedSessionCount.toLocaleString(locale) : t("dashboard.unavailable")} detail={t("dashboard.inSnapshot")} />
-            <Metric label={t("dashboard.inProgress")} value={sessionsAvailable ? snapshot.statusCounts.in_progress.toLocaleString(locale) : t("dashboard.unavailable")} detail={t("dashboard.reportedStatus")} />
-            <Metric
-              label={t("dashboard.needsAttention")}
-              value={sessionsAvailable ? attentionCount.toLocaleString(locale) : t("dashboard.unavailable")}
-              detail={t("dashboard.attentionDetail")}
-              emphasis={sessionsAvailable && attentionCount > 0}
-            />
+            <Metric label={t("dashboard.activeSandboxes")} value={runtimeModel ? runtimeModel.summary.activeSandboxCount.toLocaleString(locale) : t("dashboard.unavailable")} detail={t("dashboard.currentRuntimeSnapshot")} />
+            <Metric label={t("dashboard.totalTokens")} value={runtimeModel && runtimeModel.summary.totalTokens !== null ? formatDashboardTokens(runtimeModel.summary.totalTokens, locale) : t("dashboard.unavailable")} detail={t("dashboard.reportedUsage")} />
+            <Metric label={t("dashboard.cpuCapacity")} value={runtimeModel && runtimeModel.summary.cpuCapacityCores !== null ? runtimeModel.summary.cpuCapacityCores.toLocaleString(locale) : t("dashboard.unavailable")} detail={t("dashboard.measuredCores")} />
+            <Metric label={t("dashboard.memoryLimit")} value={runtimeModel && runtimeModel.summary.memoryLimitBytes !== null ? formatDashboardBytes(runtimeModel.summary.memoryLimitBytes) : t("dashboard.unavailable")} detail={t("dashboard.measuredLimit")} />
+            <Metric label={t("dashboard.readyNodes")} value={nodes === null ? t("dashboard.unavailable") : `${nodes.filter((node) => node.online && node.provider_ready).length}/${nodes.length}`} detail={t("dashboard.nodeSnapshot")} />
           </dl>
         </section>
+        </> : null}
 
+        {tab === "observability" ? <>
         <section className="dashboard-panel dashboard-runtime-panel" aria-labelledby="dashboard-runtime-heading">
           <header>
             <div>
@@ -393,6 +426,7 @@ export function DashboardView({
               </span>
             ) : null}
           </header>
+          {runtimeCollectionState === "failed" && runtimeCollectionError ? <p className="dashboard-runtime-history-error" role="status">{runtimeCollectionError}</p> : null}
           {!runtimeAvailable || !runtimeSnapshot || !runtimeModel ? (
             <p className="dashboard-empty">
               <AlertTriangle size={14} aria-hidden="true" />
@@ -419,7 +453,10 @@ export function DashboardView({
             </>
           )}
         </section>
+        <SystemObservabilityContent coreBaseUrl={coreBaseUrl} nodes={nodes} />
+        </> : null}
 
+        {tab === "overview" ? <>
         <div className="dashboard-primary-grid">
           <section className="dashboard-panel dashboard-attention-panel" aria-labelledby="dashboard-attention-heading">
             <header>
@@ -476,6 +513,7 @@ export function DashboardView({
             <p className="dashboard-empty"><Rows3 size={14} aria-hidden="true" />{t("dashboard.noRecent")}</p>
           )}
         </section>
+        </> : null}
       </div>
     </section>
   );

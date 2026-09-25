@@ -148,10 +148,10 @@ func TestPostgresRuntimeHistoryDenseReadAndBoundedRetention(t *testing.T) {
 	}
 	// Seed the equivalent of a full day of five-second periodic samples in one
 	// fixture statement; production inserts still go through the exporter.
-	_, err := pool.Exec(t.Context(), `INSERT INTO runtime_history_samples
+	_, err := pool.Exec(t.Context(), `INSERT INTO observability_runtime_samples
  (tenant_id,session_id,environment_id,resolved_at_ns,allocation_id,provider_type,status,observed_at_ns,started_at_ns,cpu_usage_seconds,cpu_capacity_cores,memory_usage_bytes,input_tokens,output_tokens)
  SELECT tenant_id,session_id,environment_id,resolved_at_ns+n*5000000000,allocation_id,provider_type,status,observed_at_ns+n*5000000000,started_at_ns,n::double precision,cpu_capacity_cores,memory_usage_bytes,input_tokens+n,output_tokens+n
- FROM runtime_history_samples CROSS JOIN generate_series(1,17279) n WHERE tenant_id=$1 AND session_id=$2`, scope.TenantID, scope.SessionID)
+ FROM observability_runtime_samples CROSS JOIN generate_series(1,17279) n WHERE tenant_id=$1 AND session_id=$2`, scope.TenantID, scope.SessionID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,10 +173,10 @@ func TestPostgresRuntimeHistoryDenseReadAndBoundedRetention(t *testing.T) {
 	if err := s.InsertRuntimeHistorySample(t.Context(), old); err != nil {
 		t.Fatal(err)
 	}
-	_, err = pool.Exec(t.Context(), `INSERT INTO runtime_history_samples
+	_, err = pool.Exec(t.Context(), `INSERT INTO observability_runtime_samples
  (tenant_id,session_id,environment_id,resolved_at_ns,allocation_id,provider_type,status,observed_at_ns,started_at_ns)
  SELECT tenant_id,session_id,environment_id,resolved_at_ns-n,allocation_id,provider_type,'unavailable',NULL,NULL
- FROM runtime_history_samples CROSS JOIN generate_series(1,4100) n WHERE tenant_id=$1 AND session_id=$2 AND resolved_at_ns=$3`, scope.TenantID, scope.SessionID, old.ResolvedAt.UnixNano())
+ FROM observability_runtime_samples CROSS JOIN generate_series(1,4100) n WHERE tenant_id=$1 AND session_id=$2 AND resolved_at_ns=$3`, scope.TenantID, scope.SessionID, old.ResolvedAt.UnixNano())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,13 +188,13 @@ func TestPostgresRuntimeHistoryDenseReadAndBoundedRetention(t *testing.T) {
 		t.Fatal(err)
 	}
 	var remaining int
-	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM runtime_history_samples WHERE tenant_id=$1 AND resolved_at_ns<$2`, scope.TenantID, end.Add(-7*24*time.Hour).UnixNano()).Scan(&remaining); err != nil || remaining != 5 {
+	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM observability_runtime_samples WHERE tenant_id=$1 AND resolved_at_ns<$2`, scope.TenantID, end.Add(-7*24*time.Hour).UnixNano()).Scan(&remaining); err != nil || remaining != 5 {
 		t.Fatal("cleanup exceeded bounded batch", remaining, err)
 	}
 	if err := reader.Prune(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM runtime_history_samples WHERE tenant_id=$1 AND resolved_at_ns<$2`, scope.TenantID, end.Add(-7*24*time.Hour).UnixNano()).Scan(&remaining); err != nil || remaining != 0 {
+	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM observability_runtime_samples WHERE tenant_id=$1 AND resolved_at_ns<$2`, scope.TenantID, end.Add(-7*24*time.Hour).UnixNano()).Scan(&remaining); err != nil || remaining != 0 {
 		t.Fatal("retention cleanup incomplete", remaining, err)
 	}
 	cancelled, cancel := context.WithCancel(t.Context())

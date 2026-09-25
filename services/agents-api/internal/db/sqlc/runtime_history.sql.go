@@ -12,7 +12,7 @@ import (
 )
 
 const insertRuntimeHistorySample = `-- name: InsertRuntimeHistorySample :exec
-INSERT INTO runtime_history_samples (
+INSERT INTO observability_runtime_samples (
     tenant_id, session_id, environment_id, resolved_at_ns, allocation_id, provider_type,
     status, observed_at_ns, started_at_ns, cpu_usage_seconds, cpu_capacity_cores,
     memory_usage_bytes, memory_limit_bytes, input_tokens, output_tokens
@@ -65,7 +65,7 @@ func (q *Queries) InsertRuntimeHistorySample(ctx context.Context, arg InsertRunt
 }
 
 const listRuntimeHistorySamples = `-- name: ListRuntimeHistorySamples :many
-SELECT tenant_id, session_id, environment_id, resolved_at_ns, allocation_id, provider_type, status, observed_at_ns, started_at_ns, cpu_usage_seconds, cpu_capacity_cores, memory_usage_bytes, memory_limit_bytes, input_tokens, output_tokens FROM runtime_history_samples
+SELECT tenant_id, session_id, environment_id, resolved_at_ns, allocation_id, provider_type, status, observed_at_ns, started_at_ns, cpu_usage_seconds, cpu_capacity_cores, memory_usage_bytes, memory_limit_bytes, input_tokens, output_tokens FROM observability_runtime_samples
 WHERE tenant_id = $1 AND session_id = $2 AND environment_id = $3
   AND resolved_at_ns >= $4 AND resolved_at_ns < $5
 ORDER BY resolved_at_ns
@@ -81,7 +81,7 @@ type ListRuntimeHistorySamplesParams struct {
 	RowLimit      int32       `json:"row_limit"`
 }
 
-func (q *Queries) ListRuntimeHistorySamples(ctx context.Context, arg ListRuntimeHistorySamplesParams) ([]RuntimeHistorySample, error) {
+func (q *Queries) ListRuntimeHistorySamples(ctx context.Context, arg ListRuntimeHistorySamplesParams) ([]ObservabilityRuntimeSample, error) {
 	rows, err := q.db.Query(ctx, listRuntimeHistorySamples,
 		arg.TenantID,
 		arg.SessionID,
@@ -94,9 +94,9 @@ func (q *Queries) ListRuntimeHistorySamples(ctx context.Context, arg ListRuntime
 		return nil, err
 	}
 	defer rows.Close()
-	items := []RuntimeHistorySample{}
+	items := []ObservabilityRuntimeSample{}
 	for rows.Next() {
-		var i RuntimeHistorySample
+		var i ObservabilityRuntimeSample
 		if err := rows.Scan(
 			&i.TenantID,
 			&i.SessionID,
@@ -126,11 +126,11 @@ func (q *Queries) ListRuntimeHistorySamples(ctx context.Context, arg ListRuntime
 
 const pruneRuntimeHistorySamples = `-- name: PruneRuntimeHistorySamples :execrows
 WITH expired AS (
-    SELECT p.tenant_id, p.session_id, p.environment_id, p.resolved_at_ns FROM runtime_history_samples p
+    SELECT p.tenant_id, p.session_id, p.environment_id, p.resolved_at_ns FROM observability_runtime_samples p
     WHERE p.resolved_at_ns < $1
     ORDER BY p.resolved_at_ns LIMIT 256 FOR UPDATE SKIP LOCKED
 )
-DELETE FROM runtime_history_samples h USING expired e
+DELETE FROM observability_runtime_samples h USING expired e
 WHERE h.tenant_id = e.tenant_id AND h.session_id = e.session_id
   AND h.environment_id = e.environment_id AND h.resolved_at_ns = e.resolved_at_ns
 `

@@ -11,6 +11,7 @@ import (
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/observability"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
@@ -36,6 +37,10 @@ type Dispatcher struct {
 	Options func(context.Context, store.Session) (map[string]any, error)
 	// ManagedRuntimes is optional internal provisioning; it does not admit hosted API requests.
 	ManagedRuntimes *RuntimeProvider
+	// ToolRecorder receives sanitized terminal observations without affecting execution.
+	ToolRecorder interface {
+		Record(observability.ToolAttempt)
+	}
 }
 
 type Result struct {

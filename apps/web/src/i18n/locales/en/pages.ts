@@ -1,5 +1,9 @@
 export const pages = {
   dashboard: {
+    viewTabs: "Dashboard views", overviewTab: "Overview", observabilityTab: "Observability",
+    activeSandboxes: "Active sandboxes", currentRuntimeSnapshot: "Current Runtime snapshot", totalTokens: "Reported tokens", reportedUsage: "Session usage with coverage",
+    cpuCapacity: "Sandbox CPU capacity", measuredCores: "Cores with a current observation", memoryLimit: "Sandbox memory limit", measuredLimit: "Limits with a current observation",
+    readyNodes: "Ready nodes", nodeSnapshot: "Deployment node heartbeat",
     title: "Dashboard", subtitle: "Agents and Sessions that may need your attention.", refresh: "Refresh", refreshing: "Refreshing…", refreshLabel: "Refresh Dashboard snapshot",
     snapshotIncomplete: "Snapshot incomplete", snapshotStale: "Using the last successful snapshot", snapshotRefreshing: "Refreshing snapshot", snapshotReady: "Snapshot ready", snapshotDetail: "Latest complete paginated reads · not a live Core total or runtime-readiness signal", dataSources: "Dashboard data sources",
     agents: "Agents", sessions: "Sessions", runtime: "Runtime", unavailable: "Unavailable", savedDefinitions: "Saved definitions", inSnapshot: "In this snapshot", inProgress: "In progress", reportedStatus: "Core-reported status", needsAttention: "Needs attention", attentionDetail: "Requires action or failed",

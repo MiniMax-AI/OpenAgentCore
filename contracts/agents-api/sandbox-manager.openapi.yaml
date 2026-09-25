@@ -7,6 +7,33 @@ definitions:
       rotate:
         type: boolean
     type: object
+  api.OperatorMetricsResponse:
+    properties:
+      collector:
+        items:
+          $ref: '#/definitions/store.CollectorMetricBucket'
+        type: array
+      end:
+        type: string
+      generated_at:
+        type: string
+      requests:
+        items:
+          $ref: '#/definitions/store.RequestMetricBucket'
+        type: array
+      start:
+        type: string
+      step_seconds:
+        type: integer
+      tools:
+        items:
+          $ref: '#/definitions/store.ToolMetricBucket'
+        type: array
+      turns:
+        items:
+          $ref: '#/definitions/store.TurnMetricBucket'
+        type: array
+    type: object
   api.ProjectAPIKeyList:
     properties:
       data:
@@ -102,6 +129,25 @@ definitions:
       revoked_at:
         type: string
     type: object
+  store.CollectorMetricBucket:
+    properties:
+      attempted_count:
+        type: integer
+      dropped_count:
+        type: integer
+      export_failed_count:
+        type: integer
+      observed_count:
+        type: integer
+      source:
+        type: string
+      start:
+        type: string
+      timeout_count:
+        type: integer
+      unavailable_count:
+        type: integer
+    type: object
   store.IssuedExecutorCredential:
     properties:
       environment_id:
@@ -137,6 +183,23 @@ definitions:
       prefix:
         type: string
       revoked_at:
+        type: string
+    type: object
+  store.RequestMetricBucket:
+    properties:
+      count:
+        type: integer
+      latency_bucket_counts:
+        items:
+          type: integer
+        type: array
+      latency_sum_ms:
+        type: integer
+      outcome:
+        type: string
+      route_family:
+        type: string
+      start:
         type: string
     type: object
   store.ResourceOwner:
@@ -300,6 +363,34 @@ definitions:
       maintenance:
         type: boolean
     type: object
+  store.ToolMetricBucket:
+    properties:
+      category:
+        type: string
+      count:
+        type: integer
+      duration_p95_ms:
+        type: number
+      outcome:
+        type: string
+      start:
+        type: string
+      timed_count:
+        type: integer
+    type: object
+  store.TurnMetricBucket:
+    properties:
+      count:
+        type: integer
+      execution_p95_ms:
+        type: number
+      queue_p95_ms:
+        type: number
+      start:
+        type: string
+      status:
+        type: string
+    type: object
   store.WriteOperation:
     properties:
       action:
@@ -451,6 +542,42 @@ paths:
       summary: Revoke an Environment executor credential
       tags:
         - Environment Executor
+  /core/v1/observability/summary:
+    get:
+      description: Deployment administrator only. Returns fixed-range aggregate requests and collector coverage without paths, payloads or project identifiers.
+      parameters:
+        - description: 1h, 6h, or 24h (default 1h)
+          in: query
+          name: range
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.OperatorMetricsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve bounded operator observability metrics
+      tags:
+        - Observability
   /core/v1/project-api-keys/{binding_digest}:
     get:
       description: Core extension requiring deployment administrator authority. The binding digest selects only a statically configured caller; it does not authenticate. Returns safe metadata, never key secrets or token digests. Derived keys freeze that caller's principal and stop authenticating when the static parent is removed or rebound.

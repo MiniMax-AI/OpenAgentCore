@@ -2367,6 +2367,7 @@ export function App() {
               runtimeCollectionError={runtimeCollectionError}
               runtimeCollectionHasSnapshot={runtimeCollectionHasSnapshot}
               loadRuntimeHistory={loadDashboardRuntimeHistory}
+              coreBaseUrl={connection.baseUrl}
               onRefresh={refreshDashboard}
               onCreateAgent={openAgentSetup}
               onStartSession={() => openSessionSetup()}

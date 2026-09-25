@@ -136,6 +136,73 @@ type InitialEnvironmentFile struct {
 	Contents  []byte      `json:"contents"`
 }
 
+type ObservabilityCollectorMinuteBucket struct {
+	BucketStart       pgtype.Timestamptz `json:"bucket_start"`
+	Source            string             `json:"source"`
+	AttemptedCount    int64              `json:"attempted_count"`
+	ObservedCount     int64              `json:"observed_count"`
+	UnavailableCount  int64              `json:"unavailable_count"`
+	TimeoutCount      int64              `json:"timeout_count"`
+	DroppedCount      int64              `json:"dropped_count"`
+	ExportFailedCount int64              `json:"export_failed_count"`
+}
+
+type ObservabilityModelAttempt struct {
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	SessionID    pgtype.UUID        `json:"session_id"`
+	TurnID       pgtype.UUID        `json:"turn_id"`
+	StartedAt    pgtype.Timestamptz `json:"started_at"`
+	FinishedAt   pgtype.Timestamptz `json:"finished_at"`
+	ModelFamily  string             `json:"model_family"`
+	ProviderType string             `json:"provider_type"`
+	Outcome      string             `json:"outcome"`
+	DurationMs   int64              `json:"duration_ms"`
+	InputTokens  pgtype.Int8        `json:"input_tokens"`
+	OutputTokens pgtype.Int8        `json:"output_tokens"`
+	UsageStatus  string             `json:"usage_status"`
+}
+
+type ObservabilityRequestMinuteBucket struct {
+	BucketStart         pgtype.Timestamptz `json:"bucket_start"`
+	RouteFamily         string             `json:"route_family"`
+	Method              string             `json:"method"`
+	Outcome             string             `json:"outcome"`
+	RequestCount        int64              `json:"request_count"`
+	LatencySumMs        int64              `json:"latency_sum_ms"`
+	LatencyBucketCounts []int64            `json:"latency_bucket_counts"`
+}
+
+type ObservabilityRuntimeSample struct {
+	TenantID         pgtype.UUID   `json:"tenant_id"`
+	SessionID        pgtype.UUID   `json:"session_id"`
+	EnvironmentID    pgtype.UUID   `json:"environment_id"`
+	ResolvedAtNs     int64         `json:"resolved_at_ns"`
+	AllocationID     pgtype.UUID   `json:"allocation_id"`
+	ProviderType     string        `json:"provider_type"`
+	Status           string        `json:"status"`
+	ObservedAtNs     pgtype.Int8   `json:"observed_at_ns"`
+	StartedAtNs      pgtype.Int8   `json:"started_at_ns"`
+	CpuUsageSeconds  pgtype.Float8 `json:"cpu_usage_seconds"`
+	CpuCapacityCores pgtype.Float8 `json:"cpu_capacity_cores"`
+	MemoryUsageBytes pgtype.Int8   `json:"memory_usage_bytes"`
+	MemoryLimitBytes pgtype.Int8   `json:"memory_limit_bytes"`
+	InputTokens      pgtype.Int8   `json:"input_tokens"`
+	OutputTokens     pgtype.Int8   `json:"output_tokens"`
+}
+
+type ObservabilityToolAttempt struct {
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	SessionID    pgtype.UUID        `json:"session_id"`
+	TurnID       pgtype.UUID        `json:"turn_id"`
+	StartedAt    pgtype.Timestamptz `json:"started_at"`
+	FinishedAt   pgtype.Timestamptz `json:"finished_at"`
+	ToolCategory string             `json:"tool_category"`
+	Outcome      string             `json:"outcome"`
+	DurationMs   pgtype.Int8        `json:"duration_ms"`
+}
+
 type ProjectApiKey struct {
 	ID             pgtype.UUID        `json:"id"`
 	Name           string             `json:"name"`
@@ -211,24 +278,6 @@ type RuntimeDeviceAuthority struct {
 	Name           string      `json:"name"`
 	EnvironmentID  pgtype.UUID `json:"environment_id"`
 	CredentialHash string      `json:"credential_hash"`
-}
-
-type RuntimeHistorySample struct {
-	TenantID         pgtype.UUID   `json:"tenant_id"`
-	SessionID        pgtype.UUID   `json:"session_id"`
-	EnvironmentID    pgtype.UUID   `json:"environment_id"`
-	ResolvedAtNs     int64         `json:"resolved_at_ns"`
-	AllocationID     pgtype.UUID   `json:"allocation_id"`
-	ProviderType     string        `json:"provider_type"`
-	Status           string        `json:"status"`
-	ObservedAtNs     pgtype.Int8   `json:"observed_at_ns"`
-	StartedAtNs      pgtype.Int8   `json:"started_at_ns"`
-	CpuUsageSeconds  pgtype.Float8 `json:"cpu_usage_seconds"`
-	CpuCapacityCores pgtype.Float8 `json:"cpu_capacity_cores"`
-	MemoryUsageBytes pgtype.Int8   `json:"memory_usage_bytes"`
-	MemoryLimitBytes pgtype.Int8   `json:"memory_limit_bytes"`
-	InputTokens      pgtype.Int8   `json:"input_tokens"`
-	OutputTokens     pgtype.Int8   `json:"output_tokens"`
 }
 
 type RuntimeNode struct {

@@ -13,6 +13,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/observability"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -61,6 +62,8 @@ type Handler struct {
 	subagents             SubagentStore
 	runtimeObservations   RuntimeObservationService
 	runtimeHistory        RuntimeHistoryService
+	requestMetrics        *observability.RequestRecorder
+	operatorMetrics       OperatorMetricsStore
 	startup               *v1.CoreStartupConfiguration
 }
 
@@ -92,6 +95,9 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 func (h *Handler) routes() *chi.Mux {
 	router := chi.NewRouter()
 	router.Use(agentsResponseHeaders, log.HTTPMiddleware, middleware.GetHead)
+	if h.requestMetrics != nil {
+		router.Use(h.recordRequestMetrics)
+	}
 	router.MethodNotAllowed(methodNotAllowed)
 	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -109,6 +115,7 @@ func (h *Handler) routes() *chi.Mux {
 	h.registerSandboxManagerRoutes(router)
 	h.registerProjectAPIKeyRoutes(router)
 	h.registerWriteAuditRoutes(router)
+	h.registerOperatorMetricsRoutes(router)
 	h.registerEnvironmentExecutorRoutes(router)
 	router.Route("/v1", func(r chi.Router) {
 		r.Use(h.authenticate)

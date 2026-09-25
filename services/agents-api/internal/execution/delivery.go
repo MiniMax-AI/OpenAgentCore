@@ -65,7 +65,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 		}
 	}()
 	journal := &journal{store: d.Store, tenant: tenantID, session: sessionID, turn: request.RunID, next: 1,
-		observeSubagents: request.ObserveSubagentIdentities}
+		observeSubagents: request.ObserveSubagentIdentities, toolRecorder: d.ToolRecorder}
 	defer func() {
 		finishCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

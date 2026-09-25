@@ -4,3 +4,4 @@ export { createSSEDecoder } from "./sse";
 export type { SSEDecoder, SSEMessage } from "./sse";
 export type * from "./types";
 export * from "./sandbox-client";
+export * from "./observability-client";

@@ -144,6 +144,16 @@ logs. Update this guide when architecture, ownership or generated contracts chan
 Comments and documentation are English. Reuse existing helpers and error mapping;
 split oversized components before extending them. Use `internal/obs/log` for logs.
 
+Operator observability is a side-channel owned by Core. The authenticated
+`/core/v1/observability/summary` extension reads bounded request, terminal Turn,
+tool attempt, and collector aggregates; the Core Web uses it through
+`packages/agents-client`. Runtime samples retain their separate public history
+contract under the `observability_runtime_samples` table. Native model attempts
+have a reserved table but no qualified producer; configured models, cumulative
+Usage, and Turns must not be counted as model calls. Missing collector coverage
+stays unavailable rather than becoming zero. See
+`contracts/agents-api/system-observability-plan.md` for source and retention details.
+
 ## Required checks
 
 Run `make check` before completion. The standalone gate includes all daemon/shared

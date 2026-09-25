@@ -1,5 +1,9 @@
 export const pages = {
   dashboard: {
+    viewTabs: "大盘视图", overviewTab: "概览", observabilityTab: "观测大盘",
+    activeSandboxes: "活跃 Sandbox", currentRuntimeSnapshot: "当前 Runtime 快照", totalTokens: "已报告 Token", reportedUsage: "有覆盖的会话用量",
+    cpuCapacity: "Sandbox CPU 容量", measuredCores: "有当前观测的核数", memoryLimit: "Sandbox 内存上限", measuredLimit: "有当前观测的上限",
+    readyNodes: "就绪节点", nodeSnapshot: "部署节点心跳",
     title: "概览", subtitle: "查看可能需要关注的智能体和会话。", refresh: "刷新", refreshing: "刷新中…", refreshLabel: "刷新概览快照",
     snapshotIncomplete: "快照不完整", snapshotStale: "正在使用最近一次成功快照", snapshotRefreshing: "正在刷新快照", snapshotReady: "快照已就绪", snapshotDetail: "最近一次完整分页读取 · 不代表 Core 实时总量或运行时就绪", dataSources: "概览数据源",
     agents: "智能体", sessions: "会话", runtime: "运行时", unavailable: "不可用", savedDefinitions: "已保存定义", inSnapshot: "当前快照", inProgress: "进行中", reportedStatus: "Core 报告状态", needsAttention: "需要关注", attentionDetail: "需要操作或已失败",
