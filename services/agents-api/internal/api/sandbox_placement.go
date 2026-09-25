@@ -41,14 +41,9 @@ func (h *Handler) sandboxNodeDirectory(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	deployment, err := h.sandboxStore.GetRuntimeDeployment(r.Context())
-	if err != nil {
-		writeStoreError(w, r, err)
-		return
-	}
 	result := make([]SandboxNodeDirectoryEntry, 0, len(nodes))
 	for _, n := range nodes {
-		result = append(result, SandboxNodeDirectoryEntry{ID: n.ID, Name: n.Name, Available: n.Online && n.ProviderReady && !deployment.Maintenance && n.Active < int64(n.MaxActive) && n.Retained < int64(n.MaxRetained)})
+		result = append(result, SandboxNodeDirectoryEntry{ID: n.ID, Name: n.Name, Available: n.Schedulable})
 	}
 	writeJSON(w, http.StatusOK, SandboxNodeDirectory{Data: result})
 }
