@@ -644,14 +644,21 @@ offered as Current); another backend starts from its standard size and this
 console's Runtime, and E2B always needs its key again. Rules sit behind help tips.
 
 ### System page
-Read-only facts in three sections, each saying where it changes. Installation: the
-public address, API base URL, installation ID and source commit as a fact card.
-Sandboxes: the shared sandbox configuration, with a "Change on the Nodes page"
-text action in the section header. Startup settings: a line naming the config file
-and the apply command as copyable chips, with when they were last applied, over a
-table of each setting, its value and the services a change restarts. Sensitive
-settings show only Configured or Not set; Default and Fixed after install are
-neutral pills beside the value.
+Four sections, each saying where it changes. Installation: the public address, API
+base URL, installation ID and source commit as a fact card. Default model, the one
+section changed here: one card per harness in an auto-fill grid, its header holding
+the harness name and outline actions (Set, or Replace and Clear); fact rows give the
+harness's read-only startup state (a status dot and a Default pill, its source behind
+a help tip), then the provider's protocol, base URL, whether a key is configured,
+token limits when set and the update time, or Not set. Set and Replace open one form
+dialog; the key field is a required password input, never prefilled or shown and
+forgotten when the form closes. Core's rejection stays in red inside the form; Clear
+is a ConfirmDialog. Sandboxes: the shared sandbox configuration, with a "Change on
+the Nodes page" text action in the section header. Startup settings: a line naming
+the config file and the apply command as copyable chips, with when they were last
+applied, over a table of each setting, its value and the services a change restarts.
+Sensitive settings show only Configured or Not set; Default and Fixed after install
+are neutral pills beside the value.
 
 ### Loading and motion
 The console has no spinners and no "Loading…" lines. Reads are cached (TanStack
