@@ -163,7 +163,7 @@ function connectedLiveEvents(page: Page) {
 
 async function setDarkTheme(page: Page) {
   await page.getByRole("button", { name: "Language and appearance" }).click();
-  await page.getByRole("menuitemradio", { name: "Dark theme" }).click();
+  await page.getByRole("menuitem", { name: "Switch to dark theme" }).click();
 }
 
 async function openEnvironmentDialog(page: Page) {

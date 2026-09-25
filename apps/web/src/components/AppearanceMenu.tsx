@@ -1,4 +1,4 @@
-import { Check, ChevronDown, CircleUserRound, Languages, LogOut, Moon, Sun } from "lucide-react";
+import { Check, ChevronDown, CircleUserRound, Languages, LogOut, Moon, Settings2, Sun } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -6,7 +6,13 @@ import { setLanguage, type SupportedLanguage } from "../i18n";
 import { useTheme, type ResolvedTheme } from "../lib/theme";
 import { useConsoleAccount } from "../features/first-run/ConsoleAccess";
 
-export function AppearanceMenu({ withAccount = false }: { withAccount?: boolean }) {
+type CoreState = "connecting" | "ready" | "failed";
+
+export function AppearanceMenu({ withAccount = false, coreState, onConfigureCore }: {
+  withAccount?: boolean;
+  coreState?: CoreState;
+  onConfigureCore?: () => void;
+}) {
   const { i18n, t } = useTranslation("navigation");
   const { t: tAuth } = useTranslation("firstRun");
   const account = useConsoleAccount();
@@ -70,15 +76,17 @@ export function AppearanceMenu({ withAccount = false }: { withAccount?: boolean 
     close();
   };
 
+  const showConsole = withAccount && Boolean(onConfigureCore) && Boolean(coreState);
   const showAccount = withAccount && Boolean(account);
+  const coreStatus = coreState === "connecting" ? t("coreConnecting") : coreState === "ready" ? t("coreReady") : t("coreFailed");
   const toggleTheme = () => {
     setPreference(resolvedTheme === "dark" ? "light" : "dark");
     close();
   };
-  return <div className={`appearance-menu${showAccount ? " appearance-menu-account" : ""}`} ref={rootRef} onKeyDown={onKeyDown}>
+  return <div className={`appearance-menu${showConsole ? " appearance-menu-account" : ""}`} ref={rootRef} onKeyDown={onKeyDown}>
     <button
       ref={triggerRef}
-      className={`appearance-menu-trigger${showAccount ? " appearance-menu-account-trigger" : ""}`}
+      className={`appearance-menu-trigger${showConsole ? ` appearance-menu-account-trigger appearance-console-trigger appearance-console-state-${coreState}` : ""}`}
       type="button"
       aria-haspopup="menu"
       aria-expanded={open}
@@ -97,11 +105,12 @@ export function AppearanceMenu({ withAccount = false }: { withAccount?: boolean 
         focusMenuItem(event.key === "ArrowDown" ? "first" : "last");
       }}
     >
-      {showAccount ? <><CircleUserRound size={17} strokeWidth={1.6} aria-hidden="true" /><span className="appearance-account-name">{account?.username}</span><ChevronDown size={13} strokeWidth={1.5} aria-hidden="true" /></> : <><Languages size={14} strokeWidth={1.5} aria-hidden="true" /><span>{language === "en" ? "EN" : "中"}</span><ThemeIcon size={14} strokeWidth={1.5} aria-hidden="true" /><ChevronDown size={12} strokeWidth={1.5} aria-hidden="true" /></>}
+      {showConsole ? <>{showAccount ? <CircleUserRound size={20} strokeWidth={1.5} aria-hidden="true" /> : <Settings2 size={20} strokeWidth={1.5} aria-hidden="true" />}<span className="appearance-console-identity"><strong>{account?.username ?? "Agent Core"}</strong><small><i className={`appearance-core-dot appearance-core-dot-${coreState}`} />{showAccount ? "Agent Core · " : ""}{coreStatus}</small></span><ChevronDown size={13} strokeWidth={1.5} aria-hidden="true" /></> : <><Languages size={14} strokeWidth={1.5} aria-hidden="true" /><span>{language === "en" ? "EN" : "中"}</span><ThemeIcon size={14} strokeWidth={1.5} aria-hidden="true" /><ChevronDown size={12} strokeWidth={1.5} aria-hidden="true" /></>}
     </button>
-    {open ? <div className={`appearance-menu-panel${showAccount ? " appearance-account-panel" : ""}`} role="menu" aria-label={t(showAccount ? "accountAndAppearance" : "appearanceSettings")}>
-      {showAccount ? <>
-        <div className="appearance-account-header"><span className="appearance-account-avatar" aria-hidden="true">{account?.username.slice(0, 1).toUpperCase()}</span><div><strong>{account?.username}</strong><small>{t("account")}</small></div></div>
+    {open ? <div className={`appearance-menu-panel${showConsole ? " appearance-account-panel" : ""}`} role="menu" aria-label={t(showAccount ? "accountAndAppearance" : "appearanceSettings")}>
+      {showConsole ? <>
+        {showAccount ? <div className="appearance-account-header"><span className="appearance-account-avatar" aria-hidden="true">{account?.username.slice(0, 1).toUpperCase()}</span><div><strong>{account?.username}</strong><small>{t("account")}</small></div></div> : null}
+        <div className="appearance-core-action"><button type="button" role="menuitem" aria-label={t("configureCore")} onClick={() => { close(); onConfigureCore?.(); }}><span><i className={`appearance-core-dot appearance-core-dot-${coreState}`} /><span><strong>Agent Core</strong><small>{coreStatus}</small></span></span><Settings2 size={15} aria-hidden="true" /></button></div>
         <div className="appearance-account-actions">
           <button ref={languageRef} type="button" role="menuitem" aria-haspopup="true" aria-expanded={languageOpen} onClick={() => setLanguageOpen((value) => !value)}><span><Languages size={16} aria-hidden="true" />{t("language")}</span><span className="appearance-account-value">{language === "en" ? "English" : "简体中文"}<ChevronDown size={13} aria-hidden="true" /></span></button>
           {languageOpen ? <div className="appearance-language-options" role="group" aria-label={t("language")}>
@@ -110,12 +119,12 @@ export function AppearanceMenu({ withAccount = false }: { withAccount?: boolean 
           </div> : null}
           <button type="button" role="menuitem" aria-label={t(resolvedTheme === "dark" ? "switchToLightTheme" : "switchToDarkTheme")} onClick={toggleTheme}><span><ThemeIcon size={16} aria-hidden="true" />{t("theme")}</span><span className="appearance-account-value">{t(resolvedTheme === "dark" ? "darkMode" : "lightMode")}</span></button>
         </div>
-        <div className="appearance-account-signout"><button type="button" role="menuitem" disabled={signingOut} onClick={async () => {
+        {showAccount ? <div className="appearance-account-signout"><button type="button" role="menuitem" disabled={signingOut} onClick={async () => {
           if (!account) return;
           setSigningOut(true); setSignOutFailed(false);
           try { await account.logout(); close(); } catch { setSigningOut(false); setSignOutFailed(true); }
         }}><LogOut size={16} aria-hidden="true" />{tAuth(signingOut ? "Signing out…" : "Sign out")}</button>
-        {signOutFailed ? <small role="alert">{tAuth("Could not sign out. Try again.")}</small> : null}</div>
+        {signOutFailed ? <small role="alert">{tAuth("Could not sign out. Try again.")}</small> : null}</div> : null}
       </> : <>
       <div className="appearance-menu-section" role="group" aria-label={t("language")}>
         <span>{t("language")}</span>

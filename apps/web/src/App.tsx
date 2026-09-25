@@ -1,4 +1,3 @@
-import { Settings2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -28,7 +27,6 @@ import { SystemNavigation } from "./components/SystemNavigation";
 import { ConnectionModal } from "./components/ConnectionModal";
 import { CreateMenu } from "./components/CreateMenu";
 import { ProductNavigation, type ProductView } from "./components/ProductNavigation";
-import { StatusIcon } from "./components/StatusIcon";
 import { AppearanceMenu } from "./components/AppearanceMenu";
 import { useToast } from "./components/Toast";
 import { AgentsView } from "./features/agents/AgentsView";
@@ -2309,25 +2307,7 @@ export function App() {
         <SystemNavigation active={view === "system" || view === "sandbox" ? view : null} onSelect={setView} />
 
         <div className="sidebar-footer">
-          <button
-            className="core-switcher"
-            type="button"
-            onClick={() => setConnectionOpen(true)}
-            aria-label={t("configureCore")}
-          >
-            <StatusIcon
-              status={coreState === "ready" ? "completed" : coreState === "failed" ? "failed" : "running"}
-              title={t("coreState", { state: coreState })}
-            />
-            <span>
-              <strong>Agent Core</strong>
-              <small>{coreState === "connecting" ? t("coreConnecting") : coreState === "ready" ? t("coreReady") : t("coreFailed")}</small>
-            </span>
-            <Settings2 size={14} strokeWidth={1.5} />
-          </button>
-          <div className="sidebar-preferences">
-            <AppearanceMenu withAccount />
-          </div>
+          <AppearanceMenu withAccount coreState={coreState} onConfigureCore={() => setConnectionOpen(true)} />
         </div>
       </aside>
 

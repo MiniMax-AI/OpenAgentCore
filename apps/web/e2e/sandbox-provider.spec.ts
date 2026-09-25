@@ -117,6 +117,7 @@ for (const theme of ["light", "dark"]) {
     await openManager(page);
     await page.evaluate((theme) => document.documentElement.dataset.theme = theme, theme);
     await page.getByRole("button", { name: "Language and appearance" }).click();
+    await page.getByRole("menuitem", { name: /Language/ }).click();
     await page.getByRole("menuitemradio", { name: "简体中文" }).click();
     await expect(page.getByRole("heading", { name: "部署运行后端", exact: true })).toBeVisible();
     await expect(page.getByText("已配置", { exact: true })).toBeVisible();

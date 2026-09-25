@@ -312,82 +312,21 @@ html[data-theme="dark"] .brand-mark-dark {
 }
 
 .sidebar-footer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: center;
   margin-top: auto;
   padding: 12px 4px 2px;
-  gap: 3px;
   border-top: 1px solid var(--line);
-}
-
-.core-switcher {
-  display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) 18px;
-  align-items: center;
-  width: 100%;
-  min-height: 43px;
-  padding: 5px 7px;
-  gap: 7px;
-  color: var(--sidebar-fg);
-  text-align: left;
-  background: transparent;
-  border: 0;
-}
-
-.core-switcher:hover {
-  color: var(--fg);
-}
-
-.core-switcher > span:nth-child(2) {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-
-.core-switcher strong,
-.core-switcher small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.core-switcher strong {
-  color: var(--fg);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 18px;
-}
-
-.core-switcher small {
-  color: var(--fg-muted);
-  font-size: 12px;
-  line-height: 16px;
-  text-transform: capitalize;
-}
-
-.sidebar-footer > .core-switcher {
-  grid-column: 1 / -1;
-}
-
-.sidebar-footer > .sidebar-preferences {
-  grid-column: 1;
-  grid-row: 2;
-  margin-top: 7px;
-  padding-top: 7px;
-  border-top: 1px solid var(--line);
-}
-
-.sidebar-preferences {
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .sidebar-footer .appearance-menu-trigger { width: 100%; justify-content: flex-start; border-color: transparent; background: transparent; }
 .sidebar-footer .appearance-menu { width: 100%; }
-.sidebar-footer .appearance-menu-account-trigger { min-height: 36px; height: auto; gap: 9px; padding: 6px 7px; color: var(--fg); }
-.sidebar-footer .appearance-account-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font-size: 12px; font-weight: 550; }
+.sidebar-footer .appearance-menu-account-trigger { min-height: 48px; height: auto; gap: 9px; padding: 7px; color: var(--fg); }
+.appearance-console-identity { display: grid; flex: 1; min-width: 0; gap: 2px; text-align: left; }
+.appearance-console-identity strong, .appearance-console-identity small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.appearance-console-identity strong { color: var(--fg); font-size: 12px; font-weight: 600; }
+.appearance-console-identity small { display: flex; align-items: center; gap: 5px; color: var(--fg-muted); font-size: 11px; font-weight: 400; }
+.appearance-core-dot { display: inline-block; width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--status-queued); }
+.appearance-core-dot-ready { background: var(--success); }
+.appearance-core-dot-failed { background: var(--danger); }
 
 .theme-menu {
   display: inline-flex;
@@ -463,6 +402,13 @@ html[data-theme="dark"] .brand-mark-dark {
 }
 
 .appearance-account-panel { width: 226px; padding: 0; overflow: hidden; }
+.appearance-core-action { padding: 6px; border-bottom: 1px solid var(--line); }
+.appearance-core-action > button { display: flex; width: 100%; min-height: 42px; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 9px; border: 0; border-radius: 6px; background: transparent; color: var(--fg-muted); font: inherit; text-align: left; cursor: pointer; }
+.appearance-core-action > button > span { display: flex; align-items: center; gap: 9px; }
+.appearance-core-action > button > span > span { display: grid; gap: 2px; }
+.appearance-core-action strong { color: var(--fg); font-size: 12px; font-weight: 600; }
+.appearance-core-action small { color: var(--fg-muted); font-size: 11px; }
+.appearance-core-action > button:hover, .appearance-core-action > button:focus-visible { background: var(--surface-subtle); outline: none; }
 .appearance-account-header { display: flex; align-items: center; gap: 10px; padding: 14px; border-bottom: 1px solid var(--line); }
 .appearance-account-avatar { display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); font-size: 14px; font-weight: 700; }
 .appearance-account-header > div { display: grid; min-width: 0; gap: 2px; }
@@ -667,8 +613,7 @@ html[data-theme="dark"] .brand-mark-dark {
 .field textarea:focus,
 .field select:focus,
   .session-row-select:focus-visible,
-.main-nav button:focus-visible,
-.core-switcher:focus-visible {
+.main-nav button:focus-visible {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
@@ -4522,8 +4467,7 @@ button.trace-step-row:hover {
   .nav-label,
   .main-nav button span,
   .main-nav button em,
-  .core-switcher > span:nth-child(2),
-  .core-switcher > svg:last-child {
+  .appearance-console-identity {
     display: none;
   }
 
@@ -4532,28 +4476,10 @@ button.trace-step-row:hover {
   }
 
   .sidebar-footer {
-    grid-template-columns: 1fr;
-    justify-items: center;
     padding: 8px 0 0;
-    gap: 6px;
-  }
-
-  .sidebar-footer > .sidebar-preferences {
-    grid-column: 1;
-    grid-row: auto;
-  }
-
-  .core-switcher {
-    display: flex;
-    justify-content: center;
   }
 
   .theme-menu {
-    flex-direction: column;
-  }
-
-  .sidebar-preferences {
-    max-width: 100%;
     flex-direction: column;
   }
 
@@ -4563,8 +4489,12 @@ button.trace-step-row:hover {
     padding: 0;
   }
 
-  .sidebar-footer .appearance-menu-trigger { width: 38px; justify-content: center; }
+  .sidebar-footer .appearance-menu-trigger { width: 38px; min-height: 38px; justify-content: center; }
   .sidebar-footer .appearance-menu-panel { position: fixed; right: auto; bottom: 8px; left: 60px; }
+  .appearance-console-trigger { position: relative; }
+  .appearance-console-trigger::after { position: absolute; right: 5px; bottom: 4px; width: 6px; height: 6px; border: 1px solid var(--surface); border-radius: 50%; background: var(--status-queued); content: ""; }
+  .appearance-console-state-ready::after { background: var(--success); }
+  .appearance-console-state-failed::after { background: var(--danger); }
 
   .appearance-menu-trigger > span,
   .appearance-menu-trigger > svg:nth-of-type(2),

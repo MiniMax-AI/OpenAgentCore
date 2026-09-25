@@ -22,12 +22,13 @@ async function resetFixture(request: APIRequestContext) {
 async function boot(page: Page, request: APIRequestContext) {
   await resetFixture(request);
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Configure Agent Core connection" })).toBeVisible();
+  await expect(page.locator(".sidebar-footer .appearance-menu-trigger")).toBeVisible();
 }
 
 async function openConnection(page: Page) {
-  const trigger = page.getByRole("button", { name: "Configure Agent Core connection" });
+  const trigger = page.locator(".sidebar-footer .appearance-menu-trigger");
   await trigger.click();
+  await page.getByRole("menuitem", { name: "Configure Agent Core connection" }).click();
   const dialog = page.getByRole("dialog", { name: "Connect an Agent Core" });
   await expect(dialog).toBeVisible();
   return { dialog, trigger };

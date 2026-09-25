@@ -267,7 +267,8 @@ for (const operation of ["read", "write"] as const) {
     // it lets an in-flight write finish after its owning page has unmounted.
     await page.evaluate(() => { location.hash = "system"; });
     await expect(page.getByRole("dialog", { name: "Edit Template", exact: true })).toHaveCount(0);
-    await page.getByRole("button", { name: "Configure Agent Core connection", exact: true }).click();
+    await page.locator(".sidebar-footer .appearance-menu-trigger").click();
+    await page.getByRole("menuitem", { name: "Configure Agent Core connection", exact: true }).click();
     const connection = page.getByRole("dialog", { name: "Connect an Agent Core", exact: true });
     await connection.getByRole("radio", { name: /Other compatible Core/ }).check();
     await connection.getByLabel("Compatible Core base URL").fill(`${new URL(page.url()).origin}/v1`);

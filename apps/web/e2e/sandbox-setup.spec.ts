@@ -185,7 +185,8 @@ for (const operation of ["setup", "enrollment"] as const) {
     }
     await expect.poll(() => page.evaluate(() => typeof (window as Window & { releaseSandboxResponse?: () => void }).releaseSandboxResponse)).toBe("function");
     await page.evaluate(() => { location.hash = "system"; });
-    await page.getByRole("button", { name: "Configure Agent Core connection", exact: true }).click();
+    await page.locator(".sidebar-footer .appearance-menu-trigger").click();
+    await page.getByRole("menuitem", { name: "Configure Agent Core connection", exact: true }).click();
     const connection = page.getByRole("dialog", { name: "Connect an Agent Core", exact: true });
     await connection.getByRole("radio", { name: /Other compatible Core/ }).check();
     await connection.getByLabel("Compatible Core base URL").fill(`${new URL(page.url()).origin}/v1`);
