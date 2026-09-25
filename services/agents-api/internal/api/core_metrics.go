@@ -18,7 +18,7 @@ func WithCoreMetrics(service CoreMetricsService) Option {
 }
 
 // @Summary Retrieve Core operational metrics
-// @Description Deployment administrator only. Complete UTC buckets; unknown measurements are null. Samples are process-local and are not backfilled after a restart.
+// @Description Core key only. Complete UTC buckets; unknown measurements are null. Samples are process-local and are not backfilled after a restart.
 // @Tags Core Administration
 // @Produce json
 // @Security DeploymentAdminAuth

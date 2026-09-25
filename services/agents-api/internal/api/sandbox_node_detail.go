@@ -11,7 +11,7 @@ import (
 )
 
 // @Summary Retrieve sandbox node and host history
-// @Description Deployment administrator only. Complete UTC buckets. Missing host measurements and offline history are null; reads never sample or backfill.
+// @Description Core key only. Complete UTC buckets. Missing host measurements and offline history are null; reads never sample or backfill.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth

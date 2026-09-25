@@ -3,7 +3,7 @@ package api
 import "net/http"
 
 // @Summary List Environment Templates in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Environment Templates
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -19,7 +19,7 @@ func (h *Handler) adminListEnvironmentTemplates(w http.ResponseWriter, r *http.R
 }
 
 // @Summary Retrieve an Environment Template in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Environment Templates
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -33,7 +33,7 @@ func (h *Handler) adminGetEnvironmentTemplate(w http.ResponseWriter, r *http.Req
 }
 
 // @Summary Delete an Environment Template in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Environment Templates
 // @Produce json
 // @Security DeploymentAdminAuth

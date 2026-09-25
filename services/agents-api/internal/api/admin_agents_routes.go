@@ -3,7 +3,7 @@ package api
 import "net/http"
 
 // @Summary List reusable Agents in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Agents
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -19,7 +19,7 @@ func (h *Handler) adminListAgents(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Retrieve a reusable Agent in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Agents
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -33,7 +33,7 @@ func (h *Handler) adminGetAgent(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Delete a reusable Agent in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Agents
 // @Produce json
 // @Security DeploymentAdminAuth

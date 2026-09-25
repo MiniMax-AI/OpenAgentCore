@@ -18,7 +18,7 @@ type AdminSessionArchiveRequest struct {
 }
 
 // @Summary Release a managed Session's execution resources while retaining history
-// @Description Deployment administrator only. Requires maintenance and the current deployment generation. Permanently closes execution, requests cancellation and releases sandbox/snapshots through existing cleanup. Session history and persisted files/artifacts remain; unpersisted workspace contents are lost. A cleanup_pending response is not proof of resource release. Does not affect caller-managed Runtime.
+// @Description Core key only. Requires maintenance and the current deployment generation. Permanently closes execution, requests cancellation and releases sandbox/snapshots through existing cleanup. Session history and persisted files/artifacts remain; unpersisted workspace contents are lost. A cleanup_pending response is not proof of resource release. Does not affect caller-managed Runtime.
 // @Tags Core Administration
 // @Accept json
 // @Produce json
@@ -52,7 +52,7 @@ func (h *Handler) adminArchiveSession(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Retrieve a managed Session's resource cleanup state
-// @Description Deployment administrator only. Reports actual resource disposition, including expiry and failure cleanup. This is not archive provenance and does not assert active Turn settlement. Read this after an uncertain archive response; never infer released from a missing sandbox alone.
+// @Description Core key only. Reports actual resource disposition, including expiry and failure cleanup. This is not archive provenance and does not assert active Turn settlement. Read this after an uncertain archive response; never infer released from a missing sandbox alone.
 // @Tags Core Administration
 // @Produce json
 // @Security DeploymentAdminAuth

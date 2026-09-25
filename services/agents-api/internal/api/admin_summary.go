@@ -54,7 +54,7 @@ func adminSummaryTime(r *http.Request, name string) (*time.Time, error) {
 }
 
 // @Summary Summarize resource counts and Session usage by Project, Agent or creator key
-// @Description Administrator only. after/limit/order paginate Projects. Agent grouping returns groups within those spaces. Date bounds filter Session creation, not current asset counts. Usage sums only non-null public Session usage; coverage includes every selected Session. Each Project is read in a consistent database snapshot. Totals are not billing records.
+// @Description Core key only. after/limit/order paginate Projects. Agent grouping returns groups within those spaces. Date bounds filter Session creation, not current asset counts. Usage sums only non-null public Session usage; coverage includes every selected Session. Each Project is read in a consistent database snapshot. Totals are not billing records.
 // @Tags Core Administration
 // @Produce json
 // @Security DeploymentAdminAuth

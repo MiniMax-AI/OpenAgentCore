@@ -9,7 +9,7 @@ import (
 )
 
 // @Summary Query committed administrator mutations
-// @Description Deployment administrator only. Newest-first cursor pagination of safe metadata. Actor labels are unverified console labels, not authorization identities. Request bodies and secrets are never recorded.
+// @Description Core key only. Newest-first cursor pagination of safe metadata. Actor labels are unverified console labels, not authorization identities. Request bodies and secrets are never recorded.
 // @Tags Core Administration
 // @Produce json
 // @Security DeploymentAdminAuth

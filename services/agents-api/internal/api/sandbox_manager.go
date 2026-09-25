@@ -63,7 +63,7 @@ func (h *Handler) registerSandboxManagerRoutes(r chi.Router) {
 }
 
 // @Summary Retrieve sandbox deployment
-// @Description Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields. E2B template_build values are those Core read when the selection was saved; this read does not call E2B.
+// @Description Core key only. Does not grant project resource access. Responses contain only explicit safe fields. E2B template_build values are those Core read when the selection was saved; this read does not call E2B.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -80,7 +80,7 @@ func (h *Handler) sandboxDeployment(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary List deployment sandbox nodes
-// @Description Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+// @Description Core key only. Does not grant project resource access. Responses contain only explicit safe fields.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -97,7 +97,7 @@ func (h *Handler) sandboxNodes(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Update sandbox node name and capacity
-// @Description Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+// @Description Core key only. Does not grant project resource access. Responses contain only explicit safe fields.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -126,7 +126,7 @@ func (h *Handler) updateSandboxNode(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Remove a sandbox node with no retained resources
-// @Description Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+// @Description Core key only. Does not grant project resource access. Responses contain only explicit safe fields.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -144,7 +144,7 @@ func (h *Handler) removeSandboxNode(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary List retained allocations on a sandbox node
-// @Description Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+// @Description Core key only. Does not grant project resource access. Responses contain only explicit safe fields.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -162,7 +162,7 @@ func (h *Handler) sandboxAllocations(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Create a ten-minute one-use node enrollment token
-// @Description Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+// @Description Core key only. Does not grant project resource access. Responses contain only explicit safe fields.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth

@@ -3,7 +3,7 @@ package api
 import "net/http"
 
 // @Summary List Vaults in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Vaults
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -21,7 +21,7 @@ func (h *Handler) adminListVaults(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Retrieve a Vault in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Vaults
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -35,7 +35,7 @@ func (h *Handler) adminGetVault(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Delete a Vault and all its Credentials in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Vaults
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -49,7 +49,7 @@ func (h *Handler) adminDeleteVault(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary List safe Vault Credential metadata in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Credentials
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -68,7 +68,7 @@ func (h *Handler) adminListCredentials(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Retrieve safe Vault Credential metadata in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Credentials
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -83,7 +83,7 @@ func (h *Handler) adminGetCredential(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Delete a Vault Credential in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Credentials
 // @Produce json
 // @Security DeploymentAdminAuth

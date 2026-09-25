@@ -3,7 +3,7 @@ package api
 import "net/http"
 
 // @Summary List Skills in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Skills
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -18,7 +18,7 @@ func (h *Handler) adminListSkills(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Retrieve Skill metadata in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Skills
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -31,7 +31,7 @@ func (h *Handler) adminGetSkill(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Delete a Skill and its versions in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Skills
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -44,7 +44,7 @@ func (h *Handler) adminDeleteSkill(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Download Skill content in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Skills
 // @Produce octet-stream
 // @Security DeploymentAdminAuth
@@ -57,7 +57,7 @@ func (h *Handler) adminSkillContent(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary List Skill versions in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Skills
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -73,7 +73,7 @@ func (h *Handler) adminListSkillVersions(w http.ResponseWriter, r *http.Request)
 }
 
 // @Summary Retrieve Skill version metadata in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Skills
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -87,7 +87,7 @@ func (h *Handler) adminGetSkillVersion(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Delete a Skill version in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Skills
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -101,7 +101,7 @@ func (h *Handler) adminDeleteSkillVersion(w http.ResponseWriter, r *http.Request
 }
 
 // @Summary Download immutable Skill version content in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Skills
 // @Produce octet-stream
 // @Security DeploymentAdminAuth

@@ -36,7 +36,7 @@ type AdminRuntimeObservationList struct {
 }
 
 // @Summary List Runtime observations across managed Projects
-// @Description Deployment administrator only. Each observation is labelled with its owning Project ID. Uses the existing read-only Runtime sampler, with bounded concurrency and no execution or provisioning. A provider with a batch metrics read, such as E2B, samples the page's running sandboxes in one bounded request.
+// @Description Core key only. Each observation is labelled with its owning Project ID. Uses the existing read-only Runtime sampler, with bounded concurrency and no execution or provisioning. A provider with a batch metrics read, such as E2B, samples the page's running sandboxes in one bounded request.
 // @Tags Core Administration
 // @Produce json
 // @Security DeploymentAdminAuth

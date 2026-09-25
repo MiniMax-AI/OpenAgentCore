@@ -3,7 +3,7 @@ package api
 import "net/http"
 
 // @Summary List source files in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Files
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -20,7 +20,7 @@ func (h *Handler) adminListSourceFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Retrieve source file metadata in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Files
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -34,7 +34,7 @@ func (h *Handler) adminGetSourceFile(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Delete a source file in a managed key space
-// @Description Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+// @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Files
 // @Produce json
 // @Security DeploymentAdminAuth

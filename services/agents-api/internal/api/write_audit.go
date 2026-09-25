@@ -57,7 +57,7 @@ func (h *Handler) writeAuditScope(w http.ResponseWriter, r *http.Request, allowe
 }
 
 // @Summary Batch lookup resource creation keys
-// @Description Deployment administrator only. The key path selects its independent space. Returns null for resources without recorded creation provenance, including historical and foreign resources. No key secret is returned.
+// @Description Core key only. The Project ID path selects its space. Returns null for resources without recorded creation provenance, including historical and foreign resources. No key secret is returned.
 // @Tags Write Audit
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -95,7 +95,7 @@ func (h *Handler) getResourceOwners(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Query API-key write operations
-// @Description Deployment administrator only. Reverse chronological keyset pagination over committed writes. Creation records remain; other records follow configured retention. The key path selects its independent space, never a caller-supplied tenant.
+// @Description Core key only. Reverse chronological keyset pagination over committed writes. Creation records remain; other records follow configured retention. The key path selects its independent space, never a caller-supplied tenant.
 // @Tags Write Audit
 // @Produce json
 // @Security DeploymentAdminAuth

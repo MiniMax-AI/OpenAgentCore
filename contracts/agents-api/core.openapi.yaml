@@ -2818,7 +2818,7 @@ info:
 paths:
   /core/v1/audit-log:
     get:
-      description: Deployment administrator only. Newest-first cursor pagination of safe metadata. Actor labels are unverified console labels, not authorization identities. Request bodies and secrets are never recorded.
+      description: Core key only. Newest-first cursor pagination of safe metadata. Actor labels are unverified console labels, not authorization identities. Request bodies and secrets are never recorded.
       parameters:
         - description: Target Project ID
           in: query
@@ -2881,7 +2881,7 @@ paths:
         - Core Administration
   /core/v1/metrics:
     get:
-      description: Deployment administrator only. Complete UTC buckets; unknown measurements are null. Samples are process-local and are not backfilled after a restart.
+      description: Core key only. Complete UTC buckets; unknown measurements are null. Samples are process-local and are not backfilled after a restart.
       parameters:
         - description: Time range (default 1h)
           enum:
@@ -3047,7 +3047,7 @@ paths:
         - Administrator Projects
   /core/v1/projects/{project_id}/agents:
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Last Agent ID from the previous page
           in: query
@@ -3102,7 +3102,7 @@ paths:
         - Agents
   /core/v1/projects/{project_id}/agents/{agent_id}:
     delete:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Agent ID
           in: path
@@ -3147,7 +3147,7 @@ paths:
       tags:
         - Agents
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Agent ID
           in: path
@@ -3225,7 +3225,7 @@ paths:
         - Administrator Projects
   /core/v1/projects/{project_id}/environment-templates:
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Previous Template ID
           in: query
@@ -3280,7 +3280,7 @@ paths:
         - Environment Templates
   /core/v1/projects/{project_id}/environment-templates/{environment_template_id}:
     delete:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Template ID
           in: path
@@ -3321,7 +3321,7 @@ paths:
       tags:
         - Environment Templates
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Template ID
           in: path
@@ -3493,7 +3493,7 @@ paths:
         - Executor Credentials
   /core/v1/projects/{project_id}/files:
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Last File ID from the previous page
           in: query
@@ -3557,7 +3557,7 @@ paths:
         - Files
   /core/v1/projects/{project_id}/files/{file_id}:
     delete:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Source file ID
           in: path
@@ -3602,7 +3602,7 @@ paths:
       tags:
         - Files
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Source file ID
           in: path
@@ -3784,7 +3784,7 @@ paths:
         - Administrator Projects
   /core/v1/projects/{project_id}/resource-owners:
     get:
-      description: Deployment administrator only. The key path selects its independent space. Returns null for resources without recorded creation provenance, including historical and foreign resources. No key secret is returned.
+      description: Core key only. The Project ID path selects its space. Returns null for resources without recorded creation provenance, including historical and foreign resources. No key secret is returned.
       parameters:
         - description: Project ID
           in: path
@@ -3831,7 +3831,7 @@ paths:
         - Write Audit
   /core/v1/projects/{project_id}/sessions:
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Root Agent ID whose Sessions to return
           in: query
@@ -3890,7 +3890,7 @@ paths:
         - Sessions
   /core/v1/projects/{project_id}/sessions/{session_id}:
     delete:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Session ID
           in: path
@@ -3939,7 +3939,7 @@ paths:
       tags:
         - Sessions
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Session ID
           in: path
@@ -3981,7 +3981,7 @@ paths:
         - Sessions
   /core/v1/projects/{project_id}/sessions/{session_id}/archive:
     get:
-      description: Deployment administrator only. Reports actual resource disposition, including expiry and failure cleanup. This is not archive provenance and does not assert active Turn settlement. Read this after an uncertain archive response; never infer released from a missing sandbox alone.
+      description: Core key only. Reports actual resource disposition, including expiry and failure cleanup. This is not archive provenance and does not assert active Turn settlement. Read this after an uncertain archive response; never infer released from a missing sandbox alone.
       parameters:
         - description: Project ID
           in: path
@@ -4028,7 +4028,7 @@ paths:
     post:
       consumes:
         - application/json
-      description: Deployment administrator only. Requires maintenance and the current deployment generation. Permanently closes execution, requests cancellation and releases sandbox/snapshots through existing cleanup. Session history and persisted files/artifacts remain; unpersisted workspace contents are lost. A cleanup_pending response is not proof of resource release. Does not affect caller-managed Runtime.
+      description: Core key only. Requires maintenance and the current deployment generation. Permanently closes execution, requests cancellation and releases sandbox/snapshots through existing cleanup. Session history and persisted files/artifacts remain; unpersisted workspace contents are lost. A cleanup_pending response is not proof of resource release. Does not affect caller-managed Runtime.
       parameters:
         - description: Project ID
           in: path
@@ -4088,7 +4088,7 @@ paths:
         - Core Administration
   /core/v1/projects/{project_id}/sessions/{session_id}/artifacts:
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Session ID
           in: path
@@ -4157,7 +4157,7 @@ paths:
         - Artifacts
   /core/v1/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id}:
     delete:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Session ID
           in: path
@@ -4207,7 +4207,7 @@ paths:
       tags:
         - Artifacts
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Session ID
           in: path
@@ -4258,7 +4258,7 @@ paths:
         - Artifacts
   /core/v1/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id}/content:
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Session ID
           in: path
@@ -4309,7 +4309,7 @@ paths:
         - Artifacts
   /core/v1/projects/{project_id}/sessions/{session_id}/execution-configuration:
     get:
-      description: Deployment administrator only; the Project ID selects the target space and does not authenticate. Returns the committed model, harness and safe provider selection with recorded sources. This read never decrypts credentials, resolves current defaults or probes execution health. Deployment provider details remain redacted. Historical provenance and missing provider projections are explicitly unknown/unavailable.
+      description: Core key only; the Project ID selects the target space and does not authenticate. Returns the committed model, harness and safe provider selection with recorded sources. This read never decrypts credentials, resolves current defaults or probes execution health. Deployment provider details remain redacted. Historical provenance and missing provider projections are explicitly unknown/unavailable.
       parameters:
         - description: Session ID
           in: path
@@ -4355,7 +4355,7 @@ paths:
         - Core extensions
   /core/v1/projects/{project_id}/sessions/{session_id}/items:
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Session ID
           in: path
@@ -4415,7 +4415,7 @@ paths:
         - Items
   /core/v1/projects/{project_id}/sessions/{session_id}/runtime-history:
     get:
-      description: Deployment administrator only; the Project ID selects the target space and does not authenticate. Returns stored Runtime observations for one Session. End is exclusive; the server selects a bounded resolution. Responses contain at most 1,000 series, 10,000 points per coverage/series array, and 100,000 total coverage plus series points. It never reads or changes live compute.
+      description: Core key only; the Project ID selects the target space and does not authenticate. Returns stored Runtime observations for one Session. End is exclusive; the server selects a bounded resolution. Responses contain at most 1,000 series, 10,000 points per coverage/series array, and 100,000 total coverage plus series points. It never reads or changes live compute.
       parameters:
         - description: Session ID
           in: path
@@ -4481,7 +4481,7 @@ paths:
         - Runtime history
   /core/v1/projects/{project_id}/sessions/{session_id}/runtime-observation:
     get:
-      description: Deployment administrator only; the Project ID selects the target space and does not authenticate. Returns one read-only current Runtime observation. It never provisions, renews, restarts, pauses or stops compute.
+      description: Core key only; the Project ID selects the target space and does not authenticate. Returns one read-only current Runtime observation. It never provisions, renews, restarts, pauses or stops compute.
       parameters:
         - description: Session ID
           in: path
@@ -4527,7 +4527,7 @@ paths:
         - Runtime observations
   /core/v1/projects/{project_id}/sessions/{session_id}/turns:
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Session ID
           in: path
@@ -4588,7 +4588,7 @@ paths:
         - Turns
   /core/v1/projects/{project_id}/sessions/{session_id}/turns/{turn_id}:
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Session ID
           in: path
@@ -4635,7 +4635,7 @@ paths:
         - Turns
   /core/v1/projects/{project_id}/skills:
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Skill resource cursor
           in: query
@@ -4674,7 +4674,7 @@ paths:
         - Skills
   /core/v1/projects/{project_id}/skills/{skill_id}:
     delete:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Skill ID
           in: path
@@ -4699,7 +4699,7 @@ paths:
       tags:
         - Skills
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Skill ID
           in: path
@@ -4725,7 +4725,7 @@ paths:
         - Skills
   /core/v1/projects/{project_id}/skills/{skill_id}/content:
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Skill ID
           in: path
@@ -4751,7 +4751,7 @@ paths:
         - Skills
   /core/v1/projects/{project_id}/skills/{skill_id}/versions:
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Skill ID
           in: path
@@ -4795,7 +4795,7 @@ paths:
         - Skills
   /core/v1/projects/{project_id}/skills/{skill_id}/versions/{version}:
     delete:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Skill ID
           in: path
@@ -4825,7 +4825,7 @@ paths:
       tags:
         - Skills
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Skill ID
           in: path
@@ -4856,7 +4856,7 @@ paths:
         - Skills
   /core/v1/projects/{project_id}/skills/{skill_id}/versions/{version}/content:
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Skill ID
           in: path
@@ -4887,7 +4887,7 @@ paths:
         - Skills
   /core/v1/projects/{project_id}/vaults:
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Last Vault ID from the previous page
           in: query
@@ -4958,7 +4958,7 @@ paths:
         - Vaults
   /core/v1/projects/{project_id}/vaults/{vault_id}:
     delete:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Vault ID
           in: path
@@ -5003,7 +5003,7 @@ paths:
       tags:
         - Vaults
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Vault ID
           in: path
@@ -5045,7 +5045,7 @@ paths:
         - Vaults
   /core/v1/projects/{project_id}/vaults/{vault_id}/credentials:
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Vault ID
           in: path
@@ -5121,7 +5121,7 @@ paths:
         - Credentials
   /core/v1/projects/{project_id}/vaults/{vault_id}/credentials/{credential_id}:
     delete:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Vault ID
           in: path
@@ -5171,7 +5171,7 @@ paths:
       tags:
         - Credentials
     get:
-      description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
+      description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
       parameters:
         - description: Vault ID
           in: path
@@ -5218,7 +5218,7 @@ paths:
         - Credentials
   /core/v1/projects/{project_id}/write-operations:
     get:
-      description: Deployment administrator only. Reverse chronological keyset pagination over committed writes. Creation records remain; other records follow configured retention. The key path selects its independent space, never a caller-supplied tenant.
+      description: Core key only. Reverse chronological keyset pagination over committed writes. Creation records remain; other records follow configured retention. The key path selects its independent space, never a caller-supplied tenant.
       parameters:
         - description: Project ID
           in: path
@@ -5283,7 +5283,7 @@ paths:
         - Write Audit
   /core/v1/sandbox/deployment:
     get:
-      description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields. E2B template_build values are those Core read when the selection was saved; this read does not call E2B.
+      description: Core key only. Does not grant project resource access. Responses contain only explicit safe fields. E2B template_build values are those Core read when the selection was saved; this read does not call E2B.
       produces:
         - application/json
       responses:
@@ -5454,7 +5454,7 @@ paths:
     post:
       consumes:
         - application/json
-      description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+      description: Core key only. Does not grant project resource access. Responses contain only explicit safe fields.
       parameters:
         - description: Request
           in: body
@@ -5500,7 +5500,7 @@ paths:
         - Sandbox Manager
   /core/v1/sandbox/nodes:
     get:
-      description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+      description: Core key only. Does not grant project resource access. Responses contain only explicit safe fields.
       produces:
         - application/json
       responses:
@@ -5539,7 +5539,7 @@ paths:
         - Sandbox Manager
   /core/v1/sandbox/nodes/{node_id}:
     delete:
-      description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+      description: Core key only. Does not grant project resource access. Responses contain only explicit safe fields.
       parameters:
         - description: Sandbox node UUID
           in: path
@@ -5583,7 +5583,7 @@ paths:
       tags:
         - Sandbox Manager
     get:
-      description: Deployment administrator only. Complete UTC buckets. Missing host measurements and offline history are null; reads never sample or backfill.
+      description: Core key only. Complete UTC buckets. Missing host measurements and offline history are null; reads never sample or backfill.
       parameters:
         - description: Sandbox node UUID
           in: path
@@ -5633,7 +5633,7 @@ paths:
     patch:
       consumes:
         - application/json
-      description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+      description: Core key only. Does not grant project resource access. Responses contain only explicit safe fields.
       parameters:
         - description: Sandbox node UUID
           in: path
@@ -5684,7 +5684,7 @@ paths:
         - Sandbox Manager
   /core/v1/sandbox/nodes/{node_id}/allocations:
     get:
-      description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+      description: Core key only. Does not grant project resource access. Responses contain only explicit safe fields.
       parameters:
         - description: Sandbox node UUID
           in: path
@@ -5729,7 +5729,7 @@ paths:
         - Sandbox Manager
   /core/v1/sandbox/runtime-observations:
     get:
-      description: Deployment administrator only. Each observation is labelled with its owning Project ID. Uses the existing read-only Runtime sampler, with bounded concurrency and no execution or provisioning. A provider with a batch metrics read, such as E2B, samples the page's running sandboxes in one bounded request.
+      description: Core key only. Each observation is labelled with its owning Project ID. Uses the existing read-only Runtime sampler, with bounded concurrency and no execution or provisioning. A provider with a batch metrics read, such as E2B, samples the page's running sandboxes in one bounded request.
       parameters:
         - description: Last Session ID from the preceding page
           in: query
@@ -5784,7 +5784,7 @@ paths:
         - Core Administration
   /core/v1/summary:
     get:
-      description: Administrator only. after/limit/order paginate Projects. Agent grouping returns groups within those spaces. Date bounds filter Session creation, not current asset counts. Usage sums only non-null public Session usage; coverage includes every selected Session. Each Project is read in a consistent database snapshot. Totals are not billing records.
+      description: Core key only. after/limit/order paginate Projects. Agent grouping returns groups within those spaces. Date bounds filter Session creation, not current asset counts. Usage sums only non-null public Session usage; coverage includes every selected Session. Each Project is read in a consistent database snapshot. Totals are not billing records.
       parameters:
         - description: One API Project
           in: query
