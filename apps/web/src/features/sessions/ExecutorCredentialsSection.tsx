@@ -1,7 +1,7 @@
 import { AgentCoreError, type ExecutorCredential, type IssuedExecutorCredential } from "@agents-core-web/agents-client";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Copy, Download, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -368,7 +368,15 @@ function CredentialFile({ credential, next, command = null }: { credential: Issu
   const { t } = useTranslation("sessions");
   const text = credentialText(credential);
   const { state, copy } = useCopy(text);
-  const download = () => saveBlob(new Blob([`${text}\n`], { type: "application/json" }), `executor-credential-${credential.environment_id.slice(0, 8)}.json`);
+  // A downloaded credential's object URL goes with the credential: on Done or when this leaves the page.
+  const downloads = useRef<(() => void)[]>([]);
+  useEffect(() => {
+    const revokes = downloads.current;
+    return () => { for (const revoke of revokes.splice(0)) revoke(); };
+  }, []);
+  const download = () => {
+    downloads.current.push(saveBlob(new Blob([`${text}\n`], { type: "application/json" }), `executor-credential-${credential.environment_id.slice(0, 8)}.json`));
+  };
   return (
     <div className="executor-credential">
       <p className="executor-credential-notice">{t("executor.issued.notice")}</p>

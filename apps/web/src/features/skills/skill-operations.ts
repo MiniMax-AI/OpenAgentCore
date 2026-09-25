@@ -76,8 +76,11 @@ export function skillArchiveFilename(name: string, version: string): string {
   return `${safe}-v${version}.zip`;
 }
 
-/** Hands a downloaded Blob to the browser's save flow. */
-export function saveBlob(blob: Blob, filename: string): void {
+/**
+ * Hands a downloaded Blob to the browser's save flow. The object URL is
+ * revoked after a while, or earlier through the returned function.
+ */
+export function saveBlob(blob: Blob, filename: string): () => void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -87,8 +90,15 @@ export function saveBlob(blob: Blob, filename: string): void {
   document.body.append(link);
   link.click();
   link.remove();
+  let revoked = false;
+  const revoke = () => {
+    if (revoked) return;
+    revoked = true;
+    URL.revokeObjectURL(url);
+  };
   // Give the browser time to start the download before the URL is revoked.
-  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  window.setTimeout(revoke, 30_000);
+  return revoke;
 }
 
 /** Downloads the default version, or one exact version, through the client. */
