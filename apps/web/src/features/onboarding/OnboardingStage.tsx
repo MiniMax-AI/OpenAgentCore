@@ -9,7 +9,7 @@ import { FlickeringGrid } from "@/components/magicui/flickering-grid";
 import { LightRays } from "@/components/magicui/light-rays";
 import { OrbitingCircles } from "@/components/magicui/orbiting-circles";
 
-export type StageScene = "account" | "login" | "project";
+export type StageScene = "login" | "project";
 export type TourChapter = "monitor" | "resources" | "platform";
 
 const EASE = [0.16, 1, 0.3, 1] as const;

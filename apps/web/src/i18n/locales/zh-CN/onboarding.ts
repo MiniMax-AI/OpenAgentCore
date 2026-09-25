@@ -1,17 +1,14 @@
 export const onboarding = {
   steps: {
     label: "设置进度",
-    account: "管理员",
-    project: "项目和 key",
+    project: "项目和 API Key",
     tour: "认识控制台",
   },
   stage: {
-    account: { title: "一个 Core，承载所有 Agent。", body: "连接你的机器，运行你的 Agent，在一个控制台里看清每一个 Session。" },
-    login: { title: "欢迎回到你的 Core。", body: "你的 Agent、Session 和机器，都还在原处。" },
-    project: { title: "项目承载所有工作。", body: "Agent、Session、Skills、文件和 Vault 都归属某个项目；应用用项目的 API key 访问它们。" },
+    login: { title: "一个 Core，承载所有 Agent。", body: "连接你的机器，运行你的 Agent，在一个控制台里看清每一个 Session。" },
+    project: { title: "项目承载所有工作。", body: "Agent、Session、Skills、文件和 Vault 都归属某个项目；应用用项目 API Key 访问它们。" },
     orbit: "Core 和它管理的一切：Agent、Session、Skills、Vault、文件、环境模板和机器",
   },
-  preparing: "正在准备你的控制台…",
   terminal: "在终端里试一下",
   tour: {
     eyebrow: "认识控制台 · {{n}} / {{total}}",
@@ -43,7 +40,7 @@ export const onboarding = {
         name: "平台",
         title: "部署本身。",
         points: [
-          "项目与 key：创建项目，签发只显示一次的 key，撤销或归档。",
+          "项目与 key：创建项目，签发只显示一次的项目 API Key，撤销或归档。",
           "节点：一条命令接入你的机器，随时看容量。",
           "系统：Core 的构建版本和启动配置。",
         ],
