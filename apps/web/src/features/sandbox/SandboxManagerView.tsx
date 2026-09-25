@@ -29,7 +29,7 @@ function NodesPageHeader({ title, count, back, actions }: { title?: ReactNode; c
   const { t } = useTranslation("sandbox");
   return <header className="page-header">
     <div className="console-page-heading">
-      {back ? <button type="button" className="icon-button ghost back-button" aria-label={t("Back to nodes")} title={t("Back to nodes")} onClick={back}><ArrowLeft size={16} strokeWidth={1.6} aria-hidden="true" /></button> : null}
+      {back ? <button type="button" className="icon-button ghost back-button" aria-label={t("Back")} title={t("Back")} onClick={back}><ArrowLeft size={16} strokeWidth={1.6} aria-hidden="true" /></button> : null}
       <h1>{title ?? t("Nodes")}</h1>
       {count === undefined ? null : <span className="heading-count">{count}</span>}
       {back ? null : <HelpTip>{t("Your hosts for running sandboxes.")}</HelpTip>}
@@ -50,7 +50,7 @@ function SandboxAccess() {
 function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig }) {
   const { t, i18n } = useTranslation("sandbox");
   const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
-  const { params, navigate } = useConsoleNavigation();
+  const { params, navigate, back: goBack } = useConsoleNavigation();
   const client = sandboxAdmin;
   const queryClient = useQueryClient();
   const query = useQuery(sandboxSnapshotQuery);
@@ -164,7 +164,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   </ConfirmDialog>;
 
   if (params.id && hostedNodes) {
-    const back = () => navigate("nodes");
+    const back = () => goBack("nodes");
     return <>
       <NodesPageHeader
         back={back}
@@ -177,7 +177,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
       <div className="console-page-body sandbox-content">
         {status}
         {selected ? <NodeDetail node={selected} allocations={allocations} stale={!confirmed} /> : snapshot && !loading ? (
-          <EmptyState icon={Server} title={t("Node not found")} description={t("This node is not registered. It may have been removed.")} action={<button type="button" className="button outline" onClick={back}>{t("Back to nodes")}</button>} />
+          <EmptyState icon={Server} title={t("Node not found")} description={t("This node is not registered. It may have been removed.")} action={<button type="button" className="button outline" onClick={back}>{t("Back")}</button>} />
         ) : null}
       </div>
       {dialog}

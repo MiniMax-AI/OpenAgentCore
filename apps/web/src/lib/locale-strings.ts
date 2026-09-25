@@ -167,7 +167,7 @@ export const chinese = {
   "Manage hosted execution for this Core deployment.": "管理此 Core 部署的托管执行。",
   "Status": "状态",
   "Added": "加入时间",
-  "Back to nodes": "返回节点列表",
+  "Back": "返回",
   "Node not found": "找不到此节点",
   "This node is not registered. It may have been removed.": "此节点未注册，可能已被移除。",
   "Capacity": "容量",

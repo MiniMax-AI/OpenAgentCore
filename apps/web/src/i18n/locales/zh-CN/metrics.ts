@@ -172,6 +172,22 @@ export const metrics = {
   sandbox: {
     title: "沙箱监控",
     description: "整个部署的宿主机容量，以及所有项目的托管运行时。",
+    nodeDialog: {
+      facts: "节点指标",
+      openLabel: "查看 {{name}}",
+      retainedSlots: "保留 / 上限",
+      runtimes: "这个节点上的托管沙箱",
+      runtimesHelp: "放在这个节点上的 Core 托管沙箱的 CPU 和内存，时间范围与页面一致。节点每次心跳只上报当前的可用内存和磁盘，没有历史。",
+      runtimesMeta: "{{n}} 个沙箱",
+      noRuntimes: "这个节点上没有运行中的托管沙箱。",
+      openNode: "节点详情",
+    },
+    runtimeDialog: {
+      openLabel: "查看 {{name}} 的沙箱",
+      facts: "沙箱",
+      openSession: "打开 Session",
+      noSession: "无法读取这个沙箱所属的 Session，因此无法显示它的历史。",
+    },
     fleetUnconfigured: "此控制台未配置沙箱管理。",
     fleetFailed: "无法加载宿主机。",
     fleetLoading: "正在加载宿主机…",
@@ -241,6 +257,7 @@ export const metrics = {
     charts: {
       cpu: "CPU 使用率 / {{bucket}}",
       cpuAverage: "平均",
+      cpuUsed: "已用",
       cpuPeak: "最高",
       memory: "内存 / {{bucket}}",
       memoryUsed: "已使用",

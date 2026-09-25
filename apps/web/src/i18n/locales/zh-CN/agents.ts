@@ -11,7 +11,7 @@ export const agents: TranslationShape<typeof english> = {
     columns: { agent: "Agent", model: "模型", harness: "执行框架", tools: "工具", sessions: "Session", tokens: "Token", lastActive: "最近活跃", updated: "更新时间", actions: "操作" },
     open: "打开 {{name}}",
     coreDefault: "Core 默认",
-    back: "返回 Agent",
+    back: "返回",
     facts: "Agent 详情",
     id: "ID",
     created: "创建时间",

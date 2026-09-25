@@ -24,7 +24,7 @@ import { TableSkeleton } from "../../components/Skeleton";
  * project's own keys.
  */
 export function SkillsPage() {
-  const { params, navigate } = useConsoleNavigation();
+  const { params, navigate, back } = useConsoleNavigation();
   const { byId } = useProjects();
   const project = params.project ? byId.get(params.project) : undefined;
   const [copy, setCopy] = useState<CopySource | null>(null);
@@ -38,9 +38,9 @@ export function SkillsPage() {
           projectId={params.project}
           skillId={params.id}
           initialSkill={null}
-          onBack={() => navigate("skills", { project: params.project })}
+          onBack={() => back("skills", { project: params.project })}
           onChanged={() => undefined}
-          onDeleted={() => { forgetCreators(); navigate("skills", { project: params.project }); }}
+          onDeleted={() => { forgetCreators(); back("skills", { project: params.project }); }}
           onCopy={project ? (skill) => setCopy({ type: "skill", id: skill.id, name: skill.name, project }) : undefined}
         />
         <CopyDialog source={copy} onClose={() => setCopy(null)} />

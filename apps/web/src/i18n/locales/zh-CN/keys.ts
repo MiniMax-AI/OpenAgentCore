@@ -98,7 +98,7 @@ export const keys: TranslationShape<typeof english> = {
     rejected: "Core 拒绝了请求：{{message}}",
   },
   detail: {
-    back: "返回项目列表",
+    back: "返回",
     facts: "项目信息",
     id: "ID",
     status: "状态",

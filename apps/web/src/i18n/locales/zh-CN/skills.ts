@@ -16,7 +16,7 @@ export const skills = {
     setDefaultVersion: "将 v{{version}} 设为默认",
     loadMore: "加载更多",
     loadingMore: "加载中…",
-    back: "返回 Skills",
+    back: "返回",
     copyId: "复制 ID",
     copied: "已复制 ID",
     clearFilter: "清除筛选",

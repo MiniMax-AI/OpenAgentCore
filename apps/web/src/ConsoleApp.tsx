@@ -20,7 +20,7 @@ import { SessionPage } from "./features/sessions/SessionPage";
 import { SkillsPage } from "./features/skills/SkillsPage";
 import { SystemPage } from "./features/system/SystemPage";
 import { VaultsPage } from "./features/vaults/VaultsPage";
-import { ConsoleNavigationContext, hashWithParams, routeParamsFromHash, type RouteParams } from "./lib/console-navigation";
+import { consoleDepth, ConsoleNavigationContext, hashWithParams, routeParamsFromHash, type RouteParams } from "./lib/console-navigation";
 import { consoleHashForView, consoleNavParent, consoleViewFromHash, type ConsoleView } from "./lib/console-routes";
 import { ProjectsProvider, useProjects } from "./lib/projects";
 import { collectionQuery, collections, filesCollection, queryClient, type CollectionSpec } from "./lib/queries";
@@ -86,13 +86,19 @@ function ConsoleShell() {
   const navigate = useCallback((view: ConsoleView, params: RouteParams = {}) => {
     const hash = hashWithParams(consoleHashForView(view), params);
     if (window.location.hash !== hash) {
-      window.history.pushState(null, "", hash || window.location.pathname + window.location.search);
+      // Each entry records how many console pages lie behind it, so `back` knows it can return.
+      window.history.pushState({ consoleDepth: consoleDepth() + 1 }, "", hash || window.location.pathname + window.location.search);
     }
     setLocation({ view, params });
     document.getElementById("main-content")?.focus({ preventScroll: true });
   }, []);
 
-  const navigation = useMemo(() => ({ ...location, navigate }), [location, navigate]);
+  const back = useCallback((view: ConsoleView, params: RouteParams = {}) => {
+    if (consoleDepth() > 0) window.history.back();
+    else navigate(view, params);
+  }, [navigate]);
+
+  const navigation = useMemo(() => ({ ...location, navigate, back }), [location, navigate, back]);
 
   const prefetch = useCallback((view: ConsoleView) => {
     const spec = prefetchable[view];

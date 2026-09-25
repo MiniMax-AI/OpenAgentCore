@@ -29,3 +29,18 @@ test("opens a Session's conversation from the Session log, read-only", async ({ 
   await expect(page.locator(".chat-row.user").first()).toBeVisible();
   await expect(page.getByRole("textbox")).toHaveCount(0);
 });
+
+test("opens a node and a sandbox in dialogs from Sandbox metrics", async ({ page, request }) => {
+  await openConsole(page, request, "sandbox-metrics");
+  await page.getByRole("button", { name: "Show core-01" }).click();
+  const node = page.getByRole("dialog", { name: "core-01" });
+  await expect(node.getByLabel("Node figures")).toContainText("Free memory");
+  await expect(node).toContainText("Hosted sandboxes on this node");
+  await node.getByRole("button", { name: "Close dialog" }).click();
+
+  await page.getByRole("button", { name: /^Show sandbox of / }).first().click();
+  const sandbox = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "Open Session" }) });
+  await expect(sandbox.getByLabel("Sandbox")).toContainText("Node");
+  await sandbox.getByRole("button", { name: "Open Session" }).click();
+  await expect(page.getByRole("list", { name: "Conversation" }).or(page.getByText("No Items yet"))).toBeVisible();
+});

@@ -72,7 +72,12 @@ export async function loadHostedRuntimes(
 
 /** The trend snapshot of one project, or of every project when `projectId` is empty. */
 export function runtimeSnapshot(load: HostedRuntimeLoad, projectId: string): RuntimeDashboardSnapshot {
-  const observations = load.observations.filter((observation) => !projectId || observation.project_id === projectId);
+  return runtimeSnapshotWhere(load, (observation) => !projectId || observation.project_id === projectId);
+}
+
+/** The snapshot of only the Runtimes `keep` accepts, e.g. those placed on one node. */
+export function runtimeSnapshotWhere(load: HostedRuntimeLoad, keep: (observation: OwnedRuntimeObservation) => boolean): RuntimeDashboardSnapshot {
+  const observations = load.observations.filter(keep);
   return {
     observations,
     sessions: observations.flatMap((observation) => {

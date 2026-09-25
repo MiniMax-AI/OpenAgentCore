@@ -516,7 +516,9 @@ items are 30px rows with a 15px outline icon and Sidebar Ink text. Hover takes t
 ink wash; the active item sits on a white chip (the page panel's surface, ringed)
 with Ledger Ink at 500, and the chip glides to the next item on navigation. The
 Platform group sits below a hairline. A secondary page (one Session) highlights its
-parent. The footer holds sign-out and the language/theme menu.
+parent. The footer holds sign-out and the language/theme menu. A detail page's back arrow returns to the page it was opened
+from (a Skill opened from a template goes back to the template); opened directly,
+it goes to its list. The arrow is labelled plainly "Back".
 
 ### KPI strip and metric tiles
 A KPI strip is one card of equal cells separated by inset rules. Each cell: a

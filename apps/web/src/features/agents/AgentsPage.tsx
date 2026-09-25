@@ -180,13 +180,13 @@ function AgentDetail({ projectId, agentId }: { projectId: string; agentId: strin
   const { t, i18n } = useTranslation("agents");
   const { t: tCommon } = useTranslation();
   const locale = i18n.resolvedLanguage;
-  const { navigate } = useConsoleNavigation();
+  const { navigate, back: goBack } = useConsoleNavigation();
   const { byId } = useProjects();
   const project = byId.get(projectId);
   // Opens from the cache (or the list row) at once; a refresh keeps the Agent on screen.
   const { read, forget } = useAgentDetail(projectId, agentId);
   const [copy, setCopy] = useState<CopySource | null>(null);
-  const back = useCallback(() => navigate("agents", { project: projectId }), [navigate, projectId]);
+  const back = useCallback(() => goBack("agents", { project: projectId }), [goBack, projectId]);
   const summaries = useAgentSummaries(useMemo(() => [projectId], [projectId]));
   const summary = summaries.get(`${projectId}:${agentId}`);
   const creators = useCreators("agent", useMemo(() => [{ projectId, id: agentId }], [projectId, agentId]));

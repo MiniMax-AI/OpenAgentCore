@@ -151,13 +151,13 @@ function VaultDetail({ projectId, vaultId }: { projectId: string; vaultId: strin
   const { t: tPages } = useTranslation("pages");
   const { t: tCommon } = useTranslation();
   const locale = i18n.resolvedLanguage;
-  const { navigate } = useConsoleNavigation();
+  const { navigate, back: goBack } = useConsoleNavigation();
   const { byId } = useProjects();
   const project = byId.get(projectId);
   // The Vault opens from the cache (or its list row) at once; its Credentials read beside it.
   const { read, credentials: credentialsRead, forget } = useVaultDetail(projectId, vaultId);
   const [copy, setCopy] = useState<CopySource | null>(null);
-  const back = useCallback(() => navigate("vaults", { project: projectId }), [navigate, projectId]);
+  const back = useCallback(() => goBack("vaults", { project: projectId }), [goBack, projectId]);
 
   const { refetch: refetchVault } = read;
   const { refetch: refetchCredentials } = credentialsRead;

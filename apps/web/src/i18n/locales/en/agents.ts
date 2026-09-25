@@ -18,7 +18,7 @@ export const agents = {
     columns: { agent: "Agent", model: "Model", harness: "Harness", tools: "Tools", sessions: "Sessions", tokens: "Tokens", lastActive: "Last active", updated: "Updated", actions: "Actions" },
     open: "Open {{name}}",
     coreDefault: "Core default",
-    back: "Back to Agents",
+    back: "Back",
     facts: "Agent details",
     id: "ID",
     created: "Created",

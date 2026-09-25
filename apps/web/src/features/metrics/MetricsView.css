@@ -47,3 +47,9 @@
   color: var(--orange);
 }
 
+
+/* A node or sandbox dialog: its facts, then its charts. */
+.metrics-dialog {
+  display: grid;
+  gap: 24px;
+}

@@ -43,7 +43,7 @@ function errorText(error: unknown): string {
 export function SessionPage() {
   const { t, i18n } = useTranslation("sessions");
   const locale = i18n.resolvedLanguage;
-  const { params, navigate } = useConsoleNavigation();
+  const { params, navigate, back: goBack } = useConsoleNavigation();
   const projectId = params.project;
   const sessionId = params.id;
   const { state: projects, byId } = useProjects();
@@ -57,7 +57,7 @@ export function SessionPage() {
   const creatorRows = useMemo(() => (projectId && sessionId ? [{ projectId, id: sessionId }] : []), [projectId, sessionId]);
   const creators = useCreators("session", creatorRows);
 
-  const back = () => navigate("sessions");
+  const back = () => goBack("sessions");
   const backButton = (
     <button type="button" className="icon-button ghost back-button" aria-label={t("detail.back")} title={t("detail.back")} onClick={back}>
       <ArrowLeft size={16} strokeWidth={1.6} aria-hidden="true" />

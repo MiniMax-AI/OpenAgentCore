@@ -96,7 +96,7 @@ export const keys = {
     rejected: "Core rejected the request: {{message}}",
   },
   detail: {
-    back: "Back to projects",
+    back: "Back",
     facts: "Project details",
     id: "ID",
     status: "Status",

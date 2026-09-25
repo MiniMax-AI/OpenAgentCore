@@ -32,3 +32,13 @@ test("keeps Core's reason when it refuses a deletion, then deletes on confirmati
   await expect(dialog).toBeHidden();
   await expect(page.getByRole("button", { name: "Open Code reviewer" })).toHaveCount(0);
 });
+
+test("goes back to the page a resource was opened from", async ({ page, request }) => {
+  await openConsole(page, request, "templates");
+  await page.getByRole("button", { name: "Open Report builder" }).click();
+  await expect(page.getByRole("heading", { name: "Report builder", level: 1 })).toBeVisible();
+  await page.getByRole("button", { name: /^Open skill_.* in Skills$/ }).first().click();
+  await expect(page.getByRole("heading", { level: 1 })).not.toHaveText("Report builder");
+  await page.getByRole("button", { name: "Back", exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Report builder", level: 1 })).toBeVisible();
+});

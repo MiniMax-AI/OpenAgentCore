@@ -58,7 +58,8 @@ workbench.
   needing attention, 24-hour Session activity, the topology of Core and its nodes
   with a popover glance at each, the attention table, usage by project), Agent metrics (requests, errors,
   duration, tokens, models, tools, Agents and API keys for 1 h / 6 h / 24 h / 7 d),
-  Sandbox metrics (node capacity and hosted Runtimes across projects), Session log
+  Sandbox metrics (node capacity and hosted Runtimes across projects; a node or a
+  sandbox opens in a dialog with its figures and CPU and memory charts), Session log
   (every Session, read-only, opening one Session's history).
 - **Resources**: Agents, Environment templates, Skills, Files, Vaults. Each list
   shows one project or all projects, with a Project column when all are shown and a

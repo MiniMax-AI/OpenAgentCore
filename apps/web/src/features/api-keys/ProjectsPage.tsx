@@ -8,8 +8,7 @@ import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton } from "../../
 import { ErrorState } from "../../components/ErrorState";
 import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
 import { Modal } from "../../components/Modal";
-import { hashWithParams, useConsoleNavigation } from "../../lib/console-navigation";
-import { consoleHashForView } from "../../lib/console-routes";
+import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatDateTime, formatInteger, formatRelative } from "../../lib/format";
 import { admin, useProjects } from "../../lib/projects";
 import { activeKeyNames, flowError, isAbort, isUsableName, matchesProject, normalizeName, prefixLabel, projectNameProblem, type FlowError } from "./key-flows";
@@ -28,12 +27,6 @@ type Dialog =
   | { kind: "archive"; project: Project }
   | { kind: "revoke"; project: Project; key: AdminKey; activeCount: number };
 
-/** Keeps the address in step with the open project without remounting the page. */
-function replaceHash(id: string | null) {
-  const hash = hashWithParams(consoleHashForView("projects"), id ? { id } : {});
-  if (window.location.hash !== hash) window.history.replaceState(window.history.state, "", hash);
-}
-
 const manageable = (project: Project) => project.status === "active";
 
 /**
@@ -48,7 +41,7 @@ export function ProjectsPage() {
   const locale = i18n.resolvedLanguage;
   const { state, byId } = useProjects();
   const queryClient = useQueryClient();
-  const { params } = useConsoleNavigation();
+  const { params, navigate, back } = useConsoleNavigation();
   const [selectedId, setSelectedId] = useState<string | null>(params.id ?? null);
   const [created, setCreated] = useState<Project | null>(null);
   const [query, setQuery] = useState("");
@@ -84,9 +77,10 @@ export function ProjectsPage() {
   }, [queryClient]);
   const now = Math.floor(Date.now() / 1000);
 
+  // Opening a project is a page like any other, so going back returns to where it was opened from.
   const open = (id: string | null) => {
-    setSelectedId(id);
-    replaceHash(id);
+    if (id) navigate("projects", { id });
+    else back("projects");
   };
   const openDialog = (next: Dialog) => { setDialogError(null); setDialog(next); };
   const closeDialog = () => { if (!dialogBusy) setDialog(null); };

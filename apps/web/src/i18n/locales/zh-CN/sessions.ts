@@ -47,7 +47,7 @@ export const sessions = {
     more: "显示更多",
   },
   detail: {
-    back: "返回 Session 日志",
+    back: "返回",
     facts: "Session 信息",
     id: "Session ID",
     project: "项目",

@@ -947,6 +947,10 @@ pre {
   box-shadow: var(--shadow-overlay);
 }
 
+.modal-card-wide {
+  width: min(960px, 100%);
+}
+
 .modal-header {
   min-height: 52px;
   padding: 0 12px 0 18px;

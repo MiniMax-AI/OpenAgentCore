@@ -34,7 +34,7 @@ export const templates = {
   delete: "Delete",
   deleteLabel: "Delete {{name}}",
   open: "Open {{name}}",
-  back: "Back to Templates",
+  back: "Back",
   unrecognized: "Unrecognized configuration",
   unrecognizedHelp: "Core returned configuration this console does not recognize. Recognized sections are shown; the others are not guessed.",
   unrecognizedSections: "Not recognized by this console: {{sections}}",

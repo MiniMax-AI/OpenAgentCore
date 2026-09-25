@@ -172,6 +172,22 @@ export const metrics = {
   sandbox: {
     title: "Sandbox metrics",
     description: "Host capacity of the whole deployment, and the hosted Runtimes of every project.",
+    nodeDialog: {
+      facts: "Node figures",
+      openLabel: "Show {{name}}",
+      retainedSlots: "Retained / limit",
+      runtimes: "Hosted sandboxes on this node",
+      runtimesHelp: "CPU and memory of the Core-managed sandboxes placed on this node, over the page's range. Nodes report their free memory and disk with each heartbeat, not a history.",
+      runtimesMeta: "{{n}} sandboxes",
+      noRuntimes: "No hosted sandbox runs on this node.",
+      openNode: "Node details",
+    },
+    runtimeDialog: {
+      openLabel: "Show sandbox of {{name}}",
+      facts: "Sandbox",
+      openSession: "Open Session",
+      noSession: "The Session of this sandbox could not be read, so its history cannot be shown.",
+    },
     fleetUnconfigured: "This console has no sandbox administration.",
     fleetFailed: "Hosts could not be loaded.",
     fleetLoading: "Loading hosts…",
@@ -241,6 +257,7 @@ export const metrics = {
     charts: {
       cpu: "CPU utilization / {{bucket}}",
       cpuAverage: "Average",
+      cpuUsed: "Used",
       cpuPeak: "Peak",
       memory: "Memory / {{bucket}}",
       memoryUsed: "Used",

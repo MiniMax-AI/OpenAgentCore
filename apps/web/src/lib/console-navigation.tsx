@@ -36,12 +36,26 @@ export interface ConsoleNavigation {
   view: ConsoleView;
   params: RouteParams;
   navigate: (view: ConsoleView, params?: RouteParams) => void;
+  /**
+   * Returns to the page the user came from inside the console (a Skill opened
+   * from a template goes back to the template); a page opened directly, from a
+   * link or a reload, goes to `view` instead.
+   */
+  back: (view: ConsoleView, params?: RouteParams) => void;
+}
+
+/** How many console pages lie behind the current history entry. */
+export function consoleDepth(): number {
+  const state: unknown = window.history.state;
+  const depth = state && typeof state === "object" && "consoleDepth" in state ? Number(state.consoleDepth) : 0;
+  return Number.isSafeInteger(depth) && depth > 0 ? depth : 0;
 }
 
 export const ConsoleNavigationContext = createContext<ConsoleNavigation>({
   view: "overview",
   params: {},
   navigate: () => undefined,
+  back: () => undefined,
 });
 
 export function useConsoleNavigation(): ConsoleNavigation {

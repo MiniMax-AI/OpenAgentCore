@@ -25,13 +25,16 @@ export function RuntimeCharts({ samples, resolutionSeconds, height = 168 }: { sa
     const ratios = samples.map((sample) => known(sample.targets.map((target) => target.cpuRatio)));
     return {
       buckets,
+      // One sandbox has no spread to show: its average and peak are the same line.
+      single: ratios.every((values) => values.length <= 1),
       cpuAverage: ratios.map((values) => (values.length ? (values.reduce((sum, value) => sum + value, 0) / values.length) * 100 : null)),
       cpuPeak: ratios.map((values) => (values.length ? Math.max(...values) * 100 : null)),
       memoryUsed: samples.map((sample) => (sample.memoryUsageBytes === null ? null : sample.memoryUsageBytes / GIB)),
       memoryLimit: samples.map((sample) => (sample.memoryLimitBytes === null ? null : sample.memoryLimitBytes / GIB)),
     };
   }, [samples]);
-  const percent = (value: number) => `${Math.round(value)}%`;
+  // Idle sandboxes use well under 1%: keep decimals there so the axis never reads "0%" on every tick.
+  const percent = (value: number) => `${new Intl.NumberFormat(locale, { maximumFractionDigits: value === 0 ? 0 : value < 1 ? 2 : value < 10 ? 1 : 0 }).format(value)}%`;
   return (
     <div className="chart-grid">
       <figure className="chart-panel">
@@ -41,10 +44,12 @@ export function RuntimeCharts({ samples, resolutionSeconds, height = 168 }: { sa
           kind="lines"
           buckets={series.buckets}
           bucketSeconds={resolutionSeconds}
-          series={[
-            { id: "average", label: t("sandbox.charts.cpuAverage"), color: "var(--series-1)", values: series.cpuAverage },
-            { id: "peak", label: t("sandbox.charts.cpuPeak"), color: "var(--series-3)", values: series.cpuPeak },
-          ]}
+          series={series.single
+            ? [{ id: "used", label: t("sandbox.charts.cpuUsed"), color: "var(--series-1)", values: series.cpuAverage }]
+            : [
+              { id: "average", label: t("sandbox.charts.cpuAverage"), color: "var(--series-1)", values: series.cpuAverage },
+              { id: "peak", label: t("sandbox.charts.cpuPeak"), color: "var(--series-3)", values: series.cpuPeak },
+            ]}
           formatValue={percent}
           formatAxis={percent}
           height={height}

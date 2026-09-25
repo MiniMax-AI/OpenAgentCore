@@ -50,7 +50,7 @@ export const sessions = {
     more: "Show more",
   },
   detail: {
-    back: "Back to Session log",
+    back: "Back",
     facts: "Session facts",
     id: "Session ID",
     project: "Project",

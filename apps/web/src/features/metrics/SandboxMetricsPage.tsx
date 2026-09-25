@@ -1,6 +1,6 @@
 import { Server } from "lucide-react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -16,10 +16,11 @@ import {
   StatusDot,
   type Tone,
 } from "../../components/console-ui";
+import { Modal } from "../../components/Modal";
 import { TableSkeleton } from "../../components/Skeleton";
 import { ListToolbar, listSummary, NameCell, SearchField } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
-import { formatBytes, formatClock, formatCompact, formatCores, formatDuration, formatInteger, formatRelative, MISSING } from "../../lib/format";
+import { formatBytes, formatClock, formatCompact, formatCores, formatDateTime, formatDuration, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
 import { projectClient, ProjectName, useProjects } from "../../lib/projects";
 import { loadRuntimeDurableSnapshot, RUNTIME_DURABLE_RANGES, type RuntimeDurableRange } from "../dashboard/runtime-history";
 import type { RuntimeDashboardSnapshot } from "../dashboard/runtime-snapshot";
@@ -31,6 +32,7 @@ import {
   hostedRuntimeUsage,
   matchesRuntime,
   runtimeSnapshot,
+  runtimeSnapshotWhere,
   sessionTitle,
   type HostedRuntimeLoad,
   type HostedRuntimeRow,
@@ -38,6 +40,8 @@ import {
 import "./MetricsView.css";
 import { RuntimeCharts } from "./RuntimeCharts";
 import { hostedRuntimesQuery } from "./metrics-queries";
+import { SessionRuntimeSection } from "../sessions/SessionRuntimeSection";
+import type { SandboxNode } from "@agents-core-web/agents-client";
 
 const healthTone: Record<NodeHealth, Tone> = { available: "ok", degraded: "warning", offline: "danger" };
 
@@ -88,6 +92,10 @@ export function SandboxMetricsPage() {
   const updatedAt = runtimeState.load?.loadedAt ?? fleet?.loadedAt ?? null;
   const message = fleetMessage(fleetState, t);
   const [range, setRange] = useState<RuntimeDurableRange>(RUNTIME_DURABLE_RANGES[0].milliseconds);
+  // A node or a sandbox opens in a dialog with its own figures, instead of leaving the page.
+  const [openNode, setOpenNode] = useState<string | null>(null);
+  const [openRuntime, setOpenRuntime] = useState<string | null>(null);
+  const rows = useMemo(() => (runtimeState.load ? hostedRuntimeRows(runtimeState.load, "", fleet) : []), [fleet, runtimeState.load]);
 
   return (
     <section className="page-section console-page metrics-page" aria-labelledby="sandbox-metrics-heading">
@@ -131,8 +139,8 @@ export function SandboxMetricsPage() {
                   {fleet.nodes.map((node) => {
                     const health = nodeHealth(node);
                     return (
-                      <tr key={node.id}>
-                        <th scope="row"><NameCell name={node.name} id={node.id} onOpen={() => navigate("nodes", { id: node.id })} /></th>
+                      <tr key={node.id} className="clickable-row" onClick={() => setOpenNode(node.id)}>
+                        <th scope="row"><NameCell name={node.name} id={node.id} onOpen={() => setOpenNode(node.id)} openLabel={t("sandbox.nodeDialog.openLabel", { name: node.name || node.id })} /></th>
                         <td><StatusDot tone={healthTone[health]} label={t(`sandbox.health.${health}`)} /></td>
                         <td>
                           <span className="table-meter">
@@ -163,15 +171,22 @@ export function SandboxMetricsPage() {
             : <p className="page-status" role={fleetState.status === "failed" ? "alert" : "status"}>{message}</p>}
         </Section>
 
-        <HostedRuntimeSection state={runtimeState} fleet={fleet} range={range} />
+        <HostedRuntimeSection state={runtimeState} fleet={fleet} range={range} onOpen={setOpenRuntime} />
       </PageBody>
+      <NodeDialog
+        node={fleet?.nodes.find((node) => node.id === openNode) ?? null}
+        rows={rows}
+        load={runtimeState.load}
+        range={range}
+        onClose={() => setOpenNode(null)}
+      />
+      <RuntimeDialog row={rows.find((row) => row.observation.session_id === openRuntime) ?? null} onClose={() => setOpenRuntime(null)} />
     </section>
   );
 }
 
-/** Durable Runtime history of every hosted Session over a range, read through each Session's project. */
-function useRuntimeHistory(load: HostedRuntimeLoad | null, range: RuntimeDurableRange) {
-  const snapshot = useMemo<RuntimeDashboardSnapshot | null>(() => (load ? runtimeSnapshot(load, "") : null), [load]);
+/** Durable Runtime history of the snapshot's hosted Sessions over a range, read through each Session's project. */
+function useRuntimeHistory(snapshot: RuntimeDashboardSnapshot | null, range: RuntimeDurableRange) {
   const targets = useMemo(() => snapshot?.observations
     .filter((observation) => observation.mode === "openai_hosted" && observation.environment_id !== null)
     .map((observation) => observation.session_id)
@@ -180,19 +195,20 @@ function useRuntimeHistory(load: HostedRuntimeLoad | null, range: RuntimeDurable
   return useQuery({
     queryKey: ["runtime-history", range, targets],
     queryFn: ({ signal }) => loadHistory(snapshot!, range, signal),
-    enabled: snapshot !== null,
+    enabled: snapshot !== null && targets !== "",
     placeholderData: keepPreviousData,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
 }
 
-function HostedRuntimeSection({ state, fleet, range }: { state: RuntimeState; fleet: ReturnType<typeof fleetSnapshot>; range: RuntimeDurableRange }) {
+function HostedRuntimeSection({ state, fleet, range, onOpen }: { state: RuntimeState; fleet: ReturnType<typeof fleetSnapshot>; range: RuntimeDurableRange; onOpen: (sessionId: string) => void }) {
   const { t, i18n } = useTranslation("metrics");
   const locale = i18n.resolvedLanguage;
   const load = state.load;
   const usage = useMemo(() => (load ? hostedRuntimeUsage(load.observations) : null), [load]);
-  const history = useRuntimeHistory(load, range);
+  const snapshot = useMemo<RuntimeDashboardSnapshot | null>(() => (load ? runtimeSnapshot(load, "") : null), [load]);
+  const history = useRuntimeHistory(snapshot, range);
   const partial = load && (load.unread || load.failed) ? t("sandbox.runtimePartial", { unread: load.unread, failed: load.failed }) : null;
 
   let body;
@@ -210,7 +226,7 @@ function HostedRuntimeSection({ state, fleet, range }: { state: RuntimeState; fl
         {durable ? <RuntimeCharts samples={durable.samples} resolutionSeconds={durable.resolutionSeconds} />
           : history.isError ? <p className="page-status" role="alert">{t("sandbox.charts.historyFailed", { reason: history.error instanceof Error ? history.error.message : "" })}</p>
             : history.isFetched ? <p className="page-status">{t("sandbox.charts.historyUnavailable")}</p> : null}
-        <RuntimeTable rows={hostedRuntimeRows(load, "", fleet)} showProject />
+        <RuntimeTable rows={hostedRuntimeRows(load, "", fleet)} showProject onOpen={onOpen} />
       </>
     );
   }
@@ -258,11 +274,10 @@ function lifecycleLabel(row: HostedRuntimeRow, t: TFunction<"metrics">): string 
   return t(`sandbox.lifecycle.${row.observation.lifecycle_state ?? "stopped"}`);
 }
 
-function RuntimeTable({ rows, showProject }: { rows: HostedRuntimeRow[]; showProject: boolean }) {
+function RuntimeTable({ rows, showProject, onOpen }: { rows: HostedRuntimeRow[]; showProject: boolean; onOpen: (sessionId: string) => void }) {
   const { t, i18n } = useTranslation("metrics");
   const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
-  const { navigate } = useConsoleNavigation();
   const { byId } = useProjects();
   const [query, setQuery] = useState("");
   const visible = rows.filter((row) => matchesRuntime(row, query));
@@ -291,11 +306,11 @@ function RuntimeTable({ rows, showProject }: { rows: HostedRuntimeRow[]; showPro
               const observed = observation.status === "observed";
               const cpu = observed ? observation.cpu : null;
               const memory = observed ? observation.memory : null;
-              const open = () => navigate("session", { project: observation.project_id, id: observation.session_id });
+              const open = () => onOpen(observation.session_id);
               return (
-                <tr key={`${observation.project_id}:${observation.session_id}`}>
+                <tr key={`${observation.project_id}:${observation.session_id}`} className="clickable-row" onClick={open}>
                   <th scope="row">
-                    <NameCell name={sessionTitle(session)} id={observation.session_id} fallback={t("sandbox.untitled")} onOpen={open} />
+                    <NameCell name={sessionTitle(session)} id={observation.session_id} fallback={t("sandbox.untitled")} onOpen={open} openLabel={t("sandbox.runtimeDialog.openLabel", { name: sessionTitle(session) ?? observation.session_id })} />
                   </th>
                   {showProject ? <td><ProjectName project={byId.get(observation.project_id)} /></td> : null}
                   <td>{row.node ? row.node.name || row.node.id : <span className="table-muted">{MISSING}</span>}</td>
@@ -305,6 +320,12 @@ function RuntimeTable({ rows, showProject }: { rows: HostedRuntimeRow[]; showPro
                       <span className="table-meter">
                         <Meter value={cpu.usage_cores} limit={cpu.capacity_cores} label={t("sandbox.cpu")} />
                         <span>{formatCores(cpu.usage_cores, locale)} / {t("sandbox.cores", { value: formatCores(cpu.capacity_cores, locale) })}</span>
+                      </span>
+                    ) : cpu?.utilization_ratio != null ? (
+                      // Providers that report only a utilization ratio: show it as a share of the sandbox's CPU.
+                      <span className="table-meter">
+                        <Meter value={cpu.utilization_ratio} limit={1} label={t("sandbox.cpu")} />
+                        <span>{formatPercent(cpu.utilization_ratio, locale)}</span>
                       </span>
                     ) : <span className="table-muted">{MISSING}</span>}
                   </td>
@@ -328,5 +349,106 @@ function RuntimeTable({ rows, showProject }: { rows: HostedRuntimeRow[]; showPro
         {!visible.length ? <p className="runtime-list-empty">{tCommon("list.noMatches")}</p> : null}
       </div>
     </div>
+  );
+}
+
+/** Keeps the last value on screen while a dialog closes. */
+function useLast<T>(value: T | null): T | null {
+  const last = useRef(value);
+  if (value !== null) last.current = value;
+  return value ?? last.current;
+}
+
+/**
+ * A node in a dialog: the host figures it reports with each heartbeat, and
+ * CPU and memory of the hosted sandboxes placed on it over the page's range.
+ */
+function NodeDialog({ node, rows, load, range, onClose }: {
+  node: SandboxNode | null;
+  rows: readonly HostedRuntimeRow[];
+  load: HostedRuntimeLoad | null;
+  range: RuntimeDurableRange;
+  onClose: () => void;
+}) {
+  const { t, i18n } = useTranslation("metrics");
+  const locale = i18n.resolvedLanguage;
+  const { navigate } = useConsoleNavigation();
+  const shown = useLast(node);
+  const sessionIds = useMemo(() => new Set(rows.filter((row) => row.node?.id === node?.id).map((row) => row.observation.session_id)), [node?.id, rows]);
+  const snapshot = useMemo<RuntimeDashboardSnapshot | null>(
+    () => (load && node && sessionIds.size ? runtimeSnapshotWhere(load, (observation) => sessionIds.has(observation.session_id)) : null),
+    [load, node, sessionIds],
+  );
+  const history = useRuntimeHistory(snapshot, range);
+  const now = Math.floor(Date.now() / 1000);
+  const online = shown?.online ?? false;
+  const seen = shown?.last_seen_at ? Date.parse(shown.last_seen_at) / 1000 : null;
+  return (
+    <Modal
+      open={node !== null}
+      wide
+      title={shown ? shown.name || shown.id : ""}
+      onClose={onClose}
+      footer={shown ? <button className="button outline" type="button" onClick={() => navigate("nodes", { id: shown.id })}>{t("sandbox.nodeDialog.openNode")}</button> : undefined}
+    >
+      {shown ? (
+        <div className="metrics-dialog">
+          <dl className="resource-facts" aria-label={t("sandbox.nodeDialog.facts")}>
+            <div><dt>{t("sandbox.status")}</dt><dd><StatusDot tone={healthTone[nodeHealth(shown)]} label={t(`sandbox.health.${nodeHealth(shown)}`)} /></dd></div>
+            <div><dt>{t("sandbox.slots")}</dt><dd>{formatInteger(shown.active, locale)} / {formatInteger(shown.max_active, locale)}</dd></div>
+            <div><dt>{t("sandbox.nodeDialog.retainedSlots")}</dt><dd>{formatInteger(shown.retained, locale)} / {formatInteger(shown.max_retained, locale)}</dd></div>
+            <div><dt>{t("sandbox.cpus")}</dt><dd>{online && shown.cpu_count !== null ? t("sandbox.cores", { value: formatInteger(shown.cpu_count, locale) }) : MISSING}</dd></div>
+            <div><dt>{t("sandbox.freeMemory")}</dt><dd>{online ? formatBytes(shown.available_memory_bytes) : MISSING}</dd></div>
+            <div><dt>{t("sandbox.freeDiskColumn")}</dt><dd>{online ? formatBytes(shown.available_disk_bytes) : MISSING}</dd></div>
+            <div><dt>{t("sandbox.cleanupPending")}</dt><dd>{formatInteger(shown.cleanup_pending, locale)}</dd></div>
+            <div><dt>{t("sandbox.lastSeen")}</dt><dd title={seen === null ? undefined : formatDateTime(seen, locale)}>{formatRelative(seen, now, locale)}</dd></div>
+          </dl>
+          <Section
+            headingId="node-runtimes-heading"
+            title={<>{t("sandbox.nodeDialog.runtimes")}<span className="section-meta">{t("sandbox.nodeDialog.runtimesMeta", { n: formatInteger(sessionIds.size, locale) })}</span></>}
+            help={t("sandbox.nodeDialog.runtimesHelp")}
+          >
+            {!sessionIds.size ? <EmptyState title={t("sandbox.nodeDialog.noRuntimes")} />
+              : history.data ? <RuntimeCharts samples={history.data.samples} resolutionSeconds={history.data.resolutionSeconds} height={150} />
+                : history.isError ? <p className="page-status" role="alert">{t("sandbox.charts.historyFailed", { reason: history.error instanceof Error ? history.error.message : "" })}</p>
+                  : history.isFetched ? <p className="page-status">{t("sandbox.charts.historyUnavailable")}</p>
+                    : <TableSkeleton label={t("sandbox.runtimeLoading")} rows={3} columns={4} />}
+          </Section>
+        </div>
+      ) : null}
+    </Modal>
+  );
+}
+
+/** A hosted sandbox in a dialog: where it runs, and its Session's Runtime state and history. */
+function RuntimeDialog({ row, onClose }: { row: HostedRuntimeRow | null; onClose: () => void }) {
+  const { t } = useTranslation("metrics");
+  const { t: tCommon } = useTranslation("common");
+  const { navigate } = useConsoleNavigation();
+  const { byId } = useProjects();
+  const shown = useLast(row);
+  const observation = shown?.observation ?? null;
+  return (
+    <Modal
+      open={row !== null}
+      wide
+      title={shown ? sessionTitle(shown.session) ?? shown.observation.session_id : ""}
+      onClose={onClose}
+      footer={observation ? <button className="button outline" type="button" onClick={() => navigate("session", { project: observation.project_id, id: observation.session_id })}>{t("sandbox.runtimeDialog.openSession")}</button> : undefined}
+    >
+      {shown && observation ? (
+        <div className="metrics-dialog">
+          <dl className="resource-facts" aria-label={t("sandbox.runtimeDialog.facts")}>
+            <div><dt>{tCommon("project.column")}</dt><dd><ProjectName project={byId.get(observation.project_id)} /></dd></div>
+            <div><dt>{t("sandbox.node")}</dt><dd>{shown.node ? shown.node.name || shown.node.id : MISSING}</dd></div>
+            <div><dt>{t("sandbox.status")}</dt><dd><StatusDot tone={lifecycleTone(shown)} label={lifecycleLabel(shown, t)} /></dd></div>
+            <div><dt>{t("sandbox.uptime")}</dt><dd>{formatDuration(shown.uptimeSeconds)}</dd></div>
+          </dl>
+          {shown.session
+            ? <SessionRuntimeSection projectId={observation.project_id} session={shown.session} active revision={0} refreshToken={0} />
+            : <p className="page-status">{t("sandbox.runtimeDialog.noSession")}</p>}
+        </div>
+      ) : null}
+    </Modal>
   );
 }

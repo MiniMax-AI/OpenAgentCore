@@ -7,9 +7,11 @@ interface ModalProps extends PropsWithChildren {
   title: string;
   footer?: ReactNode;
   onClose: () => void;
+  /** A wider dialog for charts and facts; the default suits a form. */
+  wide?: boolean;
 }
 
-export function Modal({ open, title, footer, onClose, children }: ModalProps) {
+export function Modal({ open, title, footer, onClose, wide = false, children }: ModalProps) {
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
@@ -108,7 +110,7 @@ export function Modal({ open, title, footer, onClose, children }: ModalProps) {
     >
       <section
         ref={dialogRef}
-        className="modal-card"
+        className={wide ? "modal-card modal-card-wide" : "modal-card"}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

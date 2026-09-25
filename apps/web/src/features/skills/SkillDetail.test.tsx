@@ -69,7 +69,7 @@ describe("Skill detail page", () => {
     expect(html).toContain("report");
     expect(html).toContain("Create the report.");
     expect(html).toContain(skillId);
-    expect(html).toContain('aria-label="Back to Skills"');
+    expect(html).toContain('aria-label="Back"');
     for (const action of ["Download", "Delete Skill"]) expect(html).toContain(action);
     expect(html).not.toContain("Upload new version");
     expect(html).not.toContain("Set as default");

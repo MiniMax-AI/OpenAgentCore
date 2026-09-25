@@ -174,13 +174,13 @@ function TemplatesList() {
 function TemplateDetailRoute({ projectId, templateId }: { projectId: string; templateId: string }) {
   const { t } = useTranslation("templates");
   const { t: tCommon } = useTranslation();
-  const { navigate } = useConsoleNavigation();
+  const { navigate, back: goBack } = useConsoleNavigation();
   const { byId } = useProjects();
   const project = byId.get(projectId);
   // Opens from the cache (or the list row) at once; a refresh keeps the Template on screen.
   const { read, forget } = useTemplateDetail(projectId, templateId);
   const [copy, setCopy] = useState<CopySource | null>(null);
-  const back = useCallback(() => navigate("templates", { project: projectId }), [navigate, projectId]);
+  const back = useCallback(() => goBack("templates", { project: projectId }), [goBack, projectId]);
   const creators = useCreators("environment_template", useMemo(() => [{ projectId, id: templateId }], [projectId, templateId]));
   const refresh = () => { forgetCreators(); void read.refetch(); };
   const failure = read.isError ? (read.error instanceof Error ? read.error.message : String(read.error)) : null;

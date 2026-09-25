@@ -16,7 +16,7 @@ export const templates: TranslationShape<typeof english> = {
     disabled: "原生工具无法访问网络。",
     restricted: "原生工具只能访问列出的主机名。子域名和重定向目标需要单独列出。",
   },
-  edit: "编辑", editLabel: "编辑 {{name}}", delete: "删除", deleteLabel: "删除 {{name}}", open: "打开 {{name}}", back: "返回模板列表",
+  edit: "编辑", editLabel: "编辑 {{name}}", delete: "删除", deleteLabel: "删除 {{name}}", open: "打开 {{name}}", back: "返回",
   unrecognized: "含无法识别的配置",
   unrecognizedHelp: "Core 返回了控制台无法识别的配置。可识别的部分照常显示，其余部分不做推测。",
   unrecognizedSections: "控制台无法识别：{{sections}}",

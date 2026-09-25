@@ -16,7 +16,7 @@ export const skills = {
     setDefaultVersion: "Make v{{version}} the default",
     loadMore: "Load more",
     loadingMore: "Loading…",
-    back: "Back to Skills",
+    back: "Back",
     copyId: "Copy ID",
     copied: "ID copied",
     clearFilter: "Clear filter",
