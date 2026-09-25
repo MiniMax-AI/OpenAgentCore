@@ -2,7 +2,7 @@ import { AgentCoreError, projectAgentSnapshot, projectRuntimeObservation } from 
 import { projectTokenUsage } from "./usage-projection";
 import { canonicalUuid, exactFields, isNonnegativeInteger, isRecord, sameResourceId } from "./response-projection";
 import type { ListPage, SavedAgent } from "./types";
-import type { AdminAPIKey, AdminProject, AdminAuditPage, AdminSummary, AdminRuntimeObservation, RuntimeDiskObservation, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperationPage, AdminCopyResult, AdminDeleted, AdminIssuedAPIKey, AdminPage, AdminSessionArchive, SessionArtifact, Skill, SkillVersion } from "./admin-types";
+import type { AdminAPIKey, AdminProject, AdminAuditPage, AdminSummary, AdminRuntimeObservation, RuntimeDiskObservation, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperationPage, AdminAuditResultID, AdminDeleted, AdminIssuedAPIKey, AdminPage, AdminSessionArchive, SessionArtifact, Skill, SkillVersion } from "./admin-types";
 
 export function invalidAdminResponse(): never {
   throw new AgentCoreError("Core returned an invalid administration response.", 502, "invalid_admin_response");
@@ -94,17 +94,16 @@ export function projectArtifact(value: unknown, sessionId: string, expectedId?: 
     !sameResourceId(artifact.session_id as string, sessionId) || (expectedId !== undefined && !sameResourceId(artifact.id as string, expectedId))) return invalidAdminResponse();
   return { ...artifact } as unknown as SessionArtifact;
 }
-export function projectCopyResult(value: unknown): AdminCopyResult {
-  const result = record(value, ["mappings", "skipped"]);
-  if (!Array.isArray(result.mappings) || !Array.isArray(result.skipped)) return invalidAdminResponse();
+// Historical copy audit entries retain their result mappings.
+function projectAuditResultIDs(value: unknown): AdminAuditResultID[] {
+  if (!Array.isArray(value)) return invalidAdminResponse();
   const types = new Set(["agent", "skill", "skill_version", "environment_template", "file", "vault", "credential"]);
-  const project = (entry: unknown, field: "target_id" | "reason") => {
-    const item = record(entry, ["type", "source_id", field]);
-    strings(item, ["type", "source_id", field]);
+  return value.map((entry) => {
+    const item = record(entry, ["type", "source_id", "target_id"]);
+    strings(item, ["type", "source_id", "target_id"]);
     if (!types.has(item.type as string)) return invalidAdminResponse();
-    return { ...item };
-  };
-  return { mappings: result.mappings.map((entry) => project(entry, "target_id")), skipped: result.skipped.map((entry) => project(entry, "reason")) } as unknown as AdminCopyResult;
+    return { ...item } as unknown as AdminAuditResultID;
+  });
 }
 
 function projectProvenance(value: unknown): AdminKeyProvenance | null {
@@ -192,8 +191,7 @@ export function projectAdminAudit(value: unknown): AdminAuditPage {
     const audit = record(entry, ["id", "created_at", "admin_credential_id", "actor_label", "action", "project_id", "resource_type", "resource_id", "result_ids", "request_id", "trace_id"]);
     strings(audit, ["id", "created_at", "admin_credential_id", "actor_label", "action", "project_id", "resource_type", "resource_id", "request_id", "trace_id"]);
     if (!date(audit.created_at)) return invalidAdminResponse();
-    const result = projectCopyResult({ mappings: audit.result_ids, skipped: [] });
-    return { ...audit, result_ids: result.mappings };
+    return { ...audit, result_ids: projectAuditResultIDs(audit.result_ids) };
   });
   return { data, has_more: page.has_more, next_cursor: page.next_cursor } as AdminAuditPage;
 }

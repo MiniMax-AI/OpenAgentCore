@@ -97,8 +97,7 @@ func (s *Store) CreateProjectAPIKey(ctx context.Context, project, id, name strin
 			return err
 		}
 		result = IssuedProjectAPIKey{ProjectAPIKey: projectKeyMetadata(row), Key: token}
-		_, err = recordAdminMutation(ctx, q, uuid.UUID(p.TenantID.Bytes).String(), "create", "api_key", id, nil)
-		return err
+		return recordAdminMutation(ctx, q, uuid.UUID(p.TenantID.Bytes).String(), "create", "api_key", id)
 	})
 	if err != nil {
 		return IssuedProjectAPIKey{}, err
@@ -164,8 +163,7 @@ func (s *Store) RevokeProjectAPIKey(ctx context.Context, project, id string) err
 		if err != nil {
 			return err
 		}
-		_, err = recordAdminMutation(ctx, q, uuid.UUID(p.TenantID.Bytes).String(), "revoke", "api_key", id, nil)
-		return err
+		return recordAdminMutation(ctx, q, uuid.UUID(p.TenantID.Bytes).String(), "revoke", "api_key", id)
 	})
 }
 func (s *Store) ResolveProjectAPIKey(ctx context.Context, digest string) (ProjectAPIKeyBinding, error) {

@@ -79,7 +79,7 @@ func (s *Store) ArchiveManagedSession(ctx context.Context, tenantID, sessionID s
 				return err
 			}
 		}
-		if _, err := recordAdminMutation(ctx, q, tenantID, "archive", "session", runtimeUUID(session), nil); err != nil {
+		if err := recordAdminMutation(ctx, q, tenantID, "archive", "session", runtimeUUID(session)); err != nil {
 			return err
 		}
 		result, err = getManagedSessionArchive(ctx, q, tenant, session)

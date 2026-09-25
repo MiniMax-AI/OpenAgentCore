@@ -18,7 +18,7 @@ func TestAdminProxyUsesAccountIdentityAndServerCredential(t *testing.T) {
 		w.WriteHeader(200)
 	}))
 	h := accountConsole(t, c)
-	paths := []struct{ method, path string }{{"GET", "/core/v1/admin/projects?limit=5"}, {"POST", "/core/v1/admin/projects"}, {"POST", "/core/v1/admin/projects/project/keys"}, {"POST", "/core/v1/admin/projects/project/archive"}, {"DELETE", "/core/v1/admin/projects/project/keys/key"}, {"GET", "/core/v1/admin/projects/key/sessions/session/artifacts/artifact/content"}, {"DELETE", "/core/v1/admin/projects/key/skills/skill/versions/1"}, {"POST", "/core/v1/admin/copies"}, {"GET", "/core/v1/admin/summary"}, {"GET", "/core/v1/admin/core-metrics?range=6h"}}
+	paths := []struct{ method, path string }{{"GET", "/core/v1/admin/projects?limit=5"}, {"POST", "/core/v1/admin/projects"}, {"POST", "/core/v1/admin/projects/project/keys"}, {"POST", "/core/v1/admin/projects/project/archive"}, {"DELETE", "/core/v1/admin/projects/project/keys/key"}, {"GET", "/core/v1/admin/projects/key/sessions/session/artifacts/artifact/content"}, {"DELETE", "/core/v1/admin/projects/key/skills/skill/versions/1"}, {"GET", "/core/v1/admin/summary"}, {"GET", "/core/v1/admin/core-metrics?range=6h"}}
 	for _, tc := range paths {
 		if w := authRequest(h, tc.method, tc.path, `{}`, nil); w.Code != 401 {
 			t.Errorf("unauthenticated %s = %d", tc.path, w.Code)

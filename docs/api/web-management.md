@@ -1,8 +1,8 @@
 # Web management API
 
 Core Web is an administrator console. Resource inspection, Project/key management,
-explicit cross-Project copies, audit, usage and sandbox operations use management
-authority. The console has no Agent execution or arbitrary asset editing operation.
+audit, usage and sandbox operations use management authority. The console has no
+Agent execution, copy or arbitrary asset editing operation.
 
 ## Browser to console
 
@@ -32,7 +32,7 @@ Core treats that name as an audit display label, not an authorization input.
 
 Use [AdminClient](../../packages/agents-client/src/admin-client.ts) for the typed
 management client and [the complete administrator reference](../../contracts/agents-api/admin-api.md)
-for methods, fields, filters, pagination, copy rules and response shapes.
+for methods, fields, filters, pagination and response shapes.
 Routes below are relative to `/core/v1/admin`:
 
 | Workflow | Routes |
@@ -42,8 +42,7 @@ Routes below are relative to `/core/v1/admin`:
 | Resource lists/details/deletion | `/projects/{id}/agents`, `/sessions`, `/environment-templates`, `/skills`, `/files`, `/vaults`, including the documented nested reads |
 | Asset ownership | `GET /projects/{id}/resource-owners` with batched resource IDs |
 | Key operation history | `GET /projects/{id}/write-operations` with key/resource/time filters |
-| Copies | `POST /copies`, explicit source/target Project IDs and optional dependencies |
-| Usage and health | `GET /summary`, `/runtime-observations`, `/startup-configuration`, `/runtime-history/capabilities` |
+| Usage and health | `GET /summary`, `/runtime-observations` |
 | Administrator audit | `GET /audit-log` |
 
 A Project UUID in a management path selects the target; it is not a credential.

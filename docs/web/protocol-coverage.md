@@ -91,10 +91,7 @@ Resource-specific boundaries:
 Summary figures are cumulative per Session and are not billing records. Sessions
 without reported usage count toward coverage but not toward token sums, and the
 console shows missing values as missing, never as zero. The administrator audit
-log (`GET /audit-log`), Runtime history capabilities
-(`GET /runtime-history/capabilities`) and startup configuration
-(`GET /startup-configuration`) are not consumed; System shows the sandbox
-deployment only.
+log (`GET /audit-log`) is not consumed; System shows the sandbox deployment only.
 
 ## Sandbox administration
 

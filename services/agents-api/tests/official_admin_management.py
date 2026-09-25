@@ -1,12 +1,14 @@
-"""Admin management and real copied-asset execution against a deployed Core.
+"""Administrator management and real Project-asset execution against a deployed Core.
 
 Read private JSON settings from stdin: base, admin, model, harness and optional
 model_provider (the complete write-only provider object). run_model defaults to
 true; false performs resource checks only and never reports model acceptance.
 The deployment and its qualified runtime must already be running. This script
-creates two Projects, exercises shared keys, and cleans up only its own resources.
+creates two Projects, exercises shared keys and Project isolation, and cleans up
+only its own resources.
 """
 import base64
+from datetime import datetime
 import io
 import json
 import secrets
@@ -58,7 +60,7 @@ def main():
     secret_values = [private, settings["admin"]]
     if settings.get("model_provider"):
         secret_values.append(settings["model_provider"]["api_key"])
-    owned, keys, clients, projects = set(), [], [], []
+    owned, keys, clients, projects, revoked = set(), [], [], [], set()
     session_id = None
     with httpx.Client(trust_env=False, timeout=30) as http:
         def request(method, path, expected=200, token=None, headers=None, **kwargs):
@@ -93,6 +95,10 @@ def main():
             uuid.UUID(key["id"])
             return key
 
+        def revoke(key):
+            request("DELETE", project_path(key) + "/keys/" + key["id"])
+            revoked.add(key["id"])
+
         def operations(key, kind, resource):
             return safe(request("GET", project_path(key) + "/write-operations", params={
                 "resource_type": kind, "resource_id": resource, "limit": 100}))["data"]
@@ -108,26 +114,6 @@ def main():
             owned.add((key["project_id"], kind, resource))
             return resource
 
-        def copy(source, target, kind, resource, dependencies=False, vault=None):
-            body = {"source_project_id": source["project_id"], "target_project_id": target["project_id"],
-                    "resource_type": kind, "resource_id": resource, "include_dependencies": dependencies}
-            if vault:
-                body["resource_id"] = resource.upper()
-                body["target_vault_id"] = vault.upper()
-            headers = {"Idempotency-Key": str(uuid.uuid4())}
-            result = safe(request("POST", "/core/v1/admin/copies", json=body, headers=headers))
-            for item in result["mappings"]:
-                if item["type"] in ADMIN_PATHS:
-                    remember(target, item["type"], item["target_id"])
-            assert safe(request("POST", "/core/v1/admin/copies", json=body, headers=headers)) == result
-            request("POST", "/core/v1/admin/copies", expected=409,
-                    json={**body, "include_dependencies": not dependencies}, headers=headers)
-            return result
-
-        def mapped(result, kind, source):
-            return next(item["target_id"] for item in result["mappings"]
-                        if item["type"] == kind and item["source_id"] == source)
-
         def equal_reads(key, kind, resource):
             public = request("GET", f"/v1/{PUBLIC_PATHS[kind]}/{resource}", token=key["key"])
             management = request("GET", admin_resource(key, kind, resource))
@@ -142,12 +128,12 @@ def main():
             while time.monotonic() < deadline:
                 state = client.beta.agents.sessions.retrieve(sid)
                 turns = list(client.beta.agents.sessions.turns.list(sid, order="asc"))
-                assert state.status != "failed", "Real copied-asset Session failed"
-                assert all(turn.status not in ("failed", "cancelled") for turn in turns), "Real copied-asset Turn failed"
+                assert state.status != "failed", "Real Session failed"
+                assert all(turn.status not in ("failed", "cancelled") for turn in turns), "Real Turn failed"
                 if len(turns) >= wanted_turns and turns[-1].status == "completed" and state.status == "idle":
                     return state
                 time.sleep(0.5)
-            raise AssertionError("Real copied-asset execution timed out")
+            raise AssertionError("Real execution timed out")
 
         try:
             for name in ("source", "target"):
@@ -175,7 +161,6 @@ def main():
                 assert safe(request("GET", "/v1/" + path, token=target["key"]))["data"] == []
             request("GET", "/core/v1/admin/projects", expected=401, token=source["key"])
             request("GET", "/v1/agents", expected=401, headers={"OpenAI-Beta": "agents=v1"})
-            safe(request("GET", "/core/v1/admin/startup-configuration"))
 
             file = a.files.create(file=("copy-source.txt", private.encode()), purpose="user_data")
             remember(source, "file", file.id)
@@ -184,12 +169,11 @@ def main():
                 upload_files = [(name, bundle.read(name), "application/octet-stream") for name in bundle.namelist()]
             skill = a.skills.create(files=upload_files)
             remember(source, "skill", skill.id)
-            # Preserve a gap and a non-initial default across copies.
+            # The peer key edits a Skill created by another key in the same Project.
             for _ in range(2):
                 a_peer.skills.versions.create(skill_id=skill.id, files=upload_files, default=False)
             a_peer.skills.update(skill.id, default_version="3")
             a_peer.skills.versions.delete(version="2", skill_id=skill.id)
-            archive = a.skills.content.retrieve(skill.id).read()
             template = a_peer.beta.agents.environments.templates.create(
                 name="Confidential copy proof", env={"COPY_PRIVATE": private},
                 setup_commands=[{"command": "printf %s " + private + " > /workspace/copy-setup.txt"}],
@@ -208,12 +192,6 @@ def main():
             remember(source, "vault", vault.id)
             static = a.beta.agents.vaults.credentials.create(vault.id, name="Static", auth={
                 "type": "static_bearer", "mcp_server_url": "https://copy.example/mcp", "token": private})
-            oauth = a.beta.agents.vaults.credentials.create(vault.id, name="OAuth", auth={
-                "type": "mcp_oauth", "mcp_server_url": "https://copy.example/oauth", "access_token": private})
-            refresh = a.beta.agents.vaults.credentials.create(vault.id, name="Refresh", auth={
-                "type": "mcp_oauth", "mcp_server_url": "https://copy.example/refresh", "access_token": private,
-                "refresh": {"client_id": "copy-proof", "refresh_token": private,
-                            "token_endpoint": "https://copy.example/token", "token_endpoint_auth": {"type": "none"}}})
 
             shared = [("agent", agent.id), ("skill", skill.id), ("file", file.id),
                       ("environment_template", template.id), ("vault", vault.id)]
@@ -248,9 +226,6 @@ def main():
             assert renamed == {**projects[0], "name": "Renamed project proof", "active_key_count": 2}
             projects[0].update(renamed)
             equal_reads(peer, "agent", agent.id)
-            request("POST", "/core/v1/admin/copies", expected=400, json={
-                "source_project_id": source["project_id"], "target_project_id": source["project_id"],
-                "resource_type": "agent", "resource_id": agent.id})
 
             for kind, resource in [("agent", agent.id), ("skill", skill.id), ("file", file.id),
                                    ("environment_template", template.id), ("vault", vault.id)]:
@@ -289,6 +264,7 @@ def main():
 
             target_vault = b.beta.agents.vaults.create(name="Empty target attachment")
             remember(target, "vault", target_vault.id)
+            request("GET", "/v1/vaults/" + target_vault.id, expected=404, token=source["key"])
             credential_errors = []
             # The pinned MCP selection contract returns 400 for both missing
             # and foreign credentials within an explicitly attached Vault.
@@ -300,91 +276,60 @@ def main():
                 response["error"]["message"] = response["error"]["message"].replace(reference, "reference")
                 credential_errors.append(response)
             assert credential_errors[0] == credential_errors[1], "Foreign credential differs from missing credential"
-
-            direct_file = copy(source, target, "file", file.id)
-            copied_file = mapped(direct_file, "file", file.id)
-            assert b.files.retrieve(copied_file).bytes == len(private.encode())
-            request("GET", "/v1/files/" + copied_file + "/content", expected=400, token=target["key"])
-            direct_skill = copy(source, target, "skill", skill.id)
-            copied_skill = mapped(direct_skill, "skill", skill.id)
-            assert b.skills.retrieve(copied_skill).default_version == "3"
-            assert [item.version for item in b.skills.versions.list(copied_skill, order="asc")] == ["1", "3"]
-            assert b.skills.content.retrieve(copied_skill).read() == archive
-            request("POST", "/core/v1/admin/copies", expected=400, json={"source_project_id": source["project_id"],
-                "target_project_id": target["project_id"], "resource_type": "environment_template", "resource_id": template.id})
-            copied_template = copy(source, target, "environment_template", template.id, dependencies=True)
-            template_id = mapped(copied_template, "environment_template", template.id)
-            copied_agent = copy(source, target, "agent", agent.id)
-            agent_id = mapped(copied_agent, "agent", agent.id)
-            copied_vault = copy(source, target, "vault", vault.id)
-            vault_id = mapped(copied_vault, "vault", vault.id)
-            assert len(copied_vault["skipped"]) == 1 and copied_vault["skipped"][0]["source_id"] == refresh.id
-            assert {item.id for item in b.beta.agents.vaults.credentials.list(vault_id)} == {
-                mapped(copied_vault, "credential", static.id), mapped(copied_vault, "credential", oauth.id)}
-            copy(source, target, "credential", static.id, vault=vault_id)
-            for kind, resource in [("agent", agent_id), ("environment_template", template_id), ("skill", copied_skill), ("vault", vault_id)]:
-                equal_reads(target, kind, resource)
-            print("Admin resource copies, isolation, confidential metadata and idempotency passed.", flush=True)
+            print("Shared keys, provenance, Project isolation and confidential metadata passed.", flush=True)
 
             if settings.get("run_model", True):
-                session = b.beta.agents.sessions.create(agent_id=agent_id, environment={
-                    "type": "openai_hosted", "environment_template_id": template_id},
+                # One real Turn with the Project's own assets. Its creation key is
+                # revoked while the Turn runs; a replacement key continues the Session.
+                session = a.beta.agents.sessions.create(agent_id=agent.id, environment={
+                    "type": "openai_hosted", "environment_template_id": template.id},
                     input="Run the installed copy-proof skill's Python verifier now.",
                     extra_headers={"Idempotency-Key": str(uuid.uuid4())})
-                session_id = remember(target, "session", session.id)
-                completed = wait_idle(b, session_id, 1)
+                session_id = remember(source, "session", session.id)
+                creation_key, old_secret = source["id"], source["key"]
+                replacement = issue(projects[0], "source-rotation")
+                revoke(source)
+                revoked_at = next(key for key in safe(request("GET", project_path(replacement) + "/keys"))["data"]
+                                  if key["id"] == creation_key)["revoked_at"]
+                source = replacement
+                a.api_key = replacement["key"]
+                request("GET", "/v1/agents/sessions/" + session_id, expected=401, token=old_secret)
+                completed = wait_idle(a, session_id, 1)
+                turn = list(a.beta.agents.sessions.turns.list(session_id))[0]
+                assert turn.completed_at >= int(datetime.fromisoformat(revoked_at).timestamp()), "Turn ended before revocation"
                 assert completed.usage is not None and completed.usage.total_tokens > 0, "Real model usage missing"
-                artifacts = list(b.beta.agents.sessions.artifacts.list(session_id))
+                artifacts = list(a.beta.agents.sessions.artifacts.list(session_id))
                 artifact = next(item for item in artifacts if item.path == "/workspace/outputs/copy-proof.txt")
-                assert b.beta.agents.sessions.artifacts.content(artifact.id, session_id=session_id).read() == b"COPY_VERIFIED"
-                equal_reads(target, "session", session_id)
+                assert a.beta.agents.sessions.artifacts.content(artifact.id, session_id=session_id).read() == b"COPY_VERIFIED"
+                a.beta.agents.sessions.update(session_id, metadata={"continued_by": "replacement"})
+                equal_reads(source, "session", session_id)
                 for suffix in ("", "/turns", "/items", "/artifacts", "/artifacts/" + artifact.id):
-                    management = request("GET", admin_resource(target, "session", session_id) + suffix)
-                    public = request("GET", "/v1/agents/sessions/" + session_id + suffix, token=target["key"])
+                    management = request("GET", admin_resource(source, "session", session_id) + suffix)
+                    public = request("GET", "/v1/agents/sessions/" + session_id + suffix, token=source["key"])
                     assert management.content == public.content, "Admin Session history differs"
-                    request("GET", "/v1/agents/sessions/" + session_id + suffix, expected=404, token=source["key"])
-                assert request("GET", admin_resource(target, "session", session_id) + "/artifacts/" + artifact.id + "/content").content == b"COPY_VERIFIED"
-                request("POST", "/core/v1/admin/copies", expected=400, json={"source_project_id": target["project_id"],
-                    "target_project_id": source["project_id"], "resource_type": "session", "resource_id": session_id})
-                request("POST", "/v1/agents/sessions/" + session_id, expected=404, token=source["key"],
+                    request("GET", "/v1/agents/sessions/" + session_id + suffix, expected=404, token=target["key"])
+                assert request("GET", admin_resource(source, "session", session_id) + "/artifacts/" + artifact.id + "/content").content == b"COPY_VERIFIED"
+                request("POST", "/v1/agents/sessions/" + session_id, expected=404, token=target["key"],
                         json={"metadata": {"forbidden": "foreign-project"}})
-                request("DELETE", "/v1/agents/sessions/" + session_id, expected=404, token=source["key"])
-                request("POST", "/v1/agents/sessions/" + session_id + "/events", expected=404, token=source["key"],
+                request("DELETE", "/v1/agents/sessions/" + session_id, expected=404, token=target["key"])
+                request("POST", "/v1/agents/sessions/" + session_id + "/events", expected=404, token=target["key"],
                         json={"events": [{"type": "agent.session.input.message", "input": [
                             {"role": "user", "content": [{"type": "input_text", "text": "foreign"}]}]}]})
-                history = b.beta.agents.sessions.items.list(session_id, order="asc").to_dict()
-                creation_key = target["id"]
-                old_secret = target["key"]
-                replacement = issue(projects[1], "target-rotation")
-                request("DELETE", project_path(target) + "/keys/" + target["id"])
-                target = replacement
-                b.api_key = replacement["key"]
-                request("GET", "/v1/agents/sessions/" + session_id, expected=401, token=old_secret)
-                assert b.beta.agents.sessions.items.list(session_id, order="asc").to_dict() == history
-                b.beta.agents.sessions.events.create(session_id, events=[{"type": "agent.session.input.message", "input": [
-                    {"role": "user", "content": [{"type": "input_text", "text": "Reply COPY_CONTINUED."}]}]}])
-                wait_idle(b, session_id, 2)
-                assert len(list(b.beta.agents.sessions.turns.list(session_id))) == 2
-                assert owner(target, "session", session_id)["api_key"]["id"] == creation_key
-                assert {creation_key, replacement["id"]} <= {item["api_key"]["id"] for item in operations(target, "session", session_id)}
+                assert owner(source, "session", session_id)["api_key"]["id"] == creation_key
+                assert {creation_key, replacement["id"]} <= {item["api_key"]["id"] for item in operations(source, "session", session_id)}
                 key_summary = safe(request("GET", "/core/v1/admin/summary", params={
-                    "group_by": "key", "project_id": target["project_id"]}))["data"]
+                    "group_by": "key", "project_id": source["project_id"]}))["data"]
                 assert sum(row["sessions"]["total"] for row in key_summary) == 1
                 group = next(row for row in key_summary if row["key_id"] == creation_key)
-                assert group["project_id"] == target["project_id"] and group["sessions"]["total"] == 1 and group["assets"] is None
-                assert group["usage"]["total_tokens"] == b.beta.agents.sessions.retrieve(session_id).usage.total_tokens
+                assert group["project_id"] == source["project_id"] and group["sessions"]["total"] == 1 and group["assets"] is None
+                assert group["usage"]["total_tokens"] == a.beta.agents.sessions.retrieve(session_id).usage.total_tokens
                 assert all(row["sessions"]["total"] == 0 for row in key_summary if row["key_id"] != creation_key)
-                print("Real copied assets, Artifact reads and same-Project key rotation continuation passed.", flush=True)
+                print("Real Project-asset execution, Artifact reads and key rotation continuation passed.", flush=True)
             else:
                 print("Real model execution not requested; resource checks only.", flush=True)
-            # Keep a receipt whose target will be archived: replay must reject too.
-            reverse_body = {"source_project_id": target["project_id"], "target_project_id": source["project_id"],
-                            "resource_type": "agent", "resource_id": agent_id}
-            reverse_headers = {"Idempotency-Key": str(uuid.uuid4())}
-            reverse = safe(request("POST", "/core/v1/admin/copies", json=reverse_body, headers=reverse_headers))
-            remember(source, "agent", mapped(reverse, "agent", agent_id))
+
             before_archive = {kind: request("GET", admin_resource(source, kind, resource)).content for kind, resource in shared}
-            request("DELETE", project_path(source) + "/keys/" + source["id"])
+            revoke(source)
             request("GET", "/v1/agents", expected=401, token=source["key"])
             equal_reads(peer, "agent", agent.id)
             peer_metadata = safe(request("GET", project_path(peer) + "/keys"))["data"]
@@ -399,29 +344,33 @@ def main():
             for kind, resource in shared:
                 assert request("GET", admin_resource(source, kind, resource)).content == before_archive[kind]
             request("POST", project_path(source) + "/keys", expected=409, json={"name": "archived"})
-            request("POST", "/core/v1/admin/copies", expected=409, json=reverse_body, headers=reverse_headers)
-            request("POST", "/core/v1/admin/copies", expected=409, json=reverse_body,
-                    headers={"Idempotency-Key": str(uuid.uuid4())})
-            copy(source, target, "agent", agent.id)
             for group_by in ("project", "agent", "key"):
                 summary = safe(request("GET", "/core/v1/admin/summary", params={
                     "group_by": group_by, "project_id": target["project_id"]}))
                 assert all(row["project_id"] == target["project_id"] for row in summary["data"])
             safe(request("GET", "/core/v1/admin/audit-log", params={"project_id": target["project_id"]}))
-            print("Project rename, archive, retained reads, archived-source copy and archived-target rejection passed.", flush=True)
+            print("Project rename, archive and retained reads passed.", flush=True)
         finally:
             failures = []
             if session_id is not None:
+                # Read through the administrator route; cancel only with a key this run
+                # has not revoked, in a Project that is not archived.
+                session_path = base + f"/core/v1/admin/projects/{projects[0]['id']}/sessions/{session_id}"
                 try:
-                    state = clients[1].beta.agents.sessions.retrieve(session_id)
-                    if state.status == "in_progress":
-                        clients[1].beta.agents.sessions.events.create(session_id,
-                            events=[{"type": "agent.session.input.cancel"}], idempotency_key=str(uuid.uuid4()))
+                    state = http.get(session_path, headers=admin).json()["status"]
+                    if state == "in_progress":
+                        live = [key for key in keys if key["project_id"] == projects[0]["id"] and key["id"] not in revoked]
+                        if projects[0]["archived_at"] is not None or not live:
+                            raise RuntimeError("no usable key")
+                        http.post(base + f"/v1/agents/sessions/{session_id}/events", json={"events": [{"type": "agent.session.input.cancel"}]},
+                                  headers={"Authorization": "Bearer " + live[0]["key"], "OpenAI-Beta": "agents=v1", "Idempotency-Key": str(uuid.uuid4())})
                         deadline = time.monotonic() + 60
-                        while state.status == "in_progress" and time.monotonic() < deadline:
+                        while state == "in_progress" and time.monotonic() < deadline:
                             time.sleep(0.5)
-                            state = clients[1].beta.agents.sessions.retrieve(session_id)
-                except openai.APIError:
+                            state = http.get(session_path, headers=admin).json()["status"]
+                        if state == "in_progress":
+                            failures.append("session_stop")
+                except (httpx.HTTPError, KeyError, ValueError, RuntimeError):
                     failures.append("session_stop")
             # Sessions must finish before deletion; never remove another run's assets.
             priority = {kind: index for index, kind in enumerate(("session", "agent", "environment_template", "skill", "vault", "file"))}

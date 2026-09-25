@@ -38,9 +38,9 @@ must match those values. All keys share subject `service_account/project:<UUID>`
 Rotate by issuing a new key in the same Project and revoking the old one. Revoking
 one key leaves other keys, assets and admitted work intact. Archive atomically
 marks the Project archived, revokes all its keys and records audit. Archived
-Projects cannot issue keys or receive copies; their assets remain available for
-administrator inspection, deletion and copying to another active Project. There
-is no Project deletion, unarchive, key reset or automatic write retry operation.
+Projects cannot issue keys; their assets remain available for administrator
+inspection and deletion. There is no Project deletion, unarchive, key reset or
+automatic write retry operation.
 After an uncertain issuance response, inspect metadata and explicitly revoke any
 unusable key before issuing another; plaintext cannot be recovered.
 
@@ -106,39 +106,12 @@ and pending counts are zero before changing provider, resources or Runtime.
 Snapshots and uncertain cleanup remain blockers. This is not a deployment-wide
 bulk operation, Session migration or public Session deletion.
 
-## Copies
+## Historical copy provenance
 
-`POST /copies` takes `source_project_id`, `target_project_id`, `resource_type`, `resource_id`,
-`include_dependencies`, and optional `target_vault_id` for a standalone Credential.
-Different source and target Projects are required. An archived target returns 409,
-including retries of an earlier copy; an archived source remains readable. `Idempotency-Key` makes identical
-retries return the committed result; a changed request conflicts. Without the
-header a separate request may create another copy; clients must not retry an
-uncertain copy automatically.
-
-Response: `{mappings: [{type, source_id, target_id}], skipped: [{type, source_id,
-reason}]}`. Supported types are `agent`, `skill`, `environment_template`, `file`,
-`vault`, and `credential`.
-
-- Agent configuration and model credentials are copied with new encryption
-  bindings. Included referenced Vaults and supported Credentials receive new IDs.
-  Uncopied/skipped MCP Credential references become null. Runtime matching still
-  requires explicitly attached target Vaults.
-- Skills retain every existing version number and their default/latest pointers;
-  encrypted bundles are rebound to the new tenant and identifiers.
-- Templates retain confidential env/setup, files, packages, inline Skills/Plugins,
-  network and directory settings. Referenced files/Skills require
-  `include_dependencies=true` and are rewritten to copied IDs.
-- Files copy actual PostgreSQL large-object bytes, up to the existing 512 MiB limit.
-- A Vault copies its allowed Credentials. `static_bearer` and non-refreshing
-  `mcp_oauth` values are decrypted/re-encrypted internally. Refreshable OAuth
-  credentials appear in `skipped`, with no usable copied token.
-- Sessions and Artifacts are not copyable.
-
-One transaction owns all mutations, the idempotency receipt and administrator
-log. A failure rolls back every dependency and large object. Copies have
-`api_key:null`, `source:"admin_copy"`, and `admin_audit_id` in resource ownership;
-historical unknown resources have null source and audit ID.
+Cross-Project asset copying has been removed; no route creates copies. Resources
+copied before the removal keep `api_key:null`, `source:"admin_copy"` and their
+`admin_audit_id` in resource ownership, and their `copy` audit entries keep their
+`result_ids` mappings. Historical unknown resources have null source and audit ID.
 
 ## Monitoring and audit
 
@@ -165,8 +138,6 @@ Each `observation` is the project Runtime observation plus `disk:
 reported disk usage and capacity, Docker returns null, and microsandbox returns
 null until its disk semantics are designed. The project-scoped observation
 routes, including the per-Session administrator read, keep their shape.
-`GET /runtime-history/capabilities` and `GET /startup-configuration` reuse the
-existing non-secret project projections.
 
 `GET /audit-log` lists administrator writes newest first with `project_id`,
 `resource_type`, `resource_id`, `action`, inclusive `created_after`, exclusive
@@ -174,9 +145,9 @@ existing non-secret project projections.
 is `{data, has_more, next_cursor}`. Each row has `id`, `created_at`,
 `admin_credential_id` (credential digest prefix), `actor_label`, `action`,
 `project_id`, `resource_type`, `resource_id`, `result_ids`, `request_id`,
-`trace_id`. Non-copy mappings are an empty array. No credential values or request
-bodies are recorded. Logs and copy ownership do not cascade away on resource
-removal or key revocation.
+`trace_id`. `result_ids` is an empty array except on historical `copy` entries.
+No credential values or request bodies are recorded. Logs and historical copy
+ownership do not cascade away on resource removal or key revocation.
 
 ## Private installation transition
 

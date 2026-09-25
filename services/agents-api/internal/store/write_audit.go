@@ -60,8 +60,7 @@ func validateWriteAuditSource(source writeaudit.Source, tenant string) error {
 // without a source stay unattributed; a malformed supplied source fails closed.
 func recordWriteAudit(ctx context.Context, q *sqlc.Queries, tenant, action, resourceType, resourceID, parentID string, created ...AuditResource) error {
 	if _, ok := adminaudit.FromContext(ctx); ok {
-		_, err := recordAdminMutation(ctx, q, tenant, action, resourceType, resourceID, nil)
-		return err
+		return recordAdminMutation(ctx, q, tenant, action, resourceType, resourceID)
 	}
 	source, ok := writeaudit.FromContext(ctx)
 	if !ok {

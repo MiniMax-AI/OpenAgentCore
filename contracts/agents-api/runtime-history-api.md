@@ -125,9 +125,10 @@ public Session usage, which is null while a root Turn runs or after one ends
 unmeasured ([item serialization](history-events-usage.md#item-serialization-2026-09-23)). These counters
 are measured model usage, not price, cost, or billing records.
 
-Core Web queries each current managed Session through this boundary with bounded
-concurrency and an all-or-nothing target budget. It offers 1h, 6h, and 24h History
-ranges only after capability discovery succeeds. Reloading Web reconstructs the
+Core Web queries each current managed Session through the administrator Session
+route with bounded concurrency and an all-or-nothing target budget, offering 1h,
+6h, and 24h History ranges. Capability discovery exists only on the application
+route above; the administrator API has none. Reloading Web reconstructs the
 charts from the backend; Live browser samples and Durable buckets remain explicit
 separate sources and are never silently merged.
 

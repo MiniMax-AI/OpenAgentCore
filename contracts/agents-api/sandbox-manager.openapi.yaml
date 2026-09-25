@@ -1,20 +1,5 @@
 basePath: /
 definitions:
-  api.AdminCopyRequest:
-    properties:
-      include_dependencies:
-        type: boolean
-      resource_id:
-        type: string
-      resource_type:
-        type: string
-      source_project_id:
-        type: string
-      target_project_id:
-        type: string
-      target_vault_id:
-        type: string
-    type: object
   api.AdminRuntimeObservation:
     properties:
       observation:
@@ -589,24 +574,6 @@ definitions:
       next_cursor:
         type: string
     type: object
-  store.AssetCopyMapping:
-    properties:
-      source_id:
-        type: string
-      target_id:
-        type: string
-      type:
-        type: string
-    type: object
-  store.AssetCopySkipped:
-    properties:
-      reason:
-        type: string
-      source_id:
-        type: string
-      type:
-        type: string
-    type: object
   store.AuditAPIKey:
     properties:
       id:
@@ -619,17 +586,6 @@ definitions:
         type: string
       revoked_at:
         type: string
-    type: object
-  store.CopyAssetsResult:
-    properties:
-      mappings:
-        items:
-          $ref: '#/definitions/store.AssetCopyMapping'
-        type: array
-      skipped:
-        items:
-          $ref: '#/definitions/store.AssetCopySkipped'
-        type: array
     type: object
   store.IssuedExecutorCredential:
     properties:
@@ -1100,112 +1056,6 @@ definitions:
         type: string
     required:
       - harness
-    type: object
-  v1.CoreConfiguredStartupConfiguration:
-    properties:
-      daemon_gateway:
-        type: boolean
-      default_harness:
-        enum:
-          - codex
-          - claude_sdk
-          - mcode
-        type: string
-      enabled_harnesses:
-        items:
-          enum:
-            - claude_sdk
-            - codex
-            - mcode
-          type: string
-        type: array
-      managed_sandbox:
-        $ref: '#/definitions/v1.CoreManagedSandboxConfiguration'
-      model_providers:
-        items:
-          $ref: '#/definitions/v1.CoreHarnessModelProviderConfiguration'
-        type: array
-      self_hosted:
-        type: boolean
-    required:
-      - daemon_gateway
-      - default_harness
-      - enabled_harnesses
-      - managed_sandbox
-      - model_providers
-      - self_hosted
-    type: object
-  v1.CoreHarnessModelProviderConfiguration:
-    properties:
-      endpoint_configured:
-        type: boolean
-      harness:
-        enum:
-          - codex
-          - claude_sdk
-          - mcode
-        type: string
-    required:
-      - endpoint_configured
-      - harness
-    type: object
-  v1.CoreManagedSandboxConfiguration:
-    properties:
-      enabled:
-        type: boolean
-      maintenance:
-        type: boolean
-      provider:
-        enum:
-          - docker
-          - microsandbox
-        type: string
-        x-nullable: true
-    required:
-      - enabled
-      - maintenance
-      - provider
-    type: object
-  v1.CoreStartupConfiguration:
-    properties:
-      configured:
-        $ref: '#/definitions/v1.CoreConfiguredStartupConfiguration'
-      object:
-        enum:
-          - agents.core.startup_configuration
-        type: string
-      schema_version:
-        enum:
-          - 1
-        type: integer
-      supported:
-        $ref: '#/definitions/v1.CoreSupportedConfiguration'
-    required:
-      - configured
-      - object
-      - schema_version
-      - supported
-    type: object
-  v1.CoreSupportedConfiguration:
-    properties:
-      harnesses:
-        items:
-          enum:
-            - claude_sdk
-            - codex
-            - mcode
-          type: string
-        type: array
-      managed_sandbox_providers:
-        items:
-          enum:
-            - docker
-            - microsandbox
-          type: string
-        type: array
-    required:
-      - harnesses
-      - managed_sandbox_providers
     type: object
   v1.Credential:
     properties:
@@ -1777,72 +1627,6 @@ definitions:
       - capacity_cores
       - contributor_count
       - utilization_ratio
-    type: object
-  v1.RuntimeHistoryCapabilities:
-    properties:
-      available:
-        type: boolean
-      collection_mode:
-        enum:
-          - on_read
-          - periodic
-        type: string
-        x-nullable: true
-      maximum_points:
-        maximum: 10000
-        minimum: 2
-        type: integer
-        x-nullable: true
-      maximum_range_seconds:
-        maximum: 9007199254740991
-        minimum: 1
-        type: integer
-        x-nullable: true
-      metrics:
-        items:
-          enum:
-            - cpu
-            - memory
-            - tokens
-          type: string
-        maxItems: 3
-        type: array
-      minimum_step_seconds:
-        maximum: 9007199254740991
-        minimum: 1
-        type: integer
-        x-nullable: true
-      object:
-        enum:
-          - agent.runtime_history_capabilities
-        type: string
-      reason:
-        enum:
-          - not_configured
-          - periodic_collection_required
-        type: string
-        x-nullable: true
-      retention_seconds:
-        maximum: 9007199254740991
-        minimum: 1
-        type: integer
-        x-nullable: true
-      sample_interval_seconds:
-        maximum: 9007199254740991
-        minimum: 1
-        type: integer
-        x-nullable: true
-    required:
-      - available
-      - collection_mode
-      - maximum_points
-      - maximum_range_seconds
-      - metrics
-      - minimum_step_seconds
-      - object
-      - reason
-      - retention_seconds
-      - sample_interval_seconds
     type: object
   v1.RuntimeHistoryCoverage:
     properties:
@@ -3068,54 +2852,6 @@ paths:
       security:
         - DeploymentAdminAuth: []
       summary: Query committed administrator mutations
-      tags:
-        - Core Administration
-  /core/v1/admin/copies:
-    post:
-      consumes:
-        - application/json
-      description: Deployment administrator only. Copies content and allowed secrets inside one transaction, rewrites selected dependencies and records administrator provenance. Refreshable OAuth credentials are skipped. Sessions and Artifacts cannot be copied. Reusing an Idempotency-Key with changed input returns conflict.
-      parameters:
-        - description: Copy retry identity, up to 128 characters
-          in: header
-          name: Idempotency-Key
-          type: string
-        - description: Source and target Projects and resource
-          in: body
-          name: body
-          required: true
-          schema:
-            $ref: '#/definitions/api.AdminCopyRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/store.CopyAssetsResult'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Copy assets into another Project
       tags:
         - Core Administration
   /core/v1/admin/core-metrics:
@@ -5390,24 +5126,6 @@ paths:
       summary: Query API-key write operations
       tags:
         - Write Audit
-  /core/v1/admin/runtime-history/capabilities:
-    get:
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.RuntimeHistoryCapabilities'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Retrieve durable Runtime history capabilities
-      tags:
-        - Core Administration
   /core/v1/admin/runtime-observations:
     get:
       description: Deployment administrator only. Each observation is labelled with its owning Project ID. Uses the existing read-only Runtime sampler, with bounded concurrency and no execution or provisioning. A provider with a batch metrics read, such as E2B, samples the page's running sandboxes in one bounded request.
@@ -5461,29 +5179,6 @@ paths:
       security:
         - DeploymentAdminAuth: []
       summary: List Runtime observations across managed Projects
-      tags:
-        - Core Administration
-  /core/v1/admin/startup-configuration:
-    get:
-      description: Deployment administrator only. Returns the same non-secret configuration metadata as the project extension.
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.CoreStartupConfiguration'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Retrieve deployment startup metadata
       tags:
         - Core Administration
   /core/v1/admin/summary:

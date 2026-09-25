@@ -31,8 +31,6 @@ const routeCases: Array<[string, string, (client: AdminClient) => Promise<unknow
   ["GET", `/projects/${projectId}/keys`, (client) => client.listAPIKeys(projectId)],
   ["POST", `/projects/${projectId}/keys`, (client) => client.issueAPIKey(projectId, { name: "SDK" })],
   ["DELETE", `/projects/${projectId}/keys/${keyId}`, (client) => client.revokeAPIKey(projectId, keyId)],
-  ["GET", "/runtime-history/capabilities", (client) => client.getRuntimeHistoryCapabilities()],
-  ["GET", "/startup-configuration", (client) => client.retrieveStartupConfiguration()],
   ["GET", "/audit-log", (client) => client.listAuditLog()],
   ["GET", "/summary", (client) => client.retrieveSummary()],
   ["GET", "/runtime-observations", (client) => client.listRuntimeObservations()],
@@ -137,18 +135,6 @@ describe("AdminClient response contracts", () => {
     expect(await clientWith({ id: keyId, deleted: true }).client.revokeAPIKey(projectId, keyId)).toEqual({ id: keyId, deleted: true });
   });
 
-  it("sends copy idempotency once and projects only safe mappings", async () => {
-    const result = { mappings: [{ type: "credential", source_id: "old", target_id: "new" }], skipped: [{ type: "credential", source_id: "oauth", reason: "refresh" }] };
-    const { client, fetch } = clientWith(result);
-    const input = { source_project_id: projectId, target_project_id: sessionId, resource_type: "credential" as const, resource_id: "old", include_dependencies: true, target_vault_id: resourceId };
-    expect(await client.copyResources(input, { idempotencyKey: "copy-1" })).toEqual(result);
-    expect(fetch).toHaveBeenCalledOnce();
-    expect(fetch.mock.calls[0]![0]).toBe("/core/v1/admin/copies");
-    expect(new Headers(fetch.mock.calls[0]![1]?.headers).get("Idempotency-Key")).toBe("copy-1");
-    expect(JSON.parse(fetch.mock.calls[0]![1]!.body as string)).toEqual(input);
-    await expect(clientWith({ ...result, token: "leak" }).client.copyResources(input)).rejects.toMatchObject({ code: "invalid_admin_response" });
-  });
-
   it("reuses Vault metadata validation including write-only credential rejection", async () => {
     const credential = { id: resourceId, vault_id: sessionId, object: "vault.credential", name: "MCP", created_at: 1, updated_at: 1, auth: { type: "static_bearer", mcp_server_url: "https://mcp.test" } };
     const { client } = clientWith(credential);
@@ -211,7 +197,7 @@ describe("AdminClient deployment read models", () => {
     await expect(clientWith({ ...summary, data: [{ ...summary.data[0], coverage: { measured_sessions: 3, total_sessions: 2, ratio: 1.5 } }] }).client.retrieveSummary()).rejects.toBeInstanceOf(AgentCoreError);
   });
 
-  it("validates administrator copy provenance and safe audit mappings", async () => {
+  it("validates historical copy provenance and safe audit mappings", async () => {
     const owners = { data: [{ resource_id: "a", api_key: null, source: "admin_copy", admin_audit_id: "audit" }] };
     expect(await clientWith(owners).client.retrieveResourceOwners(projectId, "agent", ["a"])).toEqual(owners);
     const audit = { data: [{ id: "audit", created_at: "2026-09-24T00:00:00Z", admin_credential_id: "digest", actor_label: "admin", action: "copy", project_id: projectId, resource_type: "agent", resource_id: "a", result_ids: [{ type: "agent", source_id: "a", target_id: "b" }], request_id: "request", trace_id: "trace" }], has_more: false, next_cursor: "" };

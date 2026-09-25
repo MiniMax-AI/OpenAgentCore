@@ -87,10 +87,10 @@ it and save the one-time plaintext response privately. Core stores only its dige
 The corresponding Web management screens remain pending. Multiple keys in a Project
 share its assets and execution principal; writes record the actual key separately.
 Rotate by issuing another key in that Project and revoking the old one. Archiving
-the Project disables all its keys and retains assets for inspection, deletion or
-copying to another active Project. API callers use their own keys and the public
-API endpoint. The deployment credential cannot call `/v1`; the console cannot
-execute or create Agent resources on their behalf. See the [management contract](../../contracts/agents-api/admin-api.md).
+the Project disables all its keys and retains assets for inspection and deletion.
+API callers use their own keys and the public API endpoint. The deployment
+credential cannot call `/v1`; the console cannot execute or create Agent resources
+on their behalf. See the [management contract](../../contracts/agents-api/admin-api.md).
 
 Hosts registered through the console supply sandbox resources for hosted Sessions;
 self-hosted Sessions use application-managed environments. Neither installation

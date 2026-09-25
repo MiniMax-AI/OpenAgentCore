@@ -201,7 +201,7 @@ function invalidStartupConfiguration(): never {
   throw new AgentCoreError("Agent Core returned an invalid startup configuration.", 502, "invalid_startup_configuration");
 }
 
-export function projectStartupConfiguration(value: unknown): CoreStartupConfiguration {
+function projectStartupConfiguration(value: unknown): CoreStartupConfiguration {
   if (!isRecord(value) || !exactFields(value, startupConfigurationFields) || value.object !== "agents.core.startup_configuration" || value.schema_version !== 1 ||
     !isRecord(value.supported) || !exactFields(value.supported, startupSupportedFields) ||
     !sortedUnique(value.supported.harnesses, isHarnessKind) || !sortedUnique(value.supported.managed_sandbox_providers, isSandboxProvider) ||

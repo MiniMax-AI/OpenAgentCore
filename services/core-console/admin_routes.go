@@ -24,14 +24,9 @@ func adminAPIRequest(r *http.Request) bool {
 		switch parts[0] {
 		case "projects":
 			return read || r.Method == http.MethodPost
-		case "copies":
-			return r.Method == http.MethodPost
-		case "summary", "runtime-observations", "startup-configuration", "audit-log", "core-metrics":
+		case "summary", "runtime-observations", "audit-log", "core-metrics":
 			return read
 		}
-	}
-	if len(parts) == 2 && parts[0] == "runtime-history" && parts[1] == "capabilities" {
-		return read
 	}
 	if len(parts) < 2 || parts[0] != "projects" {
 		return false

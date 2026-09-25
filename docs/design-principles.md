@@ -30,8 +30,8 @@ management API use the same records. Configuration contains deployment settings,
 not application credentials or Project definitions. Issue a new key in the same
 Project and revoke the previous one to rotate credentials. Revocation affects only
 that key and preserves assets, provenance and accepted execution. Explicit Project
-archive revokes every key and blocks new issuance and copies into that Project.
-Administrators can still inspect, delete and copy from archived Projects.
+archive revokes every key and blocks new issuance in that Project.
+Administrators can still inspect and delete resources in archived Projects.
 
 Store only API-key digests and necessary metadata. Return plaintext once, on
 issuance, and never replay it after an uncertain response. Project/key mutations
@@ -49,24 +49,11 @@ existing public operation's rules. Deployment nodes, configured model endpoints
 and startup settings are deployment infrastructure, not shared business assets.
 
 Administrators can inspect resources and execution history, delete resources under
-the same rules as their public deletion operations, copy supported assets between
-Projects, manage Projects and API keys, and query operational counts and usage. They cannot use
-management endpoints to create or edit arbitrary assets, start a Session, send an
-event, cancel work, or read stored credentials. Copying is an explicit exception
-to owner-only asset creation, with its own audit and provenance.
-
-## Shared within a Project, copied across Projects
-
-Project keys already share all assets. A cross-Project copy receives new resource IDs and has no continuing link to its source. Core
-rewrites selected dependency IDs and decrypts/re-encrypts protected values for the
-new tenant and resource bindings internally. Content, dependencies, large objects,
-idempotency results and administrator audit commit in one database transaction.
-Refreshable OAuth credentials are skipped because two copies can invalidate each
-other's rotating refresh token. Sessions and Artifacts cannot be copied.
-
-Copied MCP credentials do not gain automatic visibility. A Session still searches
-only its explicitly attached Vaults; copying an Agent never introduces a global
-credential lookup or an implicit execution privilege.
+the same rules as their public deletion operations, manage Projects and API keys,
+and query operational counts and usage. They cannot use management endpoints to
+create, copy or edit arbitrary assets, start a Session, send an event, cancel
+work, or read stored credentials. Project keys share all assets within their
+Project; nothing is shared or copied across Projects.
 
 ## Secrets and evidence
 
@@ -79,9 +66,9 @@ who inspect those records see their recorded contents.
 Public writes retain their actual API-key provenance. Administrator writes retain
 a separate audit identity and target Project. The console account name is a label;
 Core trusts the deployment credential, not that forwarded name. Audit failure rolls
-back the business transaction. Reads are not audited. Copied-resource ownership is
-explicitly distinguished from historical unknown ownership. No request bodies,
-secrets or file contents enter audit records.
+back the business transaction. Reads are not audited. Resources from the removed
+copy operation keep their `admin_copy` ownership, distinct from historical unknown
+ownership. No request bodies, secrets or file contents enter audit records.
 
 Do not add product users, RBAC, cross-Project shared assets, administrator execution, or old
 private-protocol compatibility to this management model. Existing public

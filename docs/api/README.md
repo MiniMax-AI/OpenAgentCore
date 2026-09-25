@@ -36,8 +36,8 @@ when given an application key or machine credential.
   generated `/api/v1` sandbox node routes. The node WebSocket and the private
   daemon transport are described in the node and Runtime credential guides.
 - [Administrator contract](../../contracts/agents-api/admin-api.md): Project/key
-  lifecycle, resources, explicit hosted Session archive, copying, summary,
-  errors/deletion preconditions and audit.
+  lifecycle, resources, explicit hosted Session archive, summary,
+  errors/deletion preconditions, audit and historical copy provenance.
 - [Web integration](web-management.md): browser/console/Core boundaries and frontend handoff.
 - [Design rules](../design-principles.md) and [contributor guide](../../CONTRIBUTING.md):
   ownership, security and change requirements.

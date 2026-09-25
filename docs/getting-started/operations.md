@@ -83,8 +83,7 @@ To rotate, issue another key within the same Project, update the application, th
 revoke the old key. Renaming a Project or revoking a key preserves its assets and
 execution principal. Archiving a Project disables all its keys while retaining
 assets and already accepted execution. Administrators may inspect or delete retained
-resources, or copy supported assets to an active Project; they cannot execute them
-using the deployment credential.
+resources; they cannot execute them using the deployment credential.
 
 ## Data and upgrades
 
