@@ -298,8 +298,9 @@ async function executorCredentialRoute(request, response, projectId, environment
   const credentials = state.executorCredentials.get(environmentId);
   if (!keyId && request.method === "GET") return send(response, 200, { data: credentials.map((entry) => ({ ...entry })) });
   if (!keyId && request.method === "POST") {
-    const input = await body(request);
-    if (!keyIdValid(input.key_id) || (input.rotate !== undefined && typeof input.rotate !== "boolean")) return error(response, 400, "key_id must be a UUID.", "invalid_request");
+    // As Core, a body that is not JSON is invalid input like any other: 400 with one message.
+    const input = await body(request).catch(() => null);
+    if (!keyIdValid(input?.key_id) || (input.rotate !== undefined && typeof input.rotate !== "boolean")) return error(response, 400, "Invalid resource identifier or request limits.", "invalid_request");
     if (project.archived_at) return error(response, 409, "The target Project is archived.", "project_archived");
     const existing = credentials.find((entry) => entry.key_id === input.key_id);
     if (existing && input.rotate !== true) return error(response, 409, "The executor credential exists; rotate it instead.", "executor_credential_exists");
