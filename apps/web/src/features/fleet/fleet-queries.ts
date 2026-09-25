@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import { SandboxAdminClient, type SandboxAllocation, type SandboxDeployment, type SandboxNode } from "@agents-core-web/agents-client";
+import { SandboxAdminClient, type SandboxAllocation, type SandboxDeployment, type SandboxNode, type SandboxNodeHistoryRange } from "@agents-core-web/agents-client";
 
 import { sandboxConsoleConfig } from "../sandbox/console-config";
 
@@ -45,5 +45,13 @@ export function fleetQuery(allocations: boolean) {
   return queryOptions({
     queryKey: ["sandbox-fleet", allocations ? "with-allocations" : "nodes"],
     queryFn: ({ signal }) => loadFleet(allocations, signal),
+  });
+}
+
+/** One node's host observation and host history over a range; polled while shown. */
+export function nodeDetailQuery(nodeId: string, range: SandboxNodeHistoryRange) {
+  return queryOptions({
+    queryKey: ["sandbox-node", nodeId, range],
+    queryFn: ({ signal }) => client().retrieveNode(nodeId, range, { signal }),
   });
 }

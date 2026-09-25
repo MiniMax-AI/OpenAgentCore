@@ -34,7 +34,9 @@ test("opens a node and a sandbox in dialogs from Sandbox metrics", async ({ page
   await openConsole(page, request, "sandbox-metrics");
   await page.getByRole("button", { name: "Show core-01" }).click();
   const node = page.getByRole("dialog", { name: "core-01" });
-  await expect(node.getByLabel("Node figures")).toContainText("Free memory");
+  // The machine's own load, from its heartbeats, beside the sandboxes placed on it.
+  await expect(node.getByLabel("Node figures")).toContainText("35% of 16 cores");
+  await expect(node.getByRole("figure", { name: /^Host CPU/ })).toBeVisible();
   await expect(node).toContainText("Hosted sandboxes on this node");
   await node.getByRole("button", { name: "Close dialog" }).click();
 

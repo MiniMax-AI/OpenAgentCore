@@ -104,6 +104,7 @@ log (`GET /audit-log`) and Runtime history capabilities
 | Deployment | `GET`, `POST`, `PUT /core/v1/sandbox/deployment` | Read the provider, Core origin, maintenance state, installation ID and specification; initialize the deployment with `resources`, the Docker or microsandbox `runtime` release, or the E2B account; change its settings with the expected generation |
 | Maintenance | `PATCH /core/v1/sandbox/deployment/maintenance` | Enter or leave maintenance to change the provider |
 | Nodes | `GET /core/v1/sandbox/nodes` | Nodes page; fleet on Overview; node capacity on Sandbox metrics |
+| Node detail | `GET /core/v1/sandbox/nodes/{node_id}?range=1h\|6h\|24h` | Sandbox metrics node dialog: the host's CPU busy share and memory from its last heartbeat, and their history over the page's range |
 | Allocations | `GET /core/v1/sandbox/nodes/{node_id}/allocations` | Nodes page; Sandbox metrics |
 | Enrollment | `POST /core/v1/sandbox/enrollment-tokens` | **Add node**: a single-use token inside a command that verifies the installer checksum |
 | Remove node | `DELETE /core/v1/sandbox/nodes/{node_id}` | Confirmed node removal; the row goes only after Core acknowledges the deletion |

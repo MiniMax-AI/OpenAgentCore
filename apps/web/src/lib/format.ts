@@ -38,6 +38,8 @@ export function formatBytes(value: number | null | undefined): string {
 /** Durations in seconds, as a compact unit string (850 ms, 12.4 s, 4m 12s, 3h 5m). */
 export function formatDuration(seconds: number | null | undefined): string {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds) || seconds < 0) return MISSING;
+  // Sub-10 ms values keep decimals, so a fast database never reads "1 ms" on every tick.
+  if (seconds < 0.00995) return `${new Intl.NumberFormat("en", { maximumFractionDigits: seconds < 0.001 ? 2 : 1 }).format(seconds * 1000)} ms`;
   if (seconds < 0.9995) return `${Math.round(seconds * 1000)} ms`;
   if (seconds < 9.95) return `${seconds.toFixed(1)} s`;
   const whole = Math.round(seconds);

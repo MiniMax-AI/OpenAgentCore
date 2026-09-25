@@ -27,7 +27,9 @@ import { loadRuntimeDurableSnapshot, RUNTIME_DURABLE_RANGES, type RuntimeDurable
 import type { RuntimeDashboardSnapshot } from "../dashboard/runtime-snapshot";
 import { RUNTIME_SNAPSHOT_REFRESH_MS } from "../dashboard/runtime-snapshot";
 import { capacitySummary, nodeHealth, type NodeHealth } from "../fleet/fleet-model";
+import { nodeDetailQuery } from "../fleet/fleet-queries";
 import { fleetSnapshot, useSandboxFleet, type FleetState } from "../fleet/use-sandbox-fleet";
+import { formatShare, NodeHostCharts } from "./NodeHostCharts";
 import {
   hostedRuntimeRows,
   hostedRuntimeUsage,
@@ -383,9 +385,27 @@ function NodeDialog({ node, rows, load, range, onClose }: {
     [load, node, sessionIds],
   );
   const history = useRuntimeHistory(snapshot, range);
+  // The machine itself: its last heartbeat and host history over the page's range.
+  const hostRange = RUNTIME_DURABLE_RANGES.find((entry) => entry.milliseconds === range)?.label ?? "1h";
+  const detail = useQuery({
+    ...nodeDetailQuery(shown?.id ?? "", hostRange),
+    enabled: node !== null,
+    placeholderData: keepPreviousData,
+    refetchInterval: RUNTIME_SNAPSHOT_REFRESH_MS,
+    refetchIntervalInBackground: false,
+  });
+  const host = detail.data?.id === shown?.id ? detail.data?.host ?? null : null;
   const now = Math.floor(Date.now() / 1000);
   const online = shown?.online ?? false;
   const seen = shown?.last_seen_at ? Date.parse(shown.last_seen_at) / 1000 : null;
+  const cores = host?.effective_cpu_cores ?? shown?.cpu_count ?? null;
+  const coresLabel = cores === null ? null : t("sandbox.cores", { value: formatInteger(cores, locale) });
+  const cpu = !online || coresLabel === null ? MISSING
+    : host?.cpu_utilization != null ? t("sandbox.nodeDialog.cpuOf", { percent: formatShare(host.cpu_utilization, locale), cores: coresLabel }) : coresLabel;
+  const memory = !online ? MISSING
+    : host?.total_memory_bytes != null && host.available_memory_bytes != null
+      ? t("sandbox.nodeDialog.memoryOf", { used: formatBytes(host.total_memory_bytes - host.available_memory_bytes), total: formatBytes(host.total_memory_bytes) })
+      : formatBytes(shown?.available_memory_bytes ?? null);
   return (
     <Modal
       open={node !== null}
@@ -400,12 +420,17 @@ function NodeDialog({ node, rows, load, range, onClose }: {
             <div><dt>{t("sandbox.status")}</dt><dd><StatusDot tone={healthTone[nodeHealth(shown)]} label={t(`sandbox.health.${nodeHealth(shown)}`)} /></dd></div>
             <div><dt>{t("sandbox.slots")}</dt><dd>{formatInteger(shown.active, locale)} / {formatInteger(shown.max_active, locale)}</dd></div>
             <div><dt>{t("sandbox.nodeDialog.retainedSlots")}</dt><dd>{formatInteger(shown.retained, locale)} / {formatInteger(shown.max_retained, locale)}</dd></div>
-            <div><dt>{t("sandbox.cpus")}</dt><dd>{online && shown.cpu_count !== null ? t("sandbox.cores", { value: formatInteger(shown.cpu_count, locale) }) : MISSING}</dd></div>
-            <div><dt>{t("sandbox.freeMemory")}</dt><dd>{online ? formatBytes(shown.available_memory_bytes) : MISSING}</dd></div>
+            <div><dt>{t("sandbox.cpus")}</dt><dd>{cpu}</dd></div>
+            <div><dt>{t("sandbox.memory")}</dt><dd>{memory}</dd></div>
             <div><dt>{t("sandbox.freeDiskColumn")}</dt><dd>{online ? formatBytes(shown.available_disk_bytes) : MISSING}</dd></div>
             <div><dt>{t("sandbox.cleanupPending")}</dt><dd>{formatInteger(shown.cleanup_pending, locale)}</dd></div>
             <div><dt>{t("sandbox.lastSeen")}</dt><dd title={seen === null ? undefined : formatDateTime(seen, locale)}>{formatRelative(seen, now, locale)}</dd></div>
           </dl>
+          <Section headingId="node-host-heading" title={t("sandbox.nodeDialog.host")} help={t("sandbox.nodeDialog.hostHelp")}>
+            {detail.data?.id === shown.id ? <NodeHostCharts detail={detail.data} />
+              : detail.isError ? <p className="page-status">{t("sandbox.nodeDialog.hostFailed", { reason: detail.error instanceof Error ? detail.error.message : "" })}</p>
+                : <TableSkeleton label={t("sandbox.runtimeLoading")} rows={3} columns={4} />}
+          </Section>
           <Section
             headingId="node-runtimes-heading"
             title={<>{t("sandbox.nodeDialog.runtimes")}<span className="section-meta">{t("sandbox.nodeDialog.runtimesMeta", { n: formatInteger(sessionIds.size, locale) })}</span></>}

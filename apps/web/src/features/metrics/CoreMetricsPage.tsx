@@ -101,7 +101,7 @@ function ServiceMeta({ metrics }: { metrics: CoreMetrics }) {
         tone={notOwner ? "danger" : statusTone[metrics.service.status]}
         label={t("core.meta", {
           status: notOwner ? t("core.notOwner") : t(`core.status.${metrics.service.status}`),
-          revision: metrics.service.revision ?? MISSING,
+          revision: metrics.service.revision?.slice(0, 12) ?? MISSING,
           uptime: started === null ? MISSING : formatDuration(Math.max(0, now - started)),
         })}
       />

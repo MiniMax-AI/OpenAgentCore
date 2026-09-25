@@ -54,6 +54,28 @@ export interface SandboxNode {
   cleanup_pending: number;
   created_at: string;
 }
+/** The node machine's last heartbeat observation; unavailable measurements are null. */
+export interface SandboxNodeHost {
+  effective_cpu_cores: number | null;
+  /** Busy share of the whole host's CPU between heartbeats, 0–1. */
+  cpu_utilization: number | null;
+  total_memory_bytes: number | null;
+  available_memory_bytes: number | null;
+  available_disk_bytes: number | null;
+  observed_at: string | null;
+}
+export interface SandboxNodeHostPoint {
+  start: string;
+  cpu_utilization_max: number | null;
+  memory_used_bytes_max: number | null;
+  available_disk_bytes_min: number | null;
+}
+export type SandboxNodeHistoryRange = "1h" | "6h" | "24h";
+/** One node with its host observation and complete UTC buckets of host history. */
+export interface SandboxNodeDetail extends SandboxNode {
+  host: SandboxNodeHost;
+  history: { resolution_seconds: number; points: SandboxNodeHostPoint[] };
+}
 export interface SandboxAllocation {
   id: string;
   node_id: string;
@@ -109,6 +131,9 @@ export class SandboxAdminClient extends OpenAIAgentsClient {
   }
   listNodes(options?: ReadOptions): Promise<{ data: SandboxNode[] }> {
     return this.request("/nodes", { signal: options?.signal }, undefined, false);
+  }
+  retrieveNode(nodeId: string, range: SandboxNodeHistoryRange, options?: ReadOptions): Promise<SandboxNodeDetail> {
+    return this.request(`/nodes/${encodeURIComponent(nodeId)}?range=${range}`, { signal: options?.signal }, undefined, false);
   }
   listAllocations(nodeId: string, options?: ReadOptions): Promise<{ data: SandboxAllocation[] }> {
     return this.request(`/nodes/${encodeURIComponent(nodeId)}/allocations`, { signal: options?.signal }, undefined, false);

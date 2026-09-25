@@ -199,6 +199,23 @@ function adminRead(response, path, url) {
   return error(response, 404, "Not found.");
 }
 
+// A node as Core details it: its last heartbeat and an hour of 60-second host buckets.
+function nodeDetail(node) {
+  const total = 64 * 2 ** 30;
+  const minute = Math.floor(Date.now() / 60_000) * 60;
+  const points = Array.from({ length: 60 }, (_, index) => ({
+    start: new Date((minute - (60 - index) * 60) * 1000).toISOString(),
+    cpu_utilization_max: node.online ? 0.3 + 0.1 * Math.sin(index / 6) : null,
+    memory_used_bytes_max: node.online ? total - node.available_memory_bytes : null,
+    available_disk_bytes_min: node.available_disk_bytes,
+  }));
+  return {
+    ...node,
+    host: { effective_cpu_cores: node.cpu_count, cpu_utilization: node.online ? 0.35 : null, total_memory_bytes: node.online ? total : null, available_memory_bytes: node.available_memory_bytes, available_disk_bytes: node.available_disk_bytes, observed_at: node.last_seen_at },
+    history: { resolution_seconds: 60, points },
+  };
+}
+
 async function sandboxRoute(request, response, path) {
   if (path === "/deployment" && request.method === "POST") {
     const input = await body(request);
@@ -216,6 +233,10 @@ async function sandboxRoute(request, response, path) {
   }
   let m;
   if ((m = path.match(/^\/nodes\/([^/]+)\/allocations$/))) return send(response, 200, { data: state.allocations.filter((entry) => entry.node_id === m[1]) });
+  if ((m = path.match(/^\/nodes\/([^/]+)$/)) && request.method === "GET") {
+    const node = state.nodes.find((entry) => entry.id === m[1]);
+    return node ? send(response, 200, nodeDetail(node)) : error(response, 404, "No such node.");
+  }
   if ((m = path.match(/^\/nodes\/([^/]+)$/)) && request.method === "DELETE") {
     const index = state.nodes.findIndex((node) => node.id === m[1]);
     if (index < 0) return error(response, 404, "No such node.");
