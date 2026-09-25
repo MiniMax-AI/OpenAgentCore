@@ -4,7 +4,7 @@ import { expectManagementBoundary, openConsole, setNode, writes } from "./consol
 
 test.afterEach(async ({ request }) => expectManagementBoundary(request));
 
-test("adds a node: host requirements, a countdown, the same command after closing, a new one after expiry, then registration", async ({ page, request }) => {
+test("adds a node: host requirements, a countdown, the same command after closing, a new one after expiry, then its own node's registration", async ({ page, request }) => {
   await page.clock.install();
   // Core counts a token's ten minutes on its own clock; the page's clock stands in for it, so fast-forwarding expires a command.
   await page.route("**/core/v1/sandbox/enrollment-tokens", async (route) => {
@@ -19,6 +19,7 @@ test("adds a node: host requirements, a countdown, the same command after closin
   await expect(add.getByText("Docker at /var/run/docker.sock for that user, enforcing CPU and memory limits")).toBeVisible();
   await expect(add.getByText("sudo usermod -aG docker NODE_USER")).toBeVisible();
   await expect(add.getByText("CPUs and memory for at least one sandbox: 2 CPU · 4 GiB")).toBeVisible();
+  await expect(add.getByText(/^Can reach http:\/\/127\.0\.0\.1:\d+ and https:\/\/core\.example\.com; sandboxes must reach https:\/\/core\.example\.com$/)).toBeVisible();
   await expect(add.getByText(/\/dev\/kvm/)).toHaveCount(0);
   // The fixture console runs on loopback, where another machine can't download from it.
   await expect(add.getByRole("note")).toContainText("other machines can't reach");
@@ -34,12 +35,16 @@ test("adds a node: host requirements, a countdown, the same command after closin
   const progress = add.getByRole("status", { name: "Registration progress" });
   await expect(progress).toHaveText(/Waiting for registration.*Connect.*Docker check/);
 
-  // Closing keeps the command for the next opening.
+  // Closing keeps the command for the next opening. Meanwhile another command's node, with the
+  // same limits, registers: it reports another enrollment ID, so it is not this command's node.
   const first = await field.inputValue();
   await add.getByRole("button", { name: "Close dialog" }).click();
   await expect(add).toBeHidden();
+  await setNode(request, { id: "node-other", name: "edge-05", enrollment_id: "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a" });
   await page.getByRole("button", { name: "Add node" }).click();
   await expect(field).toHaveValue(first);
+  await expect(page.getByRole("table", { name: "Sandbox nodes" })).toContainText("edge-05");
+  await expect(progress).toHaveText(/Waiting for registration.*Connect.*Docker check/);
 
   // Once expired, a new command is issued only on request, for the same limits.
   await page.clock.fastForward("10:30");
@@ -52,7 +57,7 @@ test("adds a node: host requirements, a countdown, the same command after closin
   await expect(field).not.toHaveValue(first);
 
   // The node registers while the dialog is closed and the command lapses: reopening reads the
-  // node list, and the command's node outranks its expiry.
+  // node list, and the node reporting the command's enrollment ID outranks its expiry.
   await add.getByRole("button", { name: "Close dialog" }).click();
   await expect(add).toBeHidden();
   await setNode(request, { id: "node-new", name: "edge-04" });
@@ -88,6 +93,16 @@ test("adds a node: host requirements, a countdown, the same command after closin
   // A finished flow leaves no limits behind: the next node starts from the defaults.
   await page.getByRole("button", { name: "Add node" }).click();
   await expect(add.getByLabel("Sandboxes at once")).toHaveValue("2");
+});
+
+test("says the console has no node files for the provider and issues no command", async ({ page, request }) => {
+  // A thin bundle: the console holds no node files at all.
+  await openConsole(page, request, "nodes", { nodeArtifacts: [] });
+  await page.getByRole("button", { name: "Add node" }).click();
+  const add = page.getByRole("dialog", { name: "Add node" });
+  await expect(add.getByRole("status")).toHaveText("This console has no node files for Docker. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.");
+  await expect(add.getByRole("button", { name: "Generate command" })).toHaveCount(0);
+  expect(await writes(request)).toEqual([]);
 });
 
 test("removes a node after confirmation", async ({ page, request }) => {
