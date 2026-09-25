@@ -100,6 +100,14 @@ python3 "$d/install.pyz" --source-url 'https://core.example.com' --environment-i
   await expect(install).toContainText("It asks for a credential, which this archived project can't issue or rotate");
 });
 
+test("explains instead of giving the install command when Core's public address is loopback", async ({ page, request }) => {
+  await openConsole(page, request, "sessions", { installation: "local" });
+  await page.getByRole("row").filter({ hasText: "Self-hosted" }).first().getByRole("button", { name: /^Open Session / }).click();
+  const install = page.getByRole("region", { name: "Connect a host" });
+  await expect(install).toContainText("Core's public address http://127.0.0.1:8091 is reachable only on the Core machine");
+  await expect(install.locator("pre")).toHaveCount(0);
+});
+
 test("hides Connect a host when the console does not serve the self-hosted installer", async ({ page, request }) => {
   const config = page.waitForResponse((response) => new URL(response.url()).pathname === "/console/config");
   await openConsole(page, request, "sessions", { installers: "none" });

@@ -153,8 +153,9 @@ workbench.
   disconnects the host's executor; reconnecting takes that same credential,
   rotated (Rotate on a revoked row restores it), and the same command, because a
   newly issued credential does not reconnect an environment that already
-  connected. Without a `public_url`, or when the Session's `remote_url` is not
-  `wss://`, the section says why instead of showing a command.
+  connected. Without a `public_url`, with a loopback one, or when the Session's
+  `remote_url` is not `wss://`, the section says why instead of showing a
+  command.
 - **Figures.** Project, Agent and key usage comes from Core's summary; Agent run,
   tool and activity figures are still assembled in the browser from bounded reads
   and state their coverage. Metrics that need new Core endpoints are recorded as

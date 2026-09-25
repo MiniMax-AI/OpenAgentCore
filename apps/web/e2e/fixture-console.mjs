@@ -83,7 +83,8 @@ function e2bDeployment() {
 }
 
 function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo", address = "public", credentials = "configured", installers = true) {
-  const base = buildDemo();
+  // Self-hosted Sessions get their remote_url from public_url, as in Core.
+  const base = buildDemo(undefined, address === "local" ? LOCAL_URL : PUBLIC_URL);
   const now = Math.floor(Date.now() / 1000);
   const resources = buildResources(now, base.agents, base.sessions);
   const admin = buildAdmin(now, base, resources);

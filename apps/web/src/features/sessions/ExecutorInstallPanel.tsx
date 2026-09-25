@@ -32,9 +32,10 @@ export function ExecutorInstallPanel({ environmentId, remoteUrl, archived }: { e
       ? <p className="executor-install-note" role="alert">{t("executor.install.failed")} <button className="text-action" type="button" onClick={() => void installation.refetch()}>{tCommon("actions.retry")}</button></p>
       : <div className="executor-install-command executor-install-skeleton" role="status" aria-label={t("executor.install.loading")} aria-busy="true"><span className="skeleton-bar" /><span className="skeleton-bar" /></div>;
   } else {
-    const install = executorInstall({ config: config.data, publicUrl: installation.data.public_url, environmentId, remoteUrl });
+    const install = executorInstall({ config: config.data, publicUrl: installation.data.public_url, localOnly: installation.data.local_only, environmentId, remoteUrl });
     if (install.kind === "unavailable") return null;
     body = install.kind === "no_address" ? <p className="executor-install-note" role="note">{t("executor.install.noAddress")}</p>
+      : install.kind === "local_only" ? <p className="executor-install-note" role="note">{t("executor.install.localOnly", { url: install.publicUrl })}</p>
       : install.kind === "not_wss" ? <p className="executor-install-note" role="note">{t("executor.install.notWss", { remote: install.remoteUrl || "—" })}</p>
       : <>
         <p className="executor-install-note">{archived ? t("executor.install.archived") : t("executor.install.steps")}</p>

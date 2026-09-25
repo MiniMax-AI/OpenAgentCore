@@ -192,6 +192,7 @@ export const sessions = {
       loading: "Reading Core's public address",
       failed: "Core's public address couldn't be read, so the command isn't shown.",
       noAddress: "Core has no public address yet, so no host can reach it. Set public_url in config.json and apply it to get the command.",
+      localOnly: "Core's public address {{url}} is reachable only on the Core machine, so no host can connect to it. Set public_url in config.json to an address hosts can reach and apply it.",
       notWss: "The installer connects only over wss://, but this Session's address is {{remote}}. Core uses wss:// when public_url in config.json is HTTPS.",
     },
     uncertain: {

@@ -496,8 +496,8 @@ Every resource list, the Session log and the project list share one grammar:
   paste a credential at its hidden prompt, safe to rerun), the command in a
   Margin Gray Terminal block with an icon copy button, and the host requirements
   on one dot-separated line. The command wraps rather than scrolls. Without a
-  public address, or with a Session address that is not `wss://`, one Graphite
-  note takes the command's place; an archived project keeps the command and says
+  public address, with a loopback one, or with a Session address that is not
+  `wss://`, one Graphite note takes the command's place; an archived project keeps the command and says
   the host still needs a credential.
 
 ### Dialogs

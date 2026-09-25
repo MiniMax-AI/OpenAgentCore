@@ -106,8 +106,8 @@ host**: a command that downloads `<public_url>/node-install/self-hosted-install.
 runs it with `--source-url <public_url> --environment-id <environment.id> --remote
 <environment.remote_url>`, every value shell-quoted. It holds no secret: the
 installer asks for the credential at a hidden prompt or reads `--credential-file`.
-Without a `public_url`, or with a `remote_url` that is not `wss://`, a note replaces
-the command. A console without the installer shows no Connect a host.
+Without a `public_url`, with a `local_only` one (loopback: no host reaches it), or
+with a `remote_url` that is not `wss://`, a note replaces the command. A console without the installer shows no Connect a host.
 
 ## Provenance and monitoring
 

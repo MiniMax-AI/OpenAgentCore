@@ -189,6 +189,7 @@ export const sessions = {
       loading: "正在读取 Core 的公开地址",
       failed: "无法读取 Core 的公开地址，因此没有显示命令。",
       noAddress: "Core 还没有公开地址，主机无法连接。请在 config.json 中设置 public_url 并应用，之后即可获取命令。",
+      localOnly: "Core 的公开地址 {{url}} 只能在 Core 所在的机器上访问，主机无法连接。请在 config.json 中把 public_url 设为主机能访问的地址并应用。",
       notWss: "安装程序只通过 wss:// 连接，而这个 Session 的地址是 {{remote}}。config.json 中的 public_url 为 HTTPS 时，Core 才会使用 wss://。",
     },
     uncertain: {
