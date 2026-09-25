@@ -19,7 +19,7 @@ management client, and it sends nothing to `/v1`.
 | Monitor | Core metrics | The Core process: execution slots, the Turn queue, connected daemons, database latency and pool, background jobs |
 | Monitor | Agent metrics | Requests, errors, duration, tokens, models, tools, Agents and API keys over 1 h, 6 h, 24 h or 7 d |
 | Monitor | Sandbox metrics | Node capacity and hosted Runtime CPU and memory across Projects |
-| Monitor | Session log | Every Session, read-only, opening one Session's conversation, trace and Turns |
+| Monitor | Session log | Every Session, opening one Session's read-only conversation, trace and Turns; a self-hosted Session's page also manages its executor credentials |
 | Resources | Agents, Environment templates, Skills, Files, Vaults | Inspection and permitted deletion |
 | Platform | Projects and keys, Nodes, System | Project and key lifecycle, sandbox deployment and nodes, Core startup configuration |
 
@@ -29,7 +29,9 @@ bounded is recorded in [management interface coverage](protocol-coverage.md).
 ## Management scope
 
 Administrators can create, rename and archive Projects; issue and revoke their
-keys; inspect resources and execution history; and delete supported resources.
+keys; inspect resources and execution history; delete supported resources; and
+issue, rotate and revoke the executor credentials of a self-hosted Session's
+environment on its Session page.
 They can also read summaries, Runtime observations and audit history, and manage
 deployment sandbox nodes. Deployment sandbox management selects E2B, Docker or
 microsandbox; caller-managed `self_hosted` Runtimes remain a separate application
