@@ -17,7 +17,7 @@ are checked. This does not claim a new direct root-capacity measurement on resto
 The ordinary standalone sandbox node runs this helper natively on Linux amd64,
 under a dedicated service user with KVM access. Core owns lifecycle intent through
 the node protocol and can run in a container or on another host. Core's
-`distroless/static` image does not execute this glibc helper. The installer's local
+container image does not execute this helper; only the node does. The installer's local
 microsandbox opt-in still uses native Core packaging; that is an installation
 choice, not an architectural requirement.
 
