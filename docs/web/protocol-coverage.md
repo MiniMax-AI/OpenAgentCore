@@ -101,7 +101,7 @@ log (`GET /audit-log`) and Runtime history capabilities
 
 | Operation | Route | Console use |
 | --- | --- | --- |
-| Deployment | `GET`, `POST`, `PUT /core/v1/sandbox/deployment` | Read the provider, Core origin, maintenance state and installation ID; initialize the deployment; change its settings with the expected generation |
+| Deployment | `GET`, `POST`, `PUT /core/v1/sandbox/deployment` | Read the provider, Core origin, maintenance state, installation ID and specification; initialize the deployment with `resources`, the Docker or microsandbox `runtime` release, or the E2B account; change its settings with the expected generation |
 | Maintenance | `PATCH /core/v1/sandbox/deployment/maintenance` | Enter or leave maintenance to change the provider |
 | Nodes | `GET /core/v1/sandbox/nodes` | Nodes page; fleet on Overview; node capacity on Sandbox metrics |
 | Allocations | `GET /core/v1/sandbox/nodes/{node_id}/allocations` | Nodes page; Sandbox metrics |
@@ -109,7 +109,10 @@ log (`GET /audit-log`) and Runtime history capabilities
 | Remove node | `DELETE /core/v1/sandbox/nodes/{node_id}` | Confirmed node removal; the row goes only after Core acknowledges the deletion |
 
 These pages appear only when `/console/config` reports `sandbox_admin: true`. An E2B
-deployment has no nodes; its API key is write-only.
+deployment has no nodes; its API key is write-only. The Runtime release sent for
+Docker and microsandbox comes from the console's own `GET /node-install/manifest.json`
+(the distribution manifest the node installer uses); without it the administrator
+enters the release under advanced settings.
 
 ## Writes
 

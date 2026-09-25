@@ -52,6 +52,7 @@ export default defineConfig(({ command, mode }) => {
         // The console service's own routes (sign-in, capability flags) and the
         // management surfaces it forwards, as in production.
         "/console": { target, changeOrigin: true },
+        "/node-install": { target, changeOrigin: true },
         "/core/v1/sandbox": { target, changeOrigin: true },
         "/core/v1/admin": { target, changeOrigin: true },
         "/v1": {

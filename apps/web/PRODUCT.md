@@ -66,9 +66,11 @@ workbench.
   Creator column naming the creating key. Detail pages show the resource's facts
   and offer Copy and Delete.
 - **Platform**: Projects and keys (projects, their assets and usage, named keys,
-  write history), Nodes (sandbox deployment, the node list with each node's
-  capacity, host figures and allocations, enrollment and removal), System (startup
-  configuration and the sandbox deployment).
+  write history), Nodes (sandbox setup as pages — where sandboxes run, the
+  backend or E2B account, the size of each sandbox, a review, and advanced settings
+  with the complete form — then the node list with each node's capacity, host
+  figures and allocations, enrollment and removal), System (startup configuration
+  and the sandbox deployment, including each sandbox's size and the Runtime).
 - **First run**: after the administrator account is created and while no project
   exists, full-screen steps outside the shell create the first project (default name
   `Default`) and its first key, show the plaintext once with an example request,

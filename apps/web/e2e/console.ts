@@ -4,13 +4,13 @@ const fixture = `http://127.0.0.1:${process.env.AGENTS_FIXTURE_PORT ?? 18092}`;
 const web = `http://127.0.0.1:${process.env.AGENTS_WEB_PORT ?? 4174}`;
 
 /** Fresh fixture state: "setup" (no administrator yet), "login" or "authenticated". */
-export async function resetFixture(request: APIRequestContext, auth: "setup" | "login" | "authenticated" = "authenticated", options: { fresh?: boolean } = {}) {
-  await request.post(`${fixture}/__fixture/reset?auth=${auth}${options.fresh ? "&projects=none" : ""}`);
+export async function resetFixture(request: APIRequestContext, auth: "setup" | "login" | "authenticated" = "authenticated", options: { fresh?: boolean; sandbox?: "configured" | "none" } = {}) {
+  await request.post(`${fixture}/__fixture/reset?auth=${auth}${options.fresh ? "&projects=none" : ""}&sandbox=${options.sandbox ?? "configured"}`);
 }
 
 /** Opens the console already signed in, in English. */
-export async function openConsole(page: Page, request: APIRequestContext, hash = "overview") {
-  await resetFixture(request, "authenticated");
+export async function openConsole(page: Page, request: APIRequestContext, hash = "overview", options: { sandbox?: "configured" | "none" } = {}) {
+  await resetFixture(request, "authenticated", options);
   await page.context().addCookies([{ name: "core_console", value: "fixture-session", url: web }]);
   await page.addInitScript(() => window.localStorage.setItem("agents-core-web.language", "en"));
   await page.goto(`/#${hash}`);

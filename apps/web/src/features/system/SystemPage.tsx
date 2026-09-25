@@ -8,10 +8,12 @@ import { ErrorState } from "../../components/ErrorState";
 import { CopyableId } from "../../components/list-ui";
 import { admin } from "../../lib/projects";
 import { sandboxDeploymentQuery } from "../sandbox/sandbox-queries";
+import { formatBytes } from "../../lib/format";
 import "./system.css";
 import { startupConfigurationQuery } from "./system-queries";
 
 const harnessNames: Record<CoreHarnessKind, string> = { claude_sdk: "Claude SDK", codex: "Codex", mcode: "MiniMax Code" };
+const MIB = 2 ** 20;
 const providerNames: Record<string, string> = { docker: "Docker", microsandbox: "microsandbox", e2b: "E2B" };
 
 export interface HarnessRow {
@@ -75,6 +77,7 @@ export function SystemPage() {
   const provider = deployment.data?.provider || managed?.provider || "";
   const maintenance = deployment.data?.maintenance ?? managed?.maintenance ?? null;
   const mode = deployment.data?.mode || "";
+  const spec = deployment.data?.specification ?? null;
 
   return (
     <section className="page-section console-page system-page" aria-labelledby="system-heading">
@@ -137,6 +140,12 @@ export function SystemPage() {
             <Fact label={t("sandbox.installation")}>{deployment.data?.installation_id ? <CopyableId id={deployment.data.installation_id} /> : missing}</Fact>
             <Fact label={t("sandbox.coreOrigin")} help={t("sandbox.coreOriginHelp")}>{deployment.data?.core_url ? <code className="system-code">{deployment.data.core_url}</code> : missing}</Fact>
             {deployment.data?.e2b ? <Fact label={t("sandbox.e2bTemplate")}><code className="system-code">{deployment.data.e2b.template || "—"}</code></Fact> : null}
+            {/* The per-sandbox specification saved with the deployment: every sandbox gets these limits. */}
+            <Fact label={t("sandbox.cpus")}>{spec ? t("sandbox.cores", { count: spec.resources.cpus }) : missing}</Fact>
+            <Fact label={t("sandbox.memory")}>{spec ? formatBytes(spec.resources.memory_mib * MIB) : missing}</Fact>
+            {spec?.resources.root_disk_mib ? <Fact label={t("sandbox.rootDisk")}>{formatBytes(spec.resources.root_disk_mib * MIB)}</Fact> : null}
+            {spec?.resources.environment_disk_mib ? <Fact label={t("sandbox.dataDisk")} help={t("sandbox.dataDiskHelp")}>{formatBytes(spec.resources.environment_disk_mib * MIB)}</Fact> : null}
+            {spec?.runtime ? <Fact label={t("sandbox.runtime")} help={t("sandbox.runtimeHelp")}><code className="system-code" title={spec.runtime.source_commit}>{spec.runtime.source_commit.slice(0, 12)}</code></Fact> : null}
           </dl>
         </Section>
 

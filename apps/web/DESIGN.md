@@ -590,6 +590,21 @@ the onboarding forward and reveals the console in a circle growing from the
 pressed button. With reduced motion the orbits hold their places, the grid is a
 still frame, the request is a plain block and no transition runs.
 
+### Sandbox setup
+Setting up hosted sandboxes, and changing the provider or resources in maintenance,
+is a set of pages inside the Nodes page, one decision each: where sandboxes run (own machines
+or E2B), then the backend (Docker or microsandbox, compared behind a help tip) or
+the E2B account, then the size of each sandbox (three presets), then a review.
+Choices are large cards that advance on a click; short indigo dashes show the
+progress; pages slide and blur across. The review states where sandboxes run,
+the size, the Runtime (taken from this console's distribution manifest) and the
+Core address, asking for it only when the console's own address cannot serve.
+Advanced settings, one link away, hold the complete form: resources, the Core
+address, the Runtime release and the E2B template. A change keeps the saved size
+and Runtime while the backend stays the same (a saved size outside the presets is
+offered as Current); another backend starts from its standard size and this
+console's Runtime, and E2B always needs its key again. Rules sit behind help tips.
+
 ### Loading and motion
 The console has no spinners and no "Loading…" lines. Reads are cached (TanStack
 Query) and prefetched on navigation hover, so revisits show data at once and

@@ -14,7 +14,16 @@ const port = Number(process.env.AGENTS_FIXTURE_PORT ?? 18092);
 const SESSION_COOKIE = "core_console=fixture-session";
 
 let state;
-function reset(mode = "setup", fresh = false) {
+const hex = (c) => c.repeat(64);
+/** The Runtime release this fixture's distribution manifest describes. */
+const release = { source_commit: "c0ffee".padEnd(40, "0"), image_id: `sha256:${hex("1")}`, image_manifest_digest: `sha256:${hex("2")}`, microsandbox_ref: `parsar-core-runtime@sha256:${hex("3")}`, runtime_sha256: hex("4"), firmware_sha256: hex("5") };
+const manifest = { platform: "linux/amd64", source_commit: release.source_commit, images: { runtime: release.image_id }, image_manifest_digests: { runtime: release.image_manifest_digest }, runtime_ref: release.microsandbox_ref, microsandbox: { runtime_sha256: release.runtime_sha256, firmware_sha256: release.firmware_sha256 }, artifacts: {} };
+
+function configuredDeployment() {
+  return { installation_id: "7f3c2a90-fixture", provider: "docker", core_url: `http://127.0.0.1:${port}`, maintenance: false, owner_epoch: 3, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: { resources: { cpus: 2, memory_mib: 4096 }, runtime: release }, specification_digest: "fixture" };
+}
+
+function reset(mode = "setup", fresh = false, sandbox = "configured") {
   const base = buildDemo();
   const now = Math.floor(Date.now() / 1000);
   const resources = buildResources(now, base.agents, base.sessions);
@@ -25,6 +34,8 @@ function reset(mode = "setup", fresh = false) {
     ...base, resources, admin,
     auth: { mode, username: mode === "authenticated" ? "admin" : null, password: mode === "setup" ? null : "correct horse battery" },
     violations: [], writes: [], failNext: null, nextId: 1,
+    // "none": the deployment is not configured yet, so the Nodes page offers setup.
+    deployment: sandbox === "none" ? null : configuredDeployment(),
   };
 }
 reset();
@@ -189,8 +200,15 @@ function adminRead(response, path, url) {
 }
 
 async function sandboxRoute(request, response, path) {
+  if (path === "/deployment" && request.method === "POST") {
+    const input = await body(request);
+    if (state.deployment) return error(response, 409, "The sandbox deployment is already configured.", "sandbox_deployment_conflict");
+    if (!input.resources || (input.provider !== "e2b" && !input.runtime)) return error(response, 400, "resources and runtime are required.", "invalid_sandbox_configuration");
+    state.deployment = { ...configuredDeployment(), provider: input.provider, core_url: input.core_url, mode: input.provider === "e2b" ? "direct" : "nodes", specification: { resources: input.resources, ...(input.runtime ? { runtime: input.runtime } : {}) } };
+    return send(response, 201, state.deployment);
+  }
   if (path === "/deployment") {
-    return send(response, 200, { installation_id: "7f3c2a90-fixture", provider: "docker", core_url: `http://127.0.0.1:${port}`, maintenance: false, owner_epoch: 3, generation: 1, mode: "nodes", resources: { allocations: state.allocations.length, pending: 0 } });
+    return send(response, 200, state.deployment ?? { installation_id: "7f3c2a90-fixture", provider: "", core_url: `http://127.0.0.1:${port}`, maintenance: false, owner_epoch: 3, generation: 0, mode: "", resources: { allocations: 0, pending: 0 } });
   }
   if (path === "/nodes") return send(response, 200, { data: state.nodes });
   if (path === "/enrollment-tokens" && request.method === "POST") {
@@ -211,7 +229,7 @@ async function sandboxRoute(request, response, path) {
 async function fixtureRoute(request, response, url) {
   if (url.pathname === "/__fixture/health") return send(response, 200, { ok: true });
   if (url.pathname === "/__fixture/reset" && request.method === "POST") {
-    reset(url.searchParams.get("auth") ?? "setup", url.searchParams.get("projects") === "none");
+    reset(url.searchParams.get("auth") ?? "setup", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured");
     return send(response, 200, { ok: true });
   }
   if (url.pathname === "/__fixture/fail-next" && request.method === "POST") {
@@ -226,6 +244,8 @@ http.createServer(async (request, response) => {
   const url = new URL(request.url, `http://127.0.0.1:${port}`);
   try {
     if (url.pathname.startsWith("/__fixture/")) return await fixtureRoute(request, response, url);
+    // The console service serves its distribution manifest to anyone, as nodes download it.
+    if (url.pathname === "/node-install/manifest.json") return send(response, 200, manifest);
     if (url.pathname === "/v1" || url.pathname.startsWith("/v1/")) {
       state.violations.push(`${request.method} ${url.pathname}`);
       return error(response, 404, "The console does not serve /v1.");
