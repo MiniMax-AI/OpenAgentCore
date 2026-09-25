@@ -220,6 +220,8 @@ def describe(error):
     if isinstance(error, subprocess.CalledProcessError):
         words = [word for word in error.cmd if not word.startswith(("/", "-"))][:3]
         return f"`{' '.join(words)}` failed"
+    if isinstance(error, KeyboardInterrupt):
+        return "it was interrupted"
     return str(error)
 
 

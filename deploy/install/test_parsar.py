@@ -300,8 +300,9 @@ class ParsarTests(unittest.TestCase):
                         trigger = (lambda *a, when=when, **k: self.host.core["failed"] and when(*a, **k)) \
                             if operation == "rollback" else when
                         with interrupt(target, name, trigger), \
-                                self.assertRaises((KeyboardInterrupt, parsar_cli.ParsarError)):
+                                self.assertRaises((KeyboardInterrupt, parsar_cli.ParsarError)) as raised:
                             action()
+                        self.assertNotIn(": .", str(raised.exception))
                         self.host.core.update(fails=False, failed=False)
                         self.apply()
                         self.assertConverged()
