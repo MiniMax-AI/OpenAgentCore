@@ -31,7 +31,8 @@ export function formatBytes(value: number | null | undefined): string {
     amount /= 1024;
     unit += 1;
   }
-  return `${amount >= 100 || unit === 0 ? Math.round(amount) : amount.toFixed(1)} ${units[unit]}`;
+  // One decimal below 100, without a trailing ".0": "1 GiB", "1.5 GiB", "318 MiB".
+  return `${amount >= 100 || unit === 0 ? Math.round(amount) : amount.toFixed(1).replace(/\.0$/, "")} ${units[unit]}`;
 }
 
 /** Durations in seconds, as a compact unit string (850 ms, 12.4 s, 4m 12s, 3h 5m). */

@@ -119,6 +119,8 @@ export const metrics = {
     waitingForDaemon: "{{n}} 个等 daemon",
     daemons: "已连接 daemon",
     daemonsHelp: "当前连到 Core 的执行 daemon（每个托管或自托管环境一个）。没有 daemon 的 Session 无法执行。",
+    nodes: "已连接节点",
+    nodesHelp: "当前连到 Core 的沙箱节点，对比已注册的全部节点。离线的节点不能接新的沙箱，具体是哪台见节点页。",
     databaseLatency: "数据库延迟",
     cpu: "CPU",
     cpuHelp: "Core 进程最近 30 秒用掉的 CPU（单位：核），对比它可用的 CPU（容器限额，或它能使用的 CPU 数）。",

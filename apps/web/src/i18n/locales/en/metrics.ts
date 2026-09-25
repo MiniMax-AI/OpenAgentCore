@@ -119,6 +119,8 @@ export const metrics = {
     waitingForDaemon: "{{n}} waiting for a daemon",
     daemons: "Connected daemons",
     daemonsHelp: "Execution daemons connected to Core, one per hosted or self-hosted environment. A Session without one cannot run.",
+    nodes: "Connected nodes",
+    nodesHelp: "Sandbox nodes connected to Core, of all registered nodes. A node that is offline cannot take new sandboxes; the Nodes page shows which.",
     databaseLatency: "Database latency",
     cpu: "CPU",
     cpuHelp: "CPU the Core process used over the last 30 seconds, in cores, against the CPU it may use (its container limit, or the CPUs it may run on).",

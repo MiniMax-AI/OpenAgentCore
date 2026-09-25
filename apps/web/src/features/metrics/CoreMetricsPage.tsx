@@ -9,6 +9,7 @@ import { TimeSeriesChart } from "../../components/charts/TimeSeriesChart";
 import { DashboardSkeleton, TableSkeleton } from "../../components/Skeleton";
 import { EmptyState, Kpi, KpiStrip, PageBody, PageHeader, RefreshButton, Section, SegmentedControl, StatusDot, type Tone } from "../../components/console-ui";
 import { formatBucket, formatBytes, formatClock, formatDuration, formatInteger, formatRelative, MISSING } from "../../lib/format";
+import { fleetSnapshot, useSandboxFleet } from "../fleet/use-sandbox-fleet";
 import { coreMetricsQuery } from "./metrics-queries";
 import "./MetricsView.css";
 
@@ -119,6 +120,10 @@ function CoreMetricsBody({ metrics, stale }: { metrics: CoreMetrics; stale: stri
   const count = (value: number | null) => (value === null ? MISSING : formatInteger(value, locale));
   const integer = (value: number) => formatInteger(value, locale);
   const slotsFull = execution.slots_in_use !== null && execution.slots_total !== null && execution.slots_in_use >= execution.slots_total;
+  // Sandbox nodes hold their own connection to Core, as daemons do; E2B deployments have none.
+  const fleet = fleetSnapshot(useSandboxFleet({ poll: true }).state);
+  const nodeBacked = fleet ? fleet.deployment.mode === "nodes" : false;
+  const online = fleet ? fleet.nodes.filter((node) => node.online).length : null;
 
   return (
     <>
@@ -138,6 +143,14 @@ function CoreMetricsBody({ metrics, stale }: { metrics: CoreMetrics; stale: stri
           tone={(execution.queued_turns ?? 0) > 0 ? "warning" : undefined}
         />
         <Kpi label={t("core.daemons")} help={t("core.daemonsHelp")} value={<LiveNumber value={execution.connected_daemons} />} />
+        {nodeBacked ? (
+          <Kpi
+            label={t("core.nodes")}
+            help={t("core.nodesHelp")}
+            value={<Figure value={<LiveNumber value={online} />} unit={`/ ${integer(fleet!.nodes.length)}`} />}
+            tone={online !== null && online < fleet!.nodes.length ? "warning" : undefined}
+          />
+        ) : null}
         <Kpi label={t("core.databaseLatency")} value={milliseconds(database.ping_ms.p95)} />
         <Kpi
           label={t("core.cpu")}
