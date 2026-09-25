@@ -54,7 +54,8 @@ func run(input, projectOutput, coreOutput, runtimeOutput string) error {
 	pruneDefinitions(p)
 	pruneDefinitions(m)
 	pruneDefinitions(rt)
-	// The project document keeps the generator's complete scheme list unchanged.
+	// Each document keeps only the security schemes its operations require.
+	pruneSecurityDefinitions(p)
 	pruneSecurityDefinitions(m)
 	pruneSecurityDefinitions(rt)
 	// Keep unrelated existing project definitions and the generator's formatting.
@@ -197,7 +198,7 @@ func pruneSecurityDefinitions(root *yaml.Node) {
 func preserveProjectFormatting(raw []byte, original, filtered *yaml.Node) []byte {
 	lines := bytes.SplitAfter(raw, []byte("\n"))
 	removed := make([]bool, len(lines))
-	for _, section := range []string{"paths", "definitions"} {
+	for _, section := range []string{"paths", "definitions", "securityDefinitions"} {
 		source, target := field(original, section), field(filtered, section)
 		if source == nil {
 			continue

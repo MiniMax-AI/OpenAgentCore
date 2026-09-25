@@ -23,6 +23,8 @@ info:
 paths:
   /agents/sessions:
     get:
+      security:
+        - BearerAuth: []
       responses:
         "200":
           schema:
@@ -97,9 +99,8 @@ securityDefinitions:
 			t.Fatal("reference closure was not preserved")
 		}
 	}
-	// Generated surfaces keep only the schemes their operations use; the project
-	// document is left as generated.
-	for path, want := range map[string]string{project: "BearerAuth DeploymentAdminAuth NodeAuth", core: "DeploymentAdminAuth", machine: "NodeAuth"} {
+	// Every document keeps only the schemes its operations use.
+	for path, want := range map[string]string{project: "BearerAuth", core: "DeploymentAdminAuth", machine: "NodeAuth"} {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)

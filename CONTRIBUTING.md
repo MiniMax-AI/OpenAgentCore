@@ -192,9 +192,9 @@ coverage ledgers and official SDK/raw HTTP tests when changing API behavior.
 Run `make openapi` after handler annotation changes. It reuses the original
 Core-only swaggo v1.16.4 generator, then splits the result by namespace: `/v1`
 into `openapi.yaml`, `/core/v1` into `core.openapi.yaml` and `/api/v1` into
-`runtime.openapi.yaml`; the last two use base path `/` and keep only the security
-schemes their operations use. All generated schemas remain free of product
-routes.
+`runtime.openapi.yaml`; the last two use base path `/`, and each document keeps
+only the security schemes its operations use. All generated schemas remain free
+of product routes.
 
 Core changes must retain the independent build and official-client workflow.
 Native adapter changes require their applicable build/check targets and live provider

@@ -5360,16 +5360,4 @@ securityDefinitions:
     in: header
     name: Authorization
     type: apiKey
-  DeploymentAdminAuth:
-    in: header
-    name: Authorization
-    type: apiKey
-  NodeAuth:
-    in: header
-    name: Authorization
-    type: apiKey
-  NodeEnrollmentAuth:
-    in: header
-    name: Authorization
-    type: apiKey
 swagger: "2.0"
