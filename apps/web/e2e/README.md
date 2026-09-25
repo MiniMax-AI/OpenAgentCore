@@ -21,7 +21,8 @@ runs. Existing services are never reused. Account state, the private test token,
 installer stub, binary and assets live in a fresh `~/.parsar/tests/console-e2e-*`
 directory, removed on shutdown. Browser artifacts go to
 `~/.parsar/tests/console-playwright`; `AGENTS_E2E_OUTPUT_DIR` selects an independent
-output directory. Chrome is the configured Playwright browser.
+output directory. Chrome is the default Playwright browser; set
+`AGENTS_E2E_BROWSER_CHANNEL=chromium` to use the installed bundled Chromium.
 
 The installer stub exercises command creation and the production configuration's
 digest only. Tests never execute an enrollment command or install a node.

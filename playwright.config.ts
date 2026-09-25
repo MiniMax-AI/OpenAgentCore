@@ -14,7 +14,7 @@ export default defineConfig({
   expect: { timeout: 7_500 },
   outputDir: join(output, "results"),
   reporter: [["line"], ["html", { open: "never", outputFolder: join(output, "report") }]],
-  use: { baseURL: `http://127.0.0.1:${webPort}`, channel: "chrome", trace: "retain-on-failure", screenshot: "only-on-failure", video: "off" },
+  use: { baseURL: `http://127.0.0.1:${webPort}`, channel: process.env.AGENTS_E2E_BROWSER_CHANNEL || "chrome", trace: "retain-on-failure", screenshot: "only-on-failure", video: "off" },
   webServer: [
     { command: "node apps/web/e2e/fixture-core.mjs", url: `http://127.0.0.1:${fixturePort}/__fixture/health`, timeout: 15_000, reuseExistingServer: false },
     { command: "node apps/web/e2e/start-console.mjs", url: `http://127.0.0.1:${webPort}/healthz`, timeout: 180_000, reuseExistingServer: false, gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 } },
