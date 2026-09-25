@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ConsoleSidebar } from "./components/ConsoleSidebar";
-import { FirstProjectSetup } from "./features/api-keys/FirstProjectSetup";
 import { ProjectsPage } from "./features/api-keys/ProjectsPage";
 import { AgentsPage } from "./features/agents/AgentsPage";
 import { TemplatesPage } from "./features/environment-templates/TemplatesPage";
@@ -10,6 +9,8 @@ import { FilesPage } from "./features/files/FilesPage";
 import { AgentMetricsPage } from "./features/metrics/AgentMetricsPage";
 import { CoreMetricsPage } from "./features/metrics/CoreMetricsPage";
 import { SandboxMetricsPage } from "./features/metrics/SandboxMetricsPage";
+import { ConsoleTourContext, ConsoleTourScreen } from "./features/onboarding/ConsoleTour";
+import { withTransition } from "./features/onboarding/view-transition";
 import { OverviewPage } from "./features/overview/OverviewPage";
 import { SandboxManagerView } from "./features/sandbox/SandboxManagerView";
 import { SessionLogPage } from "./features/sessions/SessionLogPage";
@@ -17,7 +18,7 @@ import { SessionPage } from "./features/sessions/SessionPage";
 import { SkillsPage } from "./features/skills/SkillsPage";
 import { SystemPage } from "./features/system/SystemPage";
 import { VaultsPage } from "./features/vaults/VaultsPage";
-import { consoleDepth, ConsoleNavigationContext, hashWithParams, routeParamsFromHash, type RouteParams } from "./lib/console-navigation";
+import { consoleDepth, ConsoleNavigationContext, hashWithParams, routeParamsFromHash, type ConsoleIntent, type RouteParams } from "./lib/console-navigation";
 import { consoleHashForView, consoleNavParent, consoleViewFromHash, type ConsoleView } from "./lib/console-routes";
 import { ProjectsProvider, useProjects } from "./lib/projects";
 import { collectionQuery, collections, filesCollection, queryClient, type CollectionSpec } from "./lib/queries";
@@ -33,9 +34,9 @@ const prefetchable: Partial<Record<ConsoleView, CollectionSpec<unknown>>> = {
   sessions: collections.sessions,
 };
 
-function readLocation(): { view: ConsoleView; params: RouteParams } {
+function readLocation(): { view: ConsoleView; params: RouteParams; intent: ConsoleIntent | null } {
   const hash = typeof window === "undefined" ? "" : window.location.hash;
-  return { view: consoleViewFromHash(hash), params: routeParamsFromHash(hash) };
+  return { view: consoleViewFromHash(hash), params: routeParamsFromHash(hash), intent: null };
 }
 
 function ConsolePage({ view }: { view: ConsoleView }) {
@@ -61,13 +62,20 @@ function ConsoleShell() {
   const { t } = useTranslation("navigation");
   const { state } = useProjects();
   const [location, setLocation] = useState(readLocation);
-  const [setupDone, setSetupDone] = useState(false);
-  // Once first-run setup has started it stays until it finishes: a background
-  // re-read of the projects (which now include the new one) must not replace it
-  // while the first key is on screen.
-  const needsSetup = state.status === "ready" && state.projects.length === 0;
-  const [setupStarted, setSetupStarted] = useState(false);
-  useEffect(() => { if (needsSetup) setSetupStarted(true); }, [needsSetup]);
+  // The console tour takes the place of the shell until it ends; then the
+  // control that opened it, or else the page, takes the focus back.
+  const [touring, setTouring] = useState(false);
+  const tourEnded = useRef(false);
+  const openTour = useCallback((from: HTMLElement | null) => withTransition("enter", () => setTouring(true), from), []);
+  const endTour = useCallback((from: HTMLElement | null) => withTransition("enter", () => {
+    tourEnded.current = true;
+    setTouring(false);
+  }, from), []);
+  useEffect(() => {
+    if (touring || !tourEnded.current) return;
+    tourEnded.current = false;
+    (document.querySelector<HTMLElement>("[data-tour-opener]") ?? document.getElementById("main-content"))?.focus();
+  }, [touring]);
 
   useEffect(() => {
     const sync = () => setLocation(readLocation());
@@ -79,22 +87,23 @@ function ConsoleShell() {
     };
   }, []);
 
-  const navigate = useCallback((view: ConsoleView, params: RouteParams = {}) => {
+  const navigate = useCallback((view: ConsoleView, params: RouteParams = {}, intent: ConsoleIntent | null = null) => {
     const hash = hashWithParams(consoleHashForView(view), params);
     if (window.location.hash !== hash) {
       // Each entry records how many console pages lie behind it, so `back` knows it can return.
       window.history.pushState({ consoleDepth: consoleDepth() + 1 }, "", hash || window.location.pathname + window.location.search);
     }
-    setLocation({ view, params });
+    setLocation({ view, params, intent });
     document.getElementById("main-content")?.focus({ preventScroll: true });
   }, []);
+  const clearIntent = useCallback(() => setLocation((current) => (current.intent ? { ...current, intent: null } : current)), []);
 
   const back = useCallback((view: ConsoleView, params: RouteParams = {}) => {
     if (consoleDepth() > 0) window.history.back();
     else navigate(view, params);
   }, [navigate]);
 
-  const navigation = useMemo(() => ({ ...location, navigate, back }), [location, navigate, back]);
+  const navigation = useMemo(() => ({ ...location, navigate, back, clearIntent }), [location, navigate, back, clearIntent]);
 
   const prefetch = useCallback((view: ConsoleView) => {
     const spec = prefetchable[view];
@@ -102,23 +111,21 @@ function ConsoleShell() {
     for (const project of state.projects) void queryClient.prefetchQuery(collectionQuery(spec, project.id));
   }, [state.projects]);
 
-  // First run: with no project yet, the administrator creates the first one and
-  // its API key. Signing in reads the projects first, so this opens at once.
-  if ((needsSetup || setupStarted) && !setupDone) {
-    return <FirstProjectSetup onDone={() => setSetupDone(true)} />;
-  }
+  if (touring) return <ConsoleTourScreen onDone={endTour} />;
 
   return (
     <ConsoleNavigationContext.Provider value={navigation}>
-      <div className="app-shell">
-        <a className="skip-link" href="#main-content">{t("skipToContent")}</a>
-        <ConsoleSidebar active={consoleNavParent(location.view)} onSelect={(view) => navigate(view)} onIntent={prefetch} />
-        <main className="app-main" id="main-content" tabIndex={-1}>
-          <div className="page-transition" key={`${location.view}:${location.params.project ?? ""}:${location.params.id ?? ""}`}>
-            <ConsolePage view={location.view} />
-          </div>
-        </main>
-      </div>
+      <ConsoleTourContext.Provider value={openTour}>
+        <div className="app-shell">
+          <a className="skip-link" href="#main-content">{t("skipToContent")}</a>
+          <ConsoleSidebar active={consoleNavParent(location.view)} onSelect={(view) => navigate(view)} onIntent={prefetch} onGettingStarted={() => navigate("overview", {}, "getting-started")} />
+          <main className="app-main" id="main-content" tabIndex={-1}>
+            <div className="page-transition" key={`${location.view}:${location.params.project ?? ""}:${location.params.id ?? ""}`}>
+              <ConsolePage view={location.view} />
+            </div>
+          </main>
+        </div>
+      </ConsoleTourContext.Provider>
     </ConsoleNavigationContext.Provider>
   );
 }

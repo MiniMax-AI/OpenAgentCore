@@ -1,4 +1,4 @@
-import { AgentCoreError, projectAgentSnapshot, projectRuntimeObservation } from "./client";
+import { AgentCoreError, projectRuntimeObservation, projectSavedAgentConfiguration } from "./client";
 import { projectTokenUsage } from "./usage-projection";
 import { canonicalUuid, exactFields, isNonnegativeInteger, isRecord, sameResourceId } from "./response-projection";
 import type { ListPage, SavedAgent } from "./types";
@@ -69,7 +69,7 @@ export function projectAdminSessionArchive(value: unknown, sessionId: string): A
 export function projectSavedAgent(value: unknown, expectedId?: string): SavedAgent {
   if (!isRecord(value)) return invalidAdminResponse();
   const { object, metadata, created_at, updated_at, ...snapshot } = value;
-  const agent = projectAgentSnapshot(snapshot);
+  const agent = projectSavedAgentConfiguration(snapshot);
   if (object !== "agent" || !isRecord(metadata) || Object.values(metadata).some((entry) => typeof entry !== "string") ||
     !isNonnegativeInteger(created_at) || !isNonnegativeInteger(updated_at) || updated_at < created_at ||
     (expectedId !== undefined && !sameResourceId(agent.id, expectedId))) return invalidAdminResponse();

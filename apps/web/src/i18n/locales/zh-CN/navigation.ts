@@ -23,7 +23,7 @@ export const navigation = {
     sandboxBackend: "沙箱后端",
     system: "系统",
   },
-  gettingStarted: "新手引导",
+  showGettingStarted: "显示新手引导",
   skipToContent: "跳到主要内容",
   configureCore: "配置 Agent Core 连接",
   coreApi: "Core API",

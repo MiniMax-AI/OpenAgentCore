@@ -264,6 +264,7 @@ function AgentMetricsContent({
               ]}
               tooltipOnly={[{ id: "total", label: t("agent.requests"), color: "var(--fg-muted)", values: series.requests }]}
               formatValue={integer}
+              counts
               formatAxis={compact}
             />
           </figure>
@@ -297,6 +298,7 @@ function AgentMetricsContent({
               bucketSeconds={window.bucketSeconds}
               series={named(series.tokensByModel, modelLabel, modelColor, totalsOf(tokenItems, compact))}
               formatValue={integer}
+              counts
               formatAxis={compact}
             />
           </figure>
@@ -310,6 +312,7 @@ function AgentMetricsContent({
               bucketSeconds={window.bucketSeconds}
               series={named(series.requestsByModel, modelLabel, modelColor, totalsOf(requestItems, integer))}
               formatValue={integer}
+              counts
               formatAxis={compact}
             />
           </figure>
@@ -330,6 +333,7 @@ function AgentMetricsContent({
                 bucketSeconds={window.bucketSeconds}
                 series={named(series.callsByTool, (id) => toolLabel(id, toolIndex.get(id)), toolColor, totalsOf(toolItems, integer))}
                 formatValue={integer}
+                counts
                 formatAxis={compact}
               />
             </figure>

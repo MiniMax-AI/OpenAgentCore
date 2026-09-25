@@ -64,6 +64,120 @@
 .metric-tile-dot-danger { background: var(--danger); }
 .metric-tile-dot-pending { background: var(--status-running); }
 
+/* Getting started: one card with a row per step (mark, text, state, action);
+   a single "You're set" line once every step is done. */
+
+.getting-started {
+  animation: overview-rise 520ms var(--ease-settle) both;
+}
+
+.getting-started-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Show Getting started moves the focus to the heading, which is not a control. */
+.getting-started h2:focus {
+  outline: none;
+}
+
+.getting-started-steps {
+  display: grid;
+  margin: 0;
+  padding: 0 16px 4px;
+  list-style: none;
+}
+
+.getting-started-step {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 104px 176px;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line-muted);
+}
+
+.getting-started-mark {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  color: var(--fg-muted);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.getting-started-mark.done {
+  color: var(--fg);
+  background: var(--tile);
+  box-shadow: none;
+}
+
+.getting-started-text h3 {
+  margin: 0;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.getting-started-text p {
+  margin: 2px 0 0;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+.getting-started-action {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.overview-card.getting-started-line {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 16px;
+}
+
+.getting-started-line .console-section-title {
+  min-width: 0;
+}
+
+.getting-started-line h2 {
+  margin: 0;
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.getting-started-line .overview-card-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Narrow: the state and the action go under the step's text. */
+@media (max-width: 720px) {
+  .getting-started-step {
+    grid-template-columns: 22px minmax(0, 1fr);
+    row-gap: 8px;
+  }
+
+  .getting-started-step > .status-dot,
+  .getting-started-action {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+}
+
 /* Cards ------------------------------------------------------------------ */
 
 .overview-grid {
@@ -407,6 +521,7 @@ button.fleet-core:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .getting-started,
   .metric-tile,
   .overview-activity,
   .overview-fleet,

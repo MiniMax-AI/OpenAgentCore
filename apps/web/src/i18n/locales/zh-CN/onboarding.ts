@@ -1,21 +1,15 @@
 export const onboarding = {
-  steps: {
-    label: "设置进度",
-    project: "项目和 API Key",
-    tour: "认识控制台",
-  },
   stage: {
     login: { title: "一个 Core，承载所有 Agent。", body: "连接你的机器，运行你的 Agent，在一个控制台里看清每一个 Session。" },
-    project: { title: "项目承载所有工作。", body: "Agent、Session、Skills、文件和 Vault 都归属某个项目；应用用项目 API Key 访问它们。" },
     orbit: "Core 和它管理的一切：Agent、Session、Skills、Vault、文件、环境模板和机器",
   },
-  terminal: "在终端里试一下",
   tour: {
+    label: "认识控制台",
     eyebrow: "认识控制台 · {{n}} / {{total}}",
     skip: "跳过",
     back: "上一步",
     next: "下一步",
-    enter: "进入控制台",
+    done: "返回控制台",
     shot: "控制台的{{name}}页面",
     chapters: {
       monitor: {

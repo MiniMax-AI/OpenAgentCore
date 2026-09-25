@@ -10,7 +10,6 @@ import { type AdminIssuedKey, type AdminKey, type Project } from "../../lib/admi
 
 export const PROJECT_NAME_MAX = 128;
 export const KEY_NAME_MAX = 80;
-export const DEFAULT_PROJECT_NAME = "Default";
 
 export type NameProblem = "tooLong" | "invalid" | "taken";
 
@@ -67,21 +66,15 @@ export function isAbort(error: unknown): boolean {
 
 export type KeyFlow =
   | { step: "idle" }
-  /**
-   * Issue a named key. With `project: null` the project is created first
-   * (first run); once created it is kept, so a retry only issues the key.
-   */
-  | { step: "issue"; project: Project | null; projectName: string; name: string; busy: boolean; error: FlowError | null }
+  /** Issue a named key for an active project. */
+  | { step: "issue"; project: Project; name: string; busy: boolean; error: FlowError | null }
   /** The plaintext is on screen until the operator confirms it was saved. */
   | { step: "issued"; project: Project; issued: AdminIssuedKey; open: boolean };
 
 export type KeyFlowEvent =
   | { type: "openIssue"; project: Project }
-  | { type: "openFirstRun"; projectName?: string }
-  | { type: "setProjectName"; name: string }
   | { type: "setName"; name: string }
   | { type: "started" }
-  | { type: "projectCreated"; project: Project }
   | { type: "failed"; error: FlowError }
   | { type: "issued"; projectId: string; key: AdminIssuedKey }
   | { type: "hideIssued" }
@@ -95,21 +88,15 @@ export function keyFlowReducer(flow: KeyFlow, event: KeyFlowEvent): KeyFlow {
     case "openIssue":
       // Never start a second issuance while a plaintext key is waiting to be saved.
       if (flow.step !== "idle" || event.project.status !== "active") return flow;
-      return { step: "issue", project: event.project, projectName: event.project.name, name: "", busy: false, error: null };
-    case "openFirstRun":
-      return flow.step === "idle" ? { step: "issue", project: null, projectName: event.projectName ?? DEFAULT_PROJECT_NAME, name: "", busy: false, error: null } : flow;
-    case "setProjectName":
-      return flow.step === "issue" && !flow.busy && flow.project === null ? { ...flow, projectName: event.name, error: null } : flow;
+      return { step: "issue", project: event.project, name: "", busy: false, error: null };
     case "setName":
       return flow.step === "issue" && !flow.busy ? { ...flow, name: event.name, error: null } : flow;
     case "started":
       return flow.step === "issue" && !flow.busy ? { ...flow, busy: true, error: null } : flow;
-    case "projectCreated":
-      return flow.step === "issue" && flow.busy && flow.project === null ? { ...flow, project: event.project, projectName: event.project.name } : flow;
     case "failed":
       return flow.step === "issue" && flow.busy ? { ...flow, busy: false, error: event.error } : flow;
     case "issued":
-      if (flow.step !== "issue" || !flow.busy || flow.project?.id !== event.projectId) return flow;
+      if (flow.step !== "issue" || !flow.busy || flow.project.id !== event.projectId) return flow;
       return { step: "issued", project: flow.project, issued: event.key, open: true };
     case "hideIssued":
       // Closing the dialog keeps the key on the page; only "saved" discards it.
@@ -146,18 +133,4 @@ export function matchesProject(project: Project, query: string): boolean {
   const needle = query.trim().toLocaleLowerCase();
   if (!needle) return true;
   return [project.name, project.id].some((value) => value.toLocaleLowerCase().includes(needle));
-}
-
-/**
- * A short request the caller runs themselves to check the key. The console
- * never sends it, and the key itself stays out of the command.
- */
-export function curlExample(coreOrigin: string | null): string {
-  const trimmed = coreOrigin?.replace(/\/+$/, "") ?? "";
-  const url = /^https?:\/\/[^\s/?#"'\\$`]+$/.test(trimmed) ? `${trimmed}/v1/agents` : '"$CORE_URL/v1/agents"';
-  return [
-    `curl ${url} \\`,
-    '  -H "Authorization: Bearer $PROJECT_API_KEY" \\',
-    '  -H "OpenAI-Beta: agents=v1"',
-  ].join("\n");
 }

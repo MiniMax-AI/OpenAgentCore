@@ -37,6 +37,8 @@ Reads return `ModelProviderView`, containing safe endpoint/limit fields and
 `api_key_configured`, never `api_key`. It is distinct from `ModelProviderInput`:
 do not submit a read response as an update. Replacing a provider requires its full
 protocol, endpoint and key; MiniMax Code also requires both token limits.
+Either default may be absent from a read: an Agent saved with only a provider has
+no `harness`, and one saved with an empty extension reads `x_agents_core: {}`.
 
 On update, omitting the extension preserves all defaults; omitting either nested
 member preserves that member. A null provider clears its saved bundle, while

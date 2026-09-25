@@ -13,17 +13,31 @@ function selection(value: unknown, invalid: Invalid): SessionExecutionConfigurat
   return { value: value.value as string | null, source: value.source as ExecutionConfigurationSource };
 }
 
-function safeProvider(value: unknown, invalid: Invalid): ModelProviderView {
+// Splits an absolute URL as RFC 3986 appendix B does, without parsing its host.
+const baseURLPattern = /^https:\/\/([^/?#]*)[^?#]*(?:\?([^#]*))?(?:#([\s\S]*))?$/iu;
+
+/**
+ * Checks a stored base URL no more strictly than Core's write rule: HTTPS with a
+ * host and no credentials, query or fragment. Host syntax is Core's to enforce;
+ * a value an earlier Core accepted must not fail a whole list.
+ */
+function safeBaseURL(value: string): boolean {
+  const match = baseURLPattern.exec(value);
+  if (match === null || /[\r\n\0]/u.test(value)) return false;
+  const [, authority = "", query = "", fragment = ""] = match;
+  const host = authority.replace(/:[0-9]*$/u, "").replace(/^\[(.*)\]$/u, "$1");
+  return !authority.includes("@") && host !== "" && query === "" && fragment === "";
+}
+
+/** The safe provider view shared by frozen Session configuration and saved Agent reads. */
+export function safeProvider(value: unknown, invalid: Invalid): ModelProviderView {
   if (!isRecord(value) || !onlyFields(value, providerFields) ||
     (value.protocol !== "responses" && value.protocol !== "anthropic") ||
     typeof value.base_url !== "string" || typeof value.api_key_configured !== "boolean" ||
     (value.context_window !== undefined && !isNonnegativeInteger(value.context_window)) ||
     (value.max_output_tokens !== undefined && !isNonnegativeInteger(value.max_output_tokens)) ||
     Number(value.max_output_tokens ?? 0) > Number(value.context_window ?? 0)) return invalid();
-  try {
-    const url = new URL(value.base_url);
-    if (url.protocol !== "https:" || !url.hostname || url.username || url.password || url.search || url.hash || /[\r\n\0]/u.test(value.base_url)) return invalid();
-  } catch { return invalid(); }
+  if (!safeBaseURL(value.base_url)) return invalid();
   return {
     protocol: value.protocol, base_url: value.base_url, api_key_configured: value.api_key_configured,
     ...(value.context_window === undefined ? {} : { context_window: value.context_window as number }),

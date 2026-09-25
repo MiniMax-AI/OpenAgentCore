@@ -177,6 +177,35 @@ describe("AdminClient response contracts", () => {
     expect((await clientWith(page([session])).client.listSessions(projectId)).data).toEqual([session]);
   });
 
+  it("projects saved Agent Core defaults, including the safe provider view, and rejects secrets", async () => {
+    const saved = { id: resourceId, object: "agent", model: "model", name: null, instructions: null, metadata: {}, multi_agent: { enabled: false, max_concurrent_subagents: null }, reasoning: { effort: null, summary: null }, service_tier: "auto", text: { format: { type: "text" }, verbosity: "medium" }, tools: [], created_at: 1, updated_at: 1 };
+    const provider = { protocol: "anthropic", base_url: "https://provider.test/v1", context_window: 200000, max_output_tokens: 8000, api_key_configured: true };
+    // Core omits the extension, or returns each default only when saved.
+    for (const core of [undefined, null, {}, { harness: "mcode" }, { model_provider: provider }, { harness: "mcode", model_provider: provider },
+      { model_provider: { protocol: "responses", base_url: "https://provider.test", api_key_configured: true } }]) {
+      const agent = core === undefined ? saved : { ...saved, x_agents_core: core };
+      expect(await clientWith(agent).client.retrieveAgent(projectId, resourceId)).toEqual(agent);
+      expect((await clientWith(page([agent])).client.listAgents(projectId)).data).toEqual([agent]);
+    }
+    for (const core of ["mcode", { harness: "other" }, { harness: null }, { harness: "mcode", api_key: "leak" }, { extra: 1 },
+      { model_provider: null }, { model_provider: { ...provider, api_key: "leak" } }, { model_provider: { protocol: "anthropic", base_url: "https://provider.test" } }]) {
+      const agent = { ...saved, x_agents_core: core };
+      await expect(clientWith(agent).client.retrieveAgent(projectId, resourceId)).rejects.toBeInstanceOf(AgentCoreError);
+      await expect(clientWith(page([agent])).client.listAgents(projectId)).rejects.toBeInstanceOf(AgentCoreError);
+    }
+  });
+
+  it("reads any provider base URL an earlier Core stored but still rejects unsafe ones", async () => {
+    const saved = { id: resourceId, object: "agent", model: "model", name: null, instructions: null, metadata: {}, multi_agent: { enabled: false, max_concurrent_subagents: null }, reasoning: { effort: null, summary: null }, service_tier: "auto", text: { format: { type: "text" }, verbosity: "medium" }, tools: [], created_at: 1, updated_at: 1 };
+    const withURL = (base_url: string, id = resourceId) => ({ ...saved, id, x_agents_core: { model_provider: { protocol: "responses", base_url, api_key_configured: true } } });
+    // Core once accepted hosts and ports that URL parsing rejects; one must not fail the list.
+    const stored = ["https://p.test:99999/v1", "https://xn--.test", "https://[::1]:8443/v1", "HTTPS://p.test/v1?"].map((url, index) => withURL(url, `agent-${index}`));
+    expect((await clientWith(page(stored)).client.listAgents(projectId)).data).toEqual(stored);
+    for (const url of ["http://p.test", "https://user:pw@p.test", "https://p.test/?key=secret", "https://p.test/#secret", "https://:443/v1"]) {
+      await expect(clientWith(page([withURL(url)])).client.listAgents(projectId)).rejects.toBeInstanceOf(AgentCoreError);
+    }
+  });
+
   it("binds Skills, versions and Artifacts to requested resources", async () => {
     const skill = { id: "skill", object: "skill", created_at: 1, name: "helper", description: "help", default_version: "1", latest_version: "2" };
     expect(await clientWith(skill).client.retrieveSkill(projectId, "skill")).toEqual(skill);

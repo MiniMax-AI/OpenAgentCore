@@ -1,9 +1,12 @@
 import { AnimatePresence } from "motion/react";
 import * as m from "motion/react-m";
 import { Activity, ArrowLeft, ArrowRight, Bot, FolderKanban, LayoutDashboard, ListTree, Server, Settings2, Trash2, Vault, type LucideIcon } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { AppearanceMenu } from "../../components/AppearanceMenu";
+import { ConsoleAccountMenu } from "../first-run/ConsoleAccess";
+import { OnboardingLayout } from "./OnboardingLayout";
 import type { TourChapter } from "./OnboardingStage";
 
 export const TOUR_CHAPTERS: readonly TourChapter[] = ["monitor", "resources", "platform"];
@@ -17,15 +20,33 @@ const icons: Record<TourChapter, readonly [LucideIcon, LucideIcon, LucideIcon]> 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 /**
- * The last first-run step: three short chapters, one per navigation group,
- * each beside a screenshot of those pages on the stage. The last button
- * opens the console.
+ * Opens the console tour from the console; receives the pressed button for the
+ * reveal's origin. A button marked `data-tour-opener` gets the focus back when
+ * the tour ends.
  */
-export function ConsoleTour({ chapter, onChapter, onEnter }: {
+export const ConsoleTourContext = createContext<(from: HTMLElement | null) => void>(() => undefined);
+export const useConsoleTour = () => useContext(ConsoleTourContext);
+
+/** The tour on the onboarding stage, in place of the console until it ends. */
+export function ConsoleTourScreen({ onDone }: { onDone: (from: HTMLElement | null) => void }) {
+  const [chapter, setChapter] = useState(0);
+  return (
+    <OnboardingLayout scene="tour" chapter={TOUR_CHAPTERS[chapter]} controls={<><ConsoleAccountMenu /><AppearanceMenu /></>}>
+      <ConsoleTour chapter={chapter} onChapter={setChapter} onDone={onDone} />
+    </OnboardingLayout>
+  );
+}
+
+/**
+ * An optional tour of the console: three short chapters, one per navigation
+ * group, each beside a screenshot of those pages on the stage. The last
+ * button, Skip and Escape return to the console.
+ */
+export function ConsoleTour({ chapter, onChapter, onDone }: {
   chapter: number;
   onChapter: (next: number) => void;
-  /** Opens the console; receives the pressed button for the reveal's origin. */
-  onEnter: (from: HTMLElement | null) => void;
+  /** Returns to the console; receives the pressed button for the reveal's origin. */
+  onDone: (from: HTMLElement | null) => void;
 }) {
   const { t } = useTranslation("onboarding");
   const id = TOUR_CHAPTERS[chapter] ?? "monitor";
@@ -35,21 +56,27 @@ export function ConsoleTour({ chapter, onChapter, onEnter }: {
   const [First, Second, Third] = icons[id];
   const pointIcons = [First, Second, Third];
 
+  // The tour replaces the page, so focus starts on its way forward.
+  useEffect(() => { primary.current?.focus(); }, []);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // A control that already handled the key, such as Escape closing a menu, keeps it.
+      if (event.defaultPrevented) return;
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
       if (event.key === "ArrowRight" && !last) onChapter(chapter + 1);
       if (event.key === "ArrowLeft" && chapter > 0) onChapter(chapter - 1);
+      if (event.key === "Escape") onDone(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [chapter, last, onChapter]);
+  }, [chapter, last, onChapter, onDone]);
 
   return (
     <section className="onboarding-tour" aria-labelledby="tour-heading">
       <div className="onboarding-tour-top">
         <span className="onboarding-eyebrow">{t("tour.eyebrow", { n: chapter + 1, total: TOUR_CHAPTERS.length })}</span>
-        {!last ? <button className="onboarding-skip" type="button" onClick={(event) => onEnter(event.currentTarget)}>{t("tour.skip")}</button> : null}
+        {!last ? <button className="onboarding-skip" type="button" onClick={(event) => onDone(event.currentTarget)}>{t("tour.skip")}</button> : null}
       </div>
       <AnimatePresence mode="wait" initial={false}>
         <m.div
@@ -81,7 +108,7 @@ export function ConsoleTour({ chapter, onChapter, onEnter }: {
         </m.div>
       </AnimatePresence>
       <div className="onboarding-tour-foot">
-        <div className="onboarding-dots" role="tablist" aria-label={t("steps.tour")}>
+        <div className="onboarding-dots" role="tablist" aria-label={t("tour.label")}>
           {TOUR_CHAPTERS.map((entry, index) => (
             <button
               key={entry}
@@ -106,9 +133,9 @@ export function ConsoleTour({ chapter, onChapter, onEnter }: {
             ref={primary}
             className={last ? "button primary onboarding-enter" : "button primary"}
             type="button"
-            onClick={() => (last ? onEnter(primary.current) : onChapter(chapter + 1))}
+            onClick={() => (last ? onDone(primary.current) : onChapter(chapter + 1))}
           >
-            {last ? t("tour.enter") : t("tour.next")}<ArrowRight size={14} aria-hidden="true" />
+            {last ? t("tour.done") : t("tour.next")}<ArrowRight size={14} aria-hidden="true" />
           </button>
         </div>
       </div>

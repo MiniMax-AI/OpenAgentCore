@@ -18,7 +18,7 @@ the administrator API are defined by the [administrator API contract](../../cont
 | Console server | `/console/auth`, `/console/auth/{login,logout}`, `/console/config` | Core key at sign-in, then the console session cookie | Sign-in with the Core key and sign-out; the node installer (`node_installer`, `node_installer_sha256`) |
 | Administrator API | `/core/v1/**` outside `/core/v1/sandbox` | Core key, added by the console server | Projects, keys, resource reads and deletion, executor credentials, provenance, summaries, Core metrics |
 | Sandbox administration | `/core/v1/sandbox/**` | Core key, added by the console server | Nodes page; fleet and capacity figures on Overview and Sandbox metrics; Runtime observations of every project |
-| Agents API | `/v1/**` | Project API key | Not used. The first-run screen shows a `curl` example for `/v1/agents` with a `$PROJECT_API_KEY` placeholder; the console never sends it |
+| Agents API | `/v1/**` | Project API key | Not used; the console never sends it |
 
 Browser requests are same-origin and carry only the console session. The browser
 sends the Core key once, in the sign-in request body, and never stores it; it never
@@ -30,12 +30,12 @@ value.
 
 | Operation | Route | Console use |
 | --- | --- | --- |
-| List projects | `GET /core/v1/projects` | Project filter on every project-scoped page; Projects and keys list; first-run detection (no project opens the first-run screen) |
-| Create project | `POST /core/v1/projects` | **Create project**; first run (default name `Default`) |
+| List projects | `GET /core/v1/projects` | Project filter on every project-scoped page; Projects and keys list; the Overview's Getting started (a project with an active key) |
+| Create project | `POST /core/v1/projects` | **Create project**, also from Getting started |
 | Rename project | `POST /core/v1/projects/{project_id}` | **Rename** on an active project; the ID stays the same |
 | Archive project | `POST /core/v1/projects/{project_id}/archive` | **Archive**: revokes every key; the project's assets stay readable and deletable |
 | List keys | `GET /core/v1/projects/{project_id}/keys` | Key table of a project: name, prefix, status, creation and revocation time |
-| Issue key | `POST /core/v1/projects/{project_id}/keys` | **Issue key** on an active project and the first-run screen; the plaintext is shown once |
+| Issue key | `POST /core/v1/projects/{project_id}/keys` | **Issue key** on an active project, also from Getting started; the plaintext is shown once |
 | Revoke key | `DELETE /core/v1/projects/{project_id}/keys/{key_id}` | **Revoke**, with a warning when it is the project's last active key |
 
 Names are checked for length (projects 1–128 characters, keys 1–80) and control
