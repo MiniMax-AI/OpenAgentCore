@@ -248,7 +248,8 @@ question mark, so the page stays a ledger rather than a leaflet.
 - Tabular numerals everywhere a number can line up.
 - Status is always a dot plus a plain-language label.
 - Explanations live behind "?" help tips; errors, warnings and safety notices stay
-  visible.
+  visible. No small print: an empty state's explanation is a help tip beside its
+  title, a field's rules a help tip beside its label, and filler lines are cut.
 
 ## Colors
 

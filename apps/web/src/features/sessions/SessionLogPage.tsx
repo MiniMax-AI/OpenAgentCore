@@ -99,7 +99,7 @@ export function SessionLogPage() {
   } else if (allFailed) {
     body = <EmptyState title={t("log.loadFailed")} description={failures[0]?.message} action={<button className="button outline" type="button" onClick={refresh}>{tCommon("actions.retry")}</button>} />;
   } else if (!rows.length) {
-    body = <EmptyState icon={MessageSquareText} title={t("log.emptyTitle")} description={t("log.emptyDescription")} />;
+    body = <EmptyState icon={MessageSquareText} title={t("log.emptyTitle")} hint={t("log.emptyDescription")} />;
   } else if (!filtered.length) {
     body = (
       <EmptyState

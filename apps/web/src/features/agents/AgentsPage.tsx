@@ -131,7 +131,6 @@ function AgentsList() {
         ) : (
           <EmptyState
             title={t("catalog.noMatch")}
-            description={tCommon("list.noMatchesDescription")}
             action={<button className="button outline" type="button" onClick={() => setQuery("")}>{tCommon("actions.clearSearch")}</button>}
           />
         )}

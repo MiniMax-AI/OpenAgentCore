@@ -221,7 +221,7 @@ function AgentMetricsContent({
       <>
         {listFailureNote}
         {failedReads}
-        <EmptyState title={t("agent.emptyTitle")} description={t("agent.emptyDescription", { range: t(`range.${window.range}`) })} />
+        <EmptyState title={t("agent.emptyTitle")} hint={t("agent.emptyDescription", { range: t(`range.${window.range}`) })} />
       </>
     );
   }

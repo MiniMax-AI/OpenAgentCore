@@ -135,7 +135,6 @@ function SkillsList() {
         ) : (
           <EmptyState
             title={t("list.noMatchTitle")}
-            description={tCommon("list.noMatchesDescription")}
             action={<button className="button outline" type="button" onClick={() => setQuery("")}>{tCommon("actions.clearSearch")}</button>}
           />
         )}

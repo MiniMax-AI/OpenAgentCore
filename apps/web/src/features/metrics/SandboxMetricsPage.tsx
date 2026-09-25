@@ -163,7 +163,7 @@ export function SandboxMetricsPage() {
             <EmptyState
               icon={Server}
               title={t("sandbox.noNodesTitle")}
-              description={t("sandbox.noNodesDescription")}
+              hint={t("sandbox.noNodesDescription")}
               action={<button className="button primary" type="button" onClick={() => navigate("nodes")}>{t("sandbox.addNode")}</button>}
             />
           ) : fleetState.status === "checking" || fleetState.status === "loading"
@@ -217,7 +217,7 @@ function HostedRuntimeSection({ state, fleet, range, onOpen }: { state: RuntimeS
       ? <p className="page-status" role="alert">{t("sandbox.runtimeUnavailable", { reason: state.error })}</p>
       : <TableSkeleton label={t("sandbox.runtimeLoading")} rows={4} columns={8} />;
   } else if (!usage.hosted) {
-    body = <EmptyState title={t("sandbox.noRuntimeTitle")} description={t("sandbox.noRuntimeDescription")} />;
+    body = <EmptyState title={t("sandbox.noRuntimeTitle")} hint={t("sandbox.noRuntimeDescription")} />;
   } else {
     const durable = history.data ?? null;
     body = (
