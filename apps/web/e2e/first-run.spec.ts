@@ -304,7 +304,7 @@ test("requires acknowledgement of a new API key and never recovers its secret fr
   });
   await page.goto("/");
   const next = page.getByRole("button", { name: "Continue to machines", exact: true });
-  await expect(page.getByText("No API keys yet. Create one to get started.", { exact: true })).toBeVisible();
+  await expect(page.getByText("No active keys. Create one to call the API.", { exact: true })).toBeVisible();
   await expect(next).toBeDisabled();
   await expect(page.getByRole("button", { name: /Your first Agent/ })).toBeDisabled();
   await page.getByLabel("Key name", { exact: true }).fill("Local terminal");
@@ -323,13 +323,39 @@ test("requires acknowledgement of a new API key and never recovers its secret fr
   await expect(page.getByLabel("Your new API key", { exact: true })).toHaveCount(0);
   await expect(page.locator(".api-key-list")).toContainText("Local terminal");
   await expect(page.locator(".api-key-panel")).not.toContainText(secret);
-  await page.getByRole("button", { name: "Revoke", exact: true }).click();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
   expect(revokes).toBe(0);
-  await page.getByRole("button", { name: "Confirm revocation", exact: true }).click();
-  await expect(page.locator(".api-key-list")).toContainText("Revoked");
+  await expect(page.locator(".api-key-confirm")).toContainText("Existing Agents and Sessions remain.");
+  await page.getByRole("button", { name: "Delete key", exact: true }).click();
+  await expect(page.locator(".api-key-list li")).toHaveCount(0);
+  await expect(page.getByText("No active keys. Create one to call the API.", { exact: true })).toBeVisible();
   await expect(next).toBeDisabled();
   expect(creates).toBe(1);
   expect(revokes).toBe(1);
+});
+
+test("shows only active API keys and copies a usable read-only curl example", async ({ page }) => {
+  await mockAccount(page, { mode: "authenticated", username });
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.route("**/console/config", (route) => route.fulfill({ json: { api_keys: true, sandbox_admin: false, node_installer: false } }));
+  await page.route("**/console/api-keys", (route) => route.fulfill({ json: { data: [
+    { id: "11111111-1111-4111-8111-111111111111", name: "Current key", prefix: "pc_current", created_at: "2026-09-24T00:00:00Z", revoked_at: null },
+    { id: "22222222-2222-4222-8222-222222222222", name: "Old key", prefix: "pc_old", created_at: "2026-09-23T00:00:00Z", revoked_at: "2026-09-24T00:00:00Z" },
+  ] } }));
+  await page.goto("/#api-keys");
+  await expect(page.locator(".api-key-list li")).toHaveCount(1);
+  await expect(page.locator(".api-key-list")).toContainText("Current key");
+  await expect(page.locator(".api-key-list")).not.toContainText("Old key");
+  await expect(page.locator(".api-key-list-heading strong")).toHaveText("1");
+  await page.getByRole("button", { name: "Copy curl", exact: true }).click();
+  const command = await page.evaluate(() => navigator.clipboard.readText());
+  expect(command).toContain(`--url '${new URL(page.url()).origin}/v1/agents'`);
+  expect(command).toContain('Authorization: Bearer ${AGENT_CORE_API_KEY}');
+  expect(command).toContain("OpenAI-Beta: agents=v1");
+  expect(command).not.toContain("pc_current");
+  expect(command).not.toContain("pc_old");
+  expect(command.split("\n")).toHaveLength(4);
+  await expect(page.getByRole("button", { name: "Command copied", exact: true })).toBeVisible();
 });
 
 test("lets a web-only console use an existing project connection without key management", async ({ page, request }) => {

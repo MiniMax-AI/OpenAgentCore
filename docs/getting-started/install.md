@@ -76,8 +76,10 @@ console already connects to Core; no API key is needed to sign in.
 
 On a paired deployment, the first-run Home creates an Agent API key, then guides you through optional
 host enrollment and a real Agent request. Save the generated key when it is shown;
-its secret is returned only once. The **API keys** page lists safe metadata and
-lets you create or revoke keys later. You can skip or replay it from **Getting started**. Hosts registered here
+its secret is returned only once. The **API keys** page lists only active keys and
+lets you create or delete them later. Deleting a key revokes its ability to authenticate
+new requests and removes it from the list; existing Agents and Sessions remain. The page
+also provides a read-only `curl` example for listing Agents. You can skip or replay it from **Getting started**. Hosts registered here
 supply sandbox resources for **hosted** Sessions; self-hosted Sessions use their
 application-managed environments. The request workbench lets you configure model,
 provider and harness defaults and run the generated request from your machine.

@@ -24,7 +24,7 @@ export function ApiKeyPanel({ onReady }: { onReady?: (ready: boolean) => void })
   return <section className="api-key-panel" aria-label={t("API keys")}>
     {capability === "unavailable" ? <>
       <header><div className="api-key-heading"><KeyRound size={18} strokeWidth={1.5} /><h3>{t("API key management is not enabled")}</h3></div></header>
-      <p className="api-key-caption">{t("A deployment administrator needs to enable key management for this console. You can then create, view and revoke keys here.")}</p>
+      <p className="api-key-caption">{t("A deployment administrator needs to enable key management for this console. You can then create, view and delete keys here.")}</p>
       <p className="api-key-caption">{t("If you already have an Agent API key, you can keep using it for requests from your machine or application.")}</p>
       {onReady ? <p className="api-key-caption">{t("You can continue the introduction and use your signed-in console connection to create an Agent.")}</p> : null}
       <button type="button" className="button outline" onClick={() => setRevision((value) => value + 1)}><RefreshCw size={14} />{t("Check again")}</button>
@@ -37,19 +37,29 @@ export function ApiKeyPanel({ onReady }: { onReady?: (ready: boolean) => void })
 
 export function ApiKeyExample() {
   const { t } = useTranslation("firstRun");
+  const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
+  const origin = typeof window === "undefined" ? "https://core.example" : window.location.origin;
+  const command = [
+    "curl --fail-with-body --silent --show-error \\",
+    `  --url '${origin}/v1/agents' \\`,
+    '  --header "Authorization: Bearer ${AGENT_CORE_API_KEY}" \\',
+    "  --header 'OpenAI-Beta: agents=v1'",
+  ].join("\n");
+  async function copyCommand() {
+    try { await navigator.clipboard.writeText(command); setCopied(true); setCopyFailed(false); }
+    catch { setCopied(false); setCopyFailed(true); }
+  }
   return <aside className="api-key-example" aria-label={t("How an API key works")}>
-    <div className="api-key-example-topline"><span className="api-key-example-live" />{t("A request in three beats")}</div>
-    <h2>{t("Create once. Call your API.")}</h2>
-    <p>{t("Your key connects a request from your machine to Agent Core.")}</p>
-    <div className="api-key-example-scene" aria-hidden="true">
-      <div className="api-key-example-terminal"><div className="api-key-example-terminal-top"><span /><span /><span /><code>terminal</code></div>
-        <div className="api-key-example-frame frame-one"><small>01 · {t("Create a key")}</small><code>pc_demo••••••••</code></div>
-        <div className="api-key-example-frame frame-two"><small>02 · {t("Send a request")}</small><code>Authorization: Bearer pc_demo•••</code></div>
-        <div className="api-key-example-frame frame-three"><small>03 · {t("See the result")}</small><code><span>200 OK</span> · {t("Agent created")}</code></div>
-      </div>
-      <div className="api-key-example-progress"><span /><span /><span /></div>
+    <div className="api-key-example-head">
+      <span className="api-key-example-topline">GET /v1/agents</span>
+      <button type="button" className="button outline api-key-example-copy" onClick={() => void copyCommand()}><Copy size={14} aria-hidden="true" />{t(copied ? "Command copied" : "Copy curl")}</button>
     </div>
-    <p className="api-key-example-note">{t("The secret appears once when you create it. Save it before closing the message.")}</p>
+    <h2>{t("Try a real API request")}</h2>
+    <p>{t("This read-only request lists Agents. The same key can also create Agents and Sessions.")}</p>
+    <pre className="api-key-example-code"><code>{command}</code></pre>
+    <p className="api-key-example-note">{t("Set AGENT_CORE_API_KEY in a terminal that can reach this address. The key is shown only when created.")}</p>
+    {copyFailed ? <p className="api-key-error" role="alert">{t("Could not copy the command. Select and copy it manually.")}</p> : null}
   </aside>;
 }
 
@@ -93,7 +103,8 @@ function ManagedApiKeyPanel({ onReady }: { onReady?: (ready: boolean) => void })
       setUncertain(null); setId(crypto.randomUUID());
     }
   }, [uncertain, fresh, keys]);
-  const hasKey = keys.some((key) => !key.revoked_at);
+  const activeKeys = keys.filter((key) => !key.revoked_at);
+  const hasKey = activeKeys.length > 0;
   useEffect(() => { ready.current?.(fresh && hasKey && !issued && !uncertain); }, [fresh, hasKey, issued, uncertain]);
   async function create(event: FormEvent) {
     event.preventDefault();
@@ -123,7 +134,7 @@ function ManagedApiKeyPanel({ onReady }: { onReady?: (ready: boolean) => void })
       if (uncertain === keyId) { setUncertain(null); setId(crypto.randomUUID()); }
       if (issued?.id === keyId) setIssued(null);
     } catch {
-      if (!controller.signal.aborted) { setFresh(false); setError(t("Could not confirm revocation. Refresh the list to check its status.")); }
+      if (!controller.signal.aborted) { setFresh(false); setError(t("Could not confirm deletion. Refresh the list to check its status.")); }
     } finally { activeRequest.current = false; if (!controller.signal.aborted) setBusy(false); }
   }
   async function copy() {
@@ -143,13 +154,13 @@ function ManagedApiKeyPanel({ onReady }: { onReady?: (ready: boolean) => void })
       <form className="api-key-create" onSubmit={(event) => void create(event)}><label className="field"><span>{t("Key name")}</span><input value={name} onChange={(event) => { nameEdited.current = true; setName(event.target.value); }} maxLength={80} required disabled={busy || Boolean(uncertain)} /></label>
         <button type="submit" className="button primary" disabled={busy || loading || !fresh || Boolean(uncertain) || !name.trim()}><Plus size={14} />{t(busy ? "Creating key…" : "Create API key")}</button></form>}
     {error ? <p className="api-key-error" role="alert">{error}</p> : null}
-    {uncertain && keys.some((key) => key.id === uncertain) ? <p className="api-key-error" role="alert">{t("This key was created, but its secret cannot be shown again. Revoke it and create a new key.")}</p> : null}
+    {uncertain && keys.some((key) => key.id === uncertain) ? <p className="api-key-error" role="alert">{t("This key was created, but its secret cannot be shown again. Delete it and create a new key.")}</p> : null}
     {uncertain && fresh && !keys.some((key) => key.id === uncertain) ? <button type="button" className="button outline" onClick={() => { setUncertain(null); setError(null); }}>{t("Retry this creation")}</button> : null}
-    <div className="api-key-list-heading"><span>{t("Your keys")} <strong>{fresh ? keys.length : ""}</strong></span><button type="button" className="icon-button" aria-label={t("Refresh keys")} disabled={busy || loading} onClick={() => setRevision((current) => current + 1)}><RefreshCw size={14} /></button></div>
+    <div className="api-key-list-heading"><span>{t("Active keys")} <strong>{fresh ? activeKeys.length : ""}</strong></span><button type="button" className="icon-button" aria-label={t("Refresh keys")} disabled={busy || loading} onClick={() => setRevision((current) => current + 1)}><RefreshCw size={14} /></button></div>
     {loading ? <p role="status">{t("Loading API keys…")}</p> : null}
-    {!keys.length && fresh ? <p className="api-key-caption">{t("No API keys yet. Create one to get started.")}</p> : null}
-    <ul className="api-key-list">{keys.map((key) => <li key={key.id}><div><strong>{key.name}</strong><span><code>{key.prefix}…</code> · {t(key.revoked_at ? "Revoked" : "Active")}</span></div>
-      {!key.revoked_at ? <button className="first-run-text-button" type="button" disabled={busy || !fresh} onClick={() => setConfirm(key.id)}>{t("Revoke")}</button> : null}
-      {confirm === key.id ? <div className="api-key-confirm"><p>{t("Revoke this API key? Requests using it will stop working.")}</p><div className="api-key-actions"><button className="button danger" type="button" disabled={busy || !fresh} onClick={() => void revoke(key.id)}>{t("Confirm revocation")}</button><button className="button outline" type="button" disabled={busy} onClick={() => setConfirm(null)}>{t("Cancel")}</button></div></div> : null}</li>)}</ul>
+    {!activeKeys.length && fresh ? <p className="api-key-caption">{t("No active keys. Create one to call the API.")}</p> : null}
+    <ul className="api-key-list">{activeKeys.map((key) => <li key={key.id}><div><strong>{key.name}</strong><span><code>{key.prefix}…</code></span></div>
+      <button className="first-run-text-button" type="button" disabled={busy || !fresh} onClick={() => setConfirm(key.id)}>{t("Delete")}</button>
+      {confirm === key.id ? <div className="api-key-confirm"><p>{t("Delete this API key? It will stop authenticating new requests and disappear from this list. Existing Agents and Sessions remain.")}</p><div className="api-key-actions"><button className="button danger" type="button" disabled={busy || !fresh} onClick={() => void revoke(key.id)}>{t("Delete key")}</button><button className="button outline" type="button" disabled={busy} onClick={() => setConfirm(null)}>{t("Cancel")}</button></div></div> : null}</li>)}</ul>
   </section>;
 }

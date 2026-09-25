@@ -27,28 +27,13 @@
 .api-key-confirm { flex-basis: 100%; font-size: 12px; }
 .api-key-error { color: var(--danger); font-size: 12px; line-height: 1.6; }
 .api-key-example { overflow: hidden; padding: 28px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-subtle); }
-.api-key-example-topline { display: inline-flex; align-items: center; gap: 8px; color: var(--accent); font: 600 11px/1.4 var(--font-mono); letter-spacing: .04em; }
-.api-key-example-live { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent); }
+.api-key-example-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.api-key-example-topline { color: var(--accent); font: 600 11px/1.4 var(--font-mono); letter-spacing: .04em; }
+.api-key-example-copy { min-height: 32px; padding: 5px 9px; font-size: 12px; white-space: nowrap; }
 .api-key-example h2 { margin: 15px 0 8px; font-size: 22px; font-weight: 600; letter-spacing: -.035em; }
-.api-key-example > p { margin: 0; max-width: 34ch; color: var(--fg-muted); font-size: 13px; line-height: 1.6; }
-.api-key-example-scene { margin-top: 28px; }
-.api-key-example-terminal { position: relative; height: 190px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 10px; color: var(--fg); background: var(--surface); box-shadow: var(--shadow-control); }
-.api-key-example-terminal-top { display: flex; align-items: center; gap: 5px; height: 31px; padding: 0 11px; border-bottom: 1px solid var(--line); }
-.api-key-example-terminal-top > span { width: 6px; height: 6px; border-radius: 50%; background: var(--line-strong); }
-.api-key-example-terminal-top code { margin-left: auto; color: var(--fg-muted); font-size: 10px; }
-.api-key-example-frame { position: absolute; inset: 31px 0 0; display: flex; flex-direction: column; justify-content: center; gap: 15px; padding: 22px; opacity: 0; animation: api-example-frame 9s infinite; }
-.api-key-example-frame small { color: var(--accent); font-size: 12px; font-weight: 600; }
-.api-key-example-frame code { overflow-wrap: anywhere; font: 12px/1.6 var(--font-mono); }
-.api-key-example-frame code span { color: var(--success); font-weight: 600; }
-.api-key-example-frame.frame-two { animation-delay: 3s; }
-.api-key-example-frame.frame-three { animation-delay: 6s; }
-.api-key-example-progress { display: flex; gap: 5px; margin-top: 12px; }
-.api-key-example-progress span { flex: 1; height: 3px; border-radius: 3px; background: var(--line-strong); animation: api-example-progress 9s infinite; }
-.api-key-example-progress span:nth-child(2) { animation-delay: 3s; }
-.api-key-example-progress span:nth-child(3) { animation-delay: 6s; }
-.api-key-example .api-key-example-note { margin-top: 25px; font-size: 12px; }
-@keyframes api-example-frame { 0%, 30% { opacity: 1; transform: translateY(0); } 33%, 100% { opacity: 0; transform: translateY(8px); } }
-@keyframes api-example-progress { 0%, 30% { background: var(--accent); } 33%, 100% { background: var(--line-strong); } }
+.api-key-example > p { margin: 0; color: var(--fg-muted); font-size: 13px; line-height: 1.6; }
+.api-key-example-code { max-width: 100%; overflow-x: auto; margin: 20px 0 0; padding: 16px; border: 1px solid var(--line-strong); border-radius: 9px; color: var(--fg); background: var(--surface); font: 11px/1.7 var(--font-mono); }
+.api-key-example-code code { white-space: pre; }
+.api-key-example .api-key-example-note { margin-top: 15px; font-size: 12px; }
 @media (max-width: 1000px) { .api-keys-layout { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 640px) { .api-keys-body { padding: 20px 16px; } .api-key-panel, .api-key-example { padding: 20px; } .api-key-create { flex-direction: column; align-items: stretch; } }
-@media (prefers-reduced-motion: reduce) { .api-key-example-frame, .api-key-example-progress span { animation: none; } .api-key-example-frame.frame-one { opacity: 1; } .api-key-example-progress span:first-child { background: var(--accent); } }
