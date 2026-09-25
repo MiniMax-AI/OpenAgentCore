@@ -83,7 +83,7 @@ account/resource ownership before accepting a replacement key; an inaccessible
 sandbox or empty listing from another account is not proof of cleanup.
 
 For own machines, click **Add node**, copy the installation command from the dialog, and run it on
-the target Linux amd64 host. The command uses the saved deployment origin. Before
+the target Linux amd64 host. The command uses the installation public URL. Before
 installing, it reads the active specification with its enrollment token; this read
 does not consume the token. The local provider file is an installed copy of the
 server configuration and cannot select a different Runtime or resource profile.

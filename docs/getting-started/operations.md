@@ -150,6 +150,8 @@ replacement. Stop the services, then:
 | `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` | `AGENTS_API_CORE_KEY_DIGESTS_FILE` | `config/core.env`; its value names the renamed file |
 | `CORE_CONSOLE_ADMIN_TOKEN_FILE` | `CORE_CONSOLE_CORE_KEY_FILE` | Web `environment` in `compose.json` |
 | `--admin-token-file` | `--core-key-file` | `install.sh --web-only` flag; the installer rejects the old flag |
+| `AGENTS_API_DAEMON_WS_URL` (a `wss://…/api/v1/agent-daemon/ws` URL) | `AGENTS_API_PUBLIC_URL` (the origin only, such as `https://core.example`) | `config/core.env` |
+| `AGENTS_API_CONFIG_FILE` | None; delete the line | `config/core.env` |
 
 Also remove `CORE_CONSOLE_AUTH_MODE`, `CORE_CONSOLE_STATE_DIR` and
 `CORE_CONSOLE_PASSWORD_FILE` from Web's environment, with their `state/console`
@@ -157,6 +159,15 @@ and `config/console.password` mounts. Web no longer has accounts, passwords or
 Basic authentication, and it refuses to start while those settings are present.
 The old account state is not read; delete it after the upgrade or keep it as a
 backup. Then start the services and sign in with the Core key.
+
+Before upgrading an installation with sandbox nodes, read
+`GET /core/v1/sandbox/deployment` with the Core key and set
+`AGENTS_API_PUBLIC_URL` to its `core_url`. The deployment no longer stores that
+address, and nodes keep the one they enrolled with; with any other value, every
+existing node counts as bound to another address and must be re-added.
+Optionally move the password out of `AGENTS_API_DATABASE_URL` into the file named
+by `AGENTS_API_DATABASE_PASSWORD_FILE` (for example `/config/database.password`).
+The installer's upcoming `install.sh --convert` makes these changes for you.
 
 ## Projects and API keys
 

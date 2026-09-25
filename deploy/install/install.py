@@ -22,7 +22,7 @@ import urllib.request
 from urllib.parse import urlsplit
 import uuid
 
-from configuration import compose_config, core_environment, environment_text, read_core_environment
+from configuration import compose_config, core_environment, environment_text, read_core_environment, valid_core_origin
 import local_node
 import native_service
 from distribution import DistributionError, artifact, image_identities, ensure_docker_image
@@ -122,12 +122,18 @@ def origin_port(value):
 
 
 def public_origin(value):
-    # Core accepts only a canonical origin: lowercase scheme and host, no IPv6 literal.
-    value = core_target(value)
-    parsed = urlsplit(value)
-    if "[" in parsed.netloc:
-        raise argparse.ArgumentTypeError("Public URL must use a host name or IPv4 address")
-    return parsed._replace(scheme=parsed.scheme.lower(), netloc=parsed.netloc.lower()).geturl()
+    # Normalize case and a trailing slash, then apply Core's exact origin rule.
+    try:
+        parsed = urlsplit(value.strip())
+        if parsed.path == "/":
+            parsed = parsed._replace(path="")
+        value = parsed._replace(scheme=parsed.scheme.lower(), netloc=parsed.netloc.lower()).geturl()
+    except ValueError:
+        value = ""
+    if not valid_core_origin(value):
+        raise argparse.ArgumentTypeError("Public URL must be an HTTPS origin such as https://core.example, "
+                                         "without path, credentials, query or fragment; plain HTTP only for a loopback host")
+    return value
 
 
 def arguments(argv=None):

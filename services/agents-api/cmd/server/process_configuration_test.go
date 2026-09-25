@@ -41,7 +41,7 @@ func TestRetiredConfigurationRejectedWithoutReadingValues(t *testing.T) {
 }
 
 func TestRetiredAddressAndConfigSettingsNameTheirReplacement(t *testing.T) {
-	for key, replacement := range map[string]string{"AGENTS_API_DAEMON_WS_URL": "AGENTS_API_PUBLIC_URL", "AGENTS_API_CONFIG_FILE": "AGENTS_API_SETTINGS_FILE"} {
+	for key, replacement := range map[string]string{"AGENTS_API_DAEMON_WS_URL": "AGENTS_API_PUBLIC_URL", "AGENTS_API_CONFIG_FILE": "remove it"} {
 		t.Run(key, func(t *testing.T) {
 			t.Setenv(key, "wss://private.example/api/v1/agent-daemon/ws")
 			err := validateProcessConfiguration()

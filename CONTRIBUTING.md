@@ -737,8 +737,9 @@ server receives the private key, uses it for sign-in and injects it only on
 never receives that key. Node and daemon connections use `/api/v1`
 with their own credentials; the reverse proxy sends them directly to Core, never
 through Web. Zero-node Core receives neither the Docker socket nor KVM.
-The Web and deployment administrator API select one provider, public Core origin,
-per-sandbox resources and immutable Runtime release. PostgreSQL owns this complete,
+The Web and deployment administrator API select one provider, per-sandbox
+resources and immutable Runtime release; the Core address comes from the
+installation public URL. PostgreSQL owns this complete,
 generation-tagged selection under the existing execution lease and deployment lock.
 The shared `sandbox.DeploymentSpec` defines required CPU/memory and supported disk
 limits plus Runtime provenance; neither a node file nor the installer owns another
@@ -779,13 +780,13 @@ A locally unavailable provider dependency keeps hosted admission closed while th
 existing scan waits for repair; administrator recovery remains available, including
 on restart. Database and ownership errors remain failures. Unconfigured hosted
 admission creates no Session state. Derive Runtime bootstrap and daemon WebSocket
-addresses from the saved validated origin, never inbound Host headers. Read the
+addresses from the validated installation public URL, never inbound Host headers. Read the
 current selection from the live deployment API; there is no startup configuration
 read.
 
 Provider, resources and Runtime changes require maintenance, the current generation
-and verified zero retained or pending resources. The Core origin remains unchanged
-by this operation. Maintenance prevents fresh hosted Sessions and allocations while
+and verified zero retained or pending resources. They never change the Core
+address, which comes from the installation public URL. Maintenance prevents fresh hosted Sessions and allocations while
 retaining admitted work, known receipts, queries and explicit cleanup. Unreleased
 allocations include stopped compute, snapshots, uncertain operations and pending
 cleanup. Pending hosted Environments without allocations also block changes.
@@ -1880,7 +1881,7 @@ liveness only, never invented traffic or work; offline/stale connections are
 static and reduced-motion preferences disable decorative animation. Node selection
 reveals inspection details. Installation identifiers, provider metadata and
 allocation records are secondary content. Node enrollment is an explicit Add node action in a focused
-dialog, using the saved Core origin or the paired console origin by default.
+dialog, using the deployment's `core_url` (the installation public URL).
 Do not expose routine network wiring or manual runtime setup as the primary flow.
 Generate a one-time command only on user intent, never retry enrollment writes
 automatically, and discard credentials and late responses when the dialog closes

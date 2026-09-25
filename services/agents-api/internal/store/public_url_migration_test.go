@@ -13,9 +13,9 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
-// The deployment's saved Core address moves to each node it enrolled, and a
-// rollback takes it back from them.
-func TestPublicURLMigrationMovesTheAddressToNodes(t *testing.T) {
+// publicURLMigrationSchema migrates an isolated schema up to version 74.
+func publicURLMigrationSchema(t *testing.T) (*sql.DB, *goose.Provider) {
+	t.Helper()
 	_, pool := testStore(t)
 	ctx := t.Context()
 	schema := "public_url_" + uuid.NewString()[:8]
@@ -39,6 +39,14 @@ func TestPublicURLMigrationMovesTheAddressToNodes(t *testing.T) {
 	if _, err := provider.UpTo(ctx, 74); err != nil {
 		t.Fatal(err)
 	}
+	return db, provider
+}
+
+// The deployment's saved Core address moves to each node it enrolled, and a
+// rollback takes it back from them.
+func TestPublicURLMigrationMovesTheAddressToNodes(t *testing.T) {
+	ctx := t.Context()
+	db, provider := publicURLMigrationSchema(t)
 	installation, active, removed := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	if _, err := db.ExecContext(ctx, `UPDATE runtime_deployment SET installation_id=$1, web_managed=true, provider_kind='docker', mode='nodes', generation=1,
 		core_url='https://core.example', backend_fingerprint=$2`, installation, strings.Repeat("a", 64)); err != nil {
@@ -73,5 +81,22 @@ func TestPublicURLMigrationMovesTheAddressToNodes(t *testing.T) {
 	var restored string
 	if err := db.QueryRowContext(ctx, "SELECT core_url FROM runtime_deployment").Scan(&restored); err != nil || restored != "https://core.example" {
 		t.Fatal("rollback lost the deployment address", restored, err)
+	}
+}
+
+// An E2B deployment has no node to take its address back from, so the
+// rollback refuses instead of leaving the deployment without one.
+func TestPublicURLMigrationRollbackRefusesE2B(t *testing.T) {
+	ctx := t.Context()
+	db, provider := publicURLMigrationSchema(t)
+	if _, err := db.ExecContext(ctx, `UPDATE runtime_deployment SET installation_id=$1, web_managed=true, provider_kind='e2b', mode='direct', generation=1,
+		core_url='https://core.example', backend_fingerprint=$2, e2b_template='runtime:build', e2b_credential='\x01'`, uuid.NewString(), strings.Repeat("a", 64)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.UpTo(ctx, 75); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.DownTo(ctx, 74); err == nil || !strings.Contains(err.Error(), "Cannot restore the sandbox deployment Core address") {
+		t.Fatal("rollback discarded the E2B deployment address", err)
 	}
 }

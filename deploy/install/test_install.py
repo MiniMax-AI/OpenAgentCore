@@ -555,11 +555,24 @@ class InstallerTests(unittest.TestCase):
     def test_public_url_is_canonical_for_core(self):
         for origin, expected in (("HTTPS://Core.Example", "https://core.example"),
                                  ("http://localhost:8080/", "http://localhost:8080"),
-                                 ("http://127.0.0.1:8080", "http://127.0.0.1:8080")):
+                                 ("https://[2001:db8::1]", "https://[2001:db8::1]")):
             with self.subTest(origin=origin):
                 self.assertEqual(self.args("--public-url", origin).public_url, expected)
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            install.arguments(["--public-url", "https://[2001:db8::1]"])
+            install.arguments(["--public-url", "https://core_example"])
+
+    def test_public_url_rule_matches_core(self):
+        # The same cases as Core's TestSandboxCoreURLValidation.
+        for origin in ("https://core.example", "https://core.example:8443", "http://localhost:8091",
+                       "http://127.0.0.2:8091", "http://[::1]:8091", "https://[2001:db8::1]"):
+            self.assertTrue(install.valid_core_origin(origin), origin)
+        for origin in ("", "http://core.example", "http://core:8091", "http://host.localhost", "https://core.example/",
+                       "https://user:secret@core.example", "https://core.example/path", "https://core.example?",
+                       "https://core.example#x", "https://CORE.example", "https://core.example:", "https://core.example:0",
+                       "https://core.example:65536", "https://core.example:0080", "https://core.example:0443",
+                       "https://core.example\\evil", "https://[not-an-ip]", "https://-core.example", "https://core..example",
+                       "https://core_example", "https://core.example.", "https://b\u00fccher.example"):
+            self.assertFalse(install.valid_core_origin(origin), origin)
 
     def test_local_opt_in_requires_non_loopback_https_origin_before_installation(self):
         for provider in ("docker", "microsandbox"):

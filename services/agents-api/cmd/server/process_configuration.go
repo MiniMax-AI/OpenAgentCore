@@ -32,7 +32,7 @@ func validateProcessConfiguration() error {
 		return errors.New("AGENTS_API_DAEMON_WS_URL is retired; set AGENTS_API_PUBLIC_URL to the public Core origin, such as https://core.example, and Core derives the daemon WebSocket URL")
 	}
 	if _, present := os.LookupEnv("AGENTS_API_CONFIG_FILE"); present {
-		return errors.New("AGENTS_API_CONFIG_FILE is retired; the installer names its settings snapshot with AGENTS_API_SETTINGS_FILE")
+		return errors.New("AGENTS_API_CONFIG_FILE is retired and has no replacement; remove it")
 	}
 	for _, retired := range []string{"AGENTS_API_MANAGED_RUNTIMES_FILE", "AGENTS_API_SANDBOX_NODE_STATE_DIR", "AGENTS_API_SANDBOX_NODE_CORE_URL"} {
 		if _, present := os.LookupEnv(retired); present {

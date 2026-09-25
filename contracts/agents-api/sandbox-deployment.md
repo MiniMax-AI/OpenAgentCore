@@ -45,8 +45,10 @@ safely, but never raise its limits.
 
 Each node in `GET /core/v1/sandbox/nodes` and its detail reports `core_url`: the
 installation public URL when the node enrolled. A node whose `core_url` differs from
-the current public URL receives no new sandboxes; its retained sandboxes can still
-resume while the old address reaches Core. Remove it and add it again.
+the current public URL receives no new placements. Work already placed on it
+finishes there: a hosted Environment that was placed but not yet allocated before
+the change is still allocated on that node, and its retained sandboxes can still
+resume, while the old address reaches Core. Remove it and add it again.
 
 `GET /core/v1/sandbox/nodes/{node_id}/allocations` lists the node's unreleased
 allocations. Each item's `compute_phase_changed_at` is the time the allocation
@@ -194,8 +196,8 @@ For a replacement:
 2. Verify both response counts are zero before replacing the selection. Stopped
    compute, snapshots, uncertain operations, pending cleanup and unallocated
    hosted Environments remain blockers. Use the explicit Session archive flow below.
-3. PUT the complete replacement selection with `expected_generation: N` and the
-   unchanged Core origin. Core checks the generation and resources, prepares and
+3. PUT the complete replacement selection with `expected_generation: N`, without
+   `core_url` (a request that contains it gets 400). Core checks the generation and resources, prepares and
    validates the candidate, then drains the existing manager calls. A short Store
    transaction repeats the guards and commits a changed selection, increments
    its generation and retires old nodes and unused enrollment tokens together.

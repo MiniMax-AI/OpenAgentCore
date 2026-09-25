@@ -153,7 +153,10 @@ export class SandboxAdminClient {
       // The public-URL rejection is safe to show unless it somehow reflects the key.
       const key = input.e2b.api_key;
       if (error instanceof AgentCoreError && error.status === 409 && error.code === "sandbox_configuration_error"
-        && !error.message.includes(key) && !(error.param ?? "").includes(key)) throw error;
+        && !error.message.includes(key) && !(error.param ?? "").includes(key)) {
+        // Only Core's message and param pass through; nothing else from the response does.
+        throw new AgentCoreError(error.message, 409, "sandbox_configuration_error", error.param ?? null);
+      }
       // Any other credential-bearing rejection may reflect the key in any error field.
       throw new AgentCoreError("Sandbox configuration could not be confirmed. Refresh before submitting again.", error instanceof AgentCoreError ? error.status : 0, "sandbox_configuration_unconfirmed");
     }

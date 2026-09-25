@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import { OpenAIAgentsClient } from "./client";
+import { AgentCoreError, OpenAIAgentsClient } from "./client";
 import { SandboxAdminClient, type SandboxNode } from "./sandbox-client";
 
 function response(value: unknown, status = 200) { return new Response(JSON.stringify(value), { status }); }
@@ -132,12 +132,14 @@ describe("hosted provider configuration", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
   it("shows Core's public-URL rejection unless it reflects the E2B key", async () => {
-    const rejection = { message: "E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback.", code: "sandbox_configuration_error", param: null };
+    const rejection = { message: "E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback.", code: "sandbox_configuration_error", param: null, type: "reflected" };
     const fetch = vi.fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(response({ error: rejection }, 409))
       .mockResolvedValueOnce(response({ error: { ...rejection, message: rejection.message + e2b.api_key } }, 409));
     const client = new SandboxAdminClient({ fetch });
-    await expect(client.initializeDeployment({ provider: "e2b", e2b })).rejects.toMatchObject({ status: 409, code: "sandbox_configuration_error", message: rejection.message, param: null });
+    const shown = await client.initializeDeployment({ provider: "e2b", e2b }).catch((error: unknown) => error);
+    expect(shown).toMatchObject({ status: 409, code: "sandbox_configuration_error", message: rejection.message, param: null });
+    expect((shown as AgentCoreError).errorType).toBeUndefined();
     await expect(client.initializeDeployment({ provider: "e2b", e2b })).rejects.toMatchObject({ status: 409, code: "sandbox_configuration_unconfirmed" });
   });
   it("never retries uncertain switch or maintenance writes", async () => {

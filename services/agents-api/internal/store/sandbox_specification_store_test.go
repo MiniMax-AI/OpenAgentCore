@@ -365,3 +365,20 @@ func TestNodeBoundToAnotherPublicURLGetsNoNewSandboxes(t *testing.T) {
 		t.Fatal("node on the current address rejected placement", err)
 	}
 }
+
+// An E2B selection saved before the public URL became loopback admits no new
+// Session, and its configuration stays readable for cleanup.
+func TestE2BAdmitsNothingWhileThePublicURLIsLoopback(t *testing.T) {
+	s, _, _, _ := webSpecificationFixture(t, "e2b")
+	s.SetPublicURL("http://127.0.0.1:8091")
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, ErrSandboxPublicURLUnreachable) {
+		t.Fatal("admitted an E2B Session that could not reach Core", err)
+	}
+	if setup, err := s.GetSandboxSetup(t.Context()); err != nil || setup.Provider != "e2b" {
+		t.Fatal("the saved E2B selection became unreadable", err)
+	}
+	s.SetPublicURL("https://core.example")
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); err != nil {
+		t.Fatal(err)
+	}
+}

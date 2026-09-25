@@ -12,7 +12,8 @@ import (
 )
 
 func TestSandboxCoreURLValidation(t *testing.T) {
-	for _, value := range []string{"https://core.example", "https://core.example:8443", "http://localhost:8091", "http://127.0.0.2:8091", "http://[::1]:8091"} {
+	// deploy/install/test_install.py checks the installer's valid_core_origin against the same cases.
+	for _, value := range []string{"https://core.example", "https://core.example:8443", "http://localhost:8091", "http://127.0.0.2:8091", "http://[::1]:8091", "https://[2001:db8::1]"} {
 		if err := ValidateSandboxCoreURL(value); err != nil {
 			t.Errorf("rejected %q: %v", value, err)
 		}
@@ -22,7 +23,7 @@ func TestSandboxCoreURLValidation(t *testing.T) {
 			t.Errorf("accepted %q: %v", value, err)
 		}
 	}
-	for _, value := range []string{"https://[not-an-ip]", "https://-core.example", "https://core..example", "https://core_example"} {
+	for _, value := range []string{"https://[not-an-ip]", "https://-core.example", "https://core..example", "https://core_example", "https://core.example.", "https://bücher.example", "https://core.example:0443"} {
 		if err := ValidateSandboxCoreURL(value); !errors.Is(err, ErrInvalidInput) {
 			t.Errorf("accepted invalid hostname %q: %v", value, err)
 		}

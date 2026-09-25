@@ -19,6 +19,12 @@ func reserveRuntimePlacement(ctx context.Context, q *sqlc.Queries, session pgtyp
 		if d.Maintenance {
 			return ErrRuntimeNodeUnavailable
 		}
+		// E2B guests reach Core over the internet. A selection saved before the
+		// public URL became loopback admits nothing, while its existing sandboxes
+		// stay reachable for cleanup through the loaded provider.
+		if LoopbackOrigin(publicURL) {
+			return ErrSandboxPublicURLUnreachable
+		}
 		return nil
 	}
 	if d.ProviderKind == "" {
