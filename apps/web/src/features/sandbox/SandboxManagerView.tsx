@@ -85,7 +85,8 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const refresh = useCallback(() => {
     // Each refresh starts a new read (cancelling one in flight) and resets the forms, as a reload did.
     setRevision((value) => value + 1);
-    void refetch();
+    // Settles when the read does; the enrollment dialog waits for it before calling a command expired.
+    return refetch();
   }, [refetch]);
   const toast = useToast();
   // A refresh the administrator asks for reports its failure even while an earlier one is still unconfirmed;

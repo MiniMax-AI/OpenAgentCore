@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { Check, Copy, Terminal, TriangleAlert } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { SandboxAdminClient, SandboxDeployment, SandboxNode } from "@agents-core-web/agents-client";
 import { useTranslation } from "react-i18next";
 import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";
@@ -38,7 +38,9 @@ interface Enrollment extends EnrollmentTarget {
  * The page keeps this dialog mounted, so a command survives closing it: it is
  * shown again until it expires or its node connects. An expired command is
  * replaced only when the administrator asks. After the command, the dialog
- * follows the new node through the node list it polls.
+ * follows the new node through the node list: read on each opening, every few
+ * seconds while open, and once more at expiry, since a node registered by the
+ * command outranks its expiry.
  */
 export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open, fresh, onClose, onRefresh }: {
   client: SandboxAdminClient;
@@ -48,7 +50,8 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   open: boolean;
   fresh: boolean;
   onClose: () => void;
-  onRefresh: () => void;
+  /** Reads the page's node list again; settles when the read has. */
+  onRefresh: () => Promise<unknown>;
 }) {
   const { t, i18n } = useTranslation("sandbox");
   const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
@@ -63,6 +66,9 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const [copyFailed, setCopyFailed] = useState(false);
   const [now, setNow] = useState(Date.now);
   const [requirementsOpen, setRequirementsOpen] = useState(() => !requirementsSeen());
+  // When the latest node-list read this dialog asked for began (Date.now()), once it has finished.
+  const [checkedAt, setCheckedAt] = useState(0);
+  const reading = useRef(false);
   const generation = useRef(0);
   const request = useRef<AbortController | null>(null);
   const sourceUrl = sandboxCoreOrigin(window.location.origin);
@@ -88,13 +94,29 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   // the command on that host resumes with the node's retained identity.
   const registered = progress.stage !== "waiting";
   const ready = progress.stage === "ready" && fresh;
-  const expired = Boolean(enrollment && Date.parse(enrollment.expires_at) <= now);
+  const expiresAt = enrollment ? Date.parse(enrollment.expires_at) : 0;
+  const lapsed = Boolean(enrollment && expiresAt <= now);
+  // Expired only once a read begun after the expiry found no node for the command.
+  const expired = lapsed && checkedAt >= expiresAt;
   const command = enrollment && available && (registered || !expired) && !ready
     ? nodeInstallCommand(enrollment.token, coreUrl!, sourceUrl!, deployment.provider, deployment.installation_id, consoleConfig.node_installer_sha256) : "";
   const nodeId = node?.id ?? null;
   const polling = open && enrollment !== null && !ready && (registered || !expired);
+  const check = useCallback(async () => {
+    if (reading.current) return;
+    reading.current = true;
+    const started = Date.now();
+    try { await onRefresh(); } finally { reading.current = false; }
+    setCheckedAt((current) => Math.max(current, started));
+  }, [onRefresh]);
   useEffect(() => () => { generation.current++; request.current?.abort(); }, []);
   useEffect(() => { if (open) rememberRequirementsSeen(); }, [open]);
+  // The command's node may have registered while the dialog was closed.
+  useEffect(() => { if (open && enrollment) void check(); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  // At expiry, one more read decides between the command's node and "Command expired".
+  useEffect(() => {
+    if (open && lapsed && !registered && checkedAt < expiresAt) void check();
+  }, [open, lapsed, registered, checkedAt, expiresAt, check]);
   // The installer's wait for readiness counts from when the node appears.
   useEffect(() => {
     if (nodeId) setAppeared((current) => (current?.id === nodeId ? current : { id: nodeId, at: Date.now() }));
@@ -107,9 +129,9 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   }, [open, enrollment, ready]);
   useEffect(() => {
     if (!polling) return;
-    const interval = window.setInterval(onRefresh, 3000);
+    const interval = window.setInterval(() => void check(), 3000);
     return () => window.clearInterval(interval);
-  }, [polling, onRefresh]);
+  }, [polling, check]);
   function close() {
     generation.current++;
     request.current?.abort(); request.current = null;
@@ -137,6 +159,12 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
       // Capture the current node set before issuing a one-time enrollment token.
       const current = await client.listNodes({ signal: controller.signal });
       if (controller.signal.aborted) return;
+      // A node the previous command enrolled since the last read is that command's success:
+      // follow it instead of folding it into a new command's known nodes.
+      if (enrollment && enrolledNode(current.data, enrollment, suspends)) {
+        await onRefresh();
+        return;
+      }
       const known = new Set(current.data.map((entry) => entry.id));
       const result = await client.createEnrollment({ signal: controller.signal }, capacity);
       if (!controller.signal.aborted) {

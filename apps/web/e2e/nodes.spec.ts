@@ -50,9 +50,16 @@ test("adds a node: host requirements, a countdown, the same command after closin
   await expect(field).toHaveValue(/enroll_fixture_/);
   await expect(field).not.toHaveValue(first);
 
-  // The node registers; past the installer's minute without connecting, the dialog points at its log.
+  // The node registers while the dialog is closed and the command lapses: reopening reads the
+  // node list, and the command's node outranks its expiry.
+  await add.getByRole("button", { name: "Close dialog" }).click();
+  await expect(add).toBeHidden();
   await setNode(request, { id: "node-new", name: "edge-04" });
+  await page.clock.fastForward("10:30");
+  await page.getByRole("button", { name: "Add node" }).click();
   await expect(progress).toHaveText(/Registered · edge-04.*Waiting to connect.*Docker ready/);
+  await expect(add.getByText("Command expired")).toHaveCount(0);
+  // Past the installer's minute without connecting, the dialog points at the node's log.
   await page.clock.fastForward("01:01");
   const problem = add.getByRole("alert");
   await expect(problem).toContainText("Not connected yet");
