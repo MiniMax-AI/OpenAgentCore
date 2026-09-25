@@ -15,14 +15,14 @@ the administrator API are defined by the [administrator API contract](../../cont
 
 | Interface | Paths | Authentication | Console use |
 | --- | --- | --- | --- |
-| Console server | `/console/auth`, `/console/auth/{setup,login,logout}`, `/console/config` | Console account (session cookie) or legacy Basic authentication | Sign-in and sign-out; non-secret capability flags such as `sandbox_admin` |
+| Console server | `/console/auth`, `/console/auth/{login,logout}`, `/console/config` | Core key at sign-in, then the console session cookie | Sign-in with the Core key and sign-out; non-secret capability flags such as `sandbox_admin` |
 | Administrator API | `/core/v1/admin/**` | Deployment administrator credential, added by the console server | Projects, keys, resource reads and deletion, provenance, summaries, Runtime observations |
 | Sandbox administration | `/core/v1/sandbox/**` | Deployment administrator credential, added by the console server | Nodes page; fleet and capacity figures on Overview and Sandbox metrics |
 | Agents API | `/v1/**` | Project API key | Not used. The first-run screen shows a `curl` example for `/v1/agents` with a `$PROJECT_API_KEY` placeholder; the console never sends it |
 
-Browser requests are same-origin and carry only the console sign-in. The browser
-never holds or sends the deployment credential, an API key or an `OpenAI-Beta`
-header. Responses are validated: a malformed value is reported as a failure, or
+Browser requests are same-origin and carry only the console session. The browser
+sends the Core key once, in the sign-in request body, and never stores it; it never
+holds or sends an API key or an `OpenAI-Beta` header. Responses are validated: a malformed value is reported as a failure, or
 marked as unrecognised where noted below, and never replaced by a guessed or zero
 value.
 

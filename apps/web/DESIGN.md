@@ -580,9 +580,13 @@ the Parsar mark on a tile with a travelling border beam, and two orbits of
 Agents, Sessions, Skills, Vaults, files, templates and machines around it; the
 Parsar mark is itself nodes on a ring. Brand copy sits bottom-left in solid
 ink; it is a paragraph, not a heading, because the panel's title names the task.
-First run is three steps with numbered progress in the panel header: the
-administrator account, the first project and its key (shown once; the example
-request types itself into a terminal), and a three-chapter tour — Monitor,
+Signing in asks for one thing, the deployment's Core key, in a single password
+field; where the key is kept and what it can do sit behind a help tip beside the
+label, and a refused key, too many attempts or an unavailable console is an error
+beside the field. When no project exists yet, first run follows on the same stage
+in two steps with numbered progress in the panel header: the first project and its
+project API key (shown once; the example request types itself into a terminal),
+and a three-chapter tour — Monitor,
 Resources, Platform — whose stage shows a real dark screenshot of those pages,
 tilted towards the panel. Steps change inside a View Transition: the stage holds
 still while the panel slides and blurs across; opening the console dissolves

@@ -1,5 +1,6 @@
 /*
- * Onboarding: administrator setup, the first project and key, and the tour.
+ * Onboarding: signing in with the Core key, the first project and its API key,
+ * and the tour.
  * A dark stage (always dark, whatever the theme) holds the brand moment — Core
  * as the Parsar mark with its orbits, or a screenshot of the console during
  * the tour; the panel beside it follows the console theme and holds the task.
@@ -282,7 +283,7 @@
   color: #fff;
 }
 
-/* The account form and the first project screens inside the panel. */
+/* The sign-in form and the first project screens inside the panel. */
 .onboarding-panel .console-auth-form,
 .onboarding-panel .first-key-column {
   width: 100%;
@@ -296,11 +297,6 @@
   font-weight: 600;
   line-height: 1.3;
   letter-spacing: -0.02em;
-}
-
-.onboarding-preparing {
-  color: var(--ink-3);
-  font-size: 13px;
 }
 
 /* The example request types itself into a terminal. */

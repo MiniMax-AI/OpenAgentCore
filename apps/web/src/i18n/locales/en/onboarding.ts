@@ -1,17 +1,14 @@
 export const onboarding = {
   steps: {
     label: "Setup progress",
-    account: "Administrator",
-    project: "Project and key",
+    project: "Project and API key",
     tour: "Your console",
   },
   stage: {
-    account: { title: "One Core. Many Agents.", body: "Connect your machines, run your Agents, and watch every Session from one console." },
-    login: { title: "Welcome back to your Core.", body: "Your Agents, Sessions and machines, where you left them." },
+    login: { title: "One Core. Many Agents.", body: "Connect your machines, run your Agents, and watch every Session from one console." },
     project: { title: "A project holds the work.", body: "Agents, Sessions, Skills, files and Vaults belong to a project. Applications reach it with the project's API keys." },
     orbit: "Core and what it manages: Agents, Sessions, Skills, Vaults, files, templates and machines",
   },
-  preparing: "Preparing your console…",
   terminal: "Try it in a terminal",
   tour: {
     eyebrow: "Your console · {{n}} of {{total}}",
@@ -43,7 +40,7 @@ export const onboarding = {
         name: "Platform",
         title: "The deployment itself.",
         points: [
-          "Projects and keys: create projects, issue keys once, revoke or archive.",
+          "Projects and keys: create projects, issue project API keys shown once, revoke or archive.",
           "Nodes: add your machines with one command and watch their capacity.",
           "System: the Core build and how it was started.",
         ],

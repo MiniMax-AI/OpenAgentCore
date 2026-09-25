@@ -3,8 +3,11 @@ import { expect, type APIRequestContext, type Page } from "@playwright/test";
 const fixture = `http://127.0.0.1:${process.env.AGENTS_FIXTURE_PORT ?? 18092}`;
 const web = `http://127.0.0.1:${process.env.AGENTS_WEB_PORT ?? 4174}`;
 
-/** Fresh fixture state: "setup" (no administrator yet), "login" or "authenticated". */
-export async function resetFixture(request: APIRequestContext, auth: "setup" | "login" | "authenticated" = "authenticated", options: { fresh?: boolean; sandbox?: "configured" | "none" | "e2b" } = {}) {
+/** The fixture deployment's Core key; the same value as CORE_KEY in fixture-console.mjs. */
+export const FIXTURE_CORE_KEY = "fixture-core-key-3f9a2c71";
+
+/** Fresh fixture state: signed out ("login") or already signed in ("authenticated"). */
+export async function resetFixture(request: APIRequestContext, auth: "login" | "authenticated" = "authenticated", options: { fresh?: boolean; sandbox?: "configured" | "none" | "e2b" } = {}) {
   await request.post(`${fixture}/__fixture/reset?auth=${auth}${options.fresh ? "&projects=none" : ""}&sandbox=${options.sandbox ?? "configured"}`);
 }
 
