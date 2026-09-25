@@ -79,7 +79,7 @@ configuration and a separately installed execution daemon are still required;
 these binaries do not establish full protocol coverage. For a standalone Linux
 container, see [Container deployment](CONTAINER.md).
 
-`make build-agents-api-release` packages the same four commands in a versioned
+`make build-agents-api-release` packages these commands and `parsar-sandbox-node` in a versioned
 Linux amd64 archive, with source/protocol identity, checksums, a license and
 [operator instructions](RELEASE.md). Build from a clean Git worktree with Go and
 Python 3.9+; output defaults to `~/.parsar/build/agents-api-release` (or
@@ -93,9 +93,12 @@ AGENTS_API_RELEASE_RUNTIME_IMAGE=sha256:<qualified-image-ID> make build-agents-a
 
 The resulting `agents-api-docker-<revision>-linux-amd64.tar.gz` also contains the
 Runtime image export, committed seccomp policy and [hosted guide](HOSTED-RELEASE.md).
-Consumers load the included image and start the extracted Core; no source checkout
-or compiler is needed. The builder records the selected image ID and file hashes;
-the exact Core/Runtime combination still needs deployment acceptance. The ordinary
+The builder records only the selected image ID and file hashes, not the complete
+Runtime release (six distribution identities) that a Docker deployment requires,
+so this package cannot configure hosted execution by itself. For Docker-hosted
+deployments, the Core distribution and its
+[installer](../../docs/getting-started/install.md) replace it: their manifest
+carries the complete release, and Docker nodes are added from Web. The ordinary
 archive remains Docker-free. Database/Docker setup and publication remain separate.
 
 ## Database ownership

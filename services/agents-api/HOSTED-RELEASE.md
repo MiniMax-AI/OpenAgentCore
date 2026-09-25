@@ -178,13 +178,22 @@ recovery plan; the archive itself contains no deployment data.
 The qualified basic profile covers public creation, native execution, inline and
 source-file copies/listing, cancellation, retained-history restart and owned
 cleanup. Network access defaults to enabled; explicit disabled confines native
-tools while the trusted harness retains model/Core connectivity. Restricted domains,
-populated startup installations/templates, hosted MCP combinations, Artifacts and
-complete protocol parity remain open. Files size and directory bounds are local
-implementation limits, not verified upstream limits.
+tools while the trusted harness retains model/Core connectivity, and exact-host
+restricted policies are supported. Environment Templates and inline
+initialization are covered within their
+[recorded limits](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/contracts/agents-api/environment-templates.md), and Artifacts are captured on
+accepted Docker profiles. Other hostname forms, service-origin hosted MCP and
+complete protocol parity remain open. Files size and
+directory bounds are local implementation limits, not verified upstream limits.
 
-User-managed deployment will reuse this Runtime, but installation/enrollment and
-its official protocol mapping are separate work. It is not automatically official
-`self_hosted`. This package does not install Docker/PostgreSQL/TLS/a supervisor,
-publish an image, migrate product execution, add engines or introduce another
-execution topology. See the [versioned coverage ledger](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/contracts/agents-api/README.md).
+The same Runtime also serves caller-managed `self_hosted` Sessions. The application
+creates the Session with its Project API key, the deployment operator issues the
+Environment's [executor credential](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/contracts/agents-api/environment-executor-credentials.md) with
+the Core key, and the executor host runs the daemon with it. That path is
+[qualified](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/contracts/agents-api/user-managed-runtime-v1.md) on user-managed Docker and E2B for all
+three harnesses. It accepts only `/workspace` with empty capability directories,
+rejects service-origin HTTP MCP and has no Environment Templates; the application
+owns and cleans up its compute. This package does not install
+Docker/PostgreSQL/TLS/a supervisor, publish an image, migrate product execution or
+add engines. See the
+[versioned coverage ledger](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/contracts/agents-api/README.md).
