@@ -29,9 +29,12 @@ export function NameField({ label, help, value, onChange, problem, problemText, 
 }) {
   const id = useId();
   return (
-    <label className="field key-name-field">
+    // The label names the input explicitly: it also holds the help tip's button,
+    // which would otherwise become the control it labels.
+    <label className="field key-name-field" htmlFor={`${id}-input`}>
       <span className="field-label-row">{label}<HelpTip id={`${id}-help`}>{help}</HelpTip></span>
       <input
+        id={`${id}-input`}
         name={name}
         value={value}
         onChange={(event) => onChange(event.target.value)}

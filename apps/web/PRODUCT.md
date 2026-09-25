@@ -111,14 +111,14 @@ workbench.
 ## Brand Commitments
 
 - Product name: Parsar Core. Parsar mark assets in `apps/web/public/`.
-- Keep the existing Parsar visual identity shared with the public landing
-  (`site/`): neutral grays, violet/indigo accent, system UI fonts. Unify the
-  console within it rather than replacing it.
+- Keep the Parsar visual identity shared with the public landing (`site/`):
+  neutral grays and a quiet indigo accent. The console uses Inter and Geist Mono
+  on Beautiful UI's foundation tokens and structure; `DESIGN.md` records the system.
 
 ## Evidence on Hand
 
-- Playwright acceptance fixtures in `apps/web/e2e/` (`fixture-core.mjs`,
-  `fixture-sandbox.mjs`).
+- Browser acceptance in `apps/web/e2e/`: one test per acceptance behavior against
+  `fixture-console.mjs`, a synthetic console service with deterministic data.
 - No customer data, benchmarks or usage claims exist; do not fabricate them.
 
 ## Product Principles
