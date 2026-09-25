@@ -1,6 +1,6 @@
 // Browser acceptance fixture: the console service's routes (/console/**) and the
 // Core management tree it forwards (/core/v1/**: installation, projects, summary,
-// audit log, metrics and /core/v1/sandbox/**), with synthetic, deterministic data and
+// audit log, metrics, harness default models and /core/v1/sandbox/**), with synthetic, deterministic data and
 // in-memory writes. It never serves /v1; any /v1 request, and any
 // browser-supplied Authorization header, is recorded so a test can assert that
 // the console stays on its management boundary.
@@ -98,6 +98,12 @@ function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "d
     executorCredentials: new Map(),
     // How config.json's public_url is set: "public", "local" or "stale".
     installation: address,
+    // Startup state and deployment default model provider per harness; API keys are never kept.
+    harnesses: {
+      claude_sdk: { enabled: true, default: false, provider: null },
+      codex: { enabled: true, default: true, provider: null },
+      mcode: { enabled: false, default: false, provider: null },
+    },
     // "none": the deployment is not configured yet, so the Nodes page offers setup.
     deployment: null,
   };
@@ -394,6 +400,58 @@ function registeredNode(nodeId) {
   return { id: nodeId, name: nodeId, provider: state.deployment?.provider ?? "docker", core_url: publicUrl(), online: false, provider_ready: false, cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, snapshots: 0, last_seen_at: null, ...limits, active: 0, reserved: 0, retained: 0, cleanup_pending: 0, created_at: new Date().toISOString() };
 }
 
+const HARNESS_PROVIDER = /^\/harnesses\/([^/]+)\/model-provider$/;
+const PROVIDER_FIELDS = new Set(["protocol", "base_url", "api_key", "context_window", "max_output_tokens"]);
+/** Each harness's protocol, as Core's registry declares it; only mcode requires token limits. */
+const HARNESS_PROTOCOL = { claude_sdk: "anthropic", codex: "responses", mcode: "anthropic" };
+const httpsBase = (value) => { try { const url = new URL(value); return url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password && !url.search && !url.hash; } catch { return false; } };
+const limit = (value) => value === undefined || (Number.isInteger(value) && value >= 0 && value <= 2 ** 31 - 1);
+
+/** The first rule a provider body breaks, in Core's order and words, as [message, param]; null when valid. */
+function providerProblem(harness, input) {
+  if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some((key) => !PROVIDER_FIELDS.has(key))) return ["Invalid request body.", null];
+  if (typeof input.base_url !== "string" || !httpsBase(input.base_url)) return ["model provider requires an HTTPS base_url without credentials, query or fragment", "base_url"];
+  if (input.protocol !== "anthropic" && input.protocol !== "responses") return ["unsupported model provider protocol", "protocol"];
+  if (typeof input.api_key !== "string" || !input.api_key.trim() || /[\0\r\n]/.test(input.api_key)) return ["invalid model provider API key", "api_key"];
+  if (!limit(input.context_window) || !limit(input.max_output_tokens) || (input.max_output_tokens ?? 0) > (input.context_window ?? 0)) return ["invalid model token limits", "max_output_tokens"];
+  if (input.protocol !== HARNESS_PROTOCOL[harness]) return ["selected harness does not support this model provider protocol", "protocol"];
+  if (harness === "mcode" && !(input.context_window > 0 && input.max_output_tokens > 0)) return ["selected harness requires positive model context_window and max_output_tokens", "context_window"];
+  return null;
+}
+
+/**
+ * Harnesses and their deployment default model providers, as Core serves them:
+ * the list reflects every write; a provider read is 404 while unset; PUT is a
+ * full replacement that needs the key every time (mcode also both limits) and
+ * answers with the safe view; DELETE is 204 and safe to repeat. A disabled
+ * harness may still be configured.
+ */
+async function harnessRoute(request, response, path) {
+  const view = (id) => ({ object: "core.harness", id, enabled: state.harnesses[id].enabled, default: state.harnesses[id].default, model_provider: state.harnesses[id].provider });
+  if (path === "/harnesses" && request.method === "GET") return send(response, 200, { object: "list", data: Object.keys(state.harnesses).map(view) });
+  const match = path.match(HARNESS_PROVIDER);
+  const harness = match && Object.hasOwn(state.harnesses, match[1]) ? match[1] : null;
+  if (!harness) return error(response, 404, "No such harness.", "not_found");
+  const entry = state.harnesses[harness];
+  if (request.method === "GET") return entry.provider ? send(response, 200, entry.provider) : error(response, 404, "No default model provider is set for this harness.", "not_found");
+  if (request.method === "DELETE") {
+    entry.provider = null;
+    response.writeHead(204, { "cache-control": "no-store" });
+    return response.end();
+  }
+  if (request.method !== "PUT") return error(response, 405, "Method not allowed.");
+  const input = await body(request).catch(() => null);
+  const problem = providerProblem(harness, input);
+  if (problem) return error(response, 400, problem[0], "invalid_request_error", problem[1]);
+  entry.provider = {
+    object: "core.model_provider", harness, protocol: input.protocol, base_url: input.base_url, api_key_configured: true,
+    ...(input.context_window ? { context_window: input.context_window } : {}),
+    ...(input.max_output_tokens ? { max_output_tokens: input.max_output_tokens } : {}),
+    updated_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+  };
+  return send(response, 200, entry.provider);
+}
+
 /** Test controls: reset state, inject one failure, register or change a node, and read what the browser sent. */
 async function fixtureRoute(request, response, url) {
   if (url.pathname === "/__fixture/health") return send(response, 200, { ok: true });
@@ -443,6 +501,7 @@ http.createServer(async (request, response) => {
     if (url.pathname.startsWith("/core/v1/sandbox/")) return await sandboxRoute(request, response, url.pathname.slice("/core/v1/sandbox".length));
     if (url.pathname.startsWith("/core/v1/")) {
       const path = url.pathname.slice("/core/v1".length);
+      if (path === "/harnesses" || path.startsWith("/harnesses/")) return await harnessRoute(request, response, path);
       const credentials = path.match(EXECUTOR_CREDENTIALS);
       if (credentials) return await executorCredentialRoute(request, response, credentials[1], credentials[2], credentials[3]);
       return write ? await adminWrite(request, response, path) : adminRead(response, path, url);
