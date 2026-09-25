@@ -195,6 +195,21 @@ check targets remain; the separate `packages/codex-harness`, its build/check scr
 and its CI/`make check` gate are retired. Historical remote native probes are not
 current validation entrypoints.
 
+## Core operational metrics
+
+The administrator-only `/core/v1/admin/core-metrics` contract is documented in
+[core-metrics.md](contracts/agents-api/core-metrics.md). Keep this separate from
+Agent outcome and Sandbox capacity views. Instrument existing worker and job
+owners without changing scheduling, lease or retention behavior. Periodic pool
+pings and bounded in-process samples have explicit restart gaps; unknown values
+must remain null. Complete UTC buckets exclude the active partial bucket. Root
+Turn history is queried read-only from PostgreSQL with native timestamps.
+Count `execution_unavailable` at the existing HTTP error writer, once per rejected
+response; never record request/response bodies or infer this count from every
+503 or failed Turn. Builds inject the source commit with ldflags. No new monitoring
+service or storage system is required. Keep the frontend response shape aligned
+with the paired console contract.
+
 ## Architecture boundaries
 
 The following execution rules are retained from the source contributor guide.

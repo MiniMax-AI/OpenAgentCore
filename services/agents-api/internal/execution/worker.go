@@ -11,8 +11,11 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
+const workerSlotLimit = 4
+
 // Worker owns queued work; the database lease excludes a second execution service.
 type Worker struct {
+	metrics             workerMetricsState
 	dispatcher          *Dispatcher
 	admission           *store.Store
 	lease               *store.ExecutionLease
@@ -73,11 +76,16 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher) (*Worker, error) {
 		_ = lease.Close(context.Background())
 		return nil, err
 	}
+	worker.observeOwnership(nil)
 	return worker, nil
 }
 
 // CheckOwnership checks the same database lease used for execution writes.
-func (w *Worker) CheckOwnership(ctx context.Context) error { return w.lease.Ping(ctx) }
+func (w *Worker) CheckOwnership(ctx context.Context) error {
+	err := w.lease.Ping(ctx)
+	w.observeOwnership(err)
+	return err
+}
 
 func (w *Worker) SubmitInputs(ctx context.Context, tenant, session, key string, inputs []store.Input) ([]store.InputReceipt, error) {
 	value, err := w.admission.GetSession(ctx, tenant, session)
@@ -113,11 +121,12 @@ func (w *Worker) CreateSessionStream(ctx context.Context, tenant string, input s
 }
 
 // Run retains queued work across restarts, but never replays an uncertain claim.
-func (w *Worker) Run(ctx context.Context) error {
+func (w *Worker) Run(ctx context.Context) (runErr error) {
 	defer w.stopOnce.Do(func() { close(w.stopped) })
 	ctx, cancel := context.WithCancel(ctx)
 	var running sync.WaitGroup
 	defer func() {
+		w.observeWorkerStop(runErr, ctx.Err())
 		cancel()
 		if w.runtimes != nil {
 			w.runtimes.stop()
@@ -129,14 +138,15 @@ func (w *Worker) Run(ctx context.Context) error {
 		}
 		closeCtx, stop := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stop()
-		_ = w.lease.Close(closeCtx)
+		w.observeWorkerClosed(w.lease.Close(closeCtx))
 	}()
 	active := make(map[string]bool)
+	w.observeSlots(len(active))
 	type completion struct {
 		id  string
 		err error
 	}
-	completed := make(chan completion, 4)
+	completed := make(chan completion, workerSlotLimit)
 	lifecycleDone := make(chan error, 1)
 	if w.runtimes != nil {
 		running.Add(1)
@@ -154,8 +164,8 @@ func (w *Worker) Run(ctx context.Context) error {
 		request fileWriteRequest
 		result  fileWriteResult
 	}
-	writesCompleted := make(chan writeCompletion, 4)
-	readsCompleted := make(chan readCompletion, 4)
+	writesCompleted := make(chan writeCompletion, workerSlotLimit)
+	readsCompleted := make(chan readCompletion, workerSlotLimit)
 	reads := 0
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
@@ -167,11 +177,12 @@ func (w *Worker) Run(ctx context.Context) error {
 		case err := <-lifecycleDone:
 			return err
 		case request := <-w.fileWrites:
-			if request.ctx.Err() != nil || active[request.environment.SessionID] || len(active) == 4 {
+			if request.ctx.Err() != nil || active[request.environment.SessionID] || len(active) == workerSlotLimit {
 				request.result <- fileWriteResult{err: ErrExecutionUnavailable}
 				continue
 			}
 			active[request.environment.SessionID] = true
+			w.observeSlots(len(active))
 			running.Add(1)
 			go func() {
 				defer running.Done()
@@ -179,15 +190,17 @@ func (w *Worker) Run(ctx context.Context) error {
 			}()
 		case write := <-writesCompleted:
 			delete(active, write.request.environment.SessionID)
+			w.observeSlots(len(active))
 			write.request.result <- write.result
 		case request := <-w.directoryReads:
-			if request.ctx.Err() != nil || reads == 4 || (!active[request.environment.SessionID] && len(active) == 4) {
+			if request.ctx.Err() != nil || reads == workerSlotLimit || (!active[request.environment.SessionID] && len(active) == workerSlotLimit) {
 				request.reply(directoryReadResult{err: ErrExecutionUnavailable})
 				continue
 			}
 			reserved := !active[request.environment.SessionID]
 			if reserved {
 				active[request.environment.SessionID] = true
+				w.observeSlots(len(active))
 			}
 			reads++
 			running.Add(1)
@@ -204,37 +217,47 @@ func (w *Worker) Run(ctx context.Context) error {
 			reads--
 			if read.id != "" {
 				delete(active, read.id)
+				w.observeSlots(len(active))
 			}
 			read.request.reply(read.result)
 		case result := <-completed:
 			delete(active, result.id)
+			w.observeSlots(len(active))
 			if result.err != nil {
 				return result.err
 			}
 		case <-ticker.C:
 			check, stop := context.WithTimeout(ctx, 5*time.Second)
-			err := w.lease.Ping(check)
+			err := w.CheckOwnership(check)
 			stop()
 			if err != nil {
+				w.observeSchedulerPoll(0, err)
 				return err
 			}
 			if _, err := w.dispatcher.Store.ExpireEnvironmentInputs(ctx); err != nil {
+				w.observeSchedulerPoll(0, err)
 				return err
 			}
 			if err := w.observeEnrolledRuntimes(ctx); err != nil {
+				w.observeSchedulerPoll(0, err)
 				return err
 			}
-			if len(active) == 4 {
+			if len(active) == workerSlotLimit {
+				w.observeSchedulerPoll(0, nil)
 				continue
 			}
 			devices := w.dispatcher.Registry.Devices()
 			if len(devices) == 0 {
+				w.observeSchedulerPoll(0, nil)
 				continue
 			}
 			work, err := schedule.selectWork(ctx, w, devices, active)
+			w.observeSlots(len(active))
 			if err != nil {
+				w.observeSchedulerPoll(0, err)
 				return err
 			}
+			w.observeSchedulerPoll(len(work), nil)
 			for _, item := range work {
 				running.Add(1)
 				go func() {

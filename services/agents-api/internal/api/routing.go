@@ -123,13 +123,17 @@ func cleanPath(p string) string {
 // Cache-Control extensions remain. Organization and project headers are not
 // reported: Core's project scope is configured, not account-derived.
 func agentsResponseHeaders(next http.Handler) http.Handler {
+	return responseHeadersWithErrors(next, nil)
+}
+
+func responseHeadersWithErrors(next http.Handler, report func(string)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := newRequestID()
 		header := w.Header()
 		header.Set("X-Request-Id", id)
 		header.Set("Openai-Version", "2020-10-01")
 		header.Set("X-Content-Type-Options", "nosniff")
-		writer := &processingTimeWriter{ResponseWriter: w, started: time.Now()}
+		writer := &processingTimeWriter{ResponseWriter: w, started: time.Now(), report: report}
 		next.ServeHTTP(writer, r.WithContext(log.WithRequestID(r.Context(), id)))
 	})
 }
@@ -147,6 +151,14 @@ type processingTimeWriter struct {
 	http.ResponseWriter
 	started time.Time
 	stamped bool
+	report  func(string)
+}
+
+// reportAPIError observes the emitted code without reading or retaining bodies.
+func (w *processingTimeWriter) reportAPIError(code string) {
+	if !w.stamped && w.report != nil {
+		w.report(code)
+	}
 }
 
 func (w *processingTimeWriter) stamp() {

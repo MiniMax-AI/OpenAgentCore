@@ -37,6 +37,7 @@ type ResourceStore interface {
 }
 
 type Handler struct {
+	coreMetrics           CoreMetricsService
 	sandboxStore          *store.Store
 	deploymentAuth        *DeploymentAuthenticator
 	sandboxSetup          func(context.Context, store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error)
@@ -85,7 +86,7 @@ func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...
 // Beta group, has the JSON body and Allow header.
 func (h *Handler) routes() *chi.Mux {
 	router := chi.NewRouter()
-	router.Use(agentsResponseHeaders, log.HTTPMiddleware, middleware.GetHead)
+	router.Use(h.responseHeaders, log.HTTPMiddleware, middleware.GetHead)
 	router.MethodNotAllowed(methodNotAllowed)
 	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

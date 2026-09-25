@@ -24,6 +24,9 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 // Every 401 has type invalid_request_error, as every observed official 401
 // does (HP-07); an empty code serializes as null.
 func writeError(w http.ResponseWriter, status int, code, message string, param ...string) {
+	if observer, ok := w.(interface{ reportAPIError(string) }); ok {
+		observer.reportAPIError(code)
+	}
 	kind := "invalid_request_error"
 	if status >= 500 {
 		kind = "server_error"

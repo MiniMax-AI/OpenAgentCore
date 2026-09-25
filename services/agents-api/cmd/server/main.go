@@ -33,6 +33,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/api"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/coremetrics"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtime"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeenrollment"
@@ -89,6 +90,8 @@ func run() error {
 		return err
 	}
 	executionStore := store.NewWithCredentialCipherAndOAuthRefresh(pool, credentialKey, oauthClient)
+	metricsSource := &coreMetricsSource{store: executionStore, pool: pool}
+	metrics := coremetrics.New(processStartedAt, buildRevision, metricsSource)
 	auth, err := api.NewDatabaseAuthenticator(executionStore)
 	if err != nil {
 		return err
@@ -101,7 +104,7 @@ func run() error {
 	auditCleanupDone := make(chan struct{})
 	go func() {
 		defer close(auditCleanupDone)
-		runWriteAuditCleanup(auditCleanupCtx, executionStore, auditRetention)
+		runWriteAuditCleanup(auditCleanupCtx, executionStore, auditRetention, metrics)
 	}()
 	defer func() { cancelAuditCleanup(); <-auditCleanupDone }()
 	var workerDone chan error
@@ -157,10 +160,10 @@ func run() error {
 	cleanupDone := make(chan struct{})
 	go func() {
 		defer close(cleanupDone)
-		runHistoryCleanup(cleanupCtx, history.Prune)
+		runHistoryCleanup(cleanupCtx, history.Prune, metrics)
 	}()
 	defer func() { cancelCleanup(); <-cleanupDone }()
-	options := []api.Option{api.WithSubagents(executionStore), api.WithSkills(executionStore), api.WithSourceFiles(executionStore), api.WithSessionArtifacts(executionStore), api.WithRuntimeObservations(observationService)}
+	options := []api.Option{api.WithCoreMetrics(metrics), api.WithSubagents(executionStore), api.WithSkills(executionStore), api.WithSourceFiles(executionStore), api.WithSessionArtifacts(executionStore), api.WithRuntimeObservations(observationService)}
 	if managedNodes != nil {
 		options = append(options, api.WithSandboxManager(executionStore, managedNodes.admin))
 	}
@@ -223,6 +226,9 @@ func run() error {
 			options = append(options, api.WithHostedEnvironments())
 		}
 	}
+	if history.SampleInterval == 0 {
+		metrics.StopJob("runtime_sampler")
+	}
 	if history.SampleInterval > 0 {
 		if worker == nil {
 			return errors.New("Runtime history periodic sampling requires the execution worker")
@@ -230,6 +236,11 @@ func run() error {
 		sampler, err := runtimeobs.NewSampler(observationResolver, observationService, worker, runtimeobs.SamplerOptions{
 			Interval: history.SampleInterval,
 			Report: func(result runtimeobs.SweepResult) {
+				var sampleErr error
+				if !result.Complete {
+					sampleErr = errors.New("incomplete Runtime sampling sweep")
+				}
+				metrics.ReportJob("runtime_sampler", result.CompletedAt, metricPtr(int64(result.Observed)), metricPtr(int64(result.Failed)), sampleErr)
 				fields := []any{"listed", result.Listed, "observed", result.Observed, "failed", result.Failed, "complete", result.Complete}
 				if result.Complete {
 					log.Bg().Debug("Runtime history sampling sweep complete", fields...)
@@ -243,12 +254,17 @@ func run() error {
 		}
 		samplerCtx, cancelSampler := context.WithCancel(ctx)
 		samplerDone := make(chan error, 1)
-		go func() { samplerDone <- sampler.Run(samplerCtx) }()
+		go func() { defer metrics.StopJob("runtime_sampler"); samplerDone <- sampler.Run(samplerCtx) }()
 		defer func() {
 			cancelSampler()
 			<-samplerDone
 		}()
 	}
+	metricsSource.worker, metricsSource.registry = worker, registry
+	metricsCtx, cancelMetrics := context.WithCancel(ctx)
+	metricsDone := make(chan struct{})
+	go func() { defer close(metricsDone); metrics.Run(metricsCtx) }()
+	defer func() { cancelMetrics(); <-metricsDone }()
 	startupManaged := managed
 	if managedNodes != nil && managedNodes.setup != nil {
 		startupManaged = managedNodes.setup.selected.Load()
