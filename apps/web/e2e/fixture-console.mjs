@@ -115,7 +115,7 @@ async function consoleRoute(request, response, url) {
     return send(response, 200, { mode: "login" }, { "set-cookie": `${SESSION_COOKIE.split("=")[0]}=; Path=/; Max-Age=0` });
   }
   if (url.pathname === "/console/config") {
-    return send(response, 200, { api_keys: true, sandbox_admin: true, node_installer: true, node_installer_sha256: "a".repeat(64) });
+    return send(response, 200, { node_installer: true, node_installer_sha256: "a".repeat(64) });
   }
   return error(response, 404, "Not found.");
 }
