@@ -374,7 +374,7 @@ function CredentialFile({ credential, next, command = null }: { credential: Issu
       <p className="executor-credential-notice">{t("executor.issued.notice")}</p>
       <p className="executor-credential-next">{t(`executor.issued.next.${next}`)}</p>
       {command ? <InstallCommand value={command} /> : null}
-      <pre className="executor-credential-file" aria-label={t("executor.issued.fileLabel")} tabIndex={0}><code>{text}</code></pre>
+      <div role="region" aria-label={t("executor.issued.fileLabel")}><pre className="executor-credential-file"><code>{text}</code></pre></div>
       <div className="executor-credential-actions">
         <button className="button primary" type="button" onClick={() => void copy()}>
           {state === "copied" ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}

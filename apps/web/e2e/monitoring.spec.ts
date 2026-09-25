@@ -45,7 +45,7 @@ test("shows a self-hosted Session's install command, issues its credential once,
 
   // Connect a host: the exact install command, which carries no secret.
   const install = section.getByRole("region", { name: "Connect a host" });
-  await expect(install.getByLabel("Executor install command")).toHaveText(`(umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT
+  await expect(install.getByLabel("Executor install command").locator("pre")).toHaveText(`(umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT
 curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example.com/node-install/self-hosted-install.pyz' -o "$d/install.pyz" &&
 printf '%s  %s\\n' '${SELF_HOSTED_INSTALLER_SHA256}' "$d/install.pyz" | sha256sum -c --status &&
 python3 "$d/install.pyz" --source-url 'https://core.example.com' --environment-id '${environmentId}' --remote 'wss://core.example.com/api/v1/agent-daemon/ws')`);

@@ -89,14 +89,14 @@ export function InstallCommand({ value }: { value: string }) {
   }, [state]);
   const name = state === "copied" ? t("executor.install.copied") : t("executor.install.copy");
   return (
-    <div className="executor-install-command">
+    <div className="executor-install-command" role="region" aria-label={t("executor.install.command")}>
       <div className="executor-install-command-head">
         <span>{t("executor.install.terminal")}</span>
         <button type="button" className="icon-button ghost copyable-id-button" aria-label={name} title={name} onClick={() => void copy()}>
           {state === "copied" ? <Check size={13} strokeWidth={1.7} aria-hidden="true" /> : <Copy size={13} strokeWidth={1.7} aria-hidden="true" />}
         </button>
       </div>
-      <pre ref={code} aria-label={t("executor.install.command")} tabIndex={0}><code>{value}</code></pre>
+      <pre ref={code}><code>{value}</code></pre>
       {state === "failed" ? <p className="executor-install-error" role="alert">{t("executor.install.copyFailed")}</p> : null}
     </div>
   );
