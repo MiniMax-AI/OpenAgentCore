@@ -15,7 +15,7 @@ test("shows the deployment's health on Overview and each monitor page", async ({
   const core = page.getByLabel("Core summary");
   await expect(core).toContainText("Execution slots");
   // An unmeasured figure is missing, not zero.
-  await expect(core.locator(".kpi").filter({ hasText: "Process memory" }).locator("dd")).toHaveText("—");
+  await expect(core.locator(".kpi").filter({ hasText: /^Memory/ }).locator("dd")).toHaveText("—");
   await page.getByRole("button", { name: "Agent metrics" }).click();
   await expect(page.getByLabel("Agent run summary")).toContainText("Requests");
   await page.getByRole("button", { name: "Sandbox metrics" }).click();

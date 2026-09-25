@@ -14,6 +14,7 @@ import "./MetricsView.css";
 
 const RANGES: readonly CoreMetricsRange[] = ["1h", "6h", "24h", "7d"];
 const REFRESH_MS = 30_000;
+const GIB = 2 ** 30;
 
 const jobTone: Record<CoreJobStatus, Tone> = { ok: "ok", failing: "danger", stopped: "warning", unknown: "neutral" };
 const statusTone: Record<CoreMetrics["service"]["status"], Tone> = { running: "ok", maintenance: "warning", degraded: "warning", unknown: "neutral" };
@@ -26,6 +27,16 @@ function seconds(value: string | null): number | null {
 
 function milliseconds(value: number | null): string {
   return value === null ? MISSING : formatDuration(value / 1000);
+}
+
+/** Cores to two decimals below ten ("0.35"), whole above ("12"). */
+function cores(value: number, locale: string | undefined): string {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: value < 10 ? 2 : 0 }).format(value);
+}
+
+/** A share of a limit at or above which a figure is shown as a warning. */
+function nearLimit(value: number | null, limit: number | null, share: number): boolean {
+  return value !== null && limit !== null && limit > 0 && value / limit >= share;
 }
 
 /** A figure with its unit or limit set small beside it. */
@@ -100,6 +111,7 @@ function CoreMetricsBody({ metrics, stale }: { metrics: CoreMetrics; stale: stri
   const locale = i18n.resolvedLanguage;
   const now = Math.floor(Date.now() / 1000);
   const { execution, database, process } = metrics;
+  const processBuckets = useMemo(() => process.series.map((entry) => seconds(entry.start) ?? 0), [process.series]);
   const bucketSeconds = metrics.range.resolution_seconds;
   const bucket = formatBucket(bucketSeconds, locale);
   const executionBuckets = useMemo(() => execution.series.map((entry) => seconds(entry.start) ?? 0), [execution.series]);
@@ -127,7 +139,18 @@ function CoreMetricsBody({ metrics, stale }: { metrics: CoreMetrics; stale: stri
         />
         <Kpi label={t("core.daemons")} help={t("core.daemonsHelp")} value={<LiveNumber value={execution.connected_daemons} />} />
         <Kpi label={t("core.databaseLatency")} value={milliseconds(database.ping_ms.p95)} />
-        <Kpi label={t("core.memory")} value={process.memory_bytes === null ? MISSING : formatBytes(process.memory_bytes)} />
+        <Kpi
+          label={t("core.cpu")}
+          help={t("core.cpuHelp")}
+          value={process.cpu_cores === null ? MISSING : <Figure value={cores(process.cpu_cores, locale)} unit={process.cpu_limit_cores === null ? t("core.cores", { value: "" }).trim() : `/ ${t("core.cores", { value: cores(process.cpu_limit_cores, locale) })}`} />}
+          tone={nearLimit(process.cpu_cores, process.cpu_limit_cores, 0.8) ? "warning" : undefined}
+        />
+        <Kpi
+          label={t("core.memory")}
+          help={t("core.memoryHelp")}
+          value={process.rss_bytes === null ? MISSING : <Figure value={formatBytes(process.rss_bytes)} unit={process.memory_limit_bytes === null ? undefined : `/ ${formatBytes(process.memory_limit_bytes)}`} />}
+          tone={nearLimit(process.rss_bytes, process.memory_limit_bytes, 0.85) ? "warning" : undefined}
+        />
       </KpiStrip>
 
       <Section
@@ -204,6 +227,50 @@ function CoreMetricsBody({ metrics, stale }: { metrics: CoreMetrics; stale: stri
                 { id: "max", label: t("core.database.max"), color: "var(--ink-3)", values: database.series.map((entry) => (entry.pool_in_use === null ? null : database.pool.max)) },
               ]}
               formatValue={integer}
+            />
+          </figure>
+        </div>
+      </Section>
+
+      <Section
+        headingId="core-process-heading"
+        title={<>{t("core.process.title")}<span className="section-meta">{t("core.process.meta", {
+          heap: formatBytes(process.memory_bytes),
+          goroutines: count(process.goroutines),
+        })}</span></>}
+        help={t("core.process.help")}
+      >
+        <div className="chart-grid">
+          <figure className="chart-panel">
+            <figcaption>{t("core.process.cpuChart", { bucket })}</figcaption>
+            <TimeSeriesChart
+              label={t("core.process.cpuChart", { bucket })}
+              kind="lines"
+              buckets={processBuckets}
+              bucketSeconds={bucketSeconds}
+              series={[
+                { id: "cpu", label: t("core.process.cpu"), color: "var(--series-1)", values: process.series.map((entry) => entry.cpu_cores) },
+                // The limit is drawn only where Core observed the process.
+                { id: "limit", label: t("core.process.cpuLimit"), color: "var(--ink-3)", values: process.series.map((entry) => (entry.cpu_cores === null ? null : process.cpu_limit_cores)) },
+              ]}
+              formatValue={(value) => t("core.cores", { value: cores(value, locale) })}
+              formatAxis={(value) => cores(value, locale)}
+            />
+          </figure>
+          <figure className="chart-panel">
+            <figcaption>{t("core.process.memoryChart", { bucket })}</figcaption>
+            <TimeSeriesChart
+              label={t("core.process.memoryChart", { bucket })}
+              kind="lines"
+              buckets={processBuckets}
+              bucketSeconds={bucketSeconds}
+              series={[
+                // In GiB, so the axis ticks fall on round values.
+                { id: "rss", label: t("core.process.rss"), color: "var(--series-1)", values: process.series.map((entry) => (entry.rss_bytes === null ? null : entry.rss_bytes / GIB)) },
+                { id: "limit", label: t("core.process.memoryLimit"), color: "var(--ink-3)", values: process.series.map((entry) => (entry.rss_bytes === null || process.memory_limit_bytes === null ? null : process.memory_limit_bytes / GIB)) },
+              ]}
+              formatValue={(value) => formatBytes(value * GIB)}
+              formatAxis={(value) => (value === 0 ? "0" : `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value)} GiB`)}
             />
           </figure>
         </div>

@@ -8,6 +8,7 @@ export function coreMetrics(range = "1h", now = Math.floor(Date.now() / 1000)) {
   const wave = (i, period, phase = 0) => Math.sin((i / period) * Math.PI * 2 + phase);
   const execution = [];
   const database = [];
+  const processSeries = [];
   for (let i = 0; i < count; i += 1) {
     const at = new Date((start + i * step) * 1000).toISOString();
     const load = 1 + 0.4 * wave(i, 24) + 0.2 * wave(i, 7, 1);
@@ -16,6 +17,7 @@ export function coreMetrics(range = "1h", now = Math.floor(Date.now() / 1000)) {
     const queued = Math.max(0, Math.round((running >= 4 ? 2 : 0) + burst + (load > 1.3 ? 1 : 0)));
     execution.push({ start: at, queued, in_progress: running, queue_wait_p95_ms: queued ? Math.round(900 + 700 * queued) : 180 });
     database.push({ start: at, ping_p95_ms: Number((2.2 + 0.8 * load + (i % 31 === 11 ? 9 : 0)).toFixed(1)), pool_in_use: Math.max(1, Math.round(4 + 3 * load)) });
+    processSeries.push({ start: at, cpu_cores: Number((0.22 + 0.24 * load + (i % 23 === 7 ? 0.5 : 0)).toFixed(2)), rss_bytes: Math.round((296 + 34 * load + 0.4 * i) * 2 ** 20) });
   }
   const ago = (s) => new Date((now - s) * 1000).toISOString();
   return {
@@ -35,7 +37,7 @@ export function coreMetrics(range = "1h", now = Math.floor(Date.now() / 1000)) {
       { id: "history_cleanup", status: "ok", last_run_at: ago(41), processed: 230, failed: 0 },
       { id: "audit_cleanup", status: "ok", last_run_at: ago(41), processed: 0, failed: 0 },
     ],
-    // Unmeasured: the console must show it as missing, never as zero.
-    process: { memory_bytes: null, goroutines: 214 },
+    // Resident memory unmeasured: the console must show it as missing, never as zero.
+    process: { memory_bytes: Math.round(182 * 2 ** 20), goroutines: 214, cpu_cores: 0.41, cpu_limit_cores: 2, rss_bytes: null, memory_limit_bytes: 2 ** 30, series: processSeries },
   };
 }

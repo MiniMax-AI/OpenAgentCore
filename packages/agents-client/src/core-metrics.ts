@@ -32,6 +32,14 @@ export interface CoreDatabaseBucket {
   pool_in_use: number | null;
 }
 
+export interface CoreProcessBucket {
+  start: string;
+  /** Highest CPU use observed in the bucket, in cores. */
+  cpu_cores: number | null;
+  /** Highest resident memory observed in the bucket. */
+  rss_bytes: number | null;
+}
+
 export interface CoreJob {
   /** `scheduler`, `runtime_sampler`, `history_cleanup`, `audit_cleanup`, or another bounded name. */
   id: string;
@@ -78,8 +86,20 @@ export interface CoreMetrics {
   };
   jobs: CoreJob[];
   process: {
+    /** Go heap in use (runtime.MemStats.Alloc), not resident memory. */
     memory_bytes: number | null;
     goroutines: number | null;
+    /**
+     * Requested extension (docs/web/core-process-metrics-requirements.md):
+     * CPU used over the last sample interval, in cores; the CPU available to
+     * the process; resident memory; its memory limit; and a series. Null until
+     * Core reports them.
+     */
+    cpu_cores: number | null;
+    cpu_limit_cores: number | null;
+    rss_bytes: number | null;
+    memory_limit_bytes: number | null;
+    series: CoreProcessBucket[];
   };
 }
 
@@ -175,6 +195,15 @@ export function projectCoreMetrics(value: unknown): CoreMetrics {
     process: {
       memory_bytes: number(process.memory_bytes),
       goroutines: number(process.goroutines),
+      cpu_cores: number(process.cpu_cores),
+      cpu_limit_cores: number(process.cpu_limit_cores),
+      rss_bytes: number(process.rss_bytes),
+      memory_limit_bytes: number(process.memory_limit_bytes),
+      series: list(process.series, (entry) => ({
+        start: String(entry.start ?? ""),
+        cpu_cores: number(entry.cpu_cores),
+        rss_bytes: number(entry.rss_bytes),
+      }), "process.series"),
     },
   };
 }

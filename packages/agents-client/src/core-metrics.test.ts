@@ -17,7 +17,8 @@ describe("Core metrics projection", () => {
     expect(metrics.execution.series[0]).toMatchObject({ queued: 1, in_progress: null });
     expect(metrics.database).toMatchObject({ size_bytes: null, pool: { in_use: null, idle: null, max: null }, series: [] });
     expect(metrics.jobs[0]).toMatchObject({ status: "unknown", processed: 12, failed: null });
-    expect(metrics.process).toEqual({ memory_bytes: null, goroutines: null });
+    // A Core without the process extension reports it as missing, not zero.
+    expect(metrics.process).toEqual({ memory_bytes: null, goroutines: null, cpu_cores: null, cpu_limit_cores: null, rss_bytes: null, memory_limit_bytes: null, series: [] });
   });
 
   it("never shows an unrecognised service status as running", () => {
