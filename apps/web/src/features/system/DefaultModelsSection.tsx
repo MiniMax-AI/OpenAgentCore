@@ -11,6 +11,7 @@ import { TableSkeleton } from "../../components/Skeleton";
 import { failedLast, useFailureToast, useToast } from "../../components/Toast";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { formatDateTime, formatInteger } from "../../lib/format";
+import { useConsoleIntent } from "../../lib/console-navigation";
 import { harnessNames, protocolNames } from "../../lib/harness-labels";
 import { admin } from "../../lib/projects";
 import { Fact } from "./Fact";
@@ -62,6 +63,15 @@ export function DefaultModelsSection() {
   const harnesses = query.data?.data ?? null;
   const reread = useCallback(() => { void queryClient.invalidateQueries({ queryKey: harnessesQuery.queryKey }); }, [queryClient]);
   useFailureToast(harnesses && failedLast(query) ? message(query.error) : null, t("models.refreshFailed"), "harnesses-read");
+  // From Getting started: bring the default harness's Set or Replace into view and focus.
+  useConsoleIntent("default-model", harnesses ? "ready" : query.isError ? "unavailable" : "wait", () => {
+    window.requestAnimationFrame(() => {
+      const section = document.getElementById("system-models-heading")?.closest("section");
+      const action = section?.querySelector<HTMLButtonElement>("article[data-default] .system-model-actions button") ?? section?.querySelector<HTMLButtonElement>(".system-model-actions button");
+      section?.scrollIntoView({ block: "start" });
+      action?.focus();
+    });
+  });
 
   const [editing, setEditing] = useState<CoreHarness | null>(null);
   const clear = useDeleteFlow<CoreHarnessKind>(
@@ -133,7 +143,7 @@ function HarnessCard({ harness, busy, onEdit, onClear }: { harness: CoreHarness;
   const name = harnessNames[harness.id];
   const provider = harness.model_provider;
   return (
-    <article className="system-model" aria-labelledby={headingId}>
+    <article className="system-model" aria-labelledby={headingId} data-default={harness.default ? "" : undefined}>
       <header className="system-model-header">
         <h3 id={headingId}>{name}</h3>
         <div className="system-model-actions">

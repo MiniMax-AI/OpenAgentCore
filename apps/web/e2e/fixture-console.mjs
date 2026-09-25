@@ -101,9 +101,10 @@ function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "d
     // "none": Core has no credential encryption key, so it cannot store a provider's key.
     credentialKey: credentials !== "none",
     // Startup state and deployment default model provider per harness; API keys are never kept.
+    // The demo deployment's default harness has a default model; a fresh install has none.
     harnesses: {
       claude_sdk: { enabled: true, default: false, provider: null },
-      codex: { enabled: true, default: true, provider: null },
+      codex: { enabled: true, default: true, provider: fresh ? null : { object: "core.model_provider", harness: "codex", protocol: "responses", base_url: "https://model.example/v1", api_key_configured: true, updated_at: new Date((now - 86400) * 1000).toISOString().replace(/\.\d{3}Z$/, "Z") } },
       mcode: { enabled: false, default: false, provider: null },
     },
     // "none": the deployment is not configured yet, so the Nodes page offers setup.

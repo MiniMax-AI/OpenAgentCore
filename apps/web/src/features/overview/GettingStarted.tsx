@@ -8,6 +8,7 @@ import { useConsoleIntent, useConsoleNavigation } from "../../lib/console-naviga
 import { projectsQuery } from "../../lib/queries";
 import { type FleetState } from "../fleet/use-sandbox-fleet";
 import { useConsoleTour } from "../onboarding/ConsoleTour";
+import { harnessesQuery } from "../system/harness-queries";
 import {
   checklistStorageKey,
   checklistView,
@@ -22,8 +23,8 @@ import {
 } from "./getting-started";
 
 /**
- * Getting started: sandboxes, a project key and the first Session, each with
- * its state and one action, in any order. It shows until every step is done
+ * Getting started: sandboxes, a default model, a project key and the first
+ * Session, each with its state and one action, in any order. It shows until every step is done
  * or it is hidden; Show Getting started in the sidebar opens it again. The
  * optional console tour opens from it.
  */
@@ -32,8 +33,13 @@ export function GettingStarted({ fleet, sessions }: { fleet: FleetState; session
   const { navigate } = useConsoleNavigation();
   const openTour = useConsoleTour();
   const projects = useQuery(projectsQuery);
-  const steps = gettingStartedSteps({ fleet, projects: projects.data ?? (projects.isError ? "failed" : undefined), sessions });
-  const states = [steps.sandboxes.state, steps.key.state, steps.session];
+  const harnesses = useQuery(harnessesQuery);
+  const steps = gettingStartedSteps({
+    fleet, sessions,
+    projects: projects.data ?? (projects.isError ? "failed" : undefined),
+    harnesses: harnesses.data?.data ?? (harnesses.isError ? "failed" : undefined),
+  });
+  const states = [steps.sandboxes.state, steps.model, steps.key.state, steps.session];
   const allDone = states.every((state) => state === "done");
 
   // Remembered per installation; a choice made here overrides what was read.
@@ -134,8 +140,9 @@ export function GettingStarted({ fleet, sessions }: { fleet: FleetState; session
       </header>
       <ol className="getting-started-steps">
         <Step index={1} state={sandbox.state} title={t("gettingStarted.sandboxes.title")} body={t(sandbox.cloud ? "gettingStarted.sandboxes.bodyCloud" : "gettingStarted.sandboxes.body")} action={sandboxAction} />
-        <Step index={2} state={steps.key.state} title={t("gettingStarted.key.title")} body={t("gettingStarted.key.body")} action={keyAction} />
-        <Step index={3} state={steps.session} title={t("gettingStarted.session.title")} body={t("gettingStarted.session.body")} action={{ label: t("gettingStarted.session.open"), run: () => navigate("projects") }} />
+        <Step index={2} state={steps.model} title={t("gettingStarted.model.title")} body={t("gettingStarted.model.body")} action={{ label: t("gettingStarted.model.open"), run: () => navigate("system", {}, "default-model") }} />
+        <Step index={3} state={steps.key.state} title={t("gettingStarted.key.title")} body={t("gettingStarted.key.body")} action={keyAction} />
+        <Step index={4} state={steps.session} title={t("gettingStarted.session.title")} body={t("gettingStarted.session.body")} action={{ label: t("gettingStarted.session.open"), run: () => navigate("projects") }} />
       </ol>
     </section>
   );

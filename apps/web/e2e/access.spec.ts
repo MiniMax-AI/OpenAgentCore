@@ -48,6 +48,7 @@ test("opens a fresh install on the Overview's Getting started: a project and its
   const step = (name: string) => page.getByRole("region", { name: "Getting started" }).getByRole("listitem").filter({ hasText: name });
   // The fixture deployment already has a ready node.
   await expect(step("Get sandboxes ready")).toContainText("Done");
+  await expect(step("Set a default model")).toContainText("To do");
   await expect(step("Create a project and issue a key")).toContainText("To do");
   await expect(step("Run the first Session")).toContainText("To do");
 
@@ -80,6 +81,25 @@ test("opens a fresh install on the Overview's Getting started: a project and its
   const stored = await browserStorage(page);
   expect(stored).not.toContain("fixture-secret");
   expect(stored).not.toContain(FIXTURE_CORE_KEY);
+});
+
+test("leads from Getting started to the default model, and counts it done once the default harness has one", async ({ page, request }) => {
+  await openConsole(page, request, "overview", { fresh: true });
+  const step = page.getByRole("region", { name: "Getting started" }).getByRole("listitem").filter({ hasText: "Set a default model" });
+  await expect(step).toContainText("To do");
+  await step.getByRole("button", { name: "Open System" }).click();
+  await expect(page.getByRole("heading", { name: "System", level: 1 })).toBeVisible();
+  // It arrives on the default harness's action.
+  const set = page.getByRole("button", { name: "Set the default model for Codex" });
+  await expect(set).toBeFocused();
+  await set.click();
+  const form = page.getByRole("dialog", { name: "Set default model for Codex" });
+  await form.getByLabel("Base URL").fill("https://model.example/v1");
+  await form.getByLabel("API key").fill("sk-fixture-getting-started");
+  await form.getByRole("button", { name: "Save" }).click();
+  await expect(form).toBeHidden();
+  await page.getByRole("button", { name: "Overview", exact: true }).click();
+  await expect(step).toContainText("Done");
 });
 
 test("shows every page empty on a fresh install, and Getting started hides, comes back and leads to sandbox setup", async ({ page, request }) => {

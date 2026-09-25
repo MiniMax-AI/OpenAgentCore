@@ -1,11 +1,14 @@
+import type { CoreHarness } from "@agents-core-web/agents-client";
+
 import { type Project } from "../../lib/admin-view";
 import { type FleetState } from "../fleet/use-sandbox-fleet";
 import { templateBuildStatus } from "../sandbox/deployment-specification";
 
 /**
- * Getting started on the Overview: three steps to a working deployment,
- * computed only from reads the Overview already makes. A step whose read is
- * pending is null, and "unknown" when that read failed; neither counts as done.
+ * Getting started on the Overview: four steps to a working deployment,
+ * computed from the Overview's reads and the harness list. A step whose read
+ * is pending is null, and "unknown" when that read failed; neither counts as
+ * done.
  */
 export type StepState = "done" | "todo" | "unknown" | null;
 
@@ -14,6 +17,7 @@ export type SandboxAction = "setup" | "add-node" | "nodes";
 
 export interface GettingStartedSteps {
   sandboxes: { state: StepState; action: SandboxAction; cloud: boolean };
+  model: StepState;
   /** `project` is the active project a key would be issued for; null means create one first. */
   key: { state: StepState; project: Project | null };
   session: StepState;
@@ -25,10 +29,13 @@ export function gettingStartedSteps(input: {
   projects: readonly Project[] | "failed" | undefined;
   /** Sessions in every project, by Core's summary; null until it is read. */
   sessions: number | "failed" | null;
+  /** Core's harnesses; undefined until they are read. */
+  harnesses: readonly CoreHarness[] | "failed" | undefined;
 }): GettingStartedSteps {
   const { sessions } = input;
   return {
     sandboxes: sandboxStep(input.fleet),
+    model: modelStep(input.harnesses),
     key: keyStep(input.projects),
     session: sessions === null ? null : sessions === "failed" ? "unknown" : sessions > 0 ? "done" : "todo",
   };
@@ -52,6 +59,17 @@ function sandboxStep(fleet: FleetState): GettingStartedSteps["sandboxes"] {
   }
   if (nodes.some((node) => node.online && node.provider_ready)) return { state: "done", action: "nodes", cloud: false };
   return { state: "todo", action: nodes.length ? "nodes" : "add-node", cloud: false };
+}
+
+/**
+ * Done once the default harness has a deployment default model provider;
+ * without a default harness, once any enabled harness has one.
+ */
+function modelStep(harnesses: readonly CoreHarness[] | "failed" | undefined): StepState {
+  if (!harnesses || harnesses === "failed") return harnesses ? "unknown" : null;
+  const target = harnesses.find((harness) => harness.default);
+  const set = target ? target.model_provider !== null : harnesses.some((harness) => harness.enabled && harness.model_provider !== null);
+  return set ? "done" : "todo";
 }
 
 function keyStep(projects: readonly Project[] | "failed" | undefined): GettingStartedSteps["key"] {

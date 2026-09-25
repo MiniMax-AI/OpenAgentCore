@@ -7,7 +7,8 @@ test.afterEach(async ({ request }) => expectManagementBoundary(request));
 const KEY = "sk-fixture-default-model-canary";
 
 test("sets, replaces and clears a harness's default model, and keeps its key out of the browser", async ({ page, request }) => {
-  await openConsole(page, request, "system");
+  // A fresh install: no harness has a default model yet.
+  await openConsole(page, request, "system", { fresh: true });
   const section = page.getByRole("region", { name: "Default model" });
   const codex = section.getByRole("article", { name: "Codex" });
   const mcode = section.getByRole("article", { name: "MiniMax Code" });
@@ -70,7 +71,7 @@ test("sets, replaces and clears a harness's default model, and keeps its key out
 });
 
 test("reports a Core without a credential key as a configuration error, without rereading", async ({ page, request }) => {
-  await openConsole(page, request, "system", { credentials: "none" });
+  await openConsole(page, request, "system", { fresh: true, credentials: "none" });
   const codex = page.getByRole("region", { name: "Default model" }).getByRole("article", { name: "Codex" });
   await codex.getByRole("button", { name: "Set the default model for Codex" }).click();
   const set = page.getByRole("dialog", { name: "Set default model for Codex" });
