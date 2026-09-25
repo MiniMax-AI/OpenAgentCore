@@ -295,7 +295,7 @@ async function sandboxRoute(request, response, path) {
     const e2b = input.provider === "e2b";
     if (!e2b && (!input.resources || !input.runtime)) return error(response, 400, "resources and runtime are required.", "invalid_sandbox_configuration");
     // As Core (ErrSandboxPublicURLUnreachable): E2B sandboxes reach Core over the internet, which a loopback public_url cannot serve.
-    if (e2b && state.installation === "local") return error(response, 409, "E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback (public_url in config.json, AGENTS_API_PUBLIC_URL for Core), then save again.", "sandbox_configuration_error");
+    if (e2b && state.installation === "local") return error(response, 409, "E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback (public_url in config.json, AGENTS_API_PUBLIC_URL for Core).", "sandbox_configuration_error");
     // As Core: E2B may omit resources and adopt its template build's CPU and memory; only microsandbox suspends.
     const resources = input.resources ?? { cpus: templateBuild.resources.cpus, memory_mib: templateBuild.resources.memory_mib };
     state.deployment = {
