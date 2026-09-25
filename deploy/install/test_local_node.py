@@ -16,7 +16,7 @@ class LocalNodeTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         (self.root / "admin").mkdir()
-        (self.root / "admin/sandbox-admin.key").write_text("fixture-admin")
+        (self.root / "admin/core.key").write_text("fixture-admin")
         self.state = {"core_port": 8091, "installation_id": "94be54a1-138c-4f30-bc87-b13686272dbe",
                       "provider": "microsandbox", "public_url": "https://core.example"}
         self.manifest = {"source_commit": "a" * 40, "images": {"runtime": "sha256:" + "b" * 64},

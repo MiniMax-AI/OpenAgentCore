@@ -1,18 +1,18 @@
 # Administrator API
 
-This Core extension uses deployment Bearer authentication under `/core/v1/admin`.
+This Core extension uses Core key Bearer authentication under `/core/v1/admin`.
 It does not change `/v1`, the fixed Python SDK, or native Runtime interfaces.
-API keys cannot authenticate these routes; the administrator credential cannot
-authenticate `/v1`. The console server supplies `X-Core-Console-Actor` from its
-signed-in account. Core records it only as an unverified display label.
+API keys cannot authenticate these routes; the Core key cannot authenticate `/v1`.
+The console server sends the fixed `X-Core-Console-Actor: console`; direct Core
+key requests send none. Core records it only as an unverified display label.
 
 ## Projects and keys
 
 A Project owns one tenant and shared principal. Its keys have equal access to all
 its assets. Projects and keys are database-owned; deployment configuration defines
 neither. There are no API users, roles or configuration-managed business keys.
-Core requires a separate deployment administrator credential at startup for
-bootstrap and management.
+Core requires the Core key digest file (`AGENTS_API_CORE_KEY_DIGESTS_FILE`) at
+startup for bootstrap and management.
 
 | Operation | Path | Result |
 | --- | --- | --- |
@@ -172,7 +172,8 @@ existing non-secret project projections.
 `resource_type`, `resource_id`, `action`, inclusive `created_after`, exclusive
 `created_before`, `limit=1..100` (default 50), and opaque `after` filters. Response
 is `{data, has_more, next_cursor}`. Each row has `id`, `created_at`,
-`admin_credential_id` (credential digest prefix), `actor_label`, `action`,
+`admin_credential_id` (credential digest prefix), `actor_label` (`console` for Web
+operations, empty for direct Core key requests), `action`,
 `project_id`, `resource_type`, `resource_id`, `result_ids`, `request_id`,
 `trace_id`. Non-copy mappings are an empty array. No credential values or request
 bodies are recorded. Logs and copy ownership do not cascade away on resource

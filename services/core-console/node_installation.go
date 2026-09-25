@@ -100,9 +100,7 @@ func (h *console) serveNodePayload(w http.ResponseWriter, r *http.Request) {
 func (h *console) serveConsoleConfiguration(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(struct {
-		SandboxAdmin        bool   `json:"sandbox_admin"`
-		APIKeys             bool   `json:"api_keys"`
 		NodeInstaller       bool   `json:"node_installer"`
 		NodeInstallerSHA256 string `json:"node_installer_sha256"`
-	}{h.adminToken != "", h.adminToken != "", h.nodePayload != nil, h.nodeInstallerDigest})
+	}{h.nodePayload != nil, h.nodeInstallerDigest})
 }

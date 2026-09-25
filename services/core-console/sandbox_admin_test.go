@@ -22,8 +22,8 @@ func TestSandboxAdminUsesAuthenticatedConsoleAndServerCredential(t *testing.T) {
 	var calls atomic.Int32
 	server, _ := testConsole(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
-		if r.Header.Get("Authorization") != "Bearer private-admin-token" || r.Header.Get("X-Core-Console-Actor") != "admin" {
-			t.Error("Basic console did not supply fixed administrator identity")
+		if r.Header.Get("Authorization") != "Bearer private-core-key" || r.Header.Get("X-Core-Console-Actor") != "console" {
+			t.Error("console did not supply the Core key and fixed actor label")
 		}
 		w.WriteHeader(204)
 	}))
@@ -35,7 +35,7 @@ func TestSandboxAdminUsesAuthenticatedConsoleAndServerCredential(t *testing.T) {
 			t.Errorf("%s = %d", tc.path, response.StatusCode)
 		}
 	}
-	for _, token := range []string{"project-key", "private-admin-token", "incorrect"} {
+	for _, token := range []string{"project-key", "private-core-key", "incorrect"} {
 		response, _ := responseBody(t, server, adminRequest(t, server.URL, "GET", "/core/v1/sandbox/nodes", token))
 		if response.StatusCode != 401 {
 			t.Fatal("bearer bypassed console login")

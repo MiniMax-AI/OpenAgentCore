@@ -71,6 +71,84 @@ public issue reports. For local diagnosis, use the exact installation file:
 docker compose -f "$HOME/.parsar/core/compose.json" ps --all
 ```
 
+## Core key
+
+Each installation has one management credential, the Core key. The installer
+generates it in `<install dir>/admin/core.key` (default install dir
+`~/.parsar/core`) and writes its SHA-256 digest to `admin/core-key-digests.json`.
+Core reads the digest file named by `AGENTS_API_CORE_KEY_DIGESTS_FILE` in
+`config/core.env`; Web reads the key file named by `CORE_CONSOLE_CORE_KEY_FILE`.
+Both read them only at startup.
+
+The Core key:
+
+- signs in to Web. The browser gets an HttpOnly session cookie, never the key;
+- authorizes `/core/v1` management requests sent to Core as
+  `Authorization: Bearer <Core key>`;
+- never authorizes `/v1`. Applications use Project API keys, which in turn cannot
+  call `/core/v1`.
+
+Keep it private. `admin/` stays mode `0700` and both files `0600`, owned by the
+installation user. Of the services, only Web reads `core.key`; Core reads only the
+digest file. Don't copy the key into scripts, shell history, logs or issue reports.
+Operator scripts run on the Core host, call Core's loopback port and read the key
+from its file. This example keeps the key off the command line:
+
+```sh
+curl -fsS -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$HOME/.parsar/core/admin/core.key")") \
+  http://127.0.0.1:8091/core/v1/admin/projects
+```
+
+### Rotate the Core key
+
+1. Generate a new key and replace both files:
+
+   ```sh
+   cd "$HOME/.parsar/core/admin"
+   umask 077
+   key=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+   printf '%s\n' "$key" > core.key.new
+   printf '["%s"]\n' "$(printf '%s' "$key" | sha256sum | cut -d' ' -f1)" > core-key-digests.json.new
+   mv core.key.new core.key && mv core-key-digests.json.new core-key-digests.json
+   unset key
+   ```
+
+2. Restart Core and Web so they read the new files:
+
+   ```sh
+   docker compose -f "$HOME/.parsar/core/compose.json" up -d --force-recreate core web
+   ```
+
+   With native Core, run `systemctl --user restart parsar-<id>-core.service`, then
+   the same Compose command with only `web`. A separate Web installation keeps its
+   own copy in its `admin/core.key`; replace that file and recreate its `web`.
+3. Sign in to Web again with the new key and update your scripts. The restart
+   ends every Web session, and Core rejects the old key.
+
+The digest file is a JSON array, and Core accepts every digest it lists. To give
+scripts time to switch, you can list the old and new digests, restart Core, and
+then remove the old digest and restart Core again. Web holds only one key.
+
+### Upgrade an existing installation
+
+Earlier releases used other names for these files and settings. Current Core and
+Web refuse to start while an old setting is present, and the error names the
+replacement. Stop the services, then:
+
+| Old | New | Where |
+| --- | --- | --- |
+| `admin/sandbox-admin.key` | `admin/core.key` | File; Web bind mount in `compose.json` |
+| `admin/digests.json` | `admin/core-key-digests.json` | File; Core bind mount in `compose.json` |
+| `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` | `AGENTS_API_CORE_KEY_DIGESTS_FILE` | `config/core.env`; its value names the renamed file |
+| `CORE_CONSOLE_ADMIN_TOKEN_FILE` | `CORE_CONSOLE_CORE_KEY_FILE` | Web `environment` in `compose.json` |
+
+Also remove `CORE_CONSOLE_AUTH_MODE`, `CORE_CONSOLE_STATE_DIR` and
+`CORE_CONSOLE_PASSWORD_FILE` from Web's environment, with their `state/console`
+and `config/console.password` mounts. Web no longer has accounts, passwords or
+Basic authentication, and it refuses to start while those settings are present.
+The old account state is not read; delete it after the upgrade or keep it as a
+backup. Then start the services and sign in with the Core key.
+
 ## Projects and API keys
 
 Use the [administrator API](../../contracts/agents-api/admin-api.md) to create a
@@ -93,8 +171,8 @@ Retain together:
 - the dedicated PostgreSQL volume, including Projects, API-key digests, provenance
   and large objects;
 - `config/credential.key`, the database-owned deployment specification and installation identity;
-- `admin/`, including on zero-node installations, containing the separate sandbox
-  administrator key and Core's digest configuration;
+- `admin/`, including on zero-node installations, containing the
+  [Core key](#core-key) and its digest file;
 - each separately installed node's private configuration and persistent identity
   directory on its host (`~/.parsar/nodes/<installation-id>/` for the Web-generated
   installer), as described in the
@@ -195,7 +273,7 @@ persisted Files/Artifacts remain. E2B deployments from that period are not cover
 API and console bind to host loopback. With native Core, PostgreSQL publishes an
 installation-specific loopback port; with container Core it has no published port.
 The production Web proxy forwards only allowlisted administrator and sandbox
-management routes after console login. Its deployment credential stays on the
+management routes after console login. Its Core key stays on the
 server. The TLS reverse proxy routes `/v1` (applications) and `/api/v1` (node and
 Runtime daemon connections) directly to Core, together with the project
 executor-credential API under `/core/v1/environments/`. Everything else, including
@@ -204,11 +282,10 @@ console pages, authentication and administration, goes to Web. Web returns 404 f
 daemon traffic. Machine routes keep their own enrollment and connection credentials.
 `/node-install/` serves only the matched non-secret node payload. Web has no Docker
 or KVM authority.
-It requires an independent administrator login and rejects untrusted browser origins.
-New installations store the administrator password hash in private console state;
-legacy installations retain Basic authentication. There is only one Web role,
-with full console authority; Agent API caller keys remain separate. Back up the
-console account state, and sign in again after a console restart.
+It requires [Core key](#core-key) sign-in and rejects untrusted browser origins.
+There is only one Web role, with full console authority; Agent API caller keys
+remain separate. Sessions live in Web's memory, so sign in again after a Web
+restart or Core key rotation.
 
 A Core restart leaves the separately supervised node and resident microVM processes alone. Host reboot, user
 manager termination and loss of a running microVM are not equivalent to that
@@ -244,7 +321,7 @@ Projects and their API keys are database records. Keys within one Project share
 assets and the same execution principal, while provenance identifies the actual
 key that made each write. Existing resources without recorded provenance return
 null. Historical key-kind metadata remains audit evidence, not a configuration
-authentication path. Console credentials are separate deployment credentials. See the
+authentication path. The Core key is separate from Project API keys. See the
 [query contract](../../contracts/agents-api/write-audit.md) for deployment-authenticated
 Project-scoped batch ownership and cursor history endpoints. Administrator mutations
 have a separate [audit log](../../contracts/agents-api/admin-api.md#monitoring-and-audit). These APIs do not log bodies or secrets.

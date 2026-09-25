@@ -30,14 +30,12 @@ func testConsole(t *testing.T, backend http.Handler) (*httptest.Server, string) 
 	if err := os.WriteFile(filepath.Join(dist, "index.html"), []byte("<html>existing web build</html>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	handler, err := newConsole(config{origin: testOrigin, upstream: u, dist: dist, password: "private-console-password", adminToken: "private-admin-token"})
+	handler, err := newConsole(config{origin: testOrigin, upstream: u, dist: dist, coreKey: "private-core-key"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(handler.Close)
-	server := httptest.NewServer(handler)
-	t.Cleanup(server.Close)
-	return server, dist
+	return serveSignedIn(t, handler), dist
 }
 
 func consoleRequest(t *testing.T, server *httptest.Server, method, path string) *http.Request {
@@ -47,7 +45,9 @@ func consoleRequest(t *testing.T, server *httptest.Server, method, path string) 
 		t.Fatal(err)
 	}
 	r.Host = "127.0.0.1:8080"
-	r.SetBasicAuth("admin", "private-console-password")
+	if cookie, ok := testSessions.Load(server.URL); ok {
+		r.AddCookie(cookie.(*http.Cookie))
+	}
 	r.Header.Set("Origin", testOrigin)
 	r.Header.Set("Sec-Fetch-Site", "same-origin")
 	return r
@@ -79,10 +79,13 @@ func TestAuthenticationAndCrossSiteAdmission(t *testing.T) {
 		change func(*http.Request)
 		status int
 	}{
-		{"missing login", "GET", func(r *http.Request) { r.Header.Del("Authorization") }, 401},
-		{"wrong password", "GET", func(r *http.Request) { r.SetBasicAuth("admin", "wrong") }, 401},
-		{"wrong user", "GET", func(r *http.Request) { r.SetBasicAuth("other", "private-console-password") }, 401},
-		{"duplicate login", "GET", func(r *http.Request) { r.Header.Add("Authorization", r.Header.Get("Authorization")) }, 401},
+		{"missing session", "GET", func(r *http.Request) { r.Header.Del("Cookie") }, 401},
+		{"unknown session", "GET", func(r *http.Request) { r.Header.Set("Cookie", sessionCookie+"="+strings.Repeat("0", 64)) }, 401},
+		{"duplicate session", "GET", func(r *http.Request) { r.Header.Add("Cookie", r.Header.Get("Cookie")) }, 401},
+		{"Core key as bearer", "GET", func(r *http.Request) {
+			r.Header.Del("Cookie")
+			r.Header.Set("Authorization", "Bearer private-core-key")
+		}, 401},
 		{"DNS rebinding host", "GET", func(r *http.Request) { r.Host = "attacker.example:8080" }, 403},
 		{"cross origin", "POST", func(r *http.Request) { r.Header.Set("Origin", "https://attacker.example") }, 403},
 		{"null origin", "POST", func(r *http.Request) { r.Header.Set("Origin", "null") }, 403},
@@ -112,11 +115,11 @@ func TestAuthenticationAndCrossSiteAdmission(t *testing.T) {
 	if calls.Load() != 0 {
 		t.Fatal("rejected request reached Core")
 	}
-	anonymous := consoleRequest(t, server, "GET", "/")
-	anonymous.Header.Del("Authorization")
+	anonymous := consoleRequest(t, server, "GET", "/sessions/saved")
+	anonymous.Header.Del("Cookie")
 	response, body := responseBody(t, server, anonymous)
 	if response.StatusCode != 401 || strings.Contains(body, "existing web build") {
-		t.Fatal("static assets bypassed console authentication")
+		t.Fatal("application routes bypassed console authentication")
 	}
 	request := consoleRequest(t, server, "GET", "/healthz")
 	request.Header = make(http.Header)
@@ -138,7 +141,8 @@ func TestProxyUsesOnlyConfiguredCoreCredential(t *testing.T) {
 		_, _ = io.WriteString(w, `{"data":[]}`)
 	}))
 	r := consoleRequest(t, server, "POST", "/core/v1/admin/projects?limit=5")
-	r.Header.Set("Cookie", "browser=private")
+	r.Header.Add("Cookie", "browser=private")
+	r.Header.Set("Authorization", "Bearer browser-token")
 	r.Header.Set("Proxy-Authorization", "Basic browser-secret")
 	r.Header.Set("OpenAI-Beta", "agents=v1")
 	r.Header.Set("Forwarded", "host=attacker.example")
@@ -153,8 +157,8 @@ func TestProxyUsesOnlyConfiguredCoreCredential(t *testing.T) {
 		}
 	}
 	request := <-observed
-	if request.URL.RequestURI() != "/core/v1/admin/projects?limit=5" || request.Header.Get("Authorization") != "Bearer private-admin-token" || request.Header.Get("OpenAI-Beta") != "agents=v1" {
-		t.Fatal("proxy changed the public request or failed to inject the Core token")
+	if request.URL.RequestURI() != "/core/v1/admin/projects?limit=5" || request.Header.Get("Authorization") != "Bearer private-core-key" || request.Header.Get("OpenAI-Beta") != "agents=v1" {
+		t.Fatal("proxy changed the public request or failed to inject the Core key")
 	}
 	for _, name := range []string{"Cookie", "Proxy-Authorization", "Origin", "Referer", "Forwarded", "X-Forwarded-Host"} {
 		if request.Header.Get(name) != "" {
@@ -171,10 +175,10 @@ func TestProxyRejectsRedirectWithoutFollowingOrExposingIt(t *testing.T) {
 	}))
 	defer destination.Close()
 	server, _ := testConsole(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, destination.URL+"/?token=private-admin-token", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, destination.URL+"/?token=private-core-key", http.StatusTemporaryRedirect)
 	}))
 	response, body := responseBody(t, server, consoleRequest(t, server, "GET", "/core/v1/admin/projects"))
-	if response.StatusCode != 502 || response.Header.Get("Location") != "" || strings.Contains(body, "private-admin-token") || destinationCalls.Load() != 0 {
+	if response.StatusCode != 502 || response.Header.Get("Location") != "" || strings.Contains(body, "private-core-key") || destinationCalls.Load() != 0 {
 		t.Fatal("upstream redirect escaped the fixed proxy")
 	}
 }

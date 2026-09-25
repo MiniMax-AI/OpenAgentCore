@@ -38,9 +38,9 @@ existing Sessions retain their node across disconnects and resume.
    current management changes. See the [installation guide](docs/getting-started/install.md)
    for obtaining/building a matching bundle and the host/network prerequisites.
 2. **Sign in to Web.** Open the console address printed by the installer and
-   register your administrator account with a username and password. Keep them safe.
-   Existing installations retain their `admin` / `console.password` login.
-   The console connects to Core automatically. Create a Project in Web, then
+   sign in with the [Core key](docs/getting-started/operations.md#core-key) from
+   `~/.parsar/core/admin/core.key`. Keep it private. The console connects to Core
+   automatically. Create a Project in Web, then
    issue a key within it for your application. Save the one-time plaintext
    response privately; Core stores its digest. Rotate by issuing another key in the
    same Project and revoking the old one.

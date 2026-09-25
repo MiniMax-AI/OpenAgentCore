@@ -41,14 +41,13 @@ umask 077
 export PARSAR_HOME="$HOME/.parsar/agents-api-deployment"
 mkdir -p "$PARSAR_HOME"
 export AGENTS_API_DATABASE_URL='postgres://<account>:<password>@<host>/<execution-db>'
-export AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE="$PARSAR_HOME/admin-digests.json"
+export AGENTS_API_CORE_KEY_DIGESTS_FILE="$PARSAR_HOME/core-key-digests.json"
 export AGENTS_API_ADDR=127.0.0.1:8091
 export AGENTS_API_ENGINE=codex
 ```
 
-Create `admin-digests.json` as a JSON array containing the SHA-256 digest of a
-random deployment administrator bearer credential. Keep the bearer separately in
-private operator storage. After startup, use it to create a Project and issue an
+Create `core-key-digests.json` as a JSON array containing the SHA-256 digest of a
+random Core key. Keep the Core key separately in private operator storage. After startup, use it to create a Project and issue an
 application key through the [administrator API](../../contracts/agents-api/admin-api.md).
 Projects and application keys live only in PostgreSQL. Keys in one Project share
 its scope and principal; rotation uses issuance and revocation without a restart.

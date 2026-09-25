@@ -6,29 +6,35 @@ authority. The console has no Agent execution or arbitrary asset editing operati
 
 ## Browser to console
 
-The browser uses the console's own origin. In account mode:
+The browser uses the console's own origin and signs in with the
+[Core key](../getting-started/operations.md#core-key):
 
 | Method and route | Request | Result |
 | --- | --- | --- |
-| `GET /console/auth` | No body | `mode: setup`, `login`, or `authenticated`; authenticated mode includes `username` |
-| `POST /console/auth/setup` | JSON `username`, `password` | Creates the sole local administrator and signs in; registration closes afterward |
-| `POST /console/auth/login` | JSON `username`, `password` | Signs in with an HttpOnly session cookie |
-| `POST /console/auth/logout` | No credential payload | Clears the current session |
-| `GET /console/config` | Authenticated console session | Safe connection configuration |
+| `GET /console/auth` | No body | `200 {"mode":"login"}` or `200 {"mode":"authenticated"}` |
+| `POST /console/auth/login` | `Content-Type: application/json`, body `{"core_key":"…"}`; other members are rejected | `200 {"mode":"authenticated"}` and an HttpOnly, SameSite=Strict session cookie (Secure over HTTPS) |
+| `POST /console/auth/logout` | No credential payload | `200 {"mode":"login"}`; clears the cookie and the server-side session |
+| `GET /console/config` | Signed-in session | `node_installer` and `node_installer_sha256` |
+
+Sign-in errors use the console's `{"error": "…"}` envelope: 400 for a malformed
+body, 401 for a wrong key, 415 for a non-JSON body, 429 with `Retry-After` when
+attempts are limited, and 503 when the console cannot start a session. The console
+compares the submitted key with its configured Core key in constant time and never
+logs or returns it. Sessions live only in the console's memory; a console restart
+or Core key rotation requires signing in again. There are no console accounts,
+usernames, passwords, first-run setup or Basic authentication.
 
 Use same-origin browser requests and cookies. Mutations require the same-origin
-request checks; do not put deployment credentials in JavaScript or browser storage.
-The console's local account is not an Agent API user, Project member or role.
-Already-configured Basic-auth deployments retain their existing sign-in mode;
-`GET /console/auth` reports `legacy` there. No new Basic-auth flow is required in
-frontend work.
+request checks; never put the Core key in JavaScript or browser storage.
 
 ## Console to Core
 
-The console server injects its private deployment Bearer credential on allowlisted
+The console server injects the Core key as its Bearer credential on allowlisted
 management requests. It removes browser Authorization and forwarding-sensitive
-headers, and supplies the signed-in account name as `X-Core-Console-Actor`.
-Core treats that name as an audit display label, not an authorization input.
+headers, and sets `X-Core-Console-Actor: console`. Core records that fixed value as
+the audit `actor_label`, a display label rather than an authorization input.
+Direct Core key requests from operator scripts carry no header and record an
+empty label.
 
 Use [AdminClient](../../packages/agents-client/src/admin-client.ts) for the typed
 management client and [the complete administrator reference](../../contracts/agents-api/admin-api.md)

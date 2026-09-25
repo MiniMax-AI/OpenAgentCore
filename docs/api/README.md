@@ -7,18 +7,18 @@ OpenAI compatibility: Core also has explicitly documented extensions under `/v1`
 | --- | --- | --- | --- |
 | Public Agents API | Applications; a database-issued Project API key | Direct Core `/v1` | [Public API](public-agent-api.md) |
 | Project-scoped Core extensions | Applications; the same Project API key | Direct Core; extension-specific paths | [Extension index](public-agent-api.md#core-extensions) |
-| Administrator resources | Web's server or administrative automation; deployment credential | Core `/core/v1/admin` | [Management contract](../../contracts/agents-api/admin-api.md) |
-| Hosted sandbox administration | Web's server or administrative automation; deployment credential | Core `/core/v1/sandbox` management routes | [Web API](web-management.md#sandbox-administration) |
-| Console authentication | Browser; local console sign-in and session cookie | Console `/console/auth` | [Web API](web-management.md#browser-to-console) |
+| Administrator resources | Web's server or administrative automation; [Core key](../getting-started/operations.md#core-key) | Core `/core/v1/admin` | [Management contract](../../contracts/agents-api/admin-api.md) |
+| Hosted sandbox administration | Web's server or administrative automation; Core key | Core `/core/v1/sandbox` management routes | [Web API](web-management.md#sandbox-administration) |
+| Console authentication | Browser; Core key sign-in, then an HttpOnly session cookie | Console `/console/auth` | [Web API](web-management.md#browser-to-console) |
 | Node and daemon transport | Installed node/Runtime; its own enrollment or connection credential | Direct Core `/api/v1`: `/api/v1/sandbox-node/*` and `/api/v1/agent-daemon/*`, including WebSockets | [Runtime credentials](../../contracts/agents-api/environment-executor-credentials.md), [node operations](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host), [machine OpenAPI](../../contracts/agents-api/runtime.openapi.yaml) |
 
 Projects own assets. Multiple equally privileged keys share the Project's assets
 and execution principal; provenance retains the key that performed each write.
 Projects and application keys live in PostgreSQL, never deployment configuration.
-Administrator credentials cannot authenticate public Agent API operations, and
-Project keys cannot authenticate administrator operations.
+The Core key cannot authenticate public Agent API operations, and Project keys
+cannot authenticate administrator operations.
 
-The console server stores its deployment credential privately and proxies only
+The console server stores the Core key privately and proxies only
 allowlisted management operations. Browsers do not receive it. Applications and
 machines call Core directly; the console returns 404 for `/v1` and `/api/v1`, even
 when given an application key or machine credential.

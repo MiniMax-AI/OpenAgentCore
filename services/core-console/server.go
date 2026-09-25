@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"crypto/subtle"
 	"errors"
 	"io"
 	stdlog "log"
@@ -23,15 +21,14 @@ type console struct {
 	proxy               *httputil.ReverseProxy
 	transport           *http.Transport
 	host                string
-	password            [sha256.Size]byte
 	auth                *consoleAuth
 }
 
 type consoleActorContextKey struct{}
 
 func newConsole(c config) (*console, error) {
-	if c.adminToken == "" {
-		return nil, errors.New("console requires a deployment administrator credential")
+	if c.coreKey == "" {
+		return nil, errors.New("console requires the Core key")
 	}
 	root, err := os.OpenRoot(c.dist)
 	if err != nil {
@@ -43,14 +40,7 @@ func newConsole(c config) (*console, error) {
 		return nil, errors.New("console assets require index.html")
 	}
 	origin, _ := url.Parse(c.origin)
-	h := &console{config: c, root: root, host: origin.Host, password: sha256.Sum256([]byte(c.password))}
-	if c.authMode == "account" {
-		h.auth, err = newConsoleAuth(c)
-		if err != nil {
-			root.Close()
-			return nil, err
-		}
-	}
+	h := &console{config: c, root: root, host: origin.Host, auth: newConsoleAuth(c)}
 	if c.nodePayloadDir != "" {
 		h.nodePayload, err = os.OpenRoot(c.nodePayloadDir)
 		if err != nil {
@@ -78,7 +68,7 @@ func newConsole(c config) (*console, error) {
 			r.Out.Header.Del("Cookie")
 			r.Out.Header.Del("Origin")
 			r.Out.Header.Del("Referer")
-			r.Out.Header.Set("Authorization", "Bearer "+c.adminToken)
+			r.Out.Header.Set("Authorization", "Bearer "+c.coreKey)
 			actor, _ := r.In.Context().Value(consoleActorContextKey{}).(string)
 			r.Out.Header.Set("X-Core-Console-Actor", actor)
 		},
@@ -144,36 +134,16 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Path == "/console/auth" || strings.HasPrefix(r.URL.Path, "/console/auth/") {
-		if h.auth != nil {
-			h.auth.serve(w, r)
-		} else if r.URL.Path == "/console/auth" && r.Method == http.MethodGet {
-			authJSON(w, http.StatusOK, map[string]string{"mode": "legacy"})
-		} else {
-			authError(w, http.StatusNotFound, "Account authentication is not configured")
-		}
+		h.auth.serve(w, r)
 		return
 	}
-	if h.auth != nil && publicConsoleAsset(r) {
+	if publicConsoleAsset(r) {
 		h.serveStatic(w, r)
 		return
 	}
-	actor := "admin"
-	if h.auth != nil {
-		actor = h.auth.authenticated(r)
-		if actor == "" {
-			authError(w, http.StatusUnauthorized, "Sign in to the console")
-			return
-		}
-	} else {
-		username, password, ok := r.BasicAuth()
-		digest := sha256.Sum256([]byte(password))
-		userDigest, adminDigest := sha256.Sum256([]byte(username)), sha256.Sum256([]byte("admin"))
-		if !ok || len(r.Header.Values("Authorization")) != 1 ||
-			subtle.ConstantTimeCompare(digest[:], h.password[:])&subtle.ConstantTimeCompare(userDigest[:], adminDigest[:]) != 1 {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Core console", charset="UTF-8"`)
-			http.Error(w, "Authentication required", http.StatusUnauthorized)
-			return
-		}
+	if !h.auth.authenticated(r) {
+		authError(w, http.StatusUnauthorized, "Sign in to the console")
+		return
 	}
 	if r.URL.Path == "/console/config" && r.Method == http.MethodGet {
 		h.serveConsoleConfiguration(w, r)
@@ -184,7 +154,8 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		h.proxy.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), consoleActorContextKey{}, actor)))
+		// Core records this fixed audit label for display only; there are no console users.
+		h.proxy.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), consoleActorContextKey{}, "console")))
 		return
 	}
 	h.serveStatic(w, r)

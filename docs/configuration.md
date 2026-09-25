@@ -9,6 +9,7 @@ parameters. Each setting has one owner; reinstalling does not restore defaults.
 | Settings | Authoritative source | How changes take effect |
 | --- | --- | --- |
 | Core database/pool, listener, execution concurrency, logging, audit retention | `<installation>/config/core.env` | Edit the private file; restart Core |
+| Core key | `<installation>/admin/core.key` (Web) and `admin/core-key-digests.json` (Core) | Replace both files; restart Core and Web ([rotation](getting-started/operations.md#rotate-the-core-key)) |
 | Hosted provider, uniform guest resources, immutable Runtime specification, E2B credentials | Core PostgreSQL | Web or deployment API; existing maintenance/generation checks |
 | Node registration and sandbox capacity | Core PostgreSQL | Administrator enrollment and node updates |
 | Node host paths, Docker socket and local network wiring | Node `provider.json` | Edit host-local fields; restart the node |
@@ -62,7 +63,7 @@ flags. Changing `core.env` does not require editing those launcher files.
 | `AGENTS_API_DAEMON_WS_URL` | Installer-generated reachable WebSocket URL | Enables daemon transport and advertises self-hosted connectivity; hosted bootstrap uses the saved deployment origin |
 | `AGENTS_API_CONFIG_FILE` | Installer-generated absolute loaded-file path | Diagnostic marker only, not a loader; preserve it |
 | `AGENTS_API_SANDBOX_INSTALLATION_ID` | Installer-generated canonical UUID | Stable identity pinned to the database, not provider selection; preserve it |
-| `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` | Generated private digest file path | Administrator authority; original bearer key stays separately on the console server |
+| `AGENTS_API_CORE_KEY_DIGESTS_FILE` | Generated private `admin/core-key-digests.json` path | JSON array of [Core key](getting-started/operations.md#core-key) SHA-256 digests that authorize `/core/v1`; the key itself stays in Web's `CORE_CONSOLE_CORE_KEY_FILE`. The old name `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` fails startup |
 | `AGENTS_API_CREDENTIAL_KEY_FILE` | Generated private encryption-key path | Preserve with the database; never regenerate to repair credentials |
 | `AGENTS_API_EXECUTION_OPTIONS_FILE` | Unset | Optional existing adapter-options JSON; see [model execution](../contracts/agents-api/model-execution.md) and [harness selection](../contracts/agents-api/harness-selection.md) |
 | `AGENTS_API_RUNTIME_HISTORY_FILE` | Unset | Optional existing Runtime history/export JSON; local collection defaults to 30 seconds, retention to 7 days; see [history contract](../contracts/agents-api/runtime-history-api.md) |
