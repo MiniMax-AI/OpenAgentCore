@@ -30,8 +30,9 @@ export function NodeEditDialog({ client, node, onClose, onSaved }: {
   const whole = (value: string) => (/^\d+$/.test(value.trim()) ? Number(value.trim()) : null);
   const activeLimit = whole(active);
   const retainedLimit = suspends ? whole(retained) : Math.max(node?.max_retained ?? 0, activeLimit ?? 0);
-  const nameProblem = !name.trim() || name.length > 128 ? t("Enter a name of up to 128 characters.") : null;
-  const activeProblem = activeLimit === null || activeLimit < 1 ? t("Enter a whole number of at least 1.") : null;
+  // Core counts the name in UTF-8 bytes and caps both limits at a million.
+  const nameProblem = !name.trim() || new TextEncoder().encode(name.trim()).length > 128 ? t("Enter a shorter name.") : null;
+  const activeProblem = activeLimit === null || activeLimit < 1 || activeLimit > 1_000_000 ? t("Enter a whole number from 1 to 1,000,000.") : null;
   const retainedProblem = suspends && (retainedLimit === null || activeLimit === null || retainedLimit < activeLimit || retainedLimit > 1_000_000) ? t("Enter at least the number of sandboxes at once.") : null;
   const ready = node !== null && !nameProblem && !activeProblem && !retainedProblem && !busy;
 

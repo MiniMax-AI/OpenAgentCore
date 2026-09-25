@@ -114,6 +114,8 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         // A later visit reads the whole snapshot again; other pages re-read the deployment now.
         void queryClient.invalidateQueries({ queryKey: sandboxSnapshotQuery.queryKey, refetchType: "none" });
         void queryClient.invalidateQueries({ queryKey: sandboxDeploymentQuery.queryKey });
+        // Overview and Sandbox metrics read the fleet separately and lay out by provider.
+        void queryClient.invalidateQueries({ queryKey: ["sandbox-fleet"] });
       }
     } catch (error) {
       if (!controller.signal.aborted) {
@@ -214,7 +216,15 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         client={client}
         node={editTarget}
         onClose={() => setEditTarget(null)}
-        onSaved={() => { setEditTarget(null); toast.show(t("Node saved"), { tone: "success" }); refresh(); }}
+        onSaved={() => {
+          const saved = editTarget;
+          setEditTarget(null);
+          toast.show(t("Node saved"), { tone: "success" });
+          refresh();
+          // Other pages read the fleet and the node's detail separately.
+          void queryClient.invalidateQueries({ queryKey: ["sandbox-fleet"] });
+          if (saved) void queryClient.invalidateQueries({ queryKey: ["sandbox-node", saved.id] });
+        }}
       />
     </>;
   }
