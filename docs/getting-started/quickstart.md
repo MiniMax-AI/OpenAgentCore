@@ -57,8 +57,11 @@ install or start a separate daemon for a Core-managed Session. The public discri
 `openai_hosted`; in this deployment it means the sandbox managed by Parsar Core.
 The installation's provider can be microsandbox or Docker.
 
-For a Codex-compatible Responses endpoint, provide your actual model name,
-endpoint and key through your application's private configuration:
+If the administrator set a deployment default model provider for the harness (Web,
+System), a hosted Session needs only `agent.model`. Otherwise, or to use your own
+endpoint, pass the provider with the request. For a Codex-compatible Responses
+endpoint, provide your actual model name, endpoint and key through your
+application's private configuration:
 
 ```python
 import os
@@ -87,7 +90,9 @@ Running this example makes a real model request and may incur provider charges.
 `extra_body` carries existing Core extensions: harness selection and write-only
 model configuration. They are not fields in the official SDK 3.13.0 protocol.
 The service encrypts model configuration with tenant/Session binding and never
-returns the secret through public resource reads. Keep the installation's
+returns the secret through public resource reads. A `self_hosted` Session must
+always carry its own provider this way or through a saved Agent; deployment
+defaults apply to `openai_hosted` and `none`, never to `self_hosted`. Keep the installation's
 credential encryption key and database together across restarts.
 Keep the complete `agent` object together: SDK 3.13.0 replaces an ordinary body
 field with the corresponding `extra_body` field rather than merging nested fields.

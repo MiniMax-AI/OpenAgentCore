@@ -32,7 +32,11 @@ type Dispatcher struct {
 	Policy
 	Store    *store.Store
 	Registry *gateway.Registry
-	// Options resolves transient engine credentials; they are never stored here.
+	// Options optionally supplies native adapter options for Sessions that need
+	// no frozen model provider (environment none and legacy daemon Sessions).
+	// The server command leaves it nil since the operator options file was
+	// retired; native tests use it to reach synthetic model servers. It is never
+	// consulted for openai_hosted or self_hosted Sessions.
 	Options func(context.Context, store.Session) (map[string]any, error)
 	// ManagedRuntimes is optional internal provisioning; it does not admit hosted API requests.
 	ManagedRuntimes *RuntimeProvider

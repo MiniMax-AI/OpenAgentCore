@@ -62,16 +62,20 @@ generation. Switching never migrates Sessions or deletes resources automatically
 See the
 [deployment procedure](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance).
 
-For multiple engines, use an exclusive `by_harness` object in the private
-`AGENTS_API_EXECUTION_OPTIONS_FILE`, with one existing adapter-options object per
-engine. No engine inherits another engine's credentials. A legacy flat options
-object is usable only by the deployment default engine. Missing options for a
-selected engine fail execution. Operator credentials stay in private files and
-encrypted hosted Session snapshots. Saved Agent provider credentials use separately
-encrypted defaults; public reads return only safe fields and a configured flag.
-Credentials never enter metadata or ordinary effective responses.
-A Session may instead provide the [write-only model execution extension](model-execution.md);
-its frozen configuration takes precedence without operator fallback.
+Each engine has at most one deployment default model provider, stored encrypted in
+PostgreSQL and managed with the Core key in Web or through
+`/core/v1/harnesses/{harness}/model-provider`; `GET /core/v1/harnesses` lists every
+engine with its enabled and default flags and its safe provider view. No engine
+inherits another engine's credentials. New `openai_hosted` and `none` Sessions that
+resolve no Session or Agent bundle freeze their engine's default; `self_hosted`
+Sessions never use it. Saved Agent provider credentials use separately encrypted
+defaults. Public reads return only safe fields and a configured flag; credentials
+never enter metadata or ordinary effective responses. A Session may instead provide
+the [write-only model execution extension](model-execution.md); its frozen
+configuration takes precedence. See
+[model execution](model-execution.md#deployment-defaults) for precedence and where
+each source applies. The former `AGENTS_API_EXECUTION_OPTIONS_FILE` is rejected at
+startup.
 
 Model names remain explicit `agent.model` values. The selected native adapter uses
 its configured provider and rejects unsupported model settings without changing

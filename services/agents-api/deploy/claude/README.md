@@ -23,21 +23,20 @@ private Docker network, the existing `deploy/codex/seccomp.json`, and
 layout required by native bubblewrap; all native sandbox restrictions remain on.
 It is disabled for existing deployments unless explicitly selected.
 
-Set `AGENTS_API_ENGINE=claude_sdk`. In a private file selected by
-`AGENTS_API_EXECUTION_OPTIONS_FILE`, configure the provider:
+Set `AGENTS_API_ENGINE=claude_sdk`. Configure the deployment default model provider
+with the Core key, in Web or through Core's API:
 
-```json
-{
-  "claude_provider": {
-    "base_url": "https://api.anthropic.com",
-    "bearer_token": "REPLACE_WITH_OPERATOR_SECRET"
-  }
-}
+```sh
+curl -fsS -X PUT http://127.0.0.1:8091/core/v1/harnesses/claude_sdk/model-provider \
+  -H "Authorization: Bearer $CORE_KEY" -H "Content-Type: application/json" \
+  -d '{"protocol":"anthropic","base_url":"https://api.anthropic.com","api_key":"REPLACE_WITH_OPERATOR_SECRET"}'
 ```
 
-Use the endpoint and model supported by your actual provider. Do not bake keys
-into the image. Core forwards this adapter-owned option transiently; it is not a
-public Agent field. Workspace tool processes cannot inherit the provider secret.
+A Session may instead supply its own `x_agents_core.model_provider`. Use the
+endpoint and model supported by your actual provider. Do not bake keys into the
+image. Core freezes the bundle in the Session's encrypted snapshot and delivers it
+to the adapter; it is not a public Agent field. Workspace tool processes cannot
+inherit the provider secret.
 Follow the existing Core setup for independent PostgreSQL credentials, migrations,
 API authentication and managed Runtime enrollment. Parsar is not a dependency.
 

@@ -41,9 +41,13 @@ inline or inherited from a saved Agent; it has no implicit deployment default.
 
 The provider's `status` describes visibility:
 
-- `available`: a safe Session- or Agent-supplied bundle. Configuration contains
-  protocol, endpoint, configured-key flag and optional token limits.
-- `redacted`: deployment-owned configuration. Source is `deployment` and
+- `available`: a safe view of the frozen bundle. Configuration contains protocol,
+  endpoint, configured-key flag and optional token limits.
+- `available` with source `deployment`: the harness's deployment default as it was
+  frozen at creation. Deployment defaults are readable with the same Core key
+  through `/core/v1/harnesses`, so the safe view is recorded too.
+- `redacted`: a deployment selection frozen before deployment defaults moved into
+  Core, from the retired operator options file. Source is `deployment` and
   configuration is null; this read has no endpoint-reveal override.
 - `unavailable`: no trustworthy safe provider projection was recorded. Source is
   `unknown` and configuration is null. This does not mean that execution failed.

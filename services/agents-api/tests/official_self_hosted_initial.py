@@ -15,6 +15,11 @@ import httpx2
 from openai import OpenAI
 
 
+# Self-hosted Sessions carry their own write-only model provider; nothing here calls it.
+PROVIDER = {"x_agents_core": {"model_provider": {"protocol": "responses", "base_url": "https://model.fixture.example/v1",
+                                                 "api_key": "fixture-model-key"}}}
+
+
 def main():
     settings = json.load(sys.stdin)
     pin = json.loads((Path(__file__).resolve().parents[3] / "contracts/agents-api/upstream.json").read_text())
@@ -44,7 +49,7 @@ def main():
         endpoint = base + "/v1/agents/sessions"
 
         def post(request, key, url=endpoint, key_token=token):
-            return raw.post(url, json=request, headers={"Idempotency-Key": key, "Authorization": "Bearer " + key_token})
+            return raw.post(url, json={**request, **PROVIDER}, headers={"Idempotency-Key": key, "Authorization": "Bearer " + key_token})
 
         def current(case, status="requires_action"):
             value = sessions.retrieve(case["id"]).to_dict()
@@ -56,7 +61,7 @@ def main():
 
         def retry(case, status="requires_action"):
             value = current(case, status)
-            assert sessions.create(**case["request"], extra_headers={"Idempotency-Key": case["key"]}).to_dict() == value
+            assert sessions.create(**case["request"], extra_body=PROVIDER, extra_headers={"Idempotency-Key": case["key"]}).to_dict() == value
             response = post(case["request"], case["key"])
             assert response.status_code == 201 and response.json() == value
             return value
@@ -78,7 +83,7 @@ def main():
                     def create_once(index):
                         if index == 0:
                             with client() as creator:
-                                return creator.beta.agents.sessions.create(**request, extra_headers={"Idempotency-Key": key}).to_dict()
+                                return creator.beta.agents.sessions.create(**request, extra_body=PROVIDER, extra_headers={"Idempotency-Key": key}).to_dict()
                         reply = post(request, key)
                         assert reply.status_code == 201
                         return reply.json()
@@ -88,7 +93,7 @@ def main():
                     value = replies[0]
                     assert all(reply == value for reply in replies)
                 elif mode == "sdk_stream":
-                    with sessions.create(**request, stream=True, extra_headers={"Idempotency-Key": key}) as stream:
+                    with sessions.create(**request, stream=True, extra_body=PROVIDER, extra_headers={"Idempotency-Key": key}) as stream:
                         events = iter(stream)
                         created, waiting = next(events).to_dict(), next(events).to_dict()
                         assert created["type"] == "agent.session.created" and waiting["type"] == "agent.session.requires_action"
@@ -100,7 +105,7 @@ def main():
                         value = waiting["session"]
                         assert created["session"] == value
                 elif mode == "raw_disconnect":
-                    with raw.stream("POST", endpoint, json={**request, "stream": True}, headers={"Idempotency-Key": key}) as response:
+                    with raw.stream("POST", endpoint, json={**request, **PROVIDER, "stream": True}, headers={"Idempotency-Key": key}) as response:
                         assert response.status_code == 201 and response.headers["content-type"] == "text/event-stream"
                         created = next(json.loads(line[6:]) for line in response.iter_lines() if line.startswith("data: "))
                         assert created["type"] == "agent.session.created"
@@ -108,7 +113,7 @@ def main():
                     value = sessions.retrieve(created["session"]["id"]).to_dict()
                     assert created["session"] == value
                 else:
-                    value = sessions.create(**request, extra_headers={"Idempotency-Key": key}).to_dict()
+                    value = sessions.create(**request, extra_body=PROVIDER, extra_headers={"Idempotency-Key": key}).to_dict()
                 assert time.monotonic() - began < 8, "creation waited for offline execution"
                 check(value, "requires_action")
                 case = {"id": value["id"], "environment_id": value["environment"]["id"], "key": key, "request": request,
@@ -140,7 +145,7 @@ def main():
                 observations, failures = {}, []
                 # A same-key stream retry of the pending creation ends at once without events.
                 with client() as observer:
-                    with observer.beta.agents.sessions.create(**case["request"], stream=True, extra_headers={"Idempotency-Key": case["key"]}) as stream:
+                    with observer.beta.agents.sessions.create(**case["request"], stream=True, extra_body=PROVIDER, extra_headers={"Idempotency-Key": case["key"]}) as stream:
                         assert list(stream) == []
                 ready = {name: threading.Event() for name in ("sdk", "raw")}
 

@@ -32,10 +32,11 @@ func saveSessionExecutionConfiguration(ctx context.Context, q *sqlc.Queries, ses
 		if provider == nil {
 			return fmt.Errorf("%w: execution projection has no model provider", ErrInvalidInput)
 		}
-		// Deployment endpoints and all native options remain private, even if an
-		// internal caller accidentally supplies a public provider view.
-		frozen.ModelProvider.Status = "redacted"
-		frozen.ModelProvider.Configuration = nil
+		// The deployment default is readable with the same Core key, so the
+		// safe view is recorded from the frozen bundle itself. Native options
+		// are never part of it.
+		frozen.ModelProvider.Status = "available"
+		frozen.ModelProvider.Configuration = provider.SafeView()
 	case "session", "agent":
 		if provider == nil || frozen.ModelProvider.Status != "available" || frozen.ModelProvider.Configuration == nil || *frozen.ModelProvider.Configuration != *provider.SafeView() {
 			return fmt.Errorf("%w: execution projection does not match model provider", ErrInvalidInput)
@@ -92,7 +93,8 @@ func normalizeExecutionProjection(projection *v1.SessionExecutionConfiguration, 
 	projection.Object = "agent.session.execution_configuration"
 	projection.SchemaVersion = 1
 	projection.SessionID = sessionID
-	if projection.ModelProvider.Source == "deployment" {
+	if projection.ModelProvider.Source == "deployment" && (projection.ModelProvider.Status != "available" || projection.ModelProvider.Configuration == nil) {
+		// Sessions created before deployment defaults moved into Core stay redacted.
 		projection.ModelProvider.Status = "redacted"
 		projection.ModelProvider.Configuration = nil
 	} else if projection.ModelProvider.Status != "available" {

@@ -56,8 +56,9 @@ Routes below are relative to `/core/v1`:
 | Asset ownership | `GET /projects/{id}/resource-owners` with batched resource IDs |
 | Key operation history | `GET /projects/{id}/write-operations` with key/resource/time filters |
 | Executor credentials | `GET/POST /projects/{id}/environments/{environment_id}/executor-credentials`, `DELETE …/executor-credentials/{key_id}` ([contract](../../contracts/agents-api/environment-executor-credentials.md)) |
+| Deployment model providers | `GET /harnesses`, `GET/PUT/DELETE /harnesses/{harness}/model-provider`; the key is write-only ([contract](../../contracts/agents-api/model-execution.md#deployment-defaults)) |
 | Usage and health | `GET /summary`, `/sandbox/runtime-observations`, `/metrics` |
-| Administrator audit | `GET /audit-log` |
+| Administrator audit | `GET /audit-log`; deployment-wide entries have `project_id: null` |
 
 A Project UUID in a management path selects the target; it is not a credential.
 API-key plaintext is returned only by successful issuance, so display it once and

@@ -28,7 +28,7 @@ func TestInitialFilesHTTPInlineLimitsAndRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Exercise HTTP parsing and durable storage without starting a Runtime.
-	handler, err := api.NewHandler(s, auth, "codex", api.WithHostedEnvironments(), api.WithExecution(s))
+	handler, err := api.NewHandler(s, auth, "codex", api.WithHostedEnvironments(), api.WithExecution(s), fixtureDeploymentProvider())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -157,7 +157,7 @@ func TestWhitespaceOnlyTextHarnessAdmissionPostgres(t *testing.T) {
 			`{"agent":{"model":"m"},"environment":{"type":"none"},"input":[{"role":"user","content":[{"type":"input_text","text":"x"}]},{"role":"user","content":[{"type":"input_text","text":""},{"type":"input_text","text":" "}]}]}`,
 			`{"agent":{"model":"m"},"environment":{"type":"none"},"stream":true,"input":"   "}`,
 			// The self-hosted initial reservation is never created.
-			`{"agent":{"model":"m"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"input":"   "}`,
+			`{"agent":{"model":"m"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"input":"   ",` + fixtureSessionProvider(engine) + `}`,
 		} {
 			if status, response := client.do(token, http.MethodPost, "/v1/agents/sessions", "application/json", []byte(body)); status != http.StatusBadRequest || response != rejection {
 				t.Errorf("%s create %s: %d %s", engine, body, status, response)

@@ -299,20 +299,6 @@ def check_secrets(root, config, state):
     configuration.read_core_key(root)
 
 
-def execution_options_import(root, state, out):
-    """Hook for phase 3's one-time import of a retained execution options file.
-
-    install.sh --convert keeps an existing AGENTS_API_EXECUTION_OPTIONS_FILE and its
-    file unchanged (state.json execution_options_file). Phase 3 replaces this body with
-    the import into Core's deployment model providers and then clears the record.
-    """
-    retained = state.get("execution_options_file")
-    if retained:
-        out(f"Note: Core still reads {retained['path']} through AGENTS_API_EXECUTION_OPTIONS_FILE. "
-            "A later release imports it into Core once and removes it.")
-    return state
-
-
 def read_generated(root, names):
     result = {}
     for name in names:
@@ -504,7 +490,6 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
     if not args.dry_run:
         # A rotation that stopped before using its new key leaves only this file.
         (root / "secrets/core.key.new").unlink(missing_ok=True)
-    state = execution_options_import(root, state, out)
     rendered, disk, previous = render_now(root, config, state)
     edited = edited_files(state, disk, rendered)
     if edited and not discard_edits:

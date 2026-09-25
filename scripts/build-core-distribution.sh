@@ -99,7 +99,8 @@ if [[ "$(go env GOVERSION)" != "$required_go" ]]; then
   exit 1
 fi
 for file in install.sh install.py configuration.py config_model.py config.schema.json parsar_cli.py convert.py \
-    native_service.py node_install.py node_spec.py local_node.py distribution.py self_hosted_install.py; do
+    native_service.py node_install.py node_spec.py local_node.py distribution.py self_hosted_install.py \
+    model_provider_sessions.py; do
   cp "deploy/install/$file" "$bundle/$file"
 done
 python3 scripts/core-distribution-manifest.py bootstraps "$bundle" "$source_epoch"

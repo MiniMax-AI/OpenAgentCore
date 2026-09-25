@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,18 +10,84 @@ import (
 	"fmt"
 	"strings"
 
+	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func creationRequestHash(raw json.RawMessage) (pgtype.Text, error) {
+// modelProviderKeyPurpose separates model provider key fingerprints from any
+// other use of the credential key.
+const modelProviderKeyPurpose = "parsar.agents-api.model-provider-api-key.v1"
+
+// fingerprintedProvider replaces a bundle's key with its keyed fingerprint, so
+// idempotency hashes tell keys apart without ever hashing a key itself.
+func (s *Store) fingerprintedProvider(provider *v1.ModelProviderInput) (*v1.ModelProviderInput, error) {
+	if provider == nil {
+		return nil, nil
+	}
+	fingerprint, err := s.credentialCipher.Fingerprint(modelProviderKeyPurpose, provider.APIKey)
+	if err != nil {
+		return nil, ErrCredentialStorageUnavailable
+	}
+	copy := *provider
+	copy.APIKey = "fingerprint:" + fingerprint
+	return &copy, nil
+}
+
+// withoutProviderKey replaces a caller intent's x_agents_core.model_provider
+// with its typed value carrying a keyed fingerprint instead of the key. It fails
+// closed: an intent whose extension or provider cannot be read is rejected
+// rather than hashed as raw bytes that could carry a key.
+func (s *Store) withoutProviderKey(raw json.RawMessage) (json.RawMessage, error) {
+	var request map[string]json.RawMessage
+	if json.Unmarshal(raw, &request) != nil || request == nil {
+		return nil, ErrInvalidInput
+	}
+	extensionRaw, present := request["x_agents_core"]
+	if !present || jsonNull(extensionRaw) {
+		return raw, nil
+	}
+	var extension map[string]json.RawMessage
+	if json.Unmarshal(extensionRaw, &extension) != nil || extension == nil {
+		return nil, ErrInvalidInput
+	}
+	providerRaw, present := extension["model_provider"]
+	if !present || jsonNull(providerRaw) {
+		return raw, nil
+	}
+	var provider v1.ModelProviderInput
+	if json.Unmarshal(providerRaw, &provider) != nil {
+		return nil, ErrInvalidInput
+	}
+	fingerprinted, err := s.fingerprintedProvider(&provider)
+	if err != nil {
+		return nil, err
+	}
+	if extension["model_provider"], err = json.Marshal(fingerprinted); err != nil {
+		return nil, err
+	}
+	if request["x_agents_core"], err = json.Marshal(extension); err != nil {
+		return nil, err
+	}
+	return json.Marshal(request)
+}
+
+func jsonNull(raw json.RawMessage) bool {
+	return string(bytes.TrimSpace(raw)) == "null"
+}
+
+func (s *Store) creationRequestHash(raw json.RawMessage) (pgtype.Text, error) {
 	if len(raw) == 0 {
 		return pgtype.Text{}, nil
 	}
 	if len(raw) > 16<<20 {
 		return pgtype.Text{}, ErrInvalidInput
+	}
+	raw, err := s.withoutProviderKey(raw)
+	if err != nil {
+		return pgtype.Text{}, err
 	}
 	canonical, err := canonicalJSONObject(raw)
 	if err != nil {
@@ -42,7 +109,13 @@ func (s *Store) FindSessionCreation(ctx context.Context, tenantID, key string, r
 	if strings.TrimSpace(key) == "" || len(key) > 128 {
 		return SessionCreation{}, ErrInvalidInput
 	}
-	hash, err := creationRequestHash(request)
+	hash, err := s.creationRequestHash(request)
+	if errors.Is(err, ErrCredentialStorageUnavailable) {
+		// Without the credential key no Session with a provider bundle can have
+		// been committed or can be created; creation reports the missing key
+		// after request validation.
+		return SessionCreation{}, ErrNotFound
+	}
 	if err != nil {
 		return SessionCreation{}, err
 	}

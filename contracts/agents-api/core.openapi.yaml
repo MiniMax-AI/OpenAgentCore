@@ -180,6 +180,47 @@ definitions:
       total_sessions:
         type: integer
     type: object
+  api.CoreHarness:
+    properties:
+      default:
+        type: boolean
+      enabled:
+        type: boolean
+      id:
+        enum:
+          - claude_sdk
+          - codex
+          - mcode
+        type: string
+      model_provider:
+        allOf:
+          - $ref: '#/definitions/api.HarnessModelProvider'
+        x-nullable: true
+      object:
+        enum:
+          - core.harness
+        type: string
+    required:
+      - default
+      - enabled
+      - id
+      - model_provider
+      - object
+    type: object
+  api.CoreHarnessList:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/api.CoreHarness'
+        type: array
+      object:
+        enum:
+          - list
+        type: string
+    required:
+      - data
+      - object
+    type: object
   api.EnvironmentExecutorCredentialRequest:
     properties:
       key_id:
@@ -194,6 +235,41 @@ definitions:
         items:
           $ref: '#/definitions/store.ExecutorCredential'
         type: array
+    type: object
+  api.HarnessModelProvider:
+    properties:
+      api_key_configured:
+        type: boolean
+      base_url:
+        type: string
+      context_window:
+        type: integer
+      harness:
+        enum:
+          - claude_sdk
+          - codex
+          - mcode
+        type: string
+      max_output_tokens:
+        type: integer
+      object:
+        enum:
+          - core.model_provider
+        type: string
+      protocol:
+        enum:
+          - anthropic
+          - responses
+        type: string
+      updated_at:
+        type: string
+    required:
+      - api_key_configured
+      - base_url
+      - harness
+      - object
+      - protocol
+      - updated_at
     type: object
   api.Installation:
     properties:
@@ -638,6 +714,7 @@ definitions:
         type: string
       project_id:
         type: string
+        x-nullable: true
       request_id:
         type: string
       resource_id:
@@ -1558,6 +1635,26 @@ definitions:
       - data
       - has_more
       - object
+    type: object
+  v1.ModelProviderInput:
+    properties:
+      api_key:
+        type: string
+      base_url:
+        type: string
+      context_window:
+        type: integer
+      max_output_tokens:
+        type: integer
+      protocol:
+        enum:
+          - anthropic
+          - responses
+        type: string
+    required:
+      - api_key
+      - base_url
+      - protocol
     type: object
   v1.ModelProviderView:
     properties:
@@ -2969,6 +3066,154 @@ paths:
       summary: Query committed administrator mutations
       tags:
         - Core Administration
+  /core/v1/harnesses:
+    get:
+      description: Core key only. Returns every harness this build supports, in name order. enabled and default are read-only views of the process configuration (AGENTS_API_ENGINE and AGENTS_API_HARNESSES). model_provider is the harness's deployment default, stored in Core, or null. Keys are never returned; api_key_configured reports that one is set.
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.CoreHarnessList'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List harnesses and their deployment default model providers
+      tags:
+        - Deployment Model Providers
+  /core/v1/harnesses/{harness}/model-provider:
+    delete:
+      description: Core key only. Idempotent; each successful request is audited. Sessions that already froze the default keep it. Afterwards new openai_hosted Sessions for this harness need a Session or Agent bundle.
+      parameters:
+        - description: Harness
+          enum:
+            - claude_sdk
+            - codex
+            - mcode
+          in: path
+          name: harness
+          required: true
+          type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Remove a harness's deployment default model provider
+      tags:
+        - Deployment Model Providers
+    get:
+      description: Core key only. Returns the safe view; the key is never returned. 404 when the harness does not exist or has no deployment default.
+      parameters:
+        - description: Harness
+          enum:
+            - claude_sdk
+            - codex
+            - mcode
+          in: path
+          name: harness
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.HarnessModelProvider'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve a harness's deployment default model provider
+      tags:
+        - Deployment Model Providers
+    put:
+      consumes:
+        - application/json
+      description: 'Core key only. The body is the complete x_agents_core.model_provider bundle, including the write-only api_key; there is no partial update and bundles are never merged. The provider is validated for this harness: an HTTPS base_url without credentials, query or fragment, the harness''s protocol (responses for codex, anthropic for claude_sdk and mcode) and, for mcode, positive context_window and max_output_tokens. New openai_hosted and none Sessions that resolve no Session or Agent bundle freeze this default into their encrypted snapshot; existing Sessions never change. self_hosted Sessions never use it. The key is encrypted and never returned. Each write records an administrator audit entry without the key.'
+      parameters:
+        - description: Harness
+          enum:
+            - claude_sdk
+            - codex
+            - mcode
+          in: path
+          name: harness
+          required: true
+          type: string
+        - description: Complete model provider bundle
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/v1.ModelProviderInput'
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.HarnessModelProvider'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Replace a harness's deployment default model provider
+      tags:
+        - Deployment Model Providers
   /core/v1/installation:
     get:
       description: Core key only; available before any sandbox deployment exists. Reports the public URL that applications, nodes, sandboxes and self-hosted executors use, the API base URL, Core's source commit and installation ID, the installer's settings snapshot with where to change it, and what is bound to the current public URL. Sensitive settings report only whether they are configured.
@@ -4422,7 +4667,7 @@ paths:
         - Artifacts
   /core/v1/projects/{project_id}/sessions/{session_id}/execution-configuration:
     get:
-      description: Core key only; the Project ID selects the target space and does not authenticate. Returns the committed model, harness and safe provider selection with recorded sources. This read never decrypts credentials, resolves current defaults or probes execution health. Deployment provider details remain redacted. Historical provenance and missing provider projections are explicitly unknown/unavailable.
+      description: Core key only; the Project ID selects the target space and does not authenticate. Returns the committed model, harness and safe provider selection with recorded sources. This read never decrypts credentials, resolves current defaults or probes execution health. Deployment defaults frozen after they moved into Core show their safe view; older deployment selections remain redacted. Historical provenance and missing provider projections are explicitly unknown/unavailable.
       parameters:
         - description: Session ID
           in: path

@@ -60,33 +60,19 @@ or function calls.
 
 ## Provider configuration
 
-Keep `AGENTS_API_EXECUTION_OPTIONS_FILE` private (mode 0600). Supply the existing
-`mcode_provider` native custom-provider shape, for example:
+Supply an Anthropic-compatible bundle with the model's context and output limits,
+either per Session as `x_agents_core.model_provider` or as the deployment default,
+set with the Core key in Web or through Core's API:
 
-```json
-{
-  "mcode_provider": {
-    "name": "Parsar",
-    "kind": "custom",
-    "enabled": true,
-    "npm": "@ai-sdk/anthropic",
-    "options": {
-      "baseURL": "https://api.moonshot.cn/anthropic",
-      "apiKey": "<private provider key>"
-    },
-    "models": {
-      "kimi-k3": {
-        "name": "Kimi K3",
-        "tool_call": true,
-        "limit": {"context": 64000, "output": 4096}
-      }
-    }
-  }
-}
+```sh
+curl -fsS -X PUT http://127.0.0.1:8091/core/v1/harnesses/mcode/model-provider \
+  -H "Authorization: Bearer $CORE_KEY" -H "Content-Type: application/json" \
+  -d '{"protocol":"anthropic","base_url":"https://api.moonshot.cn/anthropic","api_key":"<private provider key>","context_window":64000,"max_output_tokens":4096}'
 ```
 
-The public Agent model must appear in this managed provider's native model list.
-The adapter selects it explicitly; it does not use a native account fallback.
+Core maps the bundle to the native custom provider for the Session's exact
+`agent.model`, with these limits. The adapter selects it explicitly; it does not
+use a native account fallback.
 Use the real provider endpoint for the selected credential. Test proxies may
 forward requests unchanged and capture tool names/status, but must not synthesize
 model responses or log keys.

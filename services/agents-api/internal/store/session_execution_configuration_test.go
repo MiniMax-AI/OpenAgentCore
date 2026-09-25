@@ -41,7 +41,6 @@ func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testi
 				tenant := uuid.NewString()
 				input := executionProjectionInput(source)
 				input.ModelProvider = &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://private-deployment.example/v1", APIKey: "private-projection-key-canary"}
-				input.ModelOptions = map[string]any{"private_headers": map[string]any{"authorization": "private-header-canary"}}
 				input.ExecutionConfiguration.ModelProvider = v1.ExecutionProviderSelection{Source: source, Status: "available", Configuration: input.ModelProvider.SafeView()}
 				input.ExecutionConfiguration.Object = "untrusted-object"
 				input.ExecutionConfiguration.SchemaVersion = 99
@@ -66,24 +65,19 @@ func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testi
 				if frozen.Object != "agent.session.execution_configuration" || frozen.SchemaVersion != 1 || frozen.SessionID != session.ID || frozen.Model.Source != source || frozen.Harness.Source != source {
 					t.Fatal("incorrect frozen projection identity or provenance")
 				}
-				if source == "deployment" {
-					if frozen.ModelProvider.Status != "redacted" || frozen.ModelProvider.Configuration != nil {
-						t.Fatal("deployment provider was not redacted")
-					}
-				} else if frozen.ModelProvider.Status != "available" || !reflect.DeepEqual(frozen.ModelProvider.Configuration, input.ModelProvider.SafeView()) {
+				// Deployment defaults are readable with the same Core key, so every
+				// source records the safe view of the frozen bundle.
+				if frozen.ModelProvider.Status != "available" || !reflect.DeepEqual(frozen.ModelProvider.Configuration, input.ModelProvider.SafeView()) {
 					t.Fatal("safe provider projection changed")
 				}
 				var stored []byte
 				if err := pool.QueryRow(t.Context(), "SELECT configuration FROM session_execution_configuration WHERE session_id=$1", session.ID).Scan(&stored); err != nil {
 					t.Fatal(err)
 				}
-				for _, secret := range []string{"private-projection-key-canary", "private-header-canary", "private_headers", "native_options"} {
+				for _, secret := range []string{"private-projection-key-canary", "native_options"} {
 					if bytes.Contains(stored, []byte(secret)) {
 						t.Fatal("secret entered safe projection")
 					}
-				}
-				if source == "deployment" && bytes.Contains(stored, []byte("private-deployment.example")) {
-					t.Fatal("deployment endpoint persisted publicly")
 				}
 				// Source-only changes and invalid replacement metadata never alter the
 				// existing Session's retry identity or projection.
@@ -102,6 +96,15 @@ func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testi
 				got, err := reader.GetSessionExecutionConfiguration(t.Context(), tenant, session.ID)
 				if err != nil || !reflect.DeepEqual(got, frozen) {
 					t.Fatal("snapshot changed or reader decrypted a secret", err)
+				}
+				if source == "deployment" {
+					// Sessions frozen before deployment defaults moved into Core stay redacted.
+					if _, err := pool.Exec(t.Context(), `UPDATE session_execution_configuration SET configuration = jsonb_set(configuration, '{model_provider}', '{"source":"deployment","status":"redacted","configuration":null}') WHERE session_id=$1`, session.ID); err != nil {
+						t.Fatal(err)
+					}
+					if historical, err := reader.GetSessionExecutionConfiguration(t.Context(), tenant, session.ID); err != nil || historical.ModelProvider.Status != "redacted" || historical.ModelProvider.Configuration != nil {
+						t.Fatal("historical deployment selection changed", err)
+					}
 				}
 				for _, lookup := range []struct{ tenant, id string }{{uuid.NewString(), session.ID}, {tenant, uuid.NewString()}, {tenant, "malformed"}} {
 					if _, err := reader.GetSessionExecutionConfiguration(t.Context(), lookup.tenant, lookup.id); !errors.Is(err, ErrNotFound) {

@@ -148,11 +148,11 @@ themselves. Compose loads the file with `env_file` and systemd with
 | `AGENTS_API_RUNTIME_HISTORY_FILE` | `generated/runtime-history.json` when `core.runtime_history` is set; see the [history contract](../contracts/agents-api/runtime-history-api.md) |
 | `PARSAR_LOG_LEVEL`, `PARSAR_LOG_FORMAT`, `PARSAR_LOG_ADD_SOURCE` | `log.*`; Web reads the same three |
 | `AGENTS_API_E2B_STATE_DIR`, `AGENTS_API_E2B_PROVIDER_BIN` | Receipt directory and, for native Core, the bundled helper; the E2B account credential and template belong to the database |
-| `AGENTS_API_EXECUTION_OPTIONS_FILE` | Not generated from `config.json`. `install.sh --convert` keeps an existing file and variable; see [model execution](../contracts/agents-api/model-execution.md) |
 
-`AGENTS_API_DAEMON_WS_URL` is retired in favor of `AGENTS_API_PUBLIC_URL`, and
-`AGENTS_API_CONFIG_FILE` is retired with no replacement; Core fails at startup
-while either is set and says what to do. Core reports loaded file
+`AGENTS_API_DAEMON_WS_URL` is retired in favor of `AGENTS_API_PUBLIC_URL`,
+`AGENTS_API_CONFIG_FILE` with no replacement, and `AGENTS_API_EXECUTION_OPTIONS_FILE`
+in favor of [deployment model providers](#deployment-model-providers); Core fails at
+startup while any of them is set and says what to do. Core reports loaded file
 paths on startup, without environment values or file contents. Internal
 polling/queue controls remain internal. Runtime history retention remains its
 existing fixed policy.
@@ -162,6 +162,18 @@ characters, quotes, backslashes or wildcard characters. Do not change the
 installation UUID or backend paths as a substitute for provider maintenance. Core
 refuses a missing installation setting when its database already has a claimed
 deployment.
+
+## Deployment model providers
+
+Each harness has at most one deployment default model provider, stored encrypted in
+PostgreSQL and set with the Core key in Web or through
+`PUT /core/v1/harnesses/{harness}/model-provider`. It takes the same complete
+bundle as `x_agents_core.model_provider` (`protocol`, HTTPS `base_url`, write-only
+`api_key` and, for MiniMax Code, `context_window` and `max_output_tokens`). New
+`openai_hosted` and `none` Sessions without a Session or Agent bundle freeze it;
+`self_hosted` Sessions never use it, and a hosted or self-hosted Session with no
+bundle is rejected with 400 `model_provider_required`. Reads never return the key.
+See [model execution](../contracts/agents-api/model-execution.md#deployment-defaults).
 
 ## Database-owned deployment
 

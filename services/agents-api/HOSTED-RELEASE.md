@@ -61,35 +61,24 @@ nodes and sandbox guests reach through your TLS proxy:
 export AGENTS_API_ADDR=0.0.0.0:8091
 export AGENTS_API_SANDBOX_INSTALLATION_ID="<installation UUID>"
 export AGENTS_API_PUBLIC_URL="https://core.example"
-export AGENTS_API_EXECUTION_OPTIONS_FILE="$PARSAR_HOME/execution-options.json"
-```
-
-Create `execution-options.json` with your trusted native model configuration.
-For a Responses-compatible model endpoint, the existing Codex adapter accepts:
-
-```json
-{
-  "codex_provider": {
-    "name": "Configured model provider",
-    "base_url": "https://<model endpoint>/v1",
-    "bearer_token": "<private model credential>",
-    "wire_api": "responses"
-  }
-}
-```
-
-Keep it mode 0600 outside the extracted package. The model endpoint must
-be reachable from the Runtime; a host loopback address is not the container's
-host. Core copies these options into trusted execution preparation without storing
-them in public Session configuration. Never put model credentials in Agent
-instructions, public requests, image layers or a workspace. Configuration changes
-require a Core restart.
-
-```sh
-chmod 0600 "$AGENTS_API_CORE_KEY_DIGESTS_FILE" "$AGENTS_API_EXECUTION_OPTIONS_FILE"
+chmod 0600 "$AGENTS_API_CORE_KEY_DIGESTS_FILE"
 "$AGENTS_API_BIN_DIR/agents-api-migrate"
 "$AGENTS_API_BIN_DIR/agents-api"
 ```
+
+Set the deployment default model provider with the Core key, for a
+Responses-compatible endpoint reachable from the Runtime (a host loopback address
+is not the container's host):
+
+```sh
+curl -fsS -X PUT http://127.0.0.1:8091/core/v1/harnesses/codex/model-provider \
+  -H "Authorization: Bearer $CORE_KEY" -H "Content-Type: application/json" \
+  -d '{"protocol":"responses","base_url":"https://<model endpoint>/v1","api_key":"<private model credential>"}'
+```
+
+Core encrypts it, never returns the key and freezes it into each new hosted
+Session. Never put model credentials in Agent instructions, image layers or a
+workspace.
 
 Then select `docker`, the per-sandbox resources and the complete Runtime release
 (the deployment's `core_url` comes from `AGENTS_API_PUBLIC_URL`), and register a node on a host where

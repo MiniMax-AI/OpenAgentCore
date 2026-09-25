@@ -44,6 +44,9 @@ func environmentInputState(ctx context.Context, q *sqlc.Queries, session pgtype.
 	}
 	if row.State == EnvironmentInputFailed {
 		activity.Status, activity.Failure = "failed", "environment_unavailable"
+		if row.FailureCode.Valid {
+			activity.Failure = row.FailureCode.String
+		}
 	}
 	if row.IsInitial && row.State == EnvironmentInputExpired {
 		activity.Status = "failed"

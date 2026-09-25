@@ -32,10 +32,10 @@ func newEnvironmentAdmission(t *testing.T) (*dispatchHarness, *execution.Worker)
 		cancel()
 		_ = worker.Run(ctx)
 	})
-	h.session, err = worker.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{
+	h.session, err = worker.CreateSession(t.Context(), h.tenant, store.WithFixtureModelProvider(store.CreateSessionInput{
 		Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 		Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`),
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}

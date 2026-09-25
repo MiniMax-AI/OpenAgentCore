@@ -166,7 +166,10 @@ display label: normally `console` from Web and empty from direct Core key reques
 `project_id`, `resource_type`, `resource_id`, `result_ids`, `request_id`,
 `trace_id`. `result_ids` is an empty array except on historical `copy` entries.
 Executor credential writes appear with `resource_type:"executor_credential"`,
-the key ID as `resource_id` and action `issue`, `rotate` or `revoke`.
+the key ID as `resource_id` and action `issue`, `rotate` or `revoke`. Deployment
+default model provider writes are deployment-wide: `project_id` is null,
+`resource_type:"deployment_model_provider"`, the harness as `resource_id` and
+action `set` or `delete`; a `project_id` filter excludes them.
 No credential values or request bodies are recorded. Logs and historical copy
 ownership do not cascade away on resource removal or key revocation.
 

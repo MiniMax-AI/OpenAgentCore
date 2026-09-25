@@ -33,8 +33,9 @@ func TestSelfHostedServiceMCPRejectionDoesNotRequireCredentialDecryption(t *test
 						"type": "mcp", "server_label": "tools", "connection_origin": "service", "credential_id": credential.ID,
 						"transport": map[string]string{"type": "http", "server_url": "https://tools.example/mcp"},
 					}}},
-					"environment": map[string]string{"type": "self_hosted", "workspace_directory": "/workspace"},
-					"vault_ids":   []string{vault.ID},
+					"environment":   map[string]string{"type": "self_hosted", "workspace_directory": "/workspace"},
+					"vault_ids":     []string{vault.ID},
+					"x_agents_core": map[string]any{"model_provider": store.FixtureModelProvider("codex")},
 				}
 				if initial {
 					body["input"] = "must not execute"

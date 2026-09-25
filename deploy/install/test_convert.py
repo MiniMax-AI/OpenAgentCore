@@ -160,7 +160,7 @@ class ConvertTests(unittest.TestCase):
                     self.assertConverted()
 
     def test_hand_set_settings_move_into_config_json(self):
-        options = self.private("config/execution-options.json", '{"codex_provider": {"bearer_token": "model-secret"}}')
+        self.private("config/execution-options.json", '{"codex_provider": {"bearer_token": "model-secret"}}')
         self.private("config/history.json", json.dumps({"endpoint": "collector.example:4317",
                                                         "headers": {"Authorization": "Bearer export-secret"}}))
         self.legacy(public_url="https://core.example", environment={
@@ -177,13 +177,11 @@ class ConvertTests(unittest.TestCase):
         self.assertEqual(config["log"]["level"], "debug")
         self.assertEqual(config["core"]["runtime_history"]["headers"], {"Authorization": "Bearer export-secret"})
         self.assertFalse((self.root / "config/history.json").exists())
-        self.assertNotIn("execution_options", json.dumps(config))
-        self.assertEqual(state["execution_options_file"], {"variable": "/config/execution-options.json", "path": str(options)})
+        # The retired options file is not carried over: Core refuses to start while it is set.
+        self.assertNotIn("execution_options", json.dumps(config) + json.dumps(state))
         self.assertEqual(sorted(path.name for path in (self.root / "config").iterdir()), ["execution-options.json"])
-        environment = configuration.read_environment((self.root / "generated/core.env").read_text())
-        self.assertEqual(environment["AGENTS_API_EXECUTION_OPTIONS_FILE"], "/config/execution-options.json")
-        self.assertIn({"type": "bind", "source": str(options), "target": "/config/execution-options.json",
-                       "read_only": True}, self.document("generated/compose.json")["services"]["core"]["volumes"])
+        self.assertNotIn("EXECUTION_OPTIONS", (self.root / "generated/core.env").read_text())
+        self.assertIn("AGENTS_API_EXECUTION_OPTIONS_FILE is retired by this release", self.output.getvalue())
         output = self.output.getvalue() + (self.root / "generated/settings.json").read_text()
         self.assertNotIn("model-secret", output)
         self.assertNotIn("export-secret", output)

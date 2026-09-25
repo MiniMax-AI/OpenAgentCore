@@ -49,7 +49,8 @@ func newManagedTestStore(t *testing.T) (*Store, *pgxpool.Pool) {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	return New(pool), pool
+	// Hosted Sessions freeze a model provider, which needs a credential key.
+	return NewWithCredentialCipher(pool, fixtureCipher), pool
 }
 
 func NewManagedTestStore(t *testing.T) (*Store, *pgxpool.Pool) {

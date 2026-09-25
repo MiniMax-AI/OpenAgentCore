@@ -87,6 +87,13 @@ func (w *Worker) submitEnvironmentInputs(ctx context.Context, session store.Sess
 		// Neither kind creates a Turn. The Session lock preserves target and retry identity.
 		return w.admission.SubmitInputs(ctx, session.TenantID, session.ID, key, inputs)
 	}
+	// Messages start work. A Session from before deployment defaults moved into
+	// Core may have no frozen provider; reject it here instead of queueing work
+	// its harness cannot run. Cancellation and results above stay available.
+	var snapshot Snapshot
+	if json.Unmarshal(session.Configuration, &snapshot) != nil || !snapshot.ModelProviderConfigured {
+		return nil, store.ErrModelProviderRequired
+	}
 	reserve, cancel := context.WithTimeout(ctx, 5*time.Second)
 	reservation, err := w.admission.ReserveEnvironmentInput(reserve, session.TenantID, session.ID, key, inputs)
 	cancel()

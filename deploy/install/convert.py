@@ -284,7 +284,7 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
     if mode == "web-only":
         config["web"] = {"core_url": canonical(old.get("core_url"), "web.core_url", plan)}
     config["log"] = {"level": "info", "format": "auto", "add_source": False}
-    retained, env_public = None, None
+    env_public = None
     known = {"config": set(), "admin": {"core.key"}}
     if mode != "web-only":
         known["config"] = {"core.env", "credential.key", "database.password"}
@@ -297,7 +297,7 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
             plan.problem("config/core.env", "", "must be a private file of double-quoted literal values")
             env = None
         if env is not None:
-            retained, env_public = map_environment(root, old, env, password, config, plan, known)
+            env_public = map_environment(root, old, env, password, config, plan, known)
         try:
             digests = json.loads((root / "admin/core-key-digests.json").read_text())
         except ValueError:
@@ -360,7 +360,7 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
         "source_commit": bundle_manifest["source_commit"], "images": images,
         "secrets_sha256": {Path(target).name: configuration.sha256((root / source).read_bytes())
                            for source, target in plan.moves if target != "secrets/core.key"},
-        "core_installation_id": None, "execution_options_file": retained, "generated": {}, "local_node": None,
+        "core_installation_id": None, "generated": {}, "local_node": None,
         "converted_from": {"source_commit": old["source_commit"],
                            "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                            "remove": [name for name in plan.deletions if name.startswith(("config/", "state/"))]}}
@@ -368,7 +368,7 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
 
 
 def map_environment(root, old, env, password, config, plan, known):
-    """Map config/core.env into config.json; return the retained options file and a set public URL."""
+    """Map config/core.env into config.json; return a public URL set in core.env, if any."""
     before, since = legacy_core_environment(root, old, password), legacy138_core_environment(root, old)
     where = "config/core.env"
     for name in DERIVED:
@@ -429,18 +429,16 @@ def map_environment(root, old, env, password, config, plan, known):
                                   "which may hold export credentials; it is a second copy.")
         except (AttributeError, OSError, ValueError):
             plan.problem("config/core.env", "AGENTS_API_RUNTIME_HISTORY_FILE", "names a file that can't be read as JSON")
-    retained = None
     if env.get("AGENTS_API_EXECUTION_OPTIONS_FILE"):
-        variable = env["AGENTS_API_EXECUTION_OPTIONS_FILE"]
-        path = host_path(root, old, variable)
-        if path is None or path.is_symlink() or not path.is_file():
-            plan.problem("config/core.env", "AGENTS_API_EXECUTION_OPTIONS_FILE", "names a file that can't be found")
-        else:
-            retained = {"variable": variable, "path": str(path)}
-            if path.parent == root / "config":
-                known["config"].add(path.name)
-            plan.notes.append(f"AGENTS_API_EXECUTION_OPTIONS_FILE and {path} stay as they are; config.json does not "
-                              "hold model settings. A later release imports them into Core once, through parsar apply.")
+        # This release retires the operator options file; Core refuses to start while it is set.
+        path = host_path(root, old, env["AGENTS_API_EXECUTION_OPTIONS_FILE"])
+        if path is not None and path.parent == root / "config":
+            known["config"].add(path.name)
+        plan.notes.append(f"AGENTS_API_EXECUTION_OPTIONS_FILE is retired by this release and is not carried over. "
+                          f"Hosted Sessions without a model provider of their own now need a deployment default: "
+                          f"set it per harness in Web (System) or with PUT /core/v1/harnesses/{{harness}}/model-provider. "
+                          f"{path or env['AGENTS_API_EXECUTION_OPTIONS_FILE']} is left in place; it may hold model keys, "
+                          f"so delete it once the defaults are set.")
     log = config["log"]
     level = env.get("PARSAR_LOG_LEVEL", "").strip().lower()
     log["level"] = {"": "info", "warning": "warn"}.get(level, level)
@@ -450,7 +448,7 @@ def map_environment(root, old, env, password, config, plan, known):
     if any(name.startswith("PARSAR_LOG_") for name in env):
         plan.notes.append("PARSAR_LOG_* had no effect before this release; the log settings now apply.")
     config["core"] = core
-    return retained, public
+    return public
 
 
 # Steps -----------------------------------------------------------------------

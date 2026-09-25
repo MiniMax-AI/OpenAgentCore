@@ -27,10 +27,10 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 	}
 	deployment := &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://deployment.example/v1", APIKey: "deployment-canary"}
 	defaultsCalls := 0
-	handler, err := api.NewHandler(st, auth, "codex", api.WithHarnesses([]string{"codex", "claude_sdk", "mcode"}), api.WithHostedEnvironments(), api.WithExecution(st), api.WithModelProviderDefaults(func(context.Context, string, string) (*v1.ModelProviderInput, map[string]any, error) {
+	handler, err := api.NewHandler(st, auth, "codex", api.WithHarnesses([]string{"codex", "claude_sdk", "mcode"}), api.WithHostedEnvironments(), api.WithExecution(st), api.WithModelProviderDefaults(func(context.Context, string) (*v1.ModelProviderInput, error) {
 		defaultsCalls++
 		copy := *deployment
-		return &copy, nil, nil
+		return &copy, nil
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +101,6 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 		strings.Replace(replacement, `"protocol":"responses"`, `"protocol":"anthropic"`, 1),
 		strings.Replace(modelOnly, `"model":"model-override"`, `"model":"model-override","x_agents_core":{"harness":"claude_sdk"}`, 1),
 		strings.TrimSuffix(strings.Replace(body, `"type":"openai_hosted"`, `"type":"none"`, 1), "}") + `,"input":"test"}`,
-		strings.Replace(body, `"type":"openai_hosted"`, `"type":"self_hosted","workspace_directory":"/workspace"`, 1),
 	} {
 		call("POST", "/v1/agents/sessions", raw, uuid.NewString(), 400)
 	}

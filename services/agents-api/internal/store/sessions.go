@@ -59,17 +59,16 @@ type Session struct {
 type CreateSessionInput struct {
 	ExecutionConfiguration *v1.SessionExecutionConfiguration
 	ModelProvider          *v1.ModelProviderInput
-	// ModelOptions is a private snapshot of trusted deployment execution options.
-	ModelOptions    map[string]any
-	Initialization  EnvironmentSetup
-	InitialFiles    []InitialFile
-	Creator         identity.Subject
-	CreationRequest json.RawMessage
-	Engine          string
-	Metadata        map[string]string
-	IdempotencyKey  string
-	Configuration   json.RawMessage
-	InitialInputs   []Input
+	ModelProviderSource    string // session, agent or deployment; empty allows only openai_hosted
+	Initialization         EnvironmentSetup
+	InitialFiles           []InitialFile
+	Creator                identity.Subject
+	CreationRequest        json.RawMessage
+	Engine                 string
+	Metadata               map[string]string
+	IdempotencyKey         string
+	Configuration          json.RawMessage
+	InitialInputs          []Input
 }
 
 type SessionPage struct {
@@ -133,9 +132,9 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 			return SessionCreation{}, err
 		}
 	}
-	if input.ModelOptions != nil && input.ModelProvider == nil {
-		return SessionCreation{}, fmt.Errorf("%w: model options require a provider", ErrInvalidInput)
-	}
+	// The retry identity covers the configuration as requested; the marker added
+	// for a deployment default below is not caller input.
+	requested := configuration
 	if input.ModelProvider != nil {
 		if err := input.ModelProvider.ValidateHarness(input.Engine); err != nil {
 			return SessionCreation{}, fmt.Errorf("%w: %s", ErrInvalidInput, err)
@@ -146,8 +145,8 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 		}
 		environment, _ := fields["environment"].(map[string]any)
 		environmentType, _ := environment["type"].(string)
-		if !v1.ModelProviderEnvironmentSupported(environmentType) {
-			return SessionCreation{}, fmt.Errorf("%w: model credentials require a hosted environment", ErrInvalidInput)
+		if !v1.ModelProviderAllowed(environmentType, input.ModelProviderSource) {
+			return SessionCreation{}, fmt.Errorf("%w: this model provider source is not supported for the Session environment", ErrInvalidInput)
 		}
 		fields["model_provider_configured"] = true
 		configuration, err = json.Marshal(fields)
@@ -159,21 +158,31 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 	if !input.Initialization.Empty() {
 		initialization = &input.Initialization
 	}
+	// The retry identity carries a caller's provider key only as a keyed
+	// fingerprint. A deployment default is not caller input: leaving it and its
+	// configuration marker out keeps retries equivalent when the default is set,
+	// replaced or removed.
+	var fingerprinted *v1.ModelProviderInput
+	hashed := configuration
+	if input.ModelProviderSource == v1.ModelProviderSourceDeployment {
+		hashed = requested
+	} else if fingerprinted, err = s.fingerprintedProvider(input.ModelProvider); err != nil {
+		return SessionCreation{}, err
+	}
 	// JSON map keys are sorted by encoding/json, so key order does not affect retries.
 	canonical, err := json.Marshal(struct {
 		ModelProvider  *v1.ModelProviderInput `json:",omitempty"`
-		ModelOptions   map[string]any         `json:",omitempty"`
 		Engine         string
 		Metadata       map[string]string
 		Configuration  json.RawMessage   `json:",omitempty"`
 		InitialInputs  json.RawMessage   `json:",omitempty"`
 		InitialFiles   []InitialFile     `json:",omitempty"`
 		Initialization *EnvironmentSetup `json:",omitempty"`
-	}{input.ModelProvider, input.ModelOptions, input.Engine, input.Metadata, configuration, encodedInput, input.InitialFiles, initialization})
+	}{fingerprinted, input.Engine, input.Metadata, hashed, encodedInput, input.InitialFiles, initialization})
 	if err != nil {
 		return SessionCreation{}, fmt.Errorf("%w: input: %v", ErrInvalidInput, err)
 	}
-	creationHash, err := creationRequestHash(input.CreationRequest)
+	creationHash, err := s.creationRequestHash(input.CreationRequest)
 	if err != nil {
 		return SessionCreation{}, err
 	}
@@ -184,7 +193,7 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 		Configuration: configuration, CreationRequestHash: creationHash,
 		CreatorKind: pgtype.Text{String: input.Creator.Kind, Valid: true}, CreatorID: pgtype.Text{String: input.Creator.ID, Valid: true},
 	}
-	row, environment, err := s.createSessionResources(ctx, tenantID, params, batch, encodedInput, input.InitialFiles, input.Initialization, input.ModelProvider, input.ModelOptions, input.ExecutionConfiguration)
+	row, environment, err := s.createSessionResources(ctx, tenantID, params, batch, encodedInput, input.InitialFiles, input.Initialization, input.ModelProvider, input.ExecutionConfiguration)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SessionCreation{}, ErrIdempotencyConflict
 	}

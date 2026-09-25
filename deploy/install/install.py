@@ -341,7 +341,7 @@ def create(root, args, config, manifest, images, provider=None):
              "uid": os.getuid(), "gid": os.getgid(), "mode": mode, "native_core": config.get("native_core", False),
              "source_commit": manifest["source_commit"], "images": images,
              "secrets_sha256": configuration.secret_digests(root, mode), "core_installation_id": None,
-             "execution_options_file": None, "converted_from": None, "generated": {},
+             "converted_from": None, "generated": {},
              # A requested local node is enrolled once the services first start; a repair retries it.
              "local_node": provider}
     state["secrets_sha256"].pop("core.key")

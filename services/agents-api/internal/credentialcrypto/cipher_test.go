@@ -2,6 +2,7 @@ package credentialcrypto
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 )
 
@@ -145,5 +146,28 @@ func TestCipherRejectsInvalidConstructionAndBinding(t *testing.T) {
 				t.Fatal("invalid binding accepted for decryption")
 			}
 		}
+	}
+}
+
+func TestFingerprintIsKeyedAndPurposeBound(t *testing.T) {
+	c, _ := New(bytes.Repeat([]byte{3}, 32))
+	other, _ := New(bytes.Repeat([]byte{4}, 32))
+	first, err := c.Fingerprint("model-provider", "secret-canary")
+	if err != nil || len(first) != 64 || strings.Contains(first, "secret-canary") {
+		t.Fatal("invalid fingerprint", err)
+	}
+	again, _ := c.Fingerprint("model-provider", "secret-canary")
+	changed, _ := c.Fingerprint("model-provider", "secret-canary2")
+	purpose, _ := c.Fingerprint("other", "secret-canary")
+	foreign, _ := other.Fingerprint("model-provider", "secret-canary")
+	if again != first || changed == first || purpose == first || foreign == first {
+		t.Fatal("fingerprint is not stable, secret-, purpose- and key-bound")
+	}
+	if _, err := (*Cipher)(nil).Fingerprint("model-provider", "secret-canary"); err == nil {
+		t.Fatal("fingerprint without a key")
+	}
+	// Without the NUL rule, ("a\x00b", "c") and ("a", "b\x00c") would collide.
+	if _, err := c.Fingerprint("model-provider\x00x", "secret-canary"); err == nil {
+		t.Fatal("purpose with NUL accepted")
 	}
 }

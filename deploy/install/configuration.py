@@ -151,22 +151,8 @@ def core_environment(root, config, state):
         result["AGENTS_API_OAUTH_TRUSTED_ORIGINS"] = ",".join(core["oauth_trusted_origins"])
     if core["runtime_history"] is not None:
         result["AGENTS_API_RUNTIME_HISTORY_FILE"] = generated + "/runtime-history.json"
-    retained = state.get("execution_options_file")
-    if retained:
-        # Kept by --convert until phase 3's one-time import moves it into Core.
-        result["AGENTS_API_EXECUTION_OPTIONS_FILE"] = retained["variable"]
     result.update(log_environment(config["log"]))
     return result
-
-
-def retained_digest(retained):
-    if not retained:
-        return None
-    try:
-        return sha256(Path(retained["path"]).read_bytes())
-    except OSError:
-        raise RuntimeError(f'{retained["path"]}, named by AGENTS_API_EXECUTION_OPTIONS_FILE, is missing; '
-                           "restore it") from None
 
 
 def settings_document(root, config, applied_at):
@@ -204,9 +190,6 @@ def compose_config(root, config, state):
             mounts += [bind(root / "generated" / name, f"{RUN}/{name}") for name in ("core-key-digests.json", "settings.json")]
             if config["core"]["runtime_history"] is not None:
                 mounts.append(bind(root / "generated/runtime-history.json", f"{RUN}/runtime-history.json"))
-            retained = state.get("execution_options_file")
-            if retained and not retained["variable"].startswith("/state/e2b/"):
-                mounts.append(bind(retained["path"], retained["variable"]))
             shared = {"image": images["core"], "user": identity,
                       "env_file": [str(root / "generated/core.env").replace("$", "$$")], "volumes": mounts,
                       "read_only": True, "tmpfs": ["/tmp:mode=1777"], "init": True,
@@ -275,13 +258,11 @@ def render(root, config, state, applied_at):
         # Only settings Core itself restarts for enter its inputs, so a Web-only change
         # leaves Core running. Its snapshot then refreshes on Core's next restart.
         core_settings = [item for item in settings["settings"] if "core" in item["restarts"]]
-        retained = state.get("execution_options_file")
         external["core"] = json.dumps({
             "core-key-digests.json": sha256(files["core-key-digests.json"]),
             "settings": sha256(json.dumps([settings["path"], settings["apply_command"], core_settings], sort_keys=True)),
             "runtime-history.json": sha256(files.get("runtime-history.json", "")),
             "credential.key": secrets["credential.key"], "database.password": secrets["database.password"],
-            "execution-options": retained_digest(retained),
         }, sort_keys=True)
     if mode != "core-only":
         external["web"] = json.dumps({"core.key": secrets["core.key"]})

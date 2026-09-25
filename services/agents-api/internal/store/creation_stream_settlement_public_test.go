@@ -118,7 +118,7 @@ func (s sseLines) open(t *testing.T) {
 // creation stream whose initial reservation is cancelled without a Session event
 // ends through the committed projection, while GET stays open.
 func TestCreationStreamPublicLifetimes(t *testing.T) {
-	s, pool := store.NewTestStore(t)
+	s, pool := store.NewModelTestStore(t)
 	tenant, token := uuid.NewString(), uuid.NewString()
 	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: device.HashCredential(token), TenantID: tenant}})
 	if err != nil {
@@ -174,8 +174,8 @@ func TestCreationStreamPublicLifetimes(t *testing.T) {
 		}
 		return event
 	}
-	const idle = `{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"stream":true}`
-	const initial = `{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"input":"initial","stream":true}`
+	idle := `{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"stream":true,` + fixtureSessionProvider("codex") + `}`
+	initial := `{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"input":"initial","stream":true,` + fixtureSessionProvider("codex") + `}`
 
 	created := openStream(t, server, token, http.MethodPost, "/v1/agents/sessions", idle, "no-input")
 	defer created.stop()
