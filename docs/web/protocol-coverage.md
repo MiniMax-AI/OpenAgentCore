@@ -15,7 +15,7 @@ the administrator API are defined by the [administrator API contract](../../cont
 
 | Interface | Paths | Authentication | Console use |
 | --- | --- | --- | --- |
-| Console server | `/console/auth`, `/console/auth/{login,logout}`, `/console/config` | Core key at sign-in, then the console session cookie | Sign-in with the Core key and sign-out; the node installer (`node_installer`, `node_installer_sha256`) and the providers whose node assets it holds (`node_artifacts`) |
+| Console server | `/console/auth`, `/console/auth/{login,logout}`, `/console/config` | Core key at sign-in, then the console session cookie | Sign-in with the Core key and sign-out; the node installer (`node_installer`, `node_installer_sha256`), the self-hosted executor installer (`self_hosted_installer`, `self_hosted_installer_sha256`) and the providers whose node assets it holds (`node_artifacts`) |
 | Administrator API | `/core/v1/**` outside `/core/v1/sandbox` | Core key, added by the console server | Projects, keys, resource reads and deletion, executor credentials, provenance, summaries, Core metrics, the installation |
 | Sandbox administration | `/core/v1/sandbox/**` | Core key, added by the console server | Nodes page; fleet and capacity figures on Overview and Sandbox metrics; Runtime observations of every project |
 | Agents API | `/v1/**` | Project API key | Not used. Wherever a new key is shown, the console gives shell exports of `OPENAI_BASE_URL` (the installation's `api_base_url`) and `OPENAI_API_KEY` (the new key) with `curl` and Python examples for `/v1/agents`, and sends none of them; when the installation is `local_only` it says the API is reachable only on the Core machine, and without an `api_base_url` it says to set `public_url` |
@@ -130,8 +130,9 @@ the sandbox deployment.
 | Runtime observations | `GET /core/v1/sandbox/runtime-observations` | Sandbox metrics: hosted Runtimes of every project, each labelled with its project; an E2B sandbox's dialog adds its `observation.disk` as used / limit (null elsewhere) |
 
 Signing in grants administration, so `/console/config` reports only the node
-installer (`node_installer`, `node_installer_sha256`) and the providers whose node
-assets the console holds (`node_artifacts`). These pages appear unless
+installer (`node_installer`, `node_installer_sha256`), the self-hosted executor
+installer (`self_hosted_installer`, `self_hosted_installer_sha256`) and the providers
+whose node assets the console holds (`node_artifacts`). These pages appear unless
 the console has no `/console/config` (404) or reports `sandbox_admin: false`. An E2B
 deployment has no nodes; its API key is write-only. The Runtime release sent for
 Docker and microsandbox comes from the console's own `GET /node-install/manifest.json`
