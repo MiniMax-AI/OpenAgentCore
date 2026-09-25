@@ -113,7 +113,7 @@ class NodeInstallTests(unittest.TestCase):
         if arguments[:1] == ["usermod"]:
             self.joined = True
         if "{{json .}}" in arguments:
-            return json.dumps({"MemoryLimit": True, "CPUCfsQuota": True, "NCPU": 8, "MemTotal": 16 << 30})
+            return json.dumps({"MemoryLimit": True, "CpuCfsQuota": True, "NCPU": 8, "MemTotal": 16 << 30})
         if "load" in arguments:
             self.image_present = True
         if "inspect" in arguments:

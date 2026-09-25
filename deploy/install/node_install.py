@@ -624,7 +624,8 @@ def provider_group(provider):
             details = json.loads(checked(list(DOCKER) + ["info", "--format", "{{json .}}"], "Docker is not running"))
         except (InstallError, ValueError):
             raise InstallError("Docker is not running: run `sudo systemctl enable --now docker`, then rerun this command." + NOTHING_CHANGED) from None
-        if details.get("MemoryLimit") is not True or details.get("CPUCfsQuota") is not True:
+        # docker info's JSON uses the Engine API names (CpuCfsQuota), not the Go field names.
+        if details.get("MemoryLimit") is not True or details.get("CpuCfsQuota") is not True:
             raise InstallError("Docker on this host does not enforce CPU and memory limits; use cgroup v2, then rerun this command." + NOTHING_CHANGED)
         return group_name(info.st_gid), details
     try:
