@@ -98,10 +98,6 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	transientOptions, err := executionOptions()
-	if err != nil {
-		return err
-	}
 	oauthClient, err := oauthRefreshClient()
 	if err != nil {
 		return err
@@ -230,7 +226,7 @@ func run() error {
 	}
 	if registry != nil {
 		dispatcher := &execution.Dispatcher{Store: executionStore, Registry: registry,
-			ManagedRuntimes: managed, Options: transientOptions, MaxConcurrentExecutions: concurrency}
+			ManagedRuntimes: managed, MaxConcurrentExecutions: concurrency}
 
 		worker, err = execution.StartWorker(ctx, dispatcher)
 		if err != nil {
@@ -248,7 +244,7 @@ func run() error {
 			}
 		}()
 		options = append(options, api.WithExecution(worker), api.WithSessionArchive(worker.ArchiveManagedSession), api.WithEnvironmentDirectoryReader(worker), api.WithEnvironmentFileWriter(worker))
-		options = append(options, api.WithHarnesses(kinds), api.WithModelProviderDefaults(deploymentModelDefaults(transientOptions)))
+		options = append(options, api.WithHarnesses(kinds), api.WithModelProviderDefaults(executionStore.DeploymentModelProvider))
 		if managed != nil {
 			options = append(options, api.WithHostedEnvironments())
 		}

@@ -91,6 +91,12 @@ recorded real models. It does not establish arbitrary-host isolation, high
 availability, full Agents API conformance, Anthropic-model acceptance for Claude,
 or identical optional capabilities across harnesses.
 
+These runs received their model through the operator options file, which is now
+retired. A self-hosted Session now carries its own model provider, from the request
+or a saved Agent, frozen and delivered over the same daemon transport; see
+[model execution](model-execution.md). Deployment default model providers never
+reach self-hosted executors.
+
 The public self-hosted profile accepts `/workspace` and empty capability
 directories. Service-origin HTTP MCP on self-hosted remains explicitly rejected;
 none-environment HTTP MCP and separately qualified hosted Plugin MCP keep their own

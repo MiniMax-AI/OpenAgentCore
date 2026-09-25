@@ -1203,6 +1203,25 @@ export interface ModelProviderView {
   api_key?: never;
 }
 
+/** A harness's deployment default model provider in Core. The key is never returned. */
+export interface HarnessModelProvider extends ModelProviderView {
+  object: "core.model_provider";
+  harness: CoreHarnessKind;
+  updated_at: string;
+}
+
+/**
+ * A harness this Core build supports. `enabled` and `default` are read-only views of
+ * the process configuration; `model_provider` is the deployment default, or null.
+ */
+export interface CoreHarness {
+  object: "core.harness";
+  id: CoreHarnessKind;
+  enabled: boolean;
+  default: boolean;
+  model_provider: HarnessModelProvider | null;
+}
+
 /** Omitted members preserve saved defaults on update; null provider clears it. */
 export interface SavedAgentCoreInput {
   harness?: CoreHarnessKind;

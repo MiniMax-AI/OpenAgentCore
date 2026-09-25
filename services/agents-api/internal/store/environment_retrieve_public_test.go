@@ -23,7 +23,7 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, pool := store.NewTestStore(t)
+	s, pool := store.NewModelTestStore(t)
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	principal := store.FixtureExecutorPrincipal(t, s, tenant)
 	token, peer, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
@@ -90,7 +90,7 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 	revoked = true
 	server.Close()
 	pool.Close()
-	reopened, reopenedPool := store.NewTestStore(t)
+	reopened, reopenedPool := store.NewModelTestStore(t)
 	handler, err = api.NewHandler(reopened, auth, "codex")
 	if err != nil {
 		t.Fatal(err)

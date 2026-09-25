@@ -128,14 +128,6 @@ project but not its Session's title, Agent, status or usage, so Sandbox metrics
 reads every hosted Session by ID (bounded at 100 per refresh). An
 `expand=session` option returning those fields would remove the reads.
 
-### P2 — Deployment configuration writes
-
-The console cannot read or change the deployment's per-harness model provider
-defaults; Core takes them from `AGENTS_API_EXECUTION_OPTIONS_FILE`. A Web API
-write (for example `PUT /core/v1/deployment/model-providers/{harness}`,
-write-only credentials) would let operators set deployment defaults. It must
-keep the precedence Session → Agent → deployment and never return secrets.
-
 ### P2 — Keys
 
 - API key `last_used_at` and per-key request counts (with the API request

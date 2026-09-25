@@ -66,15 +66,16 @@ flags. Changing `core.env` does not require editing those launcher files.
 | `AGENTS_API_SANDBOX_INSTALLATION_ID` | Installer-generated canonical UUID | Stable identity pinned to the database, not provider selection; preserve it |
 | `AGENTS_API_CORE_KEY_DIGESTS_FILE` | Generated private `admin/core-key-digests.json` path | JSON array of [Core key](getting-started/operations.md#core-key) SHA-256 digests that authorize `/core/v1`; the key itself stays in Web's `CORE_CONSOLE_CORE_KEY_FILE`. The old name `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` fails startup |
 | `AGENTS_API_CREDENTIAL_KEY_FILE` | Generated private encryption-key path | Preserve with the database; never regenerate to repair credentials |
-| `AGENTS_API_EXECUTION_OPTIONS_FILE` | Unset | Optional existing adapter-options JSON; see [model execution](../contracts/agents-api/model-execution.md) and [harness selection](../contracts/agents-api/harness-selection.md) |
 | `AGENTS_API_RUNTIME_HISTORY_FILE` | Unset | Optional existing Runtime history/export JSON; local collection defaults to 30 seconds, retention to 7 days; see [history contract](../contracts/agents-api/runtime-history-api.md) |
 | `AGENTS_API_E2B_PROVIDER_BIN` / `AGENTS_API_E2B_STATE_DIR` | Matching helper / private persistent receipt directory from installer | Paths only; the E2B account credential and template belong to the database |
 | `AGENTS_API_OAUTH_TRUSTED_ORIGINS` | Public HTTPS origins | Additional exact trusted HTTPS origins for private issuers; use the [OAuth contract](../services/agents-api/oauth-credentials.md) |
 
 Core reports loaded configuration paths on startup, without environment values or
-file contents. Existing adapter-options and history JSON formats remain separate
-specialized files referenced from `core.env`; this change does not introduce a
-new loader or consolidate secrets into one file. Internal polling/queue controls
+file contents. The existing history JSON format remains a separate specialized
+file referenced from `core.env`; this change does not introduce a new loader or
+consolidate secrets into one file. The former `AGENTS_API_EXECUTION_OPTIONS_FILE`
+is retired and stops startup: remove it and set
+[deployment model providers](#deployment-model-providers) in Web or through Core. Internal polling/queue controls
 remain internal. Runtime history retention remains its existing fixed policy.
 
 A process-only change requires restart. In Compose, recreate Core so it rereads
@@ -91,6 +92,18 @@ For native Core, restart the installation's generated `parsar-<id>-core.service`
 with `systemctl --user restart`. Do not change installation UUID or backend paths
 as a substitute for provider maintenance. Core refuses a missing installation
 setting when its database already has a claimed deployment.
+
+## Deployment model providers
+
+Each harness has at most one deployment default model provider, stored encrypted in
+PostgreSQL and set with the Core key in Web or through
+`PUT /core/v1/harnesses/{harness}/model-provider`. It takes the same complete
+bundle as `x_agents_core.model_provider` (`protocol`, HTTPS `base_url`, write-only
+`api_key` and, for MiniMax Code, `context_window` and `max_output_tokens`). New
+`openai_hosted` and `none` Sessions without a Session or Agent bundle freeze it;
+`self_hosted` Sessions never use it, and a hosted or self-hosted Session with no
+bundle is rejected with 400 `model_provider_required`. Reads never return the key.
+See [model execution](../contracts/agents-api/model-execution.md#deployment-defaults).
 
 ## Database-owned deployment
 

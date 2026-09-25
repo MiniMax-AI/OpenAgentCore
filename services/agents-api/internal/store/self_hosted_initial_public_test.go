@@ -29,7 +29,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, pool := store.NewTestStore(t)
+	s, pool := store.NewModelTestStore(t)
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	token, peer, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth, err := newTestAuthenticator([]testAPIKey{
@@ -144,7 +144,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 	stop(false)
 	server.Close()
 	pool.Close()
-	reopened, reopenedPool := store.NewTestStore(t)
+	reopened, reopenedPool := store.NewModelTestStore(t)
 	worker, stop = publicInitialWorker(t, reopened)
 	server = serve(reopened, worker)
 	settings["base"], settings["accepted"] = server.URL, accepted

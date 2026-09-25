@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -143,4 +144,40 @@ func TestPreparedDispatchOwnerOutlivesReservationDeadline(t *testing.T) {
 		t.Fatal("completion did not settle the execution owner", got)
 	}
 	assertPreparationReleased(t, h, frame.ID, handle)
+}
+
+// A self-hosted Session's frozen provider travels only in the preparation sent
+// to the executor bound to that Session, not to another executor of the tenant.
+func TestSelfHostedProviderReachesOnlyBoundExecutor(t *testing.T) {
+	h, pending := preparedDispatchHarness(t)
+	other, err := h.s.CreateSession(t.Context(), h.tenant, store.WithFixtureModelProvider(store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
+		Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bystander := connectFixtureRuntime(t, h, other)
+	ctx, cancel := context.WithCancel(t.Context())
+	result := runPreparedDispatch(h, ctx, pending)
+	frame := h.read(proto.TypeExecutionPrepare)
+	var prepare proto.ExecutionPreparePayload
+	if frame.DecodePayload(&prepare) != nil {
+		t.Fatal("invalid preparation")
+	}
+	provider, _ := prepare.Configuration.AgentOptions["codex_provider"].(map[string]any)
+	fixture := store.FixtureModelProvider("codex")
+	if provider["base_url"] != fixture.BaseURL || provider["bearer_token"] != fixture.APIKey {
+		t.Fatal("bound executor did not receive the frozen provider", prepare.Configuration.AgentOptions)
+	}
+	_ = bystander.conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	for {
+		var raw json.RawMessage
+		if bystander.conn.ReadJSON(&raw) != nil {
+			break
+		}
+		if strings.Contains(string(raw), fixture.APIKey) || strings.Contains(string(raw), proto.TypeExecutionPrepare) {
+			t.Fatal("another executor received the provider")
+		}
+	}
+	cancel()
+	awaitPreparedDispatch(t, result)
 }

@@ -66,7 +66,7 @@ func TestPreparedEnvironmentInputWaitExtendsOnlyItsResponseDeadline(t *testing.T
 			options := []Option{WithExecution(waiting)}
 			environmentJSON := `{"type":"none"}`
 			if environment == "self_hosted" {
-				environmentJSON = `{"type":"self_hosted","workspace_directory":"/workspace"}`
+				environmentJSON = `{"type":"self_hosted","workspace_directory":"/workspace"},` + fixtureSessionProvider
 				options = append(options, WithEnvironmentRemoteURL(environmentOrigin))
 			}
 			handler, fixture := environmentCreationHandler(t, "codex", options...)

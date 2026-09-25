@@ -89,6 +89,9 @@ func (w *Worker) runEnvironmentInput(ctx context.Context, item scheduledWork) er
 	if err == nil {
 		return nil
 	}
+	if errors.Is(err, store.ErrModelProviderRequired) {
+		return w.dispatcher.Store.FailEnvironmentInputWithoutModelProvider(ctx, item.TenantID, item.SessionID, item.reservationID)
+	}
 	if run.Reservation.State == store.EnvironmentInputAdmitted {
 		return err
 	}

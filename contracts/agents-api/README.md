@@ -485,7 +485,9 @@ operation and placement; native support is not public admission by itself.
 
 All three profiles implement user-managed `self_hosted` enrollment at `/workspace`
 through our private daemon transport; [separate real acceptance](user-managed-runtime-v1.md)
-records qualified deployments and limits. Service-origin HTTP MCP is rejected on `self_hosted` and hosted local
+records qualified deployments and limits. A `self_hosted` Session supplies its own
+model provider in the request or through a saved Agent; deployment defaults apply
+to `openai_hosted` and `none`, never to `self_hosted` ([model execution](model-execution.md)). Service-origin HTTP MCP is rejected on `self_hosted` and hosted local
 placements. This does not remove separately qualified Environment Plugin MCP.
 The [Docker lifecycle](environments.md#basic-public-docker-hosted-profile) retains
 workspace Files/Artifacts, cancellation and recovery with native isolation.

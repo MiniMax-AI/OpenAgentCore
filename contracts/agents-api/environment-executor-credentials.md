@@ -70,6 +70,21 @@ never contains the secret. Credentials issued by the operator CLI
 (`agents-api-environment-key`) without an Environment restriction cannot be
 managed through these routes.
 
+## Model provider
+
+The Session carries its own model provider: `x_agents_core.model_provider` at
+creation or a saved Agent that has one. Deployment default model providers do not
+apply to `self_hosted` Sessions, and creation without a provider fails with 400
+`model_provider_required`. Core freezes the bundle in the Session's encrypted
+snapshot and sends it only over the connection of the executor enrolled for this
+Environment with a current credential of the Session creator's principal. The
+executor keeps it in the Runtime's native harness home, which tools and public
+Files cannot read; the executor host's owner can. Revocation does not erase a
+bundle already delivered. A saved Agent's provider key is delivered to the
+executor of every `self_hosted` Session created with that Agent in the Project, so
+anyone who can create `self_hosted` Sessions in the Project and run an executor
+can read it.
+
 ## Executor host
 
 The distribution's `self-hosted-install.pyz` downloads the matching

@@ -20,13 +20,16 @@ type AdminAuditFilter struct {
 	CreatedAfter, CreatedBefore                        *time.Time
 	Limit                                              int
 }
+
+// AdminAuditOperation is one administrator write. ProjectID is null for
+// deployment-wide writes, such as deployment default model providers.
 type AdminAuditOperation struct {
 	ID                string          `json:"id"`
 	CreatedAt         time.Time       `json:"created_at"`
 	AdminCredentialID string          `json:"admin_credential_id"`
 	ActorLabel        string          `json:"actor_label"`
 	Action            string          `json:"action"`
-	ProjectID         string          `json:"project_id"`
+	ProjectID         *string         `json:"project_id" extensions:"x-nullable"`
 	ResourceType      string          `json:"resource_type"`
 	ResourceID        string          `json:"resource_id"`
 	ResultIDs         json.RawMessage `json:"result_ids" swaggertype:"array,object"`
@@ -89,11 +92,19 @@ func (s *Store) ListAdminAudit(ctx context.Context, filter AdminAuditFilter) (Ad
 		rows = rows[:filter.Limit]
 	}
 	for _, row := range rows {
-		page.Data = append(page.Data, AdminAuditOperation{ID: uuid.UUID(row.ID.Bytes).String(), CreatedAt: row.CreatedAt.Time, AdminCredentialID: row.AdminCredentialID, ActorLabel: row.ActorLabel, Action: row.Action, ProjectID: uuid.UUID(row.ProjectID.Bytes).String(), ResourceType: row.ResourceType, ResourceID: row.ResourceID, ResultIDs: row.ResultIds, RequestID: row.RequestID, TraceID: row.TraceID})
+		page.Data = append(page.Data, AdminAuditOperation{ID: uuid.UUID(row.ID.Bytes).String(), CreatedAt: row.CreatedAt.Time, AdminCredentialID: row.AdminCredentialID, ActorLabel: row.ActorLabel, Action: row.Action, ProjectID: auditProjectID(row.ProjectID), ResourceType: row.ResourceType, ResourceID: row.ResourceID, ResultIDs: row.ResultIds, RequestID: row.RequestID, TraceID: row.TraceID})
 	}
 	if page.HasMore {
 		raw, _ := json.Marshal(writeAuditCursor{ID: page.Data[len(page.Data)-1].ID, Scope: scope})
 		page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
 	}
 	return page, nil
+}
+
+func auditProjectID(id pgtype.UUID) *string {
+	if !id.Valid {
+		return nil
+	}
+	value := uuid.UUID(id.Bytes).String()
+	return &value
 }

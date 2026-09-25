@@ -9,9 +9,10 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
-// ModelProviderDefaults resolves deployment configuration at Session creation,
-// before the encrypted Session snapshot is committed.
-type ModelProviderDefaults func(context.Context, string, string) (*v1.ModelProviderInput, map[string]any, error)
+// ModelProviderDefaults decrypts the deployment default model provider for a
+// harness at Session creation, before the encrypted Session snapshot is
+// committed. It returns nil when the harness has no default.
+type ModelProviderDefaults func(context.Context, string) (*v1.ModelProviderInput, error)
 
 func WithModelProviderDefaults(resolve ModelProviderDefaults) Option {
 	return func(h *Handler) { h.modelProviderDefaults = resolve }
@@ -50,38 +51,62 @@ func (h *Handler) sessionAgentDefaults(ctx context.Context, tenant string, input
 	return saved, provider, nil
 }
 
-func (h *Handler) resolveSessionExecution(ctx context.Context, input sessionRequest, inherited *v1.ModelProviderInput, raw json.RawMessage) (string, *v1.ModelProviderInput, map[string]any, error) {
+// modelProviderRequiredError reports a hosted or self-hosted Session that
+// would have no model provider. The message says what to configure.
+type modelProviderRequiredError struct{ message string }
+
+func (e *modelProviderRequiredError) Error() string { return e.message }
+
+// modelProviderDefaultsError carries a storage or decryption failure while
+// reading the deployment default; it is reported as a service error.
+type modelProviderDefaultsError struct{ err error }
+
+func (e *modelProviderDefaultsError) Error() string { return e.err.Error() }
+func (e *modelProviderDefaultsError) Unwrap() error { return e.err }
+
+func modelProviderRequired(environment, engine string) error {
+	if environment == "self_hosted" {
+		return &modelProviderRequiredError{"self_hosted Sessions need a model provider for harness " + engine + ": pass x_agents_core.model_provider or use an Agent that has one saved. Deployment default model providers apply to openai_hosted and none Sessions, never to self_hosted."}
+	}
+	return &modelProviderRequiredError{"No model provider is configured for harness " + engine + ". Pass x_agents_core.model_provider, use an Agent that has one saved, or ask the Core administrator to set a deployment default model provider for " + engine + "."}
+}
+
+// resolveSessionExecution applies provider precedence: the Session bundle, the
+// saved Agent bundle, then the deployment default where the environment allows
+// it. Bundles are never merged.
+func (h *Handler) resolveSessionExecution(ctx context.Context, input sessionRequest, inherited *v1.ModelProviderInput, raw json.RawMessage) (string, *v1.ModelProviderInput, string, error) {
 	engine, err := h.sessionHarness(raw)
 	if err != nil {
-		return "", nil, nil, err
+		return "", nil, "", err
 	}
-	provider := inherited
-	var options map[string]any
+	provider, source := inherited, v1.ModelProviderSourceAgent
 	if extension := input.XAgentsCore; extension != nil {
 		if extension.ModelProvider == nil && !input.modelProviderNull {
-			return "", nil, nil, errors.New("x_agents_core requires an execution option")
+			return "", nil, "", errors.New("x_agents_core requires an execution option")
 		}
 		if extension.ModelProvider != nil {
-			provider = extension.ModelProvider
+			provider, source = extension.ModelProvider, v1.ModelProviderSourceSession
 		}
 	}
-	if provider == nil && input.Environment.Type == "openai_hosted" && h.modelProviderDefaults != nil {
-		var cfg configuration
-		if err := json.Unmarshal(raw, &cfg); err != nil {
-			return "", nil, nil, err
-		}
-		provider, options, err = h.modelProviderDefaults(ctx, engine, cfg.Agent.Model)
+	environment := input.Environment.Type
+	if provider == nil && h.modelProviderDefaults != nil && v1.ModelProviderAllowed(environment, v1.ModelProviderSourceDeployment) {
+		provider, err = h.modelProviderDefaults(ctx, engine)
 		if err != nil {
-			return "", nil, nil, errors.New("deployment model provider configuration is unavailable")
+			return "", nil, "", &modelProviderDefaultsError{err}
 		}
+		source = v1.ModelProviderSourceDeployment
 	}
-	if provider != nil {
-		if !v1.ModelProviderEnvironmentSupported(input.Environment.Type) {
-			return "", nil, nil, errors.New("caller model credentials currently require a hosted environment")
+	if provider == nil {
+		if v1.ModelProviderRequired(environment) {
+			return "", nil, "", modelProviderRequired(environment, engine)
 		}
-		if err := provider.ValidateHarness(engine); err != nil {
-			return "", nil, nil, err
-		}
+		return engine, nil, "", nil
 	}
-	return engine, provider, options, nil
+	if !v1.ModelProviderAllowed(environment, source) {
+		return "", nil, "", errors.New("caller model credentials require an openai_hosted or self_hosted environment")
+	}
+	if err := provider.ValidateHarness(engine); err != nil {
+		return "", nil, "", err
+	}
+	return engine, provider, source, nil
 }
