@@ -43,7 +43,7 @@ test("adds a node: host requirements, a countdown, the same command after closin
 
   // Once expired, a new command is issued only on request, for the same limits.
   await page.clock.fastForward("10:30");
-  await expect(add.getByText("Command expired")).toBeVisible();
+  await expect(progress).toContainText("Command expired");
   await expect(field).toBeHidden();
   const reissued = tokenRequest();
   await add.getByRole("button", { name: "Generate new command" }).click();
@@ -70,7 +70,7 @@ test("adds a node: host requirements, a countdown, the same command after closin
   await expect(problem).toContainText("Docker limits unsupported");
   await expect(progress).toContainText("Waiting for Docker");
   await setNode(request, { id: "node-new", provider_ready: true, diagnostic: "" });
-  await expect(add.getByText("edge-04 · Connected")).toBeVisible();
+  await expect(progress).toHaveText("edge-04 · Connected");
   await add.getByRole("button", { name: "Done" }).click();
   await expect(add).toBeHidden();
 });

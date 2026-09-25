@@ -265,11 +265,14 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
           <label className="field"><span className="sr-only">{t("One-time enrollment command")}</span><textarea readOnly rows={5} value={command} onClick={(event) => event.currentTarget.select()} spellCheck={false} /></label>
         </div> : null}
         {copyFailed && !ready ? <p role="alert">{t("Select the command above and copy it manually.")}</p> : null}
-        {ready && node ? <div className="sandbox-enrollment-status connected" role="status"><span className="sandbox-status-dot" />{`${node.name} · ${t("Connected")}`}</div>
-          : expired && !registered ? <div className="sandbox-enrollment-status" role="status"><span className="sandbox-status-dot" />{t("Command expired")} · {t("Generate a new command to continue.")}</div>
-          : <ol className="sandbox-enrollment-progress" role="status" aria-label={t("Registration progress")}>
-            {steps.map((step, index) => <li key={index} className={step.state}><StatusDot tone={step.tone} label={step.label} /></li>)}
-          </ol>}
+        {/* One live region for the whole flow; only its contents change, so each change is announced. */}
+        <div role="status" aria-label={t("Registration progress")}>
+          {ready && node ? <div className="sandbox-enrollment-status connected"><span className="sandbox-status-dot" />{`${node.name} · ${t("Connected")}`}</div>
+            : expired && !registered ? <div className="sandbox-enrollment-status"><span className="sandbox-status-dot" />{t("Command expired")} · {t("Generate a new command to continue.")}</div>
+            : <ol className="sandbox-enrollment-progress">
+              {steps.map((step, index) => <li key={index} className={step.state}><StatusDot tone={step.tone} label={step.label} /></li>)}
+            </ol>}
+        </div>
         {problem && !ready ? <div className="sandbox-enrollment-problem" role="alert">
           <p><strong>{problem.label}</strong> {problem.advice}</p>
           <div className="sandbox-log-hint"><span>{t("Check the log on the host:")}</span><CopyCommand value={nodeLogCommand(deployment.installation_id)} /></div>
