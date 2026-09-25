@@ -1,5 +1,5 @@
 // Synthetic deployment data for the browser acceptance fixture: Sessions, Turns, Items, nodes.
-import { agentConversations, agentDefinitions } from "./agents.mjs";
+import { agentConversations, agentDefinitions, providerAgentDefinitions } from "./agents.mjs";
 let seed = 42;
 const rand = () => ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296);
 const pick = (list) => list[Math.floor(rand() * list.length)];
@@ -99,5 +99,11 @@ export function buildDemo(now = Math.floor(Date.now() / 1000)) {
     const sleeping = allocation.compute_phase === "suspended";
     return { ...base, environment_id: session.environment.id, mode: "openai_hosted", provider_type: "docker", instance: { kind: "managed_allocation", allocation_id: allocation.id, device_id: null, connection_generation: null }, lifecycle_state: sleeping ? "sleeping" : "active", status: "observed", reason: null, allocation_created_at: session.created_at, observed_at: now - 2, started_at: session.created_at, cpu: sleeping ? null : { usage_seconds_total: 600 + Math.floor(rand() * 4000), capacity_cores: 2, usage_cores: Number((rand() * 1.6).toFixed(2)), utilization_ratio: null }, memory: sleeping ? null : { usage_bytes: Math.floor((0.4 + rand() * 1.4) * 2 ** 30), limit_bytes: 2 * 2 ** 30 } };
   });
+  // Added after everything else is generated, so the seeded data above does not change.
+  agents.push(...providerAgentDefinitions.map((definition, index) => ({
+    ...definition, object: "agent", multi_agent: { enabled: false, max_concurrent_subagents: null }, service_tier: "auto",
+    text: { format: { type: "text" }, verbosity: "medium" },
+    created_at: now - 86400 * (3 + index), updated_at: now - 1800 * (index + 1),
+  })));
   return { agents, sessions, turns, items, nodes, allocations, observations };
 }

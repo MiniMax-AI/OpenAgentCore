@@ -122,7 +122,9 @@ workbench.
   Sessions, send input or cancel work. Deletion follows the public deletion rules;
   a busy Session is not deletable and the console never cancels work to make it so.
 - **Secrets stay write-only.** Credential tokens, Template environment variables and
-  setup commands are never returned, to the administrator included.
+  setup commands are never returned, to the administrator included. An Agent's saved
+  model provider shows its protocol, base URL, limits and whether a key is configured,
+  never the key.
 - **Creators.** Core records the key behind every write. The console shows the
   creating key of each asset and a project's write history; an asset an
   administrator copied in an earlier release shows as Admin copy and an asset
