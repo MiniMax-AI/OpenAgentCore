@@ -370,6 +370,7 @@ class NodeInstallTests(unittest.TestCase):
         self.assertTrue((self.root / "registered.json").exists())
         self.assertFalse((self.root / ("parsar-node-" + self.args.installation_id + ".service")).exists())
         self.assertEqual(json.loads((system / "etc/user.json").read_text())["created"], True)
+        self.assertEqual(stat.S_IMODE((system / "etc").stat().st_mode), 0o755)
         before = {path: path.read_bytes() for path in (system / "etc").iterdir()}
         self.calls.clear()
         installer.install_system(self.args, "")
@@ -410,6 +411,7 @@ class NodeInstallTests(unittest.TestCase):
         commands = [call for call, _ in self.calls]
         self.assertIn(["systemctl", "disable", "--now", "parsar-node-" + self.args.installation_id + ".service"], commands)
         self.assertIn(["userdel", "parsar-node"], commands)
+        self.assertIn(["systemctl", "reset-failed", "parsar-node-" + self.args.installation_id + ".service"], commands)
         self.assertFalse(any(call[-2:] == ["rm", "--force"] or "prune" in call or ("image" in call and "rm" in call) for call in commands))
         self.assertFalse(self.root.exists())
         self.assertFalse((system / "units" / ("parsar-node-" + self.args.installation_id + ".service")).exists())

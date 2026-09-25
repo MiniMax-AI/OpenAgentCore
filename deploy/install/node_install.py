@@ -373,10 +373,12 @@ def open_node(args, token, system=False):
     safe_directory(root)
     identity_file = root / "state/node/identity.json"
     retained = json.loads(identity_file.read_text()) if existing_file(identity_file) else None
-    print("Reading the Core deployment specification...", flush=True)
+    if not system:  # In sudo mode, root has already said so.
+        print("Reading the Core deployment specification...", flush=True)
     args.configuration = node_spec.fetch(args, token, retained, open_request, allow_enrollment=not (root / "registered.json").exists())
     args.provider = args.configuration["provider"]
-    print("Checking host requirements...", flush=True)
+    if not system:
+        print("Checking host requirements...", flush=True)
     preflight(args.provider, system)
     if args.provider == "microsandbox":
         runtime_home = micro_home(args.installation_id)
@@ -460,7 +462,11 @@ def register_node(root, args, token):
 
 def install(args, token):
     """Non-root mode: the node runs as this user's systemd user service."""
-    if (SYSTEM_RECORDS / (args.installation_id + ".json")).exists():
+    try:
+        system_node = (SYSTEM_RECORDS / (args.installation_id + ".json")).exists()
+    except PermissionError:
+        system_node = True
+    if system_node:
         raise InstallError("This host already runs a node for this installation as a system service. Rerun the command "
                            "with sudo, or uninstall that node with sudo first." + NOTHING_CHANGED)
     root = open_node(args, token)
@@ -564,7 +570,10 @@ def root_file(path, content):
         if path.stat().st_uid != os.geteuid() or path.read_text() != content:
             raise InstallError(str(path) + " differs from this installer's version; preserve it and inspect the node")
         return
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+    if not path.parent.exists():
+        # Readable by every user, so a no-sudo run can see a sudo-mode node; the caller's umask is 077.
+        path.parent.mkdir(parents=True, mode=0o755)
+        os.chmod(path.parent, 0o755)
     descriptor, temporary = tempfile.mkstemp(prefix=".parsar-node-", dir=path.parent)
     try:
         with os.fdopen(descriptor, "w") as stream:
@@ -837,6 +846,9 @@ def uninstall_system(args):
                 checked(["systemctl", "disable", "--now", unit.name], "Cannot stop the node service " + unit.name)
                 unit.unlink()
                 checked(["systemctl", "daemon-reload"], "Cannot reload systemd")
+                # A removed node's service ends failed (exit 78); drop that state with the unit.
+                with contextlib.suppress(InstallError):
+                    checked(["systemctl", "reset-failed", unit.name], "Cannot reset " + unit.name)
             release_docker_network(root, args.installation_id)
             remove_node_files(root, args.installation_id, home)
             record_path.unlink(missing_ok=True)
@@ -874,6 +886,8 @@ def uninstall_user(args):
     remove_node_files(root, args.installation_id, Path.home())
     if service:
         checked(["systemctl", "--user", "daemon-reload"], "Cannot reload the systemd user manager")
+        with contextlib.suppress(InstallError):
+            checked(["systemctl", "--user", "reset-failed", unit.name], "Cannot reset " + unit.name)
     print("Node for installation " + args.installation_id + " uninstalled for this user.")
 
 def wait_ready(root, args, timeout=60):
