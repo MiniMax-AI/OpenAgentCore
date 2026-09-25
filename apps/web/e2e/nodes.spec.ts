@@ -74,6 +74,9 @@ test("adds a node: host requirements, a countdown, the same command after closin
   await expect(progress).toHaveText("edge-04 · Connected");
   await add.getByRole("button", { name: "Done" }).click();
   await expect(add).toBeHidden();
+  // A finished flow leaves no limits behind: the next node starts from the defaults.
+  await page.getByRole("button", { name: "Add node" }).click();
+  await expect(add.getByLabel("Sandboxes at once")).toHaveValue("2");
 });
 
 test("removes a node after confirmation", async ({ page, request }) => {

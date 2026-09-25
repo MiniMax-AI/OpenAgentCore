@@ -24,6 +24,10 @@ function rememberRequirementsSeen() {
 }
 
 /** A command, with the nodes registered before it and the limits it approved, which identify its node. */
+/** The limits a new flow starts from. */
+const DEFAULT_ACTIVE = "2";
+const DEFAULT_RETAINED = "8";
+
 interface Enrollment extends EnrollmentTarget {
   token: string;
   expires_at: string;
@@ -57,8 +61,8 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const { t, i18n } = useTranslation("sandbox");
   const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
   const id = useId();
-  const [active, setActive] = useState("2");
-  const [retained, setRetained] = useState("8");
+  const [active, setActive] = useState(DEFAULT_ACTIVE);
+  const [retained, setRetained] = useState(DEFAULT_RETAINED);
   const [busy, setBusy] = useState(false);
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [appeared, setAppeared] = useState<{ id: string; at: number } | null>(null);
@@ -139,6 +143,8 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     setError(null); setBusy(false); setCopied(false); setCopyFailed(false);
     // A connected node ends the command; otherwise it waits here for the next opening.
     if (ready) { setEnrollment(null); setAppeared(null); }
+    // The limits stay only with an unfinished flow: a command still waiting for its node.
+    if (!enrollment || ready) { setActive(DEFAULT_ACTIVE); setRetained(DEFAULT_RETAINED); }
     onClose();
   }
   /**
