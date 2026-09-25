@@ -1,4 +1,5 @@
 import type { SandboxDeployment, SandboxE2BTemplateBuild, SandboxProvider, SandboxResources, SandboxRuntimeRelease, SandboxSpecification } from "@agents-core-web/agents-client";
+import standardSizes from "./standard-sizes.json";
 
 interface Manifest {
   platform?: string;
@@ -9,10 +10,9 @@ interface Manifest {
   microsandbox?: { runtime_sha256?: string; firmware_sha256?: string };
 }
 
+// The Standard sizes are a contract with the node installer; see standard-sizes.md before changing their structure.
 export function defaultSandboxResources(provider: SandboxProvider): SandboxResources {
-  return provider === "microsandbox"
-    ? { cpus: 2, memory_mib: 4096, root_disk_mib: 8192, environment_disk_mib: 8192 }
-    : { cpus: 2, memory_mib: 2048 };
+  return { ...(provider === "microsandbox" ? standardSizes.microsandbox : standardSizes.docker) };
 }
 
 export function validSandboxResources(provider: SandboxProvider, resources: SandboxResources): boolean {
