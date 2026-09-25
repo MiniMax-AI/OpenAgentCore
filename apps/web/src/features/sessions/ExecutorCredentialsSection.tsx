@@ -80,8 +80,8 @@ function seconds(value: string | null): number | null {
  * own it. Rotating a revoked credential restores it with a new secret, which
  * is how a host whose credential was revoked reconnects: its installer accepts
  * only the same key ID. An archived project's credentials are listed and
- * revoked but neither issued nor rotated. Below the list, Connect a host gives the command that
- * installs the executor with one of these credentials.
+ * revoked but neither issued nor rotated. Below the list, Connect a host gives
+ * the command that installs the executor with one of these credentials.
  */
 export function ExecutorCredentialsSection({ projectId, sessionId, environmentId, remoteUrl }: { projectId: string; sessionId: string; environmentId: string; remoteUrl: string }) {
   const { t, i18n } = useTranslation("sessions");

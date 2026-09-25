@@ -497,8 +497,8 @@ Every resource list, the Session log and the project list share one grammar:
   Margin Gray Terminal block with an icon copy button, and the host requirements
   on one dot-separated line. The command wraps rather than scrolls. Without a
   public address, with a loopback one, or with a Session address that is not
-  `wss://`, one Graphite note takes the command's place; an archived project keeps the command and says
-  the host still needs a credential.
+  `wss://`, one Graphite note takes the command's place; an archived project
+  keeps the command and says the host still needs a credential.
 
 ### Dialogs
 Dialogs are 448px Paper cards with 8px corners, a 48px header and a 52px footer
