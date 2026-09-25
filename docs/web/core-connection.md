@@ -40,8 +40,8 @@ application's caller-managed `self_hosted` Runtime, including its own E2B setup.
 
 The console exposes `GET /console/auth` and `POST /console/auth/login` and
 `/logout`. The administrator signs in with the deployment's Core key, which the
-installer writes to `admin/core.key` under the installation directory (by default
-`~/.parsar/core/admin/core.key`; see [Core key](../getting-started/operations.md#core-key)).
+installer writes to `secrets/core.key` under the installation directory (by default
+`~/.parsar/core/secrets/core.key`; see [Core key](../getting-started/operations.md#core-key)).
 The server compares it in constant time and answers with a same-origin session
 cookie held only in its memory; the key is never logged or returned, and the
 browser does not store it. A console restart or a Core key rotation requires

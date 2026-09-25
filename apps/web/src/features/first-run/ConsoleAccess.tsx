@@ -15,7 +15,7 @@ import "./console-access.css";
  * directory, and that file under the default installation directory. The
  * sign-in help names both.
  */
-const CORE_KEY_LOCATION = { file: "admin/core.key", defaultPath: "~/.parsar/core/admin/core.key" } as const;
+const CORE_KEY_LOCATION = { file: "secrets/core.key", defaultPath: "~/.parsar/core/secrets/core.key" } as const;
 
 const ConsoleAccountContext = createContext<{ logout: () => Promise<void> } | null>(null);
 export const useConsoleAccount = () => useContext(ConsoleAccountContext);
