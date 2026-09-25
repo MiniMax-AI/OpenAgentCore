@@ -297,7 +297,8 @@ async function executorCredentialRoute(request, response, projectId, environment
     if (typeof input.key_id !== "string" || !UUID.test(input.key_id) || (input.rotate !== undefined && typeof input.rotate !== "boolean")) return error(response, 400, "key_id must be a UUID.", "invalid_request");
     const existing = credentials.find((entry) => entry.key_id === input.key_id);
     if (existing && input.rotate !== true) return error(response, 409, "The executor credential exists; rotate it instead.", "executor_credential_exists");
-    if (existing?.revoked_at) return error(response, 409, "The executor credential is revoked.", "executor_credential_revoked");
+    // As Core: the only conflict is an existing key without rotate; rotating a revoked key restores it.
+    if (existing) existing.revoked_at = null;
     if (!existing) credentials.push({ key_id: input.key_id, created_at: new Date().toISOString(), revoked_at: null });
     return send(response, 201, { key_id: input.key_id, environment_id: environmentId, executor_token: `exec_fixture_${state.nextId++}` });
   }
