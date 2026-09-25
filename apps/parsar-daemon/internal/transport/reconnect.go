@@ -89,6 +89,10 @@ func Sleep(ctx context.Context, d time.Duration) error {
 // retried — e.g. 401 bad_credential or 426 incompatible_version.
 var ErrPermanent = errors.New("transport: permanent error (do not retry)")
 
+// ErrIncompatibleVersion accompanies ErrPermanent when the gateway refuses the
+// daemon's wire-protocol version (HTTP 426) rather than its credential.
+var ErrIncompatibleVersion = errors.New("transport: incompatible daemon version")
+
 // DialFn is invoked once per attempt. Wrap with ErrPermanent on auth/
 // protocol fatalities; any other error triggers backoff + retry.
 type DialFn func(ctx context.Context) (*Conn, error)

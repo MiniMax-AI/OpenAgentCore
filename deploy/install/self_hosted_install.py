@@ -2,7 +2,6 @@
 """Start one user-owned V1 Runtime from the connected Core's distribution."""
 import argparse
 import fcntl
-import getpass
 import http.client
 import json
 import os
@@ -13,6 +12,8 @@ import signal
 import stat
 import subprocess
 import sys
+import tempfile
+import termios
 import time
 import urllib.error
 import urllib.request
@@ -78,6 +79,54 @@ def credential(raw, environment):
     return value
 
 
+def prompt_credential(environment):
+    """Read the credential JSON from the terminal with echo off.
+
+    Input is read until one complete JSON object parses, so both the compact
+    form and Web's pretty-printed file work. The secret never enters argv, the
+    environment, shell history or the screen; leftover typed-ahead input is
+    discarded so no fragment reaches the shell afterwards.
+    """
+    try:
+        tty = os.open('/dev/tty', os.O_RDWR | os.O_NOCTTY)
+    except OSError:
+        raise InstallError('Use --credential-file in noninteractive sessions; credentials are never echoed') from None
+    try:
+        previous = termios.tcgetattr(tty)
+        hidden = termios.tcgetattr(tty)
+        hidden[3] &= ~(termios.ECHO | termios.ECHONL)
+        raw = b''
+        try:
+            # Echo is off before the prompt appears, so nothing pasted is shown.
+            termios.tcsetattr(tty, termios.TCSAFLUSH, hidden)
+            os.write(tty, b'Paste the restricted executor credential JSON (input hidden), then press Enter: ')
+            while True:
+                chunk = os.read(tty, 4096)
+                if not chunk:
+                    raise InstallError('No executor credential was entered')
+                raw += chunk
+                text = raw.decode('utf-8', 'replace').strip()
+                if len(raw) > 16384 or text[:1] not in ('', '{'):
+                    raise InstallError('Invalid restricted executor credential JSON')
+                if not text:
+                    continue
+                try:
+                    json.loads(text)
+                    break
+                except ValueError:
+                    # The credential is one flat object: a closing brace ends it.
+                    if text.endswith('}'):
+                        raise InstallError('Invalid restricted executor credential JSON') from None
+        finally:
+            termios.tcsetattr(tty, termios.TCSAFLUSH, previous)
+            os.write(tty, b'\n')
+    except termios.error:
+        raise InstallError('Cannot read the credential from this terminal; use --credential-file') from None
+    finally:
+        os.close(tty)
+    return credential(raw, environment)
+
+
 def write_private(path, value):
     data = json.dumps(value).encode()
     try:
@@ -122,13 +171,29 @@ class _ConnectionDeadline(Exception):
     pass
 
 
-def wait_connected(remote, environment, key, container, timeout=60):
+def connection_request(remote, environment, key):
     # Only the validated daemon origin receives the restricted credential.
     identity(environment, remote)
     address = urlsplit(remote)
     endpoint = 'https://' + address.netloc + '/api/v1/agent-daemon/connection?'
-    request = urllib.request.Request(endpoint + urlencode({'environment_id': environment}),
-                                     headers={'Authorization': 'Bearer ' + key['executor_token']})
+    return urllib.request.Request(endpoint + urlencode({'environment_id': environment}),
+                                  headers={'Authorization': 'Bearer ' + key['executor_token']})
+
+
+def credential_verdict(remote, environment, key):
+    """One connection read: 'accepted', 401 or 409 when Core rejects the key, or None when Core cannot answer."""
+    try:
+        with open_connection(connection_request(remote, environment, key), 10) as response:
+            response.read(4097)
+        return 'accepted'
+    except urllib.error.HTTPError as error:
+        return error.code if error.code in (401, 409) else None
+    except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.HTTPException):
+        return None
+
+
+def wait_connected(remote, environment, key, container, timeout=60):
+    request = connection_request(remote, environment, key)
     guidance = (' Inspect with: docker --host unix:///var/run/docker.sock logs --tail 100 ' + container
                 + '. Check the Runtime network, TLS and executor credential, then rerun the same installation command.'
                 + ' Keep the existing container, volumes and installation state; do not replace history.')
@@ -189,7 +254,7 @@ def wait_connected(remote, environment, key, container, timeout=60):
     raise InstallError('Runtime connection timed out: ' + detail + '.' + guidance)
 
 
-def inspect_prior_launch(root, state):
+def inspect_prior_launch(root, state, replacing=False):
     docker = 'docker --host unix:///var/run/docker.sock'
     filters = (' --filter label=io.parsar.agents-api.installation=' + state['installation_id']
                + ' --filter label=io.parsar.agents-api.environment=' + state['environment_id'])
@@ -217,6 +282,8 @@ def inspect_prior_launch(root, state):
         raise InstallError('The retained container does not match this installation and Environment.' + guidance)
     if image not in (state['runtime_image'], state['runtime_manifest']):
         raise InstallError('The retained container image does not match this distribution.' + guidance)
+    if replacing and status in ('running', 'exited', 'restarting', 'created'):
+        return name
     if status == 'running':
         print('Runtime already running: ' + name)
         return name
@@ -224,6 +291,59 @@ def inspect_prior_launch(root, state):
         raise InstallError('The existing Runtime is stopped. Preserve its history and resume that same container with: '
                            + docker + ' start ' + name + '. Then rerun the same installation command to confirm connection.')
     raise InstallError('The retained Runtime requires inspection before continuing.' + guidance)
+
+
+def replace_credential(args, manifest, root, state, stored, rejection, supplied):
+    """Give the same container a rotated credential after Core rejected the stored one.
+
+    rejection is Core's answer for the stored credential: 401 when it was revoked
+    or rotated, so only that same key rotated can replace it; 409 when the
+    Environment is bound to a different credential. The container, its volumes and
+    native history stay. The stored copy changes last, so every interruption
+    leaves it rejected and rerunning the same command replaces it again.
+    """
+    environment = args.environment_id
+    name = inspect_prior_launch(root, state, replacing=True)
+    if rejection == 401:
+        advice = ('Rotate this same credential in Web (Session > Executor credentials > Rotate); '
+                  'a newly issued credential cannot replace it.')
+        print('Executor credential ' + stored['key_id'] + ' is no longer accepted by Core. ' + advice
+              + ('' if supplied else ' Then paste the rotated credential.'))
+    else:
+        advice = ('Rotate the credential first used for this Environment in Web (Session > Executor credentials > Rotate) '
+                  'instead of issuing a new one.')
+        print('Environment ' + environment + ' is bound to a different executor credential than ' + stored['key_id'] + '. '
+              + advice + ('' if supplied else ' Then paste the rotated credential.'))
+    replacement = supplied or prompt_credential(environment)
+    if rejection == 401 and replacement['key_id'] != stored['key_id']:
+        raise InstallError('The pasted credential is ' + replacement['key_id'] + ', not ' + stored['key_id'] + '. '
+                           + advice + ' Then rerun this command. Nothing was changed.')
+    verdict = credential_verdict(args.remote, environment, replacement)
+    if verdict == 409:
+        raise InstallError('Environment ' + environment + ' is bound to a different executor credential. Rotate the credential '
+                           'first used for this Environment instead of issuing a new one, then rerun this command. Nothing was changed.')
+    if verdict != 'accepted':
+        raise InstallError('Core did not accept the replacement credential ('
+                           + ('HTTP 401' if verdict == 401 else 'Core unavailable')
+                           + '). Nothing was changed; rerun this command with a currently valid credential.')
+    launcher = obtain_artifact(manifest, 'native/bin/parsar-runtime', root / 'native/bin/parsar-runtime', args.offline_root)
+    docker = ['docker', '--host', 'unix:///var/run/docker.sock']
+    fd, staged = tempfile.mkstemp(prefix='.executor-key-', dir=root)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(json.dumps(replacement).encode())
+            stream.flush()
+            os.fsync(stream.fileno())
+        checked(docker + ['stop', name], 'Cannot stop the Runtime to replace its credential; rerun this command', timeout=60)
+        checked([str(launcher), 'replace-credential', '--container', name, '--credential-file', staged],
+                'Runtime credential replacement failed; rerun this command', timeout=90)
+        checked(docker + ['start', name], 'Cannot start the Runtime ' + name + '; rerun this command')
+        os.replace(staged, root / 'executor-key.json')
+    finally:
+        if os.path.exists(staged):
+            os.unlink(staged)
+    print('Executor credential replaced; restarted the same Runtime: ' + name)
+    wait_connected(args.remote, environment, replacement, name)
 
 
 def install(args, root):
@@ -246,9 +366,14 @@ def install(args, root):
         state = dict(target, installation_id=str(uuid.uuid4()))
         write_private(state_file, state)
     if (root / 'launch.json').exists() or (root / 'launch.json').is_symlink():
-        name = inspect_prior_launch(root, state)
         key = credential(private_read(root / 'executor-key.json'), args.environment_id)
-        if args.credential_file and credential(private_read(Path(args.credential_file)), args.environment_id) != key:
+        supplied = credential(private_read(Path(args.credential_file)), args.environment_id) if args.credential_file else None
+        rejection = credential_verdict(args.remote, args.environment_id, key)
+        if rejection in (401, 409):
+            replace_credential(args, manifest, root, state, key, rejection, supplied)
+            return
+        name = inspect_prior_launch(root, state)
+        if supplied and supplied != key:
             raise InstallError('Stored executor credential differs; inspect the existing installation')
         wait_connected(args.remote, args.environment_id, key, name)
         return
@@ -258,10 +383,10 @@ def install(args, root):
         if args.credential_file and credential(private_read(Path(args.credential_file)), args.environment_id) != key:
             raise InstallError('Stored executor credential differs; inspect the existing installation')
     else:
-        if not args.credential_file and not sys.stdin.isatty():
-            raise InstallError('Use --credential-file in noninteractive sessions; credentials are never echoed')
-        raw = private_read(Path(args.credential_file)) if args.credential_file else getpass.getpass('Restricted executor credential JSON (hidden): ')
-        key = credential(raw, args.environment_id)
+        if args.credential_file:
+            key = credential(private_read(Path(args.credential_file)), args.environment_id)
+        else:
+            key = prompt_credential(args.environment_id)
         write_private(key_file, key)
     launcher = obtain_artifact(manifest, 'native/bin/parsar-runtime', root / 'native/bin/parsar-runtime', args.offline_root)
     seccomp = obtain_artifact(manifest, 'runtime/seccomp.json', root / 'runtime/seccomp.json', args.offline_root)

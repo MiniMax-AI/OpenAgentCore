@@ -54,19 +54,21 @@ func (h *console) allowedNodePayload(name string) bool {
 	return false
 }
 
-func nodeInstallerDigest(root *os.Root) (string, error) {
-	f, err := root.Open("node-install.pyz")
+// installerDigest returns the SHA-256 that Web's install commands verify
+// before running the named installer from the payload.
+func installerDigest(root *os.Root, name string) (string, error) {
+	f, err := root.Open(name)
 	if err != nil {
-		return "", errors.New("node installer is missing")
+		return "", errors.New("installer " + name + " is missing from the node installation payload")
 	}
 	defer f.Close()
 	info, err := f.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Size() > 1024*1024 {
-		return "", errors.New("invalid node installer")
+		return "", errors.New("invalid installer " + name)
 	}
 	digest := sha256.New()
 	if _, err = io.Copy(digest, f); err != nil {
-		return "", errors.New("cannot read node installer")
+		return "", errors.New("cannot read installer " + name)
 	}
 	return hex.EncodeToString(digest.Sum(nil)), nil
 }
@@ -100,7 +102,9 @@ func (h *console) serveNodePayload(w http.ResponseWriter, r *http.Request) {
 func (h *console) serveConsoleConfiguration(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(struct {
-		NodeInstaller       bool   `json:"node_installer"`
-		NodeInstallerSHA256 string `json:"node_installer_sha256"`
-	}{h.nodePayload != nil, h.nodeInstallerDigest})
+		NodeInstaller             bool   `json:"node_installer"`
+		NodeInstallerSHA256       string `json:"node_installer_sha256"`
+		SelfHostedInstaller       bool   `json:"self_hosted_installer"`
+		SelfHostedInstallerSHA256 string `json:"self_hosted_installer_sha256"`
+	}{h.nodePayload != nil, h.nodeInstallerDigest, h.nodePayload != nil, h.selfHostedInstallerDigest})
 }

@@ -106,6 +106,78 @@ An uncertain launch without a success receipt gives label-filtered container
 and volume inspection commands and never creates a replacement. A cached image
 with the exact distribution digest and platform skips image download and import.
 
+### Install command
+
+Web builds a command that contains no secret, like Add node's. It downloads
+`/node-install/self-hosted-install.pyz` from the console, verifies it against
+`self_hosted_installer_sha256` from `GET /console/config`, and runs it with the
+installation's `public_url` (`GET /core/v1/installation`) as `--source-url` plus
+the Session's `environment.id` and unchanged `environment.remote_url`:
+
+```sh
+(umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT
+curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/self-hosted-install.pyz' -o "$d/install.pyz" &&
+printf '%s  %s\n' 'SHA256' "$d/install.pyz" | sha256sum -c --status &&
+python3 "$d/install.pyz" --source-url 'https://core.example' --environment-id 'ENVIRONMENT_UUID' --remote 'wss://core.example/api/v1/agent-daemon/ws')
+```
+
+Without `--credential-file`, the installer asks for the credential at a hidden
+prompt on the controlling terminal. It turns echo off before showing the prompt
+and reads until one complete JSON object parses (at most 16 KiB), so the compact
+form and the pretty-printed credential file both work. Leftover typed-ahead input
+is discarded. The secret never enters process arguments, the environment, shell
+history or the screen; the installer stores it only in its private mode-0600
+state and the container's private home volume. Without a terminal, use
+`--credential-file` with an owned mode-0600 file. The same command reruns safely:
+with an accepted stored credential it only confirms the connection and asks for
+nothing.
+
+### Revoked or rotated credential
+
+When Core permanently rejects the executor (enrollment 401 or 409, a WebSocket
+upgrade 401/403/426, or a close for a retired Runtime), the daemon parks instead
+of exiting: it prints one message naming the fix (for 426, that the Runtime comes
+from a different Core distribution), makes no further requests, and exits 0 on
+SIGTERM or SIGINT. The container keeps its `unless-stopped` policy, so it has no
+restart loop yet still starts after a reboot, makes one enrollment request and
+parks again. Transport failures, 5xx and 404 still exit 1
+and are retried by the restart policy. The installer's launcher starts the daemon
+with `--self-hosted-install`, so its 401 message names the installer's rerun:
+
+```text
+parsar-daemon: executor credential KEY_ID for Environment ENVIRONMENT_ID was rejected by Core (revoked, rotated, or its Session was deleted). This Runtime will not retry. To reconnect it, rotate this credential in Web (Session > Executor credentials > Rotate), then rerun the self-hosted install command on this host and paste it. To remove it instead, stop this container.
+```
+
+Without that flag (for example a caller-managed E2B Runtime) the message says to
+install the rotated credential for this Runtime and restart it, or to stop it.
+
+The fix is always to rotate the same `key_id`, then rerun the install command.
+Issuing a new key does not work for an Environment that has already enrolled:
+enrollment keeps the key the Environment first bound, and the connection check
+returns 409 for another key. Rotation restores a revoked key with a new secret.
+
+On rerun the installer checks the stored credential with the connection route.
+When Core rejects it, the installer asks for the replacement (or reads
+`--credential-file`):
+
+- 401 (revoked or rotated): only the same `key_id`, rotated, can replace it. A
+  different key is refused before any change, because the connection check alone
+  may accept a new key that enrollment would then reject with 409.
+- 409 (the Environment is bound to a different credential): the replacement must
+  be the credential first used for this Environment, rotated.
+
+The replacement is then checked the same way; 409 or 401, or no answer, stops
+without changes. The installer stops the container and writes the replacement
+into it with `parsar-runtime replace-credential --container NAME
+--credential-file PATH`. That command refuses a running container, one without
+this installation's labels and name or its exact `-home` and `-environment`
+volumes, and a symlinked private credential directory. The installer then starts
+the same container, updates its stored copy last and waits for connection. The
+container, its volumes and native history are kept. Because the stored copy
+changes last, an interrupted replacement still sees a rejected credential and is
+completed by rerunning the same command. The host keeps two copies of the
+credential: the installer's state and the container's home volume.
+
 ## Private connection confirmation
 
 `GET /api/v1/agent-daemon/connection?environment_id=UUID` uses the existing
