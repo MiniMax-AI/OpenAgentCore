@@ -48,6 +48,7 @@ type Handler struct {
 	auth                  *Authenticator
 	projectKeys           ProjectAPIKeyStore
 	writeAudit            WriteAuditStore
+	adminArchive          func(context.Context, string, string, uint64) (store.ManagedSessionArchive, error)
 	adminManagement       AdminManagementStore
 	harnesses             map[string]bool
 	modelProviderDefaults ModelProviderDefaults

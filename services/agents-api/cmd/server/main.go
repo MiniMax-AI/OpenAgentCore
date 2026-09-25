@@ -220,7 +220,7 @@ func run() error {
 				<-workerDone
 			}
 		}()
-		options = append(options, api.WithExecution(worker), api.WithEnvironmentDirectoryReader(worker), api.WithEnvironmentFileWriter(worker))
+		options = append(options, api.WithExecution(worker), api.WithSessionArchive(worker.ArchiveManagedSession), api.WithEnvironmentDirectoryReader(worker), api.WithEnvironmentFileWriter(worker))
 		options = append(options, api.WithHarnesses(kinds), api.WithModelProviderDefaults(deploymentModelDefaults(transientOptions)))
 		if managed != nil {
 			options = append(options, api.WithHostedEnvironments())

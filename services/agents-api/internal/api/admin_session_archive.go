@@ -1,11 +1,17 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/go-chi/chi/v5"
 )
+
+// WithSessionArchive binds the execution owner; management reads use the ordinary Store.
+func WithSessionArchive(archive func(context.Context, string, string, uint64) (store.ManagedSessionArchive, error)) Option {
+	return func(h *Handler) { h.adminArchive = archive }
+}
 
 type AdminSessionArchiveRequest struct {
 	ExpectedGeneration uint64 `json:"expected_generation"`
@@ -33,7 +39,11 @@ func (h *Handler) adminArchiveSession(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
-	result, err := h.adminManagement.ArchiveManagedSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), input.ExpectedGeneration)
+	if h.adminArchive == nil {
+		writeStoreError(w, r, store.ErrEnvironmentUnavailable)
+		return
+	}
+	result, err := h.adminArchive(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), input.ExpectedGeneration)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

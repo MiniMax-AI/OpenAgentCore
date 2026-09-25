@@ -13,7 +13,6 @@ import (
 type adminTenantContextKey struct{}
 
 type AdminManagementStore interface {
-	ArchiveManagedSession(context.Context, string, string, uint64) (store.ManagedSessionArchive, error)
 	GetManagedSessionArchive(context.Context, string, string) (store.ManagedSessionArchive, error)
 	CopyAssets(context.Context, string, string, store.CopyAssetsInput) (store.CopyAssetsResult, error)
 	ReadAdminSummary(context.Context, string, store.AdminSummaryFilter, func(store.Session, *string) error) (store.AdminAssetCounts, error)

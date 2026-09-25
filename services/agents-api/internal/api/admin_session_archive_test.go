@@ -40,7 +40,7 @@ func TestAdminSessionArchiveAuthorityAndValidation(t *testing.T) {
 	auth, _ := NewAuthenticator([]APIKey{key})
 	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("admin")})
 	fixture := &archiveManagementFixture{}
-	h, err := NewHandler(&recordingStore{}, auth, "codex", WithProjectAPIKeys(managementProjectStore(key), admin), WithAdminManagement(fixture))
+	h, err := NewHandler(&recordingStore{}, auth, "codex", WithProjectAPIKeys(managementProjectStore(key), admin), WithAdminManagement(fixture), WithSessionArchive(fixture.ArchiveManagedSession))
 	if err != nil {
 		t.Fatal(err)
 	}
