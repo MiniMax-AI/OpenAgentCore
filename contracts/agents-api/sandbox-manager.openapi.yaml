@@ -168,6 +168,11 @@ definitions:
         type: string
     type: object
   api.SandboxEnrollmentTokenRequest:
+    properties:
+      max_active:
+        type: integer
+      max_retained:
+        type: integer
     type: object
   api.SandboxMutationResponse:
     properties:
@@ -665,6 +670,10 @@ definitions:
         type: integer
       installation_id:
         type: string
+      max_active:
+        type: integer
+      max_retained:
+        type: integer
       provider:
         type: string
       specification:
@@ -679,10 +688,6 @@ definitions:
       credential:
         type: string
       deployment_generation:
-        type: integer
-      max_active:
-        type: integer
-      max_retained:
         type: integer
       name:
         type: string
@@ -699,6 +704,10 @@ definitions:
         type: integer
       installation_id:
         type: string
+      max_active:
+        type: integer
+      max_retained:
+        type: integer
       node_id:
         type: string
       provider:
@@ -714,6 +723,10 @@ definitions:
         type: integer
       installation_id:
         type: string
+      max_active:
+        type: integer
+      max_retained:
+        type: integer
       node_id:
         type: string
       provider:

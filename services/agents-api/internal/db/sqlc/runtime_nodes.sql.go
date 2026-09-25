@@ -95,16 +95,23 @@ func (q *Queries) ConsumeRuntimeEnrollment(ctx context.Context, arg ConsumeRunti
 }
 
 const createRuntimeEnrollment = `-- name: CreateRuntimeEnrollment :exec
-INSERT INTO runtime_node_enrollments(token_sha256,installation_id,expires_at) VALUES($1,$2,clock_timestamp()+interval '10 minutes')
+INSERT INTO runtime_node_enrollments(token_sha256,installation_id,expires_at,max_active,max_retained) VALUES($1,$2,clock_timestamp()+interval '10 minutes',$3,$4)
 `
 
 type CreateRuntimeEnrollmentParams struct {
 	TokenSha256    string      `json:"token_sha256"`
 	InstallationID pgtype.UUID `json:"installation_id"`
+	MaxActive      int32       `json:"max_active"`
+	MaxRetained    int32       `json:"max_retained"`
 }
 
 func (q *Queries) CreateRuntimeEnrollment(ctx context.Context, arg CreateRuntimeEnrollmentParams) error {
-	_, err := q.db.Exec(ctx, createRuntimeEnrollment, arg.TokenSha256, arg.InstallationID)
+	_, err := q.db.Exec(ctx, createRuntimeEnrollment,
+		arg.TokenSha256,
+		arg.InstallationID,
+		arg.MaxActive,
+		arg.MaxRetained,
+	)
 	return err
 }
 
@@ -182,7 +189,7 @@ func (q *Queries) GetRuntimeDeployment(ctx context.Context) (RuntimeDeployment, 
 }
 
 const getRuntimeEnrollment = `-- name: GetRuntimeEnrollment :one
-SELECT token_sha256, installation_id, expires_at, consumed_at, node_id FROM runtime_node_enrollments WHERE token_sha256=$1
+SELECT token_sha256, installation_id, expires_at, consumed_at, node_id, max_active, max_retained FROM runtime_node_enrollments WHERE token_sha256=$1
 `
 
 func (q *Queries) GetRuntimeEnrollment(ctx context.Context, tokenSha256 string) (RuntimeNodeEnrollment, error) {
@@ -194,6 +201,8 @@ func (q *Queries) GetRuntimeEnrollment(ctx context.Context, tokenSha256 string) 
 		&i.ExpiresAt,
 		&i.ConsumedAt,
 		&i.NodeID,
+		&i.MaxActive,
+		&i.MaxRetained,
 	)
 	return i, err
 }

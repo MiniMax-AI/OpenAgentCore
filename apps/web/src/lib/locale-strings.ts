@@ -1,6 +1,17 @@
 import { consoleAuthChinese } from "./console-auth-strings";
 export const chinese = {
   ...consoleAuthChinese,
+  "The matching Runtime release could not be loaded. Check the console distribution and try again.": "无法加载匹配的 Runtime 版本，请检查控制台安装包后重试。",
+  "Loading Runtime specification…": "正在加载 Runtime 配置…",
+  "Advanced sandbox resources": "高级沙箱资源配置",
+  "These limits apply to every sandbox in this deployment.": "这些资源限制适用于此部署中的所有沙箱。",
+  "CPU and memory must match the selected E2B template build. Core verifies them before saving.": "CPU 和内存必须与所选 E2B 模板构建一致，Core 会在保存前验证。",
+  "CPU cores per sandbox": "每个沙箱的 CPU 核数",
+  "Memory per sandbox (MiB)": "每个沙箱的内存（MiB）",
+  "Root disk per sandbox (MiB)": "每个沙箱的根磁盘（MiB）",
+  "Environment disk per sandbox (MiB)": "每个沙箱的环境磁盘（MiB）",
+  "Change provider or resources": "修改运行后端或资源",
+
   "This console address cannot be used by sandbox guests. Enter the HTTPS Core address that your nodes and guests can reach.": "沙箱无法使用此控制台地址。请输入节点和沙箱都能访问的 HTTPS Core 地址。",
   "Use an HTTPS Core origin reachable from every node and sandbox guest, without a path or credentials. The console URL may be different.": "请输入所有节点和沙箱都能访问的 HTTPS Core 源地址，不含路径或凭据。此地址可能与控制台地址不同。",
   "Enter a non-loopback HTTPS origin, such as https://core.example.": "请输入非回环的 HTTPS 源地址，例如 https://core.example。",

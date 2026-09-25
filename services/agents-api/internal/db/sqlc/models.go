@@ -293,6 +293,8 @@ type RuntimeNodeEnrollment struct {
 	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
 	ConsumedAt     pgtype.Timestamptz `json:"consumed_at"`
 	NodeID         pgtype.UUID        `json:"node_id"`
+	MaxActive      int32              `json:"max_active"`
+	MaxRetained    int32              `json:"max_retained"`
 }
 
 type RuntimePlacement struct {

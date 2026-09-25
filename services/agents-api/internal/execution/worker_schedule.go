@@ -46,7 +46,7 @@ func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []st
 		}
 	}
 	var selected []scheduledWork
-	for len(turns)+len(environments) > 0 && len(active) < workerSlotLimit {
+	for len(turns)+len(environments) > 0 && len(active) < w.executionConcurrency() {
 		var item scheduledWork
 		if len(environments) > 0 && (s.environmentFirst || len(turns) == 0) {
 			value := environments[0]

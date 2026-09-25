@@ -53,12 +53,12 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 	if _, err := s.CreateSession(t.Context(), uuid.NewString(), input); !errors.Is(err, store.ErrRuntimeNodeUnavailable) {
 		t.Fatal("zero-node deployment admitted Session", err)
 	}
-	token, _, err := s.CreateRuntimeEnrollment(t.Context())
+	token, _, err := s.CreateRuntimeEnrollment(t.Context(), store.RuntimeNodeCapacity{MaxActive: 4, MaxRetained: 16})
 	if err != nil {
 		t.Fatal(err)
 	}
 	nodeID := uuid.NewString()
-	if _, err := s.EnrollRuntimeNode(t.Context(), token, store.RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: store.SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: nodeID, Name: "Remote", Provider: "docker", Credential: strings.Repeat("x", 64), BackendFingerprint: strings.Repeat("b", 64), MaxActive: 4, MaxRetained: 16}); err != nil {
+	if _, err := s.EnrollRuntimeNode(t.Context(), token, store.RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: store.SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: nodeID, Name: "Remote", Provider: "docker", Credential: strings.Repeat("x", 64), BackendFingerprint: strings.Repeat("b", 64)}); err != nil {
 		t.Fatal(err)
 	}
 	connect := func() {

@@ -1620,12 +1620,12 @@ Session locks, durable deadlines and engine capability checks. Keep the one-seco
 Environment-input scan cadence and at most 100 candidates per scan. At EOF after a
 nonempty cursor, refill the first page once in the same scan; an empty queue must
 not spin. Advance the cursor before readiness checks so an unavailable Runtime
-cannot starve later candidates. Preserve the four active slots and alternation
+cannot starve later candidates. Preserve the configured execution concurrency (default four) and alternation
 between ordinary Turns and Environment inputs. A self-hosted Session
 waits for its dedicated enrolled device; it cannot select an arbitrary same-tenant
 device or migrate an existing binding. Preparation failure can retry while still
 pending without extending the deadline. Preparation retries share this scan cadence;
-the four slots bound concurrency, not attempt frequency. Managed-provider lifecycle
+execution concurrency bounds simultaneous work, not attempt frequency. Managed-provider lifecycle
 polling retains its separate five-second interval. Unknown promotion results or
 errors after admission retain the existing no-replay settlement rules.
 
@@ -1688,6 +1688,17 @@ workflow. Keep model/operator credentials external and Provider ownership stable
 across upgrades. This is the same managed Runtime, not user-managed enrollment.
 
 #### Matched Core and console distribution
+
+[Configuration](docs/configuration.md) is the canonical operator parameter reference.
+Compose and native launchers load the same private `config/core.env`; the installer
+creates it once, validates retained literal values and never replaces user edits.
+Core logs the loaded path without values. The installation receipt records packaging
+and identity, not provider overrides. Explicit local-node flags call the ordinary
+administrator API once; PostgreSQL owns the resulting selection. Administrator-issued
+enrollment approves capacity (default two active/eight retained); a node cannot
+supply or overwrite those limits. Downloaded specification copies remain validated
+against the existing database-owned resources/Runtime contract. Do not add a new
+configuration format, loader precedence, hot reload or embedded Core node.
 
 The installer packages Core and the Web console together,
 with independent `--core-only` and `--web-only` modes. `site/` is the public static
@@ -1775,9 +1786,9 @@ same opt-in rule. Missing KVM fails when microsandbox is selected without changi
 that choice.
 The thin distribution supplies native Core binaries. Provider helpers, the node
 agent, Runtime launcher and pinned msb runtime/firmware are separate, same-revision
-assets resolved only when selected. For the microsandbox installation option, Core
-runs as a native systemd user service; PostgreSQL/Web remain in Compose with a private
-loopback database port. The Docker option keeps Core in Compose. Core receives no
+assets resolved only when selected. Core packaging is independent of provider:
+`--native-core` runs Core as a systemd user service, with PostgreSQL/Web in Compose
+and a private loopback database port. Native Core needs no KVM or node assets. Core receives no
 Docker socket or node identity mount in either mode. The ordinary standalone node
 service owns its provider processes outside the Core container. Its `KillMode=process`
 preserves resident microVM/helper processes across a node-service restart. User KVM

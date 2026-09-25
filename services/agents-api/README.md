@@ -1,5 +1,7 @@
 # Agents API
 
+See [Configuration](../../docs/configuration.md) for process, deployment, node and daemon configuration ownership.
+
 Independent execution service implementing part of the pinned OpenAI Agents API.
 It owns reusable Agents, durable Sessions/Turns/Items, live events, function actions
 and a daemon execution worker. Public execution supports qualified Codex, Claude Code

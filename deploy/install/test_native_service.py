@@ -9,6 +9,7 @@ import unittest
 from unittest import mock
 
 import native_service as service
+from configuration import environment_text, read_core_environment
 
 
 class NativeServiceTests(unittest.TestCase):
@@ -18,21 +19,26 @@ class NativeServiceTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(dir=temporary_root)
         self.addCleanup(temporary.cleanup)
         self.directory = Path(temporary.name).resolve()
-        self.root = self.directory / 'install space %n $HOME "quote"'
+        self.root = self.directory / 'install space %n $HOME'
         self.bundle = self.directory / "bundle"
-        self.state = {"mode": "all", "provider": "microsandbox", "project": "parsar-0123456789"}
+        self.state = {"mode": "all", "native_core": True, "project": "parsar-0123456789", "installation_id": "fixture-installation"}
         self.environment = {"DATABASE_URL": 'synthetic:"quoted"\\path$HOME`value`%n', "PORT": "8091"}
         for name in service.REQUIRED:
             path = self.bundle / "native" / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"\x7fELFfixture-" + name.encode())
+        self.environment.update(AGENTS_API_SANDBOX_INSTALLATION_ID=self.state["installation_id"],
+                                AGENTS_API_CONFIG_FILE=str(self.root / "config/core.env"))
+        (self.root / "config").mkdir(parents=True, mode=0o700)
+        (self.root / "config/core.env").write_text(environment_text(self.environment))
+        (self.root / "config/core.env").chmod(0o600)
         self.commands = mock.patch.object(service.subprocess, "run")
         self.run = self.commands.start()
         self.addCleanup(self.commands.stop)
         self.run.return_value = subprocess.CompletedProcess([], 0, "", "")
 
     def prepare(self):
-        service.prepare(self.root, self.state, self.bundle, self.environment)
+        service.prepare(self.root, self.state, self.bundle)
 
     def unit_path(self):
         return self.root / "config" / "parsar-0123456789-core.service"
@@ -49,17 +55,14 @@ class NativeServiceTests(unittest.TestCase):
 
         self.run.side_effect = result
 
-    def test_only_core_microsandbox_uses_native_service(self):
-        for mode, provider, expected in (("all", None, False),
-                                         ("all", "microsandbox", True),
-                                         ("core-only", "microsandbox", True),
-                                         ("web-only", "microsandbox", False),
-                                         ("all", "docker", False)):
-            with self.subTest(mode=mode, provider=provider):
-                state = dict(self.state, mode=mode, provider=provider)
+    def test_native_core_is_explicit_and_independent_of_execution(self):
+        for mode, native, expected in (("all", False, False), ("all", True, True),
+                                       ("core-only", True, True), ("web-only", True, False)):
+            with self.subTest(mode=mode, native=native):
+                state = dict(self.state, mode=mode, native_core=native)
                 self.assertEqual(service.is_native(state), expected)
                 if not expected:
-                    service.prepare(self.root, state, self.bundle, {})
+                    service.prepare(self.root, state, self.bundle)
                     service.start(self.root, state)
                     service.stop(self.root, state)
                     self.assertFalse(service.active(state))
@@ -90,12 +93,10 @@ class NativeServiceTests(unittest.TestCase):
     def test_private_files_and_environment_literal_values(self):
         self.prepare()
         env = self.root / "config/core.env"
-        self.assertEqual(env.read_text(), 'DATABASE_URL="synthetic:\\"quoted\\"\\\\path\\$HOME\\`value\\`%n"\nPORT="8091"\n')
-        for path in (env, self.unit_path(), self.root / "native/microsandbox/libkrunfw.so.5.6.1"):
+        self.assertEqual(read_core_environment(self.root, self.state), self.environment)
+        for path in (env, self.unit_path()):
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
-        for path in (self.root / "config", self.root / "native/bin/agents-api",
-                     self.root / "native/bin/agents-api-microsandbox-provider",
-                     self.root / "native/microsandbox/msb"):
+        for path in (self.root / "config", *(self.root / "native" / name for name in service.REQUIRED)):
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o700)
 
     def test_repeat_keeps_binary_and_private_file_inodes(self):
@@ -116,23 +117,24 @@ class NativeServiceTests(unittest.TestCase):
         self.assertEqual(installed.read_bytes(), before)
         self.run.assert_not_called()
 
-    def test_invalid_environment_is_rejected_before_writes(self):
-        for environment in ({"KEY": "secret\nInjected=value"}, {"KEY": "secret\x00"},
-                            {"KEY": "secret\r"}, {"BAD=KEY": "secret"}, {1: "secret", "OK": "value"}):
-            with self.subTest(environment=environment):
-                with self.assertRaises(RuntimeError) as error:
-                    service.prepare(self.root, self.state, self.bundle, environment)
-                self.assertNotIn("secret", str(error.exception))
-                self.assertFalse(self.root.exists())
+    def test_prepare_preserves_user_environment_edits(self):
+        self.prepare()
+        env = self.root / "config/core.env"
+        environment = dict(self.environment, PORT="19091", EXTRA='edited $value "quote" \\ path')
+        env.write_text(environment_text(environment))
+        before = env.read_bytes()
+        self.prepare()
+        self.assertEqual(env.read_bytes(), before)
+        self.assertEqual(read_core_environment(self.root, self.state), environment)
 
     def test_ambiguous_paths_and_foreign_units_refuse(self):
-        for suffix in ("bad\npath", "bad*path", "bad\\path"):
+        for suffix in ("bad\npath", "bad*path", "bad\\path", "bad\x7fpath", 'bad"path', "bad'path"):
             with self.assertRaises(RuntimeError):
-                service.prepare(self.directory / suffix, self.state, self.bundle, {})
+                service.prepare(self.directory / suffix, self.state, self.bundle)
         for project in ("other-service", "../parsar-0123456789", "parsar-0123456789\n"):
             state = dict(self.state, project=project)
             with self.assertRaises(RuntimeError):
-                service.prepare(self.root, state, self.bundle, {})
+                service.prepare(self.root, state, self.bundle)
             with self.assertRaises(RuntimeError):
                 service.stop(self.root, state)
             with self.assertRaises(RuntimeError):
@@ -148,7 +150,7 @@ class NativeServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "regular"):
             self.prepare()
         self.assertEqual(outside.read_bytes(), b"unchanged")
-        self.assertFalse(self.root.exists())
+        self.assertFalse((self.root / "native").exists())
 
     def test_symlink_configuration_does_not_overwrite_target(self):
         self.prepare()
@@ -157,27 +159,26 @@ class NativeServiceTests(unittest.TestCase):
         outside = self.directory / "outside"
         outside.write_text("unchanged")
         env.symlink_to(outside)
-        with self.assertRaisesRegex(RuntimeError, "regular"):
+        with self.assertRaisesRegex(RuntimeError, "unsafe"):
             self.prepare()
         self.assertEqual(outside.read_text(), "unchanged")
 
     def test_preflight_checks_host_and_libraries_without_running_provider(self):
         self.host_ready()
-        service.preflight(self.bundle)
+        service.preflight(self.bundle, self.root)
         commands = [call.args[0] for call in self.run.call_args_list]
         self.assertEqual(commands[:2], [["systemctl", "--user", "show", "--property=Version", "--value"],
                                        ["loginctl", "show-user", str(service.os.getuid()), "--property=Linger", "--value"]])
-        self.assertEqual(commands[2:], [["ldd", str(self.bundle / "native" / name)] for name in service.REQUIRED[1:]])
+        self.assertEqual(commands[2:], [["ldd", str(self.bundle / "native" / name)] for name in service.REQUIRED])
 
-    def test_preflight_requires_kvm_access_and_linger(self):
+    def test_preflight_requires_linger_without_kvm_checks(self):
         self.host_ready()
-        with mock.patch.object(service.os, "access", return_value=False):
-            with self.assertRaisesRegex(RuntimeError, "/dev/kvm"):
-                service.preflight(self.bundle)
-        self.run.assert_not_called()
+        with mock.patch.object(service.os, "access", side_effect=AssertionError("No Core device checks")):
+            service.preflight(self.bundle, self.root)
+        self.run.reset_mock()
         self.run.side_effect = lambda arguments, **kwargs: subprocess.CompletedProcess(arguments, 0, "no\n", "")
         with self.assertRaisesRegex(RuntimeError, "lingering"):
-            service.preflight(self.bundle)
+            service.preflight(self.bundle, self.root)
         self.assertFalse(any(call.args[0][0] == "ldd" for call in self.run.call_args_list))
 
     def test_failed_commands_do_not_disclose_diagnostics(self):
@@ -185,7 +186,7 @@ class NativeServiceTests(unittest.TestCase):
         self.run.side_effect = None
         self.run.return_value = subprocess.CompletedProcess([], 1, "synthetic-secret", "synthetic-secret")
         with self.assertRaises(RuntimeError) as error:
-            service.preflight(self.bundle)
+            service.preflight(self.bundle, self.root)
         self.assertNotIn("synthetic-secret", str(error.exception))
         self.prepare()
         self.run.side_effect = OSError("synthetic-secret")
@@ -198,7 +199,7 @@ class NativeServiceTests(unittest.TestCase):
         self.run.side_effect = lambda arguments, **kwargs: subprocess.CompletedProcess(
             arguments, 0, "libc.so => not found" if arguments[0] == "ldd" else "yes\n", "")
         with self.assertRaisesRegex(RuntimeError, "shared libraries"):
-            service.preflight(self.bundle)
+            service.preflight(self.bundle, self.root)
 
     def test_commands_target_only_this_installation(self):
         self.prepare()

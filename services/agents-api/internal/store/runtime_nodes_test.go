@@ -114,11 +114,11 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 }
 func TestRuntimeNodesEnrollmentAndEpoch(t *testing.T) {
 	s, w, d := managerFixture(t, 2, 4)
-	token, _, err := s.CreateRuntimeEnrollment(t.Context())
+	token, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4})
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Credential: strings.Repeat("x", 64), Name: "remote", Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64), MaxActive: 2, MaxRetained: 4}
+	input := RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Credential: strings.Repeat("x", 64), Name: "remote", Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64)}
 	if _, err := s.EnrollRuntimeNode(t.Context(), token, input); !errors.Is(err, ErrInvalidInput) {
 		t.Fatal("mixed provider accepted", err)
 	}

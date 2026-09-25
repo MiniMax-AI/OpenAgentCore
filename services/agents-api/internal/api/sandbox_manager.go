@@ -23,7 +23,10 @@ type SandboxMutationResponse struct {
 	Deleted bool   `json:"deleted,omitempty"`
 	Updated bool   `json:"updated,omitempty"`
 }
-type SandboxEnrollmentTokenRequest struct{}
+type SandboxEnrollmentTokenRequest struct {
+	MaxActive   *int `json:"max_active,omitempty"`
+	MaxRetained *int `json:"max_retained,omitempty"`
+}
 
 func WithSandboxManager(s *store.Store, auth *DeploymentAuthenticator) Option {
 	return func(h *Handler) { h.sandboxStore = s; h.deploymentAuth = auth }
@@ -166,12 +169,19 @@ func (h *Handler) createSandboxEnrollment(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	var input struct{}
-	if decodeInputObject(raw, &input) != nil {
+	var input SandboxEnrollmentTokenRequest
+	if decodeInputObject(raw, &input, "max_active", "max_retained") != nil {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
-	token, expires, err := h.sandboxStore.CreateRuntimeEnrollment(r.Context())
+	capacity := store.RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 8}
+	if input.MaxActive != nil {
+		capacity.MaxActive = *input.MaxActive
+	}
+	if input.MaxRetained != nil {
+		capacity.MaxRetained = *input.MaxRetained
+	}
+	token, expires, err := h.sandboxStore.CreateRuntimeEnrollment(r.Context(), capacity)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -200,7 +210,7 @@ func (h *Handler) enrollSandboxNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input store.RuntimeNodeEnrollment
-	if decodeInputObject(raw, &input, "node_id", "credential", "name", "provider", "backend_fingerprint", "max_active", "max_retained", "deployment_generation", "specification_digest") != nil {
+	if decodeInputObject(raw, &input, "node_id", "credential", "name", "provider", "backend_fingerprint", "deployment_generation", "specification_digest") != nil {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}

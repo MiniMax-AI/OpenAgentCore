@@ -39,12 +39,12 @@ func webSpecificationFixture(t *testing.T, provider string) (*Store, *Store, Run
 
 func specificationNode(t *testing.T, s *Store, view RuntimeDeploymentView) RuntimeNodeEnrollment {
 	t.Helper()
-	token, _, err := s.CreateRuntimeEnrollment(t.Context())
+	token, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 4, MaxRetained: 16})
 	if err != nil {
 		t.Fatal(err)
 	}
 	input := RuntimeNodeEnrollment{NodeID: uuid.NewString(), Name: "specification fixture", Credential: strings.Repeat("n", 64), Provider: view.Provider,
-		BackendFingerprint: strings.Repeat("b", 64), MaxActive: 4, MaxRetained: 16, DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest}
+		BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest}
 	if _, err := s.EnrollRuntimeNode(t.Context(), token, input); err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestSandboxSpecificationRoundTripAndFileConfigurationCannotOverride(t *test
 
 func TestSandboxSpecificationBootstrapReadDoesNotConsumeEnrollment(t *testing.T) {
 	s, w, view, input := webSpecificationFixture(t, "docker")
-	token, _, err := s.CreateRuntimeEnrollment(t.Context())
+	token, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestSandboxSpecificationBootstrapReadDoesNotConsumeEnrollment(t *testing.T)
 	if _, err := s.RuntimeNodeConfiguration(t.Context(), "", "invalid-token"); !errors.Is(err, ErrRuntimeNodeCredential) {
 		t.Fatal("unauthenticated configuration read", err)
 	}
-	node := RuntimeNodeEnrollment{NodeID: uuid.NewString(), Name: "bootstrap", Credential: strings.Repeat("n", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), MaxActive: 2, MaxRetained: 4, DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest}
+	node := RuntimeNodeEnrollment{NodeID: uuid.NewString(), Name: "bootstrap", Credential: strings.Repeat("n", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest}
 	for _, change := range []func(*RuntimeNodeEnrollment){
 		func(n *RuntimeNodeEnrollment) { n.DeploymentGeneration++ },
 		func(n *RuntimeNodeEnrollment) { n.SpecificationDigest = strings.Repeat("c", 64) },

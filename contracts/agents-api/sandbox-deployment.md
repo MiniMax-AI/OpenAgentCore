@@ -29,6 +29,14 @@ management routes. The browser never receives that credential. Node configuratio
 uses its own Bearer credential, forwarded unchanged by the console; a console
 login or Project key does not grant node enrollment authority.
 
+Node capacity is separate from the deployment specification. The administrator's
+`POST /core/v1/sandbox/enrollment-tokens` accepts optional `max_active` and
+`max_retained`, defaulting to 2 and 8. Core stores that approval with the token and
+copies it to the registered node. Node enrollment cannot submit capacity overrides.
+The existing node configuration/identity reads expose approved limits for that
+credential; node updates remain administrator operations. Local host capacity
+checks may reject a deployment that cannot run safely, but never raise its limits.
+
 ## Selection request
 
 POST and PUT take the same complete selection. PUT also requires a nonzero

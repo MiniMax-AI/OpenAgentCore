@@ -53,11 +53,11 @@ type EnrollmentRequest struct {
 	Name                 string `json:"name"`
 	Provider             string `json:"provider"`
 	BackendFingerprint   string `json:"backend_fingerprint"`
-	MaxActive            int    `json:"max_active"`
-	MaxRetained          int    `json:"max_retained"`
 }
 
 type EnrollmentResponse struct {
+	MaxActive            int    `json:"max_active"`
+	MaxRetained          int    `json:"max_retained"`
 	SpecificationDigest  string `json:"specification_digest"`
 	DeploymentGeneration uint64 `json:"deployment_generation"`
 	Connected            bool   `json:"connected,omitempty"`

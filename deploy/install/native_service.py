@@ -1,4 +1,4 @@
-"""Install only the native Core user service; Core retains Runtime ownership."""
+"""Install the native Core user service independently of execution nodes."""
 
 import hashlib
 import os
@@ -9,14 +9,14 @@ import shutil
 import subprocess
 import tempfile
 
+from configuration import read_core_environment
 
-REQUIRED = ("bin/agents-api", "bin/agents-api-microsandbox-provider",
-            "microsandbox/msb", "microsandbox/libkrunfw.so.5.6.1",
-            "e2b/agents-api-e2b-provider")
+
+REQUIRED = ("bin/agents-api", "bin/agents-api-migrate", "e2b/agents-api-e2b-provider")
 
 
 def is_native(state):
-    return state["mode"] != "web-only" and state["provider"] == "microsandbox"
+    return state["mode"] != "web-only" and state["native_core"]
 
 
 def _unit_name(state):
@@ -29,11 +29,12 @@ def _unit_name(state):
 def _path(value):
     path = Path(value)
     text = str(path)
-    # EnvironmentFile accepts glob patterns and WorkingDirectory is not a shell
-    # word. Reject ambiguous paths instead of expanding another file or unit line.
+    # EnvironmentFile accepts glob patterns; systemd executable paths reject
+    # quote characters even when ExecStart quotes/escapes the entire word.
     if (not path.is_absolute() or path.resolve() != path or text != text.strip()
-            or any(ord(char) < 32 for char in text) or any(char in text for char in "\\*?[]")):
-        raise RuntimeError("Native Core paths must be canonical absolute paths without control characters, backslashes or wildcards")
+            or any(ord(char) < 32 or ord(char) == 127 for char in text)
+            or any(char in text for char in "\\*?[]\"'")):
+        raise RuntimeError("Native Core paths must be canonical absolute paths without control characters, quotes, backslashes or wildcards")
     return path
 
 
@@ -58,20 +59,20 @@ def _files(native):
     files = {}
     for path in native.rglob("*"):
         if path.is_symlink() or not (path.is_dir() or path.is_file()):
-            raise RuntimeError("Native Core payload must contain only regular files and directories")
-        if path.is_file():
-            files[str(path.relative_to(native))] = path
+            raise RuntimeError("The distribution requires regular native Core executables")
+        name = str(path.relative_to(native))
+        if name in REQUIRED and path.is_file():
+            files[name] = path
     if not set(REQUIRED).issubset(files):
-        raise RuntimeError("The distribution is missing a required native Core executable or firmware")
+        raise RuntimeError("The distribution is missing a required native Core executable")
     return files
 
 
-def preflight(bundle):
+def preflight(bundle, root):
     """Check host prerequisites without launching a helper operation or VM."""
+    _path(root)
     if platform.system() != "Linux":
-        raise RuntimeError("Native microsandbox installation requires Linux")
-    if not os.access("/dev/kvm", os.R_OK | os.W_OK):
-        raise RuntimeError("Native microsandbox requires read/write access to /dev/kvm; ask the host administrator to grant access")
+        raise RuntimeError("Native Core installation requires Linux")
     _checked(["systemctl", "--user", "show", "--property=Version", "--value"],
              "The systemd user manager is unavailable; establish a user session before installation")
     linger = _checked(["loginctl", "show-user", str(os.getuid()), "--property=Linger", "--value"],
@@ -81,7 +82,7 @@ def preflight(bundle):
     try:
         native = _path(bundle) / "native"
         files = _files(native)
-        for name in REQUIRED[1:]:
+        for name in REQUIRED:
             with files[name].open("rb") as stream:
                 if stream.read(4) != b"\x7fELF":
                     raise RuntimeError("Native Core payload must contain Linux ELF binaries")
@@ -102,18 +103,6 @@ def _digest(path):
     return digest.digest()
 
 
-def _environment(values):
-    lines = []
-    for key, value in values.items():
-        if (not isinstance(key, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key)
-                or not isinstance(value, str) or any(char in value for char in "\x00\r\n")):
-            raise RuntimeError("Native Core environment requires valid names and single-line string values")
-        # EnvironmentFile double quotes preserve these shell metacharacters.
-        escaped = re.sub(r'([\\"`$])', r'\\\1', value)
-        lines.append(key + '="' + escaped + '"\n')
-    return "".join(sorted(lines))
-
-
 def _private_write(path, content):
     if path.is_symlink() or (path.exists() and not path.is_file()):
         raise RuntimeError("Native Core configuration must be a regular private file")
@@ -130,13 +119,13 @@ def _private_write(path, content):
             os.unlink(temporary)
 
 
-def prepare(root, state, bundle, environment):
+def prepare(root, state, bundle):
     if not is_native(state):
         return
     try:
         root, bundle = _path(root), _path(bundle)
         unit_name = _unit_name(state)
-        environment_text = _environment(environment)
+        read_core_environment(root, state)
         source, target = bundle / "native", root / "native"
         incoming = _files(source)
         if target.exists() or target.is_symlink():
@@ -147,11 +136,13 @@ def prepare(root, state, bundle, environment):
             root.mkdir(parents=True, mode=0o700, exist_ok=True)
             with tempfile.TemporaryDirectory(prefix=".native-", dir=root) as temporary:
                 staged = Path(temporary) / "native"
-                shutil.copytree(source, staged)
+                for name, path in incoming.items():
+                    destination = staged / name
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(path, destination)
                 os.replace(staged, target)
-        for path in [target, *target.rglob("*")]:
-            executable = path.is_dir() or path.parent == target / "bin" or path == target / "microsandbox/msb" or path == target / "e2b/agents-api-e2b-provider"
-            os.chmod(path, 0o700 if executable else 0o600)
+        for path in [target, target / "bin", target / "e2b", *(target / name for name in REQUIRED)]:
+            os.chmod(path, 0o700)
         config = root / "config"
         if config.is_symlink():
             raise RuntimeError("Native Core configuration directory must not be a symlink")
@@ -165,10 +156,9 @@ def prepare(root, state, bundle, environment):
                 + "WorkingDirectory=" + str(root).replace("%", "%%") + "\n"
                 + "EnvironmentFile=" + str(config / "core.env").replace("%", "%%") + "\n"
                 + "Restart=on-failure\nKillMode=process\nUMask=0077\n\n[Install]\nWantedBy=default.target\n")
-        _private_write(config / "core.env", environment_text)
         _private_write(config / unit_name, unit)
     except (OSError, UnicodeError):
-        raise RuntimeError("Cannot prepare private native Core files; existing Runtime state was not removed") from None
+        raise RuntimeError("Cannot prepare private native Core files; existing state was not removed") from None
 
 
 def start(root, state):

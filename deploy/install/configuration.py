@@ -1,17 +1,67 @@
 """Deployment files for the existing Core, Runtime and production console."""
+import os
+import re
+import stat
 from pathlib import Path
 from urllib.parse import urlsplit
 
 
+def environment_text(values):
+    """The shared Compose/systemd subset: quoted, single-line literal values."""
+    lines = ["# Core process configuration. Escape backslash, double quote and dollar with backslash.\n"]
+    for key, value in values.items():
+        if (not isinstance(key, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key)
+                or not isinstance(value, str) or any(char in value for char in "\x00\r\n")):
+            raise RuntimeError("Core environment requires valid names and single-line string values")
+        escaped = re.sub(r'([\\"$])', r'\\\1', value)
+        lines.append(key + '="' + escaped + '"\n')
+    return "".join(lines)
+
+
+def read_core_environment(root, state=None):
+    """Read the persisted authority without shell or ambient-variable expansion."""
+    root = Path(root)
+    path = root / "config/core.env"
+    failure = "Core configuration is missing or unsafe; restore the private config/core.env file"
+    try:
+        directory = path.parent.lstat()
+        if (not stat.S_ISDIR(directory.st_mode) or stat.S_IMODE(directory.st_mode) & 0o077
+                or directory.st_uid != os.geteuid()):
+            raise RuntimeError(failure)
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(descriptor, encoding="utf-8") as stream:
+            info = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) & 0o077
+                    or info.st_uid != os.geteuid() or info.st_nlink != 1):
+                raise RuntimeError(failure)
+            content = stream.read()
+    except (OSError, UnicodeError):
+        raise RuntimeError(failure) from None
+    result = {}
+    for line in content.split("\n"):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        match = re.fullmatch(r'([A-Za-z_][A-Za-z0-9_]*)="((?:[^\\"$\x00\r\n]|\\[\\"$])*)"', line)
+        if not match or match[1] in result:
+            raise RuntimeError("Core configuration requires unique names and double-quoted literal values")
+        result[match[1]] = re.sub(r'\\([\\"$])', r'\1', match[2])
+    if state is not None:
+        expected = str(path) if state["native_core"] else "/config/core.env"
+        if (result.get("AGENTS_API_SANDBOX_INSTALLATION_ID") != state["installation_id"]
+                or result.get("AGENTS_API_CONFIG_FILE") != expected):
+            raise RuntimeError("Core configuration installation identity or file path differs")
+    return result
+
+
 def bind(source, target, readonly=True):
-    return {"type": "bind", "source": str(source), "target": target, "read_only": readonly}
+    return {"type": "bind", "source": str(source).replace("$", "$$"), "target": target, "read_only": readonly}
 
 
 def core_environment(root, state, database_password):
-    native = state["provider"] == "microsandbox"
+    native = state["native_core"]
     config = str(Path(root) / "config") if native else "/config"
     database = f'127.0.0.1:{state["database_port"]}' if native else "database:5432"
-    daemon_host = f'host.microsandbox.internal:{state["core_port"]}' if native else "core:8091"
+    daemon_host = f'127.0.0.1:{state["core_port"]}' if native else "core:8091"
     daemon_url = f"ws://{daemon_host}/api/v1/agent-daemon/ws"
     if state.get("public_url"):
         origin = urlsplit(state["public_url"])
@@ -30,6 +80,7 @@ def core_environment(root, state, database_password):
     result["AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE"] = (
         str(Path(root) / "admin/digests.json") if native else "/admin/digests.json")
     result["AGENTS_API_SANDBOX_INSTALLATION_ID"] = state["installation_id"]
+    result["AGENTS_API_CONFIG_FILE"] = config + "/core.env"
     return result
 
 
@@ -39,7 +90,7 @@ def compose_config(root, state, manifest, database_password):
     identity = f'{state["uid"]}:{state["gid"]}'
     doc = {"name": state["project"], "services": {}}
     services = doc["services"]
-    native = state["provider"] == "microsandbox" and state["mode"] != "web-only"
+    native = state["native_core"] and state["mode"] != "web-only"
     if state["mode"] != "web-only":
         services["database"] = {
             "image": manifest["images"]["database"], "restart": "unless-stopped",
@@ -49,14 +100,11 @@ def compose_config(root, state, manifest, database_password):
             "healthcheck": {"test": ["CMD-SHELL", "pg_isready -U agents_api -d agents_api"],
                             "interval": "2s", "timeout": "5s", "retries": 30},
         }
-        env = core_environment(root, state, database_password)
         shared = {"image": manifest["images"]["core"], "user": identity,
-                  "environment": env, "volumes": [bind(config, "/config")],
+                  "env_file": [str(config / "core.env").replace("$", "$$")], "volumes": [bind(config, "/config")],
                   "read_only": True, "tmpfs": ["/tmp:mode=1777"], "init": True,
                   "security_opt": ["no-new-privileges:true"]}
         services["migrate"] = dict(shared, command=["/usr/local/bin/agents-api-migrate"],
-            environment={key: value for key, value in env.items()
-                         if key != "AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE"},
             depends_on={"database": {"condition": "service_healthy"}})
         core = dict(shared, restart="unless-stopped", ports=[f'127.0.0.1:{state["core_port"]}:8091'],
                     depends_on={"migrate": {"condition": "service_completed_successfully"}})
@@ -91,13 +139,8 @@ def compose_config(root, state, manifest, database_password):
         else:
             services["web"]["volumes"].append(bind(config / "console.password", "/config/console.password"))
             services["web"]["environment"]["CORE_CONSOLE_PASSWORD_FILE"] = "/config/console.password"
-        if state["mode"] == "all":
-            services["web"]["volumes"].extend([
-                bind(root / "node-payload", "/node-payload"),
-            ])
-            services["web"]["environment"].update(
-                CORE_CONSOLE_NODE_PAYLOAD_DIR="/node-payload",
-            )
+        services["web"]["volumes"].append(bind(root / "node-payload", "/node-payload"))
+        services["web"]["environment"]["CORE_CONSOLE_NODE_PAYLOAD_DIR"] = "/node-payload"
         if state["mode"] == "web-only" or native:
             services["web"].pop("ports")
             services["web"]["network_mode"] = "host"

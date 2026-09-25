@@ -78,3 +78,27 @@ func TestSandboxLocalNodeRemovalExplainsDeploymentBinding(t *testing.T) {
 		t.Fatal(response.Code, response.Body.String())
 	}
 }
+
+func TestSandboxEnrollmentCapacityIsAdministratorOnly(t *testing.T) {
+	project, _ := NewAuthenticator([]APIKey{callerBinding()})
+	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("administrator")})
+	h, err := NewHandler(&recordingStore{}, project, "codex", WithSandboxManager(&store.Store{}, admin))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct{ path, token, body string }{
+		{"/core/v1/sandbox/enrollment-tokens", "administrator", `{"max_active":0}`},
+		{"/core/v1/sandbox/enrollment-tokens", "administrator", `{"max_active":9,"max_retained":8}`},
+		{"/core/v1/sandbox/enrollment-tokens", "administrator", `{"max_retained":1000001}`},
+		{"/core/v1/sandbox/enroll", "one-use", `{"max_active":100}`},
+		{"/core/v1/sandbox/enroll", "one-use", `{"max_retained":100}`},
+	} {
+		request := httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(test.body))
+		request.Header.Set("Authorization", "Bearer "+test.token)
+		response := httptest.NewRecorder()
+		h.ServeHTTP(response, request)
+		if response.Code != http.StatusBadRequest {
+			t.Fatal(test.path, response.Code, response.Body.String())
+		}
+	}
+}

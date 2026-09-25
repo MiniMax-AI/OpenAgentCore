@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
 	providerconfig "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/config"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/node"
 )
@@ -36,8 +37,6 @@ func run(ctx context.Context, args []string) error {
 	stateDir := flags.String("state-dir", "", "absolute private node state directory")
 	coreURL := flags.String("core-url", "", "Core HTTPS origin (register only)")
 	name := flags.String("name", "sandbox-node", "display name (register only)")
-	maxActive := flags.Int("max-active", 4, "active reservation capacity (register only)")
-	maxRetained := flags.Int("max-retained", 16, "retained allocation capacity (register only)")
 	tokenFile := flags.String("enrollment-token-file", "", "private single-use enrollment token file (register only)")
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
@@ -57,31 +56,16 @@ func run(ctx context.Context, args []string) error {
 		return err
 	}
 	defer closeProvider()
+	log.Ctx(ctx).Info("sandbox node configuration loaded", "config_path", *configFile)
 	if built.Provider == nil {
 		return errors.New("node configuration requires one local provider backend")
 	}
-	if built.Suspension != nil {
-		supplied := map[string]bool{}
-		flags.Visit(func(f *flag.Flag) { supplied[f.Name] = true })
-		if !supplied["max-active"] {
-			*maxActive = built.Suspension.MaxActive
-		}
-		if !supplied["max-retained"] {
-			*maxRetained = built.Suspension.MaxRetained
-		}
-		if *maxActive > built.Suspension.MaxActive || *maxRetained > built.Suspension.MaxRetained {
-			return errors.New("node capacity exceeds configured provider limits")
-		}
-	}
-	expected := node.Identity{SpecificationDigest: built.SpecificationDigest, DeploymentGeneration: config.Generation, InstallationID: built.InstallationID, Provider: config.Provider, BackendFingerprint: built.BackendFingerprint, MaxActive: *maxActive, MaxRetained: *maxRetained}
+	expected := node.Identity{SpecificationDigest: built.SpecificationDigest, DeploymentGeneration: config.Generation, InstallationID: built.InstallationID, Provider: config.Provider, BackendFingerprint: built.BackendFingerprint}
 	probe := func(ctx context.Context) (node.Health, error) {
 		err := built.Probe(ctx)
 		return node.Health{ProviderReady: err == nil}, err
 	}
 	if args[0] == "register" {
-		if *maxActive < 1 || *maxRetained < *maxActive {
-			return errors.New("invalid node capacity")
-		}
 		if !filepath.IsAbs(*tokenFile) {
 			return errors.New("enrollment-token-file must be absolute")
 		}
@@ -118,9 +102,9 @@ func run(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		return json.NewEncoder(os.Stdout).Encode(node.EnrollmentResponse{SpecificationDigest: stored.Identity.SpecificationDigest, DeploymentGeneration: stored.Identity.DeploymentGeneration, NodeID: stored.Identity.NodeID, InstallationID: stored.Identity.InstallationID, Provider: stored.Identity.Provider})
+		return json.NewEncoder(os.Stdout).Encode(node.EnrollmentResponse{MaxActive: stored.Identity.MaxActive, MaxRetained: stored.Identity.MaxRetained, SpecificationDigest: stored.Identity.SpecificationDigest, DeploymentGeneration: stored.Identity.DeploymentGeneration, NodeID: stored.Identity.NodeID, InstallationID: stored.Identity.InstallationID, Provider: stored.Identity.Provider})
 	}
-	stored, err := node.LoadIdentity(*stateDir)
+	stored, err := node.RefreshIdentity(ctx, *stateDir)
 	if err != nil {
 		return err
 	}

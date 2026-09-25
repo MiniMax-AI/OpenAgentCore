@@ -172,6 +172,11 @@ The installer rejects a longer path before creating node state; use a service
 account with a shorter persistent home. A node never receives arbitrary host
 paths from the browser.
 
+Node capacity is approved by Core when the administrator creates an enrollment
+token, then retained in PostgreSQL. Registration and node files cannot overwrite
+it. See [Configuration](../../docs/configuration.md#node-configuration-and-capacity)
+for limits, defaults and changes.
+
 In Hosted Sandbox Manager, generate a single-use registration token. Save it in
 a `0600` file on the host. The token expires after the duration shown by Core.
 Run the displayed command with real absolute paths, for example:
@@ -182,7 +187,6 @@ parsar-sandbox-node register \
   --state-dir /var/lib/parsar/node \
   --core-url https://core.example \
   --name worker-1 \
-  --max-active 4 --max-retained 16 \
   --enrollment-token-file /var/lib/parsar/enrollment-token
 parsar-sandbox-node run \
   --config /var/lib/parsar/provider.json \

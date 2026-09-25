@@ -64,11 +64,11 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 	if _, err := w.InitializeSandboxDeployment(t.Context(), store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("docker"), Provider: "docker", CoreURL: "https://core.example"}); err != nil {
 		t.Fatal(err)
 	}
-	enrollment, _, err := s.CreateRuntimeEnrollment(t.Context())
+	enrollment, _, err := s.CreateRuntimeEnrollment(t.Context(), store.RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4})
 	if err != nil {
 		t.Fatal(err)
 	}
-	node := store.RuntimeNodeEnrollment{NodeID: uuid.NewString(), Name: "retained candidate fixture", Provider: "docker", Credential: strings.Repeat("n", 64), BackendFingerprint: strings.Repeat("b", 64), MaxActive: 2, MaxRetained: 4, DeploymentGeneration: 1, SpecificationDigest: store.SandboxDeploymentTestSpec("docker").Digest("docker")}
+	node := store.RuntimeNodeEnrollment{NodeID: uuid.NewString(), Name: "retained candidate fixture", Provider: "docker", Credential: strings.Repeat("n", 64), BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: 1, SpecificationDigest: store.SandboxDeploymentTestSpec("docker").Digest("docker")}
 	if _, err := s.EnrollRuntimeNode(t.Context(), enrollment, node); err != nil {
 		t.Fatal(err)
 	}

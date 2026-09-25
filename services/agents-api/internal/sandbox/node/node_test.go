@@ -232,7 +232,7 @@ func TestEnrollmentLostResponseRecoversWithPersistedCredential(t *testing.T) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-			_ = json.NewEncoder(w).Encode(EnrollmentResponse{NodeID: id.NodeID, InstallationID: id.InstallationID, Provider: id.Provider})
+			_ = json.NewEncoder(w).Encode(EnrollmentResponse{NodeID: id.NodeID, InstallationID: id.InstallationID, Provider: id.Provider, MaxActive: 2, MaxRetained: 8})
 			return
 		}
 		if r.URL.Path != "/core/v1/sandbox/enroll" || r.Header.Get("Authorization") != "Bearer enrollment" {
@@ -265,8 +265,15 @@ func TestEnrollmentLostResponseRecoversWithPersistedCredential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if enrollments != 1 || recovered.Credential != stored.Credential {
-		t.Fatal("enrollment was replayed or identity rotated")
+	if enrollments != 1 || recovered.Credential != stored.Credential || recovered.Identity.MaxActive != 2 || recovered.Identity.MaxRetained != 8 {
+		t.Fatal("enrollment was replayed, identity rotated or approved capacity lost")
+	}
+	id.MaxActive, id.MaxRetained = 0, 0
+	if retry, err := InitIdentity(dir, server.URL, id); err != nil || retry != recovered {
+		t.Fatal("register retry treated absent local capacity as an override", err)
+	}
+	if _, err := Enroll(t.Context(), server.URL, dir, "consumed", EnrollmentRequest{Name: "test"}); err != nil || enrollments != 1 {
+		t.Fatal("register retry failed to recover approved identity", err)
 	}
 }
 

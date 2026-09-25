@@ -45,7 +45,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if err != nil || setup.E2B.APIKey != input.E2B.APIKey {
 		t.Fatal("internal credential unavailable", err)
 	}
-	if _, _, err := s.CreateRuntimeEnrollment(t.Context()); !errors.Is(err, ErrSandboxDeploymentConflict) {
+	if _, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 8}); !errors.Is(err, ErrSandboxDeploymentConflict) {
 		t.Fatal("cloud enrolled a machine", err)
 	}
 	tenant := uuid.NewString()
@@ -119,15 +119,15 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 	if _, err := w.InitializeSandboxDeployment(t.Context(), id, SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker", CoreURL: "https://core.example"}); err != nil {
 		t.Fatal(err)
 	}
-	token, _, err := s.CreateRuntimeEnrollment(t.Context())
+	token, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4})
 	if err != nil {
 		t.Fatal(err)
 	}
-	node := RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Name: "Machine", Provider: "docker", Credential: strings.Repeat("c", 64), BackendFingerprint: strings.Repeat("b", 64), MaxActive: 2, MaxRetained: 4}
+	node := RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Name: "Machine", Provider: "docker", Credential: strings.Repeat("c", 64), BackendFingerprint: strings.Repeat("b", 64)}
 	if _, err := s.EnrollRuntimeNode(t.Context(), token, node); err != nil {
 		t.Fatal(err)
 	}
-	unused, _, err := s.CreateRuntimeEnrollment(t.Context())
+	unused, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 8})
 	if err != nil {
 		t.Fatal(err)
 	}

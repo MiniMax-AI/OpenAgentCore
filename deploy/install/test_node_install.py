@@ -59,7 +59,7 @@ class NodeInstallTests(unittest.TestCase):
             resources.update(root_disk_mib=10240, environment_disk_mib=12288)
         spec = {"resources": resources, "runtime": node_spec.release(self.manifest)}
         configuration = {"installation_id": self.args.installation_id, "provider": self.args.provider,
-                         "core_url": self.args.core_url, "generation": 1, "specification": spec,
+                         "core_url": self.args.core_url, "generation": 1, "specification": spec, "max_active": 2, "max_retained": 8,
                          "specification_digest": node_spec.digest(self.args.provider, spec)}
         return io.BytesIO(json.dumps(configuration).encode())
 
@@ -84,6 +84,8 @@ class NodeInstallTests(unittest.TestCase):
         self.assertNotIn("synthetic-once-token", str(arguments))
         self.assertNotIn("PARSAR_NODE_ENROLLMENT_TOKEN", os.environ)
         if "register" in arguments:
+            self.assertNotIn("--max-active", arguments)
+            self.assertNotIn("--max-retained", arguments)
             secret = Path(arguments[arguments.index("--enrollment-token-file") + 1])
             self.assertEqual(secret.read_text(), "synthetic-once-token")
             self.assertEqual(stat.S_IMODE(secret.stat().st_mode), 0o600)
@@ -172,8 +174,8 @@ class NodeInstallTests(unittest.TestCase):
         self.assertEqual(config["memory_mib"], 6144)
         self.assertEqual(config["root_disk_mib"], 10240)
         self.assertEqual(config["environment_disk_mib"], 12288)
-        self.assertEqual(config["idle_seconds"], 300)
-        self.assertEqual(config["retention_seconds"], 86400)
+        for field in ("idle_seconds", "retention_seconds", "max_active", "max_retained"):
+            self.assertNotIn(field, config)
         rules = config["network"]["rules"]
         self.assertIn({"action": "allow", "direction": "egress", "destination": "172.29.144.1", "protocol": "tcp", "port": "24443"}, rules)
         self.assertNotIn("private", [rule["destination"] for rule in rules])

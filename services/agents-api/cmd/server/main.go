@@ -53,6 +53,14 @@ func main() {
 }
 
 func run() error {
+	if err := validateProcessConfiguration(); err != nil {
+		return err
+	}
+	concurrency, err := executionConcurrency()
+	if err != nil {
+		return err
+	}
+	logConfigurationSources()
 	databaseURL := os.Getenv("AGENTS_API_DATABASE_URL")
 	if databaseURL == "" {
 		return errors.New("AGENTS_API_DATABASE_URL is required")
@@ -203,7 +211,7 @@ func run() error {
 	}
 	if registry != nil {
 		dispatcher := &execution.Dispatcher{Store: executionStore, Registry: registry,
-			ManagedRuntimes: managed, Options: transientOptions}
+			ManagedRuntimes: managed, Options: transientOptions, MaxConcurrentExecutions: concurrency}
 
 		worker, err = execution.StartWorker(ctx, dispatcher)
 		if err != nil {

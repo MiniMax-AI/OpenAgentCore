@@ -20,7 +20,7 @@ class SpecificationTests(unittest.TestCase):
             "runtime_sha256": "e" * 64, "firmware_sha256": "f" * 64}}
         self.data = {"installation_id": self.args.installation_id, "provider": "docker", "generation": 3,
                      "specification": self.spec, "specification_digest": node_spec.digest("docker", self.spec),
-                     "core_url": self.args.core_url}
+                     "core_url": self.args.core_url, "max_active": 2, "max_retained": 8}
         self.retained = {"core_url": self.args.core_url, "credential": "f" * 64, "identity": {
             "node_id": "634d97be-e54d-40f0-9468-ae6b62be85bf", "installation_id": self.args.installation_id,
             "provider": "docker", "deployment_generation": 3, "specification_digest": self.data["specification_digest"]}}
@@ -78,6 +78,17 @@ class SpecificationTests(unittest.TestCase):
         self.args.provider = "microsandbox"
         with self.assertRaises(node_spec.SpecificationError):
             node_spec.validate(self.data, self.args)
+
+    def test_capacity_requires_approved_bounded_integers(self):
+        for key, value in (("max_active", None), ("max_active", True), ("max_active", 0),
+                           ("max_retained", 1), ("max_retained", 1000001)):
+            data = copy.deepcopy(self.data)
+            data[key] = value
+            with self.subTest(key=key, value=value), self.assertRaises(node_spec.SpecificationError):
+                node_spec.validate(data, self.args)
+        self.data["max_active"], self.data["max_retained"] = 3, 9
+        result = node_spec.fetch(self.args, "", self.retained, mock.Mock(return_value=self.response()))
+        self.assertEqual((result["max_active"], result["max_retained"]), (3, 9))
 
     def test_digest_is_independent_of_response_object_key_order(self):
         reordered = copy.deepcopy(self.spec)

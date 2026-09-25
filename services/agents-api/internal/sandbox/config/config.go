@@ -17,7 +17,6 @@ import (
 	sandboxdocker "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/docker"
 	"github.com/google/uuid"
 	"github.com/moby/moby/client"
-	"time"
 )
 
 type Config struct {
@@ -63,15 +62,10 @@ func Load(file string) (Config, error) {
 	return config, nil
 }
 
-type Policy struct {
-	IdleTimeout, Retention time.Duration
-	MaxActive, MaxRetained int
-}
 type Built struct {
 	SpecificationDigest                string
 	Provider                           sandbox.Provider
 	InstallationID, BackendFingerprint string
-	Suspension                         *Policy
 	Probe                              func(context.Context) error
 }
 

@@ -8,6 +8,7 @@ import ipaddress
 import os
 from pathlib import Path
 import platform
+import re
 import secrets
 import shutil
 import socket
@@ -21,10 +22,10 @@ import urllib.request
 from urllib.parse import urlsplit
 import uuid
 
-from configuration import compose_config, core_environment
+from configuration import compose_config, core_environment, environment_text, read_core_environment
 import local_node
 import native_service
-from distribution import DistributionError, artifact, obtain_artifact, image_identities, ensure_docker_image
+from distribution import DistributionError, artifact, image_identities, ensure_docker_image
 
 
 class InstallError(Exception):
@@ -112,6 +113,7 @@ def arguments(argv=None):
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--core-only", action="store_true")
     modes.add_argument("--web-only", action="store_true")
+    parser.add_argument("--native-core", action="store_true", help="Run Core as a systemd user service")
     parser.add_argument("--sandbox-provider", choices=("true", "false"), nargs="?", const="true", default="false",
                         help="Prepare a local sandbox provider (default: false)")
     parser.add_argument("--provider", choices=("microsandbox", "docker"),
@@ -125,6 +127,8 @@ def arguments(argv=None):
     parser.add_argument("--status", action="store_true", help="Read installation health; never invoke a model")
     parser.add_argument("--stop", action="store_true", help="Stop installed services; retain all data")
     args = parser.parse_args(argv)
+    if args.web_only and args.native_core:
+        parser.error("--web-only cannot install native Core")
     args.sandbox_provider = args.sandbox_provider == "true"
     if args.provider and not args.sandbox_provider:
         parser.error("--provider requires --sandbox-provider true")
@@ -156,6 +160,13 @@ def arguments(argv=None):
 
 def compose(root, *args, **kwargs):
     return run(["docker", "compose", "-f", str(root / "compose.json"), *args], **kwargs)
+
+
+def check_compose():
+    version = run(["docker", "compose", "version", "--short"], capture_output=True, text=True).stdout.strip()
+    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?", version)
+    if not match or tuple(map(int, match.groups())) < (2, 26, 0):
+        raise InstallError("Docker Compose 2.26.0 or newer is required for literal Core environment values")
 
 
 def wait_http(url, headers=None, attempts=60):
@@ -211,10 +222,10 @@ def initialize(root, args, manifest):
     mode = "core-only" if args.core_only else "web-only" if args.web_only else "all"
     if (root / "installation.json").exists():
         state = json.loads((root / "installation.json").read_text())
-        wanted = (mode, args.provider, args.core_port, args.web_port, args.core_url, args.public_url)
-        actual = (state["mode"], state["provider"], state["core_port"], state["web_port"], state.get("core_url"), state.get("public_url"))
+        wanted = (mode, args.native_core, args.core_port, args.web_port, args.core_url, args.public_url)
+        actual = (state["mode"], state["native_core"], state["core_port"], state["web_port"], state.get("core_url"), state.get("public_url"))
         if wanted != actual or state["source_commit"] != manifest["source_commit"]:
-            raise InstallError("Existing installation differs; preserve it and follow the upgrade/provider-change guide")
+            raise InstallError("Existing installation differs; preserve it and follow the upgrade guide")
         services = json.loads((root / "compose.json").read_text())["services"]
         for service, config in services.items():
             name = "core" if service == "migrate" else service
@@ -223,6 +234,7 @@ def initialize(root, args, manifest):
         if (root / "config/managed-runtimes.json").exists():
             raise InstallError("Retired file-managed provider configuration exists; preserve its resources and follow the deployment replacement guide")
         if mode != "web-only":
+            read_core_environment(root, state)
             directory = root / "state/e2b"
             if (not directory.is_dir() or directory.is_symlink() or
                     stat.S_IMODE(directory.stat().st_mode) & 0o077):
@@ -263,7 +275,7 @@ def initialize(root, args, manifest):
     for name in directories:
         (root / name).mkdir(mode=0o700)
     state = {"version": 1, "source_commit": manifest["source_commit"], "mode": mode,
-             "provider": args.provider, "installation_id": str(uuid.uuid4()),
+             "native_core": args.native_core, "installation_id": str(uuid.uuid4()),
              "project": "parsar-" + secrets.token_hex(5), "uid": os.getuid(), "gid": os.getgid(),
              "core_port": args.core_port, "web_port": args.web_port, "core_url": args.core_url, "public_url": args.public_url}
     if native_service.is_native(state):
@@ -280,13 +292,15 @@ def initialize(root, args, manifest):
     if mode != "core-only":
         state["console_auth"] = "account"
     password = (config / "database.password").read_text() if mode != "web-only" else ""
+    if mode != "web-only":
+        private_write(config / "core.env", environment_text(core_environment(root, state, password)))
     write_json(root / "compose.json", compose_config(root, state, manifest, password))
     write_json(root / "installation.json", state)
     return state
 
 
 def prepare_node_payload(root, state, bundle):
-    if state["mode"] != "all":
+    if state["mode"] == "core-only":
         return
     destination = root / "node-payload"
     # Public distribution files only. Never copy the private installation config.
@@ -336,22 +350,15 @@ def main(argv=None):
         return
     if platform.system() != "Linux" or platform.machine() not in ("x86_64", "amd64") or os.getuid() == 0:
         raise InstallError("Run as a non-root user on Linux amd64 with Docker access")
-    run(["docker", "compose", "version"], stdout=subprocess.DEVNULL)
+    check_compose()
     run(["docker", "info", "--format", "{{.ServerVersion}}"], stdout=subprocess.DEVNULL)
-    if not args.web_only and args.provider == "microsandbox" and not Path("/dev/kvm").exists():
-        raise InstallError("microsandbox requires host KVM; enable virtualization or explicitly choose --provider docker")
     bundle = Path(__file__).resolve().parent
     manifest = verify_bundle(bundle)
-    if args.provider and not args.web_only:
-        print("Preparing the selected local sandbox provider...", flush=True)
-        if args.provider == "microsandbox":
-            for name in ("native/bin/agents-api-microsandbox-provider", "native/microsandbox/msb",
-                         "native/microsandbox/libkrunfw.so.5.6.1"):
-                obtain_artifact(manifest, name, bundle / name, bundle)
-            native_service.preflight(bundle)
+    if args.native_core:
+        native_service.preflight(bundle, root)
     if args.web_only:
         images = ["web"]
-    elif args.provider == "microsandbox":
+    elif args.native_core:
         images = ["database"]
     else:
         images = ["core", "database"]
@@ -366,20 +373,17 @@ def main(argv=None):
     state = initialize(root, args, deployment)
     prepare_node_payload(root, state, bundle)
     if native_service.is_native(state):
-        password = (root / "config/database.password").read_text()
-        environment = core_environment(root, state, password)
-        native_service.prepare(root, state, bundle, environment)
+        native_service.prepare(root, state, bundle)
     compose(root, "up", "--detach", "--wait")
     if native_service.is_native(state):
-        migration_environment = {key: value for key, value in environment.items()
-                                 if key != "AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE"}
+        migration_environment = read_core_environment(root, state)
         run([str(root / "native/bin/agents-api-migrate")], env=dict(os.environ, **migration_environment),
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         native_service.start(root, state)
     if state["mode"] != "web-only" and not wait_http(f'http://127.0.0.1:{state["core_port"]}/healthz'):
         raise InstallError("Core did not become healthy. Use --status; retained state has not been removed")
-    if state["provider"]:
-        local_node.install(root, state, manifest, bundle, run)
+    if args.provider:
+        local_node.install(root, dict(state, provider=args.provider), manifest, bundle, run)
     if state["mode"] != "core-only":
         url = f'http://127.0.0.1:{state["web_port"]}'
         host = urlsplit(state.get("public_url") or url).netloc
@@ -406,10 +410,11 @@ def main(argv=None):
     if state["mode"] != "web-only":
         print(f'API: http://127.0.0.1:{state["core_port"]}/v1')
         print("Create a Project and issue its API key through the administrator API before calling the direct Core API.")
-        if state["provider"]:
-            print("Provider: " + state["provider"] + ". Local node enrolled; Core provisions Sessions on demand.")
+        print("Core configuration file: " + str(root / "config/core.env"))
+        if args.provider:
+            print("Provider: " + args.provider + ". Local node enrolled; Core provisions Sessions on demand.")
         else:
-            print("No execution node installed. Open Hosted Sandbox Manager to choose a provider and add nodes.")
+            print("No execution node was installed by this run. Open Hosted Sandbox Manager to manage providers and nodes.")
         print("Sandbox administrator key file: " + str(root / "admin/sandbox-admin.key"))
     print("Services installed. No model request was made. See docs/getting-started/quickstart.md.")
 

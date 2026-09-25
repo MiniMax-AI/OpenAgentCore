@@ -59,6 +59,7 @@ release; see [console integration status](docs/web/README.md).
 Installation and node enrollment do not call a model. Once a node is ready,
 run an optional API example with your own model credentials.
 
+- [Configuration reference](docs/configuration.md)
 - [API documentation: public API and Web management](docs/api/README.md)
 - [Make your first API request](docs/getting-started/quickstart.md)
 - [Service health, data and operations](docs/getting-started/operations.md)

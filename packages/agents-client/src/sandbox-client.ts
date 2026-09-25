@@ -113,8 +113,8 @@ export class SandboxAdminClient extends OpenAIAgentsClient {
   listAllocations(nodeId: string, options?: ReadOptions): Promise<{ data: SandboxAllocation[] }> {
     return this.request(`/nodes/${encodeURIComponent(nodeId)}/allocations`, { signal: options?.signal }, undefined, false);
   }
-  createEnrollment(options?: ReadOptions): Promise<{ token: string; expires_at: string }> {
-    return this.request("/enrollment-tokens", { method: "POST", body: "{}", signal: options?.signal }, undefined, false);
+  createEnrollment(options?: ReadOptions, capacity: { max_active?: number; max_retained?: number } = {}): Promise<{ token: string; expires_at: string }> {
+    return this.request("/enrollment-tokens", { method: "POST", body: JSON.stringify(capacity), signal: options?.signal }, undefined, false);
   }
   removeNode(nodeId: string, options?: ReadOptions): Promise<{ id: string; deleted: boolean }> {
     return this.request(`/nodes/${encodeURIComponent(nodeId)}`, { method: "DELETE", signal: options?.signal }, undefined, false);

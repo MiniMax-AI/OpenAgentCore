@@ -102,7 +102,7 @@ export const metrics = {
   },
   core: {
     title: "Core metrics",
-    description: "Health of the Core service process itself: execution slots and the Turn queue, connected daemons, the PostgreSQL database and background jobs. Agent calls and durations are on Agent metrics; sandbox capacity is on Sandbox metrics.",
+    description: "Health of the Core service process itself: execution concurrency and the Turn queue, connected daemons, the PostgreSQL database and background jobs. Agent calls and durations are on Agent metrics; sandbox capacity is on Sandbox metrics.",
     loading: "Reading Core metrics…",
     failed: "Core metrics could not be read. {{reason}}",
     stale: "Refresh failed; showing the last metrics read. {{reason}}",
@@ -112,7 +112,7 @@ export const metrics = {
     meta: "{{status}} · {{revision}} · up {{uptime}}",
     notOwner: "Does not hold the execution lease",
     status: { running: "Running", maintenance: "Maintenance", degraded: "Degraded", unknown: "Unknown status" },
-    slots: "Execution slots",
+    slots: "Execution concurrency",
     slotsHelp: "Sessions Core runs at the same time at most. Turns, environment input and file reads and writes share these slots.",
     queued: "Queued Turns",
     queuedHelp: "Turns waiting to run: some for a free slot, some for their Session's daemon to connect.",

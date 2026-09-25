@@ -41,7 +41,9 @@ def validate(data, args):
         if (provider not in ("docker", "microsandbox") or data["installation_id"] != args.installation_id
                 or data["core_url"] != args.core_url or type(data["generation"]) is not int or data["generation"] < 1
                 or getattr(args, "provider", None) not in (None, provider)
-                or set(spec) != {"resources", "runtime"}):
+                or set(spec) != {"resources", "runtime"}
+                or type(data["max_active"]) is not int or type(data["max_retained"]) is not int
+                or not 1 <= data["max_active"] <= data["max_retained"] <= 1000000):
             raise ValueError()
         resources = spec["resources"]
         if (not {"cpus", "memory_mib"}.issubset(resources)
@@ -131,6 +133,8 @@ def verify_provider(stored, configuration, runtime_image):
             raise SpecificationError("Retained Docker image differs; preserve the node and inspect its configuration")
     else:
         micro = stored.get("microsandbox", {})
+        if any(key in micro for key in ("max_active", "max_retained", "idle_seconds", "retention_seconds")):
+            raise SpecificationError("Node capacity and lifecycle policy belong to Core; regenerate the stale provider file")
         expected = dict(spec["resources"], image=spec["runtime"]["microsandbox_ref"],
                         runtime_sha256=spec["runtime"]["runtime_sha256"], firmware_sha256=spec["runtime"]["firmware_sha256"])
         if any(micro.get(key) != value for key, value in expected.items()):

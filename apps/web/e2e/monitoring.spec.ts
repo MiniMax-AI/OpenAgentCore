@@ -13,7 +13,7 @@ test("shows the deployment's health on Overview and each monitor page", async ({
 
   await page.getByRole("button", { name: "Core metrics" }).click();
   const core = page.getByLabel("Core summary");
-  await expect(core).toContainText("Execution slots");
+  await expect(core).toContainText("Execution concurrency");
   // An unmeasured figure is missing, not zero.
   await expect(core.locator(".kpi").filter({ hasText: /^Memory/ }).locator("dd")).toHaveText("—");
   await page.getByRole("button", { name: "Agent metrics" }).click();

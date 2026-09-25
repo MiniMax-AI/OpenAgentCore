@@ -56,7 +56,7 @@ func copyMetric[T any](source *T) *T {
 }
 
 func (w *Worker) observeSlots(active int) {
-	used, total := int64(active), int64(workerSlotLimit)
+	used, total := int64(active), int64(w.executionConcurrency())
 	w.metrics.mu.Lock()
 	defer w.metrics.mu.Unlock()
 	w.metrics.value.SlotsInUse = &used

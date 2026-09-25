@@ -3,7 +3,6 @@ package config
 import (
 	"errors"
 	"path/filepath"
-	"time"
 
 	sandboxmicro "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/microsandbox"
 )
@@ -23,10 +22,6 @@ type Microsandbox struct {
 	RootDiskMiB        uint32  `json:"root_disk_mib"`
 	EnvironmentDiskMiB uint32  `json:"environment_disk_mib"`
 	Network            Network `json:"network"`
-	IdleSeconds        int64   `json:"idle_seconds"`
-	RetentionSeconds   int64   `json:"retention_seconds"`
-	MaxActive          int     `json:"max_active"`
-	MaxRetained        int     `json:"max_retained"`
 }
 
 type Network struct {
@@ -44,10 +39,6 @@ type Rule struct {
 }
 
 func configureMicrosandbox(entry Microsandbox, result *Built) error {
-	const maxSeconds = int64((1<<63 - 1) / time.Second)
-	if entry.IdleSeconds <= 0 || entry.IdleSeconds > maxSeconds || entry.RetentionSeconds <= 0 || entry.RetentionSeconds > maxSeconds || entry.MaxActive <= 0 || entry.MaxRetained < entry.MaxActive {
-		return errors.New("managed microsandbox requires positive bounded idle_seconds, retention_seconds and max_active, with max_retained >= max_active")
-	}
 	if !filepath.IsAbs(entry.RuntimeHome) || filepath.Clean(entry.RuntimeHome) != entry.RuntimeHome {
 		return errors.New("managed microsandbox runtime_home must be a canonical absolute path")
 	}
@@ -66,6 +57,5 @@ func configureMicrosandbox(entry Microsandbox, result *Built) error {
 	result.Provider = provider
 	result.Probe = microsandboxProbe(entry)
 	result.BackendFingerprint = BackendFingerprint("microsandbox", entry.RuntimeHome)
-	result.Suspension = &Policy{IdleTimeout: time.Duration(entry.IdleSeconds) * time.Second, Retention: time.Duration(entry.RetentionSeconds) * time.Second, MaxActive: entry.MaxActive, MaxRetained: entry.MaxRetained}
 	return nil
 }

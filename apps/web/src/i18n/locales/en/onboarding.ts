@@ -25,7 +25,7 @@ export const onboarding = {
         name: "Monitor",
         title: "Is it healthy, and where does it fail?",
         points: [
-          "Overview: service status, running Sessions, sandbox slots and the Sessions that need you.",
+          "Overview: service status, running Sessions, sandbox capacity and the Sessions that need you.",
           "Core, Agent and Sandbox metrics: the execution queue, requests and errors, nodes and Runtimes.",
           "Session log: every Session's conversation, trace and Turns, read-only.",
         ],

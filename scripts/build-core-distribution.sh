@@ -91,6 +91,7 @@ done
 python3 scripts/core-distribution-manifest.py bootstraps "$bundle" "$source_epoch"
 mkdir -p "$bundle/docs"
 cp -R docs/getting-started "$bundle/docs/"
+cp docs/configuration.md "$bundle/docs/configuration.md"
 cp README.md "$bundle/"
 mkdir -p "$bundle/services/agents-api"
 cp services/agents-api/HOSTED-SANDBOX-MANAGER.md "$bundle/services/agents-api/"

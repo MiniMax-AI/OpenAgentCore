@@ -28,6 +28,7 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, error, 
     </div>
     <dl className="sandbox-summary">
       <div><dt>{t("Provider")}</dt><dd>{sandboxProviderLabel(deployment.provider, locale)}</dd></div>
+      {deployment.specification ? <><div><dt>{t("CPU cores per sandbox")}</dt><dd>{deployment.specification.resources.cpus}</dd></div><div><dt>{t("Memory per sandbox (MiB)")}</dt><dd>{deployment.specification.resources.memory_mib}</dd></div></> : null}
       <div><dt>{t("Allocated resources")}</dt><dd>{deployment.resources?.allocations ?? t("Unknown state")}</dd></div>
       <div><dt>{t("Pending environments")}</dt><dd>{deployment.resources?.pending ?? t("Unknown state")}</dd></div>
     </dl>
@@ -42,8 +43,8 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, error, 
         {t(clean ? "Core reports no remaining execution resources. You can choose the next provider." : "Provider changes are blocked until Core confirms complete cleanup.")}
         <HelpTip>{t("Maintenance pauses new hosted placement. Clean up existing execution resources before changing provider; historical Sessions and results are preserved by the switch.")} {t("Stopped or offline resources, snapshots, uncertain creates and pending environments still block switching. Deleting a Session alone does not prove cleanup; Core must confirm both counts are zero.")}</HelpTip>
       </p>
-      {!changing ? <button type="button" className="button outline" disabled={disabled || !clean} onClick={() => setChanging(true)}>{t("Change provider")}</button> : <>
-        <SandboxSetup initialCoreUrl={deployment.core_url} disabled={disabled || !clean} switching onInitialize={onUpdate} />
+      {!changing ? <button type="button" className="button outline" disabled={disabled || !clean} onClick={() => setChanging(true)}>{t("Change provider or resources")}</button> : <>
+        <SandboxSetup initialCoreUrl={deployment.core_url} disabled={disabled || !clean} switching savedProvider={deployment.provider} initialSpecification={deployment.specification} onInitialize={onUpdate} />
         <span className="sandbox-provider-actions">
           <button type="button" className="button outline" disabled={disabled} onClick={() => setChanging(false)}>{t("Cancel")}</button>
           <HelpTip>{t("Saving retires old node identities and enrollment credentials. It does not migrate Sessions or resume placement automatically.")}</HelpTip>

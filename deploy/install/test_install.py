@@ -4,7 +4,6 @@
 import base64
 import contextlib
 import hashlib
-import gzip
 import io
 import json
 import os
@@ -44,6 +43,7 @@ class InstallerTests(unittest.TestCase):
         self.containerd = False
         self.invalid_image = None
         self.patched(mock.patch.object(distribution, "docker_command", side_effect=self.docker_command))
+        self.patched(mock.patch.object(install, "check_compose"))
         self.ports = self.patched(mock.patch.object(install, "free_port"))
         self.device_probes = []
         original_stat = os.stat
@@ -134,6 +134,94 @@ class InstallerTests(unittest.TestCase):
             hashlib.sha256(path.read_bytes()).hexdigest() + "  " + str(path.relative_to(bundle)) + "\n"
             for path in files))
 
+    def test_core_and_migration_share_one_private_environment_file(self):
+        state = self.initialize()
+        environment = install.read_core_environment(self.root, state)
+        path = self.root / "config/core.env"
+        self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+        self.assertEqual(environment["AGENTS_API_CONFIG_FILE"], "/config/core.env")
+        services = self.document("compose.json")["services"]
+        for name in ("core", "migrate"):
+            self.assertEqual(services[name]["env_file"], [str(path)])
+            self.assertNotIn("environment", services[name])
+        environment["AGENTS_API_ENGINE"] = "claude_sdk"
+        environment["AGENTS_API_DAEMON_WS_URL"] = "wss://edited.example/api/v1/agent-daemon/ws"
+        path.write_text(install.environment_text(environment))
+        before = self.snapshot()
+        self.initialize()
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(install.read_core_environment(self.root, state), environment)
+
+
+    def test_retained_core_environment_refuses_missing_or_unsafe_file(self):
+        self.initialize()
+        path = self.root / "config/core.env"
+        original = path.read_bytes()
+        for case in ("missing", "symlink", "directory", "public", "hardlink"):
+            with self.subTest(case=case):
+                path.unlink()
+                if case == "symlink":
+                    path.symlink_to(self.root / "config/database.password")
+                elif case == "directory":
+                    path.mkdir()
+                elif case == "hardlink":
+                    os.link(self.root / "config/database.password", path)
+                elif case == "public":
+                    path.write_bytes(original)
+                    path.chmod(0o644)
+                with self.assertRaisesRegex(RuntimeError, "missing or unsafe"):
+                    self.initialize()
+                if path.is_dir():
+                    path.rmdir()
+                elif path.exists() or path.is_symlink():
+                    path.unlink()
+                install.private_write(path, original.decode())
+
+
+    def test_retained_core_environment_cannot_replace_installation_identity(self):
+        state = self.initialize()
+        values = install.read_core_environment(self.root)
+        for key in ("AGENTS_API_SANDBOX_INSTALLATION_ID", "AGENTS_API_CONFIG_FILE"):
+            changed = dict(values, **{key: "changed"})
+            (self.root / "config/core.env").write_text(install.environment_text(changed))
+            with self.assertRaisesRegex(RuntimeError, "identity or file path"):
+                self.initialize()
+        (self.root / "config/core.env").write_text(install.environment_text(values))
+        self.assertEqual(self.initialize(), state)
+
+
+    def test_environment_literals_round_trip_without_expansion(self):
+        self.initialize()
+        values = {"EMPTY": "", "LITERAL": ' $HOME ${VALUE} "double" \'single\' `tick` \\path\\ ',
+                  "TRAILING_BACKSLASH": "trailing\\", "BACKSLASH_DOLLAR": "\\$HOME"}
+        path = self.root / "config/core.env"
+        path.write_text(install.environment_text(values))
+        with mock.patch.dict(os.environ, HOME="must-not-expand"):
+            self.assertEqual(install.read_core_environment(self.root), values)
+
+
+    def test_environment_parser_rejects_ambiguous_or_expanding_syntax(self):
+        self.initialize()
+        path = self.root / "config/core.env"
+        for content in ('KEY=$HOME\n', 'KEY="$HOME"\n', "KEY='value'\n", 'KEY="\\n"\n',
+                        'KEY="first"\nKEY="second"\n', 'KEY="secret\x00"\n'):
+            path.write_text(content)
+            with self.subTest(content=content), self.assertRaises(RuntimeError) as error:
+                install.read_core_environment(self.root)
+            self.assertNotIn("secret", str(error.exception))
+        for values in ({"KEY": "secret\nINJECT=value"}, {"KEY": "secret\x00"},
+                       {"BAD=KEY": "secret"}, {1: "secret"}):
+            with self.assertRaises(RuntimeError):
+                install.environment_text(values)
+
+
+    def test_core_only_does_not_prepare_or_mount_console_node_payload(self):
+        state = self.initialize("--core-only")
+        install.prepare_node_payload(self.root, state, self.bundle())
+        self.assertFalse((self.root / "node-payload").exists())
+        self.assertNotIn("node-payload", (self.root / "compose.json").read_text())
+
+
     def test_provider_receipts_are_private_durable_core_state(self):
         self.initialize()
         receipt_dir = self.root / "state/e2b"
@@ -154,7 +242,7 @@ class InstallerTests(unittest.TestCase):
                      "native/microsandbox/libkrunfw.so.5.6.1"):
             (bundle / name).unlink()
         self.write_checksums(bundle)
-        with mock.patch.object(install, "obtain_artifact", side_effect=AssertionError("unneeded download")):
+        with mock.patch.object(distribution, "obtain_artifact", side_effect=AssertionError("unneeded download")):
             manifest = install.verify_bundle(bundle)
             install.prepare_node_payload(self.root, self.initialize(), bundle)
         self.assertEqual(manifest["source_commit"], "a" * 40)
@@ -196,7 +284,7 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse((self.root / "config/caller.key").exists())
         encryption = (self.root / "config/credential.key").read_text()
         self.assertEqual(len(base64.b64decode(encryption, validate=True)), 32)
-        self.assertIsNone(first["provider"])
+        self.assertNotIn("provider", first)
         self.assertFalse((self.root / "config/managed-runtimes.json").exists())
         before = self.snapshot()
         self.ports.reset_mock()
@@ -272,7 +360,7 @@ class InstallerTests(unittest.TestCase):
     def test_configuration_changes_refuse_without_mutating_existing_deployment(self):
         self.initialize()
         before = self.snapshot()
-        for flags in (("--core-only",), ("--sandbox-provider", "true", "--provider", "docker"), ("--core-port", "8092"), ("--web-port", "8081")):
+        for flags in (("--core-only",), ("--native-core",), ("--core-port", "8092"), ("--web-port", "8081")):
             with self.subTest(flags=flags), self.assertRaises(install.InstallError):
                 self.initialize(*flags)
             self.assertEqual(before, self.snapshot())
@@ -281,13 +369,13 @@ class InstallerTests(unittest.TestCase):
             install.initialize(self.root, self.args(), changed)
         self.assertEqual(before, self.snapshot())
 
-    def test_opt_in_microsandbox_keeps_core_and_vm_processes_outside_compose(self):
-        state = self.initialize("--sandbox-provider", "true")
-        self.assertEqual(state["provider"], "microsandbox")
+    def test_native_core_runs_outside_compose_without_an_execution_node(self):
+        state = self.initialize("--native-core")
+        self.assertTrue(state["native_core"])
+        self.assertFalse((self.root / "state/sandbox-node").exists())
+        self.assertFalse((self.root / "state/msb").exists())
         self.assertFalse((self.root / "config/managed-runtimes.json").exists())
-        environment = install.core_environment(self.root, state, "fixture-password")
-        self.assertEqual(environment["AGENTS_API_SANDBOX_INSTALLATION_ID"], state["installation_id"])
-        self.assertNotIn("AGENTS_API_MANAGED_RUNTIMES_FILE", environment)
+        self.assertEqual(self.device_probes, [])
         services = self.document("compose.json")["services"]
         self.assertEqual(set(services), {"database", "web"})
         for service in services.values():
@@ -313,13 +401,13 @@ class InstallerTests(unittest.TestCase):
             self.assertNotIn("docker.sock", json.dumps(service.get("volumes", [])))
             self.assertNotIn("AGENTS_API_MANAGED_RUNTIMES_FILE", service.get("environment", {}))
             self.assertNotIn("AGENTS_API_SANDBOX_NODE_STATE_DIR", service.get("environment", {}))
-        self.assertEqual(compose["services"]["core"]["environment"]["AGENTS_API_SANDBOX_INSTALLATION_ID"], state["installation_id"])
+        self.assertEqual(install.read_core_environment(self.root, state)["AGENTS_API_SANDBOX_INSTALLATION_ID"], state["installation_id"])
 
     def test_administrator_credential_is_private_and_only_web_holds_plaintext(self):
-        for provider in (None, "docker", "microsandbox"):
-            with self.subTest(provider=provider):
-                self.root = self.work / ("admin-" + str(provider))
-                flags = ("--sandbox-provider", "true", "--provider", provider) if provider else ()
+        for native in (False, True):
+            with self.subTest(native=native):
+                self.root = self.work / ("admin-" + str(native))
+                flags = ("--native-core",) if native else ()
                 state = self.initialize(*flags)
                 admin = self.root / "admin"
                 token = (admin / "sandbox-admin.key").read_text()
@@ -332,7 +420,7 @@ class InstallerTests(unittest.TestCase):
                 self.initialize(*flags)
                 self.assertEqual(self.snapshot(), before)
                 environment = install.core_environment(self.root, state, "synthetic database password")
-                expected = str(admin / "digests.json") if provider == "microsandbox" else "/admin/digests.json"
+                expected = str(admin / "digests.json") if native else "/admin/digests.json"
                 self.assertEqual(environment["AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE"], expected)
                 self.assertNotIn("AGENTS_API_KEYS_FILE", environment)
                 self.assertFalse((self.root / "config/keys.json").exists())
@@ -448,7 +536,7 @@ class InstallerTests(unittest.TestCase):
 
     def test_default_has_no_provider_authority_or_runtime_configuration(self):
         state = self.initialize()
-        self.assertIsNone(state["provider"])
+        self.assertFalse(state["native_core"])
         self.assertEqual(self.device_probes, [])
         self.assertNotIn("device_gid", state)
         self.assertFalse((self.root / "state/sandbox-node").exists())
@@ -457,7 +545,7 @@ class InstallerTests(unittest.TestCase):
         compose = self.document("compose.json")
         self.assertEqual(set(compose["services"]), {"database", "migrate", "core", "web"})
         self.assertNotIn("networks", compose)
-        self.assertEqual(compose["services"]["core"]["environment"]["AGENTS_API_SANDBOX_INSTALLATION_ID"], state["installation_id"])
+        self.assertEqual(install.read_core_environment(self.root)["AGENTS_API_SANDBOX_INSTALLATION_ID"], state["installation_id"])
         for service in compose["services"].values():
             self.assertNotIn("devices", service)
             self.assertNotIn("group_add", service)
@@ -471,22 +559,22 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(web["environment"]["CORE_CONSOLE_ORIGIN"], "https://core.example")
         self.assertEqual(web["ports"], ["127.0.0.1:8080:8080"])
         self.assertEqual(state["public_url"], "https://core.example")
-        self.assertEqual(self.document("compose.json")["services"]["core"]["environment"]["AGENTS_API_DAEMON_WS_URL"],
+        self.assertEqual(install.read_core_environment(self.root)["AGENTS_API_DAEMON_WS_URL"],
                          "wss://core.example/api/v1/agent-daemon/ws")
         with self.assertRaises(install.InstallError):
             self.initialize("--public-url", "https://other.example")
 
     def test_public_daemon_address_is_shared_across_placement_modes(self):
         state = self.initialize("--public-url", "https://core.example:8443")
-        for provider in (None, "docker", "microsandbox"):
-            with self.subTest(provider=provider):
-                configured = dict(state, provider=provider, database_port=15432)
+        for native in (False, True):
+            with self.subTest(native=native):
+                configured = dict(state, native_core=native, database_port=15432)
                 env = install.core_environment(self.root, configured, "fixture-password")
                 self.assertEqual(env["AGENTS_API_DAEMON_WS_URL"],
                                  "wss://core.example:8443/api/v1/agent-daemon/ws")
                 configured["public_url"] = None
                 local = install.core_environment(self.root, configured, "fixture-password")
-                expected_host = "host.microsandbox.internal:8091" if provider == "microsandbox" else "core:8091"
+                expected_host = "127.0.0.1:8091" if native else "core:8091"
                 self.assertEqual(local["AGENTS_API_DAEMON_WS_URL"], "ws://" + expected_host + "/api/v1/agent-daemon/ws")
 
     def test_accepted_public_origin_schemes_generate_websocket_urls(self):
@@ -515,56 +603,70 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.args("--sandbox-provider").provider, "microsandbox")
         for flags in (("--provider", "docker"), ("--provider", "microsandbox"),
                       ("--sandbox-provider", "false", "--provider", "docker"),
-                      ("--web-only", "--sandbox-provider", "true")):
+                      ("--web-only", "--sandbox-provider", "true"), ("--web-only", "--native-core")):
             with self.subTest(flags=flags), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 self.args(*flags)
 
-    def test_local_microsandbox_accepts_actual_thin_and_offline_native_layouts(self):
-        path_exists = Path.exists
-        for offline in (False, True):
-            with self.subTest(offline=offline):
-                bundle = self.bundle()
-                payloads = {}
-                for name, entry in self.manifest["artifacts"].items():
-                    payload = gzip.compress(b"runtime fixture") if name == "images/runtime.tar.gz" else b"\x7fELFfixture"
-                    payloads[entry["filename"]] = payload
-                    entry.update(sha256=hashlib.sha256(payload).hexdigest(), size=len(payload))
-                    if name == "images/runtime.tar.gz":
-                        entry.update(unpacked_sha256=hashlib.sha256(b"runtime fixture").hexdigest(), unpacked_size=len(b"runtime fixture"))
-                    if offline:
-                        target = bundle / "artifacts" / entry["filename"]
-                        target.parent.mkdir(exist_ok=True)
-                        target.write_bytes(payload)
-                    else:
-                        self.manifest["artifact_base_url"] = "https://release.example/immutable"
-                    (bundle / name.removesuffix(".gz")).unlink()
-                (bundle / "manifest.json").write_text(json.dumps(self.manifest))
-                self.write_checksums(bundle)
-                requested = []
-                def response(url, **kwargs):
-                    requested.append(url.rsplit("/", 1)[-1])
-                    return io.BytesIO(payloads[requested[-1]])
-                def host_command(arguments, failure):
-                    return SimpleNamespace(returncode=0, stdout="yes" if arguments[0] == "loginctl" else "", stderr="")
-                with mock.patch.object(install, "__file__", str(bundle / "install.py")), \
-                        mock.patch.object(install.platform, "system", return_value="Linux"), \
-                        mock.patch.object(install.platform, "machine", return_value="x86_64"), \
-                        mock.patch.object(install.Path, "exists", lambda path: str(path) == "/dev/kvm" or path_exists(path)), \
-                        mock.patch.object(install.os, "access", return_value=True), \
-                        mock.patch.object(install, "run", return_value=SimpleNamespace(stdout="", returncode=0)), \
-                        mock.patch.object(install, "wait_http", return_value=True), \
-                        mock.patch.object(install.local_node, "install"), \
-                        mock.patch.object(install.native_service, "_run", side_effect=host_command), \
-                        mock.patch("distribution.urllib.request.build_opener", return_value=SimpleNamespace(open=response)), \
-                        contextlib.redirect_stdout(io.StringIO()):
-                    install.main(["--install-dir", str(self.root), "--sandbox-provider", "true", "--provider", "microsandbox", "--public-url", "https://core.example"])
-                self.assertTrue((self.root / "native/bin/agents-api").is_file())
-                self.assertTrue((self.root / "native/bin/agents-api-microsandbox-provider").is_file())
-                self.assertFalse((self.root / "native/bin/parsar-sandbox-node").exists())
-                self.assertNotIn(self.manifest["artifacts"]["native/bin/parsar-sandbox-node"]["filename"], requested)
-                self.assertEqual(len(requested), 0 if offline else 3)
-                shutil.rmtree(bundle)
-                shutil.rmtree(self.root)
+    def test_local_provider_input_is_transient_and_independent_of_core_placement(self):
+        for native in (False, True):
+            for provider in ("docker", "microsandbox"):
+                with self.subTest(native=native, provider=provider):
+                    self.root = self.work / (str(native) + provider)
+                    bundle = self.bundle()
+                    flags = ["--install-dir", str(self.root), "--public-url", "https://core.example"]
+                    if native:
+                        flags.append("--native-core")
+                    with mock.patch.object(install, "__file__", str(bundle / "install.py")), \
+                            mock.patch.object(install.platform, "system", return_value="Linux"), \
+                            mock.patch.object(install.platform, "machine", return_value="x86_64"), \
+                            mock.patch.object(install, "run"), mock.patch.object(install, "wait_http", return_value=True), \
+                            mock.patch.object(install.native_service, "preflight"), \
+                            mock.patch.object(install.native_service, "prepare"), \
+                            mock.patch.object(install.native_service, "start"), \
+                            mock.patch.object(install.local_node, "install") as enroll, \
+                            contextlib.redirect_stdout(io.StringIO()):
+                        install.main([*flags, "--sandbox-provider", "true", "--provider", provider])
+                        enroll.assert_called_once()
+                        self.assertEqual(enroll.call_args.args[1]["provider"], provider)
+                        state = self.document("installation.json")
+                        self.assertNotIn("provider", state)
+                        self.assertEqual(state["native_core"], native)
+                        self.assertEqual("core" in self.document("compose.json")["services"], not native)
+                        before = self.snapshot()
+                        enroll.reset_mock()
+                        install.main(flags)
+                        enroll.assert_not_called()
+                        self.assertEqual(before, self.snapshot())
+                    self.assertEqual(self.device_probes, [])
+                    shutil.rmtree(bundle)
+
+    def test_native_main_uses_retained_environment_for_migration(self):
+        bundle = self.bundle()
+        self.initialize("--native-core")
+        environment = install.read_core_environment(self.root)
+        environment["AGENTS_API_DATABASE_URL"] = 'postgres://edited:"quote"\\path$literal/agents_api'
+        (self.root / "config/core.env").write_text(install.environment_text(environment))
+        before = (self.root / "config/core.env").read_bytes()
+        def host_command(arguments, failure):
+            return SimpleNamespace(returncode=0, stdout="yes" if arguments[0] == "loginctl" else "", stderr="")
+        with mock.patch.object(install, "__file__", str(bundle / "install.py")), \
+                mock.patch.object(install.platform, "system", return_value="Linux"), \
+                mock.patch.object(install.platform, "machine", return_value="x86_64"), \
+                mock.patch.object(install, "run", return_value=SimpleNamespace(stdout="", returncode=0)) as run, \
+                mock.patch.object(install, "wait_http", return_value=True), \
+                mock.patch.object(install.native_service, "_run", side_effect=host_command), \
+                contextlib.redirect_stdout(io.StringIO()):
+            install.main(["--install-dir", str(self.root), "--native-core"])
+        self.assertEqual(self.device_probes, [])
+        self.assertTrue((self.root / "native/bin/agents-api").is_file())
+        self.assertTrue((self.root / "native/bin/agents-api-migrate").is_file())
+        self.assertFalse((self.root / "native/bin/agents-api-microsandbox-provider").exists())
+        self.assertFalse((self.root / "native/bin/parsar-sandbox-node").exists())
+        self.assertFalse((self.root / "native/microsandbox").exists())
+        migration = next(call for call in run.call_args_list if call.args[0] == [str(self.root / "native/bin/agents-api-migrate")])
+        for key, value in environment.items():
+            self.assertEqual(migration.kwargs["env"][key], value)
+        self.assertEqual((self.root / "config/core.env").read_bytes(), before)
 
     def test_default_main_skips_kvm_native_service_and_runtime_import(self):
         bundle = self.bundle()
@@ -584,7 +686,9 @@ class InstallerTests(unittest.TestCase):
                          [str(bundle / ("images/" + name + ".tar")) for name in ("core", "database", "web")])
         self.assertFalse((self.root / "native").exists())
         self.assertFalse((self.root / "config/seccomp.json").exists())
-        self.assertIn("No execution node installed", output.getvalue())
+        self.assertIn("No execution node was installed by this run", output.getvalue())
+        self.assertIn("Core configuration file: " + str(self.root / "config/core.env"), output.getvalue())
+        self.assertNotIn((self.root / "config/database.password").read_text(), output.getvalue())
         self.assertIn("Open Web to register the administrator with your chosen username and password.", output.getvalue())
         self.assertNotIn("Setup key", output.getvalue())
         self.assertFalse((self.root / "config/keys.json").exists())
@@ -622,6 +726,21 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual([call.args[0] for call in health.call_args_list], ["http://127.0.0.1:8080/console/auth", "http://127.0.0.1:9091/core/v1/admin/projects"])
         self.assertEqual(health.call_args_list[-1].args[1], {"Authorization": "Bearer " + source.read_text()})
         self.assertNotIn(source.read_text(), output.getvalue())
+        services = self.document("compose.json")["services"]
+        self.assertEqual(set(services), {"web"})
+        web = services["web"]
+        self.assertEqual(web["environment"]["CORE_CONSOLE_NODE_PAYLOAD_DIR"], "/node-payload")
+        mount = next(value for value in web["volumes"] if value["target"] == "/node-payload")
+        self.assertEqual(mount["source"], str(self.root / "node-payload"))
+        self.assertTrue(mount["read_only"])
+        payload = self.root / "node-payload"
+        names = {str(path.relative_to(payload)) for path in payload.rglob("*") if path.is_file()}
+        self.assertEqual(names, {"node-install.pyz", "self-hosted-install.pyz", "manifest.json", "SHA256SUMS", "runtime/seccomp.json"})
+        for name in names:
+            self.assertEqual((payload / name).read_bytes(), (bundle / name).read_bytes())
+            self.assertNotIn(source.read_bytes(), (payload / name).read_bytes())
+        for path in ("config/core.env", "config/database.password", "config/credential.key", "state/e2b"):
+            self.assertFalse((self.root / path).exists())
 
     def test_containerd_core_configuration_uses_local_ids_and_keeps_published_manifest(self):
         self.containerd = True
@@ -701,14 +820,25 @@ class InstallerTests(unittest.TestCase):
                     mock.patch.object(install, "compose", return_value=SimpleNamespace(stdout=json.dumps(rows))), \
                     mock.patch.object(install, "wait_http", return_value=True), \
                     contextlib.redirect_stdout(io.StringIO()), self.assertRaises(install.InstallError):
-                install.status(self.root, {"mode": "all", "provider": "docker", "core_port": 8091, "web_port": 8080})
+                install.status(self.root, {"mode": "all", "native_core": False, "core_port": 8091, "web_port": 8080})
 
     def test_status_accepts_web_only_without_database_or_core_services(self):
         rows = [{"Service": "web", "State": "running", "Health": ""}]
         with mock.patch.object(install, "compose", return_value=SimpleNamespace(stdout=json.dumps(rows))), \
                 mock.patch.object(install, "wait_http", return_value=True), \
                 contextlib.redirect_stdout(io.StringIO()):
-            install.status(self.root, {"mode": "web-only", "provider": "microsandbox", "web_port": 8080})
+            install.status(self.root, {"mode": "web-only", "native_core": True, "web_port": 8080})
+
+
+class ComposePrerequisiteTests(unittest.TestCase):
+    def test_compose_requires_the_literal_environment_parser(self):
+        for version in ("2.26.0", "v2.26.1", "2.40.0-desktop.1", "5.0.0"):
+            with self.subTest(version=version), mock.patch.object(install, "run", return_value=SimpleNamespace(stdout=version)):
+                install.check_compose()
+        for version in ("2.15.1", "2.25.9", "unknown"):
+            with self.subTest(version=version), mock.patch.object(install, "run", return_value=SimpleNamespace(stdout=version)):
+                with self.assertRaisesRegex(install.InstallError, "2.26.0"):
+                    install.check_compose()
 
 
 if __name__ == "__main__":

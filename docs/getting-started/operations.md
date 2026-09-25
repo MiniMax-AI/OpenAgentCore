@@ -7,6 +7,10 @@ A local node requested during installation runs as the same separate node servic
 on the Core host. Service
 health and provider state are separate from a Session's public execution state.
 
+Use [Configuration](../configuration.md) for the authoritative setting locations,
+defaults and restart instructions. Core process parameters live in `config/core.env`;
+Compose and systemd only launch the process.
+
 ## Read service health
 
 Run from the extracted bundle:
@@ -45,7 +49,7 @@ Settle active work before a planned restart. Then:
 
 ```sh
 ./install.sh --stop
-./install.sh  # Use the same component/provider/port flags as the initial install.
+./install.sh  # Use the same component/packaging/port flags as the initial install.
 ```
 
 This stops the control-plane services and retains the database, Runtime state and
@@ -118,7 +122,7 @@ apply the existing Core migration workflow and replace matched service/Runtime
 artifacts while retaining identities and backend paths. Qualify recovery before
 claiming the upgrade complete; there is no downgrade or history migration promise.
 
-The installer refuses component/provider flag changes on an existing installation.
+The installer refuses component/packaging flag changes on an existing installation.
 Rerunning it does not resize sandboxes or replace the database selection. Use Web
 or the administrator API for the initial selection and all later provider,
 per-sandbox resource or Runtime changes:

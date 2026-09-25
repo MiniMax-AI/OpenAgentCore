@@ -90,7 +90,10 @@ func (s *Store) ListRuntimeNodes(ctx context.Context) ([]RuntimeNode, error) {
 	}
 	return out, nil
 }
-func (s *Store) CreateRuntimeEnrollment(ctx context.Context) (string, time.Time, error) {
+func (s *Store) CreateRuntimeEnrollment(ctx context.Context, capacity RuntimeNodeCapacity) (string, time.Time, error) {
+	if err := validateRuntimeNode("enrollment", capacity.MaxActive, capacity.MaxRetained); err != nil {
+		return "", time.Time{}, err
+	}
 	var bytes [32]byte
 	if _, err := rand.Read(bytes[:]); err != nil {
 		return "", time.Time{}, err
@@ -101,7 +104,7 @@ func (s *Store) CreateRuntimeEnrollment(ctx context.Context) (string, time.Time,
 		if d.Mode != "nodes" || d.Maintenance {
 			return ErrSandboxDeploymentConflict
 		}
-		if err := q.CreateRuntimeEnrollment(ctx, sqlc.CreateRuntimeEnrollmentParams{TokenSha256: runtimeTokenDigest(token), InstallationID: d.InstallationID}); err != nil {
+		if err := q.CreateRuntimeEnrollment(ctx, sqlc.CreateRuntimeEnrollmentParams{TokenSha256: runtimeTokenDigest(token), InstallationID: d.InstallationID, MaxActive: int32(capacity.MaxActive), MaxRetained: int32(capacity.MaxRetained)}); err != nil {
 			return err
 		}
 		row, err := q.GetRuntimeEnrollment(ctx, runtimeTokenDigest(token))
@@ -115,7 +118,7 @@ func (s *Store) EnrollRuntimeNode(ctx context.Context, token string, input Runti
 	if err != nil || len(input.Credential) < 32 || len(input.Credential) > 256 || strings.ContainsAny(input.Credential, " \t\r\n") || !validRuntimeDigest(input.BackendFingerprint) {
 		return RuntimeNodeIdentity{}, ErrInvalidInput
 	}
-	if err := validateRuntimeNode(input.Name, input.MaxActive, input.MaxRetained); err != nil {
+	if err := validateRuntimeNode(input.Name, 1, 1); err != nil {
 		return RuntimeNodeIdentity{}, err
 	}
 	var result RuntimeNodeIdentity
@@ -142,7 +145,7 @@ func (s *Store) EnrollRuntimeNode(ctx context.Context, token string, input Runti
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		row, err := q.InsertRuntimeNode(ctx, sqlc.InsertRuntimeNodeParams{ID: id, InstallationID: d.InstallationID, Name: input.Name, BackendFingerprint: input.BackendFingerprint, CredentialSha256: runtimeTokenDigest(input.Credential), MaxActive: int32(input.MaxActive), MaxRetained: int32(input.MaxRetained), SpecificationDigest: input.SpecificationDigest, DeploymentGeneration: int64(input.DeploymentGeneration)})
+		row, err := q.InsertRuntimeNode(ctx, sqlc.InsertRuntimeNodeParams{ID: id, InstallationID: d.InstallationID, Name: input.Name, BackendFingerprint: input.BackendFingerprint, CredentialSha256: runtimeTokenDigest(input.Credential), MaxActive: receipt.MaxActive, MaxRetained: receipt.MaxRetained, SpecificationDigest: input.SpecificationDigest, DeploymentGeneration: int64(input.DeploymentGeneration)})
 		if err != nil {
 			return err
 		}

@@ -36,6 +36,9 @@ type Dispatcher struct {
 	Options func(context.Context, store.Session) (map[string]any, error)
 	// ManagedRuntimes is optional internal provisioning; it does not admit hosted API requests.
 	ManagedRuntimes *RuntimeProvider
+	// MaxConcurrentExecutions bounds work admitted by this Core execution owner.
+	// Zero uses DefaultExecutionConcurrency. It is independent of sandbox capacity.
+	MaxConcurrentExecutions int
 }
 
 type Result struct {

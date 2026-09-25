@@ -11,10 +11,11 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
-const workerSlotLimit = 4
+const DefaultExecutionConcurrency = 4
 
 // Worker owns queued work; the database lease excludes a second execution service.
 type Worker struct {
+	concurrency         int
 	metrics             workerMetricsState
 	dispatcher          *Dispatcher
 	admission           *store.Store
@@ -28,13 +29,16 @@ type Worker struct {
 }
 
 func StartWorker(ctx context.Context, dispatcher *Dispatcher) (*Worker, error) {
+	if dispatcher.MaxConcurrentExecutions < 0 || dispatcher.MaxConcurrentExecutions > 1024 {
+		return nil, errors.New("execution concurrency must be between 1 and 1024, or zero for the default")
+	}
 	lease, err := dispatcher.Store.AcquireExecutionLease(ctx)
 	if err != nil {
 		return nil, err
 	}
 	owned := *dispatcher
 	owned.Store = lease.Store()
-	worker := &Worker{dispatcher: &owned, admission: dispatcher.Store, lease: lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), enrolledConnections: make(map[string]*runtimeConnection)}
+	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: &owned, admission: dispatcher.Store, lease: lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), enrolledConnections: make(map[string]*runtimeConnection)}
 	worker.runtimes, err = newRuntimeManager(owned.Store, owned.Registry, owned.ManagedRuntimes)
 	if err != nil {
 		_ = lease.Close(context.Background())
@@ -146,7 +150,7 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 		id  string
 		err error
 	}
-	completed := make(chan completion, workerSlotLimit)
+	completed := make(chan completion, w.executionConcurrency())
 	lifecycleDone := make(chan error, 1)
 	if w.runtimes != nil {
 		running.Add(1)
@@ -164,8 +168,8 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 		request fileWriteRequest
 		result  fileWriteResult
 	}
-	writesCompleted := make(chan writeCompletion, workerSlotLimit)
-	readsCompleted := make(chan readCompletion, workerSlotLimit)
+	writesCompleted := make(chan writeCompletion, w.executionConcurrency())
+	readsCompleted := make(chan readCompletion, w.executionConcurrency())
 	reads := 0
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
@@ -177,7 +181,7 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 		case err := <-lifecycleDone:
 			return err
 		case request := <-w.fileWrites:
-			if request.ctx.Err() != nil || active[request.environment.SessionID] || len(active) == workerSlotLimit {
+			if request.ctx.Err() != nil || active[request.environment.SessionID] || len(active) == w.executionConcurrency() {
 				request.result <- fileWriteResult{err: ErrExecutionUnavailable}
 				continue
 			}
@@ -193,7 +197,7 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 			w.observeSlots(len(active))
 			write.request.result <- write.result
 		case request := <-w.directoryReads:
-			if request.ctx.Err() != nil || reads == workerSlotLimit || (!active[request.environment.SessionID] && len(active) == workerSlotLimit) {
+			if request.ctx.Err() != nil || reads == w.executionConcurrency() || (!active[request.environment.SessionID] && len(active) == w.executionConcurrency()) {
 				request.reply(directoryReadResult{err: ErrExecutionUnavailable})
 				continue
 			}
@@ -242,7 +246,7 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 				w.observeSchedulerPoll(0, err)
 				return err
 			}
-			if len(active) == workerSlotLimit {
+			if len(active) == w.executionConcurrency() {
 				w.observeSchedulerPoll(0, nil)
 				continue
 			}
@@ -315,4 +319,11 @@ func (w *Worker) runClaim(ctx context.Context, item store.ExecutionWork) error {
 		return nil
 	}
 	return err
+}
+
+func (w *Worker) executionConcurrency() int {
+	if w.concurrency == 0 {
+		return DefaultExecutionConcurrency
+	}
+	return w.concurrency
 }

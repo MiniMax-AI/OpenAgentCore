@@ -7,6 +7,8 @@ Core, or generate a managed Provider configuration. Select the provider, per-san
 resources and immutable Runtime through Web or the administrator API after installation. A local node is an optional installation
 choice and uses the same database-managed configuration.
 No model key, Environment wizard or sample task is required during installation.
+See [Configuration](../configuration.md) for setting ownership, paths, defaults,
+units, change restrictions and restart behavior.
 
 Recommended path: [install](#verify-extract-and-install) →
 [sign in to Web](#sign-in-to-web) →
@@ -16,7 +18,7 @@ You can leave the deployment with zero nodes until you need execution.
 ## Host requirements
 
 The first distribution targets Linux amd64 with Python 3.9+, Docker and Docker
-Compose v2. Run the installer as a non-root user who can use Docker.
+Compose 2.26.0 or newer. Run the installer as a non-root user who can use Docker.
 The default installation requires neither KVM nor systemd user services.
 The optional local provider has additional requirements described under
 [installation choices](#installation-choices). Node-host requirements are listed
@@ -236,6 +238,7 @@ reclaim user-owned Docker resources.
 ./install.sh --sandbox-provider true --provider microsandbox --public-url https://core.example
 ./install.sh --sandbox-provider true --provider docker --public-url https://core.example
 ./install.sh --core-only
+./install.sh --native-core --public-url https://core.example
 ./install.sh --core-only --sandbox-provider true --provider docker --public-url https://core.example
 ```
 
@@ -270,18 +273,17 @@ glibc, the matched native libraries and user read/write access to `/dev/kvm`;
 nested cloud hosts must expose hardware virtualization. The installer checks these
 prerequisites without granting permissions or falling back to another provider.
 
-With the microsandbox installation option, Core runs as a native user service and
-PostgreSQL/Web run in containers. With Docker, Core stays in Compose. In both cases
-the standalone node service owns provider processes outside Core's container.
+`--native-core` selects a native Core user service independently of the provider;
+PostgreSQL/Web stay in containers. Native Core itself requires no KVM or node
+Runtime files. Without this flag, Core stays in Compose. The standalone node
+service owns provider processes separately from Core.
 Stopping Core does not stop the node or prove its resources have been reclaimed.
 
-When local opt-in initializes an empty deployment, it requests 2 CPUs and 4096 MiB
-per sandbox. Microsandbox also requests an 8192 MiB root disk and an 8192 MiB
-`/environment` disk. Docker has no hard disk-capacity guarantee through this
-configuration. Node defaults allow 4 active and 16 retained allocations, separately
-from per-sandbox sizing. Change saved resources or Runtime only through the
+See [Configuration](../configuration.md) for initial per-sandbox resources,
+administrator-approved node capacity and the five-minute idle suspension policy.
+Change saved resources or Runtime only through the
 [drained deployment procedure](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance).
-These are installation defaults, not evidence of model or workload acceptance.
+Installation defaults are not evidence of model or workload acceptance.
 
 ### Separate Web installation
 

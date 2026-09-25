@@ -9,6 +9,8 @@ import (
 )
 
 type RuntimeNodeConfiguration struct {
+	MaxActive           int                    `json:"max_active"`
+	MaxRetained         int                    `json:"max_retained"`
 	InstallationID      string                 `json:"installation_id"`
 	Provider            string                 `json:"provider"`
 	CoreURL             string                 `json:"core_url"`
@@ -29,11 +31,13 @@ func (s *Store) RuntimeNodeConfiguration(ctx context.Context, nodeID, token stri
 		if err != nil {
 			return err
 		}
+		var active, retained int32
 		if nodeID == "" {
 			r, err := q.GetRuntimeEnrollment(ctx, runtimeTokenDigest(token))
 			if err != nil || r.ConsumedAt.Valid || !r.ExpiresAt.Time.After(time.Now()) || r.InstallationID != d.InstallationID {
 				return ErrRuntimeNodeCredential
 			}
+			active, retained = r.MaxActive, r.MaxRetained
 			if d.Maintenance {
 				return ErrSandboxDeploymentConflict
 			}
@@ -46,11 +50,12 @@ func (s *Store) RuntimeNodeConfiguration(ctx context.Context, nodeID, token stri
 			if err != nil || n.InstallationID != d.InstallationID || n.CredentialSha256 != runtimeTokenDigest(token) {
 				return ErrRuntimeNodeCredential
 			}
+			active, retained = n.MaxActive, n.MaxRetained
 			if n.DeploymentGeneration != d.Generation || n.SpecificationDigest != spec.Digest(d.ProviderKind) {
 				return ErrRuntimeSpecificationMismatch
 			}
 		}
-		result = RuntimeNodeConfiguration{InstallationID: runtimeUUID(d.InstallationID), Provider: d.ProviderKind, CoreURL: d.CoreUrl, Generation: uint64(d.Generation), Specification: spec, SpecificationDigest: spec.Digest(d.ProviderKind)}
+		result = RuntimeNodeConfiguration{MaxActive: int(active), MaxRetained: int(retained), InstallationID: runtimeUUID(d.InstallationID), Provider: d.ProviderKind, CoreURL: d.CoreUrl, Generation: uint64(d.Generation), Specification: spec, SpecificationDigest: spec.Digest(d.ProviderKind)}
 		return nil
 	})
 	return result, err

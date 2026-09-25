@@ -20,9 +20,14 @@ type RuntimeNodeIdentity struct {
 	InstallationID       string `json:"installation_id"`
 	Provider             string `json:"provider"`
 	BackendFingerprint   string `json:"-"`
-	MaxActive            int    `json:"-"`
-	MaxRetained          int    `json:"-"`
+	MaxActive            int    `json:"max_active"`
+	MaxRetained          int    `json:"max_retained"`
 }
+type RuntimeNodeCapacity struct {
+	MaxActive   int `json:"max_active"`
+	MaxRetained int `json:"max_retained"`
+}
+
 type RuntimeNodeEnrollment struct {
 	SpecificationDigest  string `json:"specification_digest"`
 	DeploymentGeneration uint64 `json:"deployment_generation"`
@@ -31,8 +36,6 @@ type RuntimeNodeEnrollment struct {
 	Name                 string `json:"name"`
 	Provider             string `json:"provider"`
 	BackendFingerprint   string `json:"backend_fingerprint"`
-	MaxActive            int    `json:"max_active"`
-	MaxRetained          int    `json:"max_retained"`
 }
 type RuntimeNodeHealth struct {
 	Diagnostic           string `json:"diagnostic,omitempty"`

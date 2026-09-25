@@ -25,7 +25,7 @@ export const onboarding = {
         name: "监控",
         title: "服务健康吗？哪里在出错？",
         points: [
-          "概览：服务状态、运行中的 Session、沙箱槽位，以及需要你处理的 Session。",
+          "概览：服务状态、运行中的 Session、沙箱容量，以及需要你处理的 Session。",
           "Core、Agent、沙箱监控：执行队列、请求与错误、节点和运行时。",
           "Session 日志：每个 Session 的对话、追踪和 Turn，只读。",
         ],

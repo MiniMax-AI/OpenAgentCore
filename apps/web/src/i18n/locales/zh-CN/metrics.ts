@@ -102,7 +102,7 @@ export const metrics = {
   },
   core: {
     title: "Core 监控",
-    description: "Core 服务进程自身的健康：执行槽位和 Turn 队列、已连接的 daemon、PostgreSQL 数据库和后台任务。Agent 的调用和耗时见 Agent 监控，沙箱容量见沙箱监控。",
+    description: "Core 服务进程自身的健康：执行并发和 Turn 队列、已连接的 daemon、PostgreSQL 数据库和后台任务。Agent 的调用和耗时见 Agent 监控，沙箱容量见沙箱监控。",
     loading: "正在读取 Core 指标…",
     failed: "无法读取 Core 指标。{{reason}}",
     stale: "刷新失败，显示的是上次读取的指标。{{reason}}",
@@ -112,7 +112,7 @@ export const metrics = {
     meta: "{{status}} · {{revision}} · 已运行 {{uptime}}",
     notOwner: "未持有执行归属",
     status: { running: "运行中", maintenance: "维护中", degraded: "降级", unknown: "状态未知" },
-    slots: "执行槽位",
+    slots: "执行并发",
     slotsHelp: "Core 同时最多执行的 Session 数。Turn、环境输入和文件读写共用这些槽位。",
     queued: "排队 Turn",
     queuedHelp: "等待执行的 Turn。一部分在等空闲槽位，一部分在等所属 Session 的 daemon 连上。",

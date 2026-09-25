@@ -225,8 +225,7 @@ def provider_config(root, args, manifest, runtime_image):
             "helper_path": str(root / MICRO[0]), "runtime_path": str(root / MICRO[1]), "firmware_path": str(root / MICRO[2]),
             "runtime_sha256": manifest["microsandbox"]["runtime_sha256"], "firmware_sha256": manifest["microsandbox"]["firmware_sha256"],
             "runtime_home": str(micro_home(args.installation_id)), "image": manifest["runtime_ref"],
-            **args.configuration["specification"]["resources"], "idle_seconds": 300, "retention_seconds": 86400,
-            "max_active": 4, "max_retained": 16,
+            **args.configuration["specification"]["resources"],
             "network": {"default_egress": "deny", "default_ingress": "deny", "rules": core_rules + [
                 {"action": "allow", "direction": "egress", "destination": "public"},
                 {"action": "allow", "direction": "egress", "destination": "host", "protocol": "udp", "port": "53"},
@@ -349,7 +348,7 @@ def install(args, token):
                     secret.write(token)
                 print("Registering this node with Core...", flush=True)
                 checked([str(root / COMMON[0]), "register", "--config", str(root / "provider.json"), "--state-dir", str(root / "state/node"),
-                         "--core-url", args.core_url, "--name", socket.gethostname(), "--max-active", "4", "--max-retained", "16",
+                         "--core-url", args.core_url, "--name", socket.gethostname(),
                          "--enrollment-token-file", secret_path], "Node enrollment was not confirmed. Check the Core URL, enrollment expiry and local provider prerequisites; keep its state and rerun the command to recover.")
                 write_once(marker, json_text(state))
             finally:
