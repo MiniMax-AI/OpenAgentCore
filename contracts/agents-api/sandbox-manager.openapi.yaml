@@ -37,6 +37,11 @@ definitions:
       object:
         type: string
     type: object
+  api.AdminSessionArchiveRequest:
+    properties:
+      expected_generation:
+        type: integer
+    type: object
   api.AdminSessionCounts:
     properties:
       failed:
@@ -495,6 +500,15 @@ definitions:
       project_id:
         type: string
       revoked_at:
+        type: string
+    type: object
+  store.ManagedSessionArchive:
+    properties:
+      environment_id:
+        type: string
+      session_id:
+        type: string
+      state:
         type: string
     type: object
   store.Project:
@@ -3841,6 +3855,113 @@ paths:
       summary: Retrieve an execution Session in a managed key space
       tags:
         - Sessions
+  /core/v1/admin/projects/{project_id}/sessions/{session_id}/archive:
+    get:
+      description: Deployment administrator only. Reports actual resource disposition, including expiry and failure cleanup. This is not archive provenance and does not assert active Turn settlement. Read this after an uncertain archive response; never infer released from a missing sandbox alone.
+      parameters:
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+        - description: Session ID
+          in: path
+          name: session_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.ManagedSessionArchive'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve a managed Session's resource cleanup state
+      tags:
+        - Core Administration
+    post:
+      consumes:
+        - application/json
+      description: Deployment administrator only. Requires maintenance and the current deployment generation. Permanently closes execution, requests cancellation and releases sandbox/snapshots through existing cleanup. Session history and persisted files/artifacts remain; unpersisted workspace contents are lost. A cleanup_pending response is not proof of resource release. Does not affect caller-managed Runtime.
+      parameters:
+        - description: Project ID
+          in: path
+          name: project_id
+          required: true
+          type: string
+        - description: Session ID
+          in: path
+          name: session_id
+          required: true
+          type: string
+        - description: Current deployment generation
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/api.AdminSessionArchiveRequest'
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.ManagedSessionArchive'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Release a managed Session's execution resources while retaining history
+      tags:
+        - Core Administration
   /core/v1/admin/projects/{project_id}/sessions/{session_id}/artifacts:
     get:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
