@@ -72,8 +72,16 @@ func TestProjectExecutorCredentialsHTTP(t *testing.T) {
 	if w := projectKeyHTTP(h, "POST", "/core/v1/environments/"+environment+"/executor-credentials", "admin", body); w.Code != 404 || f.calls != 0 {
 		t.Fatal("old route still served", w.Code)
 	}
-	if w := projectKeyHTTP(h, "GET", "/core/v1/projects/"+uuid.NewString()+"/environments/"+environment+"/executor-credentials", "admin", ""); w.Code != 404 || f.calls != 0 {
+	unknown := "/core/v1/projects/" + uuid.NewString() + "/environments/" + environment + "/executor-credentials"
+	if w := projectKeyHTTP(h, "GET", unknown, "admin", ""); w.Code != 404 || f.calls != 0 {
 		t.Fatal("unknown Project", w.Code)
+	}
+	// The request body is validated before the target is resolved.
+	if w := projectKeyHTTP(h, "POST", unknown, "admin", `{"key_id":"invalid"}`); w.Code != 400 || f.calls != 0 {
+		t.Fatal("body before target", w.Code)
+	}
+	if w := projectKeyHTTP(h, "POST", unknown, "admin", body); w.Code != 404 || f.calls != 0 {
+		t.Fatal("unknown Project issue", w.Code)
 	}
 
 	w := projectKeyHTTP(h, "GET", path, "admin", "")

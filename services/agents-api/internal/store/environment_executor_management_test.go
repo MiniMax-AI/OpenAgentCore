@@ -171,11 +171,22 @@ func TestArchivedProjectExecutorCredentials(t *testing.T) {
 	if _, err := s.ArchiveProject(keyAdminContext(ctx, project.ID), project.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.IssueProjectExecutorCredential(keyAdminContext(ctx, project.ID), p, environment.ID, uuid.NewString(), false); !errors.Is(err, ErrProjectArchived) {
-		t.Fatal("archived issue", err)
-	}
-	if _, err := s.IssueProjectExecutorCredential(keyAdminContext(ctx, project.ID), p, environment.ID, keyID, true); !errors.Is(err, ErrProjectArchived) {
-		t.Fatal("archived rotation", err)
+	// Order: the target (404) first, then the archived Project (409), before
+	// the key's own exists conflict or unknown-key rotation 404.
+	for _, test := range []struct {
+		environment, key string
+		rotate           bool
+		want             error
+	}{
+		{uuid.NewString(), uuid.NewString(), false, ErrNotFound},
+		{environment.ID, uuid.NewString(), false, ErrProjectArchived},
+		{environment.ID, keyID, false, ErrProjectArchived},
+		{environment.ID, keyID, true, ErrProjectArchived},
+		{environment.ID, uuid.NewString(), true, ErrProjectArchived},
+	} {
+		if _, err := s.IssueProjectExecutorCredential(keyAdminContext(ctx, project.ID), p, test.environment, test.key, test.rotate); !errors.Is(err, test.want) {
+			t.Fatal("archived write", test, err)
+		}
 	}
 	if listed, err := s.ListProjectExecutorCredentials(ctx, p, environment.ID); err != nil || len(listed) != 1 {
 		t.Fatal("archived list", listed, err)

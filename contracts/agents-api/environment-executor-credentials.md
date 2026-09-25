@@ -46,6 +46,13 @@ whose `key_id` already exists and does not set `rotate:true`, even after
 revocation. `project_archived`: the Project is archived, so it gets no new or
 rotated credential; listing and revocation remain available there, because
 revoking must always work.
+
+An issuance or rotation is checked in this order, and the first failure is
+returned: the request body (400); the target Environment, which must be a
+`self_hosted` Environment of this Project whose Session exists (404); an archived
+Project (409 `project_archived`); then the key itself (409
+`executor_credential_exists` without `rotate`, or 404 when rotating a `key_id`
+that was never issued).
 Rotation replaces the secret of an existing key restricted to this Environment,
 keeps that Environment, invalidates the previous secret and restores a revoked
 key; rotating an unknown `key_id` returns 404. Revocation is idempotent and

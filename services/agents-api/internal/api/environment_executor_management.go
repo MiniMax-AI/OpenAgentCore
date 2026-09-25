@@ -80,10 +80,8 @@ func (h *Handler) listExecutorCredentials(w http.ResponseWriter, r *http.Request
 // @Failure 400,401,404,409,500 {object} v1.ErrorResponse
 // @Router /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials [post]
 func (h *Handler) issueExecutorCredential(w http.ResponseWriter, r *http.Request, s EnvironmentExecutorStore) {
-	binding, ok := h.adminProjectScope(w, r)
-	if !ok {
-		return
-	}
+	// Check order: request body (400), target (404), archived Project (409),
+	// then the key itself (409 exists, or 404 for rotating an unknown key).
 	raw, ok := readJSONBody(w, r)
 	if !ok {
 		return
@@ -92,6 +90,10 @@ func (h *Handler) issueExecutorCredential(w http.ResponseWriter, r *http.Request
 	var fields map[string]json.RawMessage
 	if decodeInputObject(raw, &input, "key_id", "rotate") != nil || json.Unmarshal(raw, &fields) != nil || bytes.Equal(bytes.TrimSpace(fields["rotate"]), []byte("null")) || !executorManagementID(input.KeyID) {
 		writeStoreError(w, r, store.ErrInvalidInput)
+		return
+	}
+	binding, ok := h.adminProjectScope(w, r)
+	if !ok {
 		return
 	}
 	credential, err := s.IssueProjectExecutorCredential(r.Context(), binding.Principal, chi.URLParam(r, "environment_id"), input.KeyID, input.Rotate)

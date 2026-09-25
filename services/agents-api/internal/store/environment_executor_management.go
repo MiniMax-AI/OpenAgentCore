@@ -58,7 +58,11 @@ func (s *Store) ListProjectExecutorCredentials(ctx context.Context, project iden
 // gets neither (ErrProjectArchived). The administrator audit entry commits in
 // the same transaction and never contains the secret.
 func (s *Store) IssueProjectExecutorCredential(ctx context.Context, project identity.Principal, environment, keyID string, rotate bool) (IssuedExecutorCredential, error) {
+	// The target is checked first, then the archived Project, then the key.
 	if err := s.selfHostedExecutorTarget(ctx, project, environment); err != nil {
+		return IssuedExecutorCredential{}, err
+	}
+	if err := activeProject(ctx, s.queries, project); err != nil {
 		return IssuedExecutorCredential{}, err
 	}
 	if !rotate {
@@ -103,27 +107,36 @@ func executorCredentialAudit(project identity.Principal, action, keyID string) f
 	}
 }
 
-// activeProjectAudit share-locks the Project, which archiving updates, so an
-// issuance or rotation either commits before the archive or sees it and fails.
+// activeProjectAudit repeats the archive check in the writing transaction. It
+// share-locks the Project, which archiving updates, so an issuance or rotation
+// either commits before the archive or sees it and fails.
 func activeProjectAudit(project identity.Principal, action, keyID string) func(context.Context, *sqlc.Queries) error {
 	audit := executorCredentialAudit(project, action, keyID)
 	return func(ctx context.Context, q *sqlc.Queries) error {
-		tenant, err := parseID(project.TenantID)
-		if err != nil {
+		if err := activeProject(ctx, q, project); err != nil {
 			return err
-		}
-		row, err := q.LockProjectByTenant(ctx, tenant)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
-		if row.ArchivedAt.Valid {
-			return ErrProjectArchived
 		}
 		return audit(ctx, q)
 	}
+}
+
+// activeProject returns ErrProjectArchived for an archived Project.
+func activeProject(ctx context.Context, q *sqlc.Queries, project identity.Principal) error {
+	tenant, err := parseID(project.TenantID)
+	if err != nil {
+		return err
+	}
+	row, err := q.LockProjectByTenant(ctx, tenant)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if row.ArchivedAt.Valid {
+		return ErrProjectArchived
+	}
+	return nil
 }
 
 func (s *Store) selfHostedExecutorTarget(ctx context.Context, principal identity.Principal, environment string) error {
