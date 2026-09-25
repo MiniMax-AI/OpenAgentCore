@@ -13,7 +13,8 @@ function selection(value: unknown, invalid: Invalid): SessionExecutionConfigurat
   return { value: value.value as string | null, source: value.source as ExecutionConfigurationSource };
 }
 
-function safeProvider(value: unknown, invalid: Invalid): ModelProviderView {
+/** The safe provider view shared by frozen Session configuration and saved Agent reads. */
+export function safeProvider(value: unknown, invalid: Invalid): ModelProviderView {
   if (!isRecord(value) || !onlyFields(value, providerFields) ||
     (value.protocol !== "responses" && value.protocol !== "anthropic") ||
     typeof value.base_url !== "string" || typeof value.api_key_configured !== "boolean" ||
