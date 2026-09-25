@@ -104,6 +104,10 @@ func TestProjectExecutorCredentialsHTTP(t *testing.T) {
 	if w := projectKeyHTTP(h, "POST", path, "admin", body); w.Code != 409 || !strings.Contains(w.Body.String(), `"code":"executor_credential_exists"`) || strings.Contains(w.Body.String(), "synthetic-connect-only") {
 		t.Fatal("uncertain retry", w.Code, w.Body)
 	}
+	f.err = store.ErrProjectArchived
+	if w := projectKeyHTTP(h, "POST", path, "admin", body); w.Code != 409 || !strings.Contains(w.Body.String(), `"code":"project_archived"`) {
+		t.Fatal("archived Project", w.Code, w.Body)
+	}
 	f.err = store.ErrNotFound
 	// Rotating a key_id that was never issued is not found.
 	if w := projectKeyHTTP(h, "POST", path, "admin", `{"key_id":"`+uuid.NewString()+`","rotate":true}`); w.Code != 404 || !f.rotate {

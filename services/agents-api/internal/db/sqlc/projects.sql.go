@@ -170,6 +170,25 @@ func (q *Queries) LockProject(ctx context.Context, id pgtype.UUID) (Project, err
 	return i, err
 }
 
+const lockProjectByTenant = `-- name: LockProjectByTenant :one
+SELECT id, name, tenant_id, subject_kind, subject_id, created_at, archived_at FROM projects WHERE tenant_id=$1 FOR SHARE
+`
+
+func (q *Queries) LockProjectByTenant(ctx context.Context, tenantID pgtype.UUID) (Project, error) {
+	row := q.db.QueryRow(ctx, lockProjectByTenant, tenantID)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.TenantID,
+		&i.SubjectKind,
+		&i.SubjectID,
+		&i.CreatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
 const lockProjectForUpdate = `-- name: LockProjectForUpdate :one
 SELECT id, name, tenant_id, subject_kind, subject_id, created_at, archived_at FROM projects WHERE id=$1 FOR UPDATE
 `

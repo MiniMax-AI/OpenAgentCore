@@ -143,3 +143,47 @@ func TestProjectEnvironmentExecutorManagement(t *testing.T) {
 		t.Fatal("deleted target revoke", err)
 	}
 }
+
+// An archived Project gets no new or rotated credential; listing and revoking still work.
+func TestArchivedProjectExecutorCredentials(t *testing.T) {
+	s, _ := testStore(t)
+	ctx := t.Context()
+	project := createTestProject(t, s)
+	binding, err := s.GetProject(ctx, project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := binding.Principal
+	input := environmentInput(uuid.NewString(), "self_hosted", "/workspace")
+	input.Creator = p.Subject()
+	session, err := s.CreateSession(ctx, p.TenantID, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := s.GetSessionEnvironment(ctx, p.TenantID, session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyID := uuid.NewString()
+	if _, err := s.IssueProjectExecutorCredential(keyAdminContext(ctx, project.ID), p, environment.ID, keyID, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ArchiveProject(keyAdminContext(ctx, project.ID), project.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.IssueProjectExecutorCredential(keyAdminContext(ctx, project.ID), p, environment.ID, uuid.NewString(), false); !errors.Is(err, ErrProjectArchived) {
+		t.Fatal("archived issue", err)
+	}
+	if _, err := s.IssueProjectExecutorCredential(keyAdminContext(ctx, project.ID), p, environment.ID, keyID, true); !errors.Is(err, ErrProjectArchived) {
+		t.Fatal("archived rotation", err)
+	}
+	if listed, err := s.ListProjectExecutorCredentials(ctx, p, environment.ID); err != nil || len(listed) != 1 {
+		t.Fatal("archived list", listed, err)
+	}
+	if err := s.RevokeProjectExecutorCredential(keyAdminContext(ctx, project.ID), p, environment.ID, keyID); err != nil {
+		t.Fatal("archived revoke", err)
+	}
+	if listed, err := s.ListProjectExecutorCredentials(ctx, p, environment.ID); err != nil || len(listed) != 1 || listed[0].RevokedAt == nil {
+		t.Fatal("revoked list", listed, err)
+	}
+}

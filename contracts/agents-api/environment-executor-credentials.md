@@ -41,8 +41,11 @@ execution principal. The secret authorizes daemon enrollment and connection
 (`/api/v1/agent-daemon/*`) for this exact Environment only, never `/v1`, `/core/v1`,
 sandbox-node enrollment or project resource operations.
 
-The only write conflict is 409 `executor_credential_exists`: an issuance whose
-`key_id` already exists and does not set `rotate:true`, even after revocation.
+Writes have two conflicts, both 409. `executor_credential_exists`: an issuance
+whose `key_id` already exists and does not set `rotate:true`, even after
+revocation. `project_archived`: the Project is archived, so it gets no new or
+rotated credential; listing and revocation remain available there, because
+revoking must always work.
 Rotation replaces the secret of an existing key restricted to this Environment,
 keeps that Environment, invalidates the previous secret and restores a revoked
 key; rotating an unknown `key_id` returns 404. Revocation is idempotent and

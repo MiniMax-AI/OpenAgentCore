@@ -68,7 +68,7 @@ func (h *Handler) listExecutorCredentials(w http.ResponseWriter, r *http.Request
 }
 
 // @Summary Issue or explicitly rotate a self_hosted Environment executor credential
-// @Description Core key only. Returns a connect-only secret once, restricted to daemon enrollment and connection for this Environment, with the Project's principal as its execution principal. Repeating an issuance key_id returns 409 executor_credential_exists; after an uncertain response, list the credentials and rotate that key_id explicitly. Rotation keeps the key's Environment, invalidates the old secret and restores a revoked key; rotating an unknown key_id returns 404. The Environment must be a self_hosted Environment of the Project whose Session exists; otherwise 404. Each write records an administrator audit entry without the secret.
+// @Description Core key only. Returns a connect-only secret once, restricted to daemon enrollment and connection for this Environment, with the Project's principal as its execution principal. Repeating an issuance key_id returns 409 executor_credential_exists; after an uncertain response, list the credentials and rotate that key_id explicitly. Rotation keeps the key's Environment, invalidates the old secret and restores a revoked key; rotating an unknown key_id returns 404. In an archived Project, issuance and rotation return 409 project_archived. The Environment must be a self_hosted Environment of the Project whose Session exists; otherwise 404. Each write records an administrator audit entry without the secret.
 // @Tags Executor Credentials
 // @Accept json
 // @Produce json
@@ -103,7 +103,7 @@ func (h *Handler) issueExecutorCredential(w http.ResponseWriter, r *http.Request
 }
 
 // @Summary Revoke a self_hosted Environment executor credential
-// @Description Core key only. Revokes one credential restricted to this Environment; repeated revocation is safe. Revocation denies future enrollment and connection but does not stop executor-owned compute. The Environment must be a self_hosted Environment of the Project whose Session exists; otherwise 404.
+// @Description Core key only. Revokes one credential restricted to this Environment; repeated revocation is safe and it also works in an archived Project. Revocation denies future enrollment and connection but does not stop executor-owned compute. The Environment must be a self_hosted Environment of the Project whose Session exists; otherwise 404.
 // @Tags Executor Credentials
 // @Security DeploymentAdminAuth
 // @Param project_id path string true "Project UUID"

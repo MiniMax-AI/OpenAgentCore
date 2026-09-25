@@ -21,6 +21,9 @@ LIMIT sqlc.arg(page_limit)::int;
 -- name: LockProject :one
 SELECT * FROM projects WHERE id=$1 FOR SHARE;
 
+-- name: LockProjectByTenant :one
+SELECT * FROM projects WHERE tenant_id=$1 FOR SHARE;
+
 -- name: LockProjectForUpdate :one
 SELECT * FROM projects WHERE id=$1 FOR UPDATE;
 

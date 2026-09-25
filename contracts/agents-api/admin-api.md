@@ -33,7 +33,9 @@ startup for bootstrap and management.
 | Revoke executor credential | `DELETE /projects/{project_id}/environments/{environment_id}/executor-credentials/{key_id}` | HTTP 204 |
 
 Executor credentials apply only to a `self_hosted` Environment of the Project
-whose Session exists; see [executor credentials](environment-executor-credentials.md).
+whose Session exists. An archived Project returns 409 `project_archived` for
+issuance and rotation but still lists and revokes; see
+[executor credentials](environment-executor-credentials.md).
 Project and key IDs are server-generated UUIDs. Project metadata contains `id`, `name`,
 `created_at`, nullable `archived_at`, and `active_key_count`. Key metadata contains
 `id`, `project_id`, `name`, `prefix`, `created_at`, and nullable `revoked_at`.

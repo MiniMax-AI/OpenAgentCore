@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
@@ -53,22 +54,24 @@ func (s *Store) ListProjectExecutorCredentials(ctx context.Context, project iden
 }
 
 // IssueProjectExecutorCredential issues a new key or, with rotate, replaces the
-// secret of an existing key restricted to the Environment. The administrator
-// audit entry commits in the same transaction and never contains the secret.
+// secret of an existing key restricted to the Environment. An archived Project
+// gets neither (ErrProjectArchived). The administrator audit entry commits in
+// the same transaction and never contains the secret.
 func (s *Store) IssueProjectExecutorCredential(ctx context.Context, project identity.Principal, environment, keyID string, rotate bool) (IssuedExecutorCredential, error) {
 	if err := s.selfHostedExecutorTarget(ctx, project, environment); err != nil {
 		return IssuedExecutorCredential{}, err
 	}
 	if !rotate {
-		return s.issueExecutorCredential(ctx, project, keyID, environment, executorCredentialAudit(project, "issue", keyID))
+		return s.issueExecutorCredential(ctx, project, keyID, environment, activeProjectAudit(project, "issue", keyID))
 	}
 	if err := s.exactExecutorRestriction(ctx, project, environment, keyID); err != nil {
 		return IssuedExecutorCredential{}, err
 	}
-	return s.rotateExecutorCredential(ctx, project, keyID, executorCredentialAudit(project, "rotate", keyID))
+	return s.rotateExecutorCredential(ctx, project, keyID, activeProjectAudit(project, "rotate", keyID))
 }
 
-// RevokeProjectExecutorCredential is idempotent; each successful request is audited.
+// RevokeProjectExecutorCredential is idempotent and also works in an archived
+// Project; each successful request is audited.
 func (s *Store) RevokeProjectExecutorCredential(ctx context.Context, project identity.Principal, environment, keyID string) error {
 	if err := s.selfHostedExecutorTarget(ctx, project, environment); err != nil {
 		return err
@@ -97,6 +100,29 @@ func (s *Store) RevokeProjectExecutorCredential(ctx context.Context, project ide
 func executorCredentialAudit(project identity.Principal, action, keyID string) func(context.Context, *sqlc.Queries) error {
 	return func(ctx context.Context, q *sqlc.Queries) error {
 		return recordAdminMutation(ctx, q, project.TenantID, action, "executor_credential", keyID)
+	}
+}
+
+// activeProjectAudit share-locks the Project, which archiving updates, so an
+// issuance or rotation either commits before the archive or sees it and fails.
+func activeProjectAudit(project identity.Principal, action, keyID string) func(context.Context, *sqlc.Queries) error {
+	audit := executorCredentialAudit(project, action, keyID)
+	return func(ctx context.Context, q *sqlc.Queries) error {
+		tenant, err := parseID(project.TenantID)
+		if err != nil {
+			return err
+		}
+		row, err := q.LockProjectByTenant(ctx, tenant)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if row.ArchivedAt.Valid {
+			return ErrProjectArchived
+		}
+		return audit(ctx, q)
 	}
 }
 
