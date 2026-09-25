@@ -23,11 +23,11 @@ function rememberRequirementsSeen() {
   try { window.localStorage.setItem(REQUIREMENTS_SEEN, "1"); } catch { /* Storage can be unavailable; the list then opens each time. */ }
 }
 
-/** A command, with the nodes registered before it and the limits it approved, which identify its node. */
 /** The limits a new flow starts from. */
 const DEFAULT_ACTIVE = "2";
 const DEFAULT_RETAINED = "8";
 
+/** A command, with the nodes registered before it and the limits it approved, which identify its node. */
 interface Enrollment extends EnrollmentTarget {
   token: string;
   expires_at: string;
