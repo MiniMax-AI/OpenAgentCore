@@ -832,7 +832,7 @@ definitions:
       compute_phase:
         type: string
       compute_phase_changed_at:
-        description: When the allocation entered its current compute_phase; null for allocations created before it was recorded. For a suspended microsandbox allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
+        description: The time the allocation entered its current compute_phase, or null when unknown; an allocation that existed before Core recorded it reports null until its next phase change. For a suspended microsandbox allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
         type: string
         x-nullable: true
       created_at:

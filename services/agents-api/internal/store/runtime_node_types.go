@@ -138,7 +138,7 @@ type RuntimeNodeAllocation struct {
 	EnvironmentID string `json:"environment_id"`
 	State         string `json:"state"`
 	ComputePhase  string `json:"compute_phase"`
-	// When the allocation entered its current compute_phase; null for allocations created before it was recorded. For a suspended microsandbox allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
+	// The time the allocation entered its current compute_phase, or null when unknown; an allocation that existed before Core recorded it reports null until its next phase change. For a suspended microsandbox allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
 	ComputePhaseChangedAt *time.Time `json:"compute_phase_changed_at" extensions:"x-nullable"`
 	Initialization        string     `json:"initialization"`
 	CreatedAt             time.Time  `json:"created_at"`

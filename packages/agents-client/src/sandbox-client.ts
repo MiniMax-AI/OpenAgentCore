@@ -107,7 +107,7 @@ export interface SandboxAllocation {
   environment_id: string;
   state: string;
   compute_phase: string;
-  /** When the allocation entered compute_phase; null when it predates this record. */
+  /** When the allocation entered its current compute_phase, or null when unknown; an allocation that existed before Core recorded it reports null until its next phase change. */
   compute_phase_changed_at: string | null;
   diagnostic: SandboxDiagnostic;
   initialization: string;

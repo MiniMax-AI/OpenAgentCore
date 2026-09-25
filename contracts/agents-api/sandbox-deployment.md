@@ -45,9 +45,10 @@ safely, but never raise its limits.
 
 `GET /core/v1/sandbox/nodes/{node_id}/allocations` lists the node's unreleased
 allocations. Each item's `compute_phase_changed_at` is the time the allocation
-entered its current `compute_phase`, or null for allocations created before Core
-recorded it. A suspended microsandbox allocation's age, combined with the
-deployment's snapshot retention, tells roughly when Core reclaims it.
+entered its current `compute_phase`, or null when unknown; an allocation that
+existed before Core recorded it reports null until its next phase change. A
+suspended microsandbox allocation's age, combined with the deployment's snapshot
+retention, tells roughly when Core reclaims it.
 
 ## Selection request
 
