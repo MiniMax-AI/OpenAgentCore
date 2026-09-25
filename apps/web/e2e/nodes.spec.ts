@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectManagementBoundary, openConsole, setNode } from "./console";
+import { expectManagementBoundary, openConsole, setNode, writes } from "./console";
 
 test.afterEach(async ({ request }) => expectManagementBoundary(request));
 
@@ -100,8 +100,21 @@ test("sets up own-machine sandboxes page by page, with the Runtime from the dist
 
   // The saved specification carries the Runtime read from the console's manifest.
   await expect(page.getByText("c0ffee000000")).toBeVisible();
-  // Own machines continue straight to adding the first node.
-  await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
+  // Own machines continue straight to adding the first node, at its limits: no command is issued yet.
+  await expect(page.getByRole("dialog", { name: "Add node" }).getByLabel("Sandboxes at once")).toBeVisible();
+  expect(await writes(request)).toEqual(["POST /core/v1/sandbox/deployment"]);
+});
+
+test("saves E2B without opening Add node, as it has no machines", async ({ page, request }) => {
+  await openConsole(page, request, "nodes", { sandbox: "none" });
+  await page.getByRole("button", { name: "E2B cloud" }).click();
+  await page.getByLabel("E2B API key").fill("fixture-private-key");
+  await page.getByLabel("Template build").fill("template:94be54a1-138c-4f30-bc87-b13686272dbe");
+  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByLabel("Core address").fill("https://core.example.com");
+  await page.getByRole("button", { name: "Save configuration" }).click();
+  await expect(page.getByRole("heading", { name: "Sandbox backend", level: 1 })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
 test("keeps the saved size and Runtime for the same backend, and starts another from its defaults", async ({ page, request }) => {
