@@ -60,7 +60,12 @@ function installation() {
         secret("database_url", ["core"]),
       ],
     },
-    address_bindings: { nodes: nodes.length, nodes_on_other_address: nodes.filter((node) => node.core_url !== publicUrl()).length, hosted_sandboxes: 0, self_hosted_executors: 0 },
+    // As Core counts them: the allocations held on the nodes, and the unrevoked executor credentials.
+    address_bindings: {
+      nodes: nodes.length, nodes_on_other_address: nodes.filter((node) => node.core_url !== publicUrl()).length,
+      hosted_sandboxes: nodes.length ? state.allocations.length : 0,
+      self_hosted_executors: [...state.executorCredentials.values()].flat().filter((credential) => credential.revoked_at === null).length,
+    },
   };
 }
 
@@ -286,11 +291,11 @@ async function sandboxRoute(request, response, path) {
     if (initialize && state.deployment) return error(response, 409, "The sandbox deployment is already configured.", "sandbox_deployment_conflict");
     if (!initialize && !state.deployment) return error(response, 409, "The sandbox deployment is not configured.", "sandbox_deployment_conflict");
     // As Core: the address is config.json's public_url and read-only.
-    if ("core_url" in input) return error(response, 400, "core_url is read-only; set public_url in config.json.", "invalid_sandbox_configuration", "core_url");
+    if ("core_url" in input) return error(response, 400, "core_url is derived from the installation public URL (public_url in config.json, AGENTS_API_PUBLIC_URL for Core) and cannot be set here. Remove it.", "invalid_request_error", "core_url");
     const e2b = input.provider === "e2b";
     if (!e2b && (!input.resources || !input.runtime)) return error(response, 400, "resources and runtime are required.", "invalid_sandbox_configuration");
-    // E2B sandboxes reach Core over the internet, which a loopback or HTTP public_url cannot serve.
-    if (e2b && !publicUrl().startsWith("https://")) return error(response, 409, "E2B sandboxes need an HTTPS public_url. Set public_url in config.json, then run parsar apply.", "sandbox_configuration_error");
+    // As Core (ErrSandboxPublicURLUnreachable): E2B sandboxes reach Core over the internet, which a loopback public_url cannot serve.
+    if (e2b && state.installation === "local") return error(response, 409, "E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback (public_url in config.json, AGENTS_API_PUBLIC_URL for Core), then save again.", "sandbox_configuration_error");
     // As Core: E2B may omit resources and adopt its template build's CPU and memory; only microsandbox suspends.
     const resources = input.resources ?? { cpus: templateBuild.resources.cpus, memory_mib: templateBuild.resources.memory_mib };
     state.deployment = {

@@ -29,7 +29,7 @@ test("explains an E2B rejection in the wizard, with the file to edit and the com
   await expect(address).toContainText("Only the Core machine can reach this address");
   await page.getByRole("button", { name: "Save configuration" }).click();
   const rejection = page.locator(".wizard-rejection");
-  await expect(rejection).toContainText("E2B sandboxes need an HTTPS public_url.");
+  await expect(rejection).toContainText("E2B sandboxes reach Core over the internet.");
   await expect(rejection).toContainText("/opt/parsar/config.json");
   await expect(rejection).toContainText("sudo parsar apply");
   // Nothing was saved and nothing is uncertain: no dialog, and the wizard stays on its review.
