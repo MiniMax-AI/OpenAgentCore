@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { ArrowRight, Cloud, LogOut } from "lucide-react";
+import { ArrowRight, Cloud } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ThemeMenu } from "../../components/ThemeMenu";
 import { setLanguage } from "../../i18n";
@@ -16,21 +16,6 @@ export function ConsoleLanguage() {
   return <select className="console-language" aria-label={t("Console language")} value={language} onChange={(event) => void setLanguage(event.target.value === "zh-CN" ? "zh-CN" : "en")}>
     <option value="en">English</option><option value="zh-CN">中文</option>
   </select>;
-}
-
-export function ConsoleAccountMenu() {
-  const account = useConsoleAccount();
-  const { t } = useTranslation("firstRun");
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
-  if (!account) return null;
-  return <div className="console-account-menu">
-    <button type="button" title={account.username} disabled={busy} onClick={async () => {
-      setBusy(true); setFailed(false);
-      try { await account.logout(); } catch { setBusy(false); setFailed(true); }
-    }}><LogOut size={14} aria-hidden="true" /><span>{t(busy ? "Signing out…" : "Sign out")}</span></button>
-    {failed ? <small role="alert">{t("Could not sign out. Try again.")}</small> : null}
-  </div>;
 }
 
 export function ConsoleAccess({ children }: { children: ReactNode }) {

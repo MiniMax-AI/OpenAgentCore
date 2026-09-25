@@ -16,9 +16,6 @@
 .console-auth-form .field small { font-size: 11px; line-height: 1.6; color: var(--fg-muted); }
 .console-auth-form .button { min-height: 42px; justify-content: center; gap: 12px; }
 .console-auth-form .console-auth-error { color: var(--danger); }
-.console-account-menu > button { background: transparent; border: 0; display: flex; gap: 9px; align-items: center; padding: 8px; color: var(--fg-muted); font: inherit; font-size: 12px; cursor: pointer; }
-.console-account-menu small { color: var(--danger); }
-.console-account-menu > button:hover { color: var(--fg); }
 @keyframes console-arrive { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 980px) { .console-access-stage { gap: 32px; padding: 28px; } .console-access-story h1 { font-size: 28px; } }
 @media (prefers-reduced-motion: reduce) { .console-access-story, .console-auth-form { animation: none; } }

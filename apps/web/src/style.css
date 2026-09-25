@@ -370,17 +370,12 @@ html[data-theme="dark"] .brand-mark-dark {
   grid-column: 1 / -1;
 }
 
-.sidebar-footer > .console-account-menu {
-  grid-column: 1;
-  grid-row: 3;
-  border-top: 1px solid var(--line);
-  margin-top: 7px;
-  padding-top: 6px;
-}
-
 .sidebar-footer > .sidebar-preferences {
   grid-column: 1;
   grid-row: 2;
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
 }
 
 .sidebar-preferences {
@@ -389,9 +384,11 @@ html[data-theme="dark"] .brand-mark-dark {
   gap: 6px;
 }
 
-.sidebar-footer .console-account-menu > button { width: 100%; min-height: 32px; padding: 5px 7px; text-align: left; }
 .sidebar-footer .appearance-menu-trigger { width: 100%; justify-content: flex-start; border-color: transparent; background: transparent; }
 .sidebar-footer .appearance-menu { width: 100%; }
+.sidebar-footer .appearance-menu-account-trigger { min-height: 36px; height: auto; gap: 9px; padding: 6px 7px; color: var(--fg); }
+.sidebar-footer .appearance-account-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font-size: 12px; font-weight: 550; }
+.appearance-account-section small[role="alert"] { padding: 6px 7px; color: var(--danger); font-size: 11px; }
 
 .theme-menu {
   display: inline-flex;
@@ -4521,28 +4518,9 @@ button.trace-step-row:hover {
     gap: 6px;
   }
 
-  .sidebar-footer > .console-account-menu,
   .sidebar-footer > .sidebar-preferences {
     grid-column: 1;
     grid-row: auto;
-  }
-
-  .sidebar-footer > .console-account-menu { margin-top: 0; padding-top: 4px; }
-
-  .sidebar-footer .console-account-menu > button {
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-  }
-
-  .sidebar-footer .console-account-menu > button > span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
   }
 
   .core-switcher {

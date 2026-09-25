@@ -24,4 +24,6 @@ export const navigation = {
   switchToChinese: "Switch to Simplified Chinese",
   switchToEnglish: "Switch to English",
   appearanceSettings: "Language and appearance",
+  accountAndAppearance: "Account, language and appearance",
+  account: "Account",
 } as const;

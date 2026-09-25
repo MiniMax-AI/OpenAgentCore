@@ -21,7 +21,6 @@ import { ConsoleNavigation } from "./features/first-run/ConsoleNavigation";
 import { isLocalProxyBaseUrl } from "./lib/connection";
 import { ApiKeyExample, ApiKeyPanel } from "./features/api-keys/ApiKeyPanel";
 import { FirstRunHome } from "./features/first-run/FirstRunHome";
-import { ConsoleAccountMenu } from "./features/first-run/ConsoleAccess";
 import { useIntroduction } from "./features/first-run/useIntroduction";
 import { SandboxManagerView } from "./features/sandbox/SandboxManagerView";
 import { SandboxProvider } from "./features/sandbox/SandboxContext";
@@ -2326,9 +2325,8 @@ export function App() {
             </span>
             <Settings2 size={14} strokeWidth={1.5} />
           </button>
-          <ConsoleAccountMenu />
           <div className="sidebar-preferences">
-            <AppearanceMenu />
+            <AppearanceMenu withAccount />
           </div>
         </div>
       </aside>
