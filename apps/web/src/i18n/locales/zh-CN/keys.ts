@@ -98,7 +98,7 @@ export const keys: TranslationShape<typeof english> = {
   howToCall: {
     title: "如何调用",
     shell: "终端",
-    copy: "复制 {{label}}",
+    copy: "复制示例：{{label}}",
     copyFailed: "请选中文本后手动复制。",
     loading: "正在读取 API 地址",
     failed: "无法读取 API 地址。",

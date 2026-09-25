@@ -267,7 +267,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         {snapshot.deployment.maintenance ? <p className="sandbox-maintenance" role="status">{t("Maintenance is enabled. New sandbox placement is paused.")}</p> : null}
         {staleNodes.length ? <p className="sandbox-maintenance sandbox-address-warning" role="status">{staleNodes.length === 1
           ? t("{{name}} is still bound to an old Core address. Remove it and add it again.", { name: staleNodes[0] })
-          : t("{{count}} nodes are still bound to an old Core address: {{names}}. Remove them and add them again.", { count: staleNodes.length, names: staleNodes.join(", ") })}</p> : null}
+          : t("{{count}} nodes are still bound to an old Core address: {{names}}. Remove them and add them again.", { count: staleNodes.length, names: new Intl.ListFormat(i18n.resolvedLanguage, { type: "conjunction" }).format(staleNodes) })}</p> : null}
         <SandboxDeploymentSettings key={`${snapshot.deployment.generation}:${snapshot.deployment.maintenance}:${revision}`} deployment={snapshot.deployment} fresh={confirmed} disabled={busy || loading || !fresh || setupNeedsRefresh} onMaintenance={maintenance} onUpdate={update} onRefresh={refresh} />
         {hostedNodes ? <section aria-label={t("Sandbox nodes")}>
           {nodes.length

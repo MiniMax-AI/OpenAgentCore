@@ -96,7 +96,7 @@ export const keys = {
   howToCall: {
     title: "How to call",
     shell: "Shell",
-    copy: "Copy {{label}}",
+    copy: "Copy the {{label}} sample",
     copyFailed: "Select the text and copy it manually.",
     loading: "Reading the API address",
     failed: "The API address couldn't be read.",
