@@ -32,7 +32,7 @@ test("adds a node: host requirements, a countdown, the same command after closin
   await expect(field).toHaveValue(/enroll_fixture_/);
   await expect(add.getByRole("timer")).toHaveText(/^Expires in (10:00|9:\d\d)$/);
   const progress = add.getByRole("status", { name: "Registration progress" });
-  await expect(progress).toHaveText(/Waiting for registration.*Connect.*Docker ready/);
+  await expect(progress).toHaveText(/Waiting for registration.*Connect.*Docker check/);
 
   // Closing keeps the command for the next opening.
   const first = await field.inputValue();
@@ -58,7 +58,7 @@ test("adds a node: host requirements, a countdown, the same command after closin
   await setNode(request, { id: "node-new", name: "edge-04" });
   await page.clock.fastForward("10:30");
   await page.getByRole("button", { name: "Add node" }).click();
-  await expect(progress).toHaveText(/Registered · edge-04.*Waiting to connect.*Docker ready/);
+  await expect(progress).toHaveText(/Registered · edge-04.*Waiting to connect.*Docker check/);
   await expect(add.getByText("Command expired")).toHaveCount(0);
   // Past the installer's minute without connecting, the dialog points at the node's log.
   await page.clock.fastForward("01:01");

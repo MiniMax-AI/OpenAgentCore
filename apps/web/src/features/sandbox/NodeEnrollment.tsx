@@ -224,7 +224,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const labels: Record<StepState, string>[] = [
     { done: node ? `${t("Registered")} · ${node.name}` : t("Registered"), current: t("Waiting for registration"), future: t("Waiting for registration") },
     { done: t("Connected"), current: t("Waiting to connect"), future: t("Connect") },
-    { done: t("{{backend}} ready", { backend }), current: t("Waiting for {{backend}}", { backend }), future: t("{{backend}} ready", { backend }) },
+    { done: t("{{backend}} ready", { backend }), current: t("Waiting for {{backend}}", { backend }), future: t("{{backend}} check", { backend }) },
   ];
   const tones: Record<StepState, Tone> = { done: "ok", current: progress.problem ? "warning" : "pending", future: "neutral" };
   const steps = progressSteps(progress.stage === "ready" ? "connected" : progress.stage).map((state, index) => ({ state, label: labels[index]![state], tone: tones[state] }));
