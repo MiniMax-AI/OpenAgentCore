@@ -84,8 +84,28 @@ export const agentDefinitions = [
   },
 ];
 
-/** Which project owns each definition (index into the demo projects). */
-export const agentProject = [0, 1, 2, 0, 1, 0, 1, 1, 2, 3];
+/**
+ * Saved Agents with a model provider, as Core reads them: whether a key is saved,
+ * never the key. One saved only a provider, so it has no harness. No Session uses
+ * them, so the demo Sessions stay the same.
+ */
+export const providerAgentDefinitions = [
+  {
+    id: "agent_11c4f2a8", name: "Spec drafter", model: "MiniMax-M2", reasoning: {},
+    instructions: "Draft a product spec from the linked discussion: problem, users, scope, open questions.",
+    tools: [], metadata: { team: "product" },
+    x_agents_core: { model_provider: { protocol: "anthropic", base_url: "https://api.minimaxi.com/anthropic", api_key_configured: true, context_window: 204800, max_output_tokens: 65536 } },
+  },
+  {
+    id: "agent_12d7e3b9", name: "Research assistant", model: "kimi-k2", reasoning: {},
+    instructions: "Answer research questions with cited sources and a one-paragraph summary.",
+    tools: [], metadata: { team: "research" },
+    x_agents_core: { harness: "codex", model_provider: { protocol: "responses", base_url: "https://api.moonshot.cn/v1", api_key_configured: true } },
+  },
+];
+
+/** Which project owns each definition (index into the demo projects); the provider Agents come last. */
+export const agentProject = [0, 1, 2, 0, 1, 0, 1, 1, 2, 3, 0, 0];
 
 /** Prompt and reply pairs per Agent so Session transcripts read like real work. */
 export const agentConversations = {
