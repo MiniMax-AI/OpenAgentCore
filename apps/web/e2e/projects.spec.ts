@@ -18,7 +18,7 @@ test("creates a project, shows a new key once, revokes it and archives the proje
   await expect(issued.getByLabel("New key ci")).toHaveValue(/fixture-secret/);
   await issued.getByRole("button", { name: "I've saved this key" }).click();
   await expect(page.getByRole("table", { name: "Keys of Acceptance" })).toContainText("ci");
-  await expect(page.locator("input[readonly]")).toHaveCount(0);
+  await expect(page.getByLabel("New key ci")).toHaveCount(0);
   expect(await page.evaluate(() => JSON.stringify({ ...window.localStorage, ...window.sessionStorage }))).not.toContain("fixture-secret");
 
   await page.getByRole("button", { name: "Revoke key ci" }).click();

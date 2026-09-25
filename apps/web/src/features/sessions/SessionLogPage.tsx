@@ -25,7 +25,9 @@ import {
 } from "./session-log";
 import "./sessions.css";
 import { type Project } from "../../lib/admin-view";
-import { collections } from "../../lib/queries";
+import { collections, queryClient } from "../../lib/queries";
+import { forgetDeleted } from "../resources/detail-queries";
+import { sessionKey } from "./session-queries";
 import { TableSkeleton } from "../../components/Skeleton";
 import { ConsoleSelect } from "../../components/console-select";
 
@@ -202,6 +204,8 @@ export function SessionLogPage() {
         onDeleted={(target) => {
           setDeleted((current) => new Set(current).add(`${target.project.id}:${target.sessionId}`));
           setDeleteTarget(null);
+          // Drop it from the cached lists too, so another page or a revisit does not list it again.
+          forgetDeleted(queryClient, collections.sessions, sessionKey(target.project.id, target.sessionId));
         }}
       />
     </section>

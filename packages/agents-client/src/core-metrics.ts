@@ -46,7 +46,8 @@ export interface CoreMetrics {
   object: "core.metrics";
   range: { start: string; end: string; resolution_seconds: number };
   service: {
-    status: "running" | "maintenance" | "degraded";
+    /** `unknown` stands for a status this client does not recognise; it is never shown as running. */
+    status: "running" | "maintenance" | "degraded" | "unknown";
     /** Build revision (source commit) of the running Core. */
     revision: string | null;
     started_at: string | null;
@@ -124,10 +125,12 @@ export function projectCoreMetrics(value: unknown): CoreMetrics {
   const database = optional(body.database);
   const pool = optional(database.pool);
   const process = optional(body.process);
-  const status = service.status === "maintenance" || service.status === "degraded" ? service.status : "running";
+  const status = service.status === "running" || service.status === "maintenance" || service.status === "degraded" ? service.status : "unknown";
+  const resolution = number(range.resolution_seconds);
+  if (resolution === null || resolution <= 0) throw new AgentCoreError("Core metrics: range.resolution_seconds is missing.", 0, "invalid_response");
   return {
     object: "core.metrics",
-    range: { start: String(range.start ?? ""), end: String(range.end ?? ""), resolution_seconds: number(range.resolution_seconds) ?? 60 },
+    range: { start: String(range.start ?? ""), end: String(range.end ?? ""), resolution_seconds: resolution },
     service: {
       status,
       revision: text(service.revision),

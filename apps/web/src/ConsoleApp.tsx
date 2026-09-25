@@ -62,6 +62,12 @@ function ConsoleShell() {
   const { state } = useProjects();
   const [location, setLocation] = useState(readLocation);
   const [setupDone, setSetupDone] = useState(false);
+  // Once first-run setup has started it stays until it finishes: a background
+  // re-read of the projects (which now include the new one) must not replace it
+  // while the first key is on screen.
+  const needsSetup = state.status === "ready" && state.projects.length === 0;
+  const [setupStarted, setSetupStarted] = useState(false);
+  useEffect(() => { if (needsSetup) setSetupStarted(true); }, [needsSetup]);
 
   useEffect(() => {
     const sync = () => setLocation(readLocation());
@@ -91,7 +97,7 @@ function ConsoleShell() {
   }, [state.projects]);
 
   // First run: an administrator with no project yet creates the first one and its key.
-  if (state.status === "ready" && state.projects.length === 0 && !setupDone) {
+  if ((needsSetup || setupStarted) && !setupDone) {
     return <FirstProjectSetup onDone={() => setSetupDone(true)} />;
   }
 

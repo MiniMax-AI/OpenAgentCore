@@ -188,7 +188,7 @@ function TemplateDetailRoute({ projectId, templateId }: { projectId: string; tem
   const remove = useDeleteFlow<EnvironmentTemplateResource>(
     useCallback((template: EnvironmentTemplateResource) => projectClient(projectId).deleteEnvironmentTemplate(template.id), [projectId]),
     useCallback(() => { back(); forget(); }, [back, forget]),
-    { uncertain: tCommon("list.deleteUncertain") },
+    { uncertain: tCommon("list.deleteUncertain"), reread: () => void read.refetch() },
   );
 
   if (!read.data) {

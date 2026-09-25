@@ -10,7 +10,7 @@ import type { KeyFlowControls } from "./use-key-flow";
 export function FlowErrorMessage({ error, name }: { error: FlowError | null; name?: string }) {
   const { t } = useTranslation("keys");
   if (!error) return null;
-  const text = error.kind === "uncertain" ? t("errors.uncertain") : error.kind === "conflict" ? t("errors.conflict", { name: name ?? "" }) : t("errors.rejected", { message: error.message });
+  const text = error.kind === "uncertain" ? t("errors.uncertain") : t("errors.rejected", { message: error.message });
   return <p className="key-flow-error" role="alert">{text}</p>;
 }
 

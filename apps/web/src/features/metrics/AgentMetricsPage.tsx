@@ -204,9 +204,14 @@ function AgentMetricsContent({
     ? <p className="coverage-note coverage-note-error" role="alert">{tCommon("project.partial", { names: listFailures.map((entry) => entry.project.name).join(", ") })}</p>
     : null;
 
-  const outcome = agentMetricsOutcome(metrics);
+  const outcome = agentMetricsOutcome(metrics, listFailures.length);
   if (outcome === "failed") {
-    return <EmptyState icon={AlertTriangle} title={t("agent.readsFailedTitle")} description={t("agent.readsFailedDescription", { count: metrics.coverage.failedSessions })} />;
+    return (
+      <>
+        {listFailureNote}
+        <EmptyState icon={AlertTriangle} title={t("agent.readsFailedTitle")} description={t("agent.readsFailedDescription")} />
+      </>
+    );
   }
   const failedReads = metrics.coverage.failedSessions
     ? <p className="coverage-note coverage-note-error" role="alert">{t("coverage.failed", { count: metrics.coverage.failedSessions })}</p>

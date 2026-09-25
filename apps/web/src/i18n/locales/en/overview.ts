@@ -29,6 +29,7 @@ export const overview = {
     projects: "Projects could not be loaded: {{reason}}",
   },
   activity: {
+    unreadHelp: "Sessions of {{names}} could not be read and are missing from this chart.",
     title: "Session activity",
     range: "Last 24 hours",
     help: "Sessions created per hour across every project. Hovering a column also shows failed Sessions, placed by their last activity.",
@@ -115,6 +116,9 @@ export const overview = {
     coverageDetail: "{{reported}} of {{total}} Sessions reported usage",
   },
   attention: {
+    unlistedTitle: "Sessions needing attention could not be listed",
+    unreadDescription: "The Session lists of {{names}} could not be read. Refresh, or open the Session log.",
+    unlistedDescription: "Core counts {{count}} Sessions that need attention, but they were not among the Sessions read. Open the Session log to see them.",
     title: "Needs attention",
     subtitle: "Failed Sessions and Sessions waiting for a required action, across every project.",
     viewLog: "Session log",

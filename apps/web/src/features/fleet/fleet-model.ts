@@ -26,15 +26,16 @@ export interface CapacitySummary {
   cleanupPending: number;
 }
 
+/** Slots in use and their limits count online nodes only, so a used share never mixes in an offline node's stale figures. */
 export function capacitySummary(nodes: readonly SandboxNode[]): CapacitySummary {
   const online = nodes.filter((node) => node.online);
   return {
     nodes: nodes.length,
     online: online.length,
     available: nodes.filter((node) => nodeHealth(node) === "available").length,
-    active: nodes.reduce((sum, node) => sum + node.active, 0),
+    active: online.reduce((sum, node) => sum + node.active, 0),
     maxActive: online.reduce((sum, node) => sum + node.max_active, 0),
-    retained: nodes.reduce((sum, node) => sum + node.retained, 0),
+    retained: online.reduce((sum, node) => sum + node.retained, 0),
     maxRetained: online.reduce((sum, node) => sum + node.max_retained, 0),
     reserved: nodes.reduce((sum, node) => sum + node.reserved, 0),
     cleanupPending: nodes.reduce((sum, node) => sum + node.cleanup_pending, 0),

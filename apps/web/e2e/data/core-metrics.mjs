@@ -35,6 +35,7 @@ export function coreMetrics(range = "1h", now = Math.floor(Date.now() / 1000)) {
       { id: "history_cleanup", status: "ok", last_run_at: ago(41), processed: 230, failed: 0 },
       { id: "audit_cleanup", status: "ok", last_run_at: ago(41), processed: 0, failed: 0 },
     ],
-    process: { memory_bytes: Math.round(182 * 2 ** 20), goroutines: 214 },
+    // Unmeasured: the console must show it as missing, never as zero.
+    process: { memory_bytes: null, goroutines: 214 },
   };
 }

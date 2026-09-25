@@ -43,18 +43,16 @@ export function isUsableName(value: string, problem: NameProblem | null): boolea
 }
 
 /**
- * A write either failed before Core acted ("rejected": correct and retry),
- * collided with an existing name ("conflict"), or has an unknown outcome
+ * A write either failed before Core acted ("rejected": Core's reason, such as
+ * an archived project on a 409; correct and retry) or has an unknown outcome
  * ("uncertain": check the list first; never retried automatically).
  */
 export type FlowError =
   | { kind: "rejected"; status: number; message: string }
-  | { kind: "conflict" }
   | { kind: "uncertain" };
 
 export function flowError(error: unknown): FlowError {
   if (error instanceof AgentCoreError) {
-    if (error.status === 409) return { kind: "conflict" };
     if (error.status >= 400 && error.status < 500 && error.status !== 408) return { kind: "rejected", status: error.status, message: error.message };
     return { kind: "uncertain" };
   }
