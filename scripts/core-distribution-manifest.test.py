@@ -9,6 +9,7 @@ import pathlib
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 
@@ -91,6 +92,28 @@ class DistributionTests(unittest.TestCase):
         for line in (self.bundle / "SHA256SUMS").read_text().splitlines():
             digest, name = line.split("  ", 1)
             self.assertEqual(digest, distribution.sha256(self.bundle / name))
+
+    def test_built_image_records_the_id_each_docker_store_resolves(self):
+        config, manifest = "sha256:" + "1" * 64, "sha256:" + "2" * 64
+        metadata = self.stage / "build.json"
+        # Classic stores report the config digest twice; containerd stores resolve only the manifest digest.
+        for digests, stored, expected in (((config, config), config, config), ((config, manifest), manifest, manifest),
+                                          ((config, manifest), "sha256:" + "3" * 64, None)):
+            with self.subTest(stored=stored):
+                metadata.write_text(json.dumps({"containerimage.config.digest": digests[0],
+                                                "containerimage.digest": digests[1]}))
+                inspect = lambda command, **_: mock.Mock(returncode=0 if command[-1] == stored else 1,
+                                                         stdout=stored + "\n")
+                with mock.patch.object(distribution.subprocess, "run", side_effect=inspect), \
+                        mock.patch.object(distribution, "verify_image") as verify, \
+                        mock.patch("builtins.print") as output:
+                    if expected is None:
+                        with self.assertRaisesRegex(ValueError, "does not identify"):
+                            distribution.built_image(metadata)
+                    else:
+                        distribution.built_image(metadata)
+                        verify.assert_called_once_with(expected)
+                        output.assert_called_once_with(expected)
 
     def test_containerd_build_ids_still_publish_archive_config_ids(self):
         for name, identity in self.identities.items():

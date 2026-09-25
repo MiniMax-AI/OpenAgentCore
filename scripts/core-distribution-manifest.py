@@ -47,6 +47,27 @@ def verify_image(image):
     return details
 
 
+def built_image(metadata_file):
+    """Print the local store ID of the image one BuildKit build just produced."""
+    metadata = json.loads(pathlib.Path(metadata_file).read_text())
+    # The classic store names an image by its config digest, the containerd store
+    # by its manifest digest; the other value never resolves to itself there.
+    config = metadata.get("containerimage.config.digest")
+    manifest = metadata.get("containerimage.digest", config)
+    if not all(isinstance(value, str) and DIGEST.fullmatch(value) for value in (config, manifest)):
+        raise ValueError("Build metadata lacks valid image digests")
+    resolved = []
+    for candidate in dict.fromkeys((config, manifest)):
+        result = subprocess.run(["docker", "image", "inspect", "--format", "{{.Id}}", candidate],
+                                stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False)
+        if result.returncode == 0 and result.stdout.strip() == candidate:
+            resolved.append(candidate)
+    if len(resolved) != 1:
+        raise ValueError("The local image store does not identify the built image by exactly one of its digests")
+    verify_image(resolved[0])
+    print(resolved[0])
+
+
 def image_identities(archive, build_id):
     """Bind both Docker store identities to one exported Linux amd64 image."""
     if not DIGEST.fullmatch(build_id):
@@ -277,10 +298,10 @@ def archive(bundle, epoch, variant=""):
 
 if __name__ == "__main__":
     commands = {"extract-runtime": extract_runtime, "verify-runtime": verify_runtime, "verify-image": verify_image,
-                "manifest": manifest, "archive": archive, "bootstraps": bootstraps, "release-base": release_base}
+                "built-image": built_image, "manifest": manifest, "archive": archive, "bootstraps": bootstraps, "release-base": release_base}
     try:
         commands[sys.argv[1]](*sys.argv[2:])
     except (KeyError, TypeError):
-        sys.exit("Usage: core-distribution-manifest.py extract-runtime|verify-runtime|verify-image|manifest|archive|bootstraps|release-base ARGS...")
+        sys.exit("Usage: core-distribution-manifest.py extract-runtime|verify-runtime|verify-image|built-image|manifest|archive|bootstraps|release-base ARGS...")
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         sys.exit(str(error))
