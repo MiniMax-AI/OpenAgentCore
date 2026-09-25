@@ -41,14 +41,12 @@ export function ExecutorInstallPanel({ environmentId, remoteUrl, archived }: { e
         <p className="executor-install-note">{archived ? t("executor.install.archived") : t("executor.install.steps")}</p>
         <InstallCommand value={install.command} />
         <div className="executor-install-requirements">
-          <span>{t("executor.install.requirements")}</span>
+          {/* The list carries the label for assistive technology; the visible one is not read twice. */}
+          <span aria-hidden="true">{t("executor.install.requirements")}</span>
           <ul aria-label={t("executor.install.requirements")}>
-            <li>Linux amd64</li>
-            <li>Python 3.9+</li>
-            <li>curl</li>
-            <li>sha256sum</li>
-            <li>{t("executor.install.docker", { socket: DOCKER_SOCKET })}</li>
-            <li>{t("executor.install.https", { url: install.publicUrl })}</li>
+            {["Linux amd64", "Python 3.9+", "curl", "sha256sum", "Docker CLI", t("executor.install.docker", { socket: DOCKER_SOCKET }), t("executor.install.https", { url: install.publicUrl })].map((item, index) => (
+              <li key={item}>{index ? <span className="executor-install-separator" aria-hidden="true">·</span> : null}{item}</li>
+            ))}
           </ul>
         </div>
       </>;

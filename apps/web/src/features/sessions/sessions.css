@@ -546,13 +546,16 @@
 }
 
 .executor-install-requirements ul {
-  display: contents;
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  min-width: 0;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.executor-install-requirements li + li::before {
+.executor-install-separator {
   margin-right: 8px;
-  content: "·";
 }
