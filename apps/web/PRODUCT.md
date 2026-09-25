@@ -83,7 +83,8 @@ workbench.
   or Add node action; a sandbox's dialog adds its disk use.
 - **microsandbox** suspends idle sandboxes into snapshots, so its nodes show how
   many sleep (Core's retained minus active) on the Nodes list, a node's page, Sandbox
-  metrics and Overview; Docker never suspends and shows none of it.
+  metrics and Overview; a node's allocations show how long each has been suspended and
+  about when Core reclaims it. Docker never suspends and shows none of it.
 - **First run**: after the administrator account is created and while no project
   exists, full-screen steps outside the shell create the first project (default name
   `Default`) and its first key, show the plaintext once with an example request,
