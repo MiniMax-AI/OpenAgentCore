@@ -16,8 +16,9 @@ contract. Public Agents API compatibility work is tracked in the
   to Core.
 - Sign-in with the deployment's Core key; the browser keeps only the session
   cookie.
-- First run: after signing in with no project, the first project and its API key
-  shown once, and a short tour of the console before it opens.
+- Getting started: signing in opens the Overview, whose checklist leads to
+  sandboxes, a project and its key, and a first Session; an optional tour of the
+  console.
 - Projects and keys: create, rename, archive, issue with one-time display, revoke;
   uncertain writes are reported, never replayed.
 - Resource inspection and permitted deletion; no execution, resource editors,
@@ -42,7 +43,7 @@ writes, absent `/v1` proxying, secret handling and uncertain write outcomes.
 
 `apps/web/e2e` covers the browser side against `fixture-console.mjs`, a synthetic
 console service: Core key sign-in, a refused key and repeated attempts, and sign-out,
-with no credential in browser storage; first run from sign-in to the console; Project creation, one-time key display, revocation and archive; an
+with no credential in browser storage; a fresh install from sign-in to Getting started, empty pages and its actions; Project creation, one-time key display, revocation and archive; an
 unconfirmed key issue that is reported and never replayed; a refused deletion that
 keeps Core's reason; the monitor pages and a read-only Session conversation; node
 enrollment and removal.

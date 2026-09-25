@@ -368,9 +368,9 @@ heading row sits 12px above its content.
 The recurring shapes in the body are the KPI strip (auto-fit columns, min 158px;
 three per row below 1180px), chart grids (two equal columns, single below 1180px),
 full-width table cards, and a fact row on detail pages. Overview has its own
-arrangement: four metric tiles, Session activity beside the fleet topology (Core
-in the middle, nodes left and right, solid lines online and dashed offline; Core
-and each node open an anchored popover with a two-column glance and links to
+arrangement: Getting started while a step is to do, four metric tiles, Session
+activity beside the fleet topology (Core in the middle, nodes left and right,
+solid lines online and dashed offline; Core and each node open an anchored popover with a two-column glance and links to
 their pages), then the attention table and usage by project, each on its own
 card with a 16px gap. Popovers are the overlay card (14px radius, overlay shadow,
 16px padding): a 14px title, 12px labels over 13px values, links at a ruled foot. Nodes itself is a plain list with a detail page.
@@ -511,7 +511,7 @@ items are 30px rows with a 15px outline icon and Sidebar Ink text. Hover takes t
 ink wash; the active item sits on a white chip (the page panel's surface, ringed)
 with Ledger Ink at 500, and the chip glides to the next item on navigation. The
 Platform group sits below a hairline. A secondary page (one Session) highlights its
-parent. The footer holds sign-out and the language/theme menu. A detail page's back arrow returns to the page it was opened
+parent. The footer holds Show Getting started, then sign-out and the language/theme menu. A detail page's back arrow returns to the page it was opened
 from (a Skill opened from a template goes back to the template); opened directly,
 it goes to its list. The arrow is labelled plainly "Back".
 
@@ -572,7 +572,7 @@ with a help tip. Safety notices (a key shown once, a destructive consequence) st
 visible in body text.
 
 ### Onboarding
-Signing in and first-run setup share one frame: a dark stage on the left (always
+Signing in and the console tour share one frame: a dark stage on the left (always
 dark, whatever the theme) and the task panel on the right, which follows the
 theme. The stage is the product's one authored moment: a flickering indigo dot
 grid under slow light rays (Magic UI's flickering grid and light rays), Core as
@@ -583,16 +583,30 @@ ink; it is a paragraph, not a heading, because the panel's title names the task.
 Signing in asks for one thing, the deployment's Core key, in a single password
 field; where the key is kept and what it can do sit behind a help tip beside the
 label, and a refused key, too many attempts or an unavailable console is an error
-beside the field. When no project exists yet, first run follows on the same stage
-in two steps with numbered progress in the panel header: the first project and its
-project API key (shown once; the example request types itself into a terminal),
-and a three-chapter tour — Monitor,
-Resources, Platform — whose stage shows a real dark screenshot of those pages,
-tilted towards the panel. Steps change inside a View Transition: the stage holds
-still while the panel slides and blurs across; opening the console dissolves
-the onboarding forward and reveals the console in a circle growing from the
-pressed button. With reduced motion the orbits hold their places, the grid is a
-still frame, the request is a plain block and no transition runs.
+beside the field. Signing in opens the console on the Overview. The optional tour
+has three chapters — Monitor, Resources, Platform — whose stage shows a real dark
+screenshot of those pages, tilted towards the panel; it takes the place of the
+console until its last button, Skip or Escape, and then returns the focus to the
+control that opened it. Entering the console or the tour, and leaving the tour,
+happen inside a View Transition: the old page dissolves forward and the new one
+is revealed in a circle growing from the pressed button. With reduced motion the
+orbits hold their places, the grid is a still frame and no transition runs.
+
+### Getting started
+The first card on the Overview while any step is to do: a card header ("Getting
+started", "n of 3 done", a help tip, then a ghost Take the tour button and an icon
+button that hides it) over three rows split by Faint Rules. Each row has a 22px
+numbered ring (a check on the tile wash when done), a 13px/600 title over one
+12.5px Graphite line, a status dot (Done in green, To do in Idle Gray, Checking
+pending, Unknown for a failed read) and one outline action while the step is to
+do: Set up sandboxes, Add node, Open Nodes or Open sandbox backend; Create project
+(which continues to the new project's first key) or Issue key; Projects and keys.
+Add node, Create project and Issue key open their page with the dialog already
+open. Every step done turns it into one line, "You're set", with Take the tour and
+Dismiss; it stays, through the tour, until dismissed, and the checklist does not
+come back on its own. The choice is kept per installation in the browser, also
+while the deployment cannot be read; Show Getting started, a quiet row above the
+sidebar's account controls, opens it again at any time.
 
 ### Sandbox setup
 Setting up hosted sandboxes, and changing the provider or resources in maintenance,

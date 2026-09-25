@@ -97,6 +97,11 @@ html[data-theme="dark"] {
   padding: 8px 2px 0;
 }
 
+/* Show Getting started: a quiet nav row above the account controls. */
+.sidebar-help {
+  margin-top: 0;
+}
+
 .sidebar-account {
   display: flex;
   align-items: center;

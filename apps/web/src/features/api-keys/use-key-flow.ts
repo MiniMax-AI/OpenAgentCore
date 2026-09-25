@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 
-import { admin } from "../../lib/projects";
 import { flowError, idleFlow, isAbort, keyFlowReducer, normalizeName, type KeyFlow, type KeyFlowEvent } from "./key-flows";
-import { createProject, issueKey, type Project } from "../../lib/admin-view";
+import { issueKey, type Project } from "../../lib/admin-view";
 
 export interface KeyFlowControls {
   flow: KeyFlow;
   dispatch: (event: KeyFlowEvent) => void;
-  /** Issues the named key (creating the project first on first run). */
+  /** Issues the named key. */
   submit: () => Promise<void>;
 }
 
@@ -16,7 +15,7 @@ export interface KeyFlowControls {
  * changed a project or its keys. Writes are never retried automatically: an
  * uncertain result is reported for the operator to check.
  */
-export function useKeyFlow(onChanged: (project: Project | null) => void = () => undefined): KeyFlowControls {
+export function useKeyFlow(onChanged: (project: Project) => void = () => undefined): KeyFlowControls {
   const [flow, dispatch] = useReducer(keyFlowReducer, idleFlow);
   const flowRef = useRef(flow);
   flowRef.current = flow;
@@ -41,17 +40,8 @@ export function useKeyFlow(onChanged: (project: Project | null) => void = () => 
     const current = flowRef.current;
     if (current.step !== "issue" || current.busy) return;
     const keyName = normalizeName(current.name);
+    const project = current.project;
     send({ type: "started" });
-    let project = current.project;
-    if (!project) {
-      try {
-        project = await createProject(normalizeName(current.projectName));
-      } catch (error) {
-        if (!isAbort(error)) send({ type: "failed", error: flowError(error) });
-        return;
-      }
-      send({ type: "projectCreated", project });
-    }
     try {
       const key = await issueKey(project.id, keyName);
       send({ type: "issued", projectId: project.id, key });

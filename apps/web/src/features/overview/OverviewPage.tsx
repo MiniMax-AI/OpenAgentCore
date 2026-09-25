@@ -25,6 +25,7 @@ import { capacitySummary, coreStatus, type CoreStatus } from "../fleet/fleet-mod
 import { fleetSnapshot, useSandboxFleet, type FleetSnapshot, type FleetState } from "../fleet/use-sandbox-fleet";
 import { type InProject } from "../metrics/project-sessions";
 import { FleetTopology, TOPOLOGY_LIMIT, type CloudHost } from "./FleetTopology";
+import { GettingStarted } from "./GettingStarted";
 import { type OverviewData } from "./overview-loader";
 import { overviewQuery } from "./overview-queries";
 import {
@@ -139,6 +140,10 @@ export function OverviewPage() {
   const updatedAt = data?.loadedAt ?? fleet?.loadedAt ?? null;
   const attentionTotal = totals ? attentionCount(totals.sessions) : null;
   const truncated = data?.sessions.truncated ?? [];
+  // Whether any Session exists: Core's summary counts them all; without it, any Session read counts.
+  const sessionCount = totals ? totals.sessions.total
+    : sessions?.length ? sessions.length
+    : summaryError !== null || (state.status === "failed" && data === null) ? "failed" : null;
 
   // Each failed read is its own toast, shown once while it lasts.
   useFailureToast(failure !== null, t("errors.load", { reason: failure ?? "" }), "overview-load");
@@ -157,6 +162,7 @@ export function OverviewPage() {
         actions={<RefreshButton refreshing={loading} updatedAt={updatedAt ? formatClock(updatedAt, locale) : null} onClick={() => { projectsState.refresh(); refresh(); refreshFleet(); }} />}
       />
       <PageBody>
+        <GettingStarted fleet={fleetState} sessions={sessionCount} />
         <div className="overview-tiles" aria-label={t("kpi.label")}>
           <MetricTile
             index={0}
@@ -231,6 +237,7 @@ export function OverviewPage() {
                   series={[{ id: "created", label: t("activity.created"), color: "color-mix(in srgb, var(--data) 62%, var(--surface))", values: activity.created, total: formatInteger(activity.created.reduce((sum, value) => sum + value, 0), locale) }]}
                   tooltipOnly={[{ id: "failed", label: t("activity.failed"), color: "var(--danger)", values: activity.failed }]}
                   formatValue={(value) => formatInteger(value, locale)}
+                  counts
                   height={196}
                 />
               </div>
@@ -311,7 +318,11 @@ function FleetCard({ fleetState, core }: { fleetState: FleetState; core: CoreSta
           <HelpTip>{t("fleet.help")}</HelpTip>
         </div>
         {fleetState.status === "ready" ? (
-          <button className="button outline" type="button" onClick={() => navigate("nodes")}>{cloud ? t("fleet.cloud.openBackend") : hosts.length ? t("fleet.manageNodes") : t("fleet.addNode")}</button>
+          !fleet?.deployment.provider
+            ? <button className="button outline" type="button" onClick={() => navigate("nodes")}>{t("fleet.setUp")}</button>
+            : cloud || hosts.length
+              ? <button className="button outline" type="button" onClick={() => navigate("nodes")}>{cloud ? t("fleet.cloud.openBackend") : t("fleet.manageNodes")}</button>
+              : <button className="button outline" type="button" onClick={() => navigate("nodes", {}, "add-node")}>{t("fleet.addNode")}</button>
         ) : null}
       </header>
       <div className="overview-card-body fleet-body">
@@ -327,16 +338,16 @@ function FleetCard({ fleetState, core }: { fleetState: FleetState; core: CoreSta
           onOpenCoreMetrics={() => navigate("core-metrics")}
         />
         {hidden ? <button className="text-action fleet-more" type="button" onClick={() => navigate("nodes")}>{t("fleet.more", { n: hidden })}</button> : null}
-        <FleetFooter state={fleetState} empty={fleet && !cloud ? hosts.length === 0 : false} />
+        <FleetFooter state={fleetState} empty={fleet && !cloud ? hosts.length === 0 : false} unset={fleet ? !fleet.deployment.provider : false} />
       </div>
     </section>
   );
 }
 
-function FleetFooter({ state, empty }: { state: FleetState; empty: boolean }) {
+function FleetFooter({ state, empty, unset }: { state: FleetState; empty: boolean; unset: boolean }) {
   const { t } = useTranslation("overview");
   if (state.status === "ready") {
-    return empty ? <footer className="fleet-list-footer"><p>{t("fleet.noNodes")}</p></footer> : null;
+    return empty ? <footer className="fleet-list-footer"><p>{t(unset ? "fleet.notSetUp" : "fleet.noNodes")}</p></footer> : null;
   }
   return (
     <footer className="fleet-list-footer">

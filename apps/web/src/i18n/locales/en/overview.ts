@@ -1,6 +1,44 @@
 export const overview = {
   title: "Overview",
   description: "Health, capacity, usage and failures across every project of this Parsar Core deployment.",
+  gettingStarted: {
+    title: "Getting started",
+    help: "Three steps to a working deployment, in any order.",
+    progress: "{{done}} of {{total}} done",
+    tour: "Take the tour",
+    dismiss: "Hide Getting started",
+    state: {
+      done: "Done",
+      todo: "To do",
+      checking: "Checking",
+      unknown: "Unknown",
+    },
+    sandboxes: {
+      title: "Get sandboxes ready",
+      body: "Save where sandboxes run, then connect a node that is online and ready.",
+      bodyCloud: "Save the E2B account; its template build must be ready.",
+      setup: "Set up sandboxes",
+      addNode: "Add node",
+      nodes: "Open Nodes",
+      backend: "Open sandbox backend",
+    },
+    key: {
+      title: "Create a project and issue a key",
+      body: "Applications call Core with a project API key.",
+      create: "Create project",
+      issue: "Issue key",
+    },
+    session: {
+      title: "Run the first Session",
+      body: "Your app calls the /v1 Agents API with the project API key.",
+      open: "Projects and keys",
+    },
+    complete: {
+      title: "You're set",
+      body: "Sandboxes are ready, a project has a key and the first Session ran.",
+      dismiss: "Dismiss",
+    },
+  },
   kpi: {
     label: "Deployment health",
     service: "Service status",
@@ -92,6 +130,8 @@ export const overview = {
     stale: "Refresh failed; showing the nodes from the last load.",
     addNode: "Add node",
     manageNodes: "Manage nodes",
+    setUp: "Set up sandboxes",
+    notSetUp: "Sandboxes are not set up yet.",
     cloud: {
       name: "E2B cloud",
       open: "E2B cloud, {{running}} running sandboxes",

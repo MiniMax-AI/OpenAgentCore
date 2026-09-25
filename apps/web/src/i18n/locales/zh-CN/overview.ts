@@ -1,6 +1,44 @@
 export const overview = {
   title: "概览",
   description: "这套 Parsar Core 部署在所有项目下的健康、容量、用量与故障。",
+  gettingStarted: {
+    title: "新手引导",
+    help: "让部署可用的三步，顺序不限。",
+    progress: "已完成 {{done}} / {{total}}",
+    tour: "认识控制台",
+    dismiss: "隐藏新手引导",
+    state: {
+      done: "已完成",
+      todo: "待完成",
+      checking: "检查中",
+      unknown: "未知",
+    },
+    sandboxes: {
+      title: "准备好沙箱",
+      body: "保存沙箱的运行位置，再接入一台在线且就绪的节点。",
+      bodyCloud: "保存 E2B 账号，并等它的模板构建就绪。",
+      setup: "设置沙箱",
+      addNode: "添加节点",
+      nodes: "打开节点",
+      backend: "打开沙箱后端",
+    },
+    key: {
+      title: "创建项目并签发 key",
+      body: "应用用项目 API Key 调用 Core。",
+      create: "创建项目",
+      issue: "签发 key",
+    },
+    session: {
+      title: "运行第一个 Session",
+      body: "你的应用用项目 API Key 调用 /v1 Agents API。",
+      open: "项目与 key",
+    },
+    complete: {
+      title: "一切就绪",
+      body: "沙箱已就绪，项目已有 key，第一个 Session 也已运行。",
+      dismiss: "关闭",
+    },
+  },
   kpi: {
     label: "部署健康状况",
     service: "服务状态",
@@ -92,6 +130,8 @@ export const overview = {
     stale: "刷新失败，显示的是上次加载的节点。",
     addNode: "添加节点",
     manageNodes: "管理节点",
+    setUp: "设置沙箱",
+    notSetUp: "还没有设置沙箱。",
     cloud: {
       name: "E2B 云端",
       open: "E2B 云端，{{running}} 个运行中的沙箱",

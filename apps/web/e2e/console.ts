@@ -6,13 +6,19 @@ const web = `http://127.0.0.1:${process.env.AGENTS_WEB_PORT ?? 4174}`;
 /** The fixture deployment's Core key; the same value as CORE_KEY in fixture-console.mjs. */
 export const FIXTURE_CORE_KEY = "fixture-core-key-3f9a2c71";
 
+/**
+ * Fixture state options: `fresh` is a new install (no project, Session or Runtime),
+ * `sandbox` the sandbox deployment, and `nodes: "none"` a deployment no node has joined.
+ */
+export interface FixtureOptions { fresh?: boolean; sandbox?: "configured" | "none" | "e2b"; nodes?: "none" }
+
 /** Fresh fixture state: signed out ("login") or already signed in ("authenticated"). */
-export async function resetFixture(request: APIRequestContext, auth: "login" | "authenticated" = "authenticated", options: { fresh?: boolean; sandbox?: "configured" | "none" | "e2b" } = {}) {
-  await request.post(`${fixture}/__fixture/reset?auth=${auth}${options.fresh ? "&projects=none" : ""}&sandbox=${options.sandbox ?? "configured"}`);
+export async function resetFixture(request: APIRequestContext, auth: "login" | "authenticated" = "authenticated", options: FixtureOptions = {}) {
+  await request.post(`${fixture}/__fixture/reset?auth=${auth}${options.fresh ? "&projects=none" : ""}&sandbox=${options.sandbox ?? "configured"}${options.nodes ? `&nodes=${options.nodes}` : ""}`);
 }
 
 /** Opens the console already signed in, in English. */
-export async function openConsole(page: Page, request: APIRequestContext, hash = "overview", options: { sandbox?: "configured" | "none" | "e2b" } = {}) {
+export async function openConsole(page: Page, request: APIRequestContext, hash = "overview", options: FixtureOptions = {}) {
   await resetFixture(request, "authenticated", options);
   await page.context().addCookies([{ name: "core_console", value: "fixture-session", url: web }]);
   await page.addInitScript(() => window.localStorage.setItem("agents-core-web.language", "en"));

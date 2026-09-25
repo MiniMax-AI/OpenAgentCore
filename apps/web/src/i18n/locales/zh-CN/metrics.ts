@@ -245,6 +245,8 @@ export const metrics = {
     noNodesTitle: "没有执行节点",
     noNodesDescription: "托管 Session 运行在已接入的节点上。添加节点即可提供沙箱容量。",
     addNode: "添加节点",
+    notSetUpTitle: "还没有设置沙箱",
+    setUp: "设置沙箱",
     runtimeSection: "托管运行时",
     runtimeSectionDetail: "Core 托管沙箱的 CPU、内存与 Token 历史。其他环境不上报运行时指标。",
     noRuntimeTitle: "没有托管沙箱",

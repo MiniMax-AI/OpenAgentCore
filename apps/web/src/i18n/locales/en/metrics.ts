@@ -245,6 +245,8 @@ export const metrics = {
     noNodesTitle: "No execution nodes",
     noNodesDescription: "Hosted Sessions run on enrolled nodes. Add a node to provide sandbox capacity.",
     addNode: "Add node",
+    notSetUpTitle: "Sandboxes are not set up yet",
+    setUp: "Set up sandboxes",
     runtimeSection: "Hosted Runtimes",
     runtimeSectionDetail: "CPU, memory and token history of Core-managed hosted sandboxes. Other environments report no Runtime figures.",
     noRuntimeTitle: "No hosted sandboxes",
