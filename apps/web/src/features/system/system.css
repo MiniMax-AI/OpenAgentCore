@@ -54,3 +54,59 @@
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+
+.system-muted {
+  color: var(--ink-3);
+}
+
+/* Where startup settings are changed: the file and the apply command, both copyable. */
+.system-where {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 24px;
+}
+
+/* The file and the command read as chips that carry their own copy button. */
+.system-where .copyable-id {
+  margin: 0 2px;
+  padding-left: 8px;
+  vertical-align: middle;
+  background: var(--surface);
+  border-radius: var(--radius-chip);
+  box-shadow: var(--shadow-hairline);
+}
+
+.system-where .copyable-id code {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* Setting names and values are the table's data, not secondary IDs. */
+.data-table.system-settings code {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.system-applied {
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.system-note {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.system-setting-value {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}

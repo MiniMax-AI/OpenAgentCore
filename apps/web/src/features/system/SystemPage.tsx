@@ -6,11 +6,14 @@ import { useTranslation } from "react-i18next";
 
 import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, Section, StatusDot } from "../../components/console-ui";
 import { ErrorState } from "../../components/ErrorState";
+import { CopyableId } from "../../components/list-ui";
 import { DetailSkeleton } from "../../components/Skeleton";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatBytes, formatPeriod } from "../../lib/format";
+import { installationQuery } from "../../lib/installation";
 import { sandboxSize, templateBuildSize, templateBuildStatus } from "../sandbox/deployment-specification";
 import { sandboxDeploymentQuery } from "../sandbox/sandbox-queries";
+import { StartupSettings } from "./StartupSettings";
 import "./system.css";
 
 const MIB = 2 ** 20;
@@ -29,11 +32,11 @@ function Fact({ label, help, children }: { label: string; help?: string; childre
 }
 
 /**
- * Platform › System: the sandbox configuration every project shares — where
- * sandboxes run, how big each one is, the Runtime or E2B template build they
- * run, microsandbox's idle suspension, the Core address and maintenance.
- * Nothing else: harnesses and gateway flags are Core's own startup settings,
- * not something an administrator acts on here.
+ * Platform › System: this installation's addresses, the sandbox configuration
+ * every project shares — where sandboxes run, how big each one is, the Runtime
+ * or E2B template build they run, microsandbox's idle suspension and
+ * maintenance — and Core's startup settings. Each says where it is changed:
+ * sandboxes on the Nodes page, startup settings in config.json.
  */
 export function SystemPage() {
   const { t, i18n } = useTranslation("system");
@@ -41,8 +44,9 @@ export function SystemPage() {
   const { t: tNav } = useTranslation("navigation");
   const { navigate } = useConsoleNavigation();
   const deployment = useQuery(sandboxDeploymentQuery);
+  const installation = useQuery(installationQuery);
   const data = deployment.data ?? null;
-  const refresh = () => { void deployment.refetch(); };
+  const refresh = () => { void deployment.refetch(); void installation.refetch(); };
   const spec = data?.specification ?? null;
   // An E2B selection may adopt its template build's size instead of saving one.
   const each = data ? sandboxSize(data) : null;
@@ -66,7 +70,7 @@ export function SystemPage() {
     );
   } else {
     body = (
-      <Section headingId="system-sandbox-heading" title={t("sandbox.title")}>
+      <Section headingId="system-sandbox-heading" title={t("sandbox.title")} actions={<button className="text-action" type="button" onClick={() => navigate("nodes")}>{t("sandbox.change")}</button>}>
         <dl className="system-facts">
           <Fact label={t("sandbox.runsOn")}>{data.provider === "e2b" ? t("sandbox.e2b") : t("sandbox.ownMachines", { provider: providerNames[data.provider] ?? data.provider })}</Fact>
           {each ? (
@@ -92,7 +96,6 @@ export function SystemPage() {
             <Fact label={t("sandbox.suspendAfter")} help={t("sandbox.suspendAfterHelp")}>{formatPeriod(data.suspension.idle_seconds, locale)}</Fact>
             <Fact label={t("sandbox.keepSuspended")} help={t("sandbox.keepSuspendedHelp")}>{formatPeriod(data.suspension.retention_seconds, locale)}</Fact>
           </> : null}
-          {data.core_url ? <Fact label={t("sandbox.coreOrigin")} help={t("sandbox.coreOriginHelp")}><code className="system-code">{data.core_url}</code></Fact> : null}
           <Fact label={t("sandbox.maintenance")} help={t("sandbox.maintenanceHelp")}>
             {data.maintenance ? <StatusDot tone="warning" label={t("values.on")} /> : t("values.off")}
           </Fact>
@@ -101,15 +104,33 @@ export function SystemPage() {
     );
   }
 
+  const about = installation.data;
+  const facts = about ? (
+    <Section headingId="system-installation-heading" title={t("installation.title")}>
+      <dl className="system-facts">
+        <Fact label={t("installation.publicUrl")} help={t("installation.publicUrlHelp")}>{about.public_url ? <code className="system-code">{about.public_url}</code> : <span className="system-muted">{t("installation.notSet")}</span>}</Fact>
+        <Fact label={t("installation.apiBaseUrl")} help={t("installation.apiBaseUrlHelp")}>{about.api_base_url ? <CopyableId id={about.api_base_url} label={t("installation.copyApiBaseUrl")} /> : <span className="system-muted">{t("installation.localOnly")}</span>}</Fact>
+        <Fact label={t("installation.id")}>{about.installation_id ? <CopyableId id={about.installation_id} /> : <span className="system-muted">{t("installation.unknown")}</span>}</Fact>
+        <Fact label={t("installation.sourceCommit")}>{about.source_commit ? <code className="system-code" title={about.source_commit}>{about.source_commit.slice(0, 12)}</code> : <span className="system-muted">{t("installation.unknown")}</span>}</Fact>
+      </dl>
+    </Section>
+  ) : installation.isError && !installation.isFetching
+    ? <ErrorState title={t("installation.failed")} onRetry={() => void installation.refetch()} />
+    : <DetailSkeleton label={t("loading")} facts={4} />;
+
   return (
     <section className="page-section console-page system-page" aria-labelledby="system-heading">
       <PageHeader
         headingId="system-heading"
         title={tNav("views.system")}
         help={t("help")}
-        actions={<RefreshButton onClick={refresh} refreshing={deployment.isFetching} label={t("refresh")} />}
+        actions={<RefreshButton onClick={refresh} refreshing={deployment.isFetching || installation.isFetching} label={t("refresh")} />}
       />
-      <PageBody>{body}</PageBody>
+      <PageBody>
+        {facts}
+        {body}
+        {about ? <StartupSettings configuration={about.configuration} /> : null}
+      </PageBody>
     </section>
   );
 }
