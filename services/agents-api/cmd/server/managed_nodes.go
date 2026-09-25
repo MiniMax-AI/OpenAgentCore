@@ -78,7 +78,7 @@ func configureManagedNodes(s *store.Store, owner func(context.Context) error) (*
 			if err := owner(ctx); err != nil {
 				return err
 			}
-			return s.HeartbeatRuntimeNode(ctx, n.NodeID, connection, epoch, store.RuntimeNodeHealth{ProviderReady: health.ProviderReady, Diagnostic: health.Diagnostic, CPUCount: health.CPUCount, AvailableMemoryBytes: health.AvailableMemoryBytes, AvailableDiskBytes: health.AvailableDiskBytes})
+			return s.HeartbeatRuntimeNode(ctx, n.NodeID, connection, epoch, store.RuntimeNodeHealth{ProviderReady: health.ProviderReady, Diagnostic: health.Diagnostic, CPUCount: health.CPUCount, AvailableMemoryBytes: health.AvailableMemoryBytes, AvailableDiskBytes: health.AvailableDiskBytes, HostTotalMemoryBytes: health.HostTotalMemoryBytes, EffectiveMemoryBytes: health.EffectiveMemoryBytes, EffectiveCPUCores: health.EffectiveCPUCores, ObservedAt: &health.ObservedAt})
 		},
 	})
 	result.setup = &managedSetup{store: s, hub: result.hub, installationID: setupID}

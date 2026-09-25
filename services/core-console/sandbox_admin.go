@@ -30,9 +30,12 @@ func sandboxAdminRequest(r *http.Request) bool {
 	if len(parts) == 2 && parts[0] == "deployment" && parts[1] == "maintenance" {
 		return r.Method == http.MethodPatch
 	}
+	if len(parts) == 2 && parts[0] == "enrollment-tokens" && parts[1] != "" {
+		return r.Method == http.MethodGet
+	}
 	if len(parts) >= 2 && parts[0] == "nodes" && parts[1] != "" {
 		if len(parts) == 2 {
-			return r.Method == http.MethodPatch || r.Method == http.MethodDelete
+			return r.Method == http.MethodGet || r.Method == http.MethodPatch || r.Method == http.MethodDelete
 		}
 		return len(parts) == 3 && parts[2] == "allocations" && r.Method == http.MethodGet
 	}

@@ -27,7 +27,7 @@ func TestSandboxAdminUsesAuthenticatedConsoleAndServerCredential(t *testing.T) {
 		}
 		w.WriteHeader(204)
 	}))
-	for _, tc := range []struct{ method, path string }{{"GET", "/core/v1/sandbox/deployment"}, {"GET", "/core/v1/sandbox/nodes?limit=5"}, {"PATCH", "/core/v1/sandbox/nodes/node"}, {"DELETE", "/core/v1/sandbox/nodes/node"}, {"GET", "/core/v1/sandbox/nodes/node/allocations"}, {"POST", "/core/v1/sandbox/enrollment-tokens"}} {
+	for _, tc := range []struct{ method, path string }{{"GET", "/core/v1/sandbox/deployment"}, {"GET", "/core/v1/sandbox/nodes?limit=5"}, {"GET", "/core/v1/sandbox/nodes/node"}, {"GET", "/core/v1/sandbox/enrollment-tokens/receipt"}, {"PATCH", "/core/v1/sandbox/nodes/node"}, {"DELETE", "/core/v1/sandbox/nodes/node"}, {"GET", "/core/v1/sandbox/nodes/node/allocations"}, {"POST", "/core/v1/sandbox/enrollment-tokens"}} {
 		req := consoleRequest(t, server, tc.method, tc.path)
 		req.Header.Set("X-Core-Console-Actor", "spoofed")
 		response, _ := responseBody(t, server, req)
@@ -41,7 +41,7 @@ func TestSandboxAdminUsesAuthenticatedConsoleAndServerCredential(t *testing.T) {
 			t.Fatal("bearer bypassed console login")
 		}
 	}
-	if calls.Load() != 6 {
+	if calls.Load() != 8 {
 		t.Fatal("unexpected sandbox proxy calls")
 	}
 }

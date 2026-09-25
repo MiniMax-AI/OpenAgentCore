@@ -62,9 +62,14 @@ define deployment and node operations:
 
 - `GET/POST/PUT /core/v1/sandbox/deployment` and
   `PATCH /core/v1/sandbox/deployment/maintenance`.
-- `GET /core/v1/sandbox/nodes`, `PATCH/DELETE /core/v1/sandbox/nodes/{node_id}`,
+- `GET /core/v1/sandbox/nodes`, `GET/PATCH/DELETE /core/v1/sandbox/nodes/{node_id}`,
   and `GET /core/v1/sandbox/nodes/{node_id}/allocations`.
-- `POST /core/v1/sandbox/enrollment-tokens` for a one-time node installation command.
+- `POST /core/v1/sandbox/enrollment-tokens` for a one-time node installation command;
+  `GET /core/v1/sandbox/enrollment-tokens/{id}` correlates its exact node.
+
+New nodes remain pending until an administrator confirms their Core-computed
+capacity. See [node onboarding](../../contracts/agents-api/node-capacity.md) for
+nullable observations, partial PATCH, revision and retry behavior.
 
 PostgreSQL owns one provider, per-sandbox resource specification and immutable
 Runtime selection. POST initializes it; PUT replaces the complete selection using

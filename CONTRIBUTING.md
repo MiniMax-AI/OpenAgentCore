@@ -790,6 +790,16 @@ receipts, identities and storage. This change provides no old-database conversio
 force reset or automatic deletion. The supported current path is a database-managed
 deployment. Harness selection and public/self-hosted contracts remain unchanged.
 
+Node enrollment creates a pending node, not scheduling permission. The database
+owns admission and capacity; only an administrator's revision-checked confirmation
+can enable it. Enforce pending-state rejection in automatic and explicit placement
+transactions. Reconnect and installer retries preserve identity and saved limits.
+Enrollment receipts correlate each installation to its exact node without exposing
+the token. Linux probes report observable process/host limits; Core computes the
+recommendation from the deployment specification and a documented reserve. Unknown
+measurements remain null. Do not dynamically resize saved capacity or infer disk
+quotas from free space. See the [node capacity contract](contracts/agents-api/node-capacity.md).
+
 The paired console serves only matched, non-secret distribution artifacts for node
 installation. Never serve private installation files or arbitrary paths. Installation
 reads `GET /core/v1/sandbox/node/configuration` using an unconsumed enrollment token,

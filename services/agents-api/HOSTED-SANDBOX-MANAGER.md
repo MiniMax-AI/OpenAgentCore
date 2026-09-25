@@ -79,11 +79,16 @@ the target Linux amd64 host. The command uses the saved deployment origin. Befor
 installing, it reads the active specification with its enrollment token; this read
 does not consume the token. The local provider file is an installed copy of the
 server configuration and cannot select a different Runtime or resource profile.
-Closing the dialog discards its one-time command. An expired command requires
+Keep the enrollment receipt ID to correlate the command with its exact node.
+Closing the dialog does not remove an enrolled node; confirmation can resume from
+the node list. An expired command requires
 explicit regeneration; failed or uncertain writes are never retried automatically. The installer checks prerequisites, downloads the matched payload,
 checks its hashes, prepares provider configuration and starts the existing node
 program as a systemd user service. Web polls readiness and capacity while waiting.
-It does not install software through SSH. Registration itself
+It does not install software through SSH. A newly registered node waits for an
+administrator to confirm its Core-recommended active-sandbox limit and enable
+scheduling. See the [capacity contract](../../contracts/agents-api/node-capacity.md).
+Registration itself
 does not create a Session, sandbox or model request. Hosted Session admission
 fails until setup is complete and a ready node has capacity. E2B allocates directly without this node requirement.
 
@@ -182,7 +187,6 @@ parsar-sandbox-node register \
   --state-dir /var/lib/parsar/node \
   --core-url https://core.example \
   --name worker-1 \
-  --max-active 4 --max-retained 16 \
   --enrollment-token-file /var/lib/parsar/enrollment-token
 parsar-sandbox-node run \
   --config /var/lib/parsar/provider.json \

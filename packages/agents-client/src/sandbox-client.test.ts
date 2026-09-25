@@ -130,3 +130,45 @@ describe("hosted provider configuration", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("node capacity confirmation", () => {
+  it("correlates enrollment and retrieves node details without exposing browser credentials", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => response({ status: "enrolled", node_id: "node/a" }));
+    const client = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", fetch });
+    const controller = new AbortController();
+    await client.retrieveEnrollment("receipt/a", { signal: controller.signal });
+    await client.retrieveNode("node/a", { signal: controller.signal });
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+      "/core/v1/sandbox/enrollment-tokens/receipt%2Fa", "/core/v1/sandbox/nodes/node%2Fa",
+    ]);
+    for (const [, init] of fetch.mock.calls) {
+      expect(init?.signal).toBe(controller.signal);
+      expect(new Headers(init?.headers).has("Authorization")).toBe(false);
+      expect(new Headers(init?.headers).has("OpenAI-Beta")).toBe(false);
+    }
+  });
+  it("sends only specified PATCH fields and returns the committed node", async () => {
+    const node = { id: "node", max_active: 2, admission_state: "enabled", config_revision: "next" };
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response(node));
+    const client = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", fetch });
+    const input = { max_active: 2, admission_state: "enabled" as const, expected_config_revision: "previous" };
+    expect(await client.updateNode("node", input)).toEqual(node);
+    const [url, init] = fetch.mock.calls[0]!;
+    expect(url).toBe("/core/v1/sandbox/nodes/node");
+    expect(init?.method).toBe("PATCH");
+    expect(JSON.parse(String(init?.body))).toEqual(input);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it.each([409, 503])("preserves confirmation HTTP %s without a mutation retry", async (status) => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: { code: "runtime_node_configuration_conflict", message: "Refresh node details" } }, status));
+    const client = new SandboxAdminClient({ fetch });
+    await expect(client.updateNode("node", { name: "worker", expected_config_revision: "old" })).rejects.toMatchObject({ status, code: "runtime_node_configuration_conflict" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it("does not retry an uncertain confirmation", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError("Connection lost"));
+    const client = new SandboxAdminClient({ fetch });
+    await expect(client.updateNode("node", { max_active: 1, admission_state: "enabled", expected_config_revision: "old" })).rejects.toThrow("Connection lost");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});

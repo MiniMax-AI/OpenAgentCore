@@ -23,7 +23,7 @@ func TestSandboxAdministratorIsSeparateFromProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/core/v1/sandbox/nodes", "/core/v1/sandbox/deployment", "/core/v1/sandbox/nodes/node/allocations", "/core/v1/sandbox/enrollment-tokens"} {
+	for _, path := range []string{"/core/v1/sandbox/nodes", "/core/v1/sandbox/nodes/node", "/core/v1/sandbox/enrollment-tokens/receipt", "/core/v1/sandbox/deployment", "/core/v1/sandbox/nodes/node/allocations", "/core/v1/sandbox/enrollment-tokens"} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		if strings.HasSuffix(path, "enrollment-tokens") {
 			request.Method = http.MethodPost

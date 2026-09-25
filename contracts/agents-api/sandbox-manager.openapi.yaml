@@ -160,13 +160,6 @@ definitions:
       template:
         type: string
     type: object
-  api.SandboxEnrollmentToken:
-    properties:
-      expires_at:
-        type: string
-      token:
-        type: string
-    type: object
   api.SandboxEnrollmentTokenRequest:
     type: object
   api.SandboxMutationResponse:
@@ -593,31 +586,69 @@ definitions:
       specification_digest:
         type: string
     type: object
+  store.RuntimeEnrollmentReceipt:
+    properties:
+      expires_at:
+        type: string
+      id:
+        type: string
+      node_id:
+        type: string
+      status:
+        type: string
+    type: object
+  store.RuntimeEnrollmentToken:
+    properties:
+      expires_at:
+        type: string
+      id:
+        type: string
+      token:
+        type: string
+    type: object
   store.RuntimeNode:
     properties:
       active:
         type: integer
+      admission_state:
+        type: string
       available_disk_bytes:
         type: integer
       available_memory_bytes:
         type: integer
+      capacity:
+        $ref: '#/definitions/store.RuntimeNodeCapacity'
       cleanup_pending:
         type: integer
+      config_revision:
+        type: string
       cpu_count:
         type: integer
       created_at:
         type: string
       diagnostic:
         type: string
+      effective_cpu_cores:
+        type: number
+      effective_memory_bytes:
+        type: integer
+      host:
+        $ref: '#/definitions/store.RuntimeNodeHost'
+      host_total_memory_bytes:
+        type: integer
       id:
         type: string
       last_seen_at:
         type: string
       max_active:
         type: integer
+        x-nullable: true
       max_retained:
         type: integer
+        x-nullable: true
       name:
+        type: string
+      observed_at:
         type: string
       online:
         type: boolean
@@ -631,6 +662,10 @@ definitions:
         type: integer
       running:
         type: integer
+      sandbox_spec:
+        $ref: '#/definitions/store.RuntimeNodeSandboxSpec'
+      schedulable:
+        type: boolean
       snapshots:
         type: integer
     type: object
@@ -655,6 +690,23 @@ definitions:
       state:
         type: string
       tenant_id:
+        type: string
+    type: object
+  store.RuntimeNodeCapacity:
+    properties:
+      reasons:
+        items:
+          type: string
+        type: array
+      recommended_max_active:
+        type: integer
+      reserved_cpu_cores:
+        type: number
+      reserved_memory_bytes:
+        type: integer
+      selectable_max_active:
+        type: integer
+      status:
         type: string
     type: object
   store.RuntimeNodeConfiguration:
@@ -693,6 +745,21 @@ definitions:
       specification_digest:
         type: string
     type: object
+  store.RuntimeNodeHost:
+    properties:
+      available_disk_bytes:
+        type: integer
+      available_memory_bytes:
+        type: integer
+      effective_cpu_cores:
+        type: number
+      effective_memory_bytes:
+        type: integer
+      observed_at:
+        type: string
+      total_memory_bytes:
+        type: integer
+    type: object
   store.RuntimeNodeIdentity:
     properties:
       deployment_generation:
@@ -704,6 +771,19 @@ definitions:
       provider:
         type: string
       specification_digest:
+        type: string
+    type: object
+  store.RuntimeNodeSandboxSpec:
+    properties:
+      cpu_cores:
+        type: integer
+      environment_disk_limit_bytes:
+        type: integer
+      memory_bytes:
+        type: integer
+      root_disk_limit_bytes:
+        type: integer
+      runtime_version:
         type: string
     type: object
   store.RuntimeNodeStatus:
@@ -725,6 +805,10 @@ definitions:
     type: object
   store.RuntimeNodeUpdate:
     properties:
+      admission_state:
+        type: string
+      expected_config_revision:
+        type: string
       max_active:
         type: integer
       max_retained:
@@ -5647,7 +5731,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/api.SandboxEnrollmentToken'
+            $ref: '#/definitions/store.RuntimeEnrollmentToken'
         "400":
           description: Bad Request
           schema:
@@ -5675,6 +5759,51 @@ paths:
       security:
         - DeploymentAdminAuth: []
       summary: Create a ten-minute one-use node enrollment token
+      tags:
+        - Sandbox Manager
+  /core/v1/sandbox/enrollment-tokens/{enrollment_id}:
+    get:
+      description: Administrator-only receipt identifies the exact enrolled node. Never returns enrollment credentials.
+      parameters:
+        - description: Enrollment UUID
+          in: path
+          name: enrollment_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.RuntimeEnrollmentReceipt'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Observe a node installation's enrollment receipt
       tags:
         - Sandbox Manager
   /core/v1/sandbox/node/configuration:
@@ -5846,6 +5975,50 @@ paths:
       summary: Remove a sandbox node with no retained resources
       tags:
         - Sandbox Manager
+    get:
+      description: Administrator-only observation. Registration does not enable scheduling. Missing measurements are null.
+      parameters:
+        - description: Sandbox node UUID
+          in: path
+          name: node_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.RuntimeNode'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve a sandbox node and its capacity recommendation
+      tags:
+        - Sandbox Manager
     patch:
       consumes:
         - application/json
@@ -5868,7 +6041,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.SandboxMutationResponse'
+            $ref: '#/definitions/store.RuntimeNode'
         "400":
           description: Bad Request
           schema:

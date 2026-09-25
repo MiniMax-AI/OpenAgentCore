@@ -46,13 +46,57 @@ export interface SandboxNode {
   running: number;
   snapshots: number;
   last_seen_at: string | null;
-  max_active: number;
-  max_retained: number;
+  max_active: number | null;
+  max_retained: number | null;
   active: number;
   reserved: number;
   retained: number;
   cleanup_pending: number;
   created_at: string;
+}
+export interface SandboxNodeHost {
+  effective_cpu_cores: number | null;
+  total_memory_bytes: number | null;
+  effective_memory_bytes: number | null;
+  available_memory_bytes: number | null;
+  available_disk_bytes: number | null;
+  observed_at: string | null;
+}
+export interface SandboxNodeCapacity {
+  status: "checking" | "ready" | "blocked";
+  recommended_max_active: number | null;
+  selectable_max_active: number | null;
+  reserved_cpu_cores: number;
+  reserved_memory_bytes: number;
+  reasons: string[];
+}
+export interface SandboxNodeDetails extends SandboxNode {
+  admission_state: "pending_confirmation" | "enabled";
+  config_revision: string;
+  schedulable: boolean;
+  host: SandboxNodeHost | null;
+  sandbox_spec: {
+    cpu_cores: number;
+    memory_bytes: number;
+    root_disk_limit_bytes: number | null;
+    environment_disk_limit_bytes: number | null;
+    runtime_version: string;
+  } | null;
+  capacity: SandboxNodeCapacity;
+}
+export interface UpdateSandboxNode {
+  expected_config_revision: string;
+  name?: string;
+  max_active?: number;
+  max_retained?: number;
+  admission_state?: "enabled";
+}
+export interface SandboxEnrollmentToken { id: string; token: string; expires_at: string }
+export interface SandboxEnrollmentReceipt {
+  id: string;
+  status: "waiting" | "enrolled" | "expired";
+  node_id: string | null;
+  expires_at: string;
 }
 export interface SandboxAllocation {
   id: string;
@@ -107,14 +151,23 @@ export class SandboxAdminClient extends OpenAIAgentsClient {
       throw new AgentCoreError("Sandbox configuration could not be confirmed. Refresh before submitting again.", error instanceof AgentCoreError ? error.status : 0, "sandbox_configuration_unconfirmed");
     }
   }
-  listNodes(options?: ReadOptions): Promise<{ data: SandboxNode[] }> {
+  listNodes(options?: ReadOptions): Promise<{ data: SandboxNodeDetails[] }> {
     return this.request("/nodes", { signal: options?.signal }, undefined, false);
   }
   listAllocations(nodeId: string, options?: ReadOptions): Promise<{ data: SandboxAllocation[] }> {
     return this.request(`/nodes/${encodeURIComponent(nodeId)}/allocations`, { signal: options?.signal }, undefined, false);
   }
-  createEnrollment(options?: ReadOptions): Promise<{ token: string; expires_at: string }> {
+  createEnrollment(options?: ReadOptions): Promise<SandboxEnrollmentToken> {
     return this.request("/enrollment-tokens", { method: "POST", body: "{}", signal: options?.signal }, undefined, false);
+  }
+  retrieveEnrollment(enrollmentId: string, options?: ReadOptions): Promise<SandboxEnrollmentReceipt> {
+    return this.request(`/enrollment-tokens/${encodeURIComponent(enrollmentId)}`, { signal: options?.signal }, undefined, false);
+  }
+  retrieveNode(nodeId: string, options?: ReadOptions): Promise<SandboxNodeDetails> {
+    return this.request(`/nodes/${encodeURIComponent(nodeId)}`, { signal: options?.signal }, undefined, false);
+  }
+  updateNode(nodeId: string, input: UpdateSandboxNode, options?: ReadOptions): Promise<SandboxNodeDetails> {
+    return this.request(`/nodes/${encodeURIComponent(nodeId)}`, { method: "PATCH", body: JSON.stringify(input), signal: options?.signal }, undefined, false);
   }
   removeNode(nodeId: string, options?: ReadOptions): Promise<{ id: string; deleted: boolean }> {
     return this.request(`/nodes/${encodeURIComponent(nodeId)}`, { method: "DELETE", signal: options?.signal }, undefined, false);

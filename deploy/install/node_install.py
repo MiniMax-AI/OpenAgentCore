@@ -349,7 +349,7 @@ def install(args, token):
                     secret.write(token)
                 print("Registering this node with Core...", flush=True)
                 checked([str(root / COMMON[0]), "register", "--config", str(root / "provider.json"), "--state-dir", str(root / "state/node"),
-                         "--core-url", args.core_url, "--name", socket.gethostname(), "--max-active", "4", "--max-retained", "16",
+                         "--core-url", args.core_url, "--name", socket.gethostname(),
                          "--enrollment-token-file", secret_path], "Node enrollment was not confirmed. Check the Core URL, enrollment expiry and local provider prerequisites; keep its state and rerun the command to recover.")
                 write_once(marker, json_text(state))
             finally:
@@ -363,7 +363,7 @@ def install(args, token):
         checked(["systemctl", "--user", "is-active", "--quiet", unit.name], "Node service is unavailable; inspect its systemd user journal")
         print("Waiting for Core connection and provider readiness...", flush=True)
         wait_ready(root, args)
-    print("Node connected to Core and provider ready. State: " + str(root))
+    print("Node connected to Core and provider ready. Confirm its capacity in the Core console before first use. State: " + str(root))
 
 
 def wait_ready(root, args, timeout=60):

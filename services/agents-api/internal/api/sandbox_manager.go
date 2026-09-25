@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/go-chi/chi/v5"
@@ -13,10 +12,6 @@ type SandboxNodeList struct {
 }
 type SandboxAllocationList struct {
 	Data []store.RuntimeNodeAllocation `json:"data"`
-}
-type SandboxEnrollmentToken struct {
-	Token     string    `json:"token"`
-	ExpiresAt time.Time `json:"expires_at"`
 }
 type SandboxMutationResponse struct {
 	ID      string `json:"id"`
@@ -45,10 +40,12 @@ func (h *Handler) registerSandboxManagerRoutes(r chi.Router) {
 		r.Put("/deployment", h.updateSandboxDeployment)
 		r.Patch("/deployment/maintenance", h.setSandboxMaintenance)
 		r.Get("/nodes", h.sandboxNodes)
+		r.Get("/nodes/{node_id}", h.sandboxNode)
 		r.Patch("/nodes/{node_id}", h.updateSandboxNode)
 		r.Delete("/nodes/{node_id}", h.removeSandboxNode)
 		r.Get("/nodes/{node_id}/allocations", h.sandboxAllocations)
 		r.Post("/enrollment-tokens", h.createSandboxEnrollment)
+		r.Get("/enrollment-tokens/{enrollment_id}", h.sandboxEnrollment)
 	})
 }
 
@@ -94,7 +91,7 @@ func (h *Handler) sandboxNodes(w http.ResponseWriter, r *http.Request) {
 // @Param node_id path string true "Sandbox node UUID"
 // @Accept json
 // @Param body body store.RuntimeNodeUpdate true "Request"
-// @Success 200 {object} api.SandboxMutationResponse
+// @Success 200 {object} store.RuntimeNode
 // @Failure 400,401,404,409,500,503 {object} v1.ErrorResponse
 // @Router /core/v1/sandbox/nodes/{node_id} [patch]
 func (h *Handler) updateSandboxNode(w http.ResponseWriter, r *http.Request) {
@@ -103,16 +100,17 @@ func (h *Handler) updateSandboxNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input store.RuntimeNodeUpdate
-	if decodeInputObject(raw, &input, "name", "max_active", "max_retained") != nil {
+	if decodeInputObject(raw, &input, "name", "max_active", "max_retained", "admission_state", "expected_config_revision") != nil || nodeUpdateHasNull(raw) {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
 	id := chi.URLParam(r, "node_id")
-	if err := h.sandboxStore.UpdateRuntimeNode(r.Context(), id, input); err != nil {
+	value, err := h.sandboxStore.UpdateRuntimeNode(r.Context(), id, input)
+	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, SandboxMutationResponse{ID: id, Updated: true})
+	writeJSON(w, http.StatusOK, value)
 }
 
 // @Summary Remove a sandbox node with no retained resources
@@ -158,7 +156,7 @@ func (h *Handler) sandboxAllocations(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Accept json
 // @Param body body api.SandboxEnrollmentTokenRequest true "Request"
-// @Success 201 {object} api.SandboxEnrollmentToken
+// @Success 201 {object} store.RuntimeEnrollmentToken
 // @Failure 400,401,404,409,500,503 {object} v1.ErrorResponse
 // @Router /core/v1/sandbox/enrollment-tokens [post]
 func (h *Handler) createSandboxEnrollment(w http.ResponseWriter, r *http.Request) {
@@ -171,12 +169,12 @@ func (h *Handler) createSandboxEnrollment(w http.ResponseWriter, r *http.Request
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
-	token, expires, err := h.sandboxStore.CreateRuntimeEnrollment(r.Context())
+	value, err := h.sandboxStore.CreateRuntimeEnrollment(r.Context())
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, SandboxEnrollmentToken{Token: token, ExpiresAt: expires})
+	writeJSON(w, http.StatusCreated, value)
 }
 
 // @Summary Enroll a sandbox node

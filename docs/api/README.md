@@ -34,6 +34,8 @@ Core directly; the console rejects `/v1` even when given an application key.
 - [Administrator contract](../../contracts/agents-api/admin-api.md): Project/key
   lifecycle, resources, explicit hosted Session archive, copying, summary,
   errors/deletion preconditions and audit.
+- [Node onboarding](../../contracts/agents-api/node-capacity.md): enrollment receipts,
+  host observations and administrator capacity confirmation.
 - [Web integration](web-management.md): browser/console/Core boundaries and frontend handoff.
 - [Design rules](../design-principles.md) and [contributor guide](../../CONTRIBUTING.md):
   ownership, security and change requirements.
