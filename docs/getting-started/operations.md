@@ -126,10 +126,13 @@ per-sandbox resource or Runtime changes:
 1. Read the current deployment generation and enter global maintenance. Existing
    work, reads and cleanup remain available; fresh hosted admission stops.
 2. Verify both allocation and pending-Environment counts are zero. Stopped
-   compute, retained snapshots and uncertain cleanup still count. The current
-   management API has no deployment-wide cleanup operation that preserves public
-   Session history and saved artifacts. Deleting a Session removes its saved
-   artifacts and is not a substitute; retained resources remain a blocker.
+   compute, retained snapshots and uncertain cleanup still count. Explicitly
+   [archive each retained hosted Session](../../contracts/agents-api/admin-api.md#administrative-session-archive)
+   through the administrator API with the current generation, read until its
+   resource disposition is `released`, then recheck both counts. Archive retains
+   history and persisted Files/Artifacts, discards unpersisted workspace contents
+   and prevents the original Session from resuming. Unknown cleanup still blocks
+   replacement; an active Turn may finalize after its resources are released.
 3. Submit the complete replacement with the current generation and unchanged Core
    origin. A failed candidate keeps the previous configuration. A successful
    changed commit retires old nodes and enrollment tokens while retaining history.

@@ -253,7 +253,7 @@ Provider, resource-limit and Runtime changes share one deployment-wide procedure
    existing work, queries and cleanup.
 2. Verify the deployment's allocation and pending-Environment counts are zero.
    Stopped compute, snapshots, unknown creates and pending cleanup still block
-   switching. The cleanup limitation below applies to retained resources.
+   switching. Explicitly archive retained Sessions as described below.
 3. Once cleanup is verified, submit the complete replacement. Core validates the
    candidate before changing the database or draining current workers. It then
    drains existing manager calls and repeats the resource/generation checks in the
@@ -263,12 +263,21 @@ Provider, resource-limit and Runtime changes share one deployment-wide procedure
    the old configuration and maintenance state. After an uncertain response, refresh
    before another write. Saving never automatically deletes compute.
 
-The current management API has no deployment-wide resource-release operation
-that preserves public Session history and saved artifacts. Do not delete Sessions
-to satisfy that requirement: Session deletion removes public access and saved
-artifacts. Maintenance and configuration changes perform no cleanup. Retained
-resources continue to block replacement until their existing lifecycle confirms
-release.
+During maintenance, explicitly archive each retained Core-managed hosted Session
+through `POST /core/v1/admin/projects/{project_id}/sessions/{session_id}/archive`
+with the current `expected_generation`. This requests cancellation and revokes
+Runtime authority; the existing lifecycle releases compute and snapshots after
+provider verification. Poll GET on the same path for `released`, then verify both
+deployment counts are zero. Unknown cleanup remains a blocker. Resource release
+does not prove that an active Turn has finalized.
+
+Archive preserves Session history and persisted Files/Artifacts. Unpersisted
+workspace contents are lost and the original Session cannot resume. Public Session
+deletion has different retention behavior and is not needed for this workflow.
+After an uncertain archive response, read its disposition before another explicit
+write; never automatically retry. See the
+[administrator archive contract](../../contracts/agents-api/admin-api.md#administrative-session-archive).
+Maintenance and configuration changes alone perform no cleanup.
 
 `GET /core/v1/sandbox/deployment` reports the safe configuration, `generation` and
 `resources` counts. `PATCH /core/v1/sandbox/deployment/maintenance` takes

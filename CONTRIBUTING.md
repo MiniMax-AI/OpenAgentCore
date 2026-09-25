@@ -41,8 +41,8 @@ individual key provenance. Projects and keys are database-owned, with no static
 business keys or configuration synchronization. Revocation affects one key;
 archiving a Project revokes all its keys, retaining assets and admitted execution.
 Do not add Core users, roles, memberships or cross-Project sharing. Management
-provides safe reads, public deletion preconditions, independent copies and Project
-and key operations; it cannot execute or edit arbitrary assets. Keep administrator
+provides safe reads, public deletion preconditions, explicit hosted Session archive,
+independent copies and Project and key operations; it cannot execute or edit arbitrary assets. Keep administrator
 target scope separate from caller principals. See [design principles](docs/design-principles.md) and the
 [administrator contract](contracts/agents-api/admin-api.md).
 
@@ -762,6 +762,17 @@ cleanup. Pending hosted Environments without allocations also block changes.
 Failed checks never authorize resource deletion. Explicitly resume after a successful
 change. Preserve historical allocation ownership and Session placement; never migrate
 an existing Session to another provider or recreate a released allocation.
+
+Explicit administrator Session archive requires a Web-managed deployment in
+maintenance and its current generation. Keep Project scope and managed-hosted
+eligibility checks in the existing administrative Store transaction, alongside
+Environment expiry (preserving failure), cancellation requests, Runtime authority
+revocation and audit. The ordinary Worker and provider lifecycle own compute and
+snapshot release; archive must not call a provider in that transaction or delete
+the Session. Retain history and persisted Files/Artifacts. The archive GET reports
+actual resource disposition, not archive provenance or Turn finalization. Keep
+unknown cleanup blocking, never automatically retry the mutation, and never
+resume an archived Session or restore its unpersisted workspace.
 
 Core rejects `AGENTS_API_MANAGED_RUNTIMES_FILE`; there is no file-managed startup
 path or embedded local node. An older file-managed database is not automatically

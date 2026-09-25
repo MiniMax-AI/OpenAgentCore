@@ -79,9 +79,12 @@ cleanup of retained/pending resources. Core validates the candidate before commi
 a rejection preserves the previous configuration. A changed commit advances the
 generation and retires old nodes and enrollment tokens atomically. Explicitly resume
 after success. Neither switching nor editing configuration deletes resources or
-migrates existing Sessions. The management API currently has no deployment-wide
-cleanup operation that preserves public Session history and saved artifacts;
-Session deletion removes those artifacts and cannot substitute for one.
+migrates existing Sessions. During maintenance, administrators can explicitly
+[archive each retained hosted Session](../../contracts/agents-api/admin-api.md#administrative-session-archive)
+through the Core administrator API at the current generation, then read its
+resource disposition and recheck deployment counts. Archive preserves history
+and persisted Files/Artifacts; unpersisted workspace contents are lost and the
+original Session cannot resume. This API does not add a console archive control.
 Public Environment Templates, the `/v1` contract and
 caller-owned `self_hosted` provisioning remain unchanged.
 

@@ -8,12 +8,12 @@ import { projectAgentTurn, projectSessionItem, projectHistoryPage, validateHisto
 import { projectRuntimeHistory, projectRuntimeHistoryCapabilities } from "./runtime-history-projection";
 import { canonicalUuid, isNonnegativeInteger, isRecord } from "./response-projection";
 import {
-  invalidAdminResponse, projectAdminProject, projectAdminKey, projectIssuedAdminKey, projectAdminPage, projectAdminDeleted,
+  invalidAdminResponse, projectAdminProject, projectAdminKey, projectIssuedAdminKey, projectAdminPage, projectAdminDeleted, projectAdminSessionArchive,
   projectResourcePage, projectSavedAgent, projectSkill, projectSkillVersion, projectArtifact, projectCopyResult, projectSummary, projectAdminRuntimePage, projectResourceOwners, projectWriteOperations, projectAdminAudit,
 } from "./admin-projection";
 import type { PageOptions, ReadOptions, RuntimeHistoryQuery, VaultListOptions } from "./types";
 import type {
-  AdminClientOptions, AdminAuditOptions, AdminCopyInput, AdminContent, AdminWriteOptions, CreateAdminProjectInput, RenameAdminProjectInput,
+  AdminClientOptions, AdminAuditOptions, AdminCopyInput, AdminContent, AdminWriteOptions, ArchiveAdminSessionInput, CreateAdminProjectInput, RenameAdminProjectInput,
   IssueAdminAPIKeyInput, AdminSummaryOptions, AdminResourceType, AdminResourceOwner, AdminWriteOperationOptions, AdminWriteOperationPage,
 } from "./admin-types";
 
@@ -220,6 +220,15 @@ export class AdminClient {
   }
   deleteSession(projectId: string, sessionId: string, options?: ReadOptions) {
     return this.#delete(`${scope(projectId)}/sessions/${segment(sessionId)}`, sessionId, "agent.session.deleted", options);
+  }
+  async archiveSession(projectId: string, sessionId: string, input: ArchiveAdminSessionInput, options?: ReadOptions) {
+    if (!Number.isSafeInteger(input.expected_generation) || input.expected_generation <= 0) throw new TypeError("A positive safe integer generation is required.");
+    return projectAdminSessionArchive(await this.#json(`${scope(projectId)}/sessions/${segment(sessionId)}/archive`, options, "POST", {
+      expected_generation: input.expected_generation,
+    }), sessionId);
+  }
+  async retrieveSessionArchive(projectId: string, sessionId: string, options?: ReadOptions) {
+    return projectAdminSessionArchive(await this.#json(`${scope(projectId)}/sessions/${segment(sessionId)}/archive`, options), sessionId);
   }
   async listTurns(projectId: string, sessionId: string, options?: PageOptions) {
     validateHistoryPageOptions(options);

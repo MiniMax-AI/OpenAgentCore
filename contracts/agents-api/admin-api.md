@@ -68,6 +68,44 @@ its provider authorization. Deleting a default Skill version retains the public
 constraint. Skill and Artifact downloads and Runtime reads reject HEAD just as the
 corresponding project operations do.
 
+## Administrative Session archive
+
+`POST /projects/{project_id}/sessions/{session_id}/archive` takes
+`{"expected_generation": N}`, where N is a positive uint64 from the current
+sandbox deployment. It requires deployment administrator authentication, a
+Web-managed deployment in maintenance and the current generation. Missing
+maintenance or a stale generation returns 409. Only Core-managed
+`openai_hosted` Sessions are eligible; other environment types return 400. A
+Session outside the selected Project returns the same 404 as a missing Session.
+
+One transaction marks the Environment expired (retaining an existing failed
+state), requests cancellation, revokes Runtime authority and records the
+administrator audit. The existing lifecycle owns compute and snapshot cleanup;
+no provider operation runs inside that transaction. Unknown outcomes retain
+ownership until matching provider receipts confirm release. The Session itself
+is not deleted. Public history and persisted Files/Artifacts remain available;
+unpersisted workspace contents are lost and the original Session cannot resume.
+
+Both POST and `GET /projects/{project_id}/sessions/{session_id}/archive` return
+`{session_id, environment_id, state}`. GET is read-only and does not require
+maintenance or an expected generation. `state` describes current resource
+disposition: `active`, `cleanup_pending`, or `released`. It is not archive
+provenance: resources may already have expired through their normal lifecycle.
+`released` does not prove that an active Turn has finished cancellation or
+terminal publication; inspect that Turn separately when needed.
+
+After an uncertain POST response, GET this resource before choosing another
+write. A repeated POST has an idempotent state effect, with a separate audit
+record for each accepted request. Clients never automatically retry the mutation.
+`AdminClient.archiveSession` sends the generation and
+`AdminClient.retrieveSessionArchive` reads the disposition; the TypeScript client
+accepts only positive safe integer generations to avoid rounding JSON numbers.
+
+Archive each retained hosted Session explicitly, then verify deployment allocation
+and pending counts are zero before changing provider, resources or Runtime.
+Snapshots and uncertain cleanup remain blockers. This is not a deployment-wide
+bulk operation, Session migration or public Session deletion.
+
 ## Copies
 
 `POST /copies` takes `source_project_id`, `target_project_id`, `resource_type`, `resource_id`,

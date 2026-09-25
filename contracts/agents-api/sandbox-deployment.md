@@ -142,7 +142,7 @@ For a replacement:
    admitted work, reads, receipt retries and explicit cleanup.
 2. Verify both response counts are zero before replacing the selection. Stopped
    compute, snapshots, uncertain operations, pending cleanup and unallocated
-   hosted Environments remain blockers. See the cleanup limitation below.
+   hosted Environments remain blockers. Use the explicit Session archive flow below.
 3. PUT the complete replacement selection with `expected_generation: N` and the
    unchanged Core origin. Core checks the generation and resources, prepares and
    validates the candidate, then drains the existing manager calls. A short Store
@@ -152,11 +152,17 @@ For a replacement:
 4. Read the returned generation and explicitly PATCH maintenance to `false`.
    Resume requires the committed generation to be active.
 
-The current management API does not expose a deployment-wide operation that
-releases sandbox resources while preserving public Session history and saved
-artifacts. Do not substitute Session deletion: it removes public access and saved
-artifacts. Maintenance and PUT do not clear resources. A deployment with retained
-resources remains blocked until its existing cleanup lifecycle confirms release.
+To release a retained hosted Session, explicitly POST
+`/core/v1/admin/projects/{project_id}/sessions/{session_id}/archive` with
+`{"expected_generation": N}` while maintenance is enabled. Poll GET on the same
+path until its resource state is `released`, then recheck the deployment counts.
+The [administrator archive contract](admin-api.md#administrative-session-archive)
+preserves public history and persisted Files/Artifacts, but discards unpersisted
+workspace contents and prevents the original Session from resuming. An active
+Turn may still be finalizing after resources are released. Ordinary Session
+deletion remains separate. Maintenance and PUT do not clear resources; snapshots,
+pending Environments and unknown cleanup remain blockers until the existing
+lifecycle confirms release.
 
 Provider validation, cancellation and draining hold no database transaction or
 manager map mutex. One mutation gate, the existing execution lease and the Store

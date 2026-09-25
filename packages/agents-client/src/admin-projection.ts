@@ -1,8 +1,8 @@
 import { AgentCoreError, projectAgentSnapshot, projectRuntimeObservation } from "./client";
 import { projectTokenUsage } from "./usage-projection";
-import { exactFields, isNonnegativeInteger, isRecord, sameResourceId } from "./response-projection";
+import { canonicalUuid, exactFields, isNonnegativeInteger, isRecord, sameResourceId } from "./response-projection";
 import type { ListPage, SavedAgent } from "./types";
-import type { AdminAPIKey, AdminProject, AdminAuditPage, AdminSummary, AdminRuntimeObservation, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperationPage, AdminCopyResult, AdminDeleted, AdminIssuedAPIKey, AdminPage, SessionArtifact, Skill, SkillVersion } from "./admin-types";
+import type { AdminAPIKey, AdminProject, AdminAuditPage, AdminSummary, AdminRuntimeObservation, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperationPage, AdminCopyResult, AdminDeleted, AdminIssuedAPIKey, AdminPage, AdminSessionArchive, SessionArtifact, Skill, SkillVersion } from "./admin-types";
 
 export function invalidAdminResponse(): never {
   throw new AgentCoreError("Core returned an invalid administration response.", 502, "invalid_admin_response");
@@ -56,6 +56,13 @@ export function projectAdminDeleted<O extends string>(value: unknown, expectedId
   const deleted = record(value, ["id", "object", "deleted"]);
   if (typeof deleted.id !== "string" || !sameResourceId(deleted.id, expectedId) || deleted.object !== object || deleted.deleted !== true) return invalidAdminResponse();
   return { id: deleted.id, object, deleted: true };
+}
+export function projectAdminSessionArchive(value: unknown, sessionId: string): AdminSessionArchive {
+  const archive = record(value, ["session_id", "environment_id", "state"]);
+  if (typeof archive.session_id !== "string" || !sameResourceId(archive.session_id, sessionId) ||
+    canonicalUuid(archive.environment_id) === null ||
+    (archive.state !== "active" && archive.state !== "cleanup_pending" && archive.state !== "released")) return invalidAdminResponse();
+  return { session_id: archive.session_id, environment_id: archive.environment_id as string, state: archive.state };
 }
 export function projectSavedAgent(value: unknown, expectedId?: string): SavedAgent {
   if (!isRecord(value)) return invalidAdminResponse();

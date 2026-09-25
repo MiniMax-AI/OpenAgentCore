@@ -32,7 +32,8 @@ Core directly; the console rejects `/v1` even when given an application key.
   generated management and executor-credential routes. The filename does not mean
   that all its routes are sandbox-administrator operations; use the authority table above.
 - [Administrator contract](../../contracts/agents-api/admin-api.md): Project/key
-  lifecycle, resources, copying, summary, errors/deletion preconditions and audit.
+  lifecycle, resources, explicit hosted Session archive, copying, summary,
+  errors/deletion preconditions and audit.
 - [Web integration](web-management.md): browser/console/Core boundaries and frontend handoff.
 - [Design rules](../design-principles.md) and [contributor guide](../../CONTRIBUTING.md):
   ownership, security and change requirements.

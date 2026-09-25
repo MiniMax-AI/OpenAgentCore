@@ -42,6 +42,13 @@ export interface AdminCopyResult {
   skipped: Array<{ type: AdminCopyResourceType | "skill_version"; source_id: string; reason: string }>;
 }
 export interface AdminWriteOptions extends ReadOptions { idempotencyKey?: string }
+export interface ArchiveAdminSessionInput { expected_generation: number }
+/** Current resource disposition; released does not imply that the active Turn has finalized. */
+export interface AdminSessionArchive {
+  session_id: string;
+  environment_id: string;
+  state: "active" | "cleanup_pending" | "released";
+}
 export interface Skill {
   id: string;
   object: "skill";
