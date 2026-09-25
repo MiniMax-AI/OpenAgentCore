@@ -5,9 +5,7 @@
 .console-auth-form .field { gap: 7px; }
 .console-auth-form .field > span { font-size: 12px; }
 .console-auth-form .field input { padding: 10px 12px; min-height: 42px; background: var(--surface-subtle); }
-.console-auth-form .field small { font-size: 11px; line-height: 1.6; color: var(--fg-muted); }
 .console-auth-form .button { min-height: 42px; justify-content: center; gap: 12px; }
 .console-auth-form .console-auth-error { color: var(--danger); }
 .console-account-menu > button { background: transparent; border: 0; display: flex; white-space: nowrap; gap: 9px; align-items: center; padding: 8px; color: var(--fg-muted); font: inherit; font-size: 12px; cursor: pointer; }
-.console-account-menu small { color: var(--danger); }
 .console-account-menu > button:hover { color: var(--fg); }

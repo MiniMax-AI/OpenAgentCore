@@ -1,7 +1,7 @@
 export const keys = {
   page: {
     title: "Projects and keys",
-    help: "A project owns a set of assets: Agents, Sessions, Skills, templates, files and Vaults. Every API key of a project sees and uses the same assets; projects are isolated from each other. Archiving a project revokes all of its keys and keeps its assets.",
+    help: "A project owns a set of assets: Agents, Sessions, Skills, templates, files and Vaults. Every API key of a project sees and uses the same assets; projects are isolated from each other. Archiving a project revokes all of its keys and keeps its assets. Applications call the Agents API (/v1) with these project API keys; the Core key you sign in with is separate and is not listed here.",
     create: "Create project",
     refresh: "Refresh projects",
     loading: "Loading projects…",
@@ -194,12 +194,12 @@ export const keys = {
   },
   firstRun: {
     title: "Create your first project",
-    lead: "A project holds Agents, Sessions and files. Callers reach it with an API key.",
+    lead: "A project holds Agents, Sessions and files. Applications reach it with a project API key.",
     projectName: "Project name",
     submit: "Create project and key",
     submitting: "Creating…",
     projectCreated: "Project {{project}} was created. Issue its key to continue.",
-    readyTitle: "Your API key is ready",
+    readyTitle: "Your project API key is ready",
     keyCaption: "{{key}} · {{project}}",
     tryIt: "Try it",
     tryItHelp: "Run this in a terminal with PROJECT_API_KEY set to the project API key above. It lists the project's Agents; a new project has none yet. The console does not send this request.",

@@ -3,7 +3,7 @@ type TranslationShape<T> = { [K in keyof T]: T[K] extends string ? string : Tran
 export const keys: TranslationShape<typeof english> = {
   page: {
     title: "项目与 key",
-    help: "项目拥有一组资产：Agent、Session、Skill、环境模板、文件和 Vault。同一个项目的所有 API key 看到和使用的是同一批资产，项目之间互相隔离。归档项目会撤销它的全部 key，资产保留。",
+    help: "项目拥有一组资产：Agent、Session、Skill、环境模板、文件和 Vault。同一个项目的所有 API key 看到和使用的是同一批资产，项目之间互相隔离。归档项目会撤销它的全部 key，资产保留。应用用这些项目 API Key 调用 Agents API（/v1）；登录控制台用的 Core Key 与它们无关，也不在这里列出。",
     create: "创建项目",
     refresh: "刷新项目",
     loading: "正在加载项目…",
@@ -196,12 +196,12 @@ export const keys: TranslationShape<typeof english> = {
   },
   firstRun: {
     title: "创建第一个项目",
-    lead: "项目存放 Agent、Session 和文件，调用方用 API key 访问它。",
+    lead: "项目存放 Agent、Session 和文件，应用用项目 API Key 访问它。",
     projectName: "项目名称",
     submit: "创建项目和 key",
     submitting: "正在创建…",
     projectCreated: "项目 {{project}} 已创建，签发它的 key 后继续。",
-    readyTitle: "API key 已就绪",
+    readyTitle: "项目 API Key 已就绪",
     keyCaption: "{{key}} · {{project}}",
     tryIt: "试一下",
     tryItHelp: "在终端里把 PROJECT_API_KEY 设为上面的项目 API Key 后运行。它会列出项目里的 Agent，新项目还没有 Agent。控制台不会发送这个请求。",

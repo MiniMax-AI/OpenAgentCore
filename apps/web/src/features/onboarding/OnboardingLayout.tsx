@@ -5,8 +5,8 @@ import { useTranslation } from "react-i18next";
 import { OnboardingStage, type StageScene, type TourChapter } from "./OnboardingStage";
 import "./onboarding.css";
 
-export type OnboardingStep = "account" | "project" | "tour";
-const STEPS: readonly OnboardingStep[] = ["account", "project", "tour"];
+export type OnboardingStep = "project" | "tour";
+const STEPS: readonly OnboardingStep[] = ["project", "tour"];
 
 /**
  * Every onboarding screen: the dark stage on the left, the step's panel on
@@ -14,12 +14,12 @@ const STEPS: readonly OnboardingStep[] = ["account", "project", "tour"];
  * (no `step`) uses the same frame without the progress.
  */
 export function OnboardingLayout({ scene, chapter, step, controls, children }: {
-  /** What the stage shows; null while the console is still checking the account. */
+  /** What the stage shows; null while the console is still checking the sign-in. */
   scene: StageScene | "tour" | null;
   chapter?: TourChapter;
   /** The first-run step this screen is; omitted when signing in. */
   step?: OnboardingStep;
-  /** Theme, language and account controls. */
+  /** Theme, language and sign-out controls. */
   controls: ReactNode;
   children: ReactNode;
 }) {
