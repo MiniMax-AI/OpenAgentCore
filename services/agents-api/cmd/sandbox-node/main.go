@@ -26,9 +26,22 @@ func main() {
 	defer stop()
 	if err := run(ctx, os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		os.Exit(exitCode(err))
 	}
 }
+
+// exitRejected tells the service manager not to restart the node: Core rejected
+// its credential because the node was removed or retired, so no retry can succeed.
+// The node units set RestartPreventExitStatus to this value (EX_CONFIG).
+const exitRejected = 78
+
+func exitCode(err error) int {
+	if errors.Is(err, node.ErrAuthentication) {
+		return exitRejected
+	}
+	return 1
+}
+
 func run(ctx context.Context, args []string) error {
 	if len(args) == 0 || (args[0] != "register" && args[0] != "run") {
 		return errors.New("usage: parsar-sandbox-node register|run --config PATH --state-dir PATH")

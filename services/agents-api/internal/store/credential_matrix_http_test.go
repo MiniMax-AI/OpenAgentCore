@@ -25,6 +25,7 @@ import (
 // own /api/v1 machine connection routes.
 func TestCredentialNamespaceMatrix(t *testing.T) {
 	s, _ := store.NewManagedTestStore(t)
+	s.SetPublicURL("https://core.example")
 	ctx := t.Context()
 	coreKey := uuid.NewString()
 	admin, err := api.NewDeploymentAuthenticator([]string{device.HashCredential(coreKey)})
@@ -117,7 +118,7 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 	created("POST", "/core/v1/sandbox/enrollment-tokens", coreKey, `{}`, &enrollment)
 	nodeID, nodeCredential := uuid.NewString(), strings.Repeat("n", 64)
 	enroll, _ := json.Marshal(store.RuntimeNodeEnrollment{NodeID: nodeID, Credential: nodeCredential, Name: "Matrix node", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
-		DeploymentGeneration: 1, SpecificationDigest: specification.Digest("docker")})
+		DeploymentGeneration: 1, SpecificationDigest: specification.Digest("docker"), CoreURL: "https://core.example"})
 	var node store.RuntimeNodeIdentity
 	created("POST", "/api/v1/sandbox-node/enroll", enrollment.Token, string(enroll), &node)
 

@@ -56,6 +56,9 @@ definitions:
     properties:
       backend_fingerprint:
         type: string
+      core_url:
+        description: The Core origin this node stores and connects to, such as https://core.example. It must equal the installation public URL; otherwise enrollment gets 409 sandbox_node_address_mismatch and the token stays unused.
+        type: string
       credential:
         type: string
       deployment_generation:
@@ -183,7 +186,7 @@ paths:
     post:
       consumes:
         - application/json
-      description: Node machine connection. Consumes a one-use enrollment token; grants no project or administrator access. Responses contain only explicit safe fields.
+      description: Node machine connection. Consumes a one-use enrollment token; grants no project or administrator access. Responses contain only explicit safe fields. core_url is required and must equal the installation public URL; a different address gets 409 sandbox_node_address_mismatch and leaves the token unused.
       parameters:
         - description: Request
           in: body

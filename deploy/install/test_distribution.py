@@ -2,6 +2,7 @@
 import gzip
 import hashlib
 import http.server
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -185,3 +186,23 @@ class DockerIdentityTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ManifestSourceTests(unittest.TestCase):
+    """A release URL recorded by the build is never an artifact source."""
+
+    def test_console_is_the_only_artifact_source(self):
+        manifest = json.dumps({'source_commit': 'a' * 40, 'platform': 'linux/amd64',
+                               'artifact_base_url': 'https://github.com/example/releases/download/tag'}).encode()
+        sums = (hashlib.sha256(manifest).hexdigest() + '  manifest.json\n').encode()
+        root = Path.home() / '.parsar/tests/distribution'
+        root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=root) as bundle:
+            (Path(bundle) / 'manifest.json').write_bytes(manifest)
+            (Path(bundle) / 'SHA256SUMS').write_bytes(sums)
+            self.assertEqual(distribution.load_manifest(offline_root=bundle)['artifact_base_url'], '')
+        files = {'SHA256SUMS': sums, 'manifest.json': manifest}
+        opener = Mock(open=lambda url, timeout: io.BytesIO(files[url.rsplit('/', 1)[1]]))
+        with patch.object(distribution.urllib.request, 'build_opener', return_value=opener):
+            loaded = distribution.load_manifest(source_url='https://console.example')
+        self.assertEqual(loaded['artifact_base_url'], 'https://console.example/node-install/artifacts')

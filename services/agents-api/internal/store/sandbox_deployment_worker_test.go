@@ -53,7 +53,7 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 	if _, err := s.CreateSession(t.Context(), uuid.NewString(), input); !errors.Is(err, store.ErrRuntimeNodeUnavailable) {
 		t.Fatal("zero-node deployment admitted Session", err)
 	}
-	token, _, err := s.CreateRuntimeEnrollment(t.Context(), store.RuntimeNodeCapacity{MaxActive: 4, MaxRetained: 16})
+	token, err := store.EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), store.RuntimeNodeCapacity{MaxActive: 4, MaxRetained: 16}))
 	if err != nil {
 		t.Fatal(err)
 	}

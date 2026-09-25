@@ -12,7 +12,7 @@ import (
 
 func lifecycleTestNode(t *testing.T, s *Store) string {
 	t.Helper()
-	token, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 100, MaxRetained: 100})
+	token, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 100, MaxRetained: 100}))
 	if err != nil {
 		t.Fatal(err)
 	}

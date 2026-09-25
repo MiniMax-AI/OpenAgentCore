@@ -56,6 +56,8 @@ type EnrollmentRequest struct {
 	Name                 string `json:"name"`
 	Provider             string `json:"provider"`
 	BackendFingerprint   string `json:"backend_fingerprint"`
+	// The retained Core origin; Core refuses an enrollment whose address is not its public URL.
+	CoreURL string `json:"core_url"`
 }
 
 type EnrollmentResponse struct {

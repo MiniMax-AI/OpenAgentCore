@@ -259,8 +259,8 @@ def load_manifest(source_url=None, offline_root=None):
         if (manifest.get('platform') != 'linux/amd64'
                 or not re.fullmatch(r'[0-9a-f]{40}', manifest.get('source_commit', ''))):
             raise DistributionError('Unsupported distribution platform or revision')
-        if not manifest.get('artifact_base_url') and source_url:
-            manifest['artifact_base_url'] = source_url.rstrip('/') + '/node-install/artifacts'
+        # Artifacts come only from the console, never from a release URL the build recorded.
+        manifest['artifact_base_url'] = source_url.rstrip('/') + '/node-install/artifacts' if source_url and offline_root is None else ''
         return manifest
     except (ValueError, TypeError, AttributeError):
         raise DistributionError('Invalid distribution metadata') from None

@@ -1756,7 +1756,9 @@ remains independent of Docker's local store identity.
 
 The manifest is the shared download contract for Core, node and self-hosted
 installers: flat versioned filenames, compressed Runtime size/hash and unpacked
-size/hash, with HTTPS release URLs or the explicit offline payload. Download into
+size/hash. Nodes and self-hosted executors download artifacts only from their
+console's payload (or a local offline bundle), never from a release URL the build
+recorded; release URLs serve people downloading bundles. Download into
 private temporary files, verify before atomic promotion, and reuse only verified
 cache entries or exact image identities. Core's default image must not acquire
 execution-only payloads. Python zipapps bundle the shared resolver with each
@@ -1798,9 +1800,10 @@ applications, nodes, sandbox guests and self-hosted executors, and also the cons
 origin. Core derives the daemon `wss` URL, the self-hosted `remote_url`, hosted
 Runtime bootstrap and the deployment's read-only `core_url` from it; the deployment
 API does not accept a Core address, and no deployment row stores one. Bootstrap
-never uses request Host or caller-supplied placement fields. Each node records the
-address it enrolled with; after the public URL changes, it receives no new
-sandboxes until re-added. This does
+never uses request Host or caller-supplied placement fields. Enrollment names the
+Core address the node uses; Core refuses one that is not the public URL (409,
+token unconsumed) and records it. After the public URL changes, a node receives no
+new sandboxes until re-added. This does
 not widen sandbox network policies or change credential admission.
 
 The distribution build sets umask 022 for non-root-readable payloads; installation
@@ -1820,15 +1823,23 @@ same opt-in rule. Missing KVM fails when microsandbox is selected without changi
 that choice.
 The thin distribution supplies native Core binaries. Provider helpers, the node
 agent, Runtime launcher and pinned msb runtime/firmware are separate, same-revision
-assets resolved only when selected. Core packaging is independent of provider:
+assets. Nodes obtain them only from the console's payload, so a console serves
+nodes only with the offline bundle's assets or release assets placed in the bundle's
+`artifacts/` directory before `install.sh` runs; `/console/config` reports which
+providers it can serve. Core packaging is independent of provider:
 `--native-core` runs Core as a systemd user service, with PostgreSQL/Web in Compose
 and a private loopback database port. Native Core needs no KVM or node assets. Core receives no
 Docker socket or node identity mount in either mode. The ordinary standalone node
 service owns its provider processes outside the Core container. Its `KillMode=process`
 preserves resident microVM/helper processes across a node-service restart. User KVM
-access and the Linux runtime libraries are prerequisites for microsandbox; both node
-providers require a systemd user session with linger. Do not add another launcher,
-scheduler or recovery path for local installation.
+access and the Linux runtime libraries are prerequisites for microsandbox. A node
+installed without root runs as a systemd user service and needs linger. A root-run
+node installation (sudo mode) may instead install one root-owned system service per
+installation that runs the same node program as a dedicated unprivileged service
+user. Do not add any other launcher, scheduler or recovery path. Node services
+restart after failures without a start limit, so a node outlasts a Core outage,
+and stop restarting when the node program exits 78 because Core rejected its
+credential (a removed or retired node).
 The basic API image and binary builds remain independent artifacts.
 The standalone API release and Core distribution both include the Hosted Sandbox
 Manager guide at the relative path used by their packaged README. Include the
@@ -1885,8 +1896,9 @@ dialog, using the deployment's `core_url` (the installation public URL).
 Do not expose routine network wiring or manual runtime setup as the primary flow.
 Generate a one-time command only on user intent, never retry enrollment writes
 automatically, and discard credentials and late responses when the dialog closes
-or the Core connection changes. Detect successful addition against the node IDs
-present before enrollment; an existing node reconnecting is not a new enrollment.
+or the Core connection changes. Detect successful addition by the command's
+`enrollment_id`, which Core reports on the node it registered (null for nodes
+enrolled before Core recorded it); an existing node reconnecting is not a new enrollment.
 The command verifies the installer checksum before execution, retains normal TLS
 verification, and passes the enrollment credential only to the installer process.
 

@@ -93,6 +93,14 @@ func runtimeUUID(id pgtype.UUID) string {
 	}
 	return uuid.UUID(id.Bytes).String()
 }
+
+func optionalUUID(id pgtype.UUID) *string {
+	if !id.Valid {
+		return nil
+	}
+	value := runtimeUUID(id)
+	return &value
+}
 func (s *Store) ListRuntimeNodes(ctx context.Context) ([]RuntimeNode, error) {
 	rows, err := s.queries.ListRuntimeNodes(ctx, pgtype.UUID{})
 	if err != nil {
@@ -114,21 +122,24 @@ func runtimeNodeViews(rows []sqlc.ListRuntimeNodesRow) ([]RuntimeNode, error) {
 			return nil, err
 		}
 		health.ProviderReady = n.ProviderReady
-		out = append(out, RuntimeNode{RuntimeNodeHealth: health, Running: n.Running, Snapshots: n.Snapshots, ID: runtimeUUID(n.ID), Name: n.Name, CoreURL: n.CoreUrl, Provider: n.ProviderKind, Online: n.Online, LastSeenAt: seen, MaxActive: int(n.MaxActive), MaxRetained: retainedLimit(n.ProviderKind, int(n.MaxActive), int(n.MaxRetained)), Active: n.Active, Reserved: n.Reserved, Retained: n.Retained, CleanupPending: n.CleanupPending, CreatedAt: n.CreatedAt.Time})
+		out = append(out, RuntimeNode{RuntimeNodeHealth: health, Running: n.Running, Snapshots: n.Snapshots, ID: runtimeUUID(n.ID), Name: n.Name, CoreURL: n.CoreUrl, EnrollmentID: optionalUUID(n.EnrollmentID), Provider: n.ProviderKind, Online: n.Online, LastSeenAt: seen, MaxActive: int(n.MaxActive), MaxRetained: retainedLimit(n.ProviderKind, int(n.MaxActive), int(n.MaxRetained)), Active: n.Active, Reserved: n.Reserved, Retained: n.Retained, CleanupPending: n.CleanupPending, CreatedAt: n.CreatedAt.Time})
 	}
 	return out, nil
 }
-func (s *Store) CreateRuntimeEnrollment(ctx context.Context, capacity RuntimeNodeCapacity) (string, time.Time, error) {
+
+// CreateRuntimeEnrollment issues a one-use enrollment token. Its ID is a public,
+// non-secret handle: the node the token registers reports it as enrollment_id.
+func (s *Store) CreateRuntimeEnrollment(ctx context.Context, capacity RuntimeNodeCapacity) (RuntimeNodeEnrollmentToken, error) {
 	// The retained limit depends on the provider, so the transaction checks it.
 	if err := validateRuntimeNode("enrollment", capacity.MaxActive, capacity.MaxActive); err != nil {
-		return "", time.Time{}, err
+		return RuntimeNodeEnrollmentToken{}, err
 	}
 	var bytes [32]byte
 	if _, err := rand.Read(bytes[:]); err != nil {
-		return "", time.Time{}, err
+		return RuntimeNodeEnrollmentToken{}, err
 	}
-	token := hex.EncodeToString(bytes[:])
-	var expires time.Time
+	id := uuid.New()
+	result := RuntimeNodeEnrollmentToken{Token: hex.EncodeToString(bytes[:]), ID: id.String()}
 	err := s.runtimeManagerTransaction(ctx, func(q *sqlc.Queries, d sqlc.RuntimeDeployment) error {
 		capacity.MaxRetained = retainedLimit(d.ProviderKind, capacity.MaxActive, capacity.MaxRetained)
 		if err := validateRuntimeNode("enrollment", capacity.MaxActive, capacity.MaxRetained); err != nil {
@@ -137,14 +148,14 @@ func (s *Store) CreateRuntimeEnrollment(ctx context.Context, capacity RuntimeNod
 		if d.Mode != "nodes" || d.Maintenance || unspecifiedNodeDeployment(d) {
 			return ErrSandboxDeploymentConflict
 		}
-		if err := q.CreateRuntimeEnrollment(ctx, sqlc.CreateRuntimeEnrollmentParams{TokenSha256: runtimeTokenDigest(token), InstallationID: d.InstallationID, MaxActive: int32(capacity.MaxActive), MaxRetained: int32(capacity.MaxRetained)}); err != nil {
+		if err := q.CreateRuntimeEnrollment(ctx, sqlc.CreateRuntimeEnrollmentParams{ID: pgtype.UUID{Bytes: id, Valid: true}, TokenSha256: runtimeTokenDigest(result.Token), InstallationID: d.InstallationID, MaxActive: int32(capacity.MaxActive), MaxRetained: int32(capacity.MaxRetained)}); err != nil {
 			return err
 		}
-		row, err := q.GetRuntimeEnrollment(ctx, runtimeTokenDigest(token))
-		expires = row.ExpiresAt.Time
+		row, err := q.GetRuntimeEnrollment(ctx, runtimeTokenDigest(result.Token))
+		result.ExpiresAt = row.ExpiresAt.Time
 		return err
 	})
-	return token, expires, err
+	return result, err
 }
 func (s *Store) EnrollRuntimeNode(ctx context.Context, token string, input RuntimeNodeEnrollment) (RuntimeNodeIdentity, error) {
 	id, err := parseConnectionGeneration(input.NodeID)
@@ -179,12 +190,18 @@ func (s *Store) EnrollRuntimeNode(ctx context.Context, token string, input Runti
 		if err != nil || input.DeploymentGeneration != uint64(d.Generation) || input.SpecificationDigest != spec.Digest(d.ProviderKind) {
 			return ErrRuntimeSpecificationMismatch
 		}
+		// The node must use the address Core advertises now. It read that address
+		// from its configuration, but the public URL may have changed since, or an
+		// operator may have registered by hand with another origin.
+		if input.CoreURL != s.publicURL {
+			return ErrRuntimeNodeAddressMismatch
+		}
 		if _, err := q.GetRuntimeNode(ctx, id); err == nil {
 			return ErrIdempotencyConflict
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		row, err := q.InsertRuntimeNode(ctx, sqlc.InsertRuntimeNodeParams{ID: id, InstallationID: d.InstallationID, Name: input.Name, BackendFingerprint: input.BackendFingerprint, CredentialSha256: runtimeTokenDigest(input.Credential), MaxActive: receipt.MaxActive, MaxRetained: int32(retainedLimit(d.ProviderKind, int(receipt.MaxActive), int(receipt.MaxRetained))), SpecificationDigest: input.SpecificationDigest, DeploymentGeneration: int64(input.DeploymentGeneration), CoreUrl: s.publicURL})
+		row, err := q.InsertRuntimeNode(ctx, sqlc.InsertRuntimeNodeParams{ID: id, InstallationID: d.InstallationID, Name: input.Name, BackendFingerprint: input.BackendFingerprint, CredentialSha256: runtimeTokenDigest(input.Credential), MaxActive: receipt.MaxActive, MaxRetained: int32(retainedLimit(d.ProviderKind, int(receipt.MaxActive), int(receipt.MaxRetained))), SpecificationDigest: input.SpecificationDigest, DeploymentGeneration: int64(input.DeploymentGeneration), CoreUrl: input.CoreURL, EnrollmentID: receipt.ID})
 		if err != nil {
 			return err
 		}

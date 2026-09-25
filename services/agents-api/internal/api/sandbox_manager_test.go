@@ -110,3 +110,21 @@ func TestSandboxEnrollmentCapacityIsAdministratorOnly(t *testing.T) {
 		}
 	}
 }
+
+// Enrollment names the Core address the node uses; without it the request fails
+// before any token is read.
+func TestSandboxNodeEnrollmentRequiresCoreURL(t *testing.T) {
+	project, _ := NewAuthenticator([]APIKey{callerBinding()})
+	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("administrator")})
+	h, err := NewHandler(&recordingStore{}, project, "codex", WithSandboxManager(&store.Store{}, admin))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/sandbox-node/enroll", strings.NewReader(`{"node_id":"node","name":"node"}`))
+	request.Header.Set("Authorization", "Bearer one-use")
+	response := httptest.NewRecorder()
+	h.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `"param":"core_url"`) {
+		t.Fatal(response.Code, response.Body.String())
+	}
+}

@@ -20,7 +20,7 @@ func TestManagedSessionArchiveReleasesPendingNodePlacement(t *testing.T) {
 	if _, err := w.InitializeSandboxDeployment(t.Context(), installation, SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
 		t.Fatal(err)
 	}
-	token, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 1, MaxRetained: 1})
+	token, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 1, MaxRetained: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}
