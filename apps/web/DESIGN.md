@@ -508,7 +508,8 @@ request runs.
   copyable samples, each a Margin Gray block with a Hairline and its label and copy
   button in a header row: `OPENAI_BASE_URL` (the installation's API base URL) and
   `OPENAI_API_KEY` (the new key), a curl request and a Python example with the
-  pinned SDK. One Graphite line says execution needs a model. When the public
+  pinned SDK. One Graphite line says running an Agent needs a model provider: in
+  each request, saved on the Agent, or the deployment default. When the public
   address is loopback, a note above the samples says the API is reachable only on
   the Core machine; without an API address only that note shows.
 
