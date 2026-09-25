@@ -51,15 +51,26 @@ export function ApiKeyExample() {
     catch { setCopied(false); setCopyFailed(true); }
   }
   return <aside className="api-key-example" aria-label={t("How an API key works")}>
-    <div className="api-key-example-head">
-      <span className="api-key-example-topline">GET /v1/agents</span>
-      <button type="button" className="button outline api-key-example-copy" onClick={() => void copyCommand()}><Copy size={14} aria-hidden="true" />{t(copied ? "Command copied" : "Copy curl")}</button>
+    <div className="api-key-example-topline"><span className="api-key-example-live" />{t("A request in three beats")}</div>
+    <h2>{t("Create once. Call your API.")}</h2>
+    <p>{t("Your key connects a request from your machine to Agent Core.")}</p>
+    <div className="api-key-example-scene" aria-hidden="true">
+      <div className="api-key-example-terminal"><div className="api-key-example-terminal-top"><span /><span /><span /><code>terminal</code></div>
+        <div className="api-key-example-frame frame-one"><small>01 · {t("Create a key")}</small><code>pc_demo••••••••</code></div>
+        <div className="api-key-example-frame frame-two"><small>02 · {t("Send a request")}</small><code>Authorization: Bearer pc_demo•••</code></div>
+        <div className="api-key-example-frame frame-three"><small>03 · {t("See the result")}</small><code><span>200 OK</span> · {t("Agent created")}</code></div>
+      </div>
+      <div className="api-key-example-progress"><span /><span /><span /></div>
     </div>
-    <h2>{t("Try a real API request")}</h2>
-    <p>{t("This read-only request lists Agents. The same key can also create Agents and Sessions.")}</p>
-    <pre className="api-key-example-code"><code>{command}</code></pre>
-    <p className="api-key-example-note">{t("Set AGENT_CORE_API_KEY in a terminal that can reach this address. The key is shown only when created.")}</p>
-    {copyFailed ? <p className="api-key-error" role="alert">{t("Could not copy the command. Select and copy it manually.")}</p> : null}
+    <p className="api-key-example-note">{t("The secret appears once when you create it. Save it before closing the message.")}</p>
+    <details className="api-key-example-request">
+      <summary>{t("View a curl example")}</summary>
+      <p>{t("This read-only request lists Agents. The same key can also create Agents and Sessions.")}</p>
+      <pre className="api-key-example-code"><code>{command}</code></pre>
+      <button type="button" className="button outline api-key-example-copy" onClick={() => void copyCommand()}><Copy size={14} aria-hidden="true" />{t(copied ? "Command copied" : "Copy curl")}</button>
+      <p className="api-key-example-note">{t("Set AGENT_CORE_API_KEY in a terminal that can reach this address.")}</p>
+      {copyFailed ? <p className="api-key-error" role="alert">{t("Could not copy the command. Select and copy it manually.")}</p> : null}
+    </details>
   </aside>;
 }
 

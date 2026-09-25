@@ -347,6 +347,12 @@ test("shows only active API keys and copies a usable read-only curl example", as
   await expect(page.locator(".api-key-list")).toContainText("Current key");
   await expect(page.locator(".api-key-list")).not.toContainText("Old key");
   await expect(page.locator(".api-key-list-heading strong")).toHaveText("1");
+  await expect(page.locator(".api-key-example-frame")).toHaveCount(3);
+  await expect(page.locator(".api-key-example-frame.frame-one")).toContainText("Create a key");
+  await expect(page.locator(".api-key-example-frame.frame-two")).toContainText("Send a request");
+  await expect(page.locator(".api-key-example-frame.frame-three")).toContainText("See the result");
+  await expect(page.getByRole("button", { name: "Copy curl", exact: true })).toBeHidden();
+  await page.getByText("View a curl example", { exact: true }).click();
   await page.getByRole("button", { name: "Copy curl", exact: true }).click();
   const command = await page.evaluate(() => navigator.clipboard.readText());
   expect(command).toContain(`--url '${new URL(page.url()).origin}/v1/agents'`);
@@ -429,6 +435,8 @@ test("fits API key content at desktop and mobile widths", async ({ page }) => {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("button", { name: "Create API key", exact: true })).toBeInViewport();
+  await page.getByText("View a curl example", { exact: true }).click();
+  await expect(page.getByRole("button", { name: "Copy curl", exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
