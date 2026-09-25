@@ -141,7 +141,7 @@ workbench.
 - **Executor credentials.** Only Core issues the credential file a self-hosted
   executor needs, with the deployment's Core key. A Session page whose environment
   is self-hosted has an Executor credentials section: issue a credential (shown
-  once as the credential file, to copy or download, never stored), rotate it (the
+  once as one line of JSON, to copy or download, never stored), rotate it (the
   old one stops working immediately) or revoke it (the executor can no longer
   connect; a running process is not stopped). The file lets one executor connect
   for that environment only; it cannot call the Agents API.

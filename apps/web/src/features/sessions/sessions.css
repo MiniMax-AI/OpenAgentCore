@@ -387,6 +387,8 @@
   margin: 0;
   padding: 11px 13px;
   overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   color: var(--fg);
   font-family: var(--font-mono);
   font-size: 12px;

@@ -515,8 +515,9 @@ request runs.
   under a notice that it is shown once; only "I've saved this key" dismisses it.
   Closing the dialog moves the key into a pending notice card on the page.
 - **Executor credential dialog**: the same shown-once notice over the credential
-  file, then Copy credential (primary: it is pasted at the installer's hidden
-  prompt) and Download credential file (outline), with a Graphite
+  as one line of JSON (wrapped, never pretty-printed), then Copy credential
+  (primary: it is pasted at the installer's hidden prompt) and Download
+  credential file (outline), with a Graphite
   hint for automation (`chmod 600`, `--credential-file`). Done is outline and
   forgets the credential; closing the dialog keeps it in a pending card.
 - **How to call**: wherever a new key is shown, a card under it gives three

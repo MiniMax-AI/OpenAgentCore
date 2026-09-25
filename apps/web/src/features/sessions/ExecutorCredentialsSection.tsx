@@ -33,12 +33,14 @@ function newKeyId(): string {
 }
 
 /**
- * The self-hosted executor's credential file. The installer's hidden prompt
- * reads it pasted whole, and `--credential-file` reads it from disk.
+ * The self-hosted executor's credential as one line of JSON. The installer
+ * also accepts it pretty-printed, but a one-line paste survives terminals that
+ * warn about or bracket multi-line pastes; `--credential-file` reads the same
+ * JSON from the downloaded file.
  */
-function credentialFile(credential: IssuedExecutorCredential): string {
+function credentialText(credential: IssuedExecutorCredential): string {
   const { key_id, environment_id, executor_token } = credential;
-  return `${JSON.stringify({ key_id, environment_id, executor_token }, null, 2)}\n`;
+  return JSON.stringify({ key_id, environment_id, executor_token });
 }
 
 /**
@@ -353,9 +355,9 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
  */
 function CredentialFile({ credential }: { credential: IssuedExecutorCredential }) {
   const { t } = useTranslation("sessions");
-  const text = credentialFile(credential);
+  const text = credentialText(credential);
   const { state, copy } = useCopy(text);
-  const download = () => saveBlob(new Blob([text], { type: "application/json" }), `executor-credential-${credential.environment_id.slice(0, 8)}.json`);
+  const download = () => saveBlob(new Blob([`${text}\n`], { type: "application/json" }), `executor-credential-${credential.environment_id.slice(0, 8)}.json`);
   return (
     <div className="executor-credential">
       <p className="executor-credential-notice">{t("executor.issued.notice")}</p>

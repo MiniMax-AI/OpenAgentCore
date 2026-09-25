@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
 
 import { archiveProject, expectManagementBoundary, openConsole } from "./console";
 
@@ -53,13 +54,15 @@ python3 "$d/install.pyz" --source-url 'https://core.example.com' --environment-i
   await section.getByRole("button", { name: "Issue credential" }).click();
   const issued = page.getByRole("dialog", { name: "Executor credential" });
   await expect(issued).toContainText("shown only once");
-  // Copied to paste at the installer's hidden prompt; the file is for automation.
+  // One line of JSON to paste at the installer's hidden prompt; the file is for automation.
   await expect(issued.getByRole("button", { name: "Copy credential" })).toHaveClass(/\bprimary\b/);
-  await expect(issued.getByLabel("Executor credential file")).toContainText("exec_fixture_");
+  await expect(issued.getByLabel("Executor credential file")).toHaveText(new RegExp(`^\\{"key_id":"[0-9a-f-]{36}","environment_id":"${environmentId}","executor_token":"exec_fixture_\\d+"\\}$`));
   await expect(issued).toContainText("run chmod 600 <file> and add --credential-file <absolute path> to the command");
   const download = page.waitForEvent("download");
   await issued.getByRole("button", { name: "Download credential file" }).click();
   expect((await download).suggestedFilename()).toMatch(/^executor-credential-[0-9a-f]{8}\.json$/);
+  // The file is the same line, ended by a newline.
+  expect(readFileSync(await (await download).path(), "utf8")).toMatch(/^\{[^\n]*"executor_token":"exec_fixture_\d+"\}\n$/);
   // Dismissing the dialog keeps the credential on the page; only Done forgets it.
   await page.keyboard.press("Escape");
   const pending = section.getByRole("region", { name: "Executor credential", exact: true });
