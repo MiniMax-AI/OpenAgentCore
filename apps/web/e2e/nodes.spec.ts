@@ -18,6 +18,7 @@ test("adds a node: host requirements, a countdown, the same command after closin
   // What a Docker host needs, with the root commands that prepare it.
   await expect(add.getByText("Docker at /var/run/docker.sock for that user, enforcing CPU and memory limits")).toBeVisible();
   await expect(add.getByText("sudo usermod -aG docker <user>")).toBeVisible();
+  await expect(add.getByText("CPUs and memory for at least one sandbox: 2 CPU · 4 GiB")).toBeVisible();
   await expect(add.getByText(/\/dev\/kvm/)).toHaveCount(0);
   // The fixture console runs on loopback, where another machine can't download from it.
   await expect(add.getByRole("note")).toContainText("other machines can't reach");

@@ -21,35 +21,48 @@ export interface HostPrerequisite {
  * the node's readiness probe check it (line numbers as of this revision):
  * - the command runs curl, sha256sum and python3 (enrollment-command.ts);
  *   deploy/install/node_install.py:67-69 needs Python 3.9+, Linux amd64 and a non-root user;
- * - node_install.py:70-72 needs a systemd user session with lingering enabled;
  * - Docker: node_install.py:73-74 runs `docker info` through /var/run/docker.sock,
  *   and the node is ready only when Docker enforces CPU and memory limits
  *   (services/agents-api/internal/sandbox/config/probe.go:37-38), which the
  *   installer waits for (node_install.py:363-364);
- * - microsandbox: read/write /dev/kvm (node_install.py:75-76), the host libraries
- *   its binaries link (the ldd check, node_install.py:249-253), and a home short
- *   enough for ~/.parsar/m/<12 hex> to fit in 48 bytes (node_install.py:205-209),
- *   so at most 48 - len("/.parsar/m/") - 12 = 25 bytes;
+ * - microsandbox: read/write /dev/kvm (node_install.py:75-76);
+ * - node_install.py:71-72 needs lingering. It starts the user's systemd manager,
+ *   whose services, the node's included, keep the groups it started with; so the
+ *   group changes above come first, or that manager is restarted after them;
+ * - microsandbox: the host libraries its binaries link (the ldd check,
+ *   node_install.py:249-253), and a home short enough for ~/.parsar/m/<12 hex> to
+ *   fit in 48 bytes (node_install.py:205-209): at most 48 - len("/.parsar/m/") - 12 = 25 bytes;
+ * - the host's CPUs and total memory hold one sandbox of the deployment's size
+ *   (probe.go:43 and 75, config/capacity.go:9), else the node reports capacity_insufficient;
+ * - node_install.py:70 needs the user's own systemd session (`systemctl --user`),
+ *   which sudo -u and su don't provide;
  * - network: node files from the console (node_install.py:94-106), artifacts from
  *   the manifest's artifact_base_url, the console by default (node_install.py:139-140,
  *   distribution.py:150-154), Core's /api/v1 (node_spec.py:89, node_install.py:385),
  *   and sandboxes reach Core as well (node_install.py:213, 220-233).
+ * `sized` says whether the deployment's sandbox size is known for the capacity item.
  */
-export function hostPrerequisites(provider: "docker" | "microsandbox"): HostPrerequisite[] {
-  const backend: HostPrerequisite[] = provider === "docker"
-    ? [{ label: "Docker at /var/run/docker.sock for that user, enforcing CPU and memory limits", command: "sudo usermod -aG docker <user>" }]
-    : [
-      { label: "Read and write access to /dev/kvm for that user", command: "sudo usermod -aG kvm <user>" },
-      { label: "The shared libraries microsandbox needs, on a glibc system" },
-      { label: "A home directory of 25 bytes or less, such as /home/parsar" },
-    ];
+export function hostPrerequisites(provider: "docker" | "microsandbox", sized: boolean): HostPrerequisite[] {
+  const access: HostPrerequisite = provider === "docker"
+    ? { label: "Docker at /var/run/docker.sock for that user, enforcing CPU and memory limits", command: "sudo usermod -aG docker <user>" }
+    : { label: "Read and write access to /dev/kvm for that user", command: "sudo usermod -aG kvm <user>" };
+  const microsandbox: HostPrerequisite[] = provider === "microsandbox" ? [
+    { label: "The shared libraries microsandbox needs, on a glibc system" },
+    { label: "A home directory of 25 bytes or less, such as /home/parsar" },
+  ] : [];
   return [
-    { label: "Linux amd64 with Python 3.9+, curl and sha256sum" },
-    { label: "A non-root user with systemd lingering enabled", command: "sudo loginctl enable-linger <user>" },
-    ...backend,
+    { label: "Linux amd64 with Python 3.9+, curl and sha256sum, and a non-root user for the node" },
+    access,
+    { label: "systemd lingering for that user, enabled after the group change", command: "sudo loginctl enable-linger <user>" },
+    ...microsandbox,
+    { label: sized ? "CPUs and memory for at least one sandbox: {{size}}" : "CPUs and memory for at least one sandbox" },
+    { label: "Run the command signed in as that user: over SSH, or with", command: "sudo machinectl shell <user>@" },
     { label: "Can reach {{console}}, {{core}} and the release downloads; sandboxes must reach {{core}}" },
   ];
 }
+
+/** Restarts a user's systemd manager, so its services pick up a group change. */
+export const USER_MANAGER_RESTART = "sudo systemctl restart user@$(id -u <user>).service";
 
 /** Time left as m:ss (h:mm:ss from an hour), rounded up so it reads 0:00 only once expired. */
 export function formatCountdown(milliseconds: number): string {

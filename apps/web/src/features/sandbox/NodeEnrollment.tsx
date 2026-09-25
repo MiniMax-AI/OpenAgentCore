@@ -5,13 +5,14 @@ import type { SandboxAdminClient, SandboxDeployment, SandboxNode } from "@agents
 import { useTranslation } from "react-i18next";
 import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
+import { formatBytes } from "../../lib/format";
 import { sandboxDiagnosticMessage } from "../../lib/sandbox-diagnostic";
 import { sandboxRequestError } from "../../lib/sandbox-labels";
 import { useCopy } from "../api-keys/IssuedKey";
 import { sandboxCoreOrigin, sandboxSetupOrigin } from "./core-origin";
 import type { SandboxConsoleConfig } from "./console-config";
 import { nodeInstallCommand, nodeLogCommand } from "./enrollment-command";
-import { enrolledNode, enrollmentProgress, formatCountdown, hostPrerequisites, progressSteps, type EnrollmentTarget, type StepState } from "./node-enrollment";
+import { enrolledNode, enrollmentProgress, formatCountdown, hostPrerequisites, progressSteps, USER_MANAGER_RESTART, type EnrollmentTarget, type StepState } from "./node-enrollment";
 
 /** The host requirements open by default until this browser has shown them once. */
 const REQUIREMENTS_SEEN = "agents-core-web.node-requirements-seen";
@@ -184,18 +185,26 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     catch { if (current === generation.current) { setCopied(false); setCopyFailed(true); } }
   }
   const backend = suspends ? "microsandbox" : "Docker";
+  const size = deployment.specification?.resources;
+  const values = {
+    console: sourceUrl ?? "", core: coreUrl ?? "",
+    size: size ? t("{{cpus}} CPU · {{memory}}", { cpus: size.cpus, memory: formatBytes(size.memory_mib * 2 ** 20) }) : "",
+  };
   const requirements = deployment.provider === "docker" || deployment.provider === "microsandbox" ? (
     <details className="sandbox-host-requirements" open={requirementsOpen} onToggle={(event) => setRequirementsOpen(event.currentTarget.open)}>
       <summary>{t("Host requirements")}</summary>
       <ul>
-        {hostPrerequisites(deployment.provider).map((item) => (
+        {hostPrerequisites(deployment.provider, Boolean(size)).map((item) => (
           <li key={item.label}>
-            <span>{t(item.label, { console: sourceUrl ?? "", core: coreUrl ?? "" })}</span>
+            <span>{t(item.label, values)}</span>
             {item.command ? <CopyCommand value={item.command} /> : null}
           </li>
         ))}
       </ul>
-      <p>{t("Group changes apply at the user's next sign-in.")}</p>
+      <div className="sandbox-host-requirements-note">
+        <p>{t("If that user's systemd manager was already running, restart it after a group change, or reboot:")}</p>
+        <CopyCommand value={USER_MANAGER_RESTART} />
+      </div>
     </details>
   ) : null;
   const limitsForm = `${id}-limits`;
