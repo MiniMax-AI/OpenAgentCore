@@ -1,4 +1,4 @@
-import type { OpenAIAgentsClient } from "@agents-core-web/agents-client";
+import type { CoreProjectReader } from "@agents-core-web/agents-client";
 import { QueryClientProvider, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -12,7 +12,7 @@ export { admin };
 export type { Project };
 
 /**
- * The console reaches Core only through the Web API (`/core/v1/admin`). A
+ * The console reaches Core only through the Web API (`/core/v1`). A
  * project owns an isolated set of assets shared by all of its named API keys;
  * pages filter by project and read each project through `projectClient`.
  */
@@ -108,15 +108,8 @@ export interface ProjectCollection<T> {
   refresh: () => void;
 }
 
-/** The public-client reads and deletes a project page uses, bound to one project. */
-export type ProjectClient = Pick<OpenAIAgentsClient,
-  | "listAgents" | "retrieveAgent" | "deleteAgent"
-  | "listSkills" | "retrieveSkill" | "deleteSkill" | "listSkillVersions" | "deleteSkillVersion" | "downloadSkill" | "downloadSkillVersion"
-  | "listEnvironmentTemplates" | "retrieveEnvironmentTemplate" | "deleteEnvironmentTemplate"
-  | "listSourceFiles" | "deleteSourceFile"
-  | "listVaults" | "retrieveVault" | "listVaultCredentials" | "deleteVault" | "deleteVaultCredential"
-  | "listSessions" | "listSessionsTolerant" | "retrieveSession" | "deleteSession" | "listTurns" | "listItems"
-  | "retrieveRuntimeObservation" | "retrieveRuntimeHistory">;
+/** The Core reads and deletes a project page uses, bound to one project. */
+export type ProjectClient = CoreProjectReader;
 
 async function content(result: Promise<{ blob: Blob; contentType: string | null; contentDisposition: string | null }>) {
   const value = await result;
@@ -124,13 +117,12 @@ async function content(result: Promise<{ blob: Blob; contentType: string | null;
 }
 
 /**
- * Binds the management client to one project with the public client's method
- * shapes, so pages written against the public projections read a project
- * through `/core/v1/admin/projects/{id}` without change. Deletions only; no
- * creation or editing exists here.
+ * Binds the management client to one project in the public projections'
+ * shapes, so pages read a project through `/core/v1/projects/{id}`.
+ * Deletions only; no creation or editing exists here.
  */
-function createProjectClient(projectId: string): ProjectClient {
-  const listSessions = async (options: Parameters<OpenAIAgentsClient["listSessions"]>[0] = {}) => {
+function createProjectClient(projectId: string): CoreProjectReader {
+  const listSessions = async (options: Parameters<CoreProjectReader["listSessions"]>[0] = {}) => {
     const page = await admin.listSessions(projectId, { after: options.after, limit: options.limit, order: options.order, agentId: options.agentId, signal: options.signal });
     return { ...page, object: "list" as const, first_id: page.first_id ?? null, last_id: page.last_id ?? null };
   };
@@ -164,7 +156,7 @@ function createProjectClient(projectId: string): ProjectClient {
     listItems: (sessionId, options) => admin.listItems(projectId, sessionId, options),
     retrieveRuntimeObservation: (sessionId, options) => admin.retrieveRuntimeObservation(projectId, sessionId, options),
     retrieveRuntimeHistory: (sessionId, query) => admin.retrieveRuntimeHistory(projectId, sessionId, query),
-  } as ProjectClient;
+  } as CoreProjectReader;
   return client;
 }
 

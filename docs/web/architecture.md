@@ -20,14 +20,15 @@ flowchart LR
   runtime["Runtime and native adapters"]
 
   browser -->|"Same-origin management requests; console login"| console
-  console -->|"/core/v1/admin and sandbox management; deployment credential"| core
+  console -->|"/core/v1 management, including sandbox; deployment credential"| core
   application -->|"/v1; Project API key"| core
   core <--> database
   core <--> runtime
 ```
 
-React management code must use `AdminClient` from `packages/agents-client`, plus the
-existing sandbox management client for `/core/v1/sandbox`. The console service
+React management code must use the Core clients from `packages/agents-client`:
+`AdminClient` for `/core/v1`, `CoreMetricsClient` for `/core/v1/metrics` and the
+sandbox management client for `/core/v1/sandbox`. The console service
 returns 404 for `/v1` and `/api/v1`, including requests with an explicit Bearer
 token. It has no application key and does not impersonate the selected Project.
 

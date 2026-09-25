@@ -14,7 +14,7 @@ charges the process nor what a container limit is compared against.
 
 ## Contract
 
-Reuse `GET /core/v1/admin/core-metrics?range=1h|6h|24h|7d`: add fields to
+Reuse `GET /core/v1/metrics?range=1h|6h|24h|7d`: add fields to
 `process`; change nothing else. `memory_bytes` and `goroutines` keep their meaning.
 Every figure Core cannot measure is `null`, never `0`.
 Measured zero remains zero. New current values expire after 60 seconds without

@@ -65,7 +65,7 @@ export function keyUsageQuery(filter: string, range: AgentMetricsRange) {
   });
 }
 
-const coreMetricsClient = new CoreMetricsClient({ baseUrl: "/core/v1/admin" });
+const coreMetricsClient = new CoreMetricsClient();
 
 /** Core's own metrics over a range, aggregated by Core. */
 export function coreMetricsQuery(range: CoreMetricsRange) {

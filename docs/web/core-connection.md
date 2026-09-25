@@ -6,8 +6,9 @@ React screens that use it are implemented; the console has no execution controls
 
 ## Connection model
 
-The browser calls same-origin `/core/v1/admin` through `AdminClient` and existing
-`/core/v1/sandbox` management routes through the sandbox client. The console server
+The browser calls same-origin `/core/v1` through `AdminClient` and
+`CoreMetricsClient`, and the `/core/v1/sandbox` management routes through the
+sandbox client. The console server
 supplies the deployment administrator credential to its configured Core upstream.
 Browser code must never receive that credential.
 
@@ -68,7 +69,7 @@ work. Ordinary metadata reads cannot recover plaintext.
 ## Verification and diagnosis
 
 1. Core `/healthz` proves process liveness only.
-2. Console login followed by `GET /core/v1/admin/projects` proves the authenticated
+2. Console login followed by `GET /core/v1/projects` proves the authenticated
    browser-to-console and console-to-Core path.
 3. A Project key must work on its public resources and fail on management routes.
    The deployment credential must fail on `/v1`; `/v1` through the console stays 404.

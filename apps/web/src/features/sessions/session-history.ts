@@ -2,7 +2,7 @@ import type {
   AgentSession,
   AgentTurn,
   ListPage,
-  OpenAIAgentsClient,
+  CoreProjectReader,
   SessionItem,
 } from "@agents-core-web/agents-client";
 
@@ -82,7 +82,7 @@ export interface SessionHistory {
   loadedAt: number;
 }
 
-type HistoryReader = Pick<OpenAIAgentsClient, "retrieveSession" | "listItems" | "listTurns">;
+type HistoryReader = Pick<CoreProjectReader, "retrieveSession" | "listItems" | "listTurns">;
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

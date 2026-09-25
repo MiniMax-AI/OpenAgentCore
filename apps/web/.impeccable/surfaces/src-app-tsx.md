@@ -9,7 +9,7 @@ related_targets: ["src/ConsoleApp.tsx"]
 
 Scope: the signed-in console shell and every page behind it, plus the first-run step. Visitor mode: Operate.
 Audience: the administrator of one Parsar Core deployment. Task: judge health, capacity, usage and failures; inspect and delete or copy project assets; manage projects, keys and nodes.
-Constraints: Web API only (`/core/v1/admin`, `/core/v1/sandbox`); missing data stays visibly missing; no small print, explanations live in help tips; API terms stay English in Chinese copy; zh-CN and English, light and dark.
+Constraints: Web API only (`/core/v1`); missing data stays visibly missing; no small print, explanations live in help tips; API terms stay English in Chinese copy; zh-CN and English, light and dark.
 
 Information architecture: Monitor (Overview, Agent metrics, Sandbox metrics, Session log) · Resources (Agents, Environment templates, Skills, Files, Vaults) · Platform (Projects and keys, Nodes, System).
 

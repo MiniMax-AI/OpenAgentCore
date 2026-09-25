@@ -1,4 +1,4 @@
-import { AgentCoreError, type AgentCore, type Skill, type SkillVersion } from "@agents-core-web/agents-client";
+import { AgentCoreError, type CoreProjectReader, type Skill, type SkillVersion } from "@agents-core-web/agents-client";
 
 import { appendCollectionPage } from "../../lib/collection-pagination";
 
@@ -93,7 +93,7 @@ export function saveBlob(blob: Blob, filename: string): void {
 
 /** Downloads the default version, or one exact version, through the client. */
 export async function downloadSkillArchive(
-  core: Pick<AgentCore, "downloadSkill" | "downloadSkillVersion">,
+  core: Pick<CoreProjectReader, "downloadSkill" | "downloadSkillVersion">,
   skill: Skill,
   version?: SkillVersion,
   signal?: AbortSignal,
@@ -111,7 +111,7 @@ export async function downloadSkillArchive(
 
 /** Reads the next Skill page (newest first) and appends it to the loaded rows. */
 export async function readSkillsPage(
-  core: Pick<AgentCore, "listSkills">,
+  core: Pick<CoreProjectReader, "listSkills">,
   loaded: readonly Skill[],
   after: string | undefined,
   signal?: AbortSignal,
@@ -122,7 +122,7 @@ export async function readSkillsPage(
 
 /** Reads the next version page (highest version first) and appends it to the loaded rows. */
 export async function readSkillVersionsPage(
-  core: Pick<AgentCore, "listSkillVersions">,
+  core: Pick<CoreProjectReader, "listSkillVersions">,
   skillId: string,
   loaded: readonly SkillVersion[],
   after: string | undefined,

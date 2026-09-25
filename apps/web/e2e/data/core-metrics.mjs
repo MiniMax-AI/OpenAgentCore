@@ -1,4 +1,4 @@
-// Synthetic Core metrics for the browser acceptance fixture (GET /core/v1/admin/core-metrics).
+// Synthetic Core metrics for the browser acceptance fixture (GET /core/v1/metrics).
 const RANGES = { "1h": [60, 60], "6h": [72, 300], "24h": [96, 900], "7d": [84, 7200] };
 
 export function coreMetrics(range = "1h", now = Math.floor(Date.now() / 1000)) {

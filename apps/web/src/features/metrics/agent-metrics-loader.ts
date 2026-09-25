@@ -1,4 +1,4 @@
-import type { AgentSession, AgentTurn, ListPage, OpenAIAgentsClient, PageOptions, SessionItem } from "@agents-core-web/agents-client";
+import type { AgentSession, AgentTurn, ListPage, CoreProjectReader, PageOptions, SessionItem } from "@agents-core-web/agents-client";
 
 import type { MetricsCoverage, MetricsWindow, SessionActivity } from "./agent-metrics";
 import { readProjectsSessions, type InProject, type ProjectReadFailure, type SessionLister } from "./project-sessions";
@@ -200,7 +200,7 @@ export async function loadAgentMetricsActivity(
 /** Most Sessions listed per project when looking for Sessions active in the range. */
 export const PROJECT_SESSION_LIST_CAP = 2_000;
 
-type ProjectReader = SessionLister & Pick<OpenAIAgentsClient, "listTurns" | "listItems">;
+type ProjectReader = SessionLister & Pick<CoreProjectReader, "listTurns" | "listItems">;
 
 /** Routes each Session's Turn and Item reads to the admin scope of its project. */
 export function projectMetricsSource(sessions: readonly InProject<AgentSession>[], clientFor: (project: Project) => AgentMetricsSource): AgentMetricsSource {

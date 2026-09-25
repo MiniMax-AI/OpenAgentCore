@@ -1,6 +1,6 @@
 import {
   AgentCoreError,
-  type AgentCore,
+  type CoreProjectReader,
   type PageOrder,
   type SourceFileListEntry,
 } from "@agents-core-web/agents-client";
@@ -11,8 +11,6 @@ import { appendCollectionPage } from "../../lib/collection-pagination";
 export const maxFileUploadBytes = 512 * 1024 * 1024;
 /** One page of the Files list; Core allows up to 10000, but the console reads 100 at a time. */
 export const filesPageSize = 100;
-
-export type FilesOperations = Pick<AgentCore, "listSourceFiles" | "uploadSourceFile" | "deleteSourceFile">;
 
 export type UploadPrecheck = "too-large" | "bad-name" | null;
 
@@ -78,7 +76,7 @@ export function filterFiles(files: readonly SourceFileListEntry[], query: string
 
 /** Reads one page after the loaded rows and applies the shared identity and cursor checks. */
 export async function readFilesPage(
-  core: Pick<AgentCore, "listSourceFiles">,
+  core: Pick<CoreProjectReader, "listSourceFiles">,
   loaded: readonly SourceFileListEntry[],
   order: PageOrder,
   after: string | undefined,

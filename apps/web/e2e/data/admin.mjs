@@ -1,4 +1,4 @@
-// Synthetic management-plane data (/core/v1/admin/**) for the browser acceptance fixture.
+// Synthetic management-plane data (/core/v1/**) for the browser acceptance fixture.
 // Projects own isolated assets shared by their named keys; the base demo's
 // resources are split across projects so every page can be filtered.
 import { agentProject } from "./agents.mjs";

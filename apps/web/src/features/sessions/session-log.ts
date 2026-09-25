@@ -1,4 +1,4 @@
-import type { AgentSession, OpenAIAgentsClient } from "@agents-core-web/agents-client";
+import type { AgentSession, CoreProjectReader } from "@agents-core-web/agents-client";
 
 import type { Owned } from "../../lib/projects";
 
@@ -32,7 +32,7 @@ export interface SessionLogFilters {
 
 export const initialSessionLogFilters: SessionLogFilters = { status: "all", agentId: "", environment: "", query: "" };
 
-type TolerantLister = Pick<OpenAIAgentsClient, "listSessionsTolerant">;
+type TolerantLister = Pick<CoreProjectReader, "listSessionsTolerant">;
 
 /** Walks every Session page of one project, newest first, bounded at `limit` entries. */
 export async function readSessionLog(client: TolerantLister, signal?: AbortSignal, limit = SESSION_LOG_LIMIT): Promise<SessionLogEntry[]> {

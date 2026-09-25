@@ -1,4 +1,4 @@
-import type { AgentSession, OpenAIAgentsClient } from "@agents-core-web/agents-client";
+import type { AgentSession, CoreProjectReader } from "@agents-core-web/agents-client";
 
 import type { Owned } from "../../lib/projects";
 import { type Project } from "../../lib/admin-view";
@@ -12,7 +12,7 @@ import { type Project } from "../../lib/admin-view";
 
 export const SESSION_PAGE_SIZE = 100;
 
-export type SessionLister = Pick<OpenAIAgentsClient, "listSessionsTolerant">;
+export type SessionLister = Pick<CoreProjectReader, "listSessionsTolerant">;
 
 /** A value and the project it belongs to. */
 export type InProject<T> = Owned<T>;

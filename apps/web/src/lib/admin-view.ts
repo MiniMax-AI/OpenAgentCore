@@ -11,7 +11,7 @@ import {
 } from "@agents-core-web/agents-client";
 
 /**
- * View models over the typed management client (`AdminClient`, `/core/v1/admin`).
+ * View models over the typed management client (`AdminClient`, `/core/v1`).
  * Pages format Unix seconds and never treat missing data as zero, so this
  * layer converts RFC 3339 timestamps, resolves creating keys by name, walks
  * cursor pages and turns an unmeasured usage sum into `null`.

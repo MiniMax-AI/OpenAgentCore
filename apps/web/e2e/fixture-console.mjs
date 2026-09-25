@@ -1,8 +1,9 @@
 // Browser acceptance fixture: the console service's routes (/console/**) and the
-// management surfaces it forwards (/core/v1/admin/**, /core/v1/sandbox/**), with
-// synthetic, deterministic data and in-memory writes. It never serves /v1; any
-// /v1 request, and any browser-supplied Authorization header, is recorded so a
-// test can assert that the console stays on its management boundary.
+// Core management tree it forwards (/core/v1/**: projects, summary, audit log,
+// metrics and /core/v1/sandbox/**), with synthetic, deterministic data and
+// in-memory writes. It never serves /v1; any /v1 request, and any
+// browser-supplied Authorization header, is recorded so a test can assert that
+// the console stays on its management boundary.
 import http from "node:http";
 
 import { buildAdmin } from "./data/admin.mjs";
@@ -47,6 +48,8 @@ function reset(mode = "login", fresh = false, sandbox = "configured") {
     // "authenticated": the console holds a session for the fixture cookie; "login": it holds none.
     auth: { mode: mode === "authenticated" ? "authenticated" : "login", failures: 0, lockedUntil: 0 },
     violations: [], writes: [], failNext: null, nextId: 1,
+    // Executor credential metadata by environment ID; tokens are never kept.
+    executorCredentials: new Map(),
     // "none": the deployment is not configured yet, so the Nodes page offers setup.
     deployment: sandbox === "none" ? null : sandbox === "e2b" ? e2bDeployment() : configuredDeployment(),
   };
@@ -116,6 +119,7 @@ async function consoleRoute(request, response, url) {
     return send(response, 200, { mode: "login" }, { "set-cookie": `${SESSION_COOKIE.split("=")[0]}=; Path=/; Max-Age=0` });
   }
   if (url.pathname === "/console/config") {
+    // Signing in grants administration, so the console reports only its node installer.
     return send(response, 200, { node_installer: true, node_installer_sha256: "a".repeat(64) });
   }
   return error(response, 404, "Not found.");
@@ -166,13 +170,7 @@ function adminRead(response, path, url) {
   const a = state.admin;
   if (path === "/projects") return send(response, 200, { data: a.projects.map(a.publicProject), has_more: false });
   if (path === "/summary") return send(response, 200, a.summary(url));
-  if (path === "/runtime-observations") {
-    // Only E2B reports a sandbox's disk.
-    const e2b = state.deployment?.provider === "e2b";
-    const data = a.runtimeObservations().map((entry) => ({ ...entry, observation: { ...entry.observation, disk: e2b && entry.observation.status === "observed" ? { usage_bytes: 3 * 2 ** 30, limit_bytes: 10 * 2 ** 30 } : null } }));
-    return send(response, 200, { object: "list", data, has_more: false, first_id: data[0]?.observation.id ?? null, last_id: data.at(-1)?.observation.id ?? null });
-  }
-  if (path === "/core-metrics") return send(response, 200, coreMetrics(url.searchParams.get("range") ?? "1h"));
+  if (path === "/metrics") return send(response, 200, coreMetrics(url.searchParams.get("range") ?? "1h"));
   const match = path.match(/^\/projects\/([^/]+)(\/.*)?$/);
   const project = match && a.projects.find((entry) => entry.id === match[1]);
   if (!project) return error(response, 404, "No such project.");
@@ -226,6 +224,12 @@ function nodeDetail(node) {
 }
 
 async function sandboxRoute(request, response, path) {
+  if (path === "/runtime-observations" && request.method === "GET") {
+    // Only E2B reports a sandbox's disk.
+    const e2b = state.deployment?.provider === "e2b";
+    const data = state.admin.runtimeObservations().map((entry) => ({ ...entry, observation: { ...entry.observation, disk: e2b && entry.observation.status === "observed" ? { usage_bytes: 3 * 2 ** 30, limit_bytes: 10 * 2 ** 30 } : null } }));
+    return send(response, 200, { object: "list", data, has_more: false, first_id: data[0]?.observation.id ?? null, last_id: data.at(-1)?.observation.id ?? null });
+  }
   if (path === "/deployment" && request.method === "POST") {
     const input = await body(request);
     if (state.deployment) return error(response, 409, "The sandbox deployment is already configured.", "sandbox_deployment_conflict");
@@ -272,6 +276,41 @@ async function sandboxRoute(request, response, path) {
   return error(response, 404, "Not found.");
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const EXECUTOR_CREDENTIALS = /^\/projects\/([^/]+)\/environments\/([^/]+)\/executor-credentials(?:\/([^/]+))?$/;
+
+/**
+ * Executor credentials as Core issues them: only for the self_hosted
+ * environment of a Session in the project; the token is returned once; an
+ * existing key_id is reissued only with rotate:true, and a revoked one never;
+ * revoking again is safe.
+ */
+async function executorCredentialRoute(request, response, projectId, environmentId, keyId) {
+  const project = state.admin.projects.find((entry) => entry.id === projectId);
+  const session = project && state.admin.collections(project.id).sessions.find((entry) => entry.environment.type === "self_hosted" && entry.environment.id === environmentId);
+  if (!session) return error(response, 404, "No such self-hosted environment.", "not_found");
+  if (!state.executorCredentials.has(environmentId)) state.executorCredentials.set(environmentId, []);
+  const credentials = state.executorCredentials.get(environmentId);
+  if (!keyId && request.method === "GET") return send(response, 200, { data: credentials.map((entry) => ({ ...entry })) });
+  if (!keyId && request.method === "POST") {
+    const input = await body(request);
+    if (typeof input.key_id !== "string" || !UUID.test(input.key_id) || (input.rotate !== undefined && typeof input.rotate !== "boolean")) return error(response, 400, "key_id must be a UUID.", "invalid_request");
+    const existing = credentials.find((entry) => entry.key_id === input.key_id);
+    if (existing && input.rotate !== true) return error(response, 409, "The executor credential exists; rotate it instead.", "executor_credential_exists");
+    if (existing?.revoked_at) return error(response, 409, "The executor credential is revoked.", "executor_credential_revoked");
+    if (!existing) credentials.push({ key_id: input.key_id, created_at: new Date().toISOString(), revoked_at: null });
+    return send(response, 201, { key_id: input.key_id, environment_id: environmentId, executor_token: `exec_fixture_${state.nextId++}` });
+  }
+  if (keyId && request.method === "DELETE") {
+    const existing = credentials.find((entry) => entry.key_id === keyId);
+    if (!existing) return error(response, 404, "No such executor credential.", "not_found");
+    existing.revoked_at ??= new Date().toISOString();
+    response.writeHead(204, { "cache-control": "no-store" });
+    return response.end();
+  }
+  return error(response, 404, "Not found.");
+}
+
 /** Test controls: reset state, inject one failure, and read what the browser sent. */
 async function fixtureRoute(request, response, url) {
   if (url.pathname === "/__fixture/health") return send(response, 200, { ok: true });
@@ -308,11 +347,13 @@ http.createServer(async (request, response) => {
       state.failNext = null;
       return error(response, fail.status, fail.message ?? "Injected failure.", fail.code ?? null);
     }
-    if (url.pathname.startsWith("/core/v1/admin/")) {
-      const path = url.pathname.slice("/core/v1/admin".length);
+    if (url.pathname.startsWith("/core/v1/sandbox/")) return await sandboxRoute(request, response, url.pathname.slice("/core/v1/sandbox".length));
+    if (url.pathname.startsWith("/core/v1/")) {
+      const path = url.pathname.slice("/core/v1".length);
+      const credentials = path.match(EXECUTOR_CREDENTIALS);
+      if (credentials) return await executorCredentialRoute(request, response, credentials[1], credentials[2], credentials[3]);
       return write ? await adminWrite(request, response, path) : adminRead(response, path, url);
     }
-    if (url.pathname.startsWith("/core/v1/sandbox/")) return await sandboxRoute(request, response, url.pathname.slice("/core/v1/sandbox".length));
     return error(response, 404, "Not found.");
   } catch (caught) {
     error(response, 500, String(caught));

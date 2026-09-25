@@ -1,4 +1,4 @@
-import { AgentCoreError, type AgentCore, type AgentSession, type RuntimeHistory } from "@agents-core-web/agents-client";
+import { AgentCoreError, type AgentSession, type CoreProjectReader, type RuntimeHistory } from "@agents-core-web/agents-client";
 
 import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";
 import { deriveTokenThroughput, type RuntimeTrendSample, type RuntimeTrendTarget } from "./runtime-trends";
@@ -160,7 +160,7 @@ export function runtimeDurableTrendSamples(
   return deriveTokenThroughput(samples);
 }
 
-export type RuntimeHistoryReader = Pick<AgentCore, "retrieveRuntimeHistory">;
+export type RuntimeHistoryReader = Pick<CoreProjectReader, "retrieveRuntimeHistory">;
 
 function isNotFound(error: unknown): boolean {
   return error instanceof AgentCoreError && error.status === 404;

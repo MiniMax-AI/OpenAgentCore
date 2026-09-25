@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { AgentCore, SavedAgent, Vault, VaultCredential } from "@agents-core-web/agents-client";
+import type { CoreProjectReader, SavedAgent, Vault, VaultCredential } from "@agents-core-web/agents-client";
 
 import { deriveSessionVaultPlan, loadVaultCatalog, matchingCredentials, type VaultCatalog } from "./vault-catalog";
 
@@ -65,7 +65,7 @@ describe("Vault catalog", () => {
       first_id: vaultId === vaultA.id ? credentialA.id : credentialB.id,
       last_id: vaultId === vaultA.id ? credentialA.id : credentialB.id,
     }));
-    const core = { listVaults, listVaultCredentials } as unknown as AgentCore;
+    const core = { listVaults, listVaultCredentials } as unknown as CoreProjectReader;
 
     await expect(loadVaultCatalog(core)).resolves.toEqual({
       vaults: [vaultA, vaultB],

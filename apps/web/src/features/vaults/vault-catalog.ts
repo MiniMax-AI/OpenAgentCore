@@ -1,5 +1,5 @@
 import type {
-  AgentCore,
+  CoreProjectReader,
   SavedAgent,
   Vault,
   VaultCredential,
@@ -40,7 +40,7 @@ export interface SessionVaultPlan {
 
 const CREDENTIAL_READ_CONCURRENCY = 4;
 
-export async function loadVaultCatalog(core: AgentCore, signal?: AbortSignal): Promise<VaultCatalog> {
+export async function loadVaultCatalog(core: Pick<CoreProjectReader, "listVaults" | "listVaultCredentials">, signal?: AbortSignal): Promise<VaultCatalog> {
   const vaults = await listAllCollectionPages(
     (options) => core.listVaults(options),
     signal,

@@ -47,13 +47,15 @@ workbench.
   [Core key](../../docs/getting-started/operations.md#core-key)). There are no
   console accounts or usernames. The browser sends the key only to sign in and
   keeps only the session cookie; the console server holds the Core key and forwards
-  the Web API (`/core/v1/admin/**`) and sandbox administration
-  (`/core/v1/sandbox/**`). The console never calls `/v1`.
+  the Web API (`/core/v1/**`, including sandbox administration under
+  `/core/v1/sandbox/**`). The console never calls `/v1`.
 - The Core key is not an Agents API identity and cannot call `/v1`. An administrator
   who wants to call the Agents API issues a project API key like any other caller.
-- `/console/config` reports whether sandbox administration is available; without
-  it the Nodes page explains that it is not configured and the fleet figures show
-  as unavailable.
+- `/console/config` reports the node installer (`node_installer`,
+  `node_installer_sha256`). Signing in grants administration, so sandbox
+  administration is available unless the console explicitly reports
+  `sandbox_admin: false`; then the Nodes page explains that it is not configured
+  and the fleet figures show as unavailable.
 - Chinese and English UI; light and dark themes; reduced motion honored.
 
 ## Information Architecture
@@ -106,8 +108,8 @@ workbench.
   a key never touches assets. Archiving a project revokes every key and keeps its
   assets viewable and deletable. Key plaintext is shown once, at issuance, and never
   stored by the console.
-- **Web API only.** Every read and write goes through `/core/v1/admin/**` or
-  `/core/v1/sandbox/**`. The console holds no API key and sends nothing to `/v1`.
+- **Web API only.** Every read and write goes through `/core/v1/**`. The console
+  holds no API key and sends nothing to `/v1`.
 - **No asset writes except delete.** Assets are created and changed only by
   a project's keys through the Agents API. The console does not create or edit
   Agents or Templates, upload Skills or Files, create or replace Credentials, start

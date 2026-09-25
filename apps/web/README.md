@@ -7,8 +7,9 @@ described in [DESIGN.md](DESIGN.md) and its product scope in [PRODUCT.md](PRODUC
 
 ## Integration contract
 
-Browser management requests use same-origin `/core/v1/admin` through `AdminClient`,
-plus the existing sandbox management client for allowed `/core/v1/sandbox` routes.
+Browser management requests use same-origin `/core/v1` through `AdminClient`,
+`CoreMetricsClient` (`/core/v1/metrics`) and the sandbox management client
+(`/core/v1/sandbox`).
 The administrator signs in with the deployment's Core key; the console keeps the key
 server-side and gives the browser only a session cookie.
 Applications use their own Project keys directly against Core's public `/v1` API.

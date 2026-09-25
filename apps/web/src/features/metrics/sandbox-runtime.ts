@@ -1,4 +1,4 @@
-import type { AgentSession, OpenAIAgentsClient, SandboxAllocation, SandboxNode } from "@agents-core-web/agents-client";
+import type { AgentSession, CoreProjectReader, SandboxAllocation, SandboxNode } from "@agents-core-web/agents-client";
 
 import type { RuntimeDashboardSnapshot } from "../dashboard/runtime-snapshot";
 import { type OwnedRuntimeObservation } from "../../lib/admin-view";
@@ -14,7 +14,7 @@ import { type OwnedRuntimeObservation } from "../../lib/admin-view";
 export const HOSTED_SESSION_LIMIT = 100;
 const SESSION_READ_CONCURRENCY = 6;
 
-export type SessionReader = Pick<OpenAIAgentsClient, "retrieveSession">;
+export type SessionReader = Pick<CoreProjectReader, "retrieveSession">;
 
 export interface HostedRuntimeLoad {
   observations: OwnedRuntimeObservation[];

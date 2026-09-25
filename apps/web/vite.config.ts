@@ -53,8 +53,7 @@ export default defineConfig(({ command, mode }) => {
         // management surfaces it forwards, as in production.
         "/console": { target, changeOrigin: true },
         "/node-install": { target, changeOrigin: true },
-        "/core/v1/sandbox": { target, changeOrigin: true },
-        "/core/v1/admin": { target, changeOrigin: true },
+        "/core/v1": { target, changeOrigin: true },
         "/v1": {
           target,
           changeOrigin: true,

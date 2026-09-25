@@ -107,7 +107,7 @@ export const metrics = {
     failed: "无法读取 Core 指标。{{reason}}",
     stale: "刷新失败，显示的是上次读取的指标。{{reason}}",
     missingTitle: "Core 尚未上报自身指标",
-    missingDescription: "需要 Core 提供 /core/v1/admin/core-metrics，才能显示执行、数据库和后台任务。",
+    missingDescription: "需要 Core 提供 /core/v1/metrics，才能显示执行、数据库和后台任务。",
     kpiLabel: "Core 概况",
     meta: "{{status}} · {{revision}} · 已运行 {{uptime}}",
     notOwner: "未持有执行归属",
