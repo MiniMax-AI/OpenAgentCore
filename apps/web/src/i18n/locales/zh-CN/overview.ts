@@ -131,6 +131,8 @@ export const overview = {
     stale: "刷新失败，显示的是上次加载的节点。",
     addNode: "添加节点",
     manageNodes: "管理节点",
+    setUp: "设置沙箱",
+    notSetUp: "还没有设置沙箱。",
     cloud: {
       name: "E2B 云端",
       open: "E2B 云端，{{running}} 个运行中的沙箱",

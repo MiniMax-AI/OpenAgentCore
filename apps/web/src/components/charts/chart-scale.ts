@@ -1,12 +1,15 @@
 /** Pure scale helpers shared by the console charts. */
 
-/** Round a positive maximum up to a clean axis limit and return evenly spaced ticks from zero. */
-export function niceTicks(maximum: number, targetCount = 4): number[] {
+/**
+ * Round a positive maximum up to a clean axis limit and return evenly spaced ticks from zero.
+ * `minStep` keeps counts on whole numbers: a maximum of 1 gives 0 and 1, not quarters.
+ */
+export function niceTicks(maximum: number, targetCount = 4, minStep = 0): number[] {
   if (!Number.isFinite(maximum) || maximum <= 0) return [0, 1];
   const rough = maximum / targetCount;
   const magnitude = 10 ** Math.floor(Math.log10(rough));
   const residual = rough / magnitude;
-  const step = (residual <= 1 ? 1 : residual <= 2 ? 2 : residual <= 2.5 ? 2.5 : residual <= 5 ? 5 : 10) * magnitude;
+  const step = Math.max(minStep, (residual <= 1 ? 1 : residual <= 2 ? 2 : residual <= 2.5 ? 2.5 : residual <= 5 ? 5 : 10) * magnitude);
   const count = Math.max(1, Math.ceil(maximum / step - 1e-9));
   return Array.from({ length: count + 1 }, (_, index) => Number((index * step).toPrecision(12)));
 }

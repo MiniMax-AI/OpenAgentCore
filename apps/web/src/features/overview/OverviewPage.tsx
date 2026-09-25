@@ -237,6 +237,7 @@ export function OverviewPage() {
                   series={[{ id: "created", label: t("activity.created"), color: "color-mix(in srgb, var(--data) 62%, var(--surface))", values: activity.created, total: formatInteger(activity.created.reduce((sum, value) => sum + value, 0), locale) }]}
                   tooltipOnly={[{ id: "failed", label: t("activity.failed"), color: "var(--danger)", values: activity.failed }]}
                   formatValue={(value) => formatInteger(value, locale)}
+                  counts
                   height={196}
                 />
               </div>
@@ -317,7 +318,11 @@ function FleetCard({ fleetState, core }: { fleetState: FleetState; core: CoreSta
           <HelpTip>{t("fleet.help")}</HelpTip>
         </div>
         {fleetState.status === "ready" ? (
-          <button className="button outline" type="button" onClick={() => navigate("nodes")}>{cloud ? t("fleet.cloud.openBackend") : hosts.length ? t("fleet.manageNodes") : t("fleet.addNode")}</button>
+          !fleet?.deployment.provider
+            ? <button className="button outline" type="button" onClick={() => navigate("nodes")}>{t("fleet.setUp")}</button>
+            : cloud || hosts.length
+              ? <button className="button outline" type="button" onClick={() => navigate("nodes")}>{cloud ? t("fleet.cloud.openBackend") : t("fleet.manageNodes")}</button>
+              : <button className="button outline" type="button" onClick={() => navigate("nodes", {}, "add-node")}>{t("fleet.addNode")}</button>
         ) : null}
       </header>
       <div className="overview-card-body fleet-body">
@@ -333,16 +338,16 @@ function FleetCard({ fleetState, core }: { fleetState: FleetState; core: CoreSta
           onOpenCoreMetrics={() => navigate("core-metrics")}
         />
         {hidden ? <button className="text-action fleet-more" type="button" onClick={() => navigate("nodes")}>{t("fleet.more", { n: hidden })}</button> : null}
-        <FleetFooter state={fleetState} empty={fleet && !cloud ? hosts.length === 0 : false} />
+        <FleetFooter state={fleetState} empty={fleet && !cloud ? hosts.length === 0 : false} unset={fleet ? !fleet.deployment.provider : false} />
       </div>
     </section>
   );
 }
 
-function FleetFooter({ state, empty }: { state: FleetState; empty: boolean }) {
+function FleetFooter({ state, empty, unset }: { state: FleetState; empty: boolean; unset: boolean }) {
   const { t } = useTranslation("overview");
   if (state.status === "ready") {
-    return empty ? <footer className="fleet-list-footer"><p>{t("fleet.noNodes")}</p></footer> : null;
+    return empty ? <footer className="fleet-list-footer"><p>{t(unset ? "fleet.notSetUp" : "fleet.noNodes")}</p></footer> : null;
   }
   return (
     <footer className="fleet-list-footer">

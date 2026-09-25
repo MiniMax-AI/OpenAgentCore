@@ -173,12 +173,21 @@ export function SandboxMetricsPage() {
               </table>
             </div>
           ) : (
-            <EmptyState
-              icon={Server}
-              title={t("sandbox.noNodesTitle")}
-              hint={t("sandbox.noNodesDescription")}
-              action={<button className="button primary" type="button" onClick={() => navigate("nodes")}>{t("sandbox.addNode")}</button>}
-            />
+            // Before sandbox setup there is nothing to add a node to; setup comes first.
+            fleet?.deployment.provider ? (
+              <EmptyState
+                icon={Server}
+                title={t("sandbox.noNodesTitle")}
+                hint={t("sandbox.noNodesDescription")}
+                action={<button className="button primary" type="button" onClick={() => navigate("nodes", {}, "add-node")}>{t("sandbox.addNode")}</button>}
+              />
+            ) : (
+              <EmptyState
+                icon={Server}
+                title={t("sandbox.notSetUpTitle")}
+                action={<button className="button primary" type="button" onClick={() => navigate("nodes")}>{t("sandbox.setUp")}</button>}
+              />
+            )
           ) : fleetState.status === "checking" || fleetState.status === "loading"
             ? <TableSkeleton label={message} rows={3} columns={suspends ? 9 : 8} />
             : <p className="page-status" role={fleetState.status === "failed" ? "alert" : "status"}>{message}</p>}

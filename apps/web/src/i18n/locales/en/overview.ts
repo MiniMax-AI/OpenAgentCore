@@ -131,6 +131,8 @@ export const overview = {
     stale: "Refresh failed; showing the nodes from the last load.",
     addNode: "Add node",
     manageNodes: "Manage nodes",
+    setUp: "Set up sandboxes",
+    notSetUp: "Sandboxes are not set up yet.",
     cloud: {
       name: "E2B cloud",
       open: "E2B cloud, {{running}} running sandboxes",
