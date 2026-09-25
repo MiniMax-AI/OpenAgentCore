@@ -121,11 +121,11 @@ function send(response, status, body, headers = {}) {
   response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store", ...headers });
   response.end(JSON.stringify(body));
 }
-function error(response, status, message, code = null, param = null) {
+function error(response, status, message, code = null) {
   // Derive `type` as Core's writeError does (services/agents-api/internal/api/errors.go).
   const type = status >= 500 ? "server_error" : status === 409 ? "conflict_error"
     : code === "not_found_error" || code === "invalid_beta" ? code : "invalid_request_error";
-  send(response, status, { error: { message, type, code, param } });
+  send(response, status, { error: { message, type, code, param: null } });
 }
 async function body(request) {
   const chunks = [];
@@ -407,45 +407,62 @@ const HARNESS_PROVIDER = /^\/harnesses\/([^/]+)\/model-provider$/;
 const PROVIDER_FIELDS = new Set(["protocol", "base_url", "api_key", "context_window", "max_output_tokens"]);
 /** Each harness's protocol, as Core's registry declares it; only mcode requires token limits. */
 const HARNESS_PROTOCOL = { claude_sdk: "anthropic", codex: "responses", mcode: "anthropic" };
+/** Core's one message for a body that is not a complete provider; it never echoes a value. */
+const PROVIDER_SHAPE = "The body must be a complete model provider: protocol, base_url, api_key and optional nonnegative context_window and max_output_tokens.";
 const httpsBase = (value) => { try { const url = new URL(value); return url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password && !url.search && !url.hash; } catch { return false; } };
-const limit = (value) => value === undefined || (Number.isInteger(value) && value >= 0 && value <= 2 ** 31 - 1);
+/** An omitted limit, or a nonnegative integer that fits Core's int32. */
+const tokenLimit = (value) => value === undefined || (Number.isInteger(value) && value >= 0 && value <= 2 ** 31 - 1);
+const jsonKind = (value) => Array.isArray(value) ? "an array" : typeof value === "string" ? "a string" : typeof value === "boolean" ? "a boolean" : Number.isInteger(value) ? "an integer" : "a number";
 
-/** The first rule a provider body breaks, in Core's order and words, as [message, param]; null when valid. */
+/** The first rule a provider body breaks, in Core's order and words; null when valid. */
 function providerProblem(harness, input) {
-  if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some((key) => !PROVIDER_FIELDS.has(key))) return ["Invalid request body.", null];
-  if (typeof input.base_url !== "string" || !httpsBase(input.base_url)) return ["model provider requires an HTTPS base_url without credentials, query or fragment", "base_url"];
-  if (input.protocol !== "anthropic" && input.protocol !== "responses") return ["unsupported model provider protocol", "protocol"];
-  if (typeof input.api_key !== "string" || !input.api_key.trim() || /[\0\r\n]/.test(input.api_key)) return ["invalid model provider API key", "api_key"];
-  if (!limit(input.context_window) || !limit(input.max_output_tokens) || (input.max_output_tokens ?? 0) > (input.context_window ?? 0)) return ["invalid model token limits", "max_output_tokens"];
-  if (input.protocol !== HARNESS_PROTOCOL[harness]) return ["selected harness does not support this model provider protocol", "protocol"];
-  if (harness === "mcode" && !(input.context_window > 0 && input.max_output_tokens > 0)) return ["selected harness requires positive model context_window and max_output_tokens", "context_window"];
+  if (Object.keys(input).some((key) => !PROVIDER_FIELDS.has(key)) || ["protocol", "base_url", "api_key"].some((key) => typeof input[key] !== "string") ||
+    !tokenLimit(input.context_window) || !tokenLimit(input.max_output_tokens)) return PROVIDER_SHAPE;
+  if (!httpsBase(input.base_url)) return "model provider requires an HTTPS base_url without credentials, query or fragment";
+  if (input.protocol !== "anthropic" && input.protocol !== "responses") return "unsupported model provider protocol";
+  if (!input.api_key.trim() || Buffer.byteLength(input.api_key) > 16384 || /[\0\r\n]/.test(input.api_key)) return "invalid model provider API key";
+  if ((input.max_output_tokens ?? 0) > (input.context_window ?? 0)) return "invalid model token limits";
+  if (input.protocol !== HARNESS_PROTOCOL[harness]) return "selected harness does not support this model provider protocol";
+  if (harness === "mcode" && !(input.context_window > 0 && input.max_output_tokens > 0)) return "selected harness requires positive model context_window and max_output_tokens";
   return null;
 }
 
 /**
- * Harnesses and their deployment default model providers, as Core serves them:
- * the list reflects every write; a provider read is 404 while unset; PUT is a
- * full replacement that needs the key every time (mcode also both limits) and
- * answers with the safe view; DELETE is 204 and safe to repeat. A disabled
- * harness may still be configured.
+ * Harnesses and their deployment default model providers, as Core serves them
+ * (services/agents-api/internal/api/harness_model_providers.go): the list
+ * reflects every write; an unknown harness or an unset provider is 404; PUT
+ * takes a JSON object of at most 32 KiB, is a full replacement that needs the
+ * key every time (mcode also both limits) and answers with the safe view;
+ * DELETE is 204 and safe to repeat. A disabled harness may still be configured.
  */
 async function harnessRoute(request, response, path) {
   const view = (id) => ({ object: "core.harness", id, enabled: state.harnesses[id].enabled, default: state.harnesses[id].default, model_provider: state.harnesses[id].provider });
   if (path === "/harnesses" && request.method === "GET") return send(response, 200, { object: "list", data: Object.keys(state.harnesses).map(view) });
   const match = path.match(HARNESS_PROVIDER);
   const harness = match && Object.hasOwn(state.harnesses, match[1]) ? match[1] : null;
-  if (!harness) return error(response, 404, "No such harness.", "not_found");
+  if (!harness) return error(response, 404, "This harness does not exist.", "not_found");
   const entry = state.harnesses[harness];
-  if (request.method === "GET") return entry.provider ? send(response, 200, entry.provider) : error(response, 404, "No default model provider is set for this harness.", "not_found");
+  if (request.method === "GET") return entry.provider ? send(response, 200, entry.provider) : error(response, 404, "This harness has no deployment default model provider.", "not_found");
   if (request.method === "DELETE") {
     entry.provider = null;
     response.writeHead(204, { "cache-control": "no-store" });
     return response.end();
   }
   if (request.method !== "PUT") return error(response, 405, "Method not allowed.");
-  const input = await body(request).catch(() => null);
+  // Core's shared JSON body gate, with this route's 32 KiB limit.
+  if (!/^application\/json\s*(;|$)/i.test(request.headers["content-type"] ?? "")) return error(response, 400, "expected request with Content-Type: application/json", "invalid_request_error");
+  const chunks = [];
+  for await (const chunk of request) chunks.push(chunk);
+  const raw = Buffer.concat(chunks);
+  if (raw.length > 32 * 1024) return error(response, 413, "Request exceeds 32 KiB.", "request_too_large");
+  let input;
+  try { input = raw.length ? JSON.parse(raw.toString("utf8")) : null; } catch {
+    return error(response, 400, "Invalid body: failed to parse JSON value. Please check the value to ensure it is valid JSON. (Common errors include trailing commas, missing closing brackets, missing quotation marks, etc.)", "invalid_request_error");
+  }
+  input ??= {};
+  if (typeof input !== "object" || Array.isArray(input)) return error(response, 400, `Invalid type: expected an object, but got ${jsonKind(input)} instead.`, "invalid_request_error");
   const problem = providerProblem(harness, input);
-  if (problem) return error(response, 400, problem[0], "invalid_request_error", problem[1]);
+  if (problem) return error(response, 400, problem, "invalid_request_error");
   // As Core's error mapping: sealing the key needs the credential encryption key.
   if (!state.credentialKey) return error(response, 503, "Credential encryption is not configured on this service.", "credential_storage_unavailable");
   entry.provider = {
