@@ -349,6 +349,9 @@ func TestUnspecifiedNodeDeploymentDrainsBeforeReplacement(t *testing.T) {
 	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString(), "")); !errors.Is(err, ErrEnvironmentUnavailable) {
 		t.Fatal("unspecified deployment admitted a fresh sandbox", err)
 	}
+	if _, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4}); !errors.Is(err, ErrSandboxDeploymentConflict) {
+		t.Fatal("unspecified deployment issued an enrollment token", err)
+	}
 
 	if _, err := w.SetSandboxMaintenance(t.Context(), id, SandboxMaintenanceRequest{Maintenance: true, ExpectedGeneration: 1}); err != nil {
 		t.Fatal(err)

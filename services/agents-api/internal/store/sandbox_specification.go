@@ -46,7 +46,7 @@ func SandboxSetupForSelection(installationID string, input SandboxDeploymentSetu
 // retained nodes may reconnect to drain resources, but it cannot create
 // sandboxes or enroll nodes until an administrator replaces the selection.
 func unspecifiedNodeDeployment(d sqlc.RuntimeDeployment) bool {
-	return d.Mode == "nodes" && (d.ProviderKind == "docker" || d.ProviderKind == "microsandbox") && string(d.Specification) == "{}"
+	return d.WebManaged && d.Mode == "nodes" && (d.ProviderKind == "docker" || d.ProviderKind == "microsandbox") && string(d.Specification) == "{}"
 }
 
 func deploymentSpecification(d sqlc.RuntimeDeployment) (sandbox.DeploymentSpec, error) {

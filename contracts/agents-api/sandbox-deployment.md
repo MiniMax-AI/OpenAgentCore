@@ -233,9 +233,10 @@ environment variable alone does not complete that migration.
 A Web-managed Docker or microsandbox selection saved before specifications has
 the empty migration default. Core loads it for draining only. Retained nodes
 without a recorded digest or generation authenticate while the deployment is in
-this state. Fresh hosted sandboxes are refused with the same error as during
-maintenance. Node configuration reads and enrollment return 409
-`sandbox_specification_mismatch`.
+this state. GET omits `specification` and `specification_digest`. Fresh hosted
+sandboxes are refused with the same error as during maintenance. Enrollment
+tokens return 409 `sandbox_deployment_conflict`; node configuration reads and
+enrollment are refused.
 The ordinary maintenance, archive and PUT sequence records a specification and
 retires those nodes. See the [operator upgrade notes](../../docs/getting-started/operations.md#data-and-upgrades).
 
