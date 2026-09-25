@@ -208,7 +208,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
         ))}
       </ul>
       <div className="sandbox-host-requirements-note">
-        <p>{t("If that user's systemd manager was already running, restart it after a group change, or reboot:")}</p>
+        <p>{t("After a group change, sign in again as that user. If its systemd manager was already running, restart it (or reboot):")}</p>
         <CopyCommand value={USER_MANAGER_RESTART} />
       </div>
     </details>

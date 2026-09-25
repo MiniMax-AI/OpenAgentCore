@@ -28,7 +28,8 @@ export interface HostPrerequisite {
  * - microsandbox: read/write /dev/kvm (node_install.py:75-76);
  * - node_install.py:71-72 needs lingering. It starts the user's systemd manager,
  *   whose services, the node's included, keep the groups it started with; so the
- *   group changes above come first, or that manager is restarted after them;
+ *   group changes above come first, or that manager is restarted after them. A
+ *   shell open before the change lacks the group too, so the user signs in again;
  * - microsandbox: the host libraries its binaries link (the ldd check,
  *   node_install.py:249-253), and a home short enough for ~/.parsar/m/<12 hex> to
  *   fit in 48 bytes (node_install.py:205-209): at most 48 - len("/.parsar/m/") - 12 = 25 bytes;

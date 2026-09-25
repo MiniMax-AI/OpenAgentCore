@@ -55,7 +55,7 @@ export const chinese = {
   "CPUs and memory for at least one sandbox": "CPU 和内存至少够一个沙箱",
   "Run the command signed in as that user: over SSH, or with": "以该用户登录后运行命令：通过 SSH，或使用",
   "Can reach {{console}}, {{core}} and the release downloads; sandboxes must reach {{core}}": "能访问 {{console}}、{{core}} 和版本下载地址；沙箱也要能访问 {{core}}",
-  "If that user's systemd manager was already running, restart it after a group change, or reboot:": "如果该用户的 systemd 管理器已在运行，改用户组后请重启它，或重启主机：",
+  "After a group change, sign in again as that user. If its systemd manager was already running, restart it (or reboot):": "改完用户组后请以该用户重新登录；如果它的 systemd 管理器已在运行，请重启它（或重启主机）：",
   "Copy {{command}}": "复制 {{command}}",
   "Select the command and copy it manually.": "请选中命令手动复制。",
   "This console is open at {{origin}}, which other machines can't reach. To add another machine, open the console at its HTTPS address, then generate the command.": "当前控制台地址 {{origin}} 其他机器访问不到。要添加其他机器，请用控制台的 HTTPS 地址打开后再生成命令。",
