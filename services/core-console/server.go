@@ -123,7 +123,7 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "ok\n")
 		return
 	}
-	if coreDirectRequest(r) || r.URL.Path == "/console/api-keys" || strings.HasPrefix(r.URL.Path, "/console/api-keys/") || strings.HasPrefix(r.URL.Path, "/core/v1/environments/") {
+	if coreDirectRequest(r) || r.URL.Path == "/console/api-keys" || strings.HasPrefix(r.URL.Path, "/console/api-keys/") {
 		http.NotFound(w, r)
 		return
 	}
@@ -180,7 +180,7 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Path == "/core" || strings.HasPrefix(r.URL.Path, "/core/") {
-		if !sandboxAdminRequest(r) && !adminAPIRequest(r) {
+		if !coreRequest(r) {
 			http.NotFound(w, r)
 			return
 		}

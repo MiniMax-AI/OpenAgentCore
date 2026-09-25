@@ -98,7 +98,7 @@ func TestAuthenticationAndCrossSiteAdmission(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			r := consoleRequest(t, server, tc.method, "/core/v1/admin/projects")
+			r := consoleRequest(t, server, tc.method, "/core/v1/projects")
 			tc.change(r)
 			response, body := responseBody(t, server, r)
 			if response.StatusCode != tc.status {
@@ -173,7 +173,7 @@ func TestProxyRejectsRedirectWithoutFollowingOrExposingIt(t *testing.T) {
 	server, _ := testConsole(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, destination.URL+"/?token=private-admin-token", http.StatusTemporaryRedirect)
 	}))
-	response, body := responseBody(t, server, consoleRequest(t, server, "GET", "/core/v1/admin/projects"))
+	response, body := responseBody(t, server, consoleRequest(t, server, "GET", "/core/v1/projects"))
 	if response.StatusCode != 502 || response.Header.Get("Location") != "" || strings.Contains(body, "private-admin-token") || destinationCalls.Load() != 0 {
 		t.Fatal("upstream redirect escaped the fixed proxy")
 	}
@@ -190,7 +190,7 @@ func TestArtifactProxyFlushesContentAndCancelsUpstream(t *testing.T) {
 	}))
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	r := consoleRequest(t, server, "GET", "/core/v1/admin/projects/key/sessions/session/artifacts/artifact/content").WithContext(ctx)
+	r := consoleRequest(t, server, "GET", "/core/v1/projects/key/sessions/session/artifacts/artifact/content").WithContext(ctx)
 	response, err := server.Client().Do(r)
 	if err != nil {
 		t.Fatal(err)

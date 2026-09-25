@@ -18,7 +18,9 @@ func TestAdminProxyUsesAccountIdentityAndServerCredential(t *testing.T) {
 		w.WriteHeader(200)
 	}))
 	h := accountConsole(t, c)
-	paths := []struct{ method, path string }{{"GET", "/core/v1/admin/projects?limit=5"}, {"POST", "/core/v1/admin/projects"}, {"POST", "/core/v1/admin/projects/project/keys"}, {"POST", "/core/v1/admin/projects/project/archive"}, {"DELETE", "/core/v1/admin/projects/project/keys/key"}, {"GET", "/core/v1/admin/projects/key/sessions/session/artifacts/artifact/content"}, {"DELETE", "/core/v1/admin/projects/key/skills/skill/versions/1"}, {"GET", "/core/v1/admin/summary"}, {"GET", "/core/v1/admin/core-metrics?range=6h"}}
+	// Every /core/v1 operation is forwarded; Core alone decides which routes exist.
+	paths := []struct{ method, path string }{{"GET", "/core/v1/projects?limit=5"}, {"POST", "/core/v1/projects"}, {"POST", "/core/v1/projects/project/keys"}, {"POST", "/core/v1/projects/project/archive"}, {"DELETE", "/core/v1/projects/project/keys/key"}, {"GET", "/core/v1/projects/key/sessions/session/artifacts/artifact/content"}, {"DELETE", "/core/v1/projects/key/skills/skill/versions/1"}, {"GET", "/core/v1/summary"}, {"GET", "/core/v1/metrics?range=6h"}, {"GET", "/core/v1/sandbox/runtime-observations"},
+		{"POST", "/core/v1/projects/p/environments/e/executor-credentials"}, {"DELETE", "/core/v1/projects/p/environments/e/executor-credentials/k"}, {"PATCH", "/core/v1/future/operation"}, {"GET", "/core/v1/admin/projects"}}
 	for _, tc := range paths {
 		if w := authRequest(h, tc.method, tc.path, `{}`, nil); w.Code != 401 {
 			t.Errorf("unauthenticated %s = %d", tc.path, w.Code)
@@ -41,13 +43,14 @@ func TestAdminProxyUsesAccountIdentityAndServerCredential(t *testing.T) {
 	if calls.Load() != int32(len(paths)) {
 		t.Fatal("unexpected admin proxy count")
 	}
-	for _, tc := range []struct{ method, path string }{{"POST", "/core/v1/admin/projects/key/agents"}, {"PATCH", "/core/v1/admin/projects/key/agents/agent"}, {"POST", "/core/v1/admin/projects/key/sessions"}, {"POST", "/core/v1/admin/projects/key/sessions/session/events"}, {"GET", "/core/v1/admin/projects/key/sessions/session/events"}, {"GET", "/core/v1/admin/projects/key/files/file/content"}, {"GET", "/core/v1/admin/unknown"}, {"POST", "/core/v1/admin/core-metrics"}} {
+	// Only /core/v1 is forwarded.
+	for _, tc := range []struct{ method, path string }{{"GET", "/core"}, {"GET", "/core/"}, {"GET", "/core/v1"}, {"GET", "/core/v2/projects"}, {"GET", "/core/projects"}} {
 		if w := authRequest(h, tc.method, tc.path, `{}`, cookie); w.Code != 404 {
-			t.Errorf("unsupported %s %s = %d", tc.method, tc.path, w.Code)
+			t.Errorf("outside /core/v1 %s %s = %d", tc.method, tc.path, w.Code)
 		}
 	}
 	if calls.Load() != int32(len(paths)) {
-		t.Fatal("unsupported management operation reached Core")
+		t.Fatal("a request outside /core/v1 reached Core")
 	}
 }
 func TestConsoleRequiresAdministratorCredential(t *testing.T) {
