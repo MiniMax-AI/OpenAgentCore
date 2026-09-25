@@ -32,6 +32,9 @@ test("signs in with the Core key, keeps it out of the browser, and signs out and
   await page.getByRole("button", { name: "Sign out" }).click();
   for (let attempt = 0; attempt < 3; attempt++) await signIn(page, "not-the-core-key");
   await expect(page.getByRole("alert")).toHaveText("Too many attempts. Try again in 30 seconds.");
+  // Failed attempts never lock out the right key.
+  await signIn(page, FIXTURE_CORE_KEY);
+  await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
   expect(await browserStorage(page)).not.toContain(FIXTURE_CORE_KEY);
 });
 
