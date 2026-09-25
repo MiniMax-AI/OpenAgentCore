@@ -4,10 +4,15 @@ import { expectManagementBoundary, openConsole } from "./console";
 
 test.afterEach(async ({ request }) => expectManagementBoundary(request));
 
-test("prepares a one-time node command and removes a node after confirmation", async ({ page, request }) => {
+test("prepares a one-time node command for the limits set first, and removes a node after confirmation", async ({ page, request }) => {
   await openConsole(page, request, "nodes");
   await page.getByRole("button", { name: "Add node" }).click();
   const add = page.getByRole("dialog", { name: "Add node" });
+  await add.getByLabel("Sandboxes at once").fill("3");
+  const issued = page.waitForRequest((sent) => sent.method() === "POST" && sent.url().endsWith("/core/v1/sandbox/enrollment-tokens"));
+  await add.getByRole("button", { name: "Generate command" }).click();
+  // Docker never suspends, so it retains exactly the sandboxes it runs.
+  expect((await issued).postDataJSON()).toEqual({ max_active: 3, max_retained: 3 });
   await expect(add.getByLabel("One-time enrollment command")).toHaveValue(/enroll_fixture_/);
   await add.getByRole("button", { name: "Close dialog" }).click();
 

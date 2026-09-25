@@ -44,6 +44,9 @@ export const chinese = {
   "Connection status unavailable. Refresh to check your node.": "连接状态暂不可用，请刷新以查看节点。",
   "Generate a new command to continue.": "请生成新命令后继续。",
   "Generate new command": "生成新命令",
+  "Set the sandbox limits for the host you want to add.": "为要添加的主机设置沙箱上限。",
+  "Generate command": "生成命令",
+  "Change limits": "修改上限",
   "Advanced network settings": "高级网络设置",
 
   "Hosted Sandbox Manager": "托管沙箱管理",

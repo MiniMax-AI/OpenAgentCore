@@ -69,7 +69,8 @@ workbench.
   write history), Nodes (sandbox setup as pages — where sandboxes run, the
   backend or E2B account, the size of each sandbox, a review, and advanced settings
   with the complete form — then the node list with each node's capacity, host
-  figures and allocations, enrollment, renaming, sandbox limits and removal), System (only the sandbox
+  figures and allocations, enrollment, renaming, sandbox limits and removal; Add node
+  asks for the node's sandbox limits before it issues the one-time command), System (only the sandbox
   configuration every project shares: where sandboxes run, each sandbox's size, the
   Runtime or E2B template, the Core address and maintenance).
 - **E2B deployments** have no machines: the Nodes entry becomes Sandbox backend,
