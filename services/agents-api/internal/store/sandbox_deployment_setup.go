@@ -49,7 +49,7 @@ func (s *Store) GetSandboxSetup(ctx context.Context) (SandboxSetup, error) {
 	if err := json.Unmarshal(d.Specification, &result.Specification); err != nil {
 		return SandboxSetup{}, err
 	}
-	if d.ProviderKind != "" {
+	if d.ProviderKind != "" && !unspecifiedNodeDeployment(d) {
 		if err := result.Specification.Validate(d.ProviderKind); err != nil {
 			return SandboxSetup{}, err
 		}

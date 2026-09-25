@@ -230,6 +230,15 @@ Preserve identities, provider receipts, history and storage. This version does n
 automatically adopt the old database or delete its resources; removing an
 environment variable alone does not complete that migration.
 
+A Web-managed Docker or microsandbox selection saved before specifications has
+the empty migration default. Core loads it for draining only. Retained nodes
+without a recorded digest or generation authenticate while the deployment is in
+this state. Fresh hosted sandboxes are refused with the same error as during
+maintenance. Node configuration reads and enrollment return 409
+`sandbox_specification_mismatch`.
+The ordinary maintenance, archive and PUT sequence records a specification and
+retires those nodes. See the [operator upgrade notes](../../docs/getting-started/operations.md#data-and-upgrades).
+
 Unit tests, database tests and provider inspection are separate from live
 execution acceptance. This contract does not assert that every resource profile,
 provider deployment or host-reboot recovery path has been qualified.

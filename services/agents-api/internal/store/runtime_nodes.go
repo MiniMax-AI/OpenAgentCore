@@ -190,6 +190,12 @@ func (s *Store) AuthenticateRuntimeNode(ctx context.Context, nodeID, credential 
 	if n.InstallationID != d.InstallationID || d.Mode != "nodes" {
 		return RuntimeNodeIdentity{}, ErrRuntimeNodeCredential
 	}
+	if unspecifiedNodeDeployment(d) {
+		if n.SpecificationDigest != "" || n.DeploymentGeneration != 0 {
+			return RuntimeNodeIdentity{}, ErrRuntimeSpecificationMismatch
+		}
+		return nodeIdentity(n, d.ProviderKind), nil
+	}
 	spec, err := deploymentSpecification(d)
 	if err != nil || n.SpecificationDigest != spec.Digest(d.ProviderKind) || n.DeploymentGeneration != d.Generation {
 		return RuntimeNodeIdentity{}, ErrRuntimeSpecificationMismatch

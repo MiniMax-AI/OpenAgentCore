@@ -302,3 +302,62 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 		}
 	}
 }
+
+// Migration 000069 leaves a node-backed selection saved before specifications
+// with an empty specification and its nodes with empty digests. The retained
+// node reconnects to drain resources; fresh admission and node configuration
+// stay closed until an administrator replaces the selection.
+func TestUnspecifiedNodeDeploymentDrainsBeforeReplacement(t *testing.T) {
+	_, pool := newManagedTestStore(t)
+	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{7}, 32))
+	s := NewWithCredentialCipher(pool, cipher)
+	w := executionLease(t, s).Store()
+	id := uuid.NewString()
+	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
+		t.Fatal(err)
+	}
+	spec := SandboxDeploymentTestSpec("docker")
+	selection := SandboxDeploymentSetupRequest{DeploymentSpec: spec, Provider: "docker", CoreURL: "https://core.example"}
+	if _, err := w.InitializeSandboxDeployment(t.Context(), id, selection); err != nil {
+		t.Fatal(err)
+	}
+	token, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	node := RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: spec.Digest("docker"), NodeID: uuid.NewString(), Name: "Legacy", Provider: "docker", Credential: strings.Repeat("l", 64), BackendFingerprint: strings.Repeat("b", 64)}
+	if _, err := s.EnrollRuntimeNode(t.Context(), token, node); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(t.Context(), "UPDATE runtime_deployment SET specification='{}'"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(t.Context(), "UPDATE runtime_nodes SET specification_digest='', deployment_generation=0"); err != nil {
+		t.Fatal(err)
+	}
+
+	if setup, err := s.GetSandboxSetup(t.Context()); err != nil || setup.Provider != "docker" {
+		t.Fatal("unspecified deployment could not load for draining", err)
+	}
+	identity, err := s.AuthenticateRuntimeNode(t.Context(), node.NodeID, node.Credential)
+	if err != nil || identity.SpecificationDigest != "" || identity.DeploymentGeneration != 0 {
+		t.Fatal("retained unspecified node could not reconnect", identity, err)
+	}
+	if _, err := s.RuntimeNodeConfiguration(t.Context(), node.NodeID, node.Credential); !errors.Is(err, ErrRuntimeSpecificationMismatch) {
+		t.Fatal("node configuration served without a specification", err)
+	}
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString(), "")); !errors.Is(err, ErrEnvironmentUnavailable) {
+		t.Fatal("unspecified deployment admitted a fresh sandbox", err)
+	}
+
+	if _, err := w.SetSandboxMaintenance(t.Context(), id, SandboxMaintenanceRequest{Maintenance: true, ExpectedGeneration: 1}); err != nil {
+		t.Fatal(err)
+	}
+	view, err := w.UpdateSandboxDeployment(t.Context(), id, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: selection, ExpectedGeneration: 1})
+	if err != nil || view.Generation != 2 || view.Specification == nil {
+		t.Fatal("replacement did not record the specification", view, err)
+	}
+	if _, err := s.AuthenticateRuntimeNode(t.Context(), node.NodeID, node.Credential); !errors.Is(err, ErrRuntimeNodeCredential) {
+		t.Fatal("unspecified node survived replacement", err)
+	}
+}

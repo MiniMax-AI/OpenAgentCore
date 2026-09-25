@@ -109,6 +109,9 @@ func checkRuntimeDeploymentAdmission(ctx context.Context, q *sqlc.Queries, insta
 	if current.Maintenance {
 		return fmt.Errorf("%w: sandbox creation is paused for provider maintenance", ErrEnvironmentUnavailable)
 	}
+	if unspecifiedNodeDeployment(current) {
+		return fmt.Errorf("%w: sandbox creation requires a deployment specification", ErrEnvironmentUnavailable)
+	}
 	if installation != "" {
 		id, err := parseConnectionGeneration(installation)
 		if err != nil || id != current.InstallationID {

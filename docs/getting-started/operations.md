@@ -156,6 +156,17 @@ Keep the original business data, credential key, Runtime history and private pro
 state. There is no automatic old-database conversion, force reset or resource deletion.
 The supported current path uses a database-managed deployment.
 
+A Web-selected Docker or microsandbox deployment saved before deployment
+specifications existed has an empty specification after migration. Current Core
+loads it only to drain: nodes enrolled under the previous release reconnect with
+their existing node service, and their sandboxes stay reachable for archive and
+cleanup. Fresh sandbox creation, node configuration reads and enrollment are
+refused. Back up as above, replace Core and Web, then use steps 1–4 with a Runtime
+release from the new distribution. The replacement retires the old nodes. Stop each
+retired node service, move its identity directory aside as a backup, and add the
+host again with a new command from Web. Node IDs change; Session history and
+persisted Files/Artifacts remain. E2B deployments from that period are not covered.
+
 ## Exposure and network policy
 
 API and console bind to host loopback. With native Core, PostgreSQL publishes an
