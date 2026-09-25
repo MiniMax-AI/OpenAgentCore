@@ -25,7 +25,8 @@ test("explains an E2B rejection in the wizard, with the file to edit and the com
   await page.getByLabel("E2B API key").fill("fixture-private-key");
   await page.getByLabel("Template build").fill("template:94be54a1-138c-4f30-bc87-b13686272dbe");
   await page.getByRole("button", { name: "Next" }).click();
-  await expect(page.getByRole("definition").filter({ hasText: "http://127.0.0.1:8091" })).toBeVisible();
+  const address = page.getByRole("definition").filter({ hasText: "http://127.0.0.1:8091" });
+  await expect(address).toContainText("Only the Core machine can reach this address");
   await page.getByRole("button", { name: "Save configuration" }).click();
   const rejection = page.locator(".wizard-rejection");
   await expect(rejection).toContainText("E2B sandboxes need an HTTPS public_url.");
@@ -34,6 +35,10 @@ test("explains an E2B rejection in the wizard, with the file to edit and the com
   // Nothing was saved and nothing is uncertain: no dialog, and the wizard stays on its review.
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Review and save" })).toBeVisible();
+  // The key is gone from the page; saving again asks for it on the E2B step.
+  expect(await page.content()).not.toContain("fixture-private-key");
+  await page.getByRole("button", { name: "Enter the key" }).click();
+  await expect(page.getByRole("heading", { name: "Connect E2B" })).toBeVisible();
 });
 
 test("lists the startup settings on System with where to change them", async ({ page, request }) => {

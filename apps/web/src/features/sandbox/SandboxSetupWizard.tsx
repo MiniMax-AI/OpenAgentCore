@@ -228,7 +228,11 @@ export function SandboxSetupWizard({ coreUrl, current, disabled, switching = fal
           ) : null}
           <div>
             <dt>{t("Core address")}<HelpTip>{t("The address nodes and sandboxes use to reach Core.")}</HelpTip></dt>
-            <dd>{address ? <code>{address}</code> : "—"}<span className="wizard-review-sub">{t("Set by public_url in config.json")}</span></dd>
+            <dd>
+              {address ? <code>{address}</code> : "—"}
+              <span className="wizard-review-sub">{t("Set by public_url in config.json")}</span>
+              {installation.data?.local_only ? <span className="wizard-review-caution">{t("Only the Core machine can reach this address: nodes on other machines and E2B sandboxes can't. Set an HTTPS public_url in config.json.")}</span> : null}
+            </dd>
           </div>
         </dl>
         {rejection ? (
@@ -241,6 +245,13 @@ export function SandboxSetupWizard({ coreUrl, current, disabled, switching = fal
               </dl>
             ) : null}
           </div>
+        ) : null}
+        {/* Every save attempt clears the E2B key, so a second one needs it entered again. */}
+        {provider === "e2b" && !apiKey.trim() ? (
+          <p className="wizard-key-again">
+            {t("Enter the E2B key again to save.")}
+            <button className="wizard-link" type="button" onClick={() => setStep("e2b")}>{t("Enter the key")}</button>
+          </p>
         ) : null}
         <button className="wizard-link" type="button" onClick={() => setStep("advanced")}>
           <SlidersHorizontal size={14} aria-hidden="true" />{t("Advanced settings")}

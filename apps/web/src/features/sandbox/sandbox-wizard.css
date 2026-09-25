@@ -302,3 +302,25 @@
 .wizard-rejection code {
   font-size: 12.5px;
 }
+
+/* A loopback address only the Core machine reaches. */
+.wizard-review-caution {
+  color: var(--orange);
+  font-size: 13px;
+}
+
+/* After a save attempt the E2B key is gone; this says so beside the way back to it. */
+.sandbox-wizard .wizard-key-again {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.wizard-key-again .wizard-link {
+  color: var(--accent);
+}
