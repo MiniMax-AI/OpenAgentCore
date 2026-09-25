@@ -632,10 +632,11 @@ progress; pages slide and blur across. The review states where sandboxes run,
 the size, the Runtime (taken from this console's distribution manifest) and the
 Core address, read-only: it is config.json's `public_url`, and the console never
 asks for it. A loopback address carries an amber line under it: only the Core
-machine reaches it. When Core rejects the configuration for it (E2B without an
-HTTPS `public_url`), a red-tinted block under the review keeps Core's message and
-adds the config file and apply command as copyable values. A save attempt clears
-the E2B key, so the review then says to enter it again, with a link to that step.
+machine reaches it. When Core rejects the configuration for it (E2B with a
+loopback `public_url`), a red-tinted block under the review keeps Core's message
+and adds the config file and apply command as copyable values. A save attempt
+clears the E2B key, so the review then says to enter it again, with a link to
+that step.
 Advanced settings, one link away, hold the complete form: resources (not for
 E2B), the Runtime release and the E2B template. A change keeps the saved size
 and Runtime while the backend stays the same (a saved size outside the presets is

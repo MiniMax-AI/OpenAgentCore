@@ -27,7 +27,7 @@ export function sandboxRequestError(error: unknown, locale: Locale): string {
 
 /**
  * Core's own reason when it rejects a deployment configuration it cannot serve,
- * such as E2B without an HTTPS public_url; null for any other failure. Nothing
+ * such as E2B with a loopback public_url; null for any other failure. Nothing
  * was saved, so the administrator corrects the cause and saves again.
  */
 export function sandboxConfigurationRejection(error: unknown): string | null {

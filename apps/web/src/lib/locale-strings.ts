@@ -299,7 +299,7 @@ export const chinese = {
   "Config file": "配置文件",
   "Then run": "然后运行",
   "Copy path": "复制路径",
-  "Only the Core machine can reach this address: nodes on other machines and E2B sandboxes can't. Set an HTTPS public_url in config.json.": "只有 Core 所在的机器能访问这个地址，其他机器上的节点和 E2B 沙箱都无法访问。请在 config.json 中设置 HTTPS 的 public_url。",
+  "Only the Core machine can reach this address: nodes on other machines and E2B sandboxes can't. Set a public_url in config.json that other machines can reach (not loopback).": "只有 Core 所在的机器能访问这个地址，其他机器上的节点和 E2B 沙箱都无法访问。请在 config.json 里设置一个其他机器能访问的 public_url（不能是回环地址）。",
   "Enter the E2B key again to save.": "请重新输入 E2B key 后再保存。",
   "Enter the key": "输入 key",
   "{{name}} is still bound to an old Core address. Remove it and add it again.": "{{name}} 仍绑定在旧的 Core 地址上，需要移除后重新添加。",

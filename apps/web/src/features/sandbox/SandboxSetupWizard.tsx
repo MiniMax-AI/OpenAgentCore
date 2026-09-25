@@ -92,7 +92,7 @@ export function SandboxSetupWizard({ coreUrl, current, disabled, switching = fal
   const [template, setTemplate] = useState(current?.e2bTemplate ?? "");
   const [runtime, setRuntime] = useState<Partial<SandboxRuntimeRelease>>({});
   const [busy, setBusy] = useState(false);
-  // Core's reason for rejecting the saved configuration, such as an E2B deployment without an HTTPS public_url.
+  // Core's reason for rejecting the saved configuration, such as E2B with a loopback public_url.
   const [rejection, setRejection] = useState<string | null>(null);
   const installation = useQuery(installationQuery);
   const address = coreUrl || installation.data?.public_url || null;
@@ -231,7 +231,7 @@ export function SandboxSetupWizard({ coreUrl, current, disabled, switching = fal
             <dd>
               {address ? <code>{address}</code> : "—"}
               <span className="wizard-review-sub">{t("Set by public_url in config.json")}</span>
-              {installation.data?.local_only ? <span className="wizard-review-caution">{t("Only the Core machine can reach this address: nodes on other machines and E2B sandboxes can't. Set an HTTPS public_url in config.json.")}</span> : null}
+              {installation.data?.local_only ? <span className="wizard-review-caution">{t("Only the Core machine can reach this address: nodes on other machines and E2B sandboxes can't. Set a public_url in config.json that other machines can reach (not loopback).")}</span> : null}
             </dd>
           </div>
         </dl>
