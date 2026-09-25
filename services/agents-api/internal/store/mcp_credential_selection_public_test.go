@@ -175,10 +175,18 @@ func TestMCPCredentialSelectionPublicPostgres(t *testing.T) {
 			t.Fatalf("Session origin case %d: %d %s", index, created.status, created.body)
 		}
 	}
-	// A Session created with an explicit origin, as before this change, recovers
-	// from a same-key retry that omits it: the resolved configuration is equal.
-	if retry := send(tokenA, http.MethodPost, "/v1/agents/sessions", inline(tool("records", url, ""), ""), "origin-explicit"); retry.status != http.StatusCreated || retry.body != explicitSession.body {
+	// A none Session records caller intent, so a same-key retry that omits the
+	// explicit origin is a different request.
+	if retry := send(tokenA, http.MethodPost, "/v1/agents/sessions", inline(tool("records", url, ""), ""), "origin-explicit"); retry.status != http.StatusConflict || !strings.Contains(retry.body, `"code":"idempotency_conflict"`) {
 		t.Fatal("same-key retry without origin", retry.status, retry.body)
+	}
+	// A Session created before intent was recorded, with an explicit origin,
+	// recovers from a same-key retry that omits it: the resolved configuration is equal.
+	if _, err := pool.Exec(t.Context(), "UPDATE sessions SET creation_request_hash = NULL WHERE id = $1", idOf(explicitSession.body)); err != nil {
+		t.Fatal(err)
+	}
+	if retry := send(tokenA, http.MethodPost, "/v1/agents/sessions", inline(tool("records", url, ""), ""), "origin-explicit"); retry.status != http.StatusCreated || retry.body != explicitSession.body {
+		t.Fatal("historical same-key retry without origin", retry.status, retry.body)
 	}
 	// Recorded caller intent (attached Vaults) keeps comparing the request itself.
 	attachedExplicit := send(tokenA, http.MethodPost, "/v1/agents/sessions", inline(tool("records", url, `,"connection_origin":"service"`), vaults(attachedA)), "origin-attached")

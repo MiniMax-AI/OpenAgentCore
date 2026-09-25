@@ -71,8 +71,10 @@ model, harness or provider. A missing/wrong encryption key fails closed. Retain 
 same deployment credential-encryption key across restarts. V1 has no Turn override,
 provider catalog, Session migration or new execution loop.
 
-All new hosted requests record caller intent before resolving mutable defaults,
-including inline requests that use deployment defaults. Matching creation retries
+Every new request that may use a deployment default (`openai_hosted` and `none`),
+and every request with a saved Agent, template or provider bundle, records caller
+intent before resolving mutable defaults. A retry therefore returns the committed
+Session even after the deployment default was replaced or removed. Matching creation retries
 recover the committed Session before resolving the Agent or provider again and do
 not enqueue another input. Streaming remains outside the retry identity. Existing
 historical rows keep their documented retry limitations; this change does not
@@ -113,7 +115,8 @@ limits. Native provider availability is checked during execution, not by a new p
 The entire resolved provider configuration is frozen and encrypted in the Session creation
 transaction, with a distinct credential-crypto purpose and tenant/Session binding.
 Creation retries include this intent in their request hash; changing the key or
-endpoint under the same idempotency key conflicts. Recovery reads the committed
+endpoint under the same idempotency key conflicts. A key enters any stored hash
+only as a fingerprint keyed by the deployment credential key, never directly. Recovery reads the committed
 Session before mutable Agent/template resolution. No public Session, Agent,
 Environment, event or ordinary configuration contains the key. The top-level
 extension is write-only and has no update endpoint.
@@ -163,8 +166,12 @@ permission settings) are dropped. Sessions frozen from that file keep their
 complete private snapshot. Historical `openai_hosted` and `self_hosted` Sessions
 created without any snapshot cannot start new work: message input returns 400
 `model_provider_required`, while cancellation and history reads keep working.
+Input they reserved before the upgrade settles as failed with that reason, and the
+Session reports it, instead of waiting for its deadline.
 Recreate them with a bundle. Run `deploy/install/model_provider_sessions.py`
-against an installation before upgrading to count them; it only reads.
+against an installation before upgrading to count them; it only reads. Historical
+`none` Sessions that relied on the retired options file now run with the device's
+own environment, and the check does not count them.
 
 Parsar manages its own workspace catalog and encrypted keys, sends this extension
 only on the first Core Session request, and retains a private encrypted snapshot

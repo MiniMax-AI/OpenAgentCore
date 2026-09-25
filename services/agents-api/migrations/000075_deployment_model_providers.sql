@@ -16,14 +16,23 @@ ALTER TABLE admin_audit_log ALTER COLUMN tenant_id DROP NOT NULL;
 ALTER TABLE admin_audit_log ALTER COLUMN project_id DROP NOT NULL;
 ALTER TABLE admin_audit_log ADD CONSTRAINT admin_audit_log_scope_check CHECK ((tenant_id IS NULL) = (project_id IS NULL));
 
+-- Input reserved before providers were required fails with this reason instead
+-- of waiting for its deadline.
+ALTER TABLE environment_input_reservations ADD COLUMN failure_code text
+  CHECK (failure_code IS NULL OR (state = 'failed' AND failure_code = 'model_provider_required'));
+
 -- +goose Down
 -- +goose StatementBegin
 DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM admin_audit_log WHERE project_id IS NULL) THEN
         RAISE EXCEPTION 'Deployment-wide audit entries prevent this downgrade; restore a complete database backup instead.';
     END IF;
+    IF EXISTS (SELECT 1 FROM deployment_model_providers) THEN
+        RAISE EXCEPTION 'Deployment model providers prevent this downgrade; remove them or restore a complete database backup instead.';
+    END IF;
 END $$;
 -- +goose StatementEnd
+ALTER TABLE environment_input_reservations DROP COLUMN failure_code;
 ALTER TABLE admin_audit_log DROP CONSTRAINT admin_audit_log_scope_check;
 ALTER TABLE admin_audit_log ALTER COLUMN project_id SET NOT NULL;
 ALTER TABLE admin_audit_log ALTER COLUMN tenant_id SET NOT NULL;

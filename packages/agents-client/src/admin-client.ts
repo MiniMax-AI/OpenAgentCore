@@ -284,7 +284,7 @@ export class AdminClient {
   }
   /**
    * Replaces the harness's deployment default with the complete bundle, including the write-only key.
-   * New openai_hosted Sessions freeze it; existing Sessions and self_hosted Sessions never use a changed default.
+   * New openai_hosted and none Sessions freeze it; self_hosted Sessions never use it, and existing Sessions keep the provider they froze.
    */
   async setHarnessModelProvider(harness: CoreHarnessKind, input: ModelProviderInput, options?: ReadOptions): Promise<HarnessModelProvider> {
     const body: ModelProviderInput = { protocol: input.protocol, base_url: input.base_url, api_key: input.api_key };

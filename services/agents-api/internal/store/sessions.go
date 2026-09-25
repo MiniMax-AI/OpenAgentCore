@@ -152,6 +152,11 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 	if !input.Initialization.Empty() {
 		initialization = &input.Initialization
 	}
+	// The retry identity carries the provider key only as a keyed fingerprint.
+	fingerprinted, err := s.fingerprintedProvider(input.ModelProvider)
+	if err != nil {
+		return SessionCreation{}, err
+	}
 	// JSON map keys are sorted by encoding/json, so key order does not affect retries.
 	canonical, err := json.Marshal(struct {
 		ModelProvider  *v1.ModelProviderInput `json:",omitempty"`
@@ -161,11 +166,11 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 		InitialInputs  json.RawMessage   `json:",omitempty"`
 		InitialFiles   []InitialFile     `json:",omitempty"`
 		Initialization *EnvironmentSetup `json:",omitempty"`
-	}{input.ModelProvider, input.Engine, input.Metadata, configuration, encodedInput, input.InitialFiles, initialization})
+	}{fingerprinted, input.Engine, input.Metadata, configuration, encodedInput, input.InitialFiles, initialization})
 	if err != nil {
 		return SessionCreation{}, fmt.Errorf("%w: input: %v", ErrInvalidInput, err)
 	}
-	creationHash, err := creationRequestHash(input.CreationRequest)
+	creationHash, err := s.creationRequestHash(input.CreationRequest)
 	if err != nil {
 		return SessionCreation{}, err
 	}

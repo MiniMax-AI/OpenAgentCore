@@ -5,6 +5,8 @@ Read-only. Run it against an existing installation before upgrading to a Core th
 stores deployment model providers itself: these Sessions cannot start new work
 afterwards and must be recreated with x_agents_core.model_provider or an Agent that
 has one saved. Cancelling their work and reading their history keep working.
+Historical none Sessions are not counted: without a frozen provider they run with
+their device's own environment.
 """
 import argparse
 import json

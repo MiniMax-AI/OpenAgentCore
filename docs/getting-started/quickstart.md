@@ -94,7 +94,7 @@ model configuration. They are not fields in the official SDK 3.13.0 protocol.
 The service encrypts model configuration with tenant/Session binding and never
 returns the secret through public resource reads. A `self_hosted` Session must
 always carry its own provider this way or through a saved Agent; deployment
-defaults apply only to `openai_hosted`. Keep the installation's
+defaults apply to `openai_hosted` and `none`, never to `self_hosted`. Keep the installation's
 credential encryption key and database together across restarts.
 Keep the complete `agent` object together: SDK 3.13.0 replaces an ordinary body
 field with the corresponding `extra_body` field rather than merging nested fields.

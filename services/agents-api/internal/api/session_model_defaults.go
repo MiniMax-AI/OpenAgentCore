@@ -66,7 +66,7 @@ func (e *modelProviderDefaultsError) Unwrap() error { return e.err }
 
 func modelProviderRequired(environment, engine string) error {
 	if environment == "self_hosted" {
-		return &modelProviderRequiredError{"self_hosted Sessions need a model provider for harness " + engine + ": pass x_agents_core.model_provider or use an Agent that has one saved. Deployment default model providers apply only to openai_hosted Sessions."}
+		return &modelProviderRequiredError{"self_hosted Sessions need a model provider for harness " + engine + ": pass x_agents_core.model_provider or use an Agent that has one saved. Deployment default model providers apply to openai_hosted and none Sessions, never to self_hosted."}
 	}
 	return &modelProviderRequiredError{"No model provider is configured for harness " + engine + ". Pass x_agents_core.model_provider, use an Agent that has one saved, or ask the Core administrator to set a deployment default model provider for " + engine + "."}
 }

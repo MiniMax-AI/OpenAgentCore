@@ -3006,14 +3006,15 @@ paths:
         live-only. New Sessions retain their authenticated creator; all creation retries
         require the same typed subject, including across key rotation. Saved-Agent
         retries and inline requests using Vault attachments or credential references
-        retain caller intent independently of later resource changes; new hosted inline
-        requests also freeze caller intent before deployment defaults resolve; unrelated
-        non-hosted inline retries preserve resolved/default equivalences. Unknown
-        historical creators reject retries; known creators without recorded intent
-        retain resolved-snapshot retry rules. These conflict policies are local and
-        not verified hosted parity. A same-key stream=true retry of an existing creation
-        returns 201 with no events and closes at once; retry with stream=false or
-        use the GET events stream to recover. Claude SDK on none and Core-managed
+        retain caller intent independently of later resource changes; new openai_hosted
+        and none inline requests also freeze caller intent before deployment defaults
+        resolve; unrelated self_hosted inline retries preserve resolved/default equivalences.
+        Provider keys enter retry hashes only as fingerprints keyed by the credential
+        key. Unknown historical creators reject retries; known creators without recorded
+        intent retain resolved-snapshot retry rules. These conflict policies are local
+        and not verified hosted parity. A same-key stream=true retry of an existing
+        creation returns 201 with no events and closes at once; retry with stream=false
+        or use the GET events stream to recover. Claude SDK on none and Core-managed
         Docker openai_hosted supports qualified object-root json_schema output with
         medium verbosity, single-Agent execution and ordinary functions. Hosted execution
         reuses native workspace tools and Files/Artifacts; Skills, Plugins, capability

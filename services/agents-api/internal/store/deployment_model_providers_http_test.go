@@ -2,17 +2,19 @@ package store_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/adminaudit"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/api"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/credentialcrypto"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
 )
@@ -133,7 +135,7 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 
 	// Self-hosted Sessions take the request or saved Agent bundle, never the default.
 	failure := call("POST", "/v1/agents/sessions", projectKey, selfHosted, 400)
-	if !strings.Contains(string(failure["error"]), "apply only to openai_hosted") {
+	if !strings.Contains(string(failure["error"]), "never to self_hosted") {
 		t.Fatalf("self-hosted Session used or misreported the deployment default: %s", failure["error"])
 	}
 	requestProvider := strings.TrimSuffix(selfHosted, "}") + `,"x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://session.example/v1","api_key":"session-canary"}}}`
@@ -161,7 +163,8 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 }
 
 // A hosted or self-hosted Session created before providers were required has
-// no frozen provider: new work is rejected before anything is queued.
+// no frozen provider: new work is rejected before anything is queued, and input
+// reserved before the upgrade fails with that reason instead of waiting.
 func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), true)
 	legacy, err := h.s.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
@@ -169,22 +172,94 @@ func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	worker, err := execution.StartWorker(t.Context(), h.d)
+	executor := connectFixtureRuntime(t, h, legacy)
+	// Reserved directly, as a pre-upgrade Core did.
+	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, legacy.ID, "before-upgrade", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"old"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-		_ = worker.Run(ctx)
-	})
+	worker, stop := startEnvironmentExpiryWorker(t, h.d)
+	defer stop()
 	message := []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"start"}`)}}
 	if _, err := worker.SubmitInputs(t.Context(), h.tenant, legacy.ID, uuid.NewString(), message); !errors.Is(err, store.ErrModelProviderRequired) {
 		t.Fatal("provider-free Session accepted work", err)
 	}
-	_, pool := store.NewTestStore(t)
-	var reservations int
-	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM environment_input_reservations WHERE session_id=$1", legacy.ID).Scan(&reservations); err != nil || reservations != 0 {
-		t.Fatal("rejected work was queued", reservations, err)
+	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "legacy reservation settled", func() bool {
+		got, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, legacy.ID, pending.ID)
+		return err == nil && got.State == store.EnvironmentInputFailed
+	})
+	session, err := h.s.GetSession(t.Context(), h.tenant, legacy.ID)
+	if err != nil || session.EnvironmentInputActivity == nil || session.EnvironmentInputActivity.Failure != "model_provider_required" {
+		t.Fatal("legacy reservation did not fail with its reason", session.EnvironmentInputActivity, err)
+	}
+	_ = executor.conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	for {
+		var frame proto.Envelope
+		if executor.conn.ReadJSON(&frame) != nil {
+			break
+		}
+		if frame.Type == proto.TypeExecutionPrepare || frame.Type == proto.TypePromptRequest {
+			t.Fatal("provider-free work reached the executor", frame.Type)
+		}
+	}
+}
+
+// A none Session may freeze the deployment default, so its caller intent is
+// recorded first: a same-key retry returns the committed Session after the
+// default was replaced or removed.
+func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
+	st, pool := store.NewModelTestStore(t)
+	if _, err := pool.Exec(t.Context(), "DELETE FROM deployment_model_providers"); err != nil {
+		t.Fatal(err)
+	}
+	tenant, token := uuid.NewString(), uuid.NewString()
+	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "none-retry", TokenSHA256: device.HashCredential(token), TenantID: tenant}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := api.NewHandler(st, auth, "codex", api.WithExecution(st), api.WithModelProviderDefaults(st.DeploymentModelProvider))
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "abcd1234", RequestID: "none-retry", TraceID: "none-retry"})
+	setDefault := func(key string) {
+		t.Helper()
+		if _, err := st.SetDeploymentModelProvider(admin, "codex", v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://deployment.example/v1", APIKey: key}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	create := func(key string) string {
+		t.Helper()
+		r := httptest.NewRequest("POST", "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"m"},"environment":{"type":"none"},"input":"hello"}`))
+		r.Header.Set("Authorization", "Bearer "+token)
+		r.Header.Set("OpenAI-Beta", "agents=v1")
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Idempotency-Key", key)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		var session struct{ ID string }
+		if w.Code != 201 || json.Unmarshal(w.Body.Bytes(), &session) != nil {
+			t.Fatalf("creation %d: %s", w.Code, w.Body)
+		}
+		return session.ID
+	}
+	setDefault("first-default-key")
+	key := uuid.NewString()
+	original := create(key)
+	if provider, err := st.SessionModelExecution(t.Context(), tenant, original); err != nil || provider.APIKey != "first-default-key" {
+		t.Fatal("none Session did not freeze the deployment default", err)
+	}
+	setDefault("rotated-default-key")
+	if create(key) != original {
+		t.Fatal("retry after rotation created another Session")
+	}
+	if err := st.DeleteDeploymentModelProvider(admin, "codex"); err != nil {
+		t.Fatal(err)
+	}
+	if create(key) != original {
+		t.Fatal("retry after removal created another Session")
+	}
+	if provider, err := st.SessionModelExecution(t.Context(), tenant, original); err != nil || provider.APIKey != "first-default-key" {
+		t.Fatal("retry changed the frozen provider", err)
 	}
 }

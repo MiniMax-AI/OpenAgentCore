@@ -4,6 +4,9 @@ package credentialcrypto
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"unicode/utf8"
@@ -32,6 +35,8 @@ type Binding struct {
 
 type Cipher struct {
 	aead cipher.AEAD
+	// fingerprint keys Fingerprint; it is derived from, never equal to, the key.
+	fingerprint []byte
 }
 
 // New requires a 32-byte AES key. The operator must limit each key to at most
@@ -48,7 +53,26 @@ func New(key []byte) (*Cipher, error) {
 	if err != nil {
 		return nil, errUnavailable
 	}
-	return &Cipher{aead: aead}, nil
+	derive := hmac.New(sha256.New, key)
+	derive.Write([]byte("parsar.agents-api.credential-fingerprint.v1"))
+	return &Cipher{aead: aead, fingerprint: derive.Sum(nil)}, nil
+}
+
+// Fingerprint returns a keyed digest of secret for its purpose. It lets stored
+// idempotency hashes tell secrets apart without hashing a secret directly, so a
+// stored hash cannot be used to test guesses offline without this key.
+func (c *Cipher) Fingerprint(purpose, secret string) (string, error) {
+	if c == nil || len(c.fingerprint) == 0 {
+		return "", errUnavailable
+	}
+	if purpose == "" || !utf8.ValidString(purpose) {
+		return "", errInvalidBinding
+	}
+	mac := hmac.New(sha256.New, c.fingerprint)
+	mac.Write([]byte(purpose))
+	mac.Write([]byte{0})
+	mac.Write([]byte(secret))
+	return hex.EncodeToString(mac.Sum(nil)), nil
 }
 
 // Seal returns version || nonce || ciphertext || tag. The AEAD generates and

@@ -123,6 +123,7 @@ type EnvironmentInputReservation struct {
 	Deadline       pgtype.Timestamptz `json:"deadline"`
 	SettledAt      pgtype.Timestamptz `json:"settled_at"`
 	IsInitial      bool               `json:"is_initial"`
+	FailureCode    pgtype.Text        `json:"failure_code"`
 }
 
 type EnvironmentSetup struct {
