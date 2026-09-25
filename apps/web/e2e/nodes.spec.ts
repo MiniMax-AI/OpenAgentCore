@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-import { expectManagementBoundary, openConsole } from "./console";
+import { expectManagementBoundary, failNext, openConsole } from "./console";
 
-test.afterEach(async ({ request }) => expectManagementBoundary(request));
+test.afterEach(async ({ request, page }) => expectManagementBoundary(request, page));
 
 test("prepares a one-time node command and removes a node after confirmation", async ({ page, request }) => {
   await openConsole(page, request, "nodes");
@@ -16,4 +16,14 @@ test("prepares a one-time node command and removes a node after confirmation", a
   await confirm.getByRole("button", { name: "Confirm removal" }).click();
   await expect(confirm).toBeHidden();
   await expect(page.getByRole("table", { name: "Sandbox nodes" })).not.toContainText("edge-03");
+});
+
+
+test("failed node reads cannot present the cached hosts as healthy", async ({ page, request }) => {
+  await openConsole(page, request, "nodes");
+  await expect(page.getByRole("table", { name: "Sandbox nodes" })).toContainText("edge-03");
+  await failNext(request, { method: "GET", path: "/nodes", status: 503, repeat: true });
+  await page.reload();
+  await expect(page.getByRole("alert").first()).toBeVisible();
+  await expect(page.getByRole("table", { name: "Sandbox nodes" })).toHaveCount(0);
 });

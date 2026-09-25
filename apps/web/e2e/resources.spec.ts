@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { expectManagementBoundary, failNext, openConsole } from "./console";
 
-test.afterEach(async ({ request }) => expectManagementBoundary(request));
+test.afterEach(async ({ request, page }) => expectManagementBoundary(request, page));
 
 test("copies an Agent into another project and lists it there", async ({ page, request }) => {
   await openConsole(page, request, "agents");

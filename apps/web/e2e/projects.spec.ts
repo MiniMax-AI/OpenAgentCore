@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { expectManagementBoundary, failNext, openConsole, writes } from "./console";
 
-test.afterEach(async ({ request }) => expectManagementBoundary(request));
+test.afterEach(async ({ request, page }) => expectManagementBoundary(request, page));
 
 test("creates a project, shows a new key once, revokes it and archives the project", async ({ page, request }) => {
   await openConsole(page, request, "projects");
@@ -16,9 +16,13 @@ test("creates a project, shows a new key once, revokes it and archives the proje
   await page.getByRole("dialog").getByRole("button", { name: "Issue key" }).click();
   const issued = page.getByRole("dialog", { name: "Key issued" });
   await expect(issued.getByLabel("New key ci")).toHaveValue(/fixture-secret/);
+  const secret = await issued.getByLabel("New key ci").inputValue();
   await issued.getByRole("button", { name: "I've saved this key" }).click();
   await expect(page.getByRole("table", { name: "Keys of Acceptance" })).toContainText("ci");
   await expect(page.locator("input[readonly]")).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("table", { name: "Keys of Acceptance" })).toContainText("ci");
+  expect(await page.content()).not.toContain(secret);
   expect(await page.evaluate(() => JSON.stringify({ ...window.localStorage, ...window.sessionStorage }))).not.toContain("fixture-secret");
 
   await page.getByRole("button", { name: "Revoke key ci" }).click();

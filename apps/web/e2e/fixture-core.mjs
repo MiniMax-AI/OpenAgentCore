@@ -1,8 +1,5 @@
-// Browser acceptance fixture: the console service's routes (/console/**) and the
-// management surfaces it forwards (/core/v1/admin/**, /core/v1/sandbox/**), with
-// synthetic, deterministic data and in-memory writes. It never serves /v1; any
-// /v1 request, and any browser-supplied Authorization header, is recorded so a
-// test can assert that the console stays on its management boundary.
+// Synthetic Core upstream behind the real production core-console service.
+// No browser authentication or proxy logic belongs in this fixture.
 import http from "node:http";
 
 import { buildAdmin } from "./data/admin.mjs";
@@ -10,18 +7,17 @@ import { coreMetrics } from "./data/core-metrics.mjs";
 import { buildResources } from "./data/resources.mjs";
 import { buildDemo } from "./data/routes.mjs";
 
-const port = Number(process.env.AGENTS_FIXTURE_PORT ?? 18092);
-const SESSION_COOKIE = "core_console=fixture-session";
+const port = Number(process.env.AGENTS_FIXTURE_PORT ?? 18611);
+import { ADMIN_TOKEN } from "./fixture-settings.mjs";
 
 let state;
-function reset(mode = "setup") {
+function reset() {
   const base = buildDemo();
   const now = Math.floor(Date.now() / 1000);
   const resources = buildResources(now, base.agents, base.sessions);
   state = {
     ...base, resources, admin: buildAdmin(now, base, resources),
-    auth: { mode, username: mode === "authenticated" ? "admin" : null, password: mode === "setup" ? null : "correct horse battery" },
-    violations: [], writes: [], failNext: null, nextId: 1,
+    violations: [], calls: [], metricsUnknown: false, writes: [], failNext: null, nextId: 1,
   };
 }
 reset();
@@ -61,35 +57,6 @@ const startupConfiguration = {
   },
 };
 
-async function consoleRoute(request, response, url) {
-  const auth = state.auth;
-  if (url.pathname === "/console/auth" && request.method === "GET") {
-    if (auth.mode === "authenticated" && request.headers.cookie?.includes(SESSION_COOKIE)) return send(response, 200, { mode: "authenticated", username: auth.username });
-    return send(response, 200, { mode: auth.mode === "setup" ? "setup" : "login" });
-  }
-  if (url.pathname === "/console/auth/setup" && request.method === "POST") {
-    if (auth.mode !== "setup") return error(response, 409, "Setup is complete.");
-    const { username, password } = await body(request);
-    if (!username || !password || password.length < 12) return error(response, 400, "Invalid administrator.");
-    Object.assign(auth, { mode: "authenticated", username, password });
-    return send(response, 200, { mode: "authenticated", username }, { "set-cookie": `${SESSION_COOKIE}; Path=/; HttpOnly; SameSite=Strict` });
-  }
-  if (url.pathname === "/console/auth/login" && request.method === "POST") {
-    const { username, password } = await body(request);
-    if (username !== auth.username || password !== auth.password) return error(response, 401, "Sign-in failed.");
-    auth.mode = "authenticated";
-    return send(response, 200, { mode: "authenticated", username }, { "set-cookie": `${SESSION_COOKIE}; Path=/; HttpOnly; SameSite=Strict` });
-  }
-  if (url.pathname === "/console/auth/logout" && request.method === "POST") {
-    auth.mode = "login";
-    return send(response, 200, { mode: "login" }, { "set-cookie": `${SESSION_COOKIE.split("=")[0]}=; Path=/; Max-Age=0` });
-  }
-  if (url.pathname === "/console/config") {
-    return send(response, 200, { api_keys: true, sandbox_admin: true, node_installer: true, node_installer_sha256: "a".repeat(64) });
-  }
-  return error(response, 404, "Not found.");
-}
-
 async function adminWrite(request, response, path) {
   const a = state.admin;
   const input = request.method === "POST" ? await body(request) : {};
@@ -111,6 +78,7 @@ async function adminWrite(request, response, path) {
   const project = match && a.projects.find((entry) => entry.id === match[1]);
   if (!project) return error(response, 404, "No such project.");
   const rest = match[2] ?? "";
+  if (!rest && request.method === "POST") { project.name = input.name; return send(response, 200, a.publicProject(project)); }
   if (rest === "/archive" && request.method === "POST") {
     const at = Math.floor(Date.now() / 1000);
     project.archived_at = at;
@@ -149,7 +117,15 @@ function adminRead(response, path, url) {
     return send(response, 200, { object: "list", data, has_more: false, first_id: data[0]?.observation.id ?? null, last_id: data.at(-1)?.observation.id ?? null });
   }
   if (path === "/startup-configuration") return send(response, 200, startupConfiguration);
-  if (path === "/core-metrics") return send(response, 200, coreMetrics(url.searchParams.get("range") ?? "1h"));
+  if (path === "/core-metrics") {
+    const value = coreMetrics(url.searchParams.get("range") ?? "1h");
+    if (state.metricsUnknown) {
+      for (const key of ["slots_in_use", "slots_total", "queued_turns", "connected_daemons"]) value.execution[key] = null;
+      value.database.ping_ms = { p50: null, p95: null };
+      value.process.memory_bytes = null;
+    }
+    return send(response, 200, value);
+  }
   const match = path.match(/^\/projects\/([^/]+)(\/.*)?$/);
   const project = match && a.projects.find((entry) => entry.id === match[1]);
   if (!project) return error(response, 404, "No such project.");
@@ -208,14 +184,15 @@ async function sandboxRoute(request, response, path) {
 async function fixtureRoute(request, response, url) {
   if (url.pathname === "/__fixture/health") return send(response, 200, { ok: true });
   if (url.pathname === "/__fixture/reset" && request.method === "POST") {
-    reset(url.searchParams.get("auth") ?? "setup");
+    reset();
     return send(response, 200, { ok: true });
   }
   if (url.pathname === "/__fixture/fail-next" && request.method === "POST") {
     state.failNext = await body(request); // { method, path, status, code?, message? }
     return send(response, 200, { ok: true });
   }
-  if (url.pathname === "/__fixture/requests") return send(response, 200, { violations: state.violations, writes: state.writes });
+  if (url.pathname === "/__fixture/metrics-unknown" && request.method === "POST") { state.metricsUnknown = true; return send(response, 200, {}); }
+  if (url.pathname === "/__fixture/requests") return send(response, 200, { violations: state.violations, writes: state.writes, calls: state.calls });
   return error(response, 404, "Not found.");
 }
 
@@ -227,15 +204,15 @@ http.createServer(async (request, response) => {
       state.violations.push(`${request.method} ${url.pathname}`);
       return error(response, 404, "The console does not serve /v1.");
     }
-    if (request.headers.authorization) state.violations.push(`Authorization header on ${request.method} ${url.pathname}`);
-    if (url.pathname.startsWith("/console/")) return await consoleRoute(request, response, url);
-    const signedIn = state.auth.mode === "authenticated" && request.headers.cookie?.includes(SESSION_COOKIE);
-    if (!signedIn) return error(response, 401, "Sign in to the console.");
+    const call = { method: request.method, path: url.pathname, actor: request.headers["x-core-console-actor"] ?? null, authenticated: request.headers.authorization === `Bearer ${ADMIN_TOKEN}`, cookie: request.headers.cookie ?? null };
+    state.calls.push(call);
+    if (!call.authenticated) { state.violations.push(`Missing deployment credential on ${request.method} ${url.pathname}`); return error(response, 401, "Deployment authentication required."); }
+    if (call.cookie !== null) state.violations.push("Browser cookie reached Core");
     const write = request.method !== "GET" && request.method !== "HEAD";
     if (write) state.writes.push(`${request.method} ${url.pathname}`);
     const fail = state.failNext;
     if (fail && fail.method === request.method && url.pathname.includes(fail.path)) {
-      state.failNext = null;
+      if (!fail.repeat) state.failNext = null;
       return error(response, fail.status, fail.message ?? "Injected failure.", fail.code ?? null);
     }
     if (url.pathname.startsWith("/core/v1/admin/")) {
@@ -247,5 +224,5 @@ http.createServer(async (request, response) => {
   } catch (caught) {
     error(response, 500, String(caught));
   }
-}).listen(port, "127.0.0.1", () => console.log(`Console acceptance fixture on http://127.0.0.1:${port}`));
+}).listen(port, "127.0.0.1", () => console.log(`Core upstream fixture on http://127.0.0.1:${port}`));
 

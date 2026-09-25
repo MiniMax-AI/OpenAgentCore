@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-import { expectManagementBoundary, openConsole } from "./console";
+import { expectManagementBoundary, failNext, openConsole } from "./console";
 
-test.afterEach(async ({ request }) => expectManagementBoundary(request));
+test.afterEach(async ({ request, page }) => expectManagementBoundary(request, page));
 
 test("shows the deployment's health on Overview and each monitor page", async ({ page, request }) => {
   await openConsole(page, request, "overview");
@@ -25,4 +25,18 @@ test("opens a Session's conversation from the Session log, read-only", async ({ 
   await expect(page.getByRole("list", { name: "Conversation" })).toBeVisible();
   await expect(page.locator(".chat-row.user").first()).toBeVisible();
   await expect(page.getByRole("textbox")).toHaveCount(0);
+});
+
+test('Core metrics keep missing measurements unknown and make a refresh failure visible', async ({ page, request }) => {
+  await openConsole(page, request, 'core-metrics');
+  await expect(page.getByLabel('Core summary')).toBeVisible();
+  await request.post(`http://127.0.0.1:${process.env.AGENTS_FIXTURE_PORT ?? 18611}/__fixture/metrics-unknown`);
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  const values = page.getByLabel('Core summary').locator('.kpi-value');
+  await expect(values).toHaveCount(5);
+  for (const value of await values.all()) await expect(value).toHaveText('—');
+  await failNext(request, { method: 'GET', path: '/core-metrics', status: 503, repeat: true });
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Refresh failed');
+  for (const value of await values.all()) await expect(value).toHaveText('—');
 });

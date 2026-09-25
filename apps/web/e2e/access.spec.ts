@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
 
-import { expectManagementBoundary, resetFixture } from "./console";
+import { expectManagementBoundary, observeBrowser, resetFixture } from "./console";
 
-test.afterEach(async ({ request }) => expectManagementBoundary(request));
+test.afterEach(async ({ request, page }) => expectManagementBoundary(request, page));
 
 test("creates the administrator, keeps no credential in the browser, and signs out and back in", async ({ page, request }) => {
-  await resetFixture(request, "setup");
+  await resetFixture(request);
+  observeBrowser(page);
   await page.addInitScript(() => window.localStorage.setItem("agents-core-web.language", "en"));
   await page.goto("/");
 

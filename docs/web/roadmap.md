@@ -26,7 +26,7 @@ contract. Public Agents API compatibility work is tracked in the
   tooling (`scripts/core-doctor.mjs`, `.env.example`). The console no longer sends
   `/v1`; remove the path together with that tooling.
 - Run the browser acceptance below against the production console service and a
-  real Core; today it runs against a fixture.
+  real Core; the automated suite uses a synthetic Core upstream.
 
 ## Acceptance before calling the UI complete
 
@@ -35,16 +35,22 @@ archive retention, deletion conflicts, copy results and audit attribution throug
 the production console service. Browser acceptance must also cover denied cross-origin
 writes, absent `/v1` proxying, secret handling and uncertain write outcomes.
 
-`apps/web/e2e` covers the browser side against `fixture-console.mjs`, a synthetic
-console service: administrator setup and sign-in with no credential in browser
-storage; Project creation, one-time key display, revocation and archive; an
-unconfirmed key issue that is reported and never replayed; a copy's result and the
-copy in its target Project; a refused deletion that keeps Core's reason; the
-monitor pages and a read-only Session conversation; node enrollment and removal.
-Every test also asserts that the browser sent nothing to `/v1` and no
-Authorization header. Project isolation, shared key access, audit attribution and
-cross-origin write denial are enforced by Core and the console service and are
-covered by their backend tests.
+`apps/web/e2e` builds and runs the production `services/core-console` with its
+real account store, session cookies, host/origin checks and management allowlist.
+`fixture-core.mjs` supplies only synthetic Core data and failure responses; it
+contains no console authentication or proxy implementation. The suite covers
+administrator setup/sign-in, Project creation, one-time key display, revocation
+and archive, uncertain key issuance without replay, copies, deletion conflicts,
+monitor pages, unknown metrics, read-only Session history, node enrollment/removal
+and failed reads. Browser traffic is checked for `/v1` and Authorization headers;
+the upstream verifies the server credential, signed-in actor label and absence of
+browser cookies. Separate requests exercise rejected cross-origin writes, denied
+`/v1` proxying and forged browser credentials/actor labels.
+
+See the [test guide](../../apps/web/e2e/README.md) for commands and isolation. Core
+Project isolation, shared key access, archive retention and transaction/audit
+semantics remain covered by Core's backend tests and require real deployment
+acceptance; synthetic records do not prove those behaviors or model execution.
 
 A backend test pass is evidence for the service it exercises. UI completion requires
 separate browser evidence for the migrated screens; successful rendering alone is
