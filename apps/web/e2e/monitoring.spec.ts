@@ -85,6 +85,7 @@ python3 "$d/install.pyz" --source-url 'https://core.example.com' --environment-i
   await credentials.getByRole("button", { name: /^Rotate credential / }).click();
   const rotation = page.getByRole("dialog", { name: "Rotate credential?" });
   await expect(rotation).toContainText("Rotating restores it with a new secret");
+  await expect(rotation).toContainText("rerun the Connect a host command there and paste the new credential at its prompt");
   await rotation.getByRole("button", { name: "Rotate" }).click();
   const restored = page.getByRole("dialog", { name: "Executor credential" });
   await expect(restored.getByLabel("Executor credential file")).toContainText("exec_fixture_2");
@@ -145,6 +146,8 @@ test("issues a new executor credential after the unanswered one was rotated from
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
   const credentials = section.getByRole("table", { name: "Executor credentials" });
   await credentials.getByRole("button", { name: /^Rotate credential / }).click();
+  // Rotating an active credential disconnects its host until the command is rerun with the new one.
+  await expect(page.getByRole("dialog", { name: "Rotate credential?" })).toContainText("The host's executor disconnects and won't retry until you rerun the Connect a host command");
   await page.getByRole("dialog", { name: "Rotate credential?" }).getByRole("button", { name: "Rotate" }).click();
   await page.getByRole("dialog", { name: "Executor credential" }).getByRole("button", { name: "Done" }).click();
 

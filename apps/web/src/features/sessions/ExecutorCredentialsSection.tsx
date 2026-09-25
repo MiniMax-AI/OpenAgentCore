@@ -332,7 +332,9 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
         {rotation ? (
           <>
             <p>{t(`executor.rotateDialog.${rotation.reason}`, { id: shortId(rotation.keyId) })}</p>
-            <p>{t(rotation.reason === "revoked" ? "executor.rotateDialog.reconnect" : "executor.rotateDialog.consequence")}</p>
+            {rotation.reason === "revoked" ? null : <p>{t("executor.rotateDialog.consequence")}</p>}
+            {/* A connected host needs the command again; the text names it only when it is shown here. */}
+            {rotation.reason === "lost" ? null : <p>{t(`executor.rotateDialog.${rotation.reason === "revoked" ? "reconnect" : "disconnect"}.${command ? "command" : "installer"}`)}</p>}
           </>
         ) : null}
       </ConfirmDialog>
@@ -394,7 +396,7 @@ function CredentialFile({ credential, next, command = null }: { credential: Issu
       </div>
       {state === "failed" ? <p className="executor-credential-error" role="alert">{t("executor.issued.copyFailed")}</p> : null}
       <p className="executor-credential-hint">
-        <Trans t={t} i18nKey="executor.issued.downloadHint" components={{ chmod: <code>chmod 600 &lt;file&gt;</code>, flag: <code>--credential-file &lt;absolute path&gt;</code> }} />
+        <Trans t={t} i18nKey={next === "save" ? "executor.issued.downloadHint.installer" : "executor.issued.downloadHint.command"} components={{ chmod: <code>chmod 600 &lt;file&gt;</code>, flag: <code>--credential-file &lt;absolute path&gt;</code> }} />
       </p>
     </div>
   );

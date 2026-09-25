@@ -178,7 +178,10 @@ export const sessions = {
       copied: "Copied",
       copyFailed: "The credential could not be copied. Select the text and copy it yourself.",
       download: "Download credential file",
-      downloadHint: "For automation, download the file, run <chmod/> and add <flag/> to the python3 line; the path must not go through a symlink.",
+      downloadHint: {
+        command: "For automation, download the file, run <chmod/> and add <flag/> to the python3 line; the path must not go through a symlink.",
+        installer: "For automation, download the file, run <chmod/> and pass it to the installer with <flag/>; the path must not go through a symlink.",
+      },
       done: "Done",
     },
     install: {
@@ -210,7 +213,14 @@ export const sessions = {
       title: "Rotate credential?",
       active: "Credential {{id}} gets a new secret.",
       revoked: "Credential {{id}} is revoked. Rotating restores it with a new secret.",
-      reconnect: "To reconnect the host, rerun the Connect a host command there and paste the new secret at its prompt.",
+      reconnect: {
+        command: "To reconnect the host, rerun the Connect a host command there and paste the new credential at its prompt.",
+        installer: "To reconnect the host, rerun the self-hosted installer on the host and paste the new credential.",
+      },
+      disconnect: {
+        command: "The host's executor disconnects and won't retry until you rerun the Connect a host command there and paste the new credential.",
+        installer: "The host's executor disconnects and won't retry until you rerun the self-hosted installer on the host and paste the new credential.",
+      },
       lost: "Core issued credential {{id}}, but its secret never reached the console. Rotate it to receive a new secret.",
       consequence: "The old credential stops working immediately.",
       confirm: "Rotate",
