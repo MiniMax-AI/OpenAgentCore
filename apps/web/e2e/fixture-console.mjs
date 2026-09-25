@@ -276,35 +276,37 @@ async function sandboxRoute(request, response, path) {
   return error(response, 404, "Not found.");
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** A key ID as Core accepts it: a canonical lowercase UUID other than the nil UUID. */
+const keyIdValid = (value) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value) && value !== "00000000-0000-0000-0000-000000000000";
 const EXECUTOR_CREDENTIALS = /^\/projects\/([^/]+)\/environments\/([^/]+)\/executor-credentials(?:\/([^/]+))?$/;
 
 /**
  * Executor credentials as Core issues them: only for the self_hosted
  * environment of a Session in the project; the token is returned once; an
- * existing key_id is reissued only with rotate:true, and a revoked one never;
- * revoking again is safe.
+ * existing key_id is reissued only with rotate:true, which also restores a
+ * revoked one; rotating an unknown key_id is not found; revoking again is safe.
  */
 async function executorCredentialRoute(request, response, projectId, environmentId, keyId) {
   const project = state.admin.projects.find((entry) => entry.id === projectId);
   const session = project && state.admin.collections(project.id).sessions.find((entry) => entry.environment.type === "self_hosted" && entry.environment.id === environmentId);
-  if (!session) return error(response, 404, "No such self-hosted environment.", "not_found");
+  if (!session) return error(response, 404, "No such self-hosted environment.", "not_found_error");
   if (!state.executorCredentials.has(environmentId)) state.executorCredentials.set(environmentId, []);
   const credentials = state.executorCredentials.get(environmentId);
   if (!keyId && request.method === "GET") return send(response, 200, { data: credentials.map((entry) => ({ ...entry })) });
   if (!keyId && request.method === "POST") {
     const input = await body(request);
-    if (typeof input.key_id !== "string" || !UUID.test(input.key_id) || (input.rotate !== undefined && typeof input.rotate !== "boolean")) return error(response, 400, "key_id must be a UUID.", "invalid_request");
+    if (!keyIdValid(input.key_id) || (input.rotate !== undefined && typeof input.rotate !== "boolean")) return error(response, 400, "key_id must be a UUID.", "invalid_request");
     const existing = credentials.find((entry) => entry.key_id === input.key_id);
     if (existing && input.rotate !== true) return error(response, 409, "The executor credential exists; rotate it instead.", "executor_credential_exists");
-    // As Core: the only conflict is an existing key without rotate; rotating a revoked key restores it.
+    if (!existing && input.rotate === true) return error(response, 404, "No such executor credential.", "not_found_error");
+    // As Core: rotating restores a revoked key.
     if (existing) existing.revoked_at = null;
     if (!existing) credentials.push({ key_id: input.key_id, created_at: new Date().toISOString(), revoked_at: null });
     return send(response, 201, { key_id: input.key_id, environment_id: environmentId, executor_token: `exec_fixture_${state.nextId++}` });
   }
   if (keyId && request.method === "DELETE") {
     const existing = credentials.find((entry) => entry.key_id === keyId);
-    if (!existing) return error(response, 404, "No such executor credential.", "not_found");
+    if (!existing) return error(response, 404, "No such executor credential.", "not_found_error");
     existing.revoked_at ??= new Date().toISOString();
     response.writeHead(204, { "cache-control": "no-store" });
     return response.end();
