@@ -33,7 +33,7 @@ func TestSandboxDeploymentChangesAuthenticateAndDecode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const selection = `{"provider":"e2b","core_url":"https://core.example","expected_generation":2,"e2b":{"api_key":"synthetic-private-key","template":"qualified:build"}}`
+	const selection = `{"provider":"e2b","expected_generation":2,"e2b":{"api_key":"synthetic-private-key","template":"qualified:build"}}`
 	for _, tc := range []struct {
 		method, path, token, body string
 		status                    int
@@ -67,7 +67,7 @@ func TestSandboxDeploymentChangesUnavailableWithoutOwner(t *testing.T) {
 		body    string
 		handler http.HandlerFunc
 	}{
-		{`{"provider":"docker","core_url":"https://core.example","expected_generation":1}`, h.updateSandboxDeployment},
+		{`{"provider":"docker","expected_generation":1}`, h.updateSandboxDeployment},
 		{`{"maintenance":true,"expected_generation":1}`, h.setSandboxMaintenance},
 	} {
 		w := httptest.NewRecorder()

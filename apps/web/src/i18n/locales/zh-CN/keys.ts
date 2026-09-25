@@ -95,6 +95,17 @@ export const keys: TranslationShape<typeof english> = {
     uncertain: "Core 没有确认结果。请先刷新查看，再决定是否重试。",
     rejected: "Core 拒绝了请求：{{message}}",
   },
+  howToCall: {
+    title: "如何调用",
+    shell: "终端",
+    copy: "复制示例：{{label}}",
+    copyFailed: "请选中文本后手动复制。",
+    loading: "正在读取 API 地址",
+    failed: "无法读取 API 地址。",
+    localOnly: "Core 的 API 只能在 Core 所在的机器上访问。要从其他机器调用，请在 config.json 中设置 public_url 并应用。",
+    noAddress: "Core 还没有公开地址。请在 config.json 中设置 public_url 并应用。",
+    model: "运行 Agent 需要模型服务：在每个请求里传入、保存在 Agent 上，或使用部署默认值。",
+  },
   detail: {
     back: "返回",
     facts: "项目信息",

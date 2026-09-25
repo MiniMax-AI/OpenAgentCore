@@ -34,7 +34,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	installation := uuid.NewString()
 	provider := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	providerConfig := func(setup store.SandboxSetup) *execution.RuntimeProvider {
-		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, Maintenance: setup.Maintenance, CoreURL: setup.CoreURL + "/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}
+		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, Maintenance: setup.Maintenance, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}
 	}
 	configuration := execution.NewDeferredRuntimeProvider(installation, func(ctx context.Context) (*execution.RuntimeProvider, error) {
 		setup, err := s.GetSandboxSetup(ctx)
@@ -58,7 +58,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 		})
 	}
 	t.Cleanup(stop)
-	selection := store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"), Provider: "e2b", CoreURL: "https://core.example", E2B: &store.SandboxE2BConfiguration{APIKey: "fixture-api-key", Template: "runtime:" + uuid.NewString()}}
+	selection := store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"), Provider: "e2b", E2B: &store.SandboxE2BConfiguration{APIKey: "fixture-api-key", Template: "runtime:" + uuid.NewString()}}
 	if _, err := worker.InitializeSandboxDeployment(t.Context(), selection); err != nil {
 		t.Fatal(err)
 	}

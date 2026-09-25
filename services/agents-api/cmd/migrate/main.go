@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/databaseurl"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/migrations"
 )
 
@@ -18,7 +19,10 @@ func main() {
 }
 
 func run() error {
-	databaseURL := os.Getenv("AGENTS_API_DATABASE_URL")
+	databaseURL, err := databaseurl.FromEnvironment()
+	if err != nil {
+		return err
+	}
 	if databaseURL == "" {
 		return errors.New("AGENTS_API_DATABASE_URL must point to a dedicated execution database")
 	}

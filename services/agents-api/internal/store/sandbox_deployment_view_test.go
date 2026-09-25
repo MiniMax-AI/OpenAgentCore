@@ -76,7 +76,7 @@ func TestSandboxDeploymentViewRecordsTemplateBuildAndSuspension(t *testing.T) {
 		t.Fatalf("identical PUT did not record the build: %s %v", raw, err)
 	}
 	update := SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: SandboxDeploymentSetupRequest{
-		DeploymentSpec: SandboxDeploymentTestSpec("microsandbox"), Provider: "microsandbox", CoreURL: input.CoreURL}, ExpectedGeneration: 1}
+		DeploymentSpec: SandboxDeploymentTestSpec("microsandbox"), Provider: "microsandbox"}, ExpectedGeneration: 1}
 	view, err = w.UpdateSandboxDeployment(t.Context(), id, update)
 	if err != nil || view.E2B != nil || view.Suspension == nil || view.Suspension.IdleSeconds != 300 || view.Suspension.RetentionSeconds != 86400 {
 		t.Fatalf("microsandbox suspension view = %+v %v", view, err)

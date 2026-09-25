@@ -5,10 +5,11 @@ operator's export headers. Secrets stay in secrets/, one copy each, and reach th
 services as read-only single-file mounts or file paths.
 """
 import hashlib
+import ipaddress
 import json
 from pathlib import Path
 import re
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import config_model
 import native_service
@@ -18,6 +19,41 @@ RUN = "/run/parsar"
 POOL = (("max_conns", "pool_max_conns"), ("min_conns", "pool_min_conns"),
         ("max_conn_lifetime", "pool_max_conn_lifetime"), ("max_conn_idle_time", "pool_max_conn_idle_time"),
         ("health_check_period", "pool_health_check_period"))
+
+
+_HOST_LABEL = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?")
+
+
+def valid_core_origin(value):
+    """Accept exactly the origins Core's ValidateSandboxCoreURL accepts
+    (services/agents-api/internal/store/sandbox_deployment_setup.go), so an
+    installer value never fails Core's AGENTS_API_PUBLIC_URL check at startup."""
+    if not isinstance(value, str) or any(char in value for char in "?#@\\% \t\r\n"):
+        return False
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return False
+    netloc = parsed.netloc
+    if (parsed.scheme not in ("http", "https") or value != parsed.scheme + "://" + netloc
+            or not netloc or netloc != netloc.lower() or netloc.endswith(":")):
+        return False
+    if netloc.startswith("["):
+        host, _, rest = netloc[1:].partition("]")
+        if rest and not rest.startswith(":"):
+            return False
+        port = rest[1:] if rest else ""
+    else:
+        host, _, port = netloc.partition(":")
+    if port and not (port.isdigit() and str(int(port)) == port and 1 <= int(port) <= 65535):
+        return False
+    try:
+        loopback = ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        if netloc.startswith("[") or len(host) > 253 or not all(_HOST_LABEL.fullmatch(label) for label in host.split(".")):
+            return False
+        loopback = host == "localhost"
+    return parsed.scheme == "https" or loopback
 
 
 def environment_text(values, header):

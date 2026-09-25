@@ -17,6 +17,8 @@ __pycache__/
 /state/
 /cache/
 /target/
+# `go build ./services/core-console` in the repository root writes this binary.
+/core-console
 /playwright-report/
 /test-results/
 /.agents/

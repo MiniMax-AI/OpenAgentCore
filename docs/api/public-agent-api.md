@@ -6,19 +6,17 @@ They never use the Core key or the console's browser session cookie.
 
 ## Authentication and base URL
 
-Set the OpenAI client's `base_url` to the Core origin followed by `/v1`. Send
+Set `OPENAI_BASE_URL` to the installation's API base URL (`api_base_url` in
+`GET /core/v1/installation`: the public URL followed by `/v1`) and `OPENAI_API_KEY`
+to a Project API key; the official SDK reads both. Raw HTTP callers send
 `Authorization: Bearer <project-api-key>`. The fixed SDK supplies
 `OpenAI-Beta: agents=v1` for the Beta Agents resources; raw HTTP callers must add
 it. General Files and Skills endpoints do not require that Beta header.
 
 ```python
-import os
 from openai import OpenAI
 
-client = OpenAI(
-    api_key=os.environ["PARSAR_PROJECT_API_KEY"],
-    base_url=os.environ["PARSAR_CORE_URL"].rstrip("/") + "/v1",
-)
+client = OpenAI()  # Reads OPENAI_API_KEY and OPENAI_BASE_URL.
 page = client.beta.agents.list()
 ```
 

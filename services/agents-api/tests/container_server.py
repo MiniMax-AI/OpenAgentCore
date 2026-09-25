@@ -20,7 +20,7 @@ if credential_key:
         "--mount", f"type=bind,source={credential_key},target=/run/credential.key,readonly",
         "--env", "AGENTS_API_CREDENTIAL_KEY_FILE=/run/credential.key",
     ])
-for name in ("AGENTS_API_DATABASE_URL", "AGENTS_API_ADDR", "AGENTS_API_ENGINE", "AGENTS_API_DAEMON_WS_URL"):
+for name in ("AGENTS_API_DATABASE_URL", "AGENTS_API_ADDR", "AGENTS_API_ENGINE", "AGENTS_API_PUBLIC_URL"):
     args.extend(["--env", name])
 args.append(os.environ["AGENTS_API_IMAGE"])
 # Docker forwards termination to the API and --rm removes the stopped container.

@@ -241,7 +241,6 @@ type RuntimeDeployment struct {
 	LocalNodeID            pgtype.UUID        `json:"local_node_id"`
 	OwnerEpoch             int64              `json:"owner_epoch"`
 	WebManaged             bool               `json:"web_managed"`
-	CoreUrl                string             `json:"core_url"`
 	IdleSeconds            int64              `json:"idle_seconds"`
 	RetentionSeconds       int64              `json:"retention_seconds"`
 	Generation             int64              `json:"generation"`
@@ -299,6 +298,7 @@ type RuntimeNode struct {
 	RemovedAt            pgtype.Timestamptz `json:"removed_at"`
 	SpecificationDigest  string             `json:"specification_digest"`
 	DeploymentGeneration int64              `json:"deployment_generation"`
+	CoreUrl              string             `json:"core_url"`
 }
 
 type RuntimeNodeEnrollment struct {

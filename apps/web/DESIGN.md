@@ -504,6 +504,17 @@ request runs.
   red underneath. The issued key appears in a read-only field with a copy button,
   under a notice that it is shown once; only "I've saved this key" dismisses it.
   Closing the dialog moves the key into a pending notice card on the page.
+- **How to call**: wherever a new key is shown, a card under it gives three
+  copyable samples, each a Margin Gray block with a Hairline and its label and copy
+  button in a header row: a Shell block exporting `OPENAI_BASE_URL` (the
+  installation's API base URL) and `OPENAI_API_KEY` (the new key) together, a curl
+  request and a Python example with the pinned SDK. A copy the clipboard refuses
+  selects the sample and says so in red underneath. One Graphite line says running
+  an Agent needs a model provider: in each request, saved on the Agent, or the
+  deployment default. When the public address is loopback, a note above the
+  samples says the API is reachable only on the Core machine; without a public
+  address only a note to set one shows. Before the installation is read, a
+  skeleton holds the first sample's place.
 
 ### Navigation
 Sidebar groups Monitor, Resources and Platform with 12px Graphite group labels;
@@ -567,7 +578,9 @@ data on screen, projects that could not be read, and other failed actions are
 reported in an error toast with the reason. Only when a page or section has nothing to show
 does an error state take the place of its content; errors inside a dialog or a form
 stay beside what they concern. Coverage notes (Margin Gray, Hairline, 12px corners,
-12.5px Graphite) state bounded aggregation. Partial-data chips are amber-tinted pills
+12.5px Graphite) state bounded aggregation. A standing warning that needs action,
+such as the Nodes page naming nodes still bound to an old Core address, is an
+amber-tinted line at the top of the page body. Partial-data chips are amber-tinted pills
 with a help tip. Safety notices (a key shown once, a destructive consequence) stay
 visible in body text.
 
@@ -617,12 +630,28 @@ each sandbox takes the template build's size), then a review.
 Choices are large cards that advance on a click; short indigo dashes show the
 progress; pages slide and blur across. The review states where sandboxes run,
 the size, the Runtime (taken from this console's distribution manifest) and the
-Core address, asking for it only when the console's own address cannot serve.
+Core address, read-only: it is config.json's `public_url`, and the console never
+asks for it. A loopback address carries an amber line under it: only the Core
+machine reaches it. When Core rejects the configuration for it (E2B with a
+loopback `public_url`), a red-tinted block under the review keeps Core's message
+and adds the config file and apply command as copyable values. A save attempt
+clears the E2B key, so the review then says to enter it again, with a link to
+that step.
 Advanced settings, one link away, hold the complete form: resources (not for
-E2B), the Core address, the Runtime release and the E2B template. A change keeps the saved size
+E2B), the Runtime release and the E2B template. A change keeps the saved size
 and Runtime while the backend stays the same (a saved size outside the presets is
 offered as Current); another backend starts from its standard size and this
 console's Runtime, and E2B always needs its key again. Rules sit behind help tips.
+
+### System page
+Read-only facts in three sections, each saying where it changes. Installation: the
+public address, API base URL, installation ID and source commit as a fact card.
+Sandboxes: the shared sandbox configuration, with a "Change on the Nodes page"
+text action in the section header. Startup settings: a line naming the config file
+and the apply command as copyable chips, with when they were last applied, over a
+table of each setting, its value and the services a change restarts. Sensitive
+settings show only Configured or Not set; Default and Fixed after install are
+neutral pills beside the value.
 
 ### Loading and motion
 The console has no spinners and no "Loading…" lines. Reads are cached (TanStack

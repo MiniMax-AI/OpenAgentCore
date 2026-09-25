@@ -21,6 +21,7 @@ func main() {
 }
 
 func run() error {
+	log.Init(log.ConfigFromEnv())
 	c, err := loadConfig()
 	if err != nil {
 		return err

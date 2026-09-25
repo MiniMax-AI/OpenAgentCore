@@ -19,9 +19,9 @@ export type SandboxProvider = "docker" | "microsandbox" | "e2b";
 export interface SandboxResources { cpus: number; memory_mib: number; root_disk_mib?: number; environment_disk_mib?: number }
 export interface SandboxRuntimeRelease { source_commit: string; image_id: string; image_manifest_digest: string; microsandbox_ref: string; runtime_sha256: string; firmware_sha256: string }
 export interface SandboxSpecification { resources: SandboxResources; runtime?: SandboxRuntimeRelease }
+/** Core derives the deployment's address from the installation public URL; a `core_url` member is rejected. */
 export interface InitializeSandboxDeployment {
   provider: SandboxProvider;
-  core_url: string;
   /** Required for Docker/microsandbox. E2B may omit it to adopt its validated template build's CPU and memory. */
   resources?: SandboxResources;
   /** Required for Docker/microsandbox; E2B uses its fixed template build. */
@@ -36,7 +36,8 @@ export interface SandboxDeployment {
   specification_digest?: string;
   installation_id: string;
   provider: SandboxProvider | "";
-  core_url: string;
+  /** Read-only: the installation public URL, which nodes and sandboxes use to reach Core. Present before configuration. */
+  readonly core_url: string;
   maintenance: boolean;
   owner_epoch: number;
   generation: number;
@@ -72,6 +73,8 @@ export interface SandboxNode {
   retained: number;
   cleanup_pending: number;
   created_at: string;
+  /** Read-only: the Core address this node enrolled with. When it differs from the installation public URL, the node receives no new sandboxes and must be re-added. */
+  readonly core_url: string;
 }
 /** The node machine's last heartbeat observation; unavailable measurements are null. */
 export interface SandboxNodeHost {
@@ -147,7 +150,14 @@ export class SandboxAdminClient {
       return await this.#json("/deployment", options, method, input);
     } catch (error) {
       if (!input.e2b) throw error;
-      // A credential-bearing rejection may reflect the key in any error field.
+      // The public-URL rejection is safe to show unless it somehow reflects the key.
+      const key = input.e2b.api_key;
+      if (error instanceof AgentCoreError && error.status === 409 && error.code === "sandbox_configuration_error"
+        && !error.message.includes(key) && !(error.param ?? "").includes(key)) {
+        // Only Core's message and param pass through; nothing else from the response does.
+        throw new AgentCoreError(error.message, 409, "sandbox_configuration_error", error.param ?? null);
+      }
+      // Any other credential-bearing rejection may reflect the key in any error field.
       throw new AgentCoreError("Sandbox configuration could not be confirmed. Refresh before submitting again.", error instanceof AgentCoreError ? error.status : 0, "sandbox_configuration_unconfirmed");
     }
   }

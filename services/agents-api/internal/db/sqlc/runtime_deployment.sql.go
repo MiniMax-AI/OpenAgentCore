@@ -11,6 +11,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countAddressBindings = `-- name: CountAddressBindings :one
+SELECT
+(SELECT count(*) FROM runtime_nodes WHERE removed_at IS NULL)::bigint AS nodes,
+(SELECT count(*) FROM runtime_nodes WHERE removed_at IS NULL AND core_url <> $1::text)::bigint AS nodes_on_other_address,
+(SELECT count(*) FROM environment_executor_credentials c
+ LEFT JOIN environments e ON e.id = c.environment_id LEFT JOIN sessions s ON s.id = e.session_id
+ WHERE c.revoked_at IS NULL AND (c.environment_id IS NULL OR s.deleted_at IS NULL))::bigint AS self_hosted_executors
+`
+
+type CountAddressBindingsRow struct {
+	Nodes               int64 `json:"nodes"`
+	NodesOnOtherAddress int64 `json:"nodes_on_other_address"`
+	SelfHostedExecutors int64 `json:"self_hosted_executors"`
+}
+
+func (q *Queries) CountAddressBindings(ctx context.Context, publicUrl string) (CountAddressBindingsRow, error) {
+	row := q.db.QueryRow(ctx, countAddressBindings, publicUrl)
+	var i CountAddressBindingsRow
+	err := row.Scan(&i.Nodes, &i.NodesOnOtherAddress, &i.SelfHostedExecutors)
+	return i, err
+}
+
 const countRuntimeDeploymentResources = `-- name: CountRuntimeDeploymentResources :one
 SELECT
 (SELECT count(*) FROM runtime_allocations WHERE state <> 'released')::bigint AS allocations,
@@ -33,7 +55,7 @@ func (q *Queries) CountRuntimeDeploymentResources(ctx context.Context) (CountRun
 }
 
 const lockRuntimeDeployment = `-- name: LockRuntimeDeployment :one
-SELECT singleton, installation_id, backend_fingerprint, maintenance, updated_at, provider_kind, local_node_id, owner_epoch, web_managed, core_url, idle_seconds, retention_seconds, generation, mode, e2b_template, e2b_credential, specification, e2b_template_build_status, e2b_template_cpus, e2b_template_memory_mib, e2b_template_root_disk_mib FROM runtime_deployment WHERE singleton = true FOR UPDATE
+SELECT singleton, installation_id, backend_fingerprint, maintenance, updated_at, provider_kind, local_node_id, owner_epoch, web_managed, idle_seconds, retention_seconds, generation, mode, e2b_template, e2b_credential, specification, e2b_template_build_status, e2b_template_cpus, e2b_template_memory_mib, e2b_template_root_disk_mib FROM runtime_deployment WHERE singleton = true FOR UPDATE
 `
 
 func (q *Queries) LockRuntimeDeployment(ctx context.Context) (RuntimeDeployment, error) {
@@ -49,7 +71,6 @@ func (q *Queries) LockRuntimeDeployment(ctx context.Context) (RuntimeDeployment,
 		&i.LocalNodeID,
 		&i.OwnerEpoch,
 		&i.WebManaged,
-		&i.CoreUrl,
 		&i.IdleSeconds,
 		&i.RetentionSeconds,
 		&i.Generation,

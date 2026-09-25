@@ -43,13 +43,11 @@ ready before the selection can be saved. E2B CPU/memory limits are optional: Web
 sends none, and Core adopts the build's size; supplied limits must match the build.
 The key is write-only, encrypted by Core and never returned to the browser. E2B
 needs no node installation.
-The saved Core origin defaults to the paired console's public origin, where the
-reverse proxy sends `/api/v1`, including WebSocket upgrades, directly to Core; Web
-does not forward it. Use advanced network settings only when nodes and guests need
-a different public HTTPS origin. When the inferred address is loopback or is not
-HTTPS, setup opens the network field and requires a non-loopback HTTPS origin before saving.
-The API still accepts HTTP loopback for explicit local development; a guest's
-loopback address cannot reach its Core host.
+Setup takes no Core address. Nodes and guests use the installation public URL,
+where the reverse proxy sends `/api/v1`, including WebSocket upgrades, directly to
+Core; Web does not forward it. The deployment reports it as read-only `core_url`.
+E2B requires a public URL that is not loopback; a loopback public URL serves only
+local development, because a guest's loopback address cannot reach its Core host.
 
 **Save configuration** validates and initializes the deployment without creating
 compute. A failed candidate leaves the previous selection intact. Refresh after an uncertain response before
@@ -85,7 +83,7 @@ account/resource ownership before accepting a replacement key; an inaccessible
 sandbox or empty listing from another account is not proof of cleanup.
 
 For own machines, click **Add node**, copy the installation command from the dialog, and run it on
-the target Linux amd64 host. The command uses the saved deployment origin. Before
+the target Linux amd64 host. The command uses the installation public URL. Before
 installing, it reads the active specification with its enrollment token; this read
 does not consume the token. The local provider file is an installed copy of the
 server configuration and cannot select a different Runtime or resource profile.
@@ -99,9 +97,9 @@ fails until setup is complete and a ready node has capacity. E2B allocates direc
 
 For manual zero-node deployments, set `AGENTS_API_SANDBOX_INSTALLATION_ID` to a
 stable UUID, configure `AGENTS_API_CORE_KEY_DIGESTS_FILE`, and enable the daemon
-gateway using `AGENTS_API_DAEMON_WS_URL`. Do not also set
-`AGENTS_API_MANAGED_RUNTIMES_FILE`. The Web-selected origin supplies hosted Runtime
-bootstrap and its public daemon WebSocket address; it never uses request Host or
+gateway with `AGENTS_API_PUBLIC_URL`. Do not also set
+`AGENTS_API_MANAGED_RUNTIMES_FILE`. Core derives hosted Runtime bootstrap and the
+public daemon WebSocket address from that URL; it never uses request Host or
 forwarded headers. Preserve the installation UUID and database together.
 
 Use the live sandbox deployment response (`GET /core/v1/sandbox/deployment`) for
@@ -186,7 +184,7 @@ Manual registration remains available for operator-managed payloads:
 Build/install `parsar-sandbox-node` from the same Core release. On the host,
 first read `GET /api/v1/sandbox-node/configuration` with the enrollment Bearer
 token. Build the private provider JSON from its `provider`, `installation_id`,
-`core_url`, `generation` and `specification`, using the existing local backend
+`core_url` (the installation public URL), `generation` and `specification`, using the existing local backend
 schema for the host's socket, runtime paths and network policy. The Runtime image
 and resource limits must match the server specification. Docker needs access to its local
 Unix socket and pinned image. Microsandbox needs its qualified runtime, helper,
@@ -304,7 +302,7 @@ Maintenance and configuration changes alone perform no cleanup.
 `maintenance` and `expected_generation`; `PUT /core/v1/sandbox/deployment` takes
 the provider, complete `resources`/`runtime` selection, any E2B input and
 `expected_generation`. Both require deployment admin
-authority. The public Core origin cannot change in this operation. E2B is not
+authority. Neither request takes a Core address. E2B is not
 combined with own-machine nodes, and existing Sessions never migrate providers.
 
 This release has one Core execution owner. It does not add Core multi-active,

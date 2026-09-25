@@ -31,16 +31,15 @@ func (q *Queries) ClaimWebSandboxDeployment(ctx context.Context, installationID 
 }
 
 const initializeSandboxDeployment = `-- name: InitializeSandboxDeployment :exec
-UPDATE runtime_deployment SET provider_kind=$1, core_url=$2, backend_fingerprint=$3,
-idle_seconds=$4, retention_seconds=$5, generation=$6, mode=$7, e2b_template=$8, e2b_credential=$9, specification=$10,
-e2b_template_build_status=$11, e2b_template_cpus=$12,
-e2b_template_memory_mib=$13, e2b_template_root_disk_mib=$14,
+UPDATE runtime_deployment SET provider_kind=$1, backend_fingerprint=$2,
+idle_seconds=$3, retention_seconds=$4, generation=$5, mode=$6, e2b_template=$7, e2b_credential=$8, specification=$9,
+e2b_template_build_status=$10, e2b_template_cpus=$11,
+e2b_template_memory_mib=$12, e2b_template_root_disk_mib=$13,
 updated_at=clock_timestamp() WHERE singleton=true
 `
 
 type InitializeSandboxDeploymentParams struct {
 	ProviderKind           string      `json:"provider_kind"`
-	CoreUrl                string      `json:"core_url"`
 	BackendFingerprint     string      `json:"backend_fingerprint"`
 	IdleSeconds            int64       `json:"idle_seconds"`
 	RetentionSeconds       int64       `json:"retention_seconds"`
@@ -58,7 +57,6 @@ type InitializeSandboxDeploymentParams struct {
 func (q *Queries) InitializeSandboxDeployment(ctx context.Context, arg InitializeSandboxDeploymentParams) error {
 	_, err := q.db.Exec(ctx, initializeSandboxDeployment,
 		arg.ProviderKind,
-		arg.CoreUrl,
 		arg.BackendFingerprint,
 		arg.IdleSeconds,
 		arg.RetentionSeconds,

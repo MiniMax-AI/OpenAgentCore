@@ -249,11 +249,34 @@ class InstallerTests(unittest.TestCase):
     def test_origins_must_be_canonical_and_https_unless_loopback(self):
         for flag in ("--public-url", "--core-url"):
             for url in ("http://remote.example:8091", "https://user:synthetic-secret@core.example",
-                        "https://core.example/?token=synthetic-secret", "https://core.example/"):
+                        "https://core.example/?token=synthetic-secret", "https://core_example"):
                 output = io.StringIO()
                 with self.subTest(flag=flag, url=url), contextlib.redirect_stderr(output), self.assertRaises(SystemExit):
                     install.arguments([flag, url])
                 self.assertNotIn("synthetic-secret", output.getvalue())
+
+
+    def test_public_url_flag_is_made_canonical_for_core(self):
+        for origin, expected in (("HTTPS://Core.Example", "https://core.example"),
+                                 ("http://localhost:8080/", "http://localhost:8080"),
+                                 ("https://[2001:db8::1]", "https://[2001:db8::1]")):
+            with self.subTest(origin=origin):
+                self.assertEqual(install.arguments(["--public-url", origin]).public_url, expected)
+
+    def test_public_url_rule_matches_core(self):
+        # The same cases as Core's TestSandboxCoreURLValidation; config.json uses the same rule.
+        for origin in ("https://core.example", "https://core.example:8443", "http://localhost:8091",
+                       "http://127.0.0.2:8091", "http://[::1]:8091", "https://[2001:db8::1]"):
+            self.assertTrue(install.valid_core_origin(origin), origin)
+            self.assertTrue(config_model.CHECKS["origin"][0](origin), origin)
+        for origin in ("", "http://core.example", "http://core:8091", "http://host.localhost", "https://core.example/",
+                       "https://user:secret@core.example", "https://core.example/path", "https://core.example?",
+                       "https://core.example#x", "https://CORE.example", "https://core.example:", "https://core.example:0",
+                       "https://core.example:65536", "https://core.example:0080", "https://core.example:0443",
+                       "https://core.example\\evil", "https://[not-an-ip]", "https://-core.example", "https://core..example",
+                       "https://core_example", "https://core.example.", "https://b\u00fccher.example"):
+            self.assertFalse(install.valid_core_origin(origin), origin)
+            self.assertFalse(config_model.CHECKS["origin"][0](origin), origin)
 
 
 class ComposePrerequisiteTests(unittest.TestCase):

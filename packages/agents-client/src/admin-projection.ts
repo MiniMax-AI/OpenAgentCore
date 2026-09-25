@@ -2,7 +2,7 @@ import { AgentCoreError, projectRuntimeObservation, projectSavedAgentConfigurati
 import { projectTokenUsage } from "./usage-projection";
 import { canonicalUuid, exactFields, isNonnegativeInteger, isRecord, sameResourceId } from "./response-projection";
 import type { ListPage, SavedAgent } from "./types";
-import type { AdminAPIKey, AdminProject, AdminAuditPage, AdminSummary, AdminRuntimeObservation, RuntimeDiskObservation, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperationPage, AdminAuditResultID, AdminDeleted, AdminIssuedAPIKey, AdminPage, AdminSessionArchive, SessionArtifact, Skill, SkillVersion, ExecutorCredential, IssuedExecutorCredential } from "./admin-types";
+import type { AdminAPIKey, AdminProject, AdminAuditPage, AdminSummary, AdminRuntimeObservation, RuntimeDiskObservation, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperationPage, AdminAuditResultID, AdminDeleted, AdminIssuedAPIKey, AdminPage, AdminSessionArchive, SessionArtifact, Skill, SkillVersion, ExecutorCredential, IssuedExecutorCredential, CoreInstallation, CoreInstallationSetting } from "./admin-types";
 
 export function invalidAdminResponse(): never {
   throw new AgentCoreError("Core returned an invalid administration response.", 502, "invalid_admin_response");
@@ -213,4 +213,38 @@ export function projectIssuedExecutorCredential(value: unknown, keyId: string, e
     typeof issued.environment_id !== "string" || !sameResourceId(issued.environment_id, environmentId) ||
     typeof issued.executor_token !== "string" || !issued.executor_token) return invalidAdminResponse();
   return { key_id: issued.key_id, environment_id: issued.environment_id, executor_token: issued.executor_token };
+}
+
+const settingKey = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/;
+const settingServices = new Set(["core", "web", "database"]);
+function projectInstallationSetting(value: unknown): CoreInstallationSetting {
+  const base = ["key", "value", "default", "changeable", "sensitive", "restarts"];
+  if (!isRecord(value) || typeof value.sensitive !== "boolean") return invalidAdminResponse();
+  const setting = record(value, value.sensitive ? [...base, "configured"] : base);
+  if (typeof setting.key !== "string" || !settingKey.test(setting.key) || typeof setting.changeable !== "boolean" ||
+    !Array.isArray(setting.restarts) || !setting.restarts.every((service) => typeof service === "string" && settingServices.has(service)) ||
+    (setting.sensitive && (setting.value !== null || setting.default !== null || typeof setting.configured !== "boolean"))) return invalidAdminResponse();
+  return { ...setting } as unknown as CoreInstallationSetting;
+}
+/** Sensitive settings carry no value, keys are unique and binding counts are consistent. */
+export function projectInstallation(value: unknown): CoreInstallation {
+  const installation = record(value, ["object", "installation_id", "public_url", "api_base_url", "local_only", "source_commit", "configuration", "address_bindings"]);
+  const origin = installation.public_url;
+  if (installation.object !== "core.installation" || (installation.installation_id !== null && canonicalUuid(installation.installation_id) === null) ||
+    (origin !== null && typeof origin !== "string") || installation.api_base_url !== (typeof origin === "string" ? `${origin}/v1` : null) ||
+    typeof installation.local_only !== "boolean" ||
+    (installation.source_commit !== null && (typeof installation.source_commit !== "string" || !/^[0-9a-f]{40}$/.test(installation.source_commit)))) return invalidAdminResponse();
+  const bindings = record(installation.address_bindings, ["nodes", "nodes_on_other_address", "hosted_sandboxes", "self_hosted_executors"]);
+  if (![bindings.nodes, bindings.nodes_on_other_address, bindings.hosted_sandboxes, bindings.self_hosted_executors].every(isNonnegativeInteger) ||
+    (bindings.nodes_on_other_address as number) > (bindings.nodes as number)) return invalidAdminResponse();
+  let configuration: CoreInstallation["configuration"] = null;
+  if (installation.configuration !== null) {
+    const applied = record(installation.configuration, ["path", "apply_command", "applied_at", "settings"]);
+    if (typeof applied.path !== "string" || !applied.path.startsWith("/") || typeof applied.apply_command !== "string" || !applied.apply_command ||
+      typeof applied.applied_at !== "string" || !date(applied.applied_at) || !Array.isArray(applied.settings)) return invalidAdminResponse();
+    const settings = applied.settings.map(projectInstallationSetting);
+    if (new Set(settings.map((setting) => setting.key)).size !== settings.length) return invalidAdminResponse();
+    configuration = { path: applied.path, apply_command: applied.apply_command, applied_at: applied.applied_at, settings };
+  }
+  return { ...installation, address_bindings: { ...bindings }, configuration } as unknown as CoreInstallation;
 }

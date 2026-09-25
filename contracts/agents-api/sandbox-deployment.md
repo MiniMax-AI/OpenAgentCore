@@ -20,7 +20,7 @@ for the operator workflow. Generated schemas cover the
 | Method and route | Authority | Effect |
 | --- | --- | --- |
 | `GET /core/v1/sandbox/deployment` | Core key | Read the safe active configuration and retained-resource counts |
-| `POST /core/v1/sandbox/deployment` | Core key | Select the initial provider, resources, Runtime and Core origin |
+| `POST /core/v1/sandbox/deployment` | Core key | Select the initial provider, resources and Runtime |
 | `PUT /core/v1/sandbox/deployment` | Core key | Replace a fully drained selection while maintenance is enabled |
 | `PATCH /core/v1/sandbox/deployment/maintenance` | Core key | Pause or resume fresh hosted admission at the expected generation |
 | `GET /api/v1/sandbox-node/configuration` | Enrollment token or retained node credential | Read the active node installation configuration without consuming enrollment |
@@ -43,6 +43,13 @@ expose approved limits for that credential; node updates remain administrator
 operations. Local host capacity checks may reject a deployment that cannot run
 safely, but never raise its limits.
 
+Each node in `GET /core/v1/sandbox/nodes` and its detail reports `core_url`: the
+installation public URL when the node enrolled. A node whose `core_url` differs from
+the current public URL receives no new placements. Work already placed on it
+finishes there: a hosted Environment that was placed but not yet allocated before
+the change is still allocated on that node, and its retained sandboxes can still
+resume, while the old address reaches Core. Remove it and add it again.
+
 `GET /core/v1/sandbox/nodes/{node_id}/allocations` lists the node's unreleased
 allocations. Each item's `compute_phase_changed_at` is the time the allocation
 entered its current `compute_phase`, or null when unknown; an allocation that
@@ -58,15 +65,21 @@ POST and PUT take the same complete selection. PUT also requires a nonzero
 | Field | Meaning |
 | --- | --- |
 | `provider` | Exactly one of `docker`, `microsandbox`, `e2b` |
-| `core_url` | Canonical Core origin, without path, credentials, query or fragment |
 | `resources` | Per-sandbox resource limits described below; required for Docker/microsandbox, optional for E2B |
 | `runtime` | Required immutable distribution identity for Docker/microsandbox; absent for E2B |
 | `e2b` | Required only for E2B: write-only `api_key` and immutable `template` build selector |
 
-Use an HTTPS origin reachable from nodes and sandbox guests. The API accepts HTTP
-loopback only for explicit local development. A guest's loopback address does not
-reach its host. PUT preserves the selected `core_url`; changing the public origin
-is outside this operation.
+The request has no Core address. Core derives the deployment's `core_url` from the
+installation public URL (`public_url` in `config.json`, `AGENTS_API_PUBLIC_URL` for
+Core): the HTTPS origin nodes and sandbox guests use to reach Core. A request that
+contains `core_url` is rejected with 400 `invalid_request_error` and
+`param: "core_url"`. E2B guests reach Core from E2B's cloud, so an E2B selection is
+rejected with 409 `sandbox_configuration_error` while the public URL is loopback.
+Docker and microsandbox selections do not depend on the address; a loopback public
+URL serves local development only, because a guest's loopback address does not
+reach its host. Changing the public URL is an installation change, not this
+operation: nodes enrolled with the old address receive no new sandboxes and must
+be removed and added again.
 
 ### Resources
 
@@ -133,8 +146,9 @@ build uses the same drained maintenance transition as changing resources.
 
 ## Safe response
 
-GET and successful mutations return `installation_id`, `provider`, `core_url`,
-`mode`, `generation`, `owner_epoch`, `maintenance`, `suspension` and resource
+GET and successful mutations return `installation_id`, `provider`, `core_url`
+(read-only: the installation public URL, present before configuration), `mode`,
+`generation`, `owner_epoch`, `maintenance`, `suspension` and resource
 accounting. A configured deployment also returns `specification` and
 `specification_digest`. E2B returns only `e2b.template`,
 `e2b.credential_configured` and `e2b.template_build`; the `e2b` object is absent
@@ -182,8 +196,8 @@ For a replacement:
 2. Verify both response counts are zero before replacing the selection. Stopped
    compute, snapshots, uncertain operations, pending cleanup and unallocated
    hosted Environments remain blockers. Use the explicit Session archive flow below.
-3. PUT the complete replacement selection with `expected_generation: N` and the
-   unchanged Core origin. Core checks the generation and resources, prepares and
+3. PUT the complete replacement selection with `expected_generation: N`, without
+   `core_url` (a request that contains it gets 400). Core checks the generation and resources, prepares and
    validates the candidate, then drains the existing manager calls. A short Store
    transaction repeats the guards and commits a changed selection, increments
    its generation and retires old nodes and unused enrollment tokens together.
@@ -231,8 +245,8 @@ digest must match the active deployment. This read remains available in
 maintenance so the retained node can recover its exact configuration. The old
 enrollment token cannot replace a registered node's credential.
 
-The response contains `installation_id`, `provider`, `core_url`, `generation`,
-`specification` and `specification_digest`. It contains no administrator, Project
+The response contains `installation_id`, `provider`, `core_url` (the installation
+public URL), `generation`, `specification` and `specification_digest`. It contains no administrator, Project
 or E2B credential. It is available only for node-backed providers.
 
 The installer reads this configuration before preparing local assets. Its provider

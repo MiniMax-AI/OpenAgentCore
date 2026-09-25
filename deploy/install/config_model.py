@@ -4,11 +4,9 @@ This deliberately implements only the keywords config.schema.json uses. It is no
 general JSON Schema engine; a test fails if the schema uses any other keyword.
 """
 import copy
-import ipaddress
 import json
 import os
 import re
-from urllib.parse import urlsplit
 
 MODES = ("all", "core-only", "web-only")
 SERVICES = {"all": ("core", "web", "database"), "core-only": ("core", "database"), "web-only": ("web",)}
@@ -62,42 +60,10 @@ def lookup(config, key):
 
 
 # Checks named by x-parsar.check. Core stays the authority for its own semantic rules.
-_HOST_LABEL = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?")
-
-
 def _origin(value, https_only=False):
-    """Exactly the origins Core's ValidateSandboxCoreURL accepts
-    (services/agents-api/internal/store/sandbox_deployment_setup.go): canonical, lowercase,
-    ASCII host labels or an IP literal, no leading-zero port, HTTP only on a loopback host.
-    The same rule as PR 1a's installer valid_core_origin; one shared function follows."""
-    if not isinstance(value, str) or any(char in value for char in "?#@\\% \t\r\n"):
-        return False
-    try:
-        parsed = urlsplit(value)
-    except ValueError:
-        return False
-    netloc = parsed.netloc
-    if (parsed.scheme not in ("http", "https") or value != parsed.scheme + "://" + netloc
-            or not netloc or netloc != netloc.lower() or netloc.endswith(":")):
-        return False
-    if netloc.startswith("["):
-        host, _, rest = netloc[1:].partition("]")
-        if rest and not rest.startswith(":"):
-            return False
-        port = rest[1:] if rest else ""
-    else:
-        host, _, port = netloc.partition(":")
-    if port and not (port.isdigit() and str(int(port)) == port and 1 <= int(port) <= 65535):
-        return False
-    try:
-        loopback = ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        if netloc.startswith("[") or len(host) > 253 or not all(_HOST_LABEL.fullmatch(label) for label in host.split(".")):
-            return False
-        loopback = host == "localhost"
-    if https_only:
-        return parsed.scheme == "https"
-    return parsed.scheme == "https" or loopback
+    """Core's ValidateSandboxCoreURL rule, through the installer's one implementation of it."""
+    from configuration import valid_core_origin  # configuration imports this module at load time
+    return valid_core_origin(value) and (not https_only or value.startswith("https://"))
 
 
 _DURATION_UNITS = {"ns": 1e-9, "us": 1e-6, "µs": 1e-6, "μs": 1e-6, "ms": 1e-3, "s": 1, "m": 60, "h": 3600}

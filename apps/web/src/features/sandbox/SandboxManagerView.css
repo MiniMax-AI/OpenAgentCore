@@ -84,3 +84,10 @@
 .sandbox-copy-command-row { display: flex; align-items: flex-start; gap: 2px; max-width: 100%; }
 .sandbox-copy-command code { min-width: 0; padding: 2px 6px; color: var(--fg); font-family: var(--font-mono); font-size: 11.5px; background: var(--surface-subtle); border-radius: 5px; overflow-wrap: anywhere; }
 .sandbox-copy-command .icon-button { width: 24px; height: 24px; flex-basis: 24px; }
+
+/* Nodes enrolled with an older Core address; they must be added again. */
+.sandbox-manager .sandbox-address-warning {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--warning) 9%, var(--surface));
+  border-color: color-mix(in srgb, var(--warning) 32%, var(--line));
+}

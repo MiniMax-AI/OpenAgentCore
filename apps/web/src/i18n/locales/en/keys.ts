@@ -93,6 +93,17 @@ export const keys = {
     uncertain: "Core did not confirm the result. Refresh to check before trying again.",
     rejected: "Core rejected the request: {{message}}",
   },
+  howToCall: {
+    title: "How to call",
+    shell: "Shell",
+    copy: "Copy the {{label}} sample",
+    copyFailed: "Select the text and copy it manually.",
+    loading: "Reading the API address",
+    failed: "The API address couldn't be read.",
+    localOnly: "Core's API is only reachable on the Core machine. To call it from elsewhere, set public_url in config.json and apply it.",
+    noAddress: "Core has no public address yet. Set public_url in config.json and apply it.",
+    model: "Running an Agent needs a model provider: pass one in each request, save one on the Agent, or rely on the deployment default.",
+  },
   detail: {
     back: "Back",
     facts: "Project details",

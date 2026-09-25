@@ -140,7 +140,7 @@ func (m *runtimeManager) prepareCandidate(ctx context.Context, input store.Sandb
 		return PreparedRuntimeDeployment{}, err
 	}
 	config := candidate.Config
-	if config == nil || config.InstallationID != setup.InstallationID || config.ProviderKind != setup.Provider || config.Mode != setup.Mode || config.CoreURL != setup.CoreURL+"/api/v1" || config.BackendFingerprint != setup.BackendFingerprint || config.LocalNodeID != "" || config.loadDeployment != nil || config.prepareDeployment != nil {
+	if config == nil || config.InstallationID != setup.InstallationID || config.ProviderKind != setup.Provider || config.Mode != setup.Mode || config.CoreURL == "" || config.BackendFingerprint != setup.BackendFingerprint || config.LocalNodeID != "" || config.loadDeployment != nil || config.prepareDeployment != nil {
 		return PreparedRuntimeDeployment{}, sandbox.ErrInvalid
 	}
 	copied, err := validatedRuntimeProvider(config, m.registry)

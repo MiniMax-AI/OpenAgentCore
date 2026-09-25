@@ -20,20 +20,19 @@ var ErrSandboxDeploymentConflict = errors.New("sandbox deployment is already con
 type SandboxDeploymentSetupRequest struct {
 	sandbox.DeploymentSpec
 	Provider string                   `json:"provider"`
-	CoreURL  string                   `json:"core_url"`
 	E2B      *SandboxE2BConfiguration `json:"e2b,omitempty"`
 }
 
 // SandboxSetup is the immutable configuration selected by the deployment admin.
 // An empty Provider means that Web setup has not yet selected an adapter.
 type SandboxSetup struct {
-	Specification                                         sandbox.DeploymentSpec
-	InstallationID, Provider, CoreURL, BackendFingerprint string
-	Generation                                            uint64
-	Mode                                                  string
-	Maintenance                                           bool
-	E2B                                                   *SandboxE2BConfiguration
-	IdleSeconds, RetentionSeconds                         int64
+	Specification                                sandbox.DeploymentSpec
+	InstallationID, Provider, BackendFingerprint string
+	Generation                                   uint64
+	Mode                                         string
+	Maintenance                                  bool
+	E2B                                          *SandboxE2BConfiguration
+	IdleSeconds, RetentionSeconds                int64
 }
 
 func (s *Store) GetSandboxSetup(ctx context.Context) (SandboxSetup, error) {
@@ -46,7 +45,7 @@ func (s *Store) GetSandboxSetup(ctx context.Context) (SandboxSetup, error) {
 	if !d.WebManaged {
 		return SandboxSetup{}, ErrSandboxDeploymentConflict
 	}
-	result := SandboxSetup{InstallationID: runtimeUUID(d.InstallationID), Provider: d.ProviderKind, CoreURL: d.CoreUrl, BackendFingerprint: d.BackendFingerprint, IdleSeconds: d.IdleSeconds, RetentionSeconds: d.RetentionSeconds, Generation: uint64(d.Generation), Mode: d.Mode, Maintenance: d.Maintenance}
+	result := SandboxSetup{InstallationID: runtimeUUID(d.InstallationID), Provider: d.ProviderKind, BackendFingerprint: d.BackendFingerprint, IdleSeconds: d.IdleSeconds, RetentionSeconds: d.RetentionSeconds, Generation: uint64(d.Generation), Mode: d.Mode, Maintenance: d.Maintenance}
 	if err := json.Unmarshal(d.Specification, &result.Specification); err != nil {
 		return SandboxSetup{}, err
 	}
@@ -99,6 +98,7 @@ func (s *Store) ClaimWebSandboxDeployment(ctx context.Context, installationID st
 
 // ValidateSandboxCoreURL accepts a canonical public origin, never a path or
 // credential. Plain HTTP is reserved for explicit loopback development hosts.
+// AGENTS_API_PUBLIC_URL must pass it.
 func ValidateSandboxCoreURL(value string) error {
 	u, err := url.Parse(value)
 	if err != nil || u.Hostname() == "" || u.User != nil || u.Path != "" || u.RawPath != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.RawFragment != "" || u.Opaque != "" || u.String() != value || u.Host != strings.ToLower(u.Host) {
@@ -137,8 +137,21 @@ func ValidateSandboxCoreURL(value string) error {
 	return nil
 }
 
-func runtimeDeploymentView(d sqlc.RuntimeDeployment) RuntimeDeploymentView {
-	result := RuntimeDeploymentView{InstallationID: runtimeUUID(d.InstallationID), Provider: d.ProviderKind, CoreURL: d.CoreUrl, Maintenance: d.Maintenance, OwnerEpoch: uint64(d.OwnerEpoch), Generation: uint64(d.Generation), Mode: d.Mode}
+// LoopbackOrigin reports whether a validated origin names a loopback host, which
+// nothing outside the Core host can reach.
+func LoopbackOrigin(value string) bool {
+	u, err := url.Parse(value)
+	if err != nil {
+		return false
+	}
+	if ip := net.ParseIP(u.Hostname()); ip != nil {
+		return ip.IsLoopback()
+	}
+	return u.Hostname() == "localhost"
+}
+
+func runtimeDeploymentView(d sqlc.RuntimeDeployment, publicURL string) RuntimeDeploymentView {
+	result := RuntimeDeploymentView{InstallationID: runtimeUUID(d.InstallationID), Provider: d.ProviderKind, CoreURL: publicURL, Maintenance: d.Maintenance, OwnerEpoch: uint64(d.OwnerEpoch), Generation: uint64(d.Generation), Mode: d.Mode}
 	if len(d.Specification) > 0 && string(d.Specification) != "{}" {
 		var spec sandbox.DeploymentSpec
 		if json.Unmarshal(d.Specification, &spec) == nil {

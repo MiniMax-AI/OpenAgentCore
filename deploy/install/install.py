@@ -25,6 +25,7 @@ from urllib.parse import urlsplit
 
 import config_model
 import configuration
+from configuration import valid_core_origin
 import convert
 import local_node
 import native_service
@@ -96,10 +97,18 @@ def database_port():
         return sock.getsockname()[1]
 
 
-def origin(value):
-    check, message = config_model.CHECKS["origin"]
-    if not check(value):
-        raise argparse.ArgumentTypeError(message)
+def public_origin(value):
+    # Normalize case and a trailing slash, then apply Core's exact origin rule.
+    try:
+        parsed = urlsplit(value.strip())
+        if parsed.path == "/":
+            parsed = parsed._replace(path="")
+        value = parsed._replace(scheme=parsed.scheme.lower(), netloc=parsed.netloc.lower()).geturl()
+    except ValueError:
+        value = ""
+    if not valid_core_origin(value):
+        raise argparse.ArgumentTypeError("Public URL must be an HTTPS origin such as https://core.example, "
+                                         "without path, credentials, query or fragment; plain HTTP only for a loopback host")
     return value
 
 
@@ -116,8 +125,8 @@ def arguments(argv=None):
     parser.add_argument("--install-dir", type=Path, default=Path.home() / ".parsar/core")
     parser.add_argument("--core-port", type=int)
     parser.add_argument("--web-port", type=int)
-    parser.add_argument("--core-url", type=origin, help="Web-only: origin of the existing Core")
-    parser.add_argument("--public-url", type=origin, help="Public HTTPS origin behind your TLS reverse proxy")
+    parser.add_argument("--core-url", type=public_origin, help="Web-only: origin of the existing Core")
+    parser.add_argument("--public-url", type=public_origin, help="Public HTTPS origin behind your TLS reverse proxy")
     parser.add_argument("--core-key-file", type=Path, help="Web-only: private file containing the existing Core's Core key")
     parser.add_argument("--config", type=Path, help="Seed a new installation's config.json from this file")
     parser.add_argument("--convert", action="store_true",

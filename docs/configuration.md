@@ -126,23 +126,23 @@ themselves. Compose loads the file with `env_file` and systemd with
 
 | Variable | Set from |
 | --- | --- |
-| `AGENTS_API_PUBLIC_URL` | `public_url`, or Core's loopback origin |
+| `AGENTS_API_PUBLIC_URL` | `public_url`, or Core's loopback origin. The one origin applications, nodes, sandbox guests and self-hosted executors use; Core derives the daemon WebSocket URL, the self-hosted `remote_url`, the hosted bootstrap and the deployment's read-only `core_url` from it. Required with `AGENTS_API_SANDBOX_INSTALLATION_ID` |
 | `AGENTS_API_ADDR` | `ports.core` (native Core) or the container port |
 | `AGENTS_API_DATABASE_URL` | The installation's PostgreSQL without a password, plus `core.database_pool` as `pool_*` query parameters |
-| `AGENTS_API_DATABASE_PASSWORD_FILE` | `secrets/database.password` |
+| `AGENTS_API_DATABASE_PASSWORD_FILE` | `secrets/database.password`. `AGENTS_API_DATABASE_URL` must then not contain a password; migrations and the maintenance commands read the file too |
 | `AGENTS_API_CREDENTIAL_KEY_FILE` | `secrets/credential.key`; never regenerate it to repair credentials |
 | `AGENTS_API_CORE_KEY_DIGESTS_FILE` | `generated/core-key-digests.json`, the SHA-256 of the [Core key](getting-started/operations.md#core-key) |
 | `AGENTS_API_SANDBOX_INSTALLATION_ID` | `state.json`; pinned to the database |
-| `AGENTS_API_SETTINGS_FILE` | `generated/settings.json`, the snapshot Core serves |
+| `AGENTS_API_SETTINGS_FILE` | `generated/settings.json`, the snapshot Core serves at `GET /core/v1/installation`; Core does not act on it |
 | `AGENTS_API_EXECUTION_CONCURRENCY`, `AGENTS_API_ENGINE`, `AGENTS_API_HARNESSES`, `AGENTS_API_WRITE_AUDIT_RETENTION`, `AGENTS_API_OAUTH_TRUSTED_ORIGINS` | The matching `core.*` settings |
 | `AGENTS_API_RUNTIME_HISTORY_FILE` | `generated/runtime-history.json` when `core.runtime_history` is set; see the [history contract](../contracts/agents-api/runtime-history-api.md) |
-| `PARSAR_LOG_LEVEL`, `PARSAR_LOG_FORMAT`, `PARSAR_LOG_ADD_SOURCE` | `log.*` |
+| `PARSAR_LOG_LEVEL`, `PARSAR_LOG_FORMAT`, `PARSAR_LOG_ADD_SOURCE` | `log.*`; Web reads the same three |
 | `AGENTS_API_E2B_STATE_DIR`, `AGENTS_API_E2B_PROVIDER_BIN` | Receipt directory and, for native Core, the bundled helper; the E2B account credential and template belong to the database |
 | `AGENTS_API_EXECUTION_OPTIONS_FILE` | Not generated from `config.json`. `install.sh --convert` keeps an existing file and variable; see [model execution](../contracts/agents-api/model-execution.md) |
 
 `AGENTS_API_DAEMON_WS_URL` is retired in favor of `AGENTS_API_PUBLIC_URL`, and
-`AGENTS_API_CONFIG_FILE` in favor of `AGENTS_API_SETTINGS_FILE`; Core fails at
-startup while either is set and names the replacement. Core reports loaded file
+`AGENTS_API_CONFIG_FILE` is retired with no replacement; Core fails at startup
+while either is set and says what to do. Core reports loaded file
 paths on startup, without environment values or file contents. Internal
 polling/queue controls remain internal. Runtime history retention remains its
 existing fixed policy.
@@ -199,7 +199,8 @@ Microsandbox uses both limits. Docker never suspends, so its `max_retained` alwa
 equals `max_active`; Core replaces any submitted value.
 
 The generated private `provider.json` includes the provider, installation identity,
-Core address, generation, approved specification copy and one adapter object:
+Core address (the installation public URL when the node enrolled), generation,
+approved specification copy and one adapter object:
 
 - Docker: explicit Unix `host`, locally imported `image`, `network`, `extra_hosts`
   and absolute `seccomp_file`, with the existing nested-sandbox security settings.
@@ -218,7 +219,9 @@ Keep the private identity/state directory and backend storage together. Do not
 copy node identities, replace a backend directory, or delete snapshots to fix a
 connection problem. Reinstall retains local configuration and identity; changes
 in provider, installation, Core address or release are refused. This is not an
-upgrade or cross-provider migration tool.
+upgrade or cross-provider migration tool. Core records the address each node
+enrolled with. After the installation public URL changes, such a node receives no
+new sandboxes: remove it in Web and add it again with a fresh state directory.
 
 ## Daemon and identity
 

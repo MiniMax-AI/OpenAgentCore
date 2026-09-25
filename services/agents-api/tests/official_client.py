@@ -119,7 +119,7 @@ def main():
         env["AGENTS_API_CREDENTIAL_KEY_FILE"] = str(credential_key)
         # Enable the real Worker/gateway admission path without connecting a daemon.
         # Synthetic fixture inputs remain queued; this is not live model acceptance.
-        env["AGENTS_API_DAEMON_WS_URL"] = f"ws://127.0.0.1:{port}/api/v1/agent-daemon/ws"
+        env["AGENTS_API_PUBLIC_URL"] = f"http://127.0.0.1:{port}"
         with (Path(directory) / "server.log").open("w+") as log:
             def start():
                 child = subprocess.Popen([binary], env=env, stdout=log, stderr=log)

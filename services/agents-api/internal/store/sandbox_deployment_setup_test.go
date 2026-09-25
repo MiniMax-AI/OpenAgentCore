@@ -12,7 +12,8 @@ import (
 )
 
 func TestSandboxCoreURLValidation(t *testing.T) {
-	for _, value := range []string{"https://core.example", "https://core.example:8443", "http://localhost:8091", "http://127.0.0.2:8091", "http://[::1]:8091"} {
+	// deploy/install/test_install.py checks the installer's valid_core_origin against the same cases.
+	for _, value := range []string{"https://core.example", "https://core.example:8443", "http://localhost:8091", "http://127.0.0.2:8091", "http://[::1]:8091", "https://[2001:db8::1]"} {
 		if err := ValidateSandboxCoreURL(value); err != nil {
 			t.Errorf("rejected %q: %v", value, err)
 		}
@@ -22,7 +23,7 @@ func TestSandboxCoreURLValidation(t *testing.T) {
 			t.Errorf("accepted %q: %v", value, err)
 		}
 	}
-	for _, value := range []string{"https://[not-an-ip]", "https://-core.example", "https://core..example", "https://core_example"} {
+	for _, value := range []string{"https://[not-an-ip]", "https://-core.example", "https://core..example", "https://core_example", "https://core.example.", "https://bücher.example", "https://core.example:0443"} {
 		if err := ValidateSandboxCoreURL(value); !errors.Is(err, ErrInvalidInput) {
 			t.Errorf("accepted invalid hostname %q: %v", value, err)
 		}
@@ -31,6 +32,7 @@ func TestSandboxCoreURLValidation(t *testing.T) {
 
 func TestSandboxDeploymentSetupPersistsWithoutExecution(t *testing.T) {
 	s, pool := newManagedTestStore(t)
+	s.SetPublicURL("https://core.example")
 	lease := executionLease(t, s)
 	w := lease.Store()
 	id := uuid.NewString()
@@ -38,22 +40,22 @@ func TestSandboxDeploymentSetupPersistsWithoutExecution(t *testing.T) {
 		t.Fatal(err)
 	}
 	before, err := s.GetRuntimeDeployment(t.Context())
-	if err != nil || before.InstallationID != id || before.Provider != "" || before.CoreURL != "" {
+	if err != nil || before.InstallationID != id || before.Provider != "" || before.CoreURL != "https://core.example" {
 		t.Fatal(before, err)
 	}
 	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, ErrRuntimeNodeUnavailable) {
 		t.Fatal("uninitialized hosted admission", err)
 	}
-	input := SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("microsandbox"), Provider: "microsandbox", CoreURL: "https://core.example"}
+	input := SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("microsandbox"), Provider: "microsandbox"}
 	selected, err := w.InitializeSandboxDeployment(t.Context(), id, input)
-	if err != nil || selected.Provider != input.Provider || selected.CoreURL != input.CoreURL || selected.OwnerEpoch != before.OwnerEpoch {
+	if err != nil || selected.Provider != input.Provider || selected.CoreURL != "https://core.example" || selected.OwnerEpoch != before.OwnerEpoch {
 		t.Fatal(selected, err)
 	}
 	replay, err := w.InitializeSandboxDeployment(t.Context(), id, input)
 	if err != nil || !reflect.DeepEqual(replay, selected) {
 		t.Fatal("identical retry changed selection", replay, err)
 	}
-	for _, changed := range []SandboxDeploymentSetupRequest{{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker", CoreURL: input.CoreURL}, {DeploymentSpec: input.DeploymentSpec, Provider: input.Provider, CoreURL: "https://another.example"}} {
+	for _, changed := range []SandboxDeploymentSetupRequest{{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}} {
 		if _, err := w.InitializeSandboxDeployment(t.Context(), id, changed); !errors.Is(err, ErrSandboxDeploymentConflict) {
 			t.Fatal("changed selection accepted", err)
 		}
@@ -104,7 +106,7 @@ func TestSandboxDeploymentSetupConcurrentSelection(t *testing.T) {
 			if i%2 == 1 {
 				provider = "microsandbox"
 			}
-			value, err := w.InitializeSandboxDeployment(t.Context(), id, SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec(provider), Provider: provider, CoreURL: "https://core.example"})
+			value, err := w.InitializeSandboxDeployment(t.Context(), id, SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec(provider), Provider: provider})
 			results <- value
 			errorsFound <- err
 		}()
@@ -136,7 +138,7 @@ func TestSandboxDeploymentSetupConcurrentSelection(t *testing.T) {
 
 func TestSandboxDeploymentSetupRejectsFileManagedAndUnleasedWrites(t *testing.T) {
 	s, w, selection := managerFixture(t, 4, 16)
-	input := SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker", CoreURL: "https://core.example"}
+	input := SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}
 	if _, err := s.InitializeSandboxDeployment(t.Context(), selection.InstallationID, input); !errors.Is(err, ErrInvalidInput) {
 		t.Fatal("unleased setup accepted", err)
 	}

@@ -21,7 +21,7 @@ type managedNodes struct {
 	closeProvider func()
 }
 
-func configureManagedNodes(s *store.Store, owner func(context.Context) error) (*managedNodes, error) {
+func configureManagedNodes(s *store.Store, publicURL string, owner func(context.Context) error) (*managedNodes, error) {
 	if os.Getenv("AGENTS_API_MANAGED_RUNTIMES_FILE") != "" {
 		return nil, errors.New("file-managed sandbox configuration is no longer supported; retain existing resources, drain them with the previous release, this release does not automatically adopt file-managed deployment records")
 	}
@@ -33,8 +33,8 @@ func configureManagedNodes(s *store.Store, owner func(context.Context) error) (*
 	if err != nil || id == uuid.Nil || id.String() != setupID {
 		return nil, errors.New("sandbox installation ID must be a canonical UUID")
 	}
-	if os.Getenv("AGENTS_API_DAEMON_WS_URL") == "" {
-		return nil, errors.New("sandbox setup requires daemon transport")
+	if publicURL == "" {
+		return nil, errors.New("AGENTS_API_SANDBOX_INSTALLATION_ID requires AGENTS_API_PUBLIC_URL, the origin nodes and sandboxes use to reach Core")
 	}
 	closeProvider := func() {}
 	result := &managedNodes{closeProvider: closeProvider}
@@ -81,7 +81,7 @@ func configureManagedNodes(s *store.Store, owner func(context.Context) error) (*
 			return s.HeartbeatRuntimeNode(ctx, n.NodeID, connection, epoch, store.RuntimeNodeHealth{Host: &store.RuntimeNodeHost{EffectiveCPUCores: health.EffectiveCPUCores, CPUUtilization: health.CPUUtilization, TotalMemoryBytes: health.TotalMemoryBytes, AvailableMemoryBytes: health.AvailableMemoryBytes, AvailableDiskBytes: health.AvailableDiskBytes, ObservedAt: &health.ObservedAt}, ProviderReady: health.ProviderReady, Diagnostic: health.Diagnostic, CPUCount: health.CPUCount, AvailableMemoryBytes: health.AvailableMemoryBytes, AvailableDiskBytes: health.AvailableDiskBytes})
 		},
 	})
-	result.setup = &managedSetup{store: s, hub: result.hub, installationID: setupID}
+	result.setup = &managedSetup{store: s, hub: result.hub, installationID: setupID, publicURL: publicURL}
 	result.runtime = execution.NewDeferredRuntimeProvider(setupID, result.setup.load, result.setup.prepare)
 	success = true
 	return result, nil

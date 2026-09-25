@@ -164,6 +164,58 @@ export interface IssueExecutorCredentialInput { key_id: string; rotate?: boolean
 /** Returned once, on issuance or rotation. */
 export interface IssuedExecutorCredential { key_id: string; environment_id: string; executor_token: string }
 
+/** What is bound to the installation public URL; a change of that URL affects all of it. */
+export interface CoreAddressBindings {
+  /** Enrolled nodes that are not removed. */
+  nodes: number;
+  /** Nodes enrolled with another address; they receive no new sandboxes until re-added. At most `nodes`. */
+  nodes_on_other_address: number;
+  /** Retained and pending hosted sandboxes, which were started with the address current at the time. */
+  hosted_sandboxes: number;
+  /** Unrevoked self-hosted executor credentials, whose executors were installed with an advertised remote_url. */
+  self_hosted_executors: number;
+}
+/** One process setting from the installation's config.json, as last applied. */
+export interface CoreInstallationSetting {
+  /** Dotted config.json key, such as `ports.core`. Unique within the snapshot. */
+  key: string;
+  /** Applied JSON value; always null for a sensitive setting. */
+  value: unknown;
+  default: unknown;
+  /** Present exactly for a sensitive setting: whether it has a value. */
+  configured?: boolean;
+  /** False for settings fixed at installation. */
+  changeable: boolean;
+  sensitive: boolean;
+  /** Services that restart when the setting changes. */
+  restarts: ("core" | "web" | "database")[];
+}
+/** Where process settings change, and their last applied values. */
+export interface CoreInstallationConfiguration {
+  /** Absolute host path of config.json. */
+  path: string;
+  /** Command that applies config.json changes. */
+  apply_command: string;
+  applied_at: string;
+  settings: CoreInstallationSetting[];
+}
+/** `GET /core/v1/installation`: available before any sandbox deployment exists. */
+export interface CoreInstallation {
+  object: "core.installation";
+  installation_id: string | null;
+  /** The origin applications, nodes, sandboxes and self-hosted executors use; null when Core runs without one. */
+  public_url: string | null;
+  /** `public_url` followed by `/v1`; the base URL for application API keys. */
+  api_base_url: string | null;
+  /** True when `public_url` is a loopback origin that only the Core host reaches. */
+  local_only: boolean;
+  /** Full source commit Core was built from; null for development builds. */
+  source_commit: string | null;
+  /** Null when the installer did not start Core. */
+  configuration: CoreInstallationConfiguration | null;
+  address_bindings: CoreAddressBindings;
+}
+
 /**
  * The project-bound reads and deletions the console makes through Core, in
  * the public projections' shapes: each method is a Core client method with
