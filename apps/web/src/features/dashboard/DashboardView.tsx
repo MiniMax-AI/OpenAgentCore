@@ -294,10 +294,7 @@ export function DashboardView({
   return (
     <section className="page-section dashboard-page" aria-labelledby="dashboard-heading">
       <header className="page-header dashboard-header">
-        <div>
-          <h1 id="dashboard-heading">{t("dashboard.title")}</h1>
-          <p>{t("dashboard.subtitle")}</p>
-        </div>
+        <h1 id="dashboard-heading">{t("dashboard.title")}</h1>
         <div className="page-actions">
           <button
             className="button outline"
@@ -313,6 +310,7 @@ export function DashboardView({
       </header>
 
       <div className="dashboard-scroll">
+        <p className="page-description">{t("dashboard.subtitle")}</p>
         <section className="dashboard-overview" aria-labelledby="dashboard-overview-heading">
           <div className="dashboard-snapshot-bar">
             <div className="dashboard-snapshot-copy">

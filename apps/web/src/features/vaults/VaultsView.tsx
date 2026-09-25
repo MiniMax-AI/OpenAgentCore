@@ -104,10 +104,7 @@ export function VaultsView({ busy, catalog, coreError, coreState, operations }: 
   return (
     <section className="page-section vaults-page">
       <header className="page-header">
-        <div>
-          <h1>{tPages("vaults.title")}</h1>
-          <p className="page-subtitle">{tPages("vaults.subtitle")}</p>
-        </div>
+        <h1>{tPages("vaults.title")}</h1>
         <div className="page-actions">
           <button className="icon-button outline" type="button" onClick={operations.refresh} disabled={coreState === "connecting" || busy} aria-label={tPages("vaults.refresh")}>
             <RefreshCw className={coreState === "connecting" ? "refresh-spinning" : undefined} size={14} strokeWidth={1.5} />
@@ -119,6 +116,7 @@ export function VaultsView({ busy, catalog, coreError, coreState, operations }: 
       </header>
 
       <div className="vaults-content">
+        <p className="page-description">{tPages("vaults.subtitle")}</p>
         <div className="notice warning vault-security-note" role="note">
           <ShieldCheck size={15} aria-hidden="true" />
           <span>{t("securityNote")}</span>

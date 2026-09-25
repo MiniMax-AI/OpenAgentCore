@@ -2444,7 +2444,7 @@ export function App() {
           {view === "api-keys" && isLocalProxyBaseUrl(connection.baseUrl) ? <section className="page-section api-keys-page">
             <header className="page-header"><h1>{t("API keys", { ns: "firstRun" })}</h1></header>
             <div className="api-keys-body"><div className="api-keys-content">
-              <p className="api-keys-description">{t("Give your machine a secure way to call Agent Core.", { ns: "firstRun" })}</p>
+              <p className="page-description">{t("Give your machine a secure way to call Agent Core.", { ns: "firstRun" })}</p>
               <div className="api-keys-layout"><ApiKeyPanel /><ApiKeyExample /></div>
             </div></div>
           </section> : null}

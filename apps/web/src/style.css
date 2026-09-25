@@ -561,6 +561,13 @@ html[data-theme="dark"] .brand-mark-dark {
   letter-spacing: 0;
 }
 
+.page-description {
+  margin: 0 0 20px;
+  color: var(--fg-muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+
 .page-actions {
   display: flex;
   min-width: 0;
@@ -1150,7 +1157,7 @@ html[data-theme="dark"] .brand-mark-dark {
   min-height: 64px;
   flex: 0 0 64px;
   align-items: center;
-  padding: 12px 16px;
+  padding: 12px 24px;
   gap: 10px;
   background: var(--surface-subtle);
   border-bottom: 1px solid var(--line);
@@ -5744,21 +5751,11 @@ button.trace-step-row:hover {
   animation: status-spin 1.2s linear infinite;
 }
 
-.page-subtitle {
-  margin: 5px 0 0;
-  color: var(--fg-muted);
-  font-size: 12px;
-}
-
 .vaults-page {
   display: flex;
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
-}
-
-.vaults-page .page-header > div:first-child {
-  min-width: 0;
 }
 
 .vaults-content {
@@ -5961,7 +5958,6 @@ button.trace-step-row:hover {
     padding: 10px 12px;
   }
 
-  .vaults-page .page-header > div:first-child,
   .vaults-page .page-actions {
     width: 100%;
   }

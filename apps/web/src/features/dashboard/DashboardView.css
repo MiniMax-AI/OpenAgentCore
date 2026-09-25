@@ -5,21 +5,6 @@
   overflow: hidden;
 }
 
-.dashboard-header > div:first-child {
-  min-width: 0;
-}
-
-.dashboard-header h1 {
-  margin: 0;
-}
-
-.dashboard-header p {
-  margin: 3px 0 0;
-  color: var(--fg-muted);
-  font-size: 12px;
-  line-height: 16px;
-}
-
 .dashboard-scroll {
   min-height: 0;
   flex: 1;

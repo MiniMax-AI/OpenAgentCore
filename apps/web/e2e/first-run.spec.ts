@@ -406,6 +406,35 @@ test("fits API key content at desktop and mobile widths", async ({ page }) => {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
+test("keeps page headings fixed while switching console sections", async ({ page }) => {
+  await mockAccount(page, { mode: "authenticated", username });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Go to console", exact: true }).click();
+  await page.locator(".page-transition").evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+
+  const sections = [
+    ["Dashboard", ".dashboard-header"],
+    ["Agents", ".agents-page > .page-header"],
+    ["Sessions", ".session-browser-header"],
+    ["Vaults", ".vaults-page > .page-header"],
+    ["API keys", ".api-keys-page > .page-header"],
+  ] as const;
+  let first: { top: number; left: number; height: number } | null = null;
+  for (const [name, selector] of sections) {
+    await page.locator(".app-sidebar").getByRole("button", { name, exact: true }).click();
+    const header = page.locator(selector);
+    await expect(header.getByRole("heading", { level: 1 })).toBeVisible();
+    const position = await header.evaluate((element) => {
+      const header = element.getBoundingClientRect();
+      const title = element.querySelector("h1")!.getBoundingClientRect();
+      return { top: Math.round(title.top), left: Math.round(title.left), height: Math.round(header.height) };
+    });
+    first ??= position;
+    expect(position, `${name} heading position`).toEqual(first);
+  }
+});
+
 test("keeps all three introduction steps usable on a narrow screen", async ({ page }) => {
   await mockAccount(page, { mode: "authenticated", username });
   await page.setViewportSize({ width: 390, height: 844 });

@@ -1,7 +1,7 @@
 .api-keys-page { display: flex; flex-direction: column; overflow: hidden; }
 .api-keys-body { min-height: 0; flex: 1; overflow: auto; padding: 24px; }
 .api-keys-content { width: min(100%, 1160px); margin-inline: auto; }
-.api-keys-description { margin: 0 0 24px; color: var(--fg-muted); font-size: 13px; line-height: 1.5; }
+.api-keys-body .page-description { margin-bottom: 24px; }
 .api-keys-layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr); gap: 20px; align-items: start; }
 .api-key-panel { min-width: 0; padding: 28px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-control); }
 .api-key-heading { display: flex; align-items: center; gap: 11px; }
