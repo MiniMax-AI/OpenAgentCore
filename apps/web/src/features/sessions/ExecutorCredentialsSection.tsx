@@ -77,8 +77,10 @@ function seconds(value: string | null): number | null {
  * unknown outcome keeps its key ID, and after the list is refreshed the
  * administrator rotates it (issued, secret lost) or issues it again (not
  * issued). A kept key ID that is listed is never sent again: its row's actions
- * own it. An archived project's credentials are listed and revoked but neither
- * issued nor rotated. Below the list, Connect a host gives the command that
+ * own it. Rotating a revoked credential restores it with a new secret, which
+ * is how a host whose credential was revoked reconnects: its installer accepts
+ * only the same key ID. An archived project's credentials are listed and
+ * revoked but neither issued nor rotated. Below the list, Connect a host gives the command that
  * installs the executor with one of these credentials.
  */
 export function ExecutorCredentialsSection({ projectId, sessionId, environmentId, remoteUrl }: { projectId: string; sessionId: string; environmentId: string; remoteUrl: string }) {
@@ -99,7 +101,8 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
   const [issuing, setIssuing] = useState(false);
   // The unknown-outcome dialog; the key ID stays for its closing animation.
   const [uncertain, setUncertain] = useState<{ keyId: string; open: boolean } | null>(null);
-  const [rotation, setRotation] = useState<{ keyId: string; lost: boolean } | null>(null);
+  // Why a credential is rotated: an active one on request, a revoked one to restore it, or one whose secret was lost.
+  const [rotation, setRotation] = useState<{ keyId: string; reason: "active" | "revoked" | "lost" } | null>(null);
   const [rotating, setRotating] = useState(false);
   const [rotationError, setRotationError] = useState<string | null>(null);
   // The credential shown once: in its dialog, or on the page once the dialog is dismissed, until Done.
@@ -128,7 +131,7 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
     return () => window.removeEventListener("beforeunload", guard);
   }, [held]);
 
-  const openRotation = (keyId: string, lost: boolean) => { setRotationError(null); setRotation({ keyId, lost }); };
+  const openRotation = (keyId: string, reason: "active" | "revoked" | "lost") => { setRotationError(null); setRotation({ keyId, reason }); };
 
   // Reads the list again and finds a key ID in it; undefined when the read failed.
   const findListed = async (keyId: string): Promise<ExecutorCredential | null | undefined> => {
@@ -139,7 +142,7 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
   // An issued key ID whose secret never arrived is rotated for a fresh one, if it is still active.
   const recoverLost = (found: ExecutorCredential): boolean => {
     const rotatable = found.revoked_at === null && !archived;
-    if (rotatable) openRotation(found.key_id, true);
+    if (rotatable) openRotation(found.key_id, "lost");
     return rotatable;
   };
 
@@ -257,16 +260,18 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
                     </span>
                   </td>
                   <td className="actions-cell">
-                    {revoked ? null : (
+                    {revoked && archived ? null : (
                       <RowActions>
                         {archived ? null : (
-                          <button className="text-action" type="button" aria-label={t("executor.rotateLabel", { id })} disabled={busy} onClick={() => openRotation(credential.key_id, false)}>
+                          <button className="text-action" type="button" aria-label={t("executor.rotateLabel", { id })} disabled={busy} onClick={() => openRotation(credential.key_id, revoked ? "revoked" : "active")}>
                             {t("executor.rotate")}
                           </button>
                         )}
-                        <button className="text-action danger" type="button" aria-label={t("executor.revokeLabel", { id })} disabled={busy} onClick={() => revoke.ask(credential.key_id)}>
-                          {t("executor.revoke")}
-                        </button>
+                        {revoked ? null : (
+                          <button className="text-action danger" type="button" aria-label={t("executor.revokeLabel", { id })} disabled={busy} onClick={() => revoke.ask(credential.key_id)}>
+                            {t("executor.revoke")}
+                          </button>
+                        )}
                       </RowActions>
                     )}
                   </td>
@@ -323,8 +328,8 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
       >
         {rotation ? (
           <>
-            <p>{t(rotation.lost ? "executor.rotateDialog.lost" : "executor.rotateDialog.prompt", { id: shortId(rotation.keyId) })}</p>
-            <p>{t("executor.rotateDialog.consequence")}</p>
+            <p>{t(`executor.rotateDialog.${rotation.reason}`, { id: shortId(rotation.keyId) })}</p>
+            <p>{t(rotation.reason === "revoked" ? "executor.rotateDialog.reconnect" : "executor.rotateDialog.consequence")}</p>
           </>
         ) : null}
       </ConfirmDialog>

@@ -202,7 +202,9 @@ export const sessions = {
     },
     rotateDialog: {
       title: "Rotate credential?",
-      prompt: "Credential {{id}} gets a new secret.",
+      active: "Credential {{id}} gets a new secret.",
+      revoked: "Credential {{id}} is revoked. Rotating restores it with a new secret.",
+      reconnect: "To reconnect the host, rerun the Connect a host command there and paste the new secret at its prompt.",
       lost: "Core issued credential {{id}}, but its secret never reached the console. Rotate it to receive a new secret.",
       consequence: "The old credential stops working immediately.",
       confirm: "Rotate",

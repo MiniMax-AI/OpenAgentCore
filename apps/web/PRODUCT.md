@@ -150,8 +150,8 @@ workbench.
   administrator's host from Core's `public_url` (checksum-verified, no secret in
   it; the installer asks for the credential at a hidden prompt, or reads
   `--credential-file`). The same command is safe to rerun. Revoking or rotating
-  stops the host's executor; reconnecting takes that same credential, rotated,
-  and the same command, because a newly issued credential does not reconnect an
+  stops the host's executor; reconnecting takes that same credential, rotated
+  (Rotate on a revoked row restores it), and the same command, because a newly issued credential does not reconnect an
   environment that already connected. Without a `public_url`, or when the Session's
   `remote_url` is not `wss://`, the section says why instead of showing a
   command.

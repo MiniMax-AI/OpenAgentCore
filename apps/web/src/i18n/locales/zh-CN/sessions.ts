@@ -199,7 +199,9 @@ export const sessions = {
     },
     rotateDialog: {
       title: "轮换凭据？",
-      prompt: "将为凭据 {{id}} 生成新的凭据内容。",
+      active: "将为凭据 {{id}} 生成新的凭据内容。",
+      revoked: "凭据 {{id}} 已吊销。轮换会恢复它，并生成新的凭据内容。",
+      reconnect: "要让主机重新连接，请在主机上重新运行“连接主机”中的命令，并在提示处粘贴新的凭据内容。",
       lost: "Core 已签发凭据 {{id}}，但凭据内容没有送达控制台。轮换它可以拿到新的凭据内容。",
       consequence: "旧凭据会立即失效。",
       confirm: "轮换",
