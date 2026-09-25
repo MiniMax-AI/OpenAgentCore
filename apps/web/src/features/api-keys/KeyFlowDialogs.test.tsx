@@ -1,3 +1,5 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -10,10 +12,12 @@ const project: Project = { id: "proj_7f3a91c2", name: "Production", status: "act
 const secret = "pc_live_" + "s".repeat(40);
 const issued: AdminIssuedKey = { id: "9f0e1d2c-3b4a-4c5d-8e6f-7a8b9c0d1e2f", project_id: "proj_7f3a91c2", name: "bob-laptop", prefix: "pc_live_Zq8", created_at: 300, revoked_at: null, key: secret };
 const controls = (flow: KeyFlow): KeyFlowControls => ({ flow, dispatch: () => undefined, submit: async () => undefined });
+// The how-to-call card under a new key reads the installation through the query cache.
+const render = (element: ReactElement) => renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}>{element}</QueryClientProvider>);
 
 describe("one-time key display", () => {
   it("shows the plaintext read-only, without autofill, with a copy button and a saved confirmation", () => {
-    const html = renderToStaticMarkup(<KeyFlowDialogs controls={controls({ step: "issued", project, issued, open: true })} taken={[]} />);
+    const html = render(<KeyFlowDialogs controls={controls({ step: "issued", project, issued, open: true })} taken={[]} />);
     expect(html).toContain(`value="${secret}"`);
     expect(html).toContain("readOnly");
     expect(html).toContain('autoComplete="off"');
@@ -25,7 +29,7 @@ describe("one-time key display", () => {
   it("keeps a closed dialog's key on the page until it is confirmed saved", () => {
     const open = renderToStaticMarkup(<PendingKeyNotice controls={controls({ step: "issued", project, issued, open: true })} />);
     expect(open).toBe("");
-    const closed = renderToStaticMarkup(<PendingKeyNotice controls={controls({ step: "issued", project, issued, open: false })} />);
+    const closed = render(<PendingKeyNotice controls={controls({ step: "issued", project, issued, open: false })} />);
     expect(closed).toContain(`value="${secret}"`);
     expect(closed).toContain("is shown only until you confirm it was saved");
   });

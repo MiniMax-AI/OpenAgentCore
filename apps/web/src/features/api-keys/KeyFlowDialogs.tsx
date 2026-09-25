@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { HelpTip } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
 import { isUsableName, keyNameProblem, normalizeName, type FlowError, type KeyFlow, type NameProblem } from "./key-flows";
+import { HowToCall } from "./HowToCall";
 import { PlaintextKey } from "./IssuedKey";
 import type { KeyFlowControls } from "./use-key-flow";
 
@@ -126,6 +127,7 @@ export function KeyFlowDialogs({ controls, taken }: { controls: KeyFlowControls;
         <div className="key-dialog-body">
           <p className="plaintext-key-notice">{t("issued.onceNotice")}</p>
           <PlaintextKey value={flow.issued.key} label={t("issued.keyLabel", { name: flow.issued.name })} caption={flow.issued.name} />
+          <HowToCall apiKey={flow.issued.key} />
         </div>
       </Modal>
     );
@@ -143,6 +145,7 @@ export function PendingKeyNotice({ controls }: { controls: KeyFlowControls }) {
     <section className="pending-key" aria-label={t("issued.keyLabel", { name: flow.issued.name })}>
       <p className="plaintext-key-notice">{t("issued.pending", { name: flow.issued.name, project: flow.project.name })}</p>
       <PlaintextKey value={flow.issued.key} label={t("issued.keyLabel", { name: flow.issued.name })} />
+      <HowToCall apiKey={flow.issued.key} />
       <div className="pending-key-actions">
         <button className="button primary" type="button" onClick={() => dispatch({ type: "saved" })}>{t("issued.saved")}</button>
       </div>
