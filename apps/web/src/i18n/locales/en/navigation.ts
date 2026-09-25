@@ -23,6 +23,7 @@ export const navigation = {
     sandboxBackend: "Sandbox backend",
     system: "System",
   },
+  showGettingStarted: "Show Getting started",
   skipToContent: "Skip to main content",
   configureCore: "Configure Agent Core connection",
   coreApi: "Core API",

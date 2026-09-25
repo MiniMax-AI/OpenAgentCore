@@ -173,8 +173,13 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const nodes = snapshot?.nodes ?? [];
   const allocations = snapshot?.allocations ?? [];
   const hostedNodes = Boolean(snapshot?.deployment.provider && snapshot.deployment.provider !== "e2b");
-  // Getting started asks for Add node on arrival.
-  useConsoleIntent("add-node", hostedNodes && fresh && !busy && !snapshot?.deployment.maintenance, () => setAdding(true));
+  // Getting started asks for Add node on arrival. A request the first settled read cannot
+  // serve (no own-machines deployment, maintenance, a failed read) is dropped, so the
+  // dialog never opens later on its own.
+  const addNodeReadiness = loading || busy ? "wait"
+    : !snapshot ? (query.isError ? "unavailable" : "wait")
+    : hostedNodes && fresh && !snapshot.deployment.maintenance ? "ready" : "unavailable";
+  useConsoleIntent("add-node", addNodeReadiness, () => setAdding(true));
   const selected = params.id ? nodes.find((node) => node.id === params.id) : undefined;
   const refreshButton = <RefreshButton onClick={refreshByUser} refreshing={loading} disabled={busy || removing} label={t("Refresh sandbox state")} />;
   const readFailure = error !== null ? sandboxRequestError(error, locale) : null;

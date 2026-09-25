@@ -33,11 +33,14 @@ export function hashWithParams(base: string, params: RouteParams = {}): string {
 }
 
 /**
- * A dialog a link asks its target page to open on arrival, such as Add node
- * from Getting started. It lives only in memory: a reload, Back or any other
- * navigation drops it, so the dialog never reopens on its own.
+ * What a link asks its target page to open on arrival, such as Add node from
+ * Getting started. It lives only in memory: a reload, Back or any other
+ * navigation drops it, so nothing reopens on its own.
  */
-export type ConsoleIntent = "add-node" | "create-project" | "issue-key";
+export type ConsoleIntent = "add-node" | "create-project" | "issue-key" | "getting-started";
+
+/** Whether a page can act on an intent now, not yet, or not at all (then it drops the intent). */
+export type IntentReadiness = "ready" | "wait" | "unavailable";
 
 export interface ConsoleNavigation {
   view: ConsoleView;
@@ -75,14 +78,17 @@ export function useConsoleNavigation(): ConsoleNavigation {
   return useContext(ConsoleNavigationContext);
 }
 
-/** Runs `act` once when this page was opened with `intent` and it can act on it. */
-export function useConsoleIntent(intent: ConsoleIntent, ready: boolean, act: () => void): void {
+/**
+ * Runs `act` once when this page was opened with `intent` and can act on it;
+ * an intent the page cannot act on is dropped, so it never fires later.
+ */
+export function useConsoleIntent(intent: ConsoleIntent, readiness: IntentReadiness, act: () => void): void {
   const { intent: current, clearIntent } = useConsoleNavigation();
   const action = useRef(act);
   action.current = act;
   useEffect(() => {
-    if (current !== intent || !ready) return;
+    if (current !== intent || readiness === "wait") return;
     clearIntent();
-    action.current();
-  }, [current, intent, ready, clearIntent]);
+    if (readiness === "ready") action.current();
+  }, [current, intent, readiness, clearIntent]);
 }

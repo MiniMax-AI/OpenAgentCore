@@ -1,14 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { Check, Compass, X } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { HelpTip, StatusDot } from "../../components/console-ui";
-import { useConsoleNavigation } from "../../lib/console-navigation";
+import { useConsoleIntent, useConsoleNavigation } from "../../lib/console-navigation";
 import { projectsQuery } from "../../lib/queries";
 import { type FleetState } from "../fleet/use-sandbox-fleet";
 import { useConsoleTour } from "../onboarding/ConsoleTour";
 import {
+  checklistStorageKey,
   checklistView,
   gettingStartedSteps,
   readChecklistMemory,
@@ -20,7 +21,8 @@ import {
 /**
  * Getting started: sandboxes, a project key and the first Session, each with
  * its state and one action, in any order. It shows until every step is done
- * or it is dismissed; the optional console tour opens from its header.
+ * or it is hidden; Show Getting started in the sidebar opens it again. The
+ * optional console tour opens from it.
  */
 export function GettingStarted({ fleet, sessions }: { fleet: FleetState; sessions: number | "failed" | null }) {
   const { t } = useTranslation("overview");
@@ -29,52 +31,70 @@ export function GettingStarted({ fleet, sessions }: { fleet: FleetState; session
   const projects = useQuery(projectsQuery);
   const steps = gettingStartedSteps({ fleet, projects: projects.data ?? (projects.isError ? "failed" : undefined), sessions });
   const states = [steps.sandboxes.state, steps.key.state, steps.session];
-  const [memory, setMemory] = useState<ChecklistMemory>(readChecklistMemory);
-  const view = checklistView(states, memory);
   const allDone = states.every((state) => state === "done");
 
-  const remember = (value: Exclude<ChecklistMemory, null>) => {
-    writeChecklistMemory(value);
-    setMemory(value);
-  };
-  // Seen with a step to do, the checklist ends with "You're set"; a deployment
-  // first seen already set up never shows it.
-  const first = memory !== null ? null : view === "full" ? "open" : allDone ? "closed" : null;
+  // Remembered per installation; a choice made here overrides what was read.
+  const storageKey = checklistStorageKey(fleet);
+  const stored = useMemo(() => (storageKey === null ? null : readChecklistMemory(storageKey)), [storageKey]);
+  const [chosen, setChosen] = useState<{ key: string; memory: ChecklistMemory } | null>(null);
+  const memory = chosen && chosen.key === storageKey ? chosen.memory : stored;
+  const remember = useCallback((value: Exclude<ChecklistMemory, null>) => {
+    if (storageKey === null) return;
+    writeChecklistMemory(storageKey, value);
+    setChosen({ key: storageKey, memory: value });
+  }, [storageKey]);
+  // "You're set" stays until it is dismissed or the page is left, while the checklist is already closed.
+  const [celebrating, setCelebrating] = useState(false);
+  const [focusPending, setFocusPending] = useState(false);
+  const view = storageKey === null ? "hidden" : checklistView(states, memory);
+
+  // Shown with a step to do, the checklist opens; "You're set" closes it once
+  // shown, so a later regression never brings it back; a deployment first seen
+  // already set up is closed without either.
+  const next = view === "complete" ? "closed" : memory === null && storageKey !== null ? (view === "full" ? "open" : allDone ? "closed" : null) : null;
   useEffect(() => {
-    if (!first) return;
-    writeChecklistMemory(first);
-    setMemory(first);
-  }, [first]);
+    if (!next) return;
+    if (view === "complete") setCelebrating(true);
+    remember(next);
+  }, [next, remember, view]);
 
-  if (view === "hidden") return null;
-  const done = states.filter((state) => state === "done").length;
-  const progress = t("gettingStarted.progress", { done, total: states.length });
+  // Show Getting started, from the sidebar.
+  useConsoleIntent("getting-started", storageKey === null ? "wait" : "ready", () => {
+    remember("open");
+    setCelebrating(false);
+    setFocusPending(true);
+  });
+  const showing = celebrating || view !== "hidden";
+  useEffect(() => {
+    if (!focusPending || !showing) return;
+    setFocusPending(false);
+    document.getElementById("getting-started-heading")?.focus();
+  }, [focusPending, showing]);
 
-  if (view === "compact") {
+  const tourButton = (
+    <button className="button ghost" type="button" data-tour-opener="" onClick={(event) => openTour(event.currentTarget)}>
+      <Compass size={14} aria-hidden="true" />{t("gettingStarted.tour")}
+    </button>
+  );
+
+  if (celebrating || view === "complete") {
     return (
-      <section className="overview-card getting-started getting-started-compact" aria-labelledby="getting-started-heading">
-        <div className="console-section-title">
-          <h2 id="getting-started-heading">{t("gettingStarted.title")}</h2>
-          <span className="overview-card-meta">{progress}</span>
-        </div>
-        <button className="button outline" type="button" onClick={() => remember("open")}>{t("gettingStarted.show")}</button>
-      </section>
-    );
-  }
-
-  if (view === "complete") {
-    return (
-      <section className="overview-card getting-started getting-started-compact" aria-labelledby="getting-started-heading">
+      <section className="overview-card getting-started getting-started-line" aria-labelledby="getting-started-heading">
         <div className="console-section-title">
           <span className="getting-started-mark done" aria-hidden="true"><Check size={13} strokeWidth={2.2} /></span>
-          <h2 id="getting-started-heading">{t("gettingStarted.complete.title")}</h2>
+          <h2 id="getting-started-heading" tabIndex={-1}>{t("gettingStarted.complete.title")}</h2>
           <span className="overview-card-meta">{t("gettingStarted.complete.body")}</span>
         </div>
-        <button className="button outline" type="button" onClick={() => remember("closed")}>{t("gettingStarted.complete.dismiss")}</button>
+        <div className="getting-started-actions">
+          {tourButton}
+          <button className="button outline" type="button" onClick={() => { setCelebrating(false); remember("closed"); }}>{t("gettingStarted.complete.dismiss")}</button>
+        </div>
       </section>
     );
   }
+  if (view === "hidden") return null;
 
+  const done = states.filter((state) => state === "done").length;
   const sandbox = steps.sandboxes;
   const sandboxAction = sandbox.action === "setup"
     ? { label: t("gettingStarted.sandboxes.setup"), run: () => navigate("nodes") }
@@ -90,15 +110,13 @@ export function GettingStarted({ fleet, sessions }: { fleet: FleetState; session
     <section className="overview-card getting-started" aria-labelledby="getting-started-heading">
       <header className="overview-card-header">
         <div className="console-section-title">
-          <h2 id="getting-started-heading">{t("gettingStarted.title")}</h2>
-          <span className="overview-card-meta">{progress}</span>
+          <h2 id="getting-started-heading" tabIndex={-1}>{t("gettingStarted.title")}</h2>
+          <span className="overview-card-meta">{t("gettingStarted.progress", { done, total: states.length })}</span>
           <HelpTip>{t("gettingStarted.help")}</HelpTip>
         </div>
         <div className="getting-started-actions">
-          <button className="button ghost" type="button" data-tour-opener="" onClick={(event) => openTour(event.currentTarget)}>
-            <Compass size={14} aria-hidden="true" />{t("gettingStarted.tour")}
-          </button>
-          <button className="icon-button ghost" type="button" aria-label={t("gettingStarted.dismiss")} title={t("gettingStarted.dismiss")} onClick={() => remember("dismissed")}>
+          {tourButton}
+          <button className="icon-button ghost" type="button" aria-label={t("gettingStarted.dismiss")} title={t("gettingStarted.dismiss")} onClick={() => remember("closed")}>
             <X size={15} aria-hidden="true" />
           </button>
         </div>

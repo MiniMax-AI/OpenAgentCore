@@ -2,7 +2,7 @@ import type { SandboxDeployment } from "@agents-core-web/agents-client";
 import { describe, expect, it } from "vitest";
 
 import type { FleetState } from "../fleet/use-sandbox-fleet";
-import { checklistView, gettingStartedSteps } from "./getting-started";
+import { checklistStorageKey, checklistView, gettingStartedSteps } from "./getting-started";
 import { node, project } from "./test-fixtures";
 
 const deployment = (overrides: Partial<SandboxDeployment> = {}): SandboxDeployment => ({
@@ -41,14 +41,20 @@ describe("Getting started steps", () => {
 });
 
 describe("Getting started visibility", () => {
-  it("shows while a step is to do, ends with You're set only where it was seen, and stays compact once dismissed", () => {
+  it("shows while a step is to do, ends with You're set only where it was seen, and stays closed once hidden", () => {
     expect(checklistView(["done", "todo", null], null)).toBe("full");
     expect(checklistView([null, null, null], null)).toBe("hidden");
-    expect(checklistView([null, null, null], "open")).toBe("full");
+    // An open checklist waits for a step's state instead of showing every step as checking.
+    expect(checklistView([null, null, null], "open")).toBe("hidden");
+    expect(checklistView(["done", null, null], "open")).toBe("full");
     expect(checklistView(["done", "done", "done"], null)).toBe("hidden");
     expect(checklistView(["done", "done", "done"], "open")).toBe("complete");
-    expect(checklistView(["done", "todo", "todo"], "dismissed")).toBe("compact");
-    expect(checklistView(["done", "done", "done"], "dismissed")).toBe("hidden");
     expect(checklistView(["todo", "todo", "todo"], "closed")).toBe("hidden");
+  });
+
+  it("remembers the choice per installation", () => {
+    expect(checklistStorageKey(fleet(deployment({ installation_id: "inst-1" })))).toBe("agents-core-web.getting-started.inst-1");
+    expect(checklistStorageKey({ status: "unconfigured" })).toBe("agents-core-web.getting-started");
+    expect(checklistStorageKey({ status: "loading" })).toBeNull();
   });
 });

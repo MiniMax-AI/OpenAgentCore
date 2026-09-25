@@ -118,7 +118,7 @@ function ConsoleShell() {
       <ConsoleTourContext.Provider value={openTour}>
         <div className="app-shell">
           <a className="skip-link" href="#main-content">{t("skipToContent")}</a>
-          <ConsoleSidebar active={consoleNavParent(location.view)} onSelect={(view) => navigate(view)} onIntent={prefetch} />
+          <ConsoleSidebar active={consoleNavParent(location.view)} onSelect={(view) => navigate(view)} onIntent={prefetch} onGettingStarted={() => navigate("overview", {}, "getting-started")} />
           <main className="app-main" id="main-content" tabIndex={-1}>
             <div className="page-transition" key={`${location.view}:${location.params.project ?? ""}:${location.params.id ?? ""}`}>
               <ConsolePage view={location.view} />

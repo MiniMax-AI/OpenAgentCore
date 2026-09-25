@@ -64,42 +64,51 @@ function keyStep(projects: readonly Project[] | "failed" | undefined): GettingSt
 }
 
 /**
- * What this browser remembers: the checklist was shown with a step to do
- * ("open"), hidden while steps remained ("dismissed"), or closed for good
- * ("closed", after "You're set" or on a deployment that was already set up).
+ * What this browser remembers for one installation: the checklist was shown
+ * with a step to do ("open"), or it is closed ("closed": hidden, after
+ * "You're set", or on a deployment that was already set up). Only Show
+ * Getting started opens a closed checklist again.
  */
-export type ChecklistMemory = "open" | "dismissed" | "closed" | null;
+export type ChecklistMemory = "open" | "closed" | null;
 
-export type ChecklistView = "hidden" | "full" | "compact" | "complete";
+export type ChecklistView = "hidden" | "full" | "complete";
 
 /**
  * The checklist shows while a step is to do. "You're set" follows only in a
  * browser that saw a step to do, so a deployment set up before this console
- * never shows it. A dismissed checklist stays one compact line until every
- * step is done.
+ * never shows it. An open checklist waits for a step's state rather than
+ * showing every step as checking.
  */
 export function checklistView(states: readonly StepState[], memory: ChecklistMemory): ChecklistView {
   if (memory === "closed") return "hidden";
   if (states.every((state) => state === "done")) return memory === "open" ? "complete" : "hidden";
-  const todo = states.includes("todo");
-  if (memory === "dismissed") return todo ? "compact" : "hidden";
-  return todo || memory === "open" ? "full" : "hidden";
+  if (states.includes("todo")) return "full";
+  return memory === "open" && states.some((state) => state !== null) ? "full" : "hidden";
 }
 
-const STORAGE_KEY = "agents-core-web.getting-started";
+/**
+ * The storage entry for this installation, so a reinstall at the same origin
+ * starts again; the unscoped entry when the console cannot read the
+ * deployment, and null while it is still reading it.
+ */
+export function checklistStorageKey(fleet: FleetState): string | null {
+  const base = "agents-core-web.getting-started";
+  if (fleet.status === "ready") return fleet.snapshot.deployment.installation_id ? `${base}.${fleet.snapshot.deployment.installation_id}` : base;
+  return fleet.status === "failed" || fleet.status === "unconfigured" ? base : null;
+}
 
-export function readChecklistMemory(): ChecklistMemory {
+export function readChecklistMemory(key: string): ChecklistMemory {
   try {
-    const value = window.localStorage.getItem(STORAGE_KEY);
-    return value === "open" || value === "dismissed" || value === "closed" ? value : null;
+    const value = window.localStorage.getItem(key);
+    return value === "open" || value === "closed" ? value : null;
   } catch {
     return null;
   }
 }
 
-export function writeChecklistMemory(value: Exclude<ChecklistMemory, null>): void {
+export function writeChecklistMemory(key: string, value: Exclude<ChecklistMemory, null>): void {
   try {
-    window.localStorage.setItem(STORAGE_KEY, value);
+    window.localStorage.setItem(key, value);
   } catch {
     // Storage can be unavailable; the choice then lasts until the page reloads.
   }

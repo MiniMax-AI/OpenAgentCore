@@ -7,7 +7,6 @@ export const overview = {
     progress: "{{done}} of {{total}} done",
     tour: "Take the tour",
     dismiss: "Hide Getting started",
-    show: "Show",
     state: {
       done: "Done",
       todo: "To do",

@@ -74,15 +74,37 @@ test("opens a fresh install on the Overview's Getting started: a project and its
   expect(stored).not.toContain(FIXTURE_CORE_KEY);
 });
 
-test("shows empty pages on a fresh install and opens Add node from Getting started", async ({ page, request }) => {
-  await openConsole(page, request, "overview", { fresh: true, nodes: "none" });
+test("shows every page empty on a fresh install, and Getting started hides, comes back and leads to sandbox setup", async ({ page, request }) => {
+  await openConsole(page, request, "overview", { fresh: true, sandbox: "none", nodes: "none" });
+  // What each page shows once its reads are done: an empty state, Core's own figures, or sandbox setup.
+  const loaded = (view: string) => view === "core-metrics" ? page.locator(".kpi-strip").first()
+    : view === "nodes" ? page.getByRole("heading", { name: "Where should sandboxes run?" })
+    : page.locator(".console-empty").first();
   for (const view of ["core-metrics", "agent-metrics", "sandbox-metrics", "sessions", "agents", "templates", "skills", "files", "vaults", "projects", "nodes", "system", "overview"]) {
     await page.goto(`/#${view}`);
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(loaded(view)).toBeVisible();
+    await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+    await expect(page.getByText(/Loading|Connecting/)).toHaveCount(0);
     // No failed read: neither an error on the page nor an error toast.
     await expect(page.getByRole("alert")).toHaveCount(0);
     await expect(page.locator(".toast-region-assertive")).toBeEmpty();
   }
+
+  const checklist = page.getByRole("region", { name: "Getting started" });
+  await checklist.getByRole("button", { name: "Hide Getting started" }).click();
+  await expect(checklist).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator(".console-empty").first()).toBeVisible();
+  await expect(checklist).toHaveCount(0);
+  await page.getByRole("button", { name: "Show Getting started" }).click();
+  const step = checklist.getByRole("listitem").filter({ hasText: "Get sandboxes ready" });
+  await expect(step).toContainText("To do");
+  await step.getByRole("button", { name: "Set up sandboxes" }).click();
+  await expect(page.getByRole("heading", { name: "Where should sandboxes run?" })).toBeVisible();
+});
+
+test("opens Add node from Getting started when no node has joined", async ({ page, request }) => {
+  await openConsole(page, request, "overview", { fresh: true, nodes: "none" });
   const step = page.getByRole("region", { name: "Getting started" }).getByRole("listitem").filter({ hasText: "Get sandboxes ready" });
   await expect(step).toContainText("To do");
   await step.getByRole("button", { name: "Add node" }).click();

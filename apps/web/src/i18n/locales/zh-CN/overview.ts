@@ -7,7 +7,6 @@ export const overview = {
     progress: "已完成 {{done}} / {{total}}",
     tour: "认识控制台",
     dismiss: "隐藏新手引导",
-    show: "展开",
     state: {
       done: "已完成",
       todo: "待完成",

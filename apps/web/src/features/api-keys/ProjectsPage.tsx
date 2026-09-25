@@ -88,8 +88,8 @@ export function ProjectsPage() {
   const openDialog = (next: Dialog) => { setDialogError(null); setDialog(next); };
   const closeDialog = () => { if (!dialogBusy) setDialog(null); };
   // Getting started opens a dialog on arrival: a new project (then its first key), or a key for an open project.
-  useConsoleIntent("create-project", true, () => openDialog({ kind: "create", name: "", thenIssue: true }));
-  useConsoleIntent("issue-key", Boolean(selected && manageable(selected)) && flow.step === "idle", () => {
+  useConsoleIntent("create-project", "ready", () => openDialog({ kind: "create", name: "", thenIssue: true }));
+  useConsoleIntent("issue-key", selected ? (manageable(selected) && flow.step === "idle" ? "ready" : "unavailable") : state.status === "loading" ? "wait" : "unavailable", () => {
     if (selected) dispatch({ type: "openIssue", project: selected });
   });
 

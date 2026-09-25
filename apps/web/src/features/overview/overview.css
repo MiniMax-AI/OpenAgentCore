@@ -65,7 +65,7 @@
 .metric-tile-dot-pending { background: var(--status-running); }
 
 /* Getting started: one card with a row per step (mark, text, state, action);
-   a single line once dismissed or when every step is done. */
+   a single "You're set" line once every step is done. */
 
 .getting-started {
   animation: overview-rise 520ms var(--ease-settle) both;
@@ -75,6 +75,11 @@
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+/* Show Getting started moves the focus to the heading, which is not a control. */
+.getting-started h2:focus {
+  outline: none;
 }
 
 .getting-started-steps {
@@ -133,7 +138,7 @@
   justify-content: flex-end;
 }
 
-.overview-card.getting-started-compact {
+.overview-card.getting-started-line {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
@@ -142,11 +147,11 @@
   padding: 10px 16px;
 }
 
-.getting-started-compact .console-section-title {
+.getting-started-line .console-section-title {
   min-width: 0;
 }
 
-.getting-started-compact h2 {
+.getting-started-line h2 {
   margin: 0;
   color: var(--fg);
   font-size: 14px;
@@ -154,7 +159,7 @@
   line-height: 20px;
 }
 
-.getting-started-compact .overview-card-meta {
+.getting-started-line .overview-card-meta {
   overflow: hidden;
   text-overflow: ellipsis;
 }
