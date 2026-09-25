@@ -1,5 +1,6 @@
 import { type Project } from "../../lib/admin-view";
 import { type FleetState } from "../fleet/use-sandbox-fleet";
+import { templateBuildStatus } from "../sandbox/deployment-specification";
 
 /**
  * Getting started on the Overview: three steps to a working deployment,
@@ -35,8 +36,10 @@ export function gettingStartedSteps(input: {
 
 /**
  * Own machines are ready once the deployment is saved and a node is online
- * with its provider ready; E2B once the deployment is saved and its template
- * build is ready.
+ * with its provider ready; E2B once the deployment is saved, since Core admits
+ * only a ready template build. Only a build Core reports as not ready leaves
+ * the step to do; a selection saved before Core recorded its build has no
+ * status and counts as done.
  */
 function sandboxStep(fleet: FleetState): GettingStartedSteps["sandboxes"] {
   if (fleet.status !== "ready") {
@@ -45,7 +48,7 @@ function sandboxStep(fleet: FleetState): GettingStartedSteps["sandboxes"] {
   const { deployment, nodes } = fleet.snapshot;
   if (!deployment.provider) return { state: "todo", action: "setup", cloud: false };
   if (deployment.provider === "e2b") {
-    return { state: deployment.e2b?.template_build?.status === "ready" ? "done" : "todo", action: "nodes", cloud: true };
+    return { state: templateBuildStatus(deployment.e2b?.template_build) === "notReady" ? "todo" : "done", action: "nodes", cloud: true };
   }
   if (nodes.some((node) => node.online && node.provider_ready)) return { state: "done", action: "nodes", cloud: false };
   return { state: "todo", action: nodes.length ? "nodes" : "add-node", cloud: false };

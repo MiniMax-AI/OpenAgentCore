@@ -13,7 +13,7 @@ const fleet = (value: SandboxDeployment, nodes = [node("n1")]): FleetState => ({
 const sandboxes = (state: FleetState) => gettingStartedSteps({ fleet: state, projects: [], sessions: 0 }).sandboxes;
 
 describe("Getting started steps", () => {
-  it("counts sandboxes ready only with a saved deployment and a ready node, or a ready E2B template build", () => {
+  it("counts sandboxes ready with a saved deployment and a ready node, or a saved E2B deployment whose build is not reported unready", () => {
     expect(sandboxes(fleet(deployment({ provider: "", mode: "" }), []))).toMatchObject({ state: "todo", action: "setup" });
     expect(sandboxes(fleet(deployment(), []))).toMatchObject({ state: "todo", action: "add-node" });
     expect(sandboxes(fleet(deployment(), [node("n1", { provider_ready: false }), node("n2", { online: false })]))).toMatchObject({ state: "todo", action: "nodes" });
@@ -21,6 +21,8 @@ describe("Getting started steps", () => {
     const e2b = (status: string | null) => deployment({ provider: "e2b", mode: "direct", e2b: { template: "t", credential_configured: true, template_build: { status, resources: { cpus: 2, memory_mib: 2048, root_disk_mib: null } } } });
     expect(sandboxes(fleet(e2b("building"), []))).toMatchObject({ state: "todo", cloud: true });
     expect(sandboxes(fleet(e2b("ready"), []))).toMatchObject({ state: "done", cloud: true });
+    // Saved before Core recorded the build: Core admitted it, so it counts as ready.
+    expect(sandboxes(fleet(e2b(null), []))).toMatchObject({ state: "done", cloud: true });
     expect(sandboxes({ status: "loading" }).state).toBeNull();
     expect(sandboxes({ status: "failed", error: new Error("down") }).state).toBe("unknown");
   });
