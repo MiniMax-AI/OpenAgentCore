@@ -1,16 +1,18 @@
 # Connecting the administrator console to Core
 
-`services/core-console` serves built Web assets, authenticates administrators and
-proxies an explicit management allowlist to Core. The backend contract and the
-React screens that use it are implemented; the console has no execution controls.
+`services/core-console` serves built Web assets, signs administrators in with the
+Core key and forwards every signed-in, same-origin `/core/v1/*` request to Core. The
+backend contract and the React screens that use it are implemented; the console has
+no execution controls.
 
 ## Connection model
 
 The browser calls same-origin `/core/v1` through `AdminClient` and
 `CoreMetricsClient`, and the `/core/v1/sandbox` management routes through the
-sandbox client. The console server
-supplies the deployment administrator credential to its configured Core upstream.
-Browser code must never receive that credential.
+sandbox client. The console server forwards each signed-in `/core/v1/*` request by
+prefix to its configured Core upstream, with the Core key (`CORE_CONSOLE_CORE_KEY_FILE`)
+as the upstream credential; Core alone decides whether the route exists. Browser
+code must never receive that credential.
 
 Applications call Core's `/v1` directly with their own Project API keys and the
 public API's route-specific headers. Nodes and Runtime daemons call Core's `/api/v1`
@@ -48,10 +50,14 @@ Core key cannot call `/v1`. `GET /console/config` provides safe console
 configuration to an authenticated browser.
 
 Use TLS for remote browser access and loopback listeners for local development.
-Preserve host/origin checks and the management route allowlist. Browser authorization,
-cookies and actor headers are replaced or removed before forwarding to Core.
-A browser cannot choose the audit actor label the service reports: the console server declares `console`. The label is caller-declared and display only. Keep deployment, application, node and provider credentials
-out of `VITE_*`, browser storage, source files, URLs and logs.
+Preserve the host/origin checks and the forwarding rules. The console refuses
+requests with an `Upgrade` header, CONNECT and TRACE, and any path that `safePath`
+rejects: an encoded `%`, dot segments, empty segments or backslashes. Before
+forwarding, it strips the browser's Authorization, Cookie, Origin and Referer headers
+and overwrites the actor header (`X-Core-Console-Actor`) with `console`, so a browser
+cannot choose the audit actor label the service reports. The label is caller-declared
+and display only. Keep deployment, application, node and provider credentials out of
+`VITE_*`, browser storage, source files, URLs and logs.
 
 ## Projects and application keys
 
@@ -72,7 +78,7 @@ work. Ordinary metadata reads cannot recover plaintext.
 2. Console login followed by `GET /core/v1/projects` proves the authenticated
    browser-to-console and console-to-Core path.
 3. A Project key must work on its public resources and fail on management routes.
-   The deployment credential must fail on `/v1`; `/v1` through the console stays 404.
+   The Core key must fail on `/v1`; `/v1` through the console stays 404.
 4. Cross-origin management writes must be rejected. Audit actor labels must ignore
    a forged browser header.
 5. Runtime observations and history report execution state separately from startup
@@ -80,6 +86,6 @@ work. Ordinary metadata reads cannot recover plaintext.
    or sandbox readiness.
 
 A console login failure belongs to console authentication. An upstream 401 on a
-management request points to the deployment credential or Core connection. A resource
+management request points to the console's Core key or Core connection. A resource
 deletion conflict must remain visible; it does not authorize an execution call.
 Node and daemon `/api/v1` routes and native Runtime interfaces retain their own authentication.

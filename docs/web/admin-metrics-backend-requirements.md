@@ -18,9 +18,9 @@ the browser work.
    Agents API and its documented Core extensions. Metrics work must not add
    fields, routes or behavior here.
 2. **Web API** (`/core/v1/**`, including `/core/v1/sandbox/**` for sandbox
-   administration): called only by the console server with the deployment
-   administrator credential. Every endpoint proposed below belongs here and is
-   forwarded by `services/core-console`.
+   administration): called by the console server and operator scripts with the
+   Core key. Every endpoint proposed below belongs here; `services/core-console`
+   forwards `/core/v1/*` by prefix, so a new endpoint needs no proxy change.
 
 ## What the console computes today
 

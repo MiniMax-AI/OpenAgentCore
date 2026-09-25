@@ -7,7 +7,7 @@
 ## Core 的两类接口
 
 1. **面向用户的 Agents API**（`/v1/**`）：必须与锁定版本的 OpenAI Agents API 及已记录的 Core 扩展保持一致。指标相关工作不得在这里新增字段、路由或行为。
-2. **Web API**（`/core/v1/**`，包括沙箱管理用的 `/core/v1/sandbox/**`）：只由控制台服务端用部署管理员凭据调用。下文提议的所有接口都属于这一类，由 `services/core-console` 转发。
+2. **Web API**（`/core/v1/**`，包括沙箱管理用的 `/core/v1/sandbox/**`）：由控制台服务端和运维脚本用 Core Key 调用。下文提议的所有接口都属于这一类；`services/core-console` 按前缀转发 `/core/v1/*`，新增接口无需改动代理。
 
 ## 控制台目前如何计算
 

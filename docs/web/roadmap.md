@@ -12,7 +12,8 @@ contract. Public Agents API compatibility work is tracked in the
 ## Delivered
 
 - Console login and same-origin `AdminClient` and sandbox management requests; the
-  browser holds no deployment credential or application key.
+  browser holds no application key, and only the console server sends the Core key
+  to Core.
 - Sign-in with the deployment's Core key; the browser keeps only the session
   cookie.
 - First run: after signing in with no project, the first project and its API key

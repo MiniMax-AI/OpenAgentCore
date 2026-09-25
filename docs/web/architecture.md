@@ -20,7 +20,7 @@ flowchart LR
   runtime["Runtime and native adapters"]
 
   browser -->|"Same-origin management requests; console login"| console
-  console -->|"/core/v1 management, including sandbox; deployment credential"| core
+  console -->|"/core/v1/* by prefix, including sandbox; Core key"| core
   application -->|"/v1; Project API key"| core
   core <--> database
   core <--> runtime
@@ -32,10 +32,11 @@ sandbox management client for `/core/v1/sandbox`. The console service
 returns 404 for `/v1` and `/api/v1`, including requests with an explicit Bearer
 token. It has no application key and does not impersonate the selected Project.
 
-The console authenticates the browser, checks the request origin and forwards only
-allowed management routes. It replaces browser authorization and actor headers,
-strips browser cookies, and supplies its server-side deployment credential. Core
-rejects application keys on management routes and deployment credentials on `/v1`.
+The console signs the browser in with the Core key, checks the host and origin, and
+forwards every signed-in `/core/v1/*` request to Core by prefix; Core alone decides
+whether the route exists. It strips the browser's Authorization, Cookie, Origin and
+Referer headers and supplies the Core key as its private upstream credential. Core
+rejects application keys on management routes and the Core key on `/v1`.
 The audit actor label is declared by the caller and is display only, never Core authorization: the console server declares `console`, and operator scripts calling Core with the Core key directly leave it empty.
 
 Node and daemon connections use `/api/v1` with their own credentials. The reverse
@@ -48,7 +49,7 @@ grant a browser execution authority.
 | --- | --- |
 | React frontend | Project selection, permitted management actions and operational views; cached reads (TanStack Query) that keep the last data on screen while refreshing |
 | `AdminClient` | Typed management requests and validation, sharing resource parsers with the public client |
-| `services/core-console` | Console authentication, origin checks, route allowlist and private upstream credential |
+| `services/core-console` | Core key login, host/origin checks, and prefix forwarding of `/core/v1/*` with the Core key as the private upstream credential |
 | Core API and PostgreSQL | Project isolation, resource state, deletion preconditions, audit and scheduling |
 | Runtime and native adapters | Existing allocation, process lifecycle and execution protocols |
 

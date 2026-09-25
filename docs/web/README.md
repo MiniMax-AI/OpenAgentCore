@@ -1,8 +1,9 @@
 # Parsar Core Web
 
 Core Web is the administrator console for a Core deployment. Its Go service
-provides console login and a restricted management proxy. Applications use Core's
-public Agents API directly with their own Project API keys.
+provides Core key login and forwards signed-in, same-origin `/core/v1` requests to
+Core. Applications use Core's public Agents API directly with their own Project API
+keys.
 
 The React console (`apps/web`) uses this contract: every browser request goes through
 the console's same-origin management routes with `AdminClient` and the sandbox
@@ -49,7 +50,7 @@ through `/v1`. Core has no API users, roles or memberships.
 Follow the [installation guide](../getting-started/install.md) for Core, Web and
 PostgreSQL with zero execution nodes. Installation creates no Project or application
 key; an administrator creates them through the management API. The browser signs
-in to the console, whose server keeps the deployment credential private.
+in to the console with the Core key; only the console server sends it to Core.
 
 - [Connection and authentication](core-connection.md)
 - [Architecture and ownership](architecture.md)

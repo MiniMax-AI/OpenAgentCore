@@ -16,8 +16,8 @@ the administrator API are defined by the [administrator API contract](../../cont
 | Interface | Paths | Authentication | Console use |
 | --- | --- | --- | --- |
 | Console server | `/console/auth`, `/console/auth/{login,logout}`, `/console/config` | Core key at sign-in, then the console session cookie | Sign-in with the Core key and sign-out; the node installer (`node_installer`, `node_installer_sha256`) |
-| Administrator API | `/core/v1/**` outside `/core/v1/sandbox` | Deployment administrator credential, added by the console server | Projects, keys, resource reads and deletion, executor credentials, provenance, summaries, Core metrics |
-| Sandbox administration | `/core/v1/sandbox/**` | Deployment administrator credential, added by the console server | Nodes page; fleet and capacity figures on Overview and Sandbox metrics; Runtime observations of every project |
+| Administrator API | `/core/v1/**` outside `/core/v1/sandbox` | Core key, added by the console server | Projects, keys, resource reads and deletion, executor credentials, provenance, summaries, Core metrics |
+| Sandbox administration | `/core/v1/sandbox/**` | Core key, added by the console server | Nodes page; fleet and capacity figures on Overview and Sandbox metrics; Runtime observations of every project |
 | Agents API | `/v1/**` | Project API key | Not used. The first-run screen shows a `curl` example for `/v1/agents` with a `$PROJECT_API_KEY` placeholder; the console never sends it |
 
 Browser requests are same-origin and carry only the console session. The browser
@@ -185,10 +185,10 @@ client tests and the console's fixtures in the same change.
 
 ## Evidence and changes
 
-The console's route allowlists live in
-[admin_routes.go](../../services/core-console/admin_routes.go) and
-[sandbox_admin.go](../../services/core-console/sandbox_admin.go); authentication,
-origin checks and header handling live in [server.go](../../services/core-console/server.go).
+The console's `/core/v1/*` prefix forwarding lives in
+[core_routes.go](../../services/core-console/core_routes.go); authentication, origin
+and path checks and header handling live in [server.go](../../services/core-console/server.go),
+with Core key sign-in in [auth.go](../../services/core-console/auth.go).
 Update this matrix when those boundaries or the console's reads change, and keep
 detailed wire semantics in the administrator contract.
 
