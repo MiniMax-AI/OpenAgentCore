@@ -193,8 +193,9 @@ Retain together:
 - `admin/`, including on zero-node installations, containing the
   [Core key](#core-key) and its digest file;
 - each separately installed node's private configuration and persistent identity
-  directory on its host (`~/.parsar/nodes/<installation-id>/` for the Web-generated
-  installer), as described in the
+  directory on its host (`/var/lib/parsar-node/.parsar/nodes/<installation-id>/` for a
+  node added with sudo, `~/.parsar/nodes/<installation-id>/` for one added as a normal
+  user), as described in the
   [node guide](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host);
 - the same `~/.parsar/nodes/<installation-id>/` identity for a local node, including
   its credential, generation, specification digest and highest accepted owner epoch;

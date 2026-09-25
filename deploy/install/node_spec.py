@@ -110,6 +110,10 @@ def fetch(args, token, retained, open_request, allow_enrollment=False):
             raise ValueError()
         data = validate(json.loads(raw), args)
     except urllib.error.HTTPError as error:
+        if error.code == 401 and retained is not None and not allow_enrollment:
+            raise SpecificationError("Core no longer accepts this node: it was removed on the Nodes page, or a sandbox "
+                                     "deployment change retired it. Uninstall it with node-install.pyz --uninstall "
+                                     "--installation-id " + args.installation_id + ", then add the host with a new command.") from None
         if error.code == 404:
             raise SpecificationError("Core node configuration was not found (HTTP 404); route /api/v1 on the Core origin directly to Core, not to Web") from None
         if error.code == 409:

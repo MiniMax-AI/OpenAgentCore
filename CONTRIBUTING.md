@@ -822,7 +822,9 @@ installation, generation, specification digest and release before writing node f
 registering or reconnecting. Reject drift rather than overwriting retained identity
 or using local resource defaults. Registration consumes a token only after these
 checks. The installer verifies downloaded files and starts the ordinary node process
-as a user service; it performs no SSH installation, Session creation or model call.
+as a user service, or, run as root, as a root-owned system service for the dedicated
+`parsar-node` user it prepares; it performs no SSH installation, Session creation or
+model call.
 
 The [Hosted Sandbox Manager](services/agents-api/HOSTED-SANDBOX-MANAGER.md) is a
 deployment-level admin surface, separate from Project credentials. The paired
@@ -1841,11 +1843,18 @@ Docker socket or node identity mount in either mode. The ordinary standalone nod
 service owns its provider processes outside the Core container. Its `KillMode=process`
 preserves resident microVM/helper processes across a node-service restart. User KVM
 access and the Linux runtime libraries are prerequisites for microsandbox. The node
-runs as a systemd user service and needs linger. The only other launcher allowed
-is the root-run node installation (sudo mode) planned for phase 2b: one root-owned
-system service per installation that runs the same node program as a dedicated
-unprivileged service user. Do not add any other launcher, scheduler or recovery
-path. Node services restart after failures without a start limit, so a node
+installed by a normal user runs as a systemd user service and needs linger. Run as
+root (sudo mode), the installer instead prepares the host: it creates the `parsar-node`
+system user when missing, adds it to the Docker or KVM device group, and installs one
+root-owned system service per installation that runs the same node program with
+`User=parsar-node`. Root only prepares the account, group and unit; node work runs
+with the service user's credentials, and root never runs a file that user can write.
+Sudo mode never installs Docker, KVM or packages, never changes device permissions,
+refuses SELinux-enforcing hosts and changes nothing when a prerequisite is missing.
+`--uninstall` removes a node only after Core rejects its credential, never touches
+sandboxes, volumes or images, and deletes the account only when the installer
+created it and no node remains. Do not add any other launcher, scheduler or
+recovery path. Node services restart after failures without a start limit, so a node
 outlasts a Core outage, and stop restarting when the node program exits 78
 because Core answered 401 to its credential (a removed or retired node).
 The basic API image and binary builds remain independent artifacts.

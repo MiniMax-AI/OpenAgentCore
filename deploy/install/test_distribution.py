@@ -23,11 +23,24 @@ class ArtifactTests(unittest.TestCase):
         self.root = Path(self.temp.name).resolve()
         self.data = b'prebuilt artifact' * 1000
         self.requests = []
+        self.ranges = []
         self.status = 200
+        self.resumable = False
         test = self
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
                 test.requests.append(self.path)
+                test.ranges.append(self.headers.get('Range'))
+                if test.resumable:
+                    # The first response breaks off halfway; a Range request gets the rest.
+                    start = int(self.headers['Range'][6:-1]) if self.headers.get('Range') else 0
+                    self.send_response(206 if start else 200)
+                    if start:
+                        self.send_header('Content-Range', f'bytes {start}-{len(test.data) - 1}/{len(test.data)}')
+                    self.send_header('Content-Length', str(len(test.data) - start))
+                    self.end_headers()
+                    self.wfile.write(test.data[start:] if start else test.data[:len(test.data) // 2])
+                    return
                 self.send_response(test.status)
                 if test.status == 302:
                     self.send_header('Location', 'https://elsewhere.example' + self.path)
@@ -90,9 +103,19 @@ class ArtifactTests(unittest.TestCase):
         self.data = self.data[:20]
         with patch.object(distribution.time, 'sleep'), self.assertRaisesRegex(distribution.DistributionError, 'interrupted'):
             distribution.obtain_artifact(self.manifest, 'native/bin/node', self.root / 'node')
-        self.assertEqual(list(self.root.iterdir()), [])
+        # Only the private partial file stays, for the rerun to continue.
+        self.assertEqual([path.name for path in self.root.iterdir()], ['.node.partial'])
         self.data = b'prebuilt artifact' * 1000
         distribution.obtain_artifact(self.manifest, 'native/bin/node', self.root / 'node')
+        self.assertEqual([path.name for path in self.root.iterdir()], ['node'])
+
+    def test_interrupted_download_resumes_with_the_missing_bytes(self):
+        self.resumable = True
+        with patch.object(distribution.time, 'sleep'):
+            distribution.obtain_artifact(self.manifest, 'native/bin/node', self.root / 'node')
+        self.assertEqual((self.root / 'node').read_bytes(), self.data)
+        self.assertEqual(self.ranges, [None, f'bytes={len(self.data) // 2}-'])
+        self.assertEqual([path.name for path in self.root.iterdir()], ['node'])
 
     def test_offline_and_runtime_expansion_are_verified(self):
         raw = b'synthetic tar contents' * 1000

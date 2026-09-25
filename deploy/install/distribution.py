@@ -147,44 +147,94 @@ def obtain_artifact(manifest, logical_path, destination, offline_root=None):
             if candidate.is_symlink() or not candidate.is_file():
                 raise DistributionError('Offline artifact must be a regular file: ' + logical_path)
             source = candidate
+    if source is not None:
+        return copy_artifact(source, target, entry, logical_path)
     base = manifest.get('artifact_base_url', '')
-    if source is None:
-        if not isinstance(base, str) or not base or urlsplit(base).query:
-            raise DistributionError('No downloadable artifact source; use the matching offline bundle')
-        url = safe_url(base.rstrip('/') + '/' + entry['filename'])
+    if not isinstance(base, str) or not base or urlsplit(base).query:
+        raise DistributionError('No downloadable artifact source; use the matching offline bundle')
+    url = safe_url(base.rstrip('/') + '/' + entry['filename'])
+    # A private partial file survives interruptions and reruns; the next attempt asks
+    # for the missing bytes only. The complete file is still verified as a whole.
+    partial = target.with_name('.' + target.name + '.partial')
     for attempt in range(3):
-        fd, temporary = tempfile.mkstemp(prefix='.artifact-', dir=target.parent)
         try:
-            with os.fdopen(fd, 'wb') as output:
-                stream = source.open('rb') if source else urllib.request.build_opener(NoRedirect()).open(url, timeout=30)
-                with stream:
-                    count = 0
-                    while True:
-                        block = stream.read(1024 * 1024)
-                        if not block:
-                            break
-                        count += len(block)
-                        if count > entry['size']:
-                            raise DistributionError('Artifact exceeds published size: ' + logical_path)
-                        output.write(block)
-                    if count != entry['size']:
-                        raise http.client.IncompleteRead(b'', entry['size'] - count)
-            if digest(temporary) != entry['sha256']:
-                raise DistributionError('Artifact checksum mismatch: ' + logical_path)
-            os.chmod(temporary, 0o700 if logical_path.startswith('native/') else 0o600)
-            os.replace(temporary, target)
-            return target
+            download_partial(url, partial, entry, logical_path)
+            break
         except urllib.error.HTTPError as error:
-            if error.code not in (408, 429, 500, 502, 503, 504) or attempt == 2:
-                raise DistributionError(f'Artifact download failed (HTTP {error.code}): {logical_path}. Check release access and retry.') from None
+            if error.code == 416:
+                partial.unlink(missing_ok=True)
+            elif error.code not in (408, 429, 500, 502, 503, 504) or attempt == 2:
+                raise DistributionError(f'Artifact download failed (HTTP {error.code}): {logical_path}. Check the console and retry.') from None
         except (urllib.error.URLError, socket.timeout, ConnectionError, http.client.HTTPException):
-            if attempt == 2 or source:
-                raise DistributionError('Artifact transfer interrupted: ' + logical_path + '. Check network access and rerun; installed state is retained.') from None
-        finally:
-            if os.path.exists(temporary):
-                os.unlink(temporary)
+            if attempt == 2:
+                raise DistributionError('Artifact transfer interrupted: ' + logical_path + '. Check network access and rerun; '
+                                        'the download resumes where it stopped.') from None
         time.sleep(attempt + 1)
-    raise DistributionError('Artifact download did not complete')
+    else:
+        raise DistributionError('Artifact download did not complete')
+    if digest(partial) != entry['sha256']:
+        partial.unlink()
+        raise DistributionError('Artifact checksum mismatch: ' + logical_path)
+    os.chmod(partial, 0o700 if logical_path.startswith('native/') else 0o600)
+    os.replace(partial, target)
+    return target
+
+
+def copy_artifact(source, target, entry, logical_path):
+    fd, temporary = tempfile.mkstemp(prefix='.artifact-', dir=target.parent)
+    try:
+        with os.fdopen(fd, 'wb') as output, source.open('rb') as stream:
+            count = 0
+            for block in iter(lambda: stream.read(1024 * 1024), b''):
+                count += len(block)
+                if count > entry['size']:
+                    raise DistributionError('Artifact exceeds published size: ' + logical_path)
+                output.write(block)
+        if count != entry['size'] or digest(temporary) != entry['sha256']:
+            raise DistributionError('Artifact checksum mismatch: ' + logical_path)
+        os.chmod(temporary, 0o700 if logical_path.startswith('native/') else 0o600)
+        os.replace(temporary, target)
+        return target
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def download_partial(url, partial, entry, logical_path):
+    """Complete the partial file, asking only for the bytes it is missing."""
+    size = entry['size']
+    offset = 0
+    if partial.is_symlink() or (partial.exists() and not partial.is_file()):
+        raise DistributionError('Partial download must be a regular file: ' + logical_path)
+    if partial.exists():
+        info = partial.stat()
+        if info.st_uid != os.getuid():
+            raise DistributionError('Partial download must be owned by this user: ' + logical_path)
+        offset = info.st_size if info.st_size <= size else 0
+    if offset == size:
+        return
+    request = urllib.request.Request(url, headers={'Range': f'bytes={offset}-'} if offset else {})
+    with urllib.request.build_opener(NoRedirect()).open(request, timeout=30) as stream:
+        if offset and (stream.status != 206 or not stream.headers.get('Content-Range', '').startswith(f'bytes {offset}-')):
+            offset = 0  # The server sent the whole file; start over.
+        flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | (os.O_APPEND if offset else os.O_TRUNC)
+        with os.fdopen(os.open(partial, flags, 0o600), 'ab' if offset else 'wb') as output:
+            count, reported = offset, offset * 10 // size
+            while True:
+                block = stream.read(1024 * 1024)
+                if not block:
+                    break
+                count += len(block)
+                if count > size:
+                    output.close()
+                    partial.unlink()
+                    raise DistributionError('Artifact exceeds published size: ' + logical_path)
+                output.write(block)
+                if size >= 50 * 1024 * 1024 and count * 10 // size > reported:
+                    reported = count * 10 // size
+                    print(f'Downloading {logical_path}: {reported * 10}% of {size // (1024 * 1024)} MiB', flush=True)
+        if count != size:
+            raise http.client.IncompleteRead(b'', size - count)
 
 
 def runtime_archive(manifest, cache_root, offline_root=None):

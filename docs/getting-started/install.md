@@ -59,8 +59,9 @@ no Go, Node, Rust or source checkout.
 The manifest identifies every asset by immutable revision, SHA-256 and byte size.
 Adding a node downloads only its selected provider's assets. Runtime images use
 compressed archives; verified local files and already imported images are reused.
-Downloads use temporary files and bounded retries, so a truncated response is
-never promoted into the cache. An optional `-offline.tar.gz` bundle contains the
+Downloads use private partial files and bounded retries: an interrupted download,
+or a rerun after one, asks the console only for the missing bytes, and a file is used
+only after its size and SHA-256 match the manifest. An optional `-offline.tar.gz` bundle contains the
 same assets locally.
 
 Nodes download these assets only from the console (Web) that generated their
@@ -142,21 +143,26 @@ Choose English or Chinese through the System language selector.
    specification; node files cannot override it. Later changes require global
    maintenance and completed cleanup. Microsandbox uses a five-minute idle timeout
    and one-day snapshot retention.
-4. For own-machine hosting, click **Add node**, copy the command, and run it as a non-root user on the
-   target Linux amd64 host. It downloads the matched bootstrap and execution assets from your console
+4. For own-machine hosting, click **Add node**, copy the command, and run it on the target Linux amd64
+   host with sudo, or as root. It prepares the host itself: the `parsar-node` service user, its Docker or
+   KVM group and a system service. Hosts without sudo use the no-sudo command as a prepared user instead.
+   It downloads the matched bootstrap and execution assets from your console
    (never from a release URL), verifies
    checksums, reads the saved generation and specification without consuming enrollment,
    verifies the payload matches that Runtime, imports the image only when missing,
    and writes the matching provider configuration,
-   registers the node and starts a systemd user service. The service keeps retrying while Core
+   registers the node and starts its service. The service keeps retrying while Core
    is unreachable and stops for good once the node is removed. The installer waits for Core to confirm
    connection and provider readiness. Web refreshes node health
    automatically. Wait for the node to be online and its provider to be ready;
    registration alone does not mean it can accept work. A registered retry uses its
    retained node credential and refuses changed resource or Runtime settings.
 
-The target host needs curl, sha256sum, Python 3.9+, a systemd user session with lingering enabled,
-and either Docker socket access or microsandbox's KVM/native-library prerequisites.
+The target host needs curl, sha256sum, Python 3.9+ and systemd, plus Docker Engine or
+KVM with microsandbox's native libraries; the command never installs them and names
+what is missing. The no-sudo command also needs a user with lingering and Docker or KVM
+access. See [Register a host](https://github.com/MiniMax-AI/parsar-core/blob/main/services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host)
+for both modes and for removing a node from its host.
 The command checks host access before downloading the Runtime and verifies
 microsandbox's shared libraries after downloading its native programs.
 The console serves only fixed, non-secret distribution files at `/node-install/`;

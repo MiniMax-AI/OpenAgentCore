@@ -6,11 +6,13 @@ import io
 import json
 import os
 from pathlib import Path
+import socket
 import stat
 import subprocess
 import tempfile
 import unittest
 import urllib.error
+from types import SimpleNamespace
 from unittest import mock
 
 import node_install as installer
@@ -64,7 +66,8 @@ class NodeInstallTests(unittest.TestCase):
                          "specification_digest": node_spec.digest(self.args.provider, spec)}
         return io.BytesIO(json.dumps(configuration).encode())
 
-    def artifact_response(self, url, **kwargs):
+    def artifact_response(self, request, **kwargs):
+        url = getattr(request, "full_url", request)
         # The fixture manifest records a release URL; nodes still download from their console.
         self.assertTrue(url.startswith(self.args.source_url + "/node-install/artifacts/"), url)
         for name, item in self.manifest["artifacts"].items():
@@ -104,6 +107,13 @@ class NodeInstallTests(unittest.TestCase):
                 raise installer.InstallError(failure)
         if "enable" in arguments and self.fail_service:
             raise installer.InstallError(failure)
+        if arguments[:1] == ["useradd"]:
+            self.account = SimpleNamespace(pw_name="parsar-node", pw_uid=os.getuid(), pw_gid=os.getgid(),
+                                           pw_dir=str(installer.SERVICE_HOME), pw_shell="/usr/sbin/nologin")
+        if arguments[:1] == ["usermod"]:
+            self.joined = True
+        if "{{json .}}" in arguments:
+            return json.dumps({"MemoryLimit": True, "CPUCfsQuota": True, "NCPU": 8, "MemTotal": 16 << 30})
         if "load" in arguments:
             self.image_present = True
         if "inspect" in arguments:
@@ -314,6 +324,118 @@ class NodeInstallTests(unittest.TestCase):
             installer.main(["--source-url", self.args.source_url, "--core-url", self.args.core_url,
                             "--provider", "docker", "--installation-id", self.args.installation_id])
             self.assertNotIn("PARSAR_NODE_ENROLLMENT_TOKEN", os.environ)
+
+    def sudo_host(self, enforcing=False):
+        """Sudo mode against temporary system paths; the service-user step runs in-process."""
+        system = self.home / "system"
+        (system / "systemd").mkdir(parents=True)
+        (system / "run").mkdir()
+        (system / "selinux").write_text("1" if enforcing else "0")
+        docker_socket = socket.socket(socket.AF_UNIX)
+        docker_socket.bind(str(system / "docker.sock"))
+        self.addCleanup(docker_socket.close)
+        os.chmod(system / "docker.sock", 0o660)
+        self.account, self.joined, self.docker_installed = None, False, True
+        service_home = self.home / "service"
+        self.root = service_home / ".parsar/nodes" / self.args.installation_id
+
+        def run_as(account, function, *arguments):
+            with mock.patch.object(installer.Path, "home", return_value=Path(account.pw_dir)):
+                function(*arguments)
+        for patch in (mock.patch.multiple(installer, SERVICE_HOME=service_home, SYSTEM_RECORDS=system / "etc",
+                                          SYSTEM_UNITS=system / "units", SYSTEM_LOCKS=system / "run",
+                                          SYSTEMD_RUNNING=system / "systemd", SELINUX_ENFORCE=system / "selinux",
+                                          DOCKER_SOCKET=system / "docker.sock", run_as=run_as,
+                                          service_account=lambda: self.account),
+                      mock.patch.object(installer.shutil, "which", side_effect=lambda tool: None if tool == "docker" and not self.docker_installed else "/usr/bin/" + tool),
+                      mock.patch.object(installer.grp, "getgrnam", side_effect=lambda name: SimpleNamespace(gr_mem=["parsar-node"] if self.joined else []))):
+            patch.start()
+            self.addCleanup(patch.stop)
+        return system
+
+    def test_sudo_mode_prepares_the_host_and_reruns_without_changes(self):
+        system = self.sudo_host()
+        installer.install_system(self.args, "synthetic-once-token")
+        commands = [call for call, _ in self.calls]
+        self.assertIn(["useradd", "--system", "--user-group", "--no-create-home", "--home-dir", str(self.home / "service"),
+                       "--shell", next(path for path in ("/usr/sbin/nologin", "/sbin/nologin", "/bin/false") if os.path.exists(path) or path == "/bin/false"),
+                       "parsar-node"], commands)
+        self.assertTrue(any(call[:3] == ["usermod", "--append", "--groups"] for call in commands))
+        self.assertIn(["systemctl", "enable", "--now", "parsar-node-" + self.args.installation_id + ".service"], commands)
+        unit = (system / "units" / ("parsar-node-" + self.args.installation_id + ".service")).read_text()
+        for line in ("User=parsar-node", "After=network-online.target docker.service", "WantedBy=multi-user.target",
+                     "RestartPreventExitStatus=78", "StartLimitIntervalSec=0"):
+            self.assertIn(line, unit)
+        self.assertNotIn("synthetic-once-token", unit)
+        self.assertTrue((self.root / "registered.json").exists())
+        self.assertFalse((self.root / ("parsar-node-" + self.args.installation_id + ".service")).exists())
+        self.assertEqual(json.loads((system / "etc/user.json").read_text())["created"], True)
+        before = {path: path.read_bytes() for path in (system / "etc").iterdir()}
+        self.calls.clear()
+        installer.install_system(self.args, "")
+        commands = [call for call, _ in self.calls]
+        self.assertFalse([call for call in commands if call[:1] in (["useradd"], ["usermod"]) or "register" in call])
+        self.assertEqual({path: path.read_bytes() for path in (system / "etc").iterdir()}, before)
+
+    def test_sudo_mode_refusals_change_nothing(self):
+        foreign = SimpleNamespace(pw_name="parsar-node", pw_uid=4242, pw_gid=4242, pw_dir="/home/parsar-node", pw_shell="/bin/bash")
+        for case, message in (("selinux", "SELinux is enforcing"), ("docker", "Docker Engine is not installed"),
+                              ("account", "not created by this installer")):
+            with self.subTest(case=case):
+                system = self.sudo_host(enforcing=case == "selinux")
+                self.docker_installed = case != "docker"
+                self.account = foreign if case == "account" else None
+                self.calls.clear()
+                with self.assertRaisesRegex(installer.InstallError, message + ".*Nothing was changed"):
+                    installer.install_system(self.args, "synthetic-once-token")
+                self.assertFalse([call for call, _ in self.calls if call[:1] in (["useradd"], ["usermod"], ["systemctl"])])
+                self.assertFalse((system / "etc").exists())
+                self.assertFalse((system / "units").exists())
+                for path in sorted(system.rglob("*"), reverse=True):
+                    path.unlink() if not path.is_dir() else path.rmdir()
+                system.rmdir()
+
+    def test_uninstall_waits_for_core_to_reject_the_node(self):
+        system = self.sudo_host()
+        installer.install_system(self.args, "synthetic-once-token")
+        uninstall = SimpleNamespace(installation_id=self.args.installation_id, force=False)
+        with mock.patch.object(installer, "open_request", return_value=io.BytesIO(b"{}")), \
+                self.assertRaisesRegex(installer.InstallError, "still lists this node.*Nothing was changed"):
+            installer.uninstall_system(uninstall)
+        self.assertTrue((self.root / "registered.json").exists())
+        rejected = urllib.error.HTTPError("https://core.example", 401, "", {}, None)
+        self.calls.clear()
+        with mock.patch.object(installer, "open_request", side_effect=rejected):
+            installer.uninstall_system(uninstall)
+        commands = [call for call, _ in self.calls]
+        self.assertIn(["systemctl", "disable", "--now", "parsar-node-" + self.args.installation_id + ".service"], commands)
+        self.assertIn(["userdel", "parsar-node"], commands)
+        self.assertFalse(any(call[-2:] == ["rm", "--force"] or "prune" in call or ("image" in call and "rm" in call) for call in commands))
+        self.assertFalse(self.root.exists())
+        self.assertFalse((system / "units" / ("parsar-node-" + self.args.installation_id + ".service")).exists())
+        self.assertFalse((system / "etc").exists())
+
+    def test_token_comes_on_standard_input_only(self):
+        arguments = ["--source-url", self.args.source_url, "--core-url", self.args.core_url, "--installation-id",
+                     self.args.installation_id, "--enrollment-token-stdin"]
+        with mock.patch.object(installer, "install") as install, mock.patch.object(installer.sys, "stdin", io.StringIO("synthetic-once-token\n")), \
+                mock.patch.object(installer.os, "geteuid", return_value=1000):
+            installer.main(arguments)
+        self.assertEqual(install.call_args.args[1], "synthetic-once-token")
+        with mock.patch.dict(os.environ, {"PARSAR_NODE_ENROLLMENT_TOKEN": "other"}), self.assertRaises(SystemExit):
+            installer.main(arguments)
+
+    def test_user_manager_bus_is_found_without_a_login_session(self):
+        runtime = self.home / "run-user"
+        (runtime / str(os.getuid())).mkdir(parents=True)
+        with mock.patch.object(installer, "USER_RUNTIME", runtime), mock.patch.dict(os.environ, {}, clear=True):
+            with self.assertRaisesRegex(installer.InstallError, "enable-linger"):
+                installer.user_bus()
+            bus = socket.socket(socket.AF_UNIX)
+            self.addCleanup(bus.close)
+            bus.bind(str(runtime / str(os.getuid()) / "bus"))
+            installer.user_bus()
+            self.assertEqual(os.environ["DBUS_SESSION_BUS_ADDRESS"], "unix:path=" + str(runtime / str(os.getuid()) / "bus"))
 
     def test_offline_bundle_uses_same_bootstrap_and_verified_artifacts(self):
         bundle = self.home / "bundle"

@@ -90,7 +90,8 @@ server configuration and cannot select a different Runtime or resource profile.
 Closing the dialog discards its one-time command. An expired command requires
 explicit regeneration; failed or uncertain writes are never retried automatically. The installer checks prerequisites, downloads the matched payload,
 checks its hashes, prepares provider configuration and starts the existing node
-program as a systemd user service. Web polls readiness and capacity while waiting.
+program as a service (see [Register a host](#register-a-host)). Web polls readiness
+and capacity while waiting.
 It does not install software through SSH. Registration itself
 does not create a Session, sandbox or model request. Hosted Session admission
 fails until setup is complete and a ready node has capacity. E2B allocates directly without this node requirement.
@@ -156,9 +157,33 @@ in the bundle's `artifacts/` directory first; `/console/config` lists the provid
 whose assets it holds (`node_artifacts`). It reuses verified cache
 entries and exact imported images, then waits for Core to confirm connection and
 provider readiness. The enrollment token
-is transient and never a console/project credential. Python 3.9+, a systemd user
-session with lingering, and Docker access or KVM/native-library prerequisites
-must already exist on the target host. Rerunning the same command preserves the
+is transient and never a console/project credential; the command passes it to the
+installer on standard input (`--enrollment-token-stdin`), never in a process argument,
+an environment variable or sudo's log.
+
+The installer chooses how the node runs from the user that runs it:
+
+- **With sudo or as root (the default command).** It prepares the host itself. It
+  creates the system user `parsar-node` (home `/var/lib/parsar-node`) if missing,
+  adds it to the group that owns `/var/run/docker.sock` or `/dev/kvm`, and runs the
+  node as the root-owned system service `/etc/systemd/system/parsar-node-<installation-id>.service`
+  with `User=parsar-node`, enabled for boot. No lingering or login session is needed;
+  logs are in `sudo journalctl -u parsar-node-<installation-id>.service`. Node state
+  lives in `/var/lib/parsar-node/.parsar/nodes/<installation-id>/`, and what the
+  installer created is recorded in `/etc/parsar-node/`. All node work runs as
+  `parsar-node`; root only prepares the account and the service. It never installs
+  Docker, KVM or packages, never changes device permissions and refuses
+  SELinux-enforcing hosts; a missing prerequisite stops it with a one-line hint
+  before anything changes. A foreign account named `parsar-node`, or another node
+  for the same installation on the host, is refused.
+- **As a normal user (for hosts without sudo).** The node runs as that user's
+  systemd user service with state under `~/.parsar/nodes/<installation-id>/`. The
+  user needs lingering and Docker or KVM access, which an administrator grants
+  beforehand. The installer finds the user's systemd manager even from `su` or
+  `sudo -iu`, where no login session sets `XDG_RUNTIME_DIR`.
+
+Python 3.9+, curl and sha256sum, and Docker Engine or KVM with microsandbox's
+native libraries must already exist on the target host. Rerunning the same command preserves the
 node's private identity. A registered retry reads configuration with its retained
 node credential and `X-Parsar-Node-ID`; it does not enroll again. Changes to the
 Core origin, installation, generation, specification or release are refused
@@ -272,6 +297,14 @@ unknown operations or cleanup records cannot be removed. Resolve those resources
 through their normal lifecycle and then retry; the API reports the conflict.
 Offline resources remain owned and visible. Explicit removal permanently retires
 the node identity; adding that host again requires a fresh private state directory.
+After removal, clean up the host with the installer's `--uninstall` (the same
+checked download as the add command, then `sudo python3 node-install.pyz --uninstall
+--installation-id <installation-id>`, or without sudo for a node installed as a
+normal user). It proceeds only when Core answers 401 to the node's credential, or
+with `--force` for a Core that no longer exists. It stops and removes the service,
+the node state and the Docker network, and deletes the `parsar-node` account only
+when the installer created it and no other node uses it. It never removes sandboxes,
+volumes or images. The host can then be added again with a new command.
 The node program then exits with status 78 when Core answers 401 to its credential,
 and the installed service does not restart it. Other failures, including an
 unreachable Core or a 403 from a proxy in front of it, restart the service every
