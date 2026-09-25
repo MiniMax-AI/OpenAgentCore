@@ -66,7 +66,8 @@ workbench.
   duration, tokens, models, tools, Agents and API keys for 1 h / 6 h / 24 h / 7 d),
   Sandbox metrics (node capacity and hosted Runtimes across projects; a node or a
   sandbox opens in a dialog with its figures and CPU and memory charts), Session log
-  (every Session, read-only, opening one Session's history).
+  (every Session, read-only, opening one Session's history; a self-hosted
+  Session's page also has its environment's executor credentials).
 - **Resources**: Agents, Environment templates, Skills, Files, Vaults. Each list
   shows one project or all projects, with a Project column when all are shown and a
   Creator column naming the creating key. Detail pages show the resource's facts
@@ -123,6 +124,13 @@ workbench.
   without a record as Unknown.
 - **Session history is read-only.** A Session page reads the Session, its Items and
   Turns and polls while work is in flight; there is no live event stream.
+- **Executor credentials.** Only Core issues the credential file a self-hosted
+  executor needs, with the deployment's Core key. A Session page whose environment
+  is self-hosted has an Executor credentials section: issue a credential (shown
+  once as the credential file, to copy or download, never stored), rotate it (the
+  old one stops working immediately) or revoke it (the executor can no longer
+  connect; a running process is not stopped). The file lets one executor connect
+  for that environment only; it cannot call the Agents API.
 - **Figures.** Project, Agent and key usage comes from Core's summary; Agent run,
   tool and activity figures are still assembled in the browser from bounded reads
   and state their coverage. Metrics that need new Core endpoints are recorded as

@@ -340,3 +340,76 @@
   width: 232px;
 }
 
+
+/* Executor credentials of a self-hosted Session's environment. */
+.executor-credentials-table .name-cell .copyable-id code {
+  color: var(--fg);
+  font-size: 12px;
+}
+
+.executor-credential-revoked .name-cell .copyable-id code {
+  color: var(--fg-muted);
+}
+
+.executor-credential-status {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.executor-credential-date {
+  padding-left: 13px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The one-time credential file. */
+.modal-card:has(.executor-credential) {
+  width: min(560px, 100%);
+}
+
+.executor-credential {
+  display: grid;
+  gap: 12px;
+}
+
+.executor-credential-notice {
+  margin: 0;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.executor-credential-file {
+  margin: 0;
+  padding: 11px 13px;
+  overflow-x: auto;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 19px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.executor-credential-file:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.executor-credential-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.executor-credential-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12.5px;
+  line-height: 18px;
+}

@@ -32,6 +32,31 @@ test("opens a Session's conversation from the Session log, read-only", async ({ 
   await expect(page.getByRole("textbox")).toHaveCount(0);
 });
 
+test("issues an executor credential once on a self-hosted Session and revokes it", async ({ page, request }) => {
+  await openConsole(page, request, "sessions");
+  await page.getByRole("row").filter({ hasText: "Self-hosted" }).first().getByRole("button", { name: /^Open Session / }).click();
+  const section = page.getByRole("region", { name: "Executor credentials" });
+  await expect(section).toContainText("No executor credentials yet");
+
+  await section.getByRole("button", { name: "Issue credential" }).first().click();
+  const issued = page.getByRole("dialog", { name: "Executor credential" });
+  await expect(issued).toContainText("shown only once");
+  await expect(issued.getByLabel("Executor credential file")).toContainText("exec_fixture_");
+  const download = page.waitForEvent("download");
+  await issued.getByRole("button", { name: "Download credential file" }).click();
+  expect((await download).suggestedFilename()).toMatch(/^executor-credential-[0-9a-f]{8}\.json$/);
+  await issued.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByLabel("Executor credential file")).toHaveCount(0);
+  expect(await page.evaluate(() => JSON.stringify({ ...window.localStorage, ...window.sessionStorage }))).not.toContain("exec_fixture_");
+
+  const credentials = section.getByRole("table", { name: "Executor credentials" });
+  await expect(credentials).toContainText("Active");
+  await credentials.getByRole("button", { name: /^Revoke credential / }).click();
+  await page.getByRole("dialog", { name: "Revoke credential?" }).getByRole("button", { name: "Revoke" }).click();
+  await expect(credentials).toContainText("Revoked");
+  await expect(credentials.getByRole("button", { name: /^Rotate credential / })).toHaveCount(0);
+});
+
 test("opens a node and a sandbox in dialogs from Sandbox metrics", async ({ page, request }) => {
   await openConsole(page, request, "sandbox-metrics");
   await page.getByRole("button", { name: "Show core-01" }).click();

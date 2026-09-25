@@ -1,7 +1,7 @@
-import { AgentCoreError, type AgentSession, type RuntimeObservation } from "@agents-core-web/agents-client";
+import { AgentCoreError, type AgentSession, type ExecutorCredential, type RuntimeObservation } from "@agents-core-web/agents-client";
 import { queryOptions } from "@tanstack/react-query";
 
-import { projectClient } from "../../lib/projects";
+import { admin, projectClient } from "../../lib/projects";
 import { retryTransient } from "../resources/detail-queries";
 import { loadSessionHistory, nextPollDelay, type SessionHistory } from "./session-history";
 import { loadSessionRuntimeHistory, type SessionRuntimeHistory, type SessionRuntimeRange } from "./session-runtime";
@@ -97,6 +97,22 @@ export function sessionRuntimeHistoryQuery(projectId: string, session: AgentSess
   return queryOptions<SessionRuntimeHistory | null>({
     queryKey: [...sessionKey(projectId, session.id), "runtime", "history", range],
     queryFn: ({ signal }) => loadSessionRuntimeHistory(projectClient(projectId), session, range, signal),
+    retry: retryTransient,
+  });
+}
+
+/**
+ * The executor credentials of a self-hosted Session's environment, active
+ * first, then newest first. Only metadata: an issued credential never enters
+ * the cache.
+ */
+export function executorCredentialsQuery(projectId: string, sessionId: string, environmentId: string) {
+  return queryOptions<ExecutorCredential[]>({
+    queryKey: [...sessionKey(projectId, sessionId), "executor-credentials", environmentId],
+    queryFn: async ({ signal }) => {
+      const { data } = await admin.listExecutorCredentials(projectId, environmentId, { signal });
+      return [...data].sort((a, b) => Number(a.revoked_at !== null) - Number(b.revoked_at !== null) || Date.parse(b.created_at) - Date.parse(a.created_at));
+    },
     retry: retryTransient,
   });
 }

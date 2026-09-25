@@ -81,15 +81,18 @@ Resource-specific boundaries:
 
 ## Executor credentials
 
-Core issues the credentials of a self_hosted executor. The routes accept only
-the self_hosted environment of a Session that is still running; any other
+Core issues the credentials of a self_hosted executor, and the console is
+where the administrator does it: the **Executor credentials** section of a
+Session page, shown only when the Session's environment is `self_hosted`, for
+that Session's `project_id` and `environment.id`. The routes accept only the
+self_hosted environment of a Session that is still running; any other
 environment returns 404 or 409.
 
 | Operation | Route | Console use |
 | --- | --- | --- |
-| List credentials | `GET /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | Reserved for the Session page's executor credential section: `key_id`, creation and revocation time; the credential itself is never listed |
-| Issue or rotate | `POST /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` with `{"key_id", "rotate"}` | Reserved: the console generates `key_id` when the administrator issues; Core returns the credential once (`201`, `Cache-Control: no-store`). An existing `key_id` without `rotate: true` returns 409 |
-| Revoke | `DELETE /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials/{key_id}` | Reserved: confirmed revocation; revoking again returns 204 |
+| List credentials | `GET /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | The section's table, through the query cache: each credential's short `key_id` with its copy button, issue time and status (Active, or Revoked with its time), active first. The credential itself is never listed |
+| Issue or rotate | `POST /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` with `{"key_id", "rotate"}` | **Issue credential** generates `key_id` (`crypto.randomUUID()`) and keeps it before sending `rotate: false`. **Rotate**, confirmed (the old credential stops working immediately), sends an active credential's `key_id` with `rotate: true`; a revoked credential has no actions, as Core refuses to rotate it (409). Core returns the credential once (`201`, `Cache-Control: no-store`); the console shows it once in a dialog as the executor's credential file (`{key_id, environment_id, executor_token}`) to copy or download (`executor-credential-<first 8 of environment_id>.json`), keeps it only in the dialog's state (never in browser storage or the query cache) and forgets it when the dialog closes. An existing `key_id` without `rotate: true` returns 409. Other rejections show Core's reason in an error toast (issue) or in the confirmation dialog (rotate) |
+| Revoke | `DELETE /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials/{key_id}` | **Revoke**, confirmed (the executor can no longer connect; a running process is not stopped), then the list is read again and shows the credential as Revoked; revoking again returns 204 |
 
 ## Provenance and monitoring
 
@@ -137,9 +140,13 @@ enters the release under advanced settings.
 - The console offers Session deletion only for idle or failed Sessions without
   required actions and never cancels work to make a Session deletable.
 - Project, key, executor credential, deletion and sandbox writes are never
-  retried automatically. After an uncertain executor credential issuance the
-  console refreshes the list; the administrator may reissue the same `key_id`
-  with `rotate: true`.
+  retried automatically. An executor credential issuance with an unknown
+  outcome (no answer, a 30-second timeout, a 5xx) opens an error dialog whose
+  next step is **Refresh list**. If the kept `key_id` is then listed, it was
+  issued and its secret lost: the console offers to rotate it (`rotate: true`)
+  for a fresh secret, shown once. If it is not listed, the next Issue sends the
+  same `key_id` with `rotate: false`; should that return 409 because the first
+  request was issued after all, the console offers the same rotation.
 
 ## Read bounds
 

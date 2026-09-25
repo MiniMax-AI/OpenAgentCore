@@ -13,6 +13,7 @@ import { formatClock, formatDateTime, formatInteger, MISSING } from "../../lib/f
 import { CreatorCell, ProjectName, useCreators, useProjects } from "../../lib/projects";
 import { collections } from "../../lib/queries";
 import { forgetDeleted } from "../resources/detail-queries";
+import { ExecutorCredentialsSection } from "./ExecutorCredentialsSection";
 import { SessionDeleteDialog, type SessionDeleteTarget } from "./SessionDeleteDialog";
 import { sessionKey } from "./session-queries";
 import { isSessionActive } from "./session-history";
@@ -38,7 +39,8 @@ function errorText(error: unknown): string {
 
 /**
  * Monitor › Session log › one Session: its facts, usage, conversation, trace,
- * Turns and (for hosted sandboxes) runtime, read-only. The page polls while the
+ * Turns and (for hosted sandboxes) runtime, read-only; a self-hosted Session's
+ * environment also has its executor credentials. The page polls while the
  * Session has work in flight; there is no composer and no live stream.
  */
 export function SessionPage() {
@@ -66,7 +68,11 @@ export function SessionPage() {
   );
   const session = history.history?.session ?? null;
   const loadedAt = history.history?.loadedAt ?? null;
-  const refresh = () => { setRefreshToken((value) => value + 1); history.refresh(); };
+  const refresh = () => {
+    setRefreshToken((value) => value + 1);
+    history.refresh();
+    if (projectId && sessionId) void queryClient.invalidateQueries({ queryKey: [...sessionKey(projectId, sessionId), "executor-credentials"] });
+  };
   const time = loadedAt ? formatClock(loadedAt, locale) : MISSING;
   const itemsError = session ? history.history?.itemsError ?? null : null;
   const turnsError = session ? history.history?.turnsError ?? null : null;
@@ -142,6 +148,9 @@ export function SessionPage() {
           <Kpi label={t("kpi.cached")} value={formatInteger(usage?.input_tokens_details.cached_tokens, locale)} />
           <Kpi label={t("kpi.reasoning")} value={formatInteger(usage?.output_tokens_details.reasoning_tokens, locale)} />
         </KpiStrip>
+        {environment.type === "self_hosted" && typeof environment.id === "string" ? (
+          <ExecutorCredentialsSection key={environment.id} projectId={projectId} sessionId={session.id} environmentId={environment.id} />
+        ) : null}
         <Section
           headingId="session-history-heading"
           title={t("history.title")}
