@@ -96,8 +96,8 @@ with the exact distribution digest and platform skips image download and import.
 Web builds a command that contains no secret, like Add node's. It downloads
 `/node-install/self-hosted-install.pyz` from the console, verifies it against
 `self_hosted_installer_sha256` from `GET /console/config`, and runs it with the
-installation's `public_url` as `--source-url`, and the Session's
-`environment.id` and unchanged `environment.remote_url`:
+installation's `public_url` (`GET /core/v1/installation`) as `--source-url` plus
+the Session's `environment.id` and unchanged `environment.remote_url`:
 
 ```sh
 (umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT
@@ -123,9 +123,9 @@ When Core permanently rejects the executor (enrollment 401 or 409, a WebSocket
 upgrade 401/403/426, or a close for a retired Runtime), the daemon parks instead
 of exiting: it prints one message naming the fix (for 426, that the Runtime comes
 from a different Core distribution), makes no further requests, and exits 0 on
-SIGTERM or SIGINT. The container keeps its `unless-stopped`
-policy, so it has no restart loop yet still starts after a reboot, makes one
-enrollment request and parks again. Transport failures, 5xx and 404 still exit 1
+SIGTERM or SIGINT. The container keeps its `unless-stopped` policy, so it has no
+restart loop yet still starts after a reboot, makes one enrollment request and
+parks again. Transport failures, 5xx and 404 still exit 1
 and are retried by the restart policy. The 401 message is:
 
 ```text
