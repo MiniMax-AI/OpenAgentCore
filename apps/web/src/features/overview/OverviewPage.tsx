@@ -237,7 +237,7 @@ export function OverviewPage() {
                 </>
               ) : null}
             </div>
-            <button className="text-action" type="button" onClick={() => navigate("sessions")}>{t("attention.viewLog")}</button>
+            <button className="button outline" type="button" onClick={() => navigate("sessions")}>{t("attention.viewLog")}</button>
           </header>
           <AttentionTable sessions={attention} expected={attentionTotal} unread={readFailures.map((failure) => failure.project.name)} now={now} onOpen={openSession} />
         </section>
@@ -248,7 +248,7 @@ export function OverviewPage() {
               <h2 id="projects-heading">{t("projects.title")}</h2>
               <HelpTip>{t("projects.help")}</HelpTip>
             </div>
-            <button className="text-action" type="button" onClick={() => navigate("projects")}>{t("projects.manage")}</button>
+            <button className="button outline" type="button" onClick={() => navigate("projects")}>{t("projects.manage")}</button>
           </header>
           <ProjectUsageTable rows={usageRows} failed={summaryError !== null || (state.status === "failed" && data === null)} now={now} onOpen={(project) => navigate("projects", { id: project.id })} />
         </section>
@@ -288,7 +288,7 @@ function FleetCard({ fleetState, core }: { fleetState: FleetState; core: CoreSta
           <HelpTip>{t("fleet.help")}</HelpTip>
         </div>
         {fleetState.status === "ready" ? (
-          <button className="text-action" type="button" onClick={() => navigate("nodes")}>{hosts.length ? t("fleet.manageNodes") : t("fleet.addNode")}</button>
+          <button className="button outline" type="button" onClick={() => navigate("nodes")}>{hosts.length ? t("fleet.manageNodes") : t("fleet.addNode")}</button>
         ) : null}
       </header>
       <div className="overview-card-body fleet-body">

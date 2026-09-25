@@ -110,7 +110,7 @@ export function SandboxMetricsPage() {
           headingId="node-capacity-heading"
           title={t("sandbox.node")}
           help={t("sandbox.nodesSectionDetail")}
-          actions={<button className="text-action" type="button" onClick={() => navigate("nodes")}>{t("sandbox.manageNodes")}</button>}
+          actions={<button className="button outline" type="button" onClick={() => navigate("nodes")}>{t("sandbox.manageNodes")}</button>}
         >
           {fleet ? fleet.nodes.length ? (
             <div className="table-frame">

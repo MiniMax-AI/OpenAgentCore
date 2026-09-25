@@ -66,9 +66,10 @@
   white-space: nowrap;
 }
 
-/* Conversation: a chat in one card. Each Turn opens with a quiet meta line;
-   the user's message is a bubble on the right, the Agent's work and reply sit
-   on the left under its avatar. A readable column, compact rhythm. */
+/* Conversation: a chat across the whole card. Each Turn opens with a quiet
+   meta line; the user's message is a bubble at the right edge, the Agent's
+   work and reply start at the left edge under its avatar, with only the reply
+   text held to a readable measure. Compact rhythm. */
 .chat-thread {
   margin: 0;
   padding: 0;
@@ -79,17 +80,11 @@
 }
 
 .chat-turn {
-  padding: 14px 16px 18px;
+  padding: 14px 20px 18px;
 }
 
 .chat-turn + .chat-turn {
   border-top: 1px solid var(--grid-line);
-}
-
-.chat-turn-meta,
-.chat-stack {
-  max-width: 860px;
-  margin: 0 auto;
 }
 
 .chat-turn-meta {
@@ -131,7 +126,7 @@
 }
 
 .chat-bubble {
-  max-width: min(72%, 620px);
+  max-width: min(64%, 680px);
   padding: 8px 13px;
   color: var(--ink);
   font-size: 13.5px;
@@ -159,6 +154,7 @@
 .chat-body {
   display: flex;
   min-width: 0;
+  max-width: 880px;
   flex-direction: column;
   gap: 6px;
 }

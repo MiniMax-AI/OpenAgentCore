@@ -421,15 +421,17 @@ Compact and quiet; the primary button is the only filled accent in a header.
   for the one affirmative header action (Create project) and for the submit button
   of non-destructive dialogs (create, rename, issue, copy, continue).
 - **Outline:** Paper face, Firm Rule border, control lift; hover takes the ink wash.
-  Used for Copy on detail pages, section actions such as Issue key, Cancel in
-  dialogs and empty-state actions.
+  Used for every action in a card or section header (Issue key, Manage nodes,
+  Session log, Projects and keys), Copy on detail pages, Cancel in dialogs and
+  empty-state actions.
 - **Danger:** Fault Red fill, white text. Used for Delete on detail pages and for
   the confirm button of every destructive dialog.
 - **Ghost:** transparent with Graphite text; darkens on hover.
 - **Focus / Press:** focus draws an indigo border plus 1px indigo ring; press scales
   to 0.97.
-- **Text action:** borderless Graphite 12.5px/500, turning indigo on hover
-  ("Manage nodes", "Session log"); a destructive text action turns red on hover.
+- **Text action:** borderless Graphite 12.5px/500 that takes the hover wash; used
+  only for per-row actions in tables (Copy to project, Delete) and links in a
+  popover's foot, never in a header. A destructive text action turns red on hover.
 
 ### Refresh button
 A 32px ghost icon button with the refresh glyph. Controls that scope the whole page
